@@ -473,6 +473,7 @@ private:
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<cache::Client> _cache;
     boost::optional<ConditionVariable> _injector_starting, _cache_starting;
+    sys::error_code _injector_start_ec, _cache_start_ec;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -2265,6 +2266,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     sys::error_code ec;
     auto notify_ready = defer([&] {
         if (!_cache_starting) return;
+        _cache_start_ec = ec;
         _cache_starting->notify(ec);
         _cache_starting.reset();
     });
@@ -2535,6 +2537,7 @@ void Client::State::setup_injector(asio::yield_context yield)
     sys::error_code ec;
     auto notify_ready = defer([&] {
         if (!_injector_starting) return;
+        _injector_start_ec = ec;
         _injector_starting->notify(ec);
         _injector_starting.reset();
     });
