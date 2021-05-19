@@ -209,8 +209,13 @@ public:
             return Client::RunningState::Created;
         case InternalState::Failed:
             return Client::RunningState::Failed;
-        case InternalState::Stopped:  // TODO: distinguish between Stopping and Stopped
-            return Client::RunningState::Stopped;
+        case InternalState::Stopped:
+            // TODO: Gather stopped state from members
+            // instead of checking that all tasks in the context
+            // (even those which are not part of the client object) are finished.
+            return _ctx.stopped()
+                ? Client::RunningState::Stopped
+                : Client::RunningState::Stopping;
         }
         assert(_internal_state == InternalState::Started);
 
