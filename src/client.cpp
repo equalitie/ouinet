@@ -204,7 +204,15 @@ public:
     }
 
     Client::RunningState get_state() const noexcept {
-        return Client::RunningState::Created;  // TODO
+        switch (_internal_state) {
+        case InternalState::Created:
+            return Client::RunningState::Created;
+        case InternalState::Failed:
+            return Client::RunningState::Failed;
+        case InternalState::Stopped:  // TODO: distinguish between Stopping and Stopped
+            return Client::RunningState::Stopped;
+        }
+        return Client::RunningState::Started;  // TODO: distinguish between Starting, Degraded and Started
     }
 
     void setup_cache(asio::yield_context);
