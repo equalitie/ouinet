@@ -122,7 +122,7 @@ Java_ie_equalit_ouinet_Ouinet_nGetClientState(
 {
     // TODO: Avoid needing to keep this in sync by hand.
     if (!g_client)
-        return g_ios.stopped() ? 6 /* stopped */ : 1 /* failed */;
+        return g_ios.stopped() ? 6 /* stopped */ : 0 /* created */;
     switch (g_client->get_state()) {
     case ouinet::Client::RunningState::Created:  return 0;
     case ouinet::Client::RunningState::Failed:   return 1;
