@@ -121,8 +121,8 @@ Java_ie_equalit_ouinet_Ouinet_nGetClientState(
         jobject /* this */)
 {
     // TODO: Avoid needing to keep this in sync by hand.
-    if (g_ios.stopped()) return 6;  // Stopped
-    if (!g_client) return 1;  // Failed
+    if (!g_client)
+        return g_ios.stopped() ? 6 /* stopped */ : 1 /* failed */;
     switch (g_client->get_state()) {
     case ouinet::Client::RunningState::Created:  return 0;
     case ouinet::Client::RunningState::Failed:   return 1;
@@ -132,7 +132,7 @@ Java_ie_equalit_ouinet_Ouinet_nGetClientState(
     case ouinet::Client::RunningState::Stopping: return 5;
     case ouinet::Client::RunningState::Stopped:  return 6;
     }
-    return 1;  // Failed
+    return -1;
 }
 
 extern "C"
