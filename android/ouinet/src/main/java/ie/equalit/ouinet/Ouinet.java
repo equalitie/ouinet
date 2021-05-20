@@ -29,6 +29,11 @@ public class Ouinet {
         System.setProperty("https.proxyPort", "8077");
     }
 
+    // Since the client can be started several times,
+    // there are no real "initial" and "final" states.
+    // The client should be in Created or Stopped state before starting it;
+    // if a short time after start it is in the Created, Failed or Stopped states,
+    // its start can be considered as failed.
     public enum RunningState {
         Created,  // not told to start yet (initial)
         Failed,  // told to start, error precludes from continuing (final)
@@ -52,6 +57,8 @@ public class Ouinet {
         this.config = config;
     }
 
+    // See the comments about RunningState above for
+    // the meaning of the different states returned.
     public RunningState getState() {
         // TODO: Avoid needing to keep this in sync by hand.
         switch (nGetClientState()) {
