@@ -1401,7 +1401,8 @@ public:
         bool do_cache =
             ( cache
             && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
-            && CacheControl::ok_to_cache(rq, rsh, (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr))
+            && CacheControl::ok_to_cache( rq, rsh, client_state._config.is_cache_aggressive()
+                                        , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr))
             && meta.dht_group);
 
         if (do_cache) {

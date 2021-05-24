@@ -53,6 +53,7 @@ public:
 
     static bool ok_to_cache( const http::request_header<>&  request
                            , const http::response_header<>& response
+                           , bool aggressive_cache = false
                            , const char** reason = nullptr);
 
     void enable_parallel_fetch(bool value) {

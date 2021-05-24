@@ -612,6 +612,7 @@ static bool contains_private_data(const http::request_header<>& request)
 // TODO: This function is incomplete.
 bool CacheControl::ok_to_cache( const http::request_header<>&  request
                               , const http::response_header<>& response
+                              , bool aggressive_cache
                               , const char** reason)
 {
     using boost::iequals;
@@ -643,7 +644,7 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
     auto res_cache_control_i = response.find(http::field::cache_control);
 
     // https://tools.ietf.org/html/rfc7234#section-3 (bullet #5)
-    if (request.count(http::field::authorization)) {
+    if (!aggressive_cache && request.count(http::field::authorization)) {
         // https://tools.ietf.org/html/rfc7234#section-3.2
         if (res_cache_control_i == response.end()) {
             if (reason) *reason = "request has auth";
@@ -683,7 +684,7 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
             return false;
         }
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #4)
-        if (iequals(key, "private"))  {
+        if (!aggressive_cache && iequals(key, "private"))  {
             // NOTE: This decision based on the request having private data is
             // our extension (NOT part of RFC). Some servers (e.g.
             // www.bbc.com/) sometimes respond with 'Cache-Control: private'
