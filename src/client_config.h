@@ -156,9 +156,10 @@ public:
           ("cache-aggressive"
            , po::bool_switch(&_cache_aggressive)->default_value(false)
            , "Store responses regardless of being marked as private or "
-             "belonging to authorized requests, "
-             "if they are not tagged as private to the Ouinet client "
-             "(USE WITH CAUTION)")
+             "belonging to authorized requests "
+             "(in spite of Section 3 of RFC 7234), "
+             "if they are not tagged as private to the Ouinet client; "
+             "USE WITH CAUTION")
           ("cache-static-repo"
            , po::value<string>()
            , "Repository for internal files of the static cache "
