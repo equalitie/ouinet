@@ -158,7 +158,7 @@ public:
            , "Store responses regardless of being marked as private or "
              "belonging to authorized requests "
              "(in spite of Section 3 of RFC 7234), "
-             "if they are not tagged as private to the Ouinet client; "
+             "unless tagged as private to the Ouinet client; "
              "USE WITH CAUTION")
           ("cache-static-repo"
            , po::value<string>()
