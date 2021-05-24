@@ -33,6 +33,7 @@ public class Config implements Parcelable {
         private String injectorTlsCert;
         private String tlsCaCertStorePath;
         private String cacheType;
+        private boolean cacheAggressive = false;
         private String cacheStaticPath;
         private String cacheStaticContentPath;
 
@@ -62,6 +63,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setCacheType(String cacheType){
             this.cacheType = cacheType;
+            return this;
+        }
+        public ConfigBuilder setCacheAggressive(boolean cacheAggressive){
+            this.cacheAggressive = cacheAggressive;
             return this;
         }
         public ConfigBuilder setCacheStaticPath(String cacheStaticPath){
@@ -205,6 +210,7 @@ public class Config implements Parcelable {
                     setupCaRootCert(ouinetDirectory),
                     setupObfs4ProxyExecutable(ouinetDirectory),
                     cacheType,
+                    cacheAggressive,
                     cacheStaticPath,
                     cacheStaticContentPath);
         }
@@ -218,6 +224,7 @@ public class Config implements Parcelable {
     private String caRootCertPath;
     private String obfs4ProxyPath;
     private String cacheType;
+    private boolean cacheAggressive;
     private String cacheStaticPath;
     private String cacheStaticContentPath;
 
@@ -229,6 +236,7 @@ public class Config implements Parcelable {
                   String caRootCertPath,
                   String obfs4ProxyPath,
                   String cacheType,
+                  boolean cacheAggressive,
                   String cacheStaticPath,
                   String cacheStaticContentPath) {
         this.ouinetDirectory = ouinetDirectory;
@@ -239,6 +247,7 @@ public class Config implements Parcelable {
         this.caRootCertPath = caRootCertPath;
         this.obfs4ProxyPath = obfs4ProxyPath;
         this.cacheType = cacheType;
+        this.cacheAggressive = cacheAggressive;
         this.cacheStaticPath = cacheStaticPath;
         this.cacheStaticContentPath = cacheStaticContentPath;
     }
@@ -265,6 +274,9 @@ public class Config implements Parcelable {
     }
     public String getCacheType() {
         return cacheType;
+    }
+    public String getCacheAggressive() {
+        return cacheAggressive;
     }
     public String getCacheStaticPath() {
         return cacheStaticPath;
@@ -299,6 +311,7 @@ public class Config implements Parcelable {
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
         out.writeString(cacheType);
+        out.writeString(cacheAggressive);
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
     }
@@ -311,6 +324,7 @@ public class Config implements Parcelable {
         caRootCertPath = in.readString();
         obfs4ProxyPath = in.readString();
         cacheType = in.readString();
+        cacheAggressive = in.readBoolean();
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
     }

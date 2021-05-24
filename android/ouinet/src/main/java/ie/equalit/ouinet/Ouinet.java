@@ -77,6 +77,10 @@ public class Ouinet {
         maybeAdd(args, "--cache-static-repo",      config.getCacheStaticPath());
         maybeAdd(args, "--cache-static-root",      config.getCacheStaticContentPath());
 
+        if (config.getCacheAggressive()) {
+            args.add("--cache-aggressive");
+        }
+
         List<String> path = new ArrayList<>();
         if (config.getObfs4ProxyPath() != null) {
             path.add(config.getObfs4ProxyPath());
