@@ -393,6 +393,17 @@ BOOST_AUTO_TEST_CASE(test_request_no_store)
     BOOST_REQUIRE(!CacheControl::ok_to_cache(rq, rs));
 }
 
+BOOST_AUTO_TEST_CASE(test_response_private)
+{
+    Request rq{http::verb::get, "mypage?foo=bar", 11};
+
+    Response rs{http::status::ok, rq.version()};
+    rs.set(http::field::cache_control, "private");
+
+    BOOST_REQUIRE(!CacheControl::ok_to_cache(rq, rs));  // not aggressive
+    BOOST_REQUIRE(CacheControl::ok_to_cache(rq, rs, true));  // aggressive
+}
+
 BOOST_AUTO_TEST_CASE(test_if_none_match)
 {
     asio::io_context ctx;
