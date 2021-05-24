@@ -1773,6 +1773,8 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
         }
     }
 
+    if (cancel) return or_throw(yield, asio::error::operation_aborted);
+
     assert(node_endpoints.size());
 
     _wan_endpoint = my_endpoint;
