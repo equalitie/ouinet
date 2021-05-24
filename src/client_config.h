@@ -60,6 +60,10 @@ public:
         return _max_cached_age;
     }
 
+    bool is_cache_aggressive() const {
+        return _cache_aggressive;
+    }
+
     const fs::path& cache_static_path() const {
         return _cache_static_path;
     }
@@ -149,6 +153,12 @@ public:
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
+          ("cache-aggressive"
+           , po::bool_switch(&_cache_aggressive)->default_value(false)
+           , "Store responses regardless of being marked as private or "
+             "belonging to authorized requests, "
+             "if they are not tagged as private to the Ouinet client "
+             "(USE WITH CAUTION)")
           ("cache-static-repo"
            , po::value<string>()
            , "Repository for internal files of the static cache "
@@ -215,6 +225,7 @@ private:
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
+    bool _cache_aggressive = false;
 
     std::string _client_credentials;
     std::map<Endpoint, std::string> _injector_credentials;
