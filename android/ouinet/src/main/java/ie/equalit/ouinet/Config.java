@@ -275,7 +275,7 @@ public class Config implements Parcelable {
     public String getCacheType() {
         return cacheType;
     }
-    public String getCacheAggressive() {
+    public boolean getCacheAggressive() {
         return cacheAggressive;
     }
     public String getCacheStaticPath() {
@@ -311,7 +311,7 @@ public class Config implements Parcelable {
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
         out.writeString(cacheType);
-        out.writeString(cacheAggressive);
+        out.writeBoolean(cacheAggressive);
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
     }
