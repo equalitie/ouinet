@@ -139,6 +139,10 @@ struct UserAgentMetaData {
 class Client::State : public enable_shared_from_this<Client::State> {
     friend class Client;
 
+    enum class InternalState {
+        Created, Failed, Started, Stopped
+    };
+
 public:
     State(asio::io_context& ctx, ClientConfig cfg)
         : _ctx(ctx)
@@ -168,6 +172,14 @@ public:
     void start();
 
     void stop() {
+        if (_internal_state == InternalState::Created)
+            _internal_state = InternalState::Stopped;
+
+        if (_internal_state != InternalState::Started)
+            return;
+
+        _internal_state = InternalState::Stopped;
+
         // Requests waiting for these after stop may get "operation aborted"
         // when these are destroyed.
         // If the cancellation signal in `wait_for_*` was not called,
@@ -189,6 +201,41 @@ public:
             _udp_reachability->stop();
             _udp_reachability = nullptr;
         }
+    }
+
+    Client::RunningState get_state() const noexcept {
+        switch (_internal_state) {
+        case InternalState::Created:
+            return Client::RunningState::Created;
+        case InternalState::Failed:
+            return Client::RunningState::Failed;
+        case InternalState::Stopped:
+            // TODO: Gather stopped state from members
+            // instead of checking that all tasks in the context
+            // (even those which are not part of the client object) are finished.
+            return _ctx.stopped()
+                ? Client::RunningState::Stopped
+                : Client::RunningState::Stopping;
+        }
+        assert(_internal_state == InternalState::Started);
+
+        if (was_stopped())
+            return Client::RunningState::Stopping;  // `stop()` did not run yet
+
+        // TODO: check proxy acceptor
+        // TODO: check front-end acceptor
+        bool use_injector(_config.injector_endpoint());
+        bool use_cache(_config.cache_type() != ClientConfig::CacheType::None);
+        if (use_injector && _injector_starting)
+            return Client::RunningState::Starting;
+        if (use_cache && _cache_starting)
+            return Client::RunningState::Starting;
+        if (use_injector && _injector_start_ec)
+            return Client::RunningState::Degraded;
+        if (use_cache && _cache_start_ec)
+            return Client::RunningState::Degraded;
+
+        return Client::RunningState::Started;
     }
 
     void setup_cache(asio::yield_context);
@@ -292,7 +339,7 @@ private:
     CacheControl build_cache_control(request_route::Config& request_config);
 
     tcp::acceptor make_acceptor( const tcp::endpoint&
-                               , const char* service);
+                               , const char* service) const;
 
     void listen_tcp( asio::yield_context
                    , tcp::acceptor
@@ -425,6 +472,9 @@ private:
     // (i.e. from an injector exchange or injector-signed cached content).
     unsigned newest_proto_seen = http_::protocol_version_current;
 
+    // This reflects which operations have been called on the object.
+    InternalState _internal_state = InternalState::Created;
+
     asio::io_context& _ctx;
     ClientConfig _config;
     std::unique_ptr<CACertificate> _ca_certificate;
@@ -432,6 +482,7 @@ private:
     std::unique_ptr<OuiServiceClient> _injector;
     std::unique_ptr<cache::Client> _cache;
     boost::optional<ConditionVariable> _injector_starting, _cache_starting;
+    sys::error_code _injector_start_ec, _cache_start_ec;
 
     ClientFrontEnd _front_end;
     Signal<void()> _shutdown_signal;
@@ -859,6 +910,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
     sys::error_code ec;
     auto res = _front_end.serve( _config
                                , rq
+                               , get_state()
                                , _cache.get()
                                , *_ca_certificate
                                , udp_port
@@ -2224,6 +2276,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     sys::error_code ec;
     auto notify_ready = defer([&] {
         if (!_cache_starting) return;
+        _cache_start_ec = ec;
         _cache_starting->notify(ec);
         _cache_starting.reset();
     });
@@ -2271,7 +2324,7 @@ void Client::State::setup_cache(asio::yield_context yield)
 
 //------------------------------------------------------------------------------
 tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
-                                          , const char* service)
+                                          , const char* service) const
 {
     sys::error_code ec;
 
@@ -2366,6 +2419,14 @@ void Client::State::listen_tcp
 //------------------------------------------------------------------------------
 void Client::State::start()
 {
+    if (_internal_state != InternalState::Created)
+        return;
+
+    InternalState next_internal_state = InternalState::Failed;
+    auto set_internal_state = defer([&] {
+        _internal_state = next_internal_state;
+    });
+
     // These may throw if the endpoints are busy.
     auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
     boost::optional<tcp::acceptor> front_end_acceptor;
@@ -2389,6 +2450,8 @@ void Client::State::start()
                              , _config.tls_injector_cert_path()));
         }
     }
+
+    next_internal_state = InternalState::Started;
 
     TRACK_SPAWN(_ctx, ([
         this,
@@ -2484,6 +2547,7 @@ void Client::State::setup_injector(asio::yield_context yield)
     sys::error_code ec;
     auto notify_ready = defer([&] {
         if (!_injector_starting) return;
+        _injector_start_ec = ec;
         _injector_starting->notify(ec);
         _injector_starting.reset();
     });
@@ -2613,6 +2677,10 @@ void Client::start()
 void Client::stop()
 {
     _state->stop();
+}
+
+Client::RunningState Client::get_state() const noexcept {
+    return _state->get_state();
 }
 
 void Client::charging_state_change(bool is_charging) {

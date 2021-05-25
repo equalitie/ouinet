@@ -29,6 +29,21 @@ public class Ouinet {
         System.setProperty("https.proxyPort", "8077");
     }
 
+    // Since the client can be started several times,
+    // there are no real "initial" and "final" states.
+    // The client should be in Created or Stopped state before starting it;
+    // if a short time after start it is in the Created, Failed or Stopped states,
+    // its start can be considered as failed.
+    public enum RunningState {
+        Created,  // not told to start yet (initial)
+        Failed,  // told to start, error precludes from continuing (final)
+        Starting,  // told to start, some operations still pending completion
+        Degraded,  // told to start, some operations succeeded but others failed
+        Started,  // told to start, all operations succeeded
+        Stopping,  // told to stop, some operations still pending completion
+        Stopped,  // told to stop, all operations succeeded (final)
+    }
+
     private static final String TAG = "OuinetJava";
 
     private final Context context;
@@ -40,6 +55,22 @@ public class Ouinet {
     public Ouinet(Context context, Config config) {
         this.context = context;
         this.config = config;
+    }
+
+    // See the comments about RunningState above for
+    // the meaning of the different states returned.
+    public RunningState getState() {
+        // TODO: Avoid needing to keep this in sync by hand.
+        switch (nGetClientState()) {
+        case 0: return RunningState.Created;
+        case 1: return RunningState.Failed;
+        case 2: return RunningState.Starting;
+        case 3: return RunningState.Degraded;
+        case 4: return RunningState.Started;
+        case 5: return RunningState.Stopping;
+        case 6: return RunningState.Stopped;
+        }
+        return RunningState.Failed;
     }
 
     public synchronized void start() {
@@ -197,6 +228,7 @@ public class Ouinet {
      * @return Path to CA root certificate.
      */
     private static native String nGetCARootCert(String ouinetDirectory);
+    private native int nGetClientState();
     private native void nStartClient(String[] args, String[] path);
     private native void nStopClient();
     private native void nChargingStateChange(boolean isCharging);
