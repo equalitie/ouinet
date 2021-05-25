@@ -311,7 +311,7 @@ public class Config implements Parcelable {
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
         out.writeString(cacheType);
-        out.writeBoolean(cacheAggressive);
+        out.writeInt(cacheAggressive ? 1 : 0);
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
     }
@@ -324,7 +324,7 @@ public class Config implements Parcelable {
         caRootCertPath = in.readString();
         obfs4ProxyPath = in.readString();
         cacheType = in.readString();
-        cacheAggressive = in.readBoolean();
+        cacheAggressive = in.readInt() != 0;
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
     }
