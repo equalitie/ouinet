@@ -60,8 +60,8 @@ public:
         return _max_cached_age;
     }
 
-    bool is_cache_aggressive() const {
-        return _cache_aggressive;
+    bool do_cache_private() const {
+        return _cache_private;
     }
 
     const fs::path& cache_static_path() const {
@@ -153,8 +153,8 @@ public:
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
-          ("cache-aggressive"
-           , po::bool_switch(&_cache_aggressive)->default_value(false)
+          ("cache-private"
+           , po::bool_switch(&_cache_private)->default_value(false)
            , "Store responses regardless of being private or "
              "the result of an authorized request "
              "(in spite of Section 3 of RFC 7234), "
@@ -228,7 +228,7 @@ private:
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
-    bool _cache_aggressive = false;
+    bool _cache_private = false;
 
     std::string _client_credentials;
     std::map<Endpoint, std::string> _injector_credentials;

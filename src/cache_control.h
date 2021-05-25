@@ -51,12 +51,12 @@ public:
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
 
-    // Aggressive caching allows storing a response regardless of
+    // Private caching allows storing a response regardless of
     // being private or the result of an authorized request
     // (in spite of Section 3 of RFC 7234).
     static bool ok_to_cache( const http::request_header<>&  request
                            , const http::response_header<>& response
-                           , bool aggressive_cache = false
+                           , bool cache_private = false
                            , const char** reason = nullptr);
 
     void enable_parallel_fetch(bool value) {

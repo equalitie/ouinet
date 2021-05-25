@@ -400,8 +400,8 @@ BOOST_AUTO_TEST_CASE(test_response_private)
     Response rs{http::status::ok, rq.version()};
     rs.set(http::field::cache_control, "private");
 
-    BOOST_REQUIRE(!CacheControl::ok_to_cache(rq, rs));  // not aggressive
-    BOOST_REQUIRE(CacheControl::ok_to_cache(rq, rs, true));  // aggressive
+    BOOST_REQUIRE(!CacheControl::ok_to_cache(rq, rs));  // not private
+    BOOST_REQUIRE(CacheControl::ok_to_cache(rq, rs, true));  // private
 }
 
 BOOST_AUTO_TEST_CASE(test_if_none_match)
