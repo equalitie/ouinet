@@ -53,10 +53,7 @@ public:
 
     // Aggressive caching allows storing responses regardless of
     // being marked as private or belonging to authorized requests
-    // (in spite of Section 3 of RFC 7234),
-    // unless tagged as private to the Ouinet client.
-    // Please use with caution as it may seed supposedly private content
-    // to other clients.
+    // (in spite of Section 3 of RFC 7234).
     static bool ok_to_cache( const http::request_header<>&  request
                            , const http::response_header<>& response
                            , bool aggressive_cache = false
