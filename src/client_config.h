@@ -60,6 +60,10 @@ public:
         return _max_cached_age;
     }
 
+    bool do_cache_private() const {
+        return _cache_private;
+    }
+
     const fs::path& cache_static_path() const {
         return _cache_static_path;
     }
@@ -149,6 +153,15 @@ public:
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
+          ("cache-private"
+           , po::bool_switch(&_cache_private)->default_value(false)
+           , "Store responses regardless of being private or "
+             "the result of an authorized request "
+             "(in spite of Section 3 of RFC 7234), "
+             "unless tagged as private to the Ouinet client. "
+             "Sensitive headers are still removed from Injector requests. "
+             "May need special injector configuration. "
+             "USE WITH CAUTION.")
           ("cache-static-repo"
            , po::value<string>()
            , "Repository for internal files of the static cache "
@@ -215,6 +228,7 @@ private:
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
+    bool _cache_private = false;
 
     std::string _client_credentials;
     std::map<Endpoint, std::string> _injector_credentials;
