@@ -155,11 +155,13 @@ public:
               "(0: discard all; -1: discard none)")
           ("cache-aggressive"
            , po::bool_switch(&_cache_aggressive)->default_value(false)
-           , "Store responses regardless of being marked as private or "
-             "belonging to authorized requests "
+           , "Store responses regardless of being private or "
+             "the result of an authorized request "
              "(in spite of Section 3 of RFC 7234), "
              "unless tagged as private to the Ouinet client. "
-             "CAUTION: This may seed supposedly private content to other clients.")
+             "Sensitive headers are still removed from Injector requests. "
+             "May need special injector configuration. "
+             "USE WITH CAUTION.")
           ("cache-static-repo"
            , po::value<string>()
            , "Repository for internal files of the static cache "
