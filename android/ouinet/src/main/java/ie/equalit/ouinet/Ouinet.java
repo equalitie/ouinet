@@ -95,11 +95,6 @@ public class Ouinet {
         //args.add("--listen-on-tcp=127.0.0.1:8177");
         //args.add("--front-end-ep=127.0.0.1:8178");
 
-        // Useful for debugging
-        //args.add("--disable-origin-access");
-        //args.add("--disable-proxy-access");
-        //args.add("--disable-injector-access");
-
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
         maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
@@ -109,6 +104,18 @@ public class Ouinet {
         maybeAdd(args, "--cache-static-root",      config.getCacheStaticContentPath());
 
         args.add("--debug-level=" + config.getDebugLevel().name());
+
+        if (config.getDisableOriginAccess()) {
+            args.add("--disable-origin-access");
+        }
+
+        if (config.getDisableProxyAccess()) {
+            args.add("--disable-proxy-access");
+        }
+
+        if (config.getDisableInjectorAccess()) {
+            args.add("--disable-injector-access");
+        }
 
         if (config.getCachePrivate()) {
             args.add("--cache-private");

@@ -46,6 +46,9 @@ public class Config implements Parcelable {
         private boolean cachePrivate = false;
         private String cacheStaticPath;
         private String cacheStaticContentPath;
+        private boolean disableOriginAccess   = false;
+        private boolean disableProxyAccess    = false;
+        private boolean disableInjectorAccess = false;
         private DebugLevel debugLevel = DebugLevel.INFO;
 
         public ConfigBuilder(Context context) {
@@ -86,6 +89,18 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setCacheStaticContentPath(String cacheStaticContentPath){
             this.cacheStaticContentPath = cacheStaticContentPath;
+            return this;
+        }
+        public ConfigBuilder setDisableOriginAccess(boolean disableOriginAccess){
+            this.disableOriginAccess = disableOriginAccess;
+            return this;
+        }
+        public ConfigBuilder setDisableProxyAccess(boolean disableProxyAccess){
+            this.disableProxyAccess = disableProxyAccess;
+            return this;
+        }
+        public ConfigBuilder setDisableInjectorAccess(boolean disableInjectorAccess){
+            this.disableInjectorAccess = disableInjectorAccess;
             return this;
         }
         public ConfigBuilder setDebugLevel(DebugLevel debugLevel){
@@ -228,6 +243,9 @@ public class Config implements Parcelable {
                     cachePrivate,
                     cacheStaticPath,
                     cacheStaticContentPath,
+                    disableOriginAccess,
+                    disableProxyAccess,
+                    disableInjectorAccess,
                     debugLevel);
         }
     }
@@ -243,6 +261,9 @@ public class Config implements Parcelable {
     private boolean cachePrivate;
     private String cacheStaticPath;
     private String cacheStaticContentPath;
+    private boolean disableOriginAccess;
+    private boolean disableProxyAccess;
+    private boolean disableInjectorAccess;
     private DebugLevel debugLevel;
 
     private Config(String ouinetDirectory,
@@ -256,6 +277,9 @@ public class Config implements Parcelable {
                   boolean cachePrivate,
                   String cacheStaticPath,
                   String cacheStaticContentPath,
+                  boolean disableOriginAccess,
+                  boolean disableProxyAccess,
+                  boolean disableInjectorAccess,
                   DebugLevel debugLevel) {
         this.ouinetDirectory = ouinetDirectory;
         this.cacheHttpPubKey = cacheHttpPubKey;
@@ -268,6 +292,9 @@ public class Config implements Parcelable {
         this.cachePrivate = cachePrivate;
         this.cacheStaticPath = cacheStaticPath;
         this.cacheStaticContentPath = cacheStaticContentPath;
+        this.disableOriginAccess = disableOriginAccess;
+        this.disableProxyAccess = disableProxyAccess;
+        this.disableInjectorAccess = disableInjectorAccess;
         this.debugLevel = debugLevel;
     }
     public String getOuinetDirectory() {
@@ -303,6 +330,15 @@ public class Config implements Parcelable {
     public String getCacheStaticContentPath() {
         return cacheStaticContentPath;
     }
+    public boolean getDisableOriginAccess() {
+        return disableOriginAccess;
+    }
+    public boolean getDisableProxyAccess() {
+        return disableProxyAccess;
+    }
+    public boolean getDisableInjectorAccess() {
+        return disableInjectorAccess;
+    }
     public DebugLevel getDebugLevel() {
         return debugLevel;
     }
@@ -336,6 +372,9 @@ public class Config implements Parcelable {
         out.writeInt(cachePrivate ? 1 : 0);
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
+        out.writeInt(disableOriginAccess ? 1 : 0);
+        out.writeInt(disableProxyAccess ? 1 : 0);
+        out.writeInt(disableInjectorAccess ? 1 : 0);
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(debugLevel.ordinal());
     }
@@ -351,6 +390,11 @@ public class Config implements Parcelable {
         cachePrivate = in.readInt() != 0;
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
+
+        disableOriginAccess   = in.readInt() != 0;
+        disableProxyAccess    = in.readInt() != 0;
+        disableInjectorAccess = in.readInt() != 0;
+
         debugLevel = DebugLevel.values()[in.readInt()];
     }
 
