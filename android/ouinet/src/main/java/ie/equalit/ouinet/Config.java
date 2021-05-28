@@ -20,6 +20,16 @@ import java.io.IOException;
  * app to avoid race conditions.
  */
 public class Config implements Parcelable {
+    public static enum DebugLevel {
+        SILLY,
+        DEBUG,
+        VERBOSE,
+        INFO,
+        WARN,
+        ERROR,
+        ABORT
+    }
+
     private static final String TAG = "OuinetConfig";
 
     private static final String ASSET_PATH = "file:///android_asset/";
@@ -36,6 +46,7 @@ public class Config implements Parcelable {
         private boolean cachePrivate = false;
         private String cacheStaticPath;
         private String cacheStaticContentPath;
+        private DebugLevel debugLevel = DebugLevel.INFO;
 
         public ConfigBuilder(Context context) {
             this.context = context;
@@ -75,6 +86,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setCacheStaticContentPath(String cacheStaticContentPath){
             this.cacheStaticContentPath = cacheStaticContentPath;
+            return this;
+        }
+        public ConfigBuilder setDebugLevel(DebugLevel debugLevel){
+            this.debugLevel = debugLevel;
             return this;
         }
 
@@ -212,7 +227,8 @@ public class Config implements Parcelable {
                     cacheType,
                     cachePrivate,
                     cacheStaticPath,
-                    cacheStaticContentPath);
+                    cacheStaticContentPath,
+                    debugLevel);
         }
     }
 
@@ -227,6 +243,7 @@ public class Config implements Parcelable {
     private boolean cachePrivate;
     private String cacheStaticPath;
     private String cacheStaticContentPath;
+    private DebugLevel debugLevel;
 
     private Config(String ouinetDirectory,
                   String cacheHttpPubKey,
@@ -238,7 +255,8 @@ public class Config implements Parcelable {
                   String cacheType,
                   boolean cachePrivate,
                   String cacheStaticPath,
-                  String cacheStaticContentPath) {
+                  String cacheStaticContentPath,
+                  DebugLevel debugLevel) {
         this.ouinetDirectory = ouinetDirectory;
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
@@ -250,6 +268,7 @@ public class Config implements Parcelable {
         this.cachePrivate = cachePrivate;
         this.cacheStaticPath = cacheStaticPath;
         this.cacheStaticContentPath = cacheStaticContentPath;
+        this.debugLevel = debugLevel;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -284,6 +303,9 @@ public class Config implements Parcelable {
     public String getCacheStaticContentPath() {
         return cacheStaticContentPath;
     }
+    public DebugLevel getDebugLevel() {
+        return debugLevel;
+    }
 
     public static final Parcelable.Creator<Config> CREATOR
             = new Parcelable.Creator<Config>() {
@@ -314,6 +336,8 @@ public class Config implements Parcelable {
         out.writeInt(cachePrivate ? 1 : 0);
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
+        // https://stackoverflow.com/a/48533385/273348
+        out.writeInt(debugLevel.ordinal());
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -327,6 +351,7 @@ public class Config implements Parcelable {
         cachePrivate = in.readInt() != 0;
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
+        debugLevel = DebugLevel.values()[in.readInt()];
     }
 
 }
