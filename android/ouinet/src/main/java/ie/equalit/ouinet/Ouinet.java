@@ -108,6 +108,8 @@ public class Ouinet {
         maybeAdd(args, "--cache-static-repo",      config.getCacheStaticPath());
         maybeAdd(args, "--cache-static-root",      config.getCacheStaticContentPath());
 
+        args.add("--debug-level=" + config.getDebugLevel().name());
+
         if (config.getCachePrivate()) {
             args.add("--cache-private");
         }

@@ -113,6 +113,7 @@ public:
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
            ("debug", "Enable debugging messages")
+           ("debug-level", po::value<string>()->default_value("INFO"), "Set debug level: SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT")
 
            // Client options
            ("listen-on-tcp"
@@ -212,6 +213,28 @@ public:
         return _origin_doh_endpoint;
     }
 
+    void set_debug_level(const std::string& debug_level) {
+        if (debug_level == "SILLY") {
+            logger.set_threshold(SILLY);
+        } else if (debug_level == "DEBUG") {
+            logger.set_threshold(DEBUG);
+        } else if (debug_level == "VERBOSE") {
+            logger.set_threshold(VERBOSE);
+        } else if (debug_level == "INFO") {
+            logger.set_threshold(INFO);
+        } else if (debug_level == "WARN") {
+            logger.set_threshold(WARN);
+        } else if (debug_level == "ERROR") {
+            logger.set_threshold(ERROR);
+        } else if (debug_level == "ABORT") {
+            logger.set_threshold(ABORT);
+        } else {
+            LOG_ERROR("Invalid debug level: ", debug_level);
+            return;
+        }
+        LOG_INFO("Debug level set to: ", debug_level);
+    }
+
 private:
     bool _is_help = false;
     fs::path _repo_root;
@@ -297,6 +320,11 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm.count("debug")) {
         logger.set_threshold(DEBUG);
+    }
+
+    if (vm.count("debug-level")) {
+        auto debug_level = vm["debug-level"].as<string>();
+        set_debug_level(debug_level);
     }
 
     if (vm.count("open-file-limit")) {
