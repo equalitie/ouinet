@@ -2103,10 +2103,10 @@ void Client::State::serve_request( GenericStream&& con
         //
         //   - Unsafe methods (CONNECT, DELETE, PATCH, POST, PUT): do not cache
         //   - Safe but uncacheable methods (OPTIONS, TRACE): do not cache
-        //   - Safe and cacheable (GET, HEAD): cache, but HEAD not yet supported
+        //   - Safe and cacheable (GET, HEAD): cache
         //
         // Thus the only remaining method that implies caching is GET.
-        Match( !reqexpr::from_regex(method_getter, "GET")
+        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD)")
              , nocache_request_config),
         // Requests declaring a method override are checked by that method.
         // This is not a standard header,
