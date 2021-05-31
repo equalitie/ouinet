@@ -103,7 +103,7 @@ public class Ouinet {
         maybeAdd(args, "--cache-static-repo",      config.getCacheStaticPath());
         maybeAdd(args, "--cache-static-root",      config.getCacheStaticContentPath());
 
-        args.add("--debug-level=" + config.getDebugLevel().name());
+        args.add("--log-level=" + config.getLogLevel().name());
 
         if (config.getDisableOriginAccess()) {
             args.add("--disable-origin-access");

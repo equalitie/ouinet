@@ -112,8 +112,8 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("debug", "Enable debugging messages (deprecated: use --debug-level instead)")
-           ("debug-level", po::value<string>()->default_value("INFO"), "Set debug level: SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT")
+           ("debug", "Enable debugging messages (deprecated: use --log-level instead)")
+           ("log-level", po::value<string>()->default_value("INFO"), "Set debug level: SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT")
 
            // Client options
            ("listen-on-tcp"
@@ -319,16 +319,16 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     po::notify(vm);
 
     if (vm.count("debug")) {
-        LOG_WARN("The option --debug is deprecated, use --debug-level=DEBUG instead");
+        LOG_WARN("The option --debug is deprecated, use --log-level=DEBUG instead");
         logger.set_threshold(DEBUG);
     }
 
-    if (vm.count("debug-level")) {
+    if (vm.count("log-level")) {
         if (!vm.count("debug")) {
-            auto debug_level = vm["debug-level"].as<string>();
+            auto debug_level = vm["log-level"].as<string>();
             set_debug_level(debug_level);
         } else {
-            LOG_WARN("Ignoring --debug-level due to the presence of --debug");
+            LOG_WARN("Ignoring --log-level due to the presence of --debug");
         }
     }
 
