@@ -112,7 +112,7 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("debug", "Enable debugging messages")
+           ("debug", "Enable debugging messages (deprecated: use --debug-level instead)")
            ("debug-level", po::value<string>()->default_value("INFO"), "Set debug level: SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT")
 
            // Client options
@@ -319,12 +319,17 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     po::notify(vm);
 
     if (vm.count("debug")) {
+        LOG_WARN("The option --debug is deprecated, use --debug-level=DEBUG instead");
         logger.set_threshold(DEBUG);
     }
 
     if (vm.count("debug-level")) {
-        auto debug_level = vm["debug-level"].as<string>();
-        set_debug_level(debug_level);
+        if (!vm.count("debug")) {
+            auto debug_level = vm["debug-level"].as<string>();
+            set_debug_level(debug_level);
+        } else {
+            LOG_WARN("Ignoring --debug-level due to the presence of --debug");
+        }
     }
 
     if (vm.count("open-file-limit")) {
