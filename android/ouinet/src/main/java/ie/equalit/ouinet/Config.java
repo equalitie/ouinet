@@ -20,7 +20,7 @@ import java.io.IOException;
  * app to avoid race conditions.
  */
 public class Config implements Parcelable {
-    public static enum DebugLevel {
+    public static enum LogLevel {
         SILLY,
         DEBUG,
         VERBOSE,
@@ -49,7 +49,7 @@ public class Config implements Parcelable {
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
         private boolean disableInjectorAccess = false;
-        private DebugLevel debugLevel = DebugLevel.INFO;
+        private LogLevel logLevel = LogLevel.INFO;
 
         public ConfigBuilder(Context context) {
             this.context = context;
@@ -103,8 +103,8 @@ public class Config implements Parcelable {
             this.disableInjectorAccess = disableInjectorAccess;
             return this;
         }
-        public ConfigBuilder setDebugLevel(DebugLevel debugLevel){
-            this.debugLevel = debugLevel;
+        public ConfigBuilder setLogLevel(LogLevel logLevel){
+            this.logLevel = logLevel;
             return this;
         }
 
@@ -246,7 +246,7 @@ public class Config implements Parcelable {
                     disableOriginAccess,
                     disableProxyAccess,
                     disableInjectorAccess,
-                    debugLevel);
+                    logLevel);
         }
     }
 
@@ -264,7 +264,7 @@ public class Config implements Parcelable {
     private boolean disableOriginAccess;
     private boolean disableProxyAccess;
     private boolean disableInjectorAccess;
-    private DebugLevel debugLevel;
+    private LogLevel logLevel;
 
     private Config(String ouinetDirectory,
                   String cacheHttpPubKey,
@@ -280,7 +280,7 @@ public class Config implements Parcelable {
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
                   boolean disableInjectorAccess,
-                  DebugLevel debugLevel) {
+                  LogLevel logLevel) {
         this.ouinetDirectory = ouinetDirectory;
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
@@ -295,7 +295,7 @@ public class Config implements Parcelable {
         this.disableOriginAccess = disableOriginAccess;
         this.disableProxyAccess = disableProxyAccess;
         this.disableInjectorAccess = disableInjectorAccess;
-        this.debugLevel = debugLevel;
+        this.logLevel = logLevel;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -339,8 +339,8 @@ public class Config implements Parcelable {
     public boolean getDisableInjectorAccess() {
         return disableInjectorAccess;
     }
-    public DebugLevel getDebugLevel() {
-        return debugLevel;
+    public LogLevel getLogLevel() {
+        return logLevel;
     }
 
     public static final Parcelable.Creator<Config> CREATOR
@@ -376,7 +376,7 @@ public class Config implements Parcelable {
         out.writeInt(disableProxyAccess ? 1 : 0);
         out.writeInt(disableInjectorAccess ? 1 : 0);
         // https://stackoverflow.com/a/48533385/273348
-        out.writeInt(debugLevel.ordinal());
+        out.writeInt(logLevel.ordinal());
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -395,7 +395,7 @@ public class Config implements Parcelable {
         disableProxyAccess    = in.readInt() != 0;
         disableInjectorAccess = in.readInt() != 0;
 
-        debugLevel = DebugLevel.values()[in.readInt()];
+        logLevel = LogLevel.values()[in.readInt()];
     }
 
 }
