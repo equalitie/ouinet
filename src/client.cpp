@@ -1452,6 +1452,7 @@ public:
         const char* no_cache_reason = nullptr;
         bool do_cache =
             ( cache
+            && rq.method() == http::verb::get  // TODO: storing HEAD response not yet supported
             && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
             && CacheControl::ok_to_cache( rq, rsh, client_state._config.do_cache_private()
                                         , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr))
