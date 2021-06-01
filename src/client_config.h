@@ -112,8 +112,7 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("debug", "Enable debugging messages (deprecated: use --log-level instead)")
-           ("log-level", po::value<string>()->default_value("INFO"), "Set debug level: SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT")
+           ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
 
            // Client options
            ("listen-on-tcp"
@@ -213,26 +212,25 @@ public:
         return _origin_doh_endpoint;
     }
 
-    void set_debug_level(const std::string& debug_level) {
-        if (debug_level == "SILLY") {
+    bool set_log_level(const std::string& log_level) {
+        if (log_level == "SILLY") {
             logger.set_threshold(SILLY);
-        } else if (debug_level == "DEBUG") {
+        } else if (log_level == "DEBUG") {
             logger.set_threshold(DEBUG);
-        } else if (debug_level == "VERBOSE") {
+        } else if (log_level == "VERBOSE") {
             logger.set_threshold(VERBOSE);
-        } else if (debug_level == "INFO") {
+        } else if (log_level == "INFO") {
             logger.set_threshold(INFO);
-        } else if (debug_level == "WARN") {
+        } else if (log_level == "WARN") {
             logger.set_threshold(WARN);
-        } else if (debug_level == "ERROR") {
+        } else if (log_level == "ERROR") {
             logger.set_threshold(ERROR);
-        } else if (debug_level == "ABORT") {
+        } else if (log_level == "ABORT") {
             logger.set_threshold(ABORT);
         } else {
-            LOG_ERROR("Invalid debug level: ", debug_level);
-            return;
+            return false;
         }
-        LOG_INFO("Debug level set to: ", debug_level);
+        return true;
     }
 
 private:
@@ -318,18 +316,12 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
 
-    if (vm.count("debug")) {
-        LOG_WARN("The option --debug is deprecated, use --log-level=DEBUG instead");
-        logger.set_threshold(DEBUG);
-    }
-
     if (vm.count("log-level")) {
-        if (!vm.count("debug")) {
-            auto debug_level = vm["log-level"].as<string>();
-            set_debug_level(debug_level);
-        } else {
-            LOG_WARN("Ignoring --log-level due to the presence of --debug");
-        }
+        auto log_level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
+        if (!set_log_level(log_level))
+            throw std::runtime_error(
+                    util::str("Invalid log level: ", log_level));
+        LOG_INFO("Log level set to: ", log_level);
     }
 
     if (vm.count("open-file-limit")) {
