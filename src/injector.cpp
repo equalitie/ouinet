@@ -82,18 +82,15 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 //------------------------------------------------------------------------------
 static
-void handle_bad_request( GenericStream& con
-                       , const Request& req
-                       , string message
-                       , Yield yield)
+void handle_error( GenericStream& con
+                 , const Request& req
+                 , http::status status
+                 , const string& proto_error
+                 , const string& message
+                 , Yield yield)
 {
-    http::response<http::string_body> res{http::status::bad_request, req.version()};
-
-    res.set(http::field::server, OUINET_INJECTOR_SERVER_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(req.keep_alive());
-    res.body() = message;
-    res.prepare_payload();
+    auto res = util::http_error( req, status
+                               , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
 
     yield.log("=== Sending back response ===");
     yield.log(res);
@@ -102,11 +99,23 @@ void handle_bad_request( GenericStream& con
 }
 
 static
+void handle_error( GenericStream& con
+                 , const Request& req
+                 , http::status status
+                 , const string& message
+                 , Yield yield)
+{
+    return handle_error(con, req, status, "", message, yield);
+}
+
+static
 void handle_no_proxy( GenericStream& con
                     , const Request& req
                     , Yield yield)
 {
-    return handle_bad_request(con, req, "Proxy disabled", yield);
+    return handle_error( con, req, http::status::forbidden
+                       , http_::response_error_hdr_proxy_disabled, "Proxy disabled"
+                       , yield);
 }
 
 //------------------------------------------------------------------------------
@@ -174,21 +183,20 @@ void handle_connect_request( GenericStream client_c
     TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec]);
 
     if (ec) {
-        // Prepare and send error message to `con`.
-        string host, err;
+        string host;
         tie(host, ignore) = util::get_host_port(req);
 
-        if (ec == asio::error::netdb_errors::host_not_found)
-            err = "Could not resolve host: " + host;
-        else if (ec == asio::error::invalid_argument)
-            err = "Illegal target host: " + host;
-        else
-            err = "Unknown resolver error: " + ec.message();
+        if (ec == asio::error::invalid_argument)
+            return handle_error( client_c, req, http::status::bad_request
+                               , "Illegal target host: " + host
+                               , yield[ec].tag("handle_error"));
 
-        handle_bad_request( client_c, req, err
-                          , yield[ec].tag("handle_bad_request"));
-
-        return;
+        return handle_error( client_c, req, http::status::bad_gateway
+                           , http_::response_error_hdr_retrieval_failed
+                           , (ec == asio::error::netdb_errors::host_not_found)
+                             ? ("Could not resolve host: " + host)
+                             : ("Unknown resolver error: " + ec.message())
+                           , yield[ec].tag("handle_error"));
     }
 
     assert(!lookup.empty());
@@ -200,9 +208,11 @@ void handle_connect_request( GenericStream client_c
     if (port != 80 && port != 443 && port != 8080 && port != 8443) {
         ec = asio::error::invalid_argument;
         auto ep = util::format_ep(lookup.begin()->endpoint());
-        return handle_bad_request( client_c, req
-                                 , "Illegal CONNECT target: " + ep
-                                 , yield[ec]);
+        return handle_error( client_c, req
+                           , http::status::forbidden
+                           , http_::response_error_hdr_target_not_allowed
+                           , "Illegal CONNECT target: " + ep
+                           , yield[ec]);
     }
 
     auto origin_c = connect_to_host( lookup, exec
@@ -210,9 +220,11 @@ void handle_connect_request( GenericStream client_c
                                    , cancel, yield[ec]);
 
     if (ec) {
-        return handle_bad_request( client_c, req
-                                 , "Failed to connect to origin: " + ec.message()
-                                 , yield[ec]);
+        return handle_error( client_c, req
+                           , http::status::bad_gateway
+                           , http_::response_error_hdr_retrieval_failed
+                           , "Failed to connect to origin: " + ec.message()
+                           , yield[ec]);
     }
 
     auto disconnect_origin_slot = cancel.connect([&origin_c] {
@@ -425,7 +437,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         return;
     }
 
-    handle_bad_request(con, rq, "Unknown injector request", yield);
+    handle_error(con, rq, http::status::not_found, "Unknown injector request", yield);
 }
 
 //------------------------------------------------------------------------------
@@ -512,9 +524,10 @@ void serve( InjectorConfig& config
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
             if (!util::req_ensure_host(req)) {  // origin pools require host
-                handle_bad_request( con, req
-                                  , "Invalid or missing host in request"
-                                  , yield[ec].tag("proxy/plain/handle_bad_request"));
+                handle_error( con, req
+                            , http::status::bad_request
+                            , "Invalid or missing host in request"
+                            , yield[ec].tag("proxy/plain/handle_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -551,9 +564,11 @@ void serve( InjectorConfig& config
                 orig_con = rr.release_stream();  // may be reused with keep-alive
             }
             if (ec) {
-                handle_bad_request( con, req
-                                  , "Failed to retrieve content from origin: " + ec.message()
-                                  , yield[ec].tag("proxy/plain/handle_bad_request"));
+                handle_error( con, req
+                            , http::status::bad_gateway
+                            , http_::response_error_hdr_retrieval_failed
+                            , "Failed to retrieve content from origin: " + ec.message()
+                            , yield[ec].tag("proxy/plain/handle_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -568,7 +583,10 @@ void serve( InjectorConfig& config
             if (opt_err_res)
                 http::async_write(con, *opt_err_res, yield[ec]);
             else if (is_restricted_target(req.target()))
-                handle_bad_request(con, req, "Target not allowed", yield[ec].tag("inject/handle_restricted"));
+                handle_error( con, req, http::status::forbidden
+                            , http_::response_error_hdr_target_not_allowed
+                            , "Target not allowed"
+                            , yield[ec].tag("inject/handle_restricted"));
             else
                 cc.fetch( con, move(req)
                         , cancel, yield[ec].tag("inject/fetch"));
