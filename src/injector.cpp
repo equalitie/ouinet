@@ -84,10 +84,11 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 static
 void handle_error( GenericStream& con
                  , const Request& req
+                 , http::status status
                  , const string& message
                  , Yield yield)
 {
-    auto res = util::http_error( req, http::status::bad_request
+    auto res = util::http_error( req, status
                                , OUINET_INJECTOR_SERVER_STRING, "", message);
 
     yield.log("=== Sending back response ===");
@@ -101,7 +102,7 @@ void handle_no_proxy( GenericStream& con
                     , const Request& req
                     , Yield yield)
 {
-    return handle_error(con, req, "Proxy disabled", yield);
+    return handle_error(con, req, http::status::forbidden, "Proxy disabled", yield);
 }
 
 //------------------------------------------------------------------------------
@@ -173,14 +174,16 @@ void handle_connect_request( GenericStream client_c
         string host, err;
         tie(host, ignore) = util::get_host_port(req);
 
+        http::status status = http::status::bad_gateway;
         if (ec == asio::error::netdb_errors::host_not_found)
             err = "Could not resolve host: " + host;
-        else if (ec == asio::error::invalid_argument)
+        else if (ec == asio::error::invalid_argument) {
             err = "Illegal target host: " + host;
-        else
+            status = http::status::bad_request;
+        } else
             err = "Unknown resolver error: " + ec.message();
 
-        handle_error( client_c, req, err
+        handle_error( client_c, req, status, err
                     , yield[ec].tag("handle_error"));
 
         return;
@@ -196,6 +199,7 @@ void handle_connect_request( GenericStream client_c
         ec = asio::error::invalid_argument;
         auto ep = util::format_ep(lookup.begin()->endpoint());
         return handle_error( client_c, req
+                           , http::status::forbidden
                            , "Illegal CONNECT target: " + ep
                            , yield[ec]);
     }
@@ -206,6 +210,7 @@ void handle_connect_request( GenericStream client_c
 
     if (ec) {
         return handle_error( client_c, req
+                           , http::status::bad_gateway
                            , "Failed to connect to origin: " + ec.message()
                            , yield[ec]);
     }
@@ -420,7 +425,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         return;
     }
 
-    handle_error(con, rq, "Unknown injector request", yield);
+    handle_error(con, rq, http::status::not_found, "Unknown injector request", yield);
 }
 
 //------------------------------------------------------------------------------
@@ -508,6 +513,7 @@ void serve( InjectorConfig& config
             // but the client should be using a CONNECT request instead!
             if (!util::req_ensure_host(req)) {  // origin pools require host
                 handle_error( con, req
+                            , http::status::bad_request
                             , "Invalid or missing host in request"
                             , yield[ec].tag("proxy/plain/handle_error"));
                 if (ec || !req_keep_alive) break;
@@ -547,6 +553,7 @@ void serve( InjectorConfig& config
             }
             if (ec) {
                 handle_error( con, req
+                            , http::status::bad_gateway
                             , "Failed to retrieve content from origin: " + ec.message()
                             , yield[ec].tag("proxy/plain/handle_error"));
                 if (ec || !req_keep_alive) break;
@@ -563,7 +570,8 @@ void serve( InjectorConfig& config
             if (opt_err_res)
                 http::async_write(con, *opt_err_res, yield[ec]);
             else if (is_restricted_target(req.target()))
-                handle_error(con, req, "Target not allowed", yield[ec].tag("inject/handle_restricted"));
+                handle_error( con, req, http::status::forbidden, "Target not allowed"
+                            , yield[ec].tag("inject/handle_restricted"));
             else
                 cc.fetch( con, move(req)
                         , cancel, yield[ec].tag("inject/fetch"));
