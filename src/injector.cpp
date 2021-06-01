@@ -84,7 +84,7 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 static
 void handle_bad_request( GenericStream& con
                        , const Request& req
-                       , string message
+                       , const string& message
                        , Yield yield)
 {
     auto res = util::http_error( req, http::status::bad_request
