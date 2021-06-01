@@ -87,13 +87,8 @@ void handle_bad_request( GenericStream& con
                        , string message
                        , Yield yield)
 {
-    http::response<http::string_body> res{http::status::bad_request, req.version()};
-
-    res.set(http::field::server, OUINET_INJECTOR_SERVER_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(req.keep_alive());
-    res.body() = message;
-    res.prepare_payload();
+    auto res = util::http_error( req, http::status::bad_request
+                               , OUINET_INJECTOR_SERVER_STRING, "", message);
 
     yield.log("=== Sending back response ===");
     yield.log(res);
