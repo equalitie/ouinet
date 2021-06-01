@@ -40,7 +40,7 @@ static const unsigned protocol_version_current = 6;
 
 // The presence of this HTTP request header
 // indicates that an error happened processing the request,
-// with informatio complementing the HTTP status code.
+// with information complementing the HTTP status code.
 //
 // The format of this header is guaranteed to be `[0-9]+ [\x21-\x7E][\x20-\x7E]*`
 // for all versions of the protocol (including future ones).
