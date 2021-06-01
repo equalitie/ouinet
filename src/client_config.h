@@ -112,7 +112,7 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("log-level", po::value<string>()->default_value("INFO"), "Set log level: SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT")
+           ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
 
            // Client options
            ("listen-on-tcp"
@@ -319,7 +319,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm.count("log-level")) {
         auto log_level = vm["log-level"].as<string>();
-        set_log_level(log_level);
+        set_log_level(boost::algorithm::to_upper_copy(log_level));
     }
 
     if (vm.count("open-file-limit")) {
