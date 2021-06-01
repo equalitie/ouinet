@@ -112,7 +112,6 @@ public:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("debug", "Enable debugging messages (deprecated: use --log-level instead)")
            ("log-level", po::value<string>()->default_value("INFO"), "Set log level: SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT")
 
            // Client options
@@ -318,18 +317,9 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
 
-    if (vm.count("debug")) {
-        LOG_WARN("The option --debug is deprecated, use --log-level=DEBUG instead");
-        logger.set_threshold(DEBUG);
-    }
-
     if (vm.count("log-level")) {
-        if (!vm.count("debug")) {
-            auto log_level = vm["log-level"].as<string>();
-            set_log_level(log_level);
-        } else {
-            LOG_WARN("Ignoring --log-level due to the presence of --debug");
-        }
+        auto log_level = vm["log-level"].as<string>();
+        set_log_level(log_level);
     }
 
     if (vm.count("open-file-limit")) {
