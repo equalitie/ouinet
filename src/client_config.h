@@ -212,7 +212,7 @@ public:
         return _origin_doh_endpoint;
     }
 
-    void set_log_level(const std::string& log_level) {
+    bool set_log_level(const std::string& log_level) {
         if (log_level == "SILLY") {
             logger.set_threshold(SILLY);
         } else if (log_level == "DEBUG") {
@@ -228,10 +228,9 @@ public:
         } else if (log_level == "ABORT") {
             logger.set_threshold(ABORT);
         } else {
-            LOG_ERROR("Invalid log level: ", log_level);
-            return;
+            return false;
         }
-        LOG_INFO("Log level set to: ", log_level);
+        return true;
     }
 
 private:
@@ -318,8 +317,11 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     po::notify(vm);
 
     if (vm.count("log-level")) {
-        auto log_level = vm["log-level"].as<string>();
-        set_log_level(boost::algorithm::to_upper_copy(log_level));
+        auto log_level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
+        if (!set_log_level(log_level))
+            throw std::runtime_error(
+                    util::str("Invalid log level: ", log_level));
+        LOG_INFO("Log level set to: ", log_level);
     }
 
     if (vm.count("open-file-limit")) {
