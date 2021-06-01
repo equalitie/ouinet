@@ -87,6 +87,27 @@ public:
     util::Ed25519PrivateKey cache_private_key() const
     { return _ed25519_private_key; }
 
+    bool set_log_level(const std::string& log_level) {
+        if (log_level == "SILLY") {
+           logger.set_threshold(SILLY);
+        } else if (log_level == "DEBUG") {
+            logger.set_threshold(DEBUG);
+        } else if (log_level == "VERBOSE") {
+            logger.set_threshold(VERBOSE);
+        } else if (log_level == "INFO") {
+            logger.set_threshold(INFO);
+        } else if (log_level == "WARN") {
+            logger.set_threshold(WARN);
+        } else if (log_level == "ERROR") {
+            logger.set_threshold(ERROR);
+        } else if (log_level == "ABORT") {
+            logger.set_threshold(ABORT);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
 private:
     void setup_ed25519_private_key(const std::string& hex);
 
@@ -124,7 +145,7 @@ InjectorConfig::options_description()
     desc.add_options()
         ("help", "Produce this help message")
         ("repo", po::value<string>(), "Path to the repository root")
-        ("debug", "Enable debugging messages")
+        ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
 
         // Injector options
         ("open-file-limit"
@@ -208,8 +229,12 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     po::store(po::parse_config_file(ouinet_conf, desc), vm);
     po::notify(vm);
 
-    if (vm.count("debug")) {
-        logger.set_threshold(DEBUG);
+    if (vm.count("log-level")) {
+        auto log_level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
+        if (!set_log_level(log_level))
+            throw std::runtime_error(
+                    util::str("Invalid log level: ", log_level));
+        LOG_INFO("Log level set to: ", log_level);
     }
 
     if (vm.count("open-file-limit")) {
