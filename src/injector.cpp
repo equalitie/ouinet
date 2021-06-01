@@ -429,7 +429,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         http::response<http::empty_body> rs{http::status::ok, rq.version()};
 
         rs.set(http::field::server, OUINET_INJECTOR_SERVER_STRING);
-        rs.set(http::field::content_type, "text/html");
+        rs.set(http::field::content_type, "text/plain");
         rs.keep_alive(rq.keep_alive());
         rs.prepare_payload();
 
