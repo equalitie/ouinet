@@ -53,9 +53,11 @@ static const std::string response_error_hdr = header_prefix + "Error";
 static const boost::regex response_error_rx("^([0-9]+) ([\\x21-\\x7E][\\x20-\\x7E]*)$");
 
 // Internal error codes.
-static const std::string response_error_hdr_version_too_low  = "1 Client's version too low";
-static const std::string response_error_hdr_version_too_high = "2 Client's version too high";
-static const std::string response_error_hdr_retrieval_failed = "3 Resource retrieval failed";
+static const std::string response_error_hdr_version_too_low    = "1 Client's version too low";
+static const std::string response_error_hdr_version_too_high   = "2 Client's version too high";
+static const std::string response_error_hdr_retrieval_failed   = "3 Resource retrieval failed";
+static const std::string response_error_hdr_proxy_disabled     = "4 Proxy support disabled";
+static const std::string response_error_hdr_target_not_allowed = "5 Request target not allowed";
 
 
 // Version-dependent headers:
