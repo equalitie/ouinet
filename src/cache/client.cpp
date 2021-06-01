@@ -275,7 +275,7 @@ struct Client::Impl {
                           , const string& proto_error
                           , asio::yield_context yield)
     {
-        auto res = util::http_client_error(req, status, proto_error);
+        auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
         http::async_write(con, res, yield);
     }
 

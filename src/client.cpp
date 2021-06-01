@@ -531,7 +531,9 @@ void handle_bad_request( GenericStream& con
                        , const string& message
                        , Yield yield)
 {
-    auto res = util::http_client_error(req, http::status::bad_request, "", message);
+    auto res = util::http_error( req, http::status::bad_request
+                               , OUINET_CLIENT_SERVER_STRING
+                               , "", message);
     auto yield_ = yield.tag("handle_bad_request");
     return handle_http_error(con, res, yield_);
 }
@@ -1903,8 +1905,9 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 http::response<http::string_body>
 Client::State::retrieval_failure_response(const Request& req)
 {
-    auto res = util::http_client_error
-        ( req, http::status::bad_gateway, http_::response_error_hdr_retrieval_failed
+    auto res = util::http_error
+        ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
+        , http_::response_error_hdr_retrieval_failed
         , "Failed to retrieve the resource "
           "(after attempting all configured mechanisms)");
     maybe_add_proto_version_warning(res);

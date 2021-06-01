@@ -164,17 +164,18 @@ bool http_proto_version_check_trusted( const Message& message
         , newest_proto_seen);
 }
 
-// Create an HTTP client error response for the given request `rq`
-// with the given `status` and `message` body (text/plain).
+// Create an HTTP error response for the given request `rq`
+// with the given `status`, `server` header and `message` body (text/plain).
 // If `proto_error` is not empty,
 // make this a Ouinet protocol message with that error.
 template<class Request>
 inline
 http::response<http::string_body>
-http_client_error( const Request& rq
-                 , http::status status
-                 , const std::string& proto_error
-                 , const std::string& message = "")
+http_error( const Request& rq
+          , http::status status
+          , const char* server
+          , const std::string& proto_error
+          , const std::string& message = "")
 {
     http::response<http::string_body> rs{status, rq.version()};
 
@@ -183,7 +184,7 @@ http_client_error( const Request& rq
         rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
         rs.set(http_::response_error_hdr, proto_error);
     }
-    rs.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
+    rs.set(http::field::server, server);
     rs.set(http::field::content_type, "text/plain");
     rs.keep_alive(rq.keep_alive());
     rs.body() = message;
