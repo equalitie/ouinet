@@ -1182,15 +1182,13 @@ Session Client::State::fetch_fresh_through_simple_proxy
     if (can_inject) {
         maybe_add_proto_version_warning(hdr);
 
-        session.response_header().set( http_::response_source_hdr  // for agent
-                                     , http_::response_source_hdr_injector);
+        hdr.set(http_::response_source_hdr, http_::response_source_hdr_injector);  // for agent
     } else {
         // Prevent others from inserting ouinet headers
         // (except a protocol error, if present and well-formed).
         util::remove_ouinet_nonerrors_ref(hdr);
 
-        session.response_header().set( http_::response_source_hdr  // for agent
-                                     , http_::response_source_hdr_proxy);
+        hdr.set(http_::response_source_hdr, http_::response_source_hdr_proxy);  // for agent
     }
     return session;
 }
