@@ -1446,7 +1446,8 @@ public:
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
             _YERROR(yield, "Error from injector: ", injector_error);
-            return or_throw(yield, err::invalid_argument);
+            tnx.write_to_user_agent(session, cancel, yield[ec]);
+            return or_throw(yield, ec);
         }
 
         auto& ctx = client_state.get_io_context();
