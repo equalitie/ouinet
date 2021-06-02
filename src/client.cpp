@@ -40,6 +40,7 @@
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
+#include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
@@ -1045,10 +1046,19 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     if (connres.result() != http::status::ok) {
-        // This error code is quite fake, so log the error too.
-        // Unfortunately there is no body to show.
         yield.tag("proxy_connect").log(connres);
-        return or_throw<Session>(yield, asio::error::connection_refused);
+        // The use of `fetch_http<http::empty_body>` above precludes us from
+        // using the response body in a normal `Session` or `Reader`,
+        // so drop it altogether (TODO).
+        auto rsh = util::without_framing(connres.base());
+        rsh.set(http::field::content_length, 0);  // avoid blocking the agent
+        util::remove_ouinet_nonerrors_ref(rsh);
+        rsh.set(http_::response_source_hdr, http_::response_source_hdr_proxy);
+
+        auto r = std::make_unique<QueueReader>(_ctx.get_executor());
+        r->insert(http_response::Part(http_response::Head(std::move(rsh))));
+        auto s = Session::create(std::move(r), cancel, yield[ec]);
+        return or_throw(yield, ec, std::move(s));
     }
 
     GenericStream con;
