@@ -52,7 +52,7 @@ http_injection_trailer( const http::response_header<>& rsh
     // initial head, minus chunking (and related headers) and its signature,
     // plus trailer headers.
     // Use `...-Data-Size` internal header instead on `Content-Length`.
-    auto to_sign = SignedHead::without_framing(rsh);
+    auto to_sign = util::without_framing(rsh);
     to_sign.erase(SignedHead::initial_signature_hdr());
     for (auto& hdr : rst)
         to_sign.set(hdr.name_string(), hdr.value());
@@ -146,7 +146,7 @@ http::response_header<>
 http_injection_merge( http::response_header<> rsh
                     , const http::fields& rst)
 {
-    rsh = SignedHead::without_framing(std::move(rsh));
+    rsh = util::without_framing(std::move(rsh));
 
     // Extend the head with trailer headers.
     for (const auto& th : rst)

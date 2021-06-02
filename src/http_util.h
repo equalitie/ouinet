@@ -193,6 +193,17 @@ http_error( const Request& rq
     return rs;
 }
 
+inline
+http::response_header<>
+without_framing(const http::response_header<>& rsh)
+{
+    http::response<http::empty_body> rs(rsh);
+    rs.chunked(false);  // easier with a whole response
+    rs.erase(http::field::content_length);  // 0 anyway because of empty body
+    rs.erase(http::field::trailer);
+    return rs.base();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where
 // the set is defined by second, third, fourth,... arguments.
