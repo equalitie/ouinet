@@ -1046,7 +1046,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     if (connres.result() != http::status::ok) {
-        yield.tag("proxy_connect").log(connres);
+        _YERROR(yield.tag("proxy_connect"), connres);
         // The use of `fetch_http<http::empty_body>` above precludes us from
         // using the response body in a normal `Session` or `Reader`,
         // so drop it altogether (TODO).
