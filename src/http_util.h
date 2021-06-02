@@ -281,6 +281,20 @@ static Message remove_ouinet_fields(Message message)
     return message;
 }
 
+// Remove Ouinet protocol fields, but keep a protocol error if present and well-formed.
+template<class Body>
+static void remove_ouinet_nonerrors_ref(http::response_header<Body>& message)
+{
+    auto proto_err = message[http_::response_error_hdr].to_string();
+    remove_ouinet_fields_ref(message);
+
+    if (!boost::regex_match(proto_err, http_::response_error_rx))
+        return;
+
+    message.set(http_::protocol_version_hdr, http_::protocol_version_current);
+    message.set(http_::response_error_hdr, proto_err);
+}
+
 template<class Response>
 static Response to_non_chunked_response(Response rs) {
     rs.chunked(false);

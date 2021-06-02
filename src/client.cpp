@@ -1187,14 +1187,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
     } else {
         // Prevent others from inserting ouinet headers
         // (except a protocol error, if present and well-formed).
-        auto proto_err = hdr[http_::response_error_hdr].to_string();
-        util::remove_ouinet_fields_ref(hdr);
+        util::remove_ouinet_nonerrors_ref(hdr);
 
-        if (boost::regex_match(proto_err, http_::response_error_rx)) {
-            session.response_header().set( http_::protocol_version_hdr
-                                         , http_::protocol_version_current);
-            session.response_header().set(http_::response_error_hdr, proto_err);
-        }
         session.response_header().set( http_::response_source_hdr  // for agent
                                      , http_::response_source_hdr_proxy);
     }
