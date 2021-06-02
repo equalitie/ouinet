@@ -193,6 +193,17 @@ http_error( const Request& rq
     return rs;
 }
 
+inline
+http::response_header<>
+without_framing(const http::response_header<>& rsh)
+{
+    http::response<http::empty_body> rs(rsh);
+    rs.chunked(false);  // easier with a whole response
+    rs.erase(http::field::content_length);  // 0 anyway because of empty body
+    rs.erase(http::field::trailer);
+    return rs.base();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Utility function to check whether an HTTP field belongs to a set. Where
 // the set is defined by second, third, fourth,... arguments.
@@ -279,6 +290,20 @@ static Message remove_ouinet_fields(Message message)
 {
     remove_ouinet_fields_ref(message);
     return message;
+}
+
+// Remove Ouinet protocol fields, but keep a protocol error if present and well-formed.
+template<class Body>
+static void remove_ouinet_nonerrors_ref(http::response_header<Body>& message)
+{
+    auto proto_err = message[http_::response_error_hdr].to_string();
+    remove_ouinet_fields_ref(message);
+
+    if (!boost::regex_match(proto_err, http_::response_error_rx))
+        return;
+
+    message.set(http_::protocol_version_hdr, http_::protocol_version_current);
+    message.set(http_::response_error_hdr, proto_err);
 }
 
 template<class Response>

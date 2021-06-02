@@ -40,6 +40,7 @@
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
+#include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
@@ -1045,10 +1046,19 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     if (connres.result() != http::status::ok) {
-        // This error code is quite fake, so log the error too.
-        // Unfortunately there is no body to show.
-        yield.tag("proxy_connect").log(connres);
-        return or_throw<Session>(yield, asio::error::connection_refused);
+        _YERROR(yield.tag("proxy_connect"), connres);
+        // The use of `fetch_http<http::empty_body>` above precludes us from
+        // using the response body in a normal `Session` or `Reader`,
+        // so drop it altogether (TODO).
+        auto rsh = util::without_framing(connres.base());
+        rsh.set(http::field::content_length, 0);  // avoid blocking the agent
+        util::remove_ouinet_nonerrors_ref(rsh);
+        rsh.set(http_::response_source_hdr, http_::response_source_hdr_proxy);
+
+        auto r = std::make_unique<QueueReader>(_ctx.get_executor());
+        r->insert(http_response::Part(http_response::Head(std::move(rsh))));
+        auto s = Session::create(std::move(r), cancel, yield[ec]);
+        return or_throw(yield, ec, std::move(s));
     }
 
     GenericStream con;
@@ -1182,14 +1192,13 @@ Session Client::State::fetch_fresh_through_simple_proxy
     if (can_inject) {
         maybe_add_proto_version_warning(hdr);
 
-        session.response_header().set( http_::response_source_hdr  // for agent
-                                     , http_::response_source_hdr_injector);
+        hdr.set(http_::response_source_hdr, http_::response_source_hdr_injector);  // for agent
     } else {
-        // Prevent others from inserting ouinet headers.
-        util::remove_ouinet_fields_ref(hdr);
+        // Prevent others from inserting ouinet headers
+        // (except a protocol error, if present and well-formed).
+        util::remove_ouinet_nonerrors_ref(hdr);
 
-        session.response_header().set( http_::response_source_hdr  // for agent
-                                     , http_::response_source_hdr_proxy);
+        hdr.set(http_::response_source_hdr, http_::response_source_hdr_proxy);  // for agent
     }
     return session;
 }
@@ -1437,7 +1446,8 @@ public:
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
             _YERROR(yield, "Error from injector: ", injector_error);
-            return or_throw(yield, err::invalid_argument);
+            tnx.write_to_user_agent(session, cancel, yield[ec]);
+            return or_throw(yield, ec);
         }
 
         auto& ctx = client_state.get_io_context();

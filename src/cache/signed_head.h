@@ -119,17 +119,6 @@ public:
                  , std::chrono::seconds::rep injection_ts
                  , const util::Ed25519PrivateKey& sk);
 
-    static
-    http::response_header<>
-    without_framing(const http::response_header<>& rsh)
-    {
-        http::response<http::empty_body> rs(rsh);
-        rs.chunked(false);  // easier with a whole response
-        rs.erase(http::field::content_length);  // 0 anyway because of empty body
-        rs.erase(http::field::trailer);
-        return rs.base();
-    }
-
     // Verify that the given response head contains
     // good signatures for it from the given public key.
     // Return a head which only contains headers covered by at least one such signature,
@@ -212,7 +201,7 @@ SignedHead::sign_response( const http::request_header<>& rqh
            , boost::format(fmt_) % key_id % response_data_block);
 
     // Create a signature of the initial head.
-    auto to_sign = without_framing(rsh);
+    auto to_sign = util::without_framing(rsh);
     rsh.set(initial_signature_hdr(), http_signature(to_sign, sk, key_id, injection_ts));
 
     // Enabling chunking is easier with a whole respone,
@@ -238,7 +227,7 @@ SignedHead::verify(http::response_header<> rsh, const util::Ed25519PublicKey& pk
     // given head, minus chunking (and related headers), and signatures themselves.
     // Collect signatures found in the meanwhile.
     http::response_header<> to_verify, sig_headers;
-    to_verify = SignedHead::without_framing(rsh);
+    to_verify = util::without_framing(rsh);
     for (auto hit = rsh.begin(); hit != rsh.end();) {
         auto hn = hit->name_string();
         if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
