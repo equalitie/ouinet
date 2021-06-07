@@ -332,10 +332,20 @@ private:
         if (ec) yield.log("Failed to send request: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
 
-        auto insert_id = to_string(genuuid());
-        auto insert_ts = chrono::seconds(time(nullptr)).count();
-        Session::reader_uptr sig_reader = make_unique<cache::SigningReader>
-            (move(orig_con), cache_rq, move(insert_id), insert_ts, config.cache_private_key());
+
+        Session::reader_uptr sig_reader;
+        auto cache_rq_method = cache_rq.method();
+        if (cache_rq_method == http::verb::get || cache_rq_method == http::verb::head) {
+            auto insert_id = to_string(genuuid());
+            auto insert_ts = chrono::seconds(time(nullptr)).count();
+            sig_reader = make_unique<cache::SigningReader>
+                (move(orig_con), cache_rq, move(insert_id), insert_ts, config.cache_private_key());
+        } else {
+            // Responses of unsafe or uncacheable requests should not be cached.
+            yield.log("Not signing response: not a GET or HEAD request");
+            sig_reader = make_unique<http_response::Reader>(move(orig_con));
+        }
+
         auto orig_sess = Session::create(move(sig_reader), timeout_cancel, yield.tag("read-hdr")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
@@ -352,7 +362,7 @@ private:
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response: ", ec.message());
         return_or_throw_on_error(yield, cancel, ec);
-        yield.log("Injection end");  // TODO: report whether inject or just fwd
+        yield.log("Injection end");
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
     }
