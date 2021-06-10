@@ -51,6 +51,7 @@ REPO=$(dirname $CONF)
 
 repo_arg=$(get_repo_from_args "$@")
 REPO="${repo_arg:-$REPO}"
+CACHE_STATIC_ROOT="$REPO/static-cache"
 
 CLIENT_PROXY_PORT=8077
 INJECTOR_LOOP_ADDR=127.7.2.1
@@ -88,6 +89,14 @@ if [ ! -d "$REPO" ] && ! has_help_arg "$@"; then
     if [ "$PROG" = injector ]; then
         password=$(dd if=/dev/urandom bs=1024 count=1 status=none | md5sum | cut -f1 -d' ')
         sed -i -E "s/^(credentials\s*=\s*).*/\1ouinet:$password/" "$CONF"
+    fi
+fi
+
+# Enable features depending on the environment.
+if [ "$PROG" = client ] && ! has_help_arg "$@"; then
+    # Enable the static cache if present (and not yet done).
+    if test -d "$CACHE_STATIC_ROOT/.ouinet" && ! grep -qE '^#*\s*cache-static-root\s*=' "$CONF"; then
+        echo "cache-static-root = $CACHE_STATIC_ROOT" >> "$CONF"
     fi
 fi
 
