@@ -21,12 +21,6 @@ public class Ouinet {
     static {
         System.loadLibrary("client");
         System.loadLibrary("native-lib");
-
-        System.setProperty("http.proxyHost", "127.0.0.1");
-        System.setProperty("http.proxyPort", "8077");
-
-        System.setProperty("https.proxyHost", "127.0.0.1");
-        System.setProperty("https.proxyPort", "8077");
     }
 
     // Since the client can be started several times,
