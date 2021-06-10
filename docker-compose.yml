@@ -32,6 +32,14 @@ services:
     image: "equalitie/ouinet:${OUINET_VERSION:-latest}"
     volumes:
       - data:/var/opt/ouinet
+    # Uncomment the following lines to
+    # mount a static cache root from the host.
+    #
+    #  - type: bind
+    #    source: /host/path/to/static-cache
+    #    target: /var/opt/ouinet/static-cache
+    #    read_only: true
+    #
     # Host networking is preferred over port forwarding
     # if running on a Linux host (especially for injectors).
     # Otherwise see below.

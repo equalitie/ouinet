@@ -264,6 +264,9 @@ You may use [Docker Compose](https://docs.docker.com/compose/) with the
 commands using that configuration file, you must be in the directory where the
 file resides.
 
+If you want to create a client that seeds a static cache root (see below) from
+a directory in the host, check the instructions in `docker-compose.yml`.
+
 If you just plan to **run a single client** with the latest code on your
 computer, you should be fine with running the following command:
 
