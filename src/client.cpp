@@ -657,8 +657,11 @@ Client::State::fetch_stored_in_dcache( const Request& request
 
     auto key = key_from_http_req(request);
     if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
-    auto s = c->load(move(*key), dht_group, cancel, yield[ec]);
+    auto s = c->load(move(*key), dht_group, request.method() == http::verb::head, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
+
+    s.debug();
+    s.debug_prefix(yield.tag());
 
     auto& hdr = s.response_header();
 
@@ -736,7 +739,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
     if (ec) return or_throw<Session>(yield, ec);
 
-    return Session::create(move(con), cancel, yield);
+    return Session::create(move(con), request.method() == http::verb::head, cancel, yield);
 }
 
 // Transforms addresses to endpoints with the given port.
@@ -980,7 +983,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     }
     if (ec) return or_throw<Session>(yield, ec);
 
-    auto ret = Session::create(std::move(con), cancel, yield[ec]);
+    auto ret = Session::create(std::move(con), rq.method() == http::verb::head, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
@@ -1057,7 +1060,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
         auto r = std::make_unique<QueueReader>(_ctx.get_executor());
         r->insert(http_response::Part(http_response::Head(std::move(rsh))));
-        auto s = Session::create(std::move(r), cancel, yield[ec]);
+        auto s = Session::create(std::move(r), rq.method() == http::verb::head, cancel, yield[ec]);
         return or_throw(yield, ec, std::move(s));
     }
 
@@ -1084,7 +1087,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         return_or_throw_on_error(yield, cancel, ec, Session());
     }
 
-    auto session = Session::create(move(con), cancel, yield[ec]);
+    auto session = Session::create(move(con), rq.method() == http::verb::head, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
@@ -1170,7 +1173,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     cancel_slot = {};
 
     // Receive response
-    auto session = Session::create(move(con), cancel, yield[ec]);
+    auto session = Session::create(move(con), request.method() == http::verb::head, cancel, yield[ec]);
 
     auto& hdr = session.response_header();
 
@@ -1490,7 +1493,7 @@ public:
         ] (asio::yield_context yield_) {
             sys::error_code ec;
             auto rr = std::make_unique<AsyncQueueReader>(qag);
-            Session sag = Session::create(std::move(rr), cancel, yield_[ec]);
+            Session sag = Session::create(std::move(rr), tnx.request().method() == http::verb::head, cancel, yield_[ec]);
             if (cancel) return;
             if (ec) return;
             tnx.write_to_user_agent(sag, cancel, yield_[ec]);

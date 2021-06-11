@@ -3,6 +3,9 @@
 #include "generic_stream.h"
 #include "response_reader.h"
 
+//#include "util/part_io.h"
+//#include <iostream>
+
 namespace ouinet {
 
 class Session : public http_response::AbstractReader {
@@ -19,10 +22,10 @@ public:
     Session& operator=(Session&&) = default;
 
     // Construct the session and read response head
-    static Session create(GenericStream, Cancel, asio::yield_context);
+    static Session create(GenericStream, bool is_head_response, Cancel, asio::yield_context);
 
     template<class Reader>
-    static Session create(std::unique_ptr<Reader>&&, Cancel, asio::yield_context);
+    static Session create(std::unique_ptr<Reader>&&, bool is_head_response, Cancel, asio::yield_context);
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
@@ -54,31 +57,42 @@ public:
         return _reader->get_executor();
     }
 
+    void debug() { _debug = true; }
+    void debug_prefix(std::string s) { _debug_prefix = std::move(s); }
+
 private:
-    Session(http_response::Head&& head, reader_uptr&& reader)
+    Session(http_response::Head&& head, bool is_head_response, reader_uptr&& reader)
         : _head(std::move(head))
         , _reader(std::move(reader))
+        , _is_head_response(is_head_response)
     {}
 
 private:
     http_response::Head _head;
     reader_uptr _reader;
     bool _head_was_read = false;
+    bool _is_head_response;
+    bool _debug = false;
+    std::string _debug_prefix;
 };
 
 inline
-Session Session::create(GenericStream con, Cancel cancel, asio::yield_context yield)
+Session Session::create( GenericStream con
+                       , bool is_head_response
+                       , Cancel cancel
+                       , asio::yield_context yield)
 {
     assert(!cancel);
 
     reader_uptr reader = std::make_unique<http_response::Reader>(std::move(con));
 
-    return Session::create(std::move(reader), cancel, yield);
+    return Session::create(std::move(reader), is_head_response, cancel, yield);
 }
 
 template<class Reader>
 inline
 Session Session::create( std::unique_ptr<Reader>&& reader
+                       , bool is_head_response
                        , Cancel cancel, asio::yield_context yield)
 {
     assert(!cancel);
@@ -103,7 +117,7 @@ Session Session::create( std::unique_ptr<Reader>&& reader
 
     if (!head) return or_throw<Session>(yield, http::error::unexpected_body);
 
-    return Session{std::move(*head), std::move(reader)};
+    return Session{std::move(*head), is_head_response, std::move(reader)};
 }
 
 inline
@@ -131,6 +145,8 @@ Session::flush_response(SinkStream& sink,
     _head.async_write(sink, cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec);
 
+    if (_is_head_response) return;
+
     while (true) {
         auto opt_part = _reader->async_read_part(cancel, yield[ec]);
         assert(ec != http::error::end_of_stream);
@@ -153,9 +169,12 @@ Session::flush_response(Cancel& cancel,
     sys::error_code ec;
 
     _head_was_read = true;
+
     h(http_response::Part{_head}, cancel, yield[ec]);
     if (cancel) ec = asio::error::operation_aborted;
     return_or_throw_on_error(yield, cancel, ec);
+
+    if (_is_head_response) return;
 
     while (true) {
         auto opt_part = _reader->async_read_part(cancel, yield[ec]);

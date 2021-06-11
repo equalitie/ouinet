@@ -69,6 +69,7 @@ public:
     // This may add a response source header.
     Session load( const std::string& key
                 , const std::string& dht_group
+                , bool is_head_request
                 , Cancel
                 , Yield);
 

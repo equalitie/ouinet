@@ -218,19 +218,15 @@ struct Client::Impl {
 
         _YDEBUG(yield, "Serving ", *key);
 
-        auto s = Session::create(move(rr), cancel, yield[ec].tag("read_header"));
+        bool is_head_request = req.method() == http::verb::head;
+
+        auto s = Session::create(move(rr), is_head_request, cancel, yield[ec].tag("read_header"));
 
         if (ec) return or_throw(yield, ec, false);
 
         bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
 
-        auto& head = s.response_header();
-
-        if (req.method() == http::verb::head) {
-            head.async_write(sink, cancel, yield[ec].tag("write-head"));
-        } else {
-            s.flush_response(sink, cancel, yield[ec].tag("flush"));
-        }
+        s.flush_response(sink, cancel, yield[ec].tag("flush"));
 
         return or_throw(yield, ec, keep_alive);
     }
@@ -308,6 +304,7 @@ struct Client::Impl {
 
     Session load( const std::string& key
                 , const std::string& dht_group
+                , bool is_head_request
                 , Cancel cancel
                 , Yield yield_)
     {
@@ -320,7 +317,7 @@ struct Client::Impl {
         _YDEBUG(yield, "Requesting from the cache: ", key);
 
         {
-            auto rs = load_from_local(key, cancel, yield[ec]);
+            auto rs = load_from_local(key, is_head_request, cancel, yield[ec]);
             _YDEBUG(yield, "looking up local cache ec:", ec.message());
             if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
             // TODO: Check its age, store it if it's too old but keep trying
@@ -346,7 +343,7 @@ struct Client::Impl {
             , _newest_proto_seen
             , debug_tag);
 
-        auto s = Session::create(std::move(reader), cancel, yield[ec].tag("create_session"));
+        auto s = Session::create(std::move(reader), is_head_request, cancel, yield[ec].tag("create_session"));
 
         if (!ec) {
             s.response_header().set( http_::response_source_hdr  // for agent
@@ -357,13 +354,14 @@ struct Client::Impl {
     }
 
     Session load_from_local( const std::string& key
+                           , bool is_head_request
                            , Cancel cancel
                            , Yield yield)
     {
         sys::error_code ec;
         auto rr = _http_store->reader(key, ec);
         if (ec) return or_throw<Session>(yield, ec);
-        auto rs = Session::create(move(rr), cancel, yield[ec]);
+        auto rs = Session::create(move(rr), is_head_request, cancel, yield[ec]);
         assert(!cancel || ec == asio::error::operation_aborted);
         if (!ec) rs.response_header().set( http_::response_source_hdr  // for agent
                                          , http_::response_source_hdr_local_cache);
@@ -621,9 +619,12 @@ Client::Client(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
 
-Session Client::load(const std::string& key, const std::string& dht_group, Cancel cancel, Yield yield)
+Session Client::load( const std::string& key
+                    , const std::string& dht_group
+                    , bool is_head_request
+                    , Cancel cancel, Yield yield)
 {
-    return _impl->load(key, dht_group, cancel, yield);
+    return _impl->load(key, dht_group, is_head_request, cancel, yield);
 }
 
 void Client::store( const std::string& key
