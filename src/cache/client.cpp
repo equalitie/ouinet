@@ -28,6 +28,7 @@
 #define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 #define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+#define _YERROR(y, ...) do { if (logger.get_threshold() <= ERROR) y.log(ERROR, __VA_ARGS__); } while (false)
 
 using namespace std;
 using namespace ouinet;
@@ -316,15 +317,25 @@ struct Client::Impl {
 
         _YDEBUG(yield, "Requesting from the cache: ", key);
 
-        {
-            auto rs = load_from_local(key, is_head_request, cancel, yield[ec]);
-            _YDEBUG(yield, "looking up local cache ec:", ec.message());
-            if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
+        bool rs_available = false;
+        auto rs = load_from_local(key, is_head_request, cancel, yield[ec]);
+        _YDEBUG(yield, "looking up local cache ec:", ec.message());
+        if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
+        if (!ec) {
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
-            if (!ec) return rs;
-            // Try distributed cache on other errors.
-            ec = {};
+            auto rs_sz = _http_store->body_size(key, ec);
+            if (ec) {
+                _YERROR(yield, "Failed to get body size of response in local cache ec:", ec.message());
+                rs.close();
+            } else {
+                auto data_size_sv = rs.response_header()[http_::response_data_size_hdr];
+                auto data_size_o = parse::number<std::size_t>(data_size_sv);
+                if (data_size_o && rs_sz == *data_size_o)
+                    return rs;  // local copy available and complete, use it
+                rs_available = true;  // available but incomplete
+            }
+            ec = {};  // try distributed cache
         }
 
         string debug_tag;
@@ -348,6 +359,10 @@ struct Client::Impl {
         if (!ec) {
             s.response_header().set( http_::response_source_hdr  // for agent
                                    , http_::response_source_hdr_dist_cache);
+        } else if (ec != err::operation_aborted && rs_available) {
+            _YDEBUG(yield, "Multi-peer session creation failed, falling back to incomplete local copy"
+                    " ec:", ec.message());
+            return rs;
         }
 
         return or_throw<Session>(yield, ec, move(s));
