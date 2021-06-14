@@ -702,9 +702,8 @@ canonical_from_content_relpath( const fs::path& body_path_p
 }
 
 static
-asio::posix::stream_descriptor
-open_body_external( const asio::executor& ex
-                  , const fs::path& dirp
+fs::path
+body_path_external( const fs::path& dirp
                   , const fs::path& cdirp
                   , sys::error_code& ec)
 {
@@ -713,16 +712,29 @@ open_body_external( const asio::executor& ex
         auto body_path_s = fs::status(body_path_p, ec);
         if (!ec && !fs::is_regular_file(body_path_s))
             ec = asio::error::bad_descriptor;
-        if (ec) return asio::posix::stream_descriptor(ex);
+        if (ec) return {};
     }
 
     auto body_cp_o = canonical_from_content_relpath(body_path_p, cdirp);
     if (!body_cp_o) {
         ec = asio::error::bad_descriptor;
-        return asio::posix::stream_descriptor(ex);
+        return {};
     }
 
-    return util::file_io::open_readonly(ex, *body_cp_o, ec);
+    return *body_cp_o;
+}
+
+static
+asio::posix::stream_descriptor
+open_body_external( const asio::executor& ex
+                  , const fs::path& dirp
+                  , const fs::path& cdirp
+                  , sys::error_code& ec)
+{
+    auto body_cp = body_path_external(dirp, cdirp, ec);
+    if (ec) return asio::posix::stream_descriptor(ex);
+
+    return util::file_io::open_readonly(ex, body_cp, ec);
 }
 
 template<class Reader>
