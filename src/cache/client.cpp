@@ -334,6 +334,8 @@ struct Client::Impl {
                 if (data_size_o && rs_sz == *data_size_o)
                     return rs;  // local copy available and complete, use it
                 rs_available = true;  // available but incomplete
+                // TODO: Ideally, an incomplete or stale local cache entry
+                // could be reused in the multi-peer download below.
             }
             ec = {};  // try distributed cache
         }
