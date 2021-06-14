@@ -170,6 +170,9 @@ public:
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code&) = 0;
 
     virtual std::size_t
+    body_size(const std::string& key, sys::error_code&) const = 0;
+
+    virtual std::size_t
     size(Cancel, asio::yield_context) const = 0;
 
     virtual HashList

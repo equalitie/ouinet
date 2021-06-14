@@ -972,6 +972,13 @@ public:
     }
 
     std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_body_size(kpath, executor, ec);
+    }
+
+    std::size_t
     size(Cancel cancel, asio::yield_context yield) const override
     {
         // Do not use `for_each` since it can alter the store.
@@ -1028,6 +1035,13 @@ public:
         // Also, the client does not currently issue partial reads to the local cache
         // to be served to the agent.
         return http_store_range_reader(kpath, content_path, executor, first, last, ec);
+    }
+
+    std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_body_size(kpath, content_path, executor, ec);
     }
 
     std::size_t
@@ -1131,6 +1145,10 @@ public:
     reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
     { return read_store->range_reader(key, first, last, ec); }
+
+    std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    { return read_store->body_size(key, ec); }
 
     std::size_t
     size(Cancel cancel, asio::yield_context ec) const override
@@ -1268,6 +1286,15 @@ public:
         if (!ec) return ret;
         _DEBUG("Failed to create range reader for key, trying fallback store: ", key);
         return fallback_store->range_reader(key, first, last, ec = {});
+    }
+
+    std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    {
+        auto ret = FullHttpStore::body_size(key, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to get body size for key, trying fallback store: ", key);
+        return fallback_store->body_size(key, ec = {});
     }
 
     std::size_t
