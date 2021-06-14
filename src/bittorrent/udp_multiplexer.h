@@ -171,10 +171,11 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
         std::vector<uint8_t> buf;
         udp::endpoint from;
 
+        buf.resize(65536);
+
         while (true) {
             sys::error_code ec;
 
-            buf.resize(65536);
 
             size_t size = _socket.async_receive_from(asio::buffer(buf), from, yield[ec]);
             if (terminated) return;
@@ -182,7 +183,6 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
             _rc_rx.update(size);
             recv += size;
 
-            buf.resize(size);
             for (auto& entry : std::move(_receive_queue)) {
                 entry.handler(ec, boost::string_view((char*)&buf[0], size), from);
             }
