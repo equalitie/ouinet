@@ -897,7 +897,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
-                it->second.callback(*message_map);
+                it->second.callback(std::move(*message_map));
             }
         }
     }
@@ -1038,7 +1038,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
 
     _active_requests[transaction] = {
         dst.endpoint,
-        [&] (const BencodedMap& response_) {
+        [&] (BencodedMap&& response_) {
             /*
              * This function is never called when the Dht object is
              * destructed, thus the terminate_slot.
@@ -1047,7 +1047,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
                 return;
             }
             first_error_code = sys::error_code(); // success;
-            response = response_;
+            response = std::move(response_);
             timeout_timer.cancel();
         }
     };

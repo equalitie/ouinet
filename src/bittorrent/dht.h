@@ -366,7 +366,7 @@ class DhtNode {
 
     struct ActiveRequest {
         udp::endpoint destination;
-        std::function<void(const BencodedMap&)> callback;
+        std::function<void(BencodedMap&&)> callback;
     };
     uint32_t _next_transaction_id;
 
