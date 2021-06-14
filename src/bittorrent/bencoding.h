@@ -55,6 +55,12 @@ class BencodedValue : public detail::value {
         return *v;
     }
 
+    boost::optional<boost::string_view> as_string_view() const {
+        auto v = boost::get<std::string>(this);
+        if (!v) return boost::none;
+        return boost::optional<boost::string_view>{{*v}};
+    }
+
     boost::optional<BencodedList> as_list() const {
         auto v = boost::get<BencodedList>(this);
         if (!v) return boost::none;
@@ -68,7 +74,7 @@ class BencodedValue : public detail::value {
     }
 
     bool operator==(const char* str) const {
-        auto opt_str = as_string();
+        auto opt_str = as_string_view();
         return opt_str && *opt_str == str;
     }
 
@@ -77,7 +83,7 @@ class BencodedValue : public detail::value {
     }
 
     bool operator==(const std::string& str) const {
-        auto opt_str = as_string();
+        auto opt_str = as_string_view();
         return opt_str && *opt_str == str;
     }
 
