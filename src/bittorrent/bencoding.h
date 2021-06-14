@@ -61,16 +61,20 @@ class BencodedValue : public detail::value {
         return boost::optional<boost::string_view>{{*v}};
     }
 
-    boost::optional<BencodedList> as_list() const {
-        auto v = boost::get<BencodedList>(this);
-        if (!v) return boost::none;
-        return *v;
+    const BencodedList* as_list() const {
+        return boost::get<BencodedList>(this);
     }
 
-    boost::optional<BencodedMap> as_map() const {
-        auto v = boost::get<BencodedMap>(this);
-        if (!v) return boost::none;
-        return *v;
+    const BencodedMap* as_map() const {
+        return boost::get<BencodedMap>(this);
+    }
+
+    BencodedList* as_list() {
+        return boost::get<BencodedList>(this);
+    }
+
+    BencodedMap* as_map() {
+        return boost::get<BencodedMap>(this);
     }
 
     bool operator==(const char* str) const {

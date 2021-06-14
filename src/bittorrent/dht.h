@@ -257,7 +257,7 @@ class DhtNode {
         asio::yield_context
     );
 
-    void handle_query(udp::endpoint sender, BencodedMap query);
+    void handle_query(udp::endpoint sender, BencodedMap& query);
 
     void bootstrap(asio::yield_context);
 

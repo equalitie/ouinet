@@ -877,7 +877,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         std::cerr << "recv: " << sender << " " << *decoded_message << std::endl;
 #       endif
 
-        boost::optional<BencodedMap> message_map = decoded_message->as_map();
+        BencodedMap* message_map = decoded_message->as_map();
         if (!message_map) {
             continue;
         }
@@ -1109,7 +1109,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     return or_throw<BencodedMap>(yield, *first_error_code, std::move(response));
 }
 
-void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
+void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
 {
     assert(query["y"] == "q");
 
@@ -1151,7 +1151,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
     if (!query["a"].is_map()) {
         return send_error(203, "Missing field 'a'");
     }
-    BencodedMap arguments = *query["a"].as_map();
+    BencodedMap& arguments = *query["a"].as_map();
 
     boost::optional<string_view> sender_id = arguments["id"].as_string_view();
     if (!sender_id) {
@@ -2036,7 +2036,7 @@ bool dht::DhtNode::query_find_node(
     if (find_node_reply["y"] != "r") {
         return false;
     }
-    boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
+    BencodedMap* response = find_node_reply["r"].as_map();
     if (!response) {
         return false;
     }
@@ -2090,7 +2090,7 @@ bool dht::DhtNode::query_find_node2(
         return false;
     }
 
-    boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
+    BencodedMap* response = find_node_reply["r"].as_map();
     if (!response) {
         return false;
     }
@@ -2129,7 +2129,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
     if (get_peers_reply["y"] != "r") {
         return boost::none;
     }
-    boost::optional<BencodedMap> response = get_peers_reply["r"].as_map();
+    BencodedMap* response = get_peers_reply["r"].as_map();
     if (!response) {
         return boost::none;
     }
@@ -2168,7 +2168,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
 
     closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 // http://bittorrent.org/beps/bep_0044.html#get-message
@@ -2240,13 +2240,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
         return boost::none;
     }
 
-    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+    BencodedMap* response = get_reply["r"].as_map();
 
     if (!response) return boost::none;
 
     read_nodes(is_v4(), *response, closer_nodes, cancel, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
@@ -2314,13 +2314,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
 
     std::vector<NodeContact> closer_nodes_v;
 
-    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+    BencodedMap* response = get_reply["r"].as_map();
 
     if (!response) return boost::none;
 
     read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
@@ -2369,13 +2369,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
 
     std::vector<NodeContact> closer_nodes_v;
 
-    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+    BencodedMap* response = get_reply["r"].as_map();
 
     if (!response) return boost::none;
 
     read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 /**
@@ -2432,7 +2432,7 @@ void dht::DhtNode::tracker_do_search_peers(
 
         if (candidate.id) {
             ResponsibleNode node{ candidate.endpoint, {}, std::move(*announce_token) };
-            boost::optional<BencodedList> encoded_peers = response["values"].as_list();
+            BencodedList* encoded_peers = response["values"].as_list();
             if (encoded_peers) {
                 for (auto& peer : *encoded_peers) {
                     auto peer_string = peer.as_string_view();
