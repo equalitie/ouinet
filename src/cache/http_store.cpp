@@ -867,8 +867,11 @@ _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cd
     if (ec == sys::errc::no_such_file_or_directory && cdirp) {
         ec = {};
         bodysz = body_size_external(dirp, *cdirp, ec);
+        if (ec == sys::errc::no_such_file_or_directory) {
+            ec = {};
+            return 0;  // also considered incomplete response
+        }
     }
-    if (ec == sys::errc::no_such_file_or_directory) ec = {};  // also incomplete response
     return bodysz;
 }
 
