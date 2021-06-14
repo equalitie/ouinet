@@ -737,6 +737,18 @@ open_body_external( const asio::executor& ex
     return util::file_io::open_readonly(ex, body_cp, ec);
 }
 
+static
+std::size_t
+body_size_external( const fs::path& dirp
+                  , const fs::path& cdirp
+                  , sys::error_code& ec)
+{
+    auto body_cp = body_path_external(dirp, cdirp, ec);
+    if (ec) return 0;;
+
+    return fs::file_size(body_cp, ec);
+}
+
 template<class Reader>
 static
 reader_uptr
@@ -842,6 +854,36 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
 {
     return _http_store_reader<HttpStoreReader>
         (dirp, cdirp, std::move(ex), first, last, ec);
+}
+
+std::size_t
+_http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cdirp
+                     , asio::executor ex
+                     , sys::error_code& ec)
+{
+    assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
+
+    auto bodysz = fs::file_size(dirp / body_fname, ec);
+    if (ec == sys::errc::no_such_file_or_directory && cdirp) {
+        ec = {};
+        bodysz = body_size_external(dirp, *cdirp, ec);
+    }
+    if (ec == sys::errc::no_such_file_or_directory) ec = {};  // also incomplete response
+    return bodysz;
+}
+
+std::size_t
+http_store_body_size( const fs::path& dirp, asio::executor ex
+                    , sys::error_code& ec)
+{
+    return _http_store_body_size(dirp, boost::none, std::move(ex), ec);
+}
+
+std::size_t
+http_store_body_size( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+                    , sys::error_code& ec)
+{
+    return _http_store_body_size(dirp, cdirp, std::move(ex), ec);
 }
 
 static

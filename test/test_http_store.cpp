@@ -402,6 +402,13 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
     run_spawned(ctx, [&] (auto yield) {
         store_response(tmpdir, complete, ctx, yield);
 
+        {
+            sys::error_code e;
+            auto body_size = cache::http_store_body_size(tmpdir, ctx.get_executor(), e);
+            BOOST_CHECK(!e);
+            BOOST_CHECK_EQUAL(body_size, 131076);
+        }
+
         auto read_file = [&] (auto fname, auto c, auto y) -> string {
             sys::error_code e;
             auto f = util::file_io::open_readonly(ctx.get_executor(), tmpdir / fname, e);
@@ -482,6 +489,13 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         store_response(tmpdir, complete, ctx, yield);
+
+        {
+            sys::error_code e;
+            auto body_size = cache::http_store_body_size(tmpdir, ctx.get_executor(), e);
+            BOOST_CHECK(!e);
+            BOOST_CHECK_EQUAL(body_size, 131076);
+        }
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
@@ -589,6 +603,13 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         store_response_external(tmpdir, tmpcdir, ctx, yield);
+
+        {
+            sys::error_code e;
+            auto body_size = cache::http_store_body_size(tmpdir, tmpcdir, ctx.get_executor(), e);
+            BOOST_CHECK(!e);
+            BOOST_CHECK_EQUAL(body_size, 131076);
+        }
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
@@ -794,6 +815,13 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
     asio::io_context ctx;
     run_spawned(ctx, [&] (auto yield) {
         store_response(tmpdir, true, ctx, yield);
+
+        {
+            sys::error_code e;
+            auto body_size = cache::http_store_body_size(tmpdir, ctx.get_executor(), e);
+            BOOST_CHECK(!e);
+            BOOST_CHECK_EQUAL(body_size, 131076);
+        }
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
