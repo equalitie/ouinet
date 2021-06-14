@@ -1,9 +1,9 @@
 #pragma once
 
-#include <map>
 #include <string>
 #include <vector>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/optional.hpp>
 #include <boost/variant.hpp>
 #include <boost/utility/string_view.hpp>
@@ -18,7 +18,7 @@ namespace bittorrent {
 class BencodedValue;
 
 typedef std::vector<BencodedValue> BencodedList;
-typedef std::map<std::string, BencodedValue> BencodedMap;
+typedef boost::container::flat_map<std::string, BencodedValue> BencodedMap;
 
 namespace detail {
     typedef boost::variant<
@@ -55,20 +55,30 @@ class BencodedValue : public detail::value {
         return *v;
     }
 
-    boost::optional<BencodedList> as_list() const {
-        auto v = boost::get<BencodedList>(this);
+    boost::optional<boost::string_view> as_string_view() const {
+        auto v = boost::get<std::string>(this);
         if (!v) return boost::none;
-        return *v;
+        return boost::optional<boost::string_view>{{*v}};
     }
 
-    boost::optional<BencodedMap> as_map() const {
-        auto v = boost::get<BencodedMap>(this);
-        if (!v) return boost::none;
-        return *v;
+    const BencodedList* as_list() const {
+        return boost::get<BencodedList>(this);
+    }
+
+    const BencodedMap* as_map() const {
+        return boost::get<BencodedMap>(this);
+    }
+
+    BencodedList* as_list() {
+        return boost::get<BencodedList>(this);
+    }
+
+    BencodedMap* as_map() {
+        return boost::get<BencodedMap>(this);
     }
 
     bool operator==(const char* str) const {
-        auto opt_str = as_string();
+        auto opt_str = as_string_view();
         return opt_str && *opt_str == str;
     }
 
@@ -77,7 +87,7 @@ class BencodedValue : public detail::value {
     }
 
     bool operator==(const std::string& str) const {
-        auto opt_str = as_string();
+        auto opt_str = as_string_view();
         return opt_str && *opt_str == str;
     }
 

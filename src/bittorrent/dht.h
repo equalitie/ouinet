@@ -257,7 +257,7 @@ class DhtNode {
         asio::yield_context
     );
 
-    void handle_query(udp::endpoint sender, BencodedMap query);
+    void handle_query(udp::endpoint sender, BencodedMap& query);
 
     void bootstrap(asio::yield_context);
 
@@ -366,10 +366,13 @@ class DhtNode {
 
     struct ActiveRequest {
         udp::endpoint destination;
-        std::function<void(const BencodedMap&)> callback;
+        std::function<void(BencodedMap&&)> callback;
     };
     uint32_t _next_transaction_id;
-    std::map<std::string, ActiveRequest> _active_requests;
+
+    // Reason for std::less<>:
+    //   https://stackoverflow.com/questions/35525777/use-of-string-view-for-map-lookup
+    std::map<std::string, ActiveRequest, std::less<>> _active_requests;
 
     std::vector<udp::endpoint> _bootstrap_endpoints;
 

@@ -33,7 +33,7 @@ std::string detail::DhtWriteTokenStorage::generate_token(asio::ip::address addre
     return std::string((char *)hash.data(), hash.size());
 }
 
-bool detail::DhtWriteTokenStorage::verify_token(asio::ip::address address, NodeID id, const std::string& token)
+bool detail::DhtWriteTokenStorage::verify_token(asio::ip::address address, NodeID id, const boost::string_view token)
 {
     expire();
 

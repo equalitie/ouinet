@@ -31,7 +31,7 @@ class DhtWriteTokenStorage {
     public:
     DhtWriteTokenStorage();
     std::string generate_token(asio::ip::address address, NodeID id);
-    bool verify_token(asio::ip::address address, NodeID id, const std::string& token);
+    bool verify_token(asio::ip::address address, NodeID id, const boost::string_view token);
 
     private:
     void expire();
@@ -82,7 +82,7 @@ class Tracker {
         return _token_storage.generate_token(address, id);
     }
 
-    bool verify_token(asio::ip::address address, NodeID id, const std::string& token)
+    bool verify_token(asio::ip::address address, NodeID id, const boost::string_view token)
     {
         return _token_storage.verify_token(address, id, token);
     }
@@ -114,7 +114,7 @@ class DataStore {
         return _token_storage.generate_token(address, id);
     }
 
-    bool verify_token(asio::ip::address address, NodeID id, const std::string& token)
+    bool verify_token(asio::ip::address address, NodeID id, const boost::string_view token)
     {
         return _token_storage.verify_token(address, id, token);
     }

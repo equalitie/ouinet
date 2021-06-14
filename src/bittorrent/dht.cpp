@@ -164,13 +164,13 @@ static bool read_nodes( bool is_v4
     if (is_v4) {
         auto i = response.find("nodes");
         if (i != response.end()) {
-            boost::optional<std::string> os = i->second.as_string();
+            auto os = i->second.as_string_view();
             if (os) NodeContact::decode_compact_v4(*os, nodes);
         }
     } else {
         auto i = response.find("nodes6");
         if (i != response.end()) {
-            boost::optional<std::string> os = i->second.as_string();
+            auto os = i->second.as_string_view();
             if (os) NodeContact::decode_compact_v6(*os, nodes);
         }
     }
@@ -539,7 +539,7 @@ NodeID dht::DhtNode::data_put_immutable(
         if (candidate.id) {
             responsible_nodes.insert({
                 *candidate.id,
-                { candidate.endpoint, *put_token }
+                { candidate.endpoint, std::move(*put_token) }
             });
         }
     }, cancel, yield[ec]);
@@ -646,7 +646,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
         boost::optional<int64_t> sequence_number = response["seq"].as_int();
         if (!sequence_number) return;
 
-        boost::optional<std::string> signature = response["sig"].as_string();
+        auto signature = response["sig"].as_string_view();
         if (!signature || signature->size() != util::Ed25519PublicKey::sig_size) return;
 
         MutableDataItem item {
@@ -708,7 +708,7 @@ NodeID dht::DhtNode::data_put_mutable(
 
     auto write_to_node = [&] ( const NodeID& id
                              , udp::endpoint ep
-                             , const std::string& put_token
+                             , const string_view put_token
                              , WatchDog& wd
                              , Cancel& cancel
                              , asio::yield_context yield) -> bool {
@@ -718,7 +718,7 @@ NodeID dht::DhtNode::data_put_mutable(
                 { "seq", data.sequence_number },
                 { "sig", util::bytes::to_string(data.signature) },
                 { "v", data.value },
-                { "token", put_token }
+                { "token", put_token.to_string() }
             };
 
             if (!data.salt.empty()) {
@@ -775,7 +775,7 @@ NodeID dht::DhtNode::data_put_mutable(
 
         BencodedMap& response = *response_;
 
-        boost::optional<std::string> put_token = response["token"].as_string();
+        auto put_token = response["token"].as_string_view();
         if (!put_token) {
             return;
         }
@@ -805,7 +805,7 @@ NodeID dht::DhtNode::data_put_mutable(
         boost::optional<int64_t> response_seq = response["seq"].as_int();
         if (!response_seq) return;
 
-        boost::optional<std::string> response_sig = response["sig"].as_string();
+        auto response_sig = response["sig"].as_string_view();
         if (!response_sig || response_sig->size() != util::Ed25519PublicKey::sig_size) return;
 
         MutableDataItem item {
@@ -877,7 +877,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         std::cerr << "recv: " << sender << " " << *decoded_message << std::endl;
 #       endif
 
-        boost::optional<BencodedMap> message_map = decoded_message->as_map();
+        BencodedMap* message_map = decoded_message->as_map();
         if (!message_map) {
             continue;
         }
@@ -886,8 +886,8 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
             continue;
         }
 
-        boost::optional<std::string> message_type = (*message_map)["y"].as_string();
-        boost::optional<std::string> transaction_id = (*message_map)["t"].as_string();
+        boost::optional<string_view> message_type = (*message_map)["y"].as_string_view();
+        boost::optional<string_view> transaction_id = (*message_map)["t"].as_string_view();
         if (!message_type || !transaction_id) {
             continue;
         }
@@ -897,7 +897,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
-                it->second.callback(*message_map);
+                it->second.callback(std::move(*message_map));
             }
         }
     }
@@ -1038,7 +1038,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
 
     _active_requests[transaction] = {
         dst.endpoint,
-        [&] (const BencodedMap& response_) {
+        [&] (BencodedMap&& response_) {
             /*
              * This function is never called when the Dht object is
              * destructed, thus the terminate_slot.
@@ -1047,7 +1047,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
                 return;
             }
             first_error_code = sys::error_code(); // success;
-            response = response_;
+            response = std::move(response_);
             timeout_timer.cancel();
         }
     };
@@ -1109,22 +1109,22 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     return or_throw<BencodedMap>(yield, *first_error_code, std::move(response));
 }
 
-void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
+void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
 {
     assert(query["y"] == "q");
 
-    boost::optional<std::string> transaction_ = query["t"].as_string();
+    const auto transaction_ = query["t"].as_string_view();
 
     if (!transaction_) { return; }
 
-    std::string transaction = *transaction_;
+    const auto transaction = *transaction_;
 
     auto send_error = [&] (int code, std::string description) {
         send_datagram(
             sender,
             BencodedMap {
                 { "y", "e" },
-                { "t", transaction },
+                { "t", transaction.to_string() },
                 { "e", BencodedList{code, description} }
             }
         );
@@ -1137,7 +1137,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
             sender,
             BencodedMap {
                 { "y", "r" },
-                { "t", transaction },
+                { "t", transaction.to_string() },
                 { "e", std::move(reply) }
             }
         );
@@ -1146,14 +1146,14 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
     if (!query["q"].is_string()) {
         return send_error(203, "Missing field 'q'");
     }
-    std::string query_type = *query["q"].as_string();
+    string_view query_type = *query["q"].as_string_view();
 
     if (!query["a"].is_map()) {
         return send_error(203, "Missing field 'a'");
     }
-    BencodedMap arguments = *query["a"].as_map();
+    BencodedMap& arguments = *query["a"].as_map();
 
-    boost::optional<std::string> sender_id = arguments["id"].as_string();
+    boost::optional<string_view> sender_id = arguments["id"].as_string_view();
     if (!sender_id) {
         return send_error(203, "Missing argument 'id'");
     }
@@ -1179,7 +1179,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
     if (query_type == "ping") {
         return send_reply({});
     } else if (query_type == "find_node") {
-        boost::optional<std::string> target_id_ = arguments["target"].as_string();
+        boost::optional<string_view> target_id_ = arguments["target"].as_string_view();
         if (!target_id_) {
             return send_error(203, "Missing argument 'target'");
         }
@@ -1214,7 +1214,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 
         return send_reply(reply);
     } else if (query_type == "get_peers") {
-        boost::optional<std::string> infohash_ = arguments["info_hash"].as_string();
+        boost::optional<string_view> infohash_ = arguments["info_hash"].as_string_view();
         if (!infohash_) {
             return send_error(203, "Missing argument 'info_hash'");
         }
@@ -1260,7 +1260,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 
         return send_reply(reply);
     } else if (query_type == "announce_peer") {
-        boost::optional<std::string> infohash_ = arguments["info_hash"].as_string();
+        boost::optional<string_view> infohash_ = arguments["info_hash"].as_string_view();
         if (!infohash_) {
             return send_error(203, "Missing argument 'info_hash'");
         }
@@ -1269,11 +1269,11 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
         }
         NodeID infohash = NodeID::from_bytestring(*infohash_);
 
-        boost::optional<std::string> token_ = arguments["token"].as_string();
+        boost::optional<string_view> token_ = arguments["token"].as_string_view();
         if (!token_) {
             return send_error(203, "Missing argument 'token'");
         }
-        std::string token = *token_;
+        string_view token = *token_;
         boost::optional<int64_t> port_ = arguments["port"].as_int();
         if (!port_) {
             return send_error(203, "Missing argument 'port'");
@@ -1314,7 +1314,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 
         return send_reply({});
     } else if (query_type == "get") {
-        boost::optional<std::string> target_ = arguments["target"].as_string();
+        boost::optional<string_view> target_ = arguments["target"].as_string_view();
         if (!target_) {
             return send_error(203, "Missing argument 'target'");
         }
@@ -1365,7 +1365,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
 
         return send_reply(reply);
     } else if (query_type == "put") {
-        boost::optional<std::string> token_ = arguments["token"].as_string();
+        boost::optional<string_view> token_ = arguments["token"].as_string_view();
         if (!token_) {
             return send_error(203, "Missing argument 'token'");
         }
@@ -1385,7 +1385,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
             /*
              * This is a mutable data item.
              */
-            boost::optional<std::string> public_key_ = arguments["k"].as_string();
+            boost::optional<string_view> public_key_ = arguments["k"].as_string_view();
             if (!public_key_) {
                 return send_error(203, "Missing argument 'k'");
             }
@@ -1394,7 +1394,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
             }
             util::Ed25519PublicKey public_key(util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(*public_key_));
 
-            boost::optional<std::string> signature_ = arguments["sig"].as_string();
+            boost::optional<string_view> signature_ = arguments["sig"].as_string_view();
             if (!signature_) {
                 return send_error(203, "Missing argument 'sig'");
             }
@@ -1409,14 +1409,14 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap query)
             }
             int64_t sequence_number = *sequence_number_;
 
-            boost::optional<std::string> salt_ = arguments["salt"].as_string();
+            boost::optional<string> salt_ = arguments["salt"].as_string();
             /*
              * Size limit specified in BEP 44
              */
             if (salt_ && salt_->size() > 64) {
                 return send_error(207, "Argument 'salt' too big");
             }
-            std::string salt = salt_ ? *salt_ : "";
+            std::string salt = salt_ ? std::move(*salt_) : "";
 
             NodeID target = _data_store->mutable_get_id(public_key, salt);
 
@@ -1619,7 +1619,7 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
         return or_throw<BootstrapResult>(yield, ec);
     }
 
-    boost::optional<std::string> my_ip = initial_ping_reply["ip"].as_string();
+    auto my_ip = initial_ping_reply["ip"].as_string_view();
 
     if (!my_ip) {
         LOG_DEBUG("Unexpected bootstrap server reply, giving up (no ip)");
@@ -2036,18 +2036,18 @@ bool dht::DhtNode::query_find_node(
     if (find_node_reply["y"] != "r") {
         return false;
     }
-    boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
+    BencodedMap* response = find_node_reply["r"].as_map();
     if (!response) {
         return false;
     }
 
     if (is_v4()) {
-        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
+        auto nodes = (*response)["nodes"].as_string_view();
         if (!NodeContact::decode_compact_v4(*nodes, closer_nodes)) {
             return false;
         }
     } else {
-        boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
+        auto nodes6 = (*response)["nodes6"].as_string_view();
         if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes)) {
             return false;
         }
@@ -2090,7 +2090,7 @@ bool dht::DhtNode::query_find_node2(
         return false;
     }
 
-    boost::optional<BencodedMap> response = find_node_reply["r"].as_map();
+    BencodedMap* response = find_node_reply["r"].as_map();
     if (!response) {
         return false;
     }
@@ -2129,7 +2129,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
     if (get_peers_reply["y"] != "r") {
         return boost::none;
     }
-    boost::optional<BencodedMap> response = get_peers_reply["r"].as_map();
+    BencodedMap* response = get_peers_reply["r"].as_map();
     if (!response) {
         return boost::none;
     }
@@ -2137,12 +2137,12 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
     std::vector<NodeContact> closer_nodes_v;
 
     if (is_v4()) {
-        boost::optional<std::string> nodes = (*response)["nodes"].as_string();
+        auto nodes = (*response)["nodes"].as_string_view();
         if (!NodeContact::decode_compact_v4(*nodes, closer_nodes_v)) {
             return boost::none;
         }
     } else {
-        boost::optional<std::string> nodes6 = (*response)["nodes6"].as_string();
+        auto nodes6 = (*response)["nodes6"].as_string_view();
         if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes_v)) {
             return boost::none;
         }
@@ -2168,7 +2168,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
 
     closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 // http://bittorrent.org/beps/bep_0044.html#get-message
@@ -2240,13 +2240,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
         return boost::none;
     }
 
-    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+    BencodedMap* response = get_reply["r"].as_map();
 
     if (!response) return boost::none;
 
     read_nodes(is_v4(), *response, closer_nodes, cancel, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
@@ -2314,13 +2314,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
 
     std::vector<NodeContact> closer_nodes_v;
 
-    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+    BencodedMap* response = get_reply["r"].as_map();
 
     if (!response) return boost::none;
 
     read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
@@ -2369,13 +2369,13 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
 
     std::vector<NodeContact> closer_nodes_v;
 
-    boost::optional<BencodedMap> response = get_reply["r"].as_map();
+    BencodedMap* response = get_reply["r"].as_map();
 
     if (!response) return boost::none;
 
     read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
 
-    return response;
+    return {std::move(*response)};
 }
 
 /**
@@ -2431,11 +2431,11 @@ void dht::DhtNode::tracker_do_search_peers(
         if (!announce_token) return;
 
         if (candidate.id) {
-            ResponsibleNode node{ candidate.endpoint, {}, *announce_token };
-            boost::optional<BencodedList> encoded_peers = response["values"].as_list();
+            ResponsibleNode node{ candidate.endpoint, {}, std::move(*announce_token) };
+            BencodedList* encoded_peers = response["values"].as_list();
             if (encoded_peers) {
                 for (auto& peer : *encoded_peers) {
-                    boost::optional<std::string> peer_string = peer.as_string();
+                    auto peer_string = peer.as_string_view();
                     if (!peer_string) continue;
 
                     boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
