@@ -346,7 +346,8 @@ private:
             sig_reader = make_unique<http_response::Reader>(move(orig_con));
         }
 
-        auto orig_sess = Session::create(move(sig_reader), timeout_cancel, yield.tag("read-hdr")[ec]);
+        auto orig_sess = Session::create( move(sig_reader), cache_rq_method == http::verb::head
+                                        , timeout_cancel, yield.tag("read-hdr")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response head: ", ec.message());

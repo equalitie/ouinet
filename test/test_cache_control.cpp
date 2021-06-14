@@ -91,7 +91,7 @@ Session make_session(
     });
 
     Cancel c;
-    return Session::create(move(pipe.source), c, y);
+    return Session::create(move(pipe.source), false, c, y);
 }
 
 Entry make_entry(

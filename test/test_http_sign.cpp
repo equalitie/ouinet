@@ -444,7 +444,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             auto sk = get_private_key();
             Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
                 (move(origin_r), move(req_h), inj_id, inj_ts, sk);
-            auto origin_rs = Session::create(std::move(origin_rvr), cancel, y[e]);
+            auto origin_rs = Session::create(std::move(origin_rvr), false, cancel, y[e]);
             BOOST_REQUIRE(!e);
             origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
@@ -545,7 +545,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             auto sk = get_private_key();
             Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
                 (move(origin_r), move(req_h), inj_id, inj_ts, sk);
-            auto origin_rs = Session::create(std::move(origin_rvr), cancel, y[e]);
+            auto origin_rs = Session::create(std::move(origin_rvr), false, cancel, y[e]);
             BOOST_REQUIRE(!e);
             origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
@@ -560,7 +560,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             auto pk = get_public_key();
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
                 (move(signed_r), pk);
-            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            auto signed_rs = Session::create(move(signed_rvr), false, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_rs.flush_response(hashed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
@@ -652,7 +652,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             auto sk = get_private_key();
             Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
                 (move(origin_r), move(req_h), inj_id, inj_ts, sk);
-            auto origin_rs = Session::create(std::move(origin_rvr), cancel, y[e]);
+            auto origin_rs = Session::create(std::move(origin_rvr), false, cancel, y[e]);
             BOOST_REQUIRE(!e);
             origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
@@ -693,7 +693,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             auto pk = get_public_key();
             Session::reader_uptr forged_rvr = make_unique<cache::VerifyingReader>
                 (move(forged_r), pk);
-            auto forged_rs = Session::create(move(forged_rvr), cancel, y[e]);
+            auto forged_rs = Session::create(move(forged_rvr), false, cancel, y[e]);
             BOOST_REQUIRE(!e);
             forged_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::bad_message);
@@ -770,7 +770,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             auto pk = get_public_key();
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
                 (move(signed_r), pk);
-            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            auto signed_rs = Session::create(move(signed_rvr), false, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_rs.flush_response(hashed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
@@ -915,7 +915,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
                 ( move(signed_r), pk
                 , cache::VerifyingReader::status_set{http::status::partial_content});
-            auto signed_rs = Session::create(move(signed_rvr), cancel, y[e]);
+            auto signed_rs = Session::create(move(signed_rvr), false, cancel, y[e]);
             BOOST_REQUIRE_EQUAL(e.message(), "Success");
             signed_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");

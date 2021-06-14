@@ -497,7 +497,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK(!complete || !e);
@@ -604,7 +604,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, ctx.get_executor(), e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK(!e);
@@ -709,7 +709,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
             auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
@@ -819,7 +819,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
                 (tmpdir, ctx.get_executor(), first, last, e);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), c, y[e]);
+            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
