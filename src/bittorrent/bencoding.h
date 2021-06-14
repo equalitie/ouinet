@@ -1,9 +1,9 @@
 #pragma once
 
-#include <map>
 #include <string>
 #include <vector>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/optional.hpp>
 #include <boost/variant.hpp>
 #include <boost/utility/string_view.hpp>
@@ -18,7 +18,7 @@ namespace bittorrent {
 class BencodedValue;
 
 typedef std::vector<BencodedValue> BencodedList;
-typedef std::map<std::string, BencodedValue> BencodedMap;
+typedef boost::container::flat_map<std::string, BencodedValue> BencodedMap;
 
 namespace detail {
     typedef boost::variant<
