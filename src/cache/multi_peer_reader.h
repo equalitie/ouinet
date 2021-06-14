@@ -16,6 +16,7 @@ class MultiPeerReader : public http_response::AbstractReader {
 private:
     class Peer;
     class Peers;
+    struct Block;
 
     enum class State { active, done, closed };
 
@@ -51,6 +52,7 @@ public:
 
 private:
     boost::optional<http_response::Part> async_read_part_impl(Cancel&, asio::yield_context);
+    boost::optional<Block> fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield);
 
     void mark_done();
 

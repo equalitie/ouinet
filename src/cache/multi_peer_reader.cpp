@@ -28,6 +28,13 @@ using udp = asio::ip::udp;
 namespace bt = bittorrent;
 using namespace ouinet::http_response;
 using Errc = MultiPeerReaderErrc;
+using OptPart = boost::optional<Part>;
+
+struct MultiPeerReader::Block {
+    ChunkBody chunk_body;
+    ChunkHdr chunk_hdr;
+    boost::optional<Trailer> trailer;
+};
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 {
@@ -105,12 +112,6 @@ public:
     size_t block_count() const {
         return _hash_list.blocks.size();
     }
-
-    struct Block {
-        ChunkBody chunk_body;
-        ChunkHdr chunk_hdr;
-        boost::optional<Trailer> trailer;
-    };
 
     // May return boost::none and no error if the response has no body (e.g. redirect msg)
     boost::optional<Block> read_block(size_t block_id, Cancel& c, asio::yield_context yield)
@@ -535,6 +536,38 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                , dbg_tag);
 }
 
+
+// May return boost::none and no error if the response has no body (e.g. redirect msg)
+boost::optional<MultiPeerReader::Block>
+MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield)
+{
+    using OptBlock = boost::optional<MultiPeerReader::Block>;
+
+    while (true) {
+        sys::error_code ec;
+
+        Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, block_id, cancel, yield[ec]);
+
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) { return or_throw<OptBlock>(yield, ec); }
+
+        assert(peer);
+
+        auto block = peer->read_block(block_id, cancel, yield[ec]);
+
+        if (cancel) {
+            return or_throw<OptBlock>(yield, asio::error::operation_aborted);
+        }
+
+        if (ec) {
+            _peers->unmark_as_good(*peer);
+            continue;
+        }
+
+        return block;
+    }
+}
+
 boost::optional<Part>
 MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
@@ -563,8 +596,6 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 boost::optional<Part>
 MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 {
-    using OptPart = boost::optional<Part>;
-
     sys::error_code ec;
 
     auto lc = _lifetime_cancel.connect([&] { cancel(); });
@@ -607,23 +638,10 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
     }
 
     while (true /* do until successful block retrieval */) {
-        Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, _block_id, cancel, yield[ec]);
+        auto block = fetch_block(_block_id, cancel, yield[ec]);
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) { return or_throw<OptPart>(yield, ec); }
-
-        assert(peer);
-
-        auto block = peer->read_block(_block_id, cancel, yield[ec]);
-
-        if (cancel) {
-            return or_throw<OptPart>(yield, asio::error::operation_aborted);
-        }
-
-        if (ec) {
-            _peers->unmark_as_good(*peer);
-            continue;
-        }
 
         ++_block_id;
 
