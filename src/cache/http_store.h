@@ -132,6 +132,26 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
                        , std::size_t first, std::size_t last
                        , sys::error_code&);
 
+// Return the size of body data currently stored for a response under the given directory `dirp`.
+//
+// For an incomplete respone, this may be less than the size claimed in its head.
+std::size_t
+http_store_body_size( const fs::path& dirp, asio::executor
+                    , sys::error_code&);
+
+// Same as above, but get body data from files stored in the given content directory `cdirp`.
+//
+// The files for the response under `dirp` should either contain the body data itself
+// or otherwise point to the path of the data file relative to `cdirp`.
+//
+// Warning: Although security checks are performed on the pointers to body data files
+// (e.g. to check that they are not outside of the content directory),
+// none are performed on `cdirp` itself.
+// Please make sure that `cdirp` is already in canonical form or some checks may fail.
+std::size_t
+http_store_body_size( const fs::path& dirp, const fs::path& cdirp, asio::executor
+                    , sys::error_code&);
+
 HashList
 http_store_load_hash_list(const fs::path&, asio::executor, Cancel&, asio::yield_context);
 
@@ -148,6 +168,9 @@ public:
 
     virtual reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code&) = 0;
+
+    virtual std::size_t
+    body_size(const std::string& key, sys::error_code&) const = 0;
 
     virtual std::size_t
     size(Cancel, asio::yield_context) const = 0;

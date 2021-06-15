@@ -702,9 +702,8 @@ canonical_from_content_relpath( const fs::path& body_path_p
 }
 
 static
-asio::posix::stream_descriptor
-open_body_external( const asio::executor& ex
-                  , const fs::path& dirp
+fs::path
+body_path_external( const fs::path& dirp
                   , const fs::path& cdirp
                   , sys::error_code& ec)
 {
@@ -713,16 +712,41 @@ open_body_external( const asio::executor& ex
         auto body_path_s = fs::status(body_path_p, ec);
         if (!ec && !fs::is_regular_file(body_path_s))
             ec = asio::error::bad_descriptor;
-        if (ec) return asio::posix::stream_descriptor(ex);
+        if (ec) return {};
     }
 
     auto body_cp_o = canonical_from_content_relpath(body_path_p, cdirp);
     if (!body_cp_o) {
         ec = asio::error::bad_descriptor;
-        return asio::posix::stream_descriptor(ex);
+        return {};
     }
 
-    return util::file_io::open_readonly(ex, *body_cp_o, ec);
+    return *body_cp_o;
+}
+
+static
+asio::posix::stream_descriptor
+open_body_external( const asio::executor& ex
+                  , const fs::path& dirp
+                  , const fs::path& cdirp
+                  , sys::error_code& ec)
+{
+    auto body_cp = body_path_external(dirp, cdirp, ec);
+    if (ec) return asio::posix::stream_descriptor(ex);
+
+    return util::file_io::open_readonly(ex, body_cp, ec);
+}
+
+static
+std::size_t
+body_size_external( const fs::path& dirp
+                  , const fs::path& cdirp
+                  , sys::error_code& ec)
+{
+    auto body_cp = body_path_external(dirp, cdirp, ec);
+    if (ec) return 0;;
+
+    return fs::file_size(body_cp, ec);
 }
 
 template<class Reader>
@@ -832,6 +856,39 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
         (dirp, cdirp, std::move(ex), first, last, ec);
 }
 
+std::size_t
+_http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cdirp
+                     , asio::executor ex
+                     , sys::error_code& ec)
+{
+    assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
+
+    auto bodysz = fs::file_size(dirp / body_fname, ec);
+    if (ec == sys::errc::no_such_file_or_directory && cdirp) {
+        ec = {};
+        bodysz = body_size_external(dirp, *cdirp, ec);
+        if (ec == sys::errc::no_such_file_or_directory) {
+            ec = {};
+            return 0;  // also considered incomplete response
+        }
+    }
+    return bodysz;
+}
+
+std::size_t
+http_store_body_size( const fs::path& dirp, asio::executor ex
+                    , sys::error_code& ec)
+{
+    return _http_store_body_size(dirp, boost::none, std::move(ex), ec);
+}
+
+std::size_t
+http_store_body_size( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+                    , sys::error_code& ec)
+{
+    return _http_store_body_size(dirp, cdirp, std::move(ex), ec);
+}
+
 static
 fs::path
 path_from_key(fs::path dir, const std::string& key)
@@ -918,6 +975,13 @@ public:
     }
 
     std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_body_size(kpath, executor, ec);
+    }
+
+    std::size_t
     size(Cancel cancel, asio::yield_context yield) const override
     {
         // Do not use `for_each` since it can alter the store.
@@ -974,6 +1038,13 @@ public:
         // Also, the client does not currently issue partial reads to the local cache
         // to be served to the agent.
         return http_store_range_reader(kpath, content_path, executor, first, last, ec);
+    }
+
+    std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    {
+        auto kpath = path_from_key(path, key);
+        return http_store_body_size(kpath, content_path, executor, ec);
     }
 
     std::size_t
@@ -1077,6 +1148,10 @@ public:
     reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
     { return read_store->range_reader(key, first, last, ec); }
+
+    std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    { return read_store->body_size(key, ec); }
 
     std::size_t
     size(Cancel cancel, asio::yield_context ec) const override
@@ -1214,6 +1289,15 @@ public:
         if (!ec) return ret;
         _DEBUG("Failed to create range reader for key, trying fallback store: ", key);
         return fallback_store->range_reader(key, first, last, ec = {});
+    }
+
+    std::size_t
+    body_size(const std::string& key, sys::error_code& ec) const override
+    {
+        auto ret = FullHttpStore::body_size(key, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to get body size for key, trying fallback store: ", key);
+        return fallback_store->body_size(key, ec = {});
     }
 
     std::size_t

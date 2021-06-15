@@ -157,7 +157,9 @@ static
 Session add_warning(Session s, const char* value)
 {
     auto& hdr = s.response_header();
-    hdr.set(http::field::warning, value);
+    // Do not use `hdr.set` as several warnings may co-exist
+    // (RFC7234#5.5).
+    hdr.insert(http::field::warning, value);
     return s;
 }
 
@@ -165,7 +167,7 @@ static
 Session add_stale_warning(Session response)
 {
     return add_warning( move(response)
-                      , "110 Ouinet 'Response is stale'");
+                      , "110 Ouinet \"Response is stale\"");
 }
 
 Session
