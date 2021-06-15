@@ -157,7 +157,9 @@ static
 Session add_warning(Session s, const char* value)
 {
     auto& hdr = s.response_header();
-    hdr.set(http::field::warning, value);
+    // Do not use `hdr.set` as several warnings may co-exist
+    // (RFC7234#5.5).
+    hdr.insert(http::field::warning, value);
     return s;
 }
 
