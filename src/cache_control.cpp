@@ -165,7 +165,7 @@ static
 Session add_stale_warning(Session response)
 {
     return add_warning( move(response)
-                      , "110 Ouinet 'Response is stale'");
+                      , "110 Ouinet \"Response is stale\"");
 }
 
 Session
