@@ -864,15 +864,20 @@ _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cd
     assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
 
     auto bodysz = fs::file_size(dirp / body_fname, ec);
-    if (ec == sys::errc::no_such_file_or_directory && cdirp) {
-        ec = {};
-        bodysz = body_size_external(dirp, *cdirp, ec);
-        if (ec == sys::errc::no_such_file_or_directory) {
-            ec = {};
-            return 0;  // also considered incomplete response
-        }
-    }
-    return bodysz;
+    if (!ec || ec != sys::errc::no_such_file_or_directory)
+        return bodysz;
+
+    assert(ec == sys::errc::no_such_file_or_directory);
+    ec = {};
+    if (!cdirp) return 0;  // considered incomplete response
+
+    bodysz = body_size_external(dirp, *cdirp, ec);
+    if (!ec || ec != sys::errc::no_such_file_or_directory)
+        return bodysz;
+
+    assert(ec == sys::errc::no_such_file_or_directory);
+    ec = {};
+    return 0;  // also considered incomplete response
 }
 
 std::size_t

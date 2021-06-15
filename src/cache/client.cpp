@@ -337,8 +337,8 @@ struct Client::Impl {
                 // TODO: Ideally, an incomplete or stale local cache entry
                 // could be reused in the multi-peer download below.
             }
-            ec = {};  // try distributed cache
         }
+        ec = {};  // try distributed cache
 
         string debug_tag;
         if (logger.get_threshold() <= DEBUG) {
