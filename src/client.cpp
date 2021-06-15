@@ -210,6 +210,8 @@ public:
             return Client::RunningState::Created;
         case InternalState::Failed:
             return Client::RunningState::Failed;
+        case InternalState::Started:
+            break;  // handled below
         case InternalState::Stopped:
             // TODO: Gather stopped state from members
             // instead of checking that all tasks in the context
