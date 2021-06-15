@@ -1136,9 +1136,13 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
         send_datagram(
             sender,
             BencodedMap {
+                // TODO: Send version "v" and sender endpoint "ip" (same in
+                // above error reply).
+                // https://wiki.theory.org/BitTorrentSpecification
+                // http://www.bittorrent.org/beps/bep_0020.html
                 { "y", "r" },
                 { "t", transaction.to_string() },
-                { "e", std::move(reply) }
+                { "r", std::move(reply) }
             }
         );
     };
