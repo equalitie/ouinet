@@ -113,6 +113,26 @@ public:
         return _hash_list.blocks.size();
     }
 
+    void send_block_request(size_t block_id, Cancel& c, asio::yield_context yield)
+    {
+        if (!_connection) return or_throw(yield, asio::error::not_connected);
+
+        sys::error_code ec;
+
+        auto cl = _lifetime_cancel.connect([&] { c(); });
+        auto cc = c.connect([&] { if (_connection) _connection->close(); });
+
+        Cancel tc(c);
+        auto wd = watch_dog(_exec, 10s, [&] { tc(); });
+
+        http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
+
+        if (tc) ec = asio::error::timed_out;
+        if (c)  ec = asio::error::operation_aborted;
+
+        return or_throw(yield, ec);
+    }
+
     // May return boost::none and no error if the response has no body (e.g. redirect msg)
     boost::optional<Block> read_block(size_t block_id, Cancel& c, asio::yield_context yield)
     {
@@ -124,14 +144,6 @@ public:
 
         auto cl = _lifetime_cancel.connect([&] { c(); });
         auto cc = c.connect([&] { if (_connection) _connection->close(); });
-
-        {
-            Cancel tc(c);
-            auto wd = watch_dog(_exec, 10s, [&] { tc(); });
-            http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
-            if (tc && !c) ec = asio::error::timed_out;
-            if (ec) return or_throw<OptBlock>(yield, ec);
-        }
 
         auto r = make_unique<http_response::Reader>(move(*_connection));
         _connection = boost::none;
@@ -381,13 +393,13 @@ public:
             sys::error_code ec;
 
             if (!dbg_tag.empty()) {
-                LOG_INFO(dbg_tag, " fetching from: ", ep);
+                LOG_INFO(dbg_tag, " Fetching hash list from: ", ep);
             }
 
             p->download_hash_list(ep, *_dht, _newest_proto_seen, c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_INFO(dbg_tag, " done fetching: ", ep, " "
+                LOG_INFO(dbg_tag, " Done fetching hash list: ", ep, " "
                         , " ec:", ec.message(), " c:", bool(c));
             }
 
@@ -552,6 +564,17 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
         if (ec) { return or_throw<OptBlock>(yield, ec); }
 
         assert(peer);
+
+        peer->send_block_request(block_id, cancel, yield[ec]);
+
+        if (cancel) {
+            return or_throw<OptBlock>(yield, asio::error::operation_aborted);
+        }
+
+        if (ec) {
+            _peers->unmark_as_good(*peer);
+            continue;
+        }
 
         auto block = peer->read_block(block_id, cancel, yield[ec]);
 
