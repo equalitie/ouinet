@@ -364,6 +364,10 @@ struct Client::Impl {
         } else if (ec != err::operation_aborted && rs_available) {
             _YDEBUG(yield, "Multi-peer session creation failed, falling back to incomplete local copy"
                     " ec:", ec.message());
+            // Do not use `.set` as several warnings may co-exist
+            // (RFC7234#5.5).
+            rs.response_header().insert( http::field::warning
+                                       , "119 Ouinet \"Using incomplete response body from local cache\"");
             return rs;
         }
 
