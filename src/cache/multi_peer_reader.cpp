@@ -24,6 +24,12 @@ using namespace ouinet;
 using namespace cache;
 using namespace std::chrono_literals;
 
+const std::chrono::duration READ_HEAD_TIMEOUT = 10s;
+const std::chrono::duration READ_CHUNK_BODY_TIMEOUT = 15s;
+const std::chrono::duration READ_CHUNK_HDR_TIMEOUT = 10s;
+const std::chrono::duration READ_TRAILER_TIMEOUT = 10s;
+const std::chrono::duration WRITE_REQUEST_TIMEOUT = 10s;
+
 using udp = asio::ip::udp;
 namespace bt = bittorrent;
 using namespace ouinet::http_response;
@@ -123,7 +129,7 @@ public:
         auto cc = c.connect([&] { if (_connection) _connection->close(); });
 
         Cancel tc(c);
-        auto wd = watch_dog(_exec, 10s, [&] { tc(); });
+        auto wd = watch_dog(_exec, WRITE_REQUEST_TIMEOUT, [&] { tc(); });
 
         http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
 
@@ -148,14 +154,14 @@ public:
         auto r = make_unique<http_response::Reader>(move(*_connection));
         _connection = boost::none;
 
-        auto head = r->timed_async_read_part(5s, c, yield[ec]);
+        auto head = r->timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
         if (ec) return or_throw<OptBlock>(yield, ec);
 
         if (!head || !head->is_head()) {
             return or_throw<OptBlock>(yield, Errc::expected_head);
         }
 
-        auto p = r->timed_async_read_part(5s, c, yield[ec]);
+        auto p = r->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
         if (ec) return or_throw<OptBlock>(yield, ec);
 
         // This may happen when the message has no body
@@ -181,7 +187,7 @@ public:
         if (first_chunk_hdr->size) {
             // Read the block and the chunk header that comes after it.
             while (true) {
-                p = r->timed_async_read_part(5s, c, yield[ec]);
+                p = r->timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
                 if (ec) return or_throw<OptBlock>(yield, ec);
 
                 auto chunk_body = p->as_chunk_body();
@@ -204,7 +210,7 @@ public:
                 }
             }
 
-            p = r->timed_async_read_part(5s, c, yield[ec]);
+            p = r->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
 
             ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
@@ -231,7 +237,7 @@ public:
 
         // Read the trailer (if any), and make sure we're done with this response
         while (true) {
-            p = r->timed_async_read_part(5s, c, yield[ec]);
+            p = r->timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
             if (ec) return or_throw<OptBlock>(yield, ec);
             if (!p) {
                 _connection = r->release_stream();
