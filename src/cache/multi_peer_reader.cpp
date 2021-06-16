@@ -24,11 +24,13 @@ using namespace ouinet;
 using namespace cache;
 using namespace std::chrono_literals;
 
-const std::chrono::duration READ_HEAD_TIMEOUT = 10s;
-const std::chrono::duration READ_CHUNK_BODY_TIMEOUT = 15s;
-const std::chrono::duration READ_CHUNK_HDR_TIMEOUT = 10s;
-const std::chrono::duration READ_TRAILER_TIMEOUT = 10s;
-const std::chrono::duration WRITE_REQUEST_TIMEOUT = 10s;
+using Clock = std::chrono::steady_clock;
+
+const Clock::duration READ_HEAD_TIMEOUT = 10s;
+const Clock::duration READ_CHUNK_BODY_TIMEOUT = 15s;
+const Clock::duration READ_CHUNK_HDR_TIMEOUT = 10s;
+const Clock::duration READ_TRAILER_TIMEOUT = 10s;
+const Clock::duration WRITE_REQUEST_TIMEOUT = 10s;
 
 using udp = asio::ip::udp;
 namespace bt = bittorrent;
