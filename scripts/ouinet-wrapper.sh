@@ -51,7 +51,7 @@ REPO=$(dirname $CONF)
 
 repo_arg=$(get_repo_from_args "$@")
 REPO="${repo_arg:-$REPO}"
-CACHE_STATIC_ROOT="$REPO/static-cache"
+CACHE_STATIC_ROOT=/var/opt/ouinet-static-cache
 
 CLIENT_PROXY_PORT=8077
 INJECTOR_LOOP_ADDR=127.7.2.1
