@@ -47,4 +47,19 @@ std::ostream& operator<<(std::ostream& o, const http_response::Part& p) {
     return o;
 }
 
+inline
+std::ostream& operator<<(std::ostream& o, const http_response::Part::Type& t) {
+    using Type = http_response::Part::Type;
+
+    switch (t) {
+        case Type::HEAD:       o << "HEAD";       break;
+        case Type::BODY:       o << "BODY";       break;
+        case Type::CHUNK_HDR:  o << "CHUNK_HDR";  break;
+        case Type::CHUNK_BODY: o << "CHUNK_BODY"; break;
+        case Type::TRAILER:    o << "TRAILER";    break;
+    }
+
+    return o;
+}
+
 }}
