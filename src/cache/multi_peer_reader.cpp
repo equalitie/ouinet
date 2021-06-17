@@ -554,6 +554,18 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                , dbg_tag);
 }
 
+struct MultiPeerReader::NextJob {
+    size_t block_id;
+    Peer* peer;
+};
+
+void MultiPeerReader::unmark_as_good(Peer& peer)
+{
+    _peers->unmark_as_good(peer);
+    if (_next_job && _next_job->peer == &peer) {
+        _next_job = nullptr;
+    }
+}
 
 // May return boost::none and no error if the response has no body (e.g. redirect msg)
 boost::optional<MultiPeerReader::Block>
@@ -564,22 +576,54 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
     while (true) {
         sys::error_code ec;
 
-        Peer* peer = _peers->choose_peer_for_block(*_reference_hash_list, block_id, cancel, yield[ec]);
+        Peer* peer;
+        bool request_sent = false;
 
+        if (_next_job && _next_job->block_id == block_id) {
+            peer = _next_job->peer;
+            request_sent = true;
+        } else {
+            peer = _peers->choose_peer_for_block(*_reference_hash_list, block_id, cancel, yield[ec]);
+            request_sent = false;
+        }
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) { return or_throw<OptBlock>(yield, ec); }
 
         assert(peer);
 
-        peer->send_block_request(block_id, cancel, yield[ec]);
+        if (!request_sent) {
+            peer->send_block_request(block_id, cancel, yield[ec]);
+        }
 
         if (cancel) {
             return or_throw<OptBlock>(yield, asio::error::operation_aborted);
         }
 
         if (ec) {
-            _peers->unmark_as_good(*peer);
+            unmark_as_good(*peer);
             continue;
+        }
+
+        if (block_id + 1 < _reference_hash_list->blocks.size()) {
+            size_t next_block_id = block_id + 1;
+            Peer* next_peer = _peers->choose_peer_for_block(*_reference_hash_list, next_block_id, cancel, yield[ec]);
+            if (peer == next_peer) {
+                next_peer->send_block_request(next_block_id, cancel, yield[ec]);
+
+                if (cancel) {
+                    return or_throw<OptBlock>(yield, asio::error::operation_aborted);
+                }
+
+                if (!ec) {
+                    _next_job.reset(new NextJob{next_block_id, next_peer});
+                }
+            }
+            else {
+                _next_job = nullptr;
+            }
+        }
+        else {
+            _next_job = nullptr;
         }
 
         auto block = peer->read_block(block_id, cancel, yield[ec]);
@@ -589,7 +633,7 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
         }
 
         if (ec) {
-            _peers->unmark_as_good(*peer);
+            unmark_as_good(*peer);
             continue;
         }
 

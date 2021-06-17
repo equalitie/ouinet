@@ -17,6 +17,7 @@ private:
     class Peer;
     class Peers;
     struct Block;
+    struct NextJob;
 
     enum class State { active, done, closed };
 
@@ -53,6 +54,7 @@ public:
 private:
     boost::optional<http_response::Part> async_read_part_impl(Cancel&, asio::yield_context);
     boost::optional<Block> fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield);
+    void unmark_as_good(Peer& peer);
 
     void mark_done();
 
@@ -72,6 +74,8 @@ private:
     bool _last_chunk_hdr_sent = false;
 
     State _state = State::active;
+
+    std::unique_ptr<NextJob> _next_job;
 };
 
 }}
