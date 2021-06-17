@@ -96,7 +96,7 @@ public:
     asio::executor _exec;
     string _key;
     const util::Ed25519PublicKey _cache_pk;
-    boost::optional<GenericStream> _connection;
+    std::unique_ptr<http_response::Reader> _reader;
     HashList _hash_list;
     Cancel _lifetime_cancel;
 
@@ -123,17 +123,17 @@ public:
 
     void send_block_request(size_t block_id, Cancel& c, asio::yield_context yield)
     {
-        if (!_connection) return or_throw(yield, asio::error::not_connected);
+        if (!_reader) return or_throw(yield, asio::error::not_connected);
 
         sys::error_code ec;
 
         auto cl = _lifetime_cancel.connect([&] { c(); });
-        auto cc = c.connect([&] { if (_connection) _connection->close(); });
+        auto cc = c.connect([&] { if (_reader) _reader->close(); });
 
         Cancel tc(c);
         auto wd = watch_dog(_exec, WRITE_REQUEST_TIMEOUT, [&] { tc(); });
 
-        http::async_write(*_connection, range_request(http::verb::get, block_id, _key), yield[ec]);
+        http::async_write(_reader->stream(), range_request(http::verb::get, block_id, _key), yield[ec]);
 
         if (tc) ec = asio::error::timed_out;
         if (c)  ec = asio::error::operation_aborted;
@@ -146,29 +146,26 @@ public:
     {
         using OptBlock = boost::optional<Block>;
 
-        if (!_connection) return or_throw<OptBlock>(yield, asio::error::not_connected);
+        if (!_reader) return or_throw<OptBlock>(yield, asio::error::not_connected);
 
         sys::error_code ec;
 
         auto cl = _lifetime_cancel.connect([&] { c(); });
-        auto cc = c.connect([&] { if (_connection) _connection->close(); });
+        auto cc = c.connect([&] { if (_reader) _reader->close(); });
 
-        auto r = make_unique<http_response::Reader>(move(*_connection));
-        _connection = boost::none;
-
-        auto head = r->timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
+        auto head = _reader->timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
         if (ec) return or_throw<OptBlock>(yield, ec);
 
         if (!head || !head->is_head()) {
             return or_throw<OptBlock>(yield, Errc::expected_head);
         }
 
-        auto p = r->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+        auto p = _reader->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
         if (ec) return or_throw<OptBlock>(yield, ec);
 
         // This may happen when the message has no body
         if (!p) {
-            _connection = r->release_stream();
+            _reader->restart();
             return boost::none;
         }
 
@@ -189,7 +186,7 @@ public:
         if (first_chunk_hdr->size) {
             // Read the block and the chunk header that comes after it.
             while (true) {
-                p = r->timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
+                p = _reader->timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
                 if (ec) return or_throw<OptBlock>(yield, ec);
 
                 auto chunk_body = p->as_chunk_body();
@@ -212,7 +209,7 @@ public:
                 }
             }
 
-            p = r->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+            p = _reader->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
 
             ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
@@ -239,11 +236,11 @@ public:
 
         // Read the trailer (if any), and make sure we're done with this response
         while (true) {
-            p = r->timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
+            p = _reader->timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
             if (ec) return or_throw<OptBlock>(yield, ec);
             if (!p) {
-                _connection = r->release_stream();
                 // We're done with this request
+                _reader->restart();
                 break;
             }
             auto trailer = p->as_trailer();
@@ -306,9 +303,9 @@ public:
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
-        http_response::Reader reader(move(con));
+        auto reader = std::make_unique<http_response::Reader>(move(con));
 
-        auto hash_list = HashList::load(reader, _cache_pk, timeout_cancel, yield[ec]);
+        auto hash_list = HashList::load(*reader, _cache_pk, timeout_cancel, yield[ec]);
 
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
@@ -320,7 +317,8 @@ public:
             return or_throw(yield, asio::error::not_found);
 
         _hash_list = move(hash_list);
-        _connection = reader.release_stream();
+        reader->restart();
+        _reader = std::move(reader);
     }
 };
 
