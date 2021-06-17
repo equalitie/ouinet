@@ -110,6 +110,8 @@ public:
     // do not use afterwards.
     GenericStream release_stream();
 
+    GenericStream& stream() { return _in; }
+
     void restart()
     {
         // It is only valid to call restart() if we've finished reading
