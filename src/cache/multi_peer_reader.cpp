@@ -14,6 +14,7 @@
 #include "../util/yield.h"
 #include "../util/set_io.h"
 #include "../util/part_io.h"
+#include "../util/async_job.h"
 #include "../util/condition_variable.h"
 #include "signed_head.h"
 
@@ -554,86 +555,154 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                , dbg_tag);
 }
 
-struct MultiPeerReader::NextJob {
+struct MultiPeerReader::PreFetch {
+    using OptBlock = boost::optional<MultiPeerReader::Block>;
+
     size_t block_id;
     Peer* peer;
+
+    PreFetch(size_t block_id, Peer* peer)
+        : block_id(block_id)
+        , peer(peer)
+    {}
+
+    virtual ~PreFetch() {}
+
+    virtual OptBlock get_block(Cancel&, asio::yield_context) = 0;
+};
+
+struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
+    AsyncJob<boost::none_t> job;
+
+    PreFetchSequential(size_t block_id, Peer* peer, asio::executor ex)
+        : PreFetch(block_id, peer)
+        , job(ex)
+    {
+        job.start([=] (auto& cancel, auto yield) -> boost::none_t {
+            sys::error_code ec;
+            peer->send_block_request(block_id, cancel, yield[ec]);
+            if (ec) return or_throw(yield, asio::error::operation_aborted, boost::none);
+            return boost::none;
+        });
+    }
+
+    OptBlock get_block(Cancel& cancel, asio::yield_context yield) override {
+        sys::error_code ec;
+
+        job.wait_for_finish(cancel, yield[ec]);
+        if (ec) return or_throw<OptBlock>(yield, ec);
+
+        return peer->read_block(block_id, cancel, yield);
+    }
+};
+
+struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
+    using Job = AsyncJob<OptBlock>;
+    Job job;
+
+    PreFetchParallel(size_t block_id, Peer* peer, asio::executor ex)
+        : PreFetch(block_id, peer)
+        , job(ex)
+    {
+        job.start([=] (auto& cancel, auto yield) -> OptBlock {
+            sys::error_code ec;
+            peer->send_block_request(block_id, cancel, yield[ec]);
+            if (ec) return or_throw<OptBlock>(yield, asio::error::operation_aborted);
+            return peer->read_block(block_id, cancel, yield);
+        });
+    }
+
+    OptBlock get_block(Cancel& cancel, asio::yield_context yield) override {
+        sys::error_code ec;
+
+        job.wait_for_finish(cancel, yield[ec]);
+        if (ec) return or_throw<OptBlock>(yield, ec);
+
+        Job::Result r = std::move(job.result());
+
+        if (r.ec) {
+            if (ec) return or_throw<OptBlock>(yield, ec);
+        }
+
+        return std::move(r.retval);
+    }
 };
 
 void MultiPeerReader::unmark_as_good(Peer& peer)
 {
     _peers->unmark_as_good(peer);
-    if (_next_job && _next_job->peer == &peer) {
-        _next_job = nullptr;
+    if (_pre_fetch && _pre_fetch->peer == &peer) {
+        _pre_fetch = nullptr;
     }
+}
+
+std::unique_ptr<MultiPeerReader::PreFetch>
+MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Cancel& cancel, asio::yield_context yield)
+{
+    using R = std::unique_ptr<MultiPeerReader::PreFetch>;
+
+    if (block_id >= _reference_hash_list->blocks.size())
+        return nullptr;
+
+    sys::error_code ec;
+
+    Peer* next_peer = _peers->choose_peer_for_block(*_reference_hash_list, block_id, cancel, yield[ec]);
+    if (ec) return or_throw<R>(yield, ec);
+
+    PreFetch* pre_fetch;
+
+    if (last_peer == nullptr || next_peer == last_peer) {
+        pre_fetch = new PreFetchSequential(block_id, next_peer, _executor);
+    } else {
+        pre_fetch = new PreFetchParallel(block_id, next_peer, _executor);
+    }
+
+    return std::unique_ptr<PreFetch>(pre_fetch);
 }
 
 // May return boost::none and no error if the response has no body (e.g. redirect msg)
 boost::optional<MultiPeerReader::Block>
 MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield)
 {
+    //   Q0   Q1   R0   Q2   R1   Q3   R2
+    // |----|----|----|----|----|----|----|...
+
     using OptBlock = boost::optional<MultiPeerReader::Block>;
 
+    sys::error_code ec;
+
+    if (!_pre_fetch) {
+        _pre_fetch = new_fetch_job(block_id, nullptr, cancel, yield[ec]);
+        if (ec) return or_throw<OptBlock>(yield, ec);
+
+        // new_fetch_job should always return non-null if block_id is valid.
+        assert(_pre_fetch);
+    }
+
+    auto fetch = std::move(_pre_fetch);
+
+    _pre_fetch = new_fetch_job(block_id + 1, fetch->peer, cancel, yield[ec]);
+    if (ec) return or_throw<OptBlock>(yield, ec);
+
     while (true) {
-        sys::error_code ec;
-
-        Peer* peer;
-        bool request_sent = false;
-
-        if (_next_job && _next_job->block_id == block_id) {
-            peer = _next_job->peer;
-            request_sent = true;
-        } else {
-            peer = _peers->choose_peer_for_block(*_reference_hash_list, block_id, cancel, yield[ec]);
-            request_sent = false;
-        }
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) { return or_throw<OptBlock>(yield, ec); }
-
-        assert(peer);
-
-        if (!request_sent) {
-            peer->send_block_request(block_id, cancel, yield[ec]);
-        }
+        auto block = fetch->get_block(cancel, yield[ec]);
 
         if (cancel) {
             return or_throw<OptBlock>(yield, asio::error::operation_aborted);
         }
 
         if (ec) {
-            unmark_as_good(*peer);
-            continue;
-        }
+            // Retry with another peer
+            ec = {};
 
-        if (block_id + 1 < _reference_hash_list->blocks.size()) {
-            size_t next_block_id = block_id + 1;
-            Peer* next_peer = _peers->choose_peer_for_block(*_reference_hash_list, next_block_id, cancel, yield[ec]);
-            if (peer == next_peer) {
-                next_peer->send_block_request(next_block_id, cancel, yield[ec]);
+            unmark_as_good(*fetch->peer);
 
-                if (cancel) {
-                    return or_throw<OptBlock>(yield, asio::error::operation_aborted);
-                }
+            fetch = new_fetch_job(block_id, nullptr, cancel, yield[ec]);
+            if (ec) return or_throw<OptBlock>(yield, ec);
 
-                if (!ec) {
-                    _next_job.reset(new NextJob{next_block_id, next_peer});
-                }
-            }
-            else {
-                _next_job = nullptr;
-            }
-        }
-        else {
-            _next_job = nullptr;
-        }
+            // new_fetch_job should always return non-null if block_id is valid.
+            assert(fetch);
 
-        auto block = peer->read_block(block_id, cancel, yield[ec]);
-
-        if (cancel) {
-            return or_throw<OptBlock>(yield, asio::error::operation_aborted);
-        }
-
-        if (ec) {
-            unmark_as_good(*peer);
             continue;
         }
 
