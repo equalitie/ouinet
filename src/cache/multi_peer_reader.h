@@ -17,6 +17,9 @@ private:
     class Peer;
     class Peers;
     struct Block;
+    struct PreFetch;
+    struct PreFetchSequential;
+    struct PreFetchParallel;
 
     enum class State { active, done, closed };
 
@@ -52,9 +55,13 @@ public:
 
 private:
     boost::optional<http_response::Part> async_read_part_impl(Cancel&, asio::yield_context);
-    boost::optional<Block> fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield);
+    boost::optional<Block> fetch_block(size_t block_id, Cancel&, asio::yield_context);
+    void unmark_as_good(Peer& peer);
 
     void mark_done();
+
+    std::unique_ptr<PreFetch>
+    new_fetch_job(size_t block_id, Peer* last_peer, Cancel&, asio::yield_context);
 
 private:
     asio::executor _executor;
@@ -72,6 +79,8 @@ private:
     bool _last_chunk_hdr_sent = false;
 
     State _state = State::active;
+
+    std::unique_ptr<PreFetch> _pre_fetch;
 };
 
 }}

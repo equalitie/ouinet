@@ -227,6 +227,10 @@ using PartVariant = boost::variant<Head, ChunkHdr, ChunkBody, Body, Trailer>;
 
 struct Part : public detail::PartVariant
 {
+    enum class Type {
+        HEAD, BODY, CHUNK_HDR, CHUNK_BODY, TRAILER
+    };
+
     using Base = detail::PartVariant;
     using Base::Base;
     Part() = default;
@@ -258,6 +262,15 @@ struct Part : public detail::PartVariant
     bool is_chunk_hdr()  const { return as_chunk_hdr()  != nullptr; }
     bool is_chunk_body() const { return as_chunk_body() != nullptr; }
     bool is_trailer()    const { return as_trailer()    != nullptr; }
+
+    Type type() const {
+        return util::apply(*this,
+                [](const Head&)      { return Type::HEAD; },
+                [](const Body&)      { return Type::BODY; },
+                [](const ChunkHdr&)  { return Type::CHUNK_HDR; },
+                [](const ChunkBody&) { return Type::CHUNK_BODY; },
+                [](const Trailer&)   { return Type::TRAILER; });
+    }
 
     template<class S>
     void async_write(S& s, asio::yield_context y) const
