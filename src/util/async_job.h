@@ -125,6 +125,14 @@ public:
         cv.wait(yield);
     }
 
+    void wait_for_finish(Cancel& c, asio::yield_context yield) {
+        auto con = c.connect([&] { cancel(); });
+        sys::error_code ec;
+        wait_for_finish(yield[ec]);
+        if (c) ec = asio::error::operation_aborted;
+        return or_throw(yield, ec);
+    }
+
     void cancel() {
         if (_cancel_signal) {
             (*_cancel_signal)();
