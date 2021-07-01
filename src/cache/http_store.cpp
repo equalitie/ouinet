@@ -2,6 +2,7 @@
 
 #include <array>
 #include <ctime>
+#include <string>
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
@@ -666,7 +667,12 @@ canonical_from_content_relpath( const fs::path& body_path_p
 {
     // TODO: proper handling of UTF-8 encoding of body path (including errors)
     fs::path body_rp;
-    fs::ifstream(body_path_p) >> body_rp;
+    {  // TODO: supposedly small, so limit size of read data
+        std::string body_rp_s;
+        fs::ifstream ifs(body_path_p);
+        std::getline(ifs, body_rp_s);
+        if (!ifs.fail()) body_rp = body_rp_s;
+    }
     if (body_rp.empty()) {
         _ERROR("Failed to read path of static cache content file: ", body_path_p);
         return boost::none;
@@ -687,7 +693,8 @@ canonical_from_content_relpath( const fs::path& body_path_p
     sys::error_code ec;
     auto body_cp = fs::canonical(body_rp, cdirp, ec);
     if (ec) {
-        _ERROR("Failed to get canonical path of static cache content file: ", body_path_p);
+        _ERROR( "Failed to get canonical path of static cache content file: ", body_path_p
+              , " ec:", ec.message());
         return boost::none;
     }
     // Avoid symlinks in actual body path pointing out of content directory.
