@@ -335,7 +335,7 @@ CacheControl::do_fetch(
             return or_throw<Session>(yield, err::operation_aborted);
         }
 
-        LOG_DEBUG(yield.tag(), ": Cache and fresh retrievals  failed");
+        LOG_DEBUG(yield.tag(), ": Cache and fresh retrievals failed");
         return or_throw<Session>(yield, err::no_data);
     }
 

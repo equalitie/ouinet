@@ -50,7 +50,7 @@ create_udp_multiplexer( asio::io_service& ios
 
         }
         else {
-            LOG_WARN( "Failed to open file  ", last_used_port, " "
+            LOG_WARN( "Failed to open file ", last_used_port, " "
                     , " to reuse last used UDP port");
         }
     }
