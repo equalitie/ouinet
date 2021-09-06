@@ -174,7 +174,7 @@ public:
     {
         if (name != _host) return;  // unrelated answer, ignore
         asio::ip::address_v6::bytes_type addrb;
-        static_assert(addrb.size() == sizeof(addr.s6_addr));
+        static_assert(addrb.size() == sizeof(addr.s6_addr), "Not an IPv6 address");
         std::memcpy(addrb.data(), addr.s6_addr, addrb.size());
         auto ip6addr = asio::ip::make_address_v6(addrb);
         LOG_DEBUG("DoH: ", name, " -> ", ip6addr);
