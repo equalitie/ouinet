@@ -9,7 +9,7 @@ namespace {
     public:
         const char* name() const noexcept override final { return "MultiPeerReader"; }
         
-        std::string message(int e_) const {
+        std::string message(int e_) const override {
             using Errc = MultiPeerReaderErrc;
     
             // Convert to enum to make compiler check we use all the codes in the
