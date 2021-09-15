@@ -1761,13 +1761,14 @@ public:
 
             cv.wait(yield);
 
-            _YDEBUG(yield, "got result from job: ", jobs.as_string(which));
-
-            if (!which) continue; // XXX
+            if (!which) {
+                _YWARN(yield, "got result from unknown job");
+                continue; // XXX
+            }
 
             auto&& result = which->result();
 
-            _YDEBUG(yield, "result: ", result.ec.message());
+            _YDEBUG(yield, "got result from job: ", jobs.as_string(which), " ec:", result.ec.message());
 
             if (!result.ec) {
                 final_ec = sys::error_code{}; // success
