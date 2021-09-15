@@ -463,7 +463,11 @@ private:
                 TRACK_SPAWN(_ctx, ([this, con = move(con)]
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
-                    Yield y(_ctx, yield, "uTPAccept(" + con.remote_endpoint() + ")");
+                    // Do not log other users' addresses unless debugging.
+                    Yield y( _ctx, yield
+                           , (logger.get_threshold() <= DEBUG)
+                             ? "uTPAccept(" + con.remote_endpoint() + ")"
+                             : "uTPAccept");
                     serve_utp_request(move(con), y[ec]);
                 }));
             }
