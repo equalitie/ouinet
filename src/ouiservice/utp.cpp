@@ -25,9 +25,9 @@ UtpOuiServiceServer::UtpOuiServiceServer( const asio::executor& ex
 
     if (ec) {
         LOG_ERROR("uTP: Failed to bind UtpOuiServiceServer to "
-                 , local_endpoint, " ec:", ec.message());
+                 , local_endpoint, "; ec=", ec.message());
     } else {
-        LOG_DEBUG("uTP UDP endpoint:", _udp_multiplexer->local_endpoint());
+        LOG_DEBUG("uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
     }
 }
 
@@ -52,8 +52,8 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
             if (cancel) return;
             if (ec) {
                 assert(ec != asio::error::operation_aborted);
-                LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s"
-                         , " lep:", local_ep, " ec:", ec.message());
+                LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s;"
+                         , " lep=", local_ep, " ec=", ec.message());
                 async_sleep(_ex, 5s, cancel, yield[ec]);
                 continue;
             }

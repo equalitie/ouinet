@@ -74,8 +74,8 @@ struct GarbageCollector {
                     if (cancel) ec = asio::error::operation_aborted;
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
-                if (ec) _WARN("Collecting garbage: failed"
-                              " ec:", ec.message());
+                if (ec) _WARN("Collecting garbage: failed;"
+                              " ec=", ec.message());
                 _DEBUG("Collecting garbage: done");
             }
             _DEBUG("Garbage collector stopped");
@@ -153,7 +153,7 @@ struct Client::Impl {
     {
         sys::error_code ec;
 
-        _YDEBUG(yield, "start\n", req);
+        _YDEBUG(yield, "Start\n", req);
 
         // Usually we would
         // (1) check that the request matches our protocol version, and
@@ -186,7 +186,7 @@ struct Client::Impl {
             _YDEBUG(yield, "Serving propfind for ", *key);
             auto hl = _http_store->load_hash_list(*key, cancel, yield[ec]);
 
-            _YDEBUG(yield, "load ec:\"", ec.message(), "\"");
+            _YDEBUG(yield, "Load; ec=", ec.message());
             if (ec) {
                 ec = {};
                 handle_not_found(sink, req, yield[ec]);
@@ -194,7 +194,7 @@ struct Client::Impl {
             }
             return_or_throw_on_error(yield, cancel, ec, false);
             hl.write(sink, cancel, yield[ec].tag("write-propfind"));
-            _YDEBUG(yield, "write ec:\"", ec.message(), "\"");
+            _YDEBUG(yield, "Write; ec=", ec.message());
             return or_throw(yield, ec, bool(!ec));
         }
 
@@ -211,13 +211,13 @@ struct Client::Impl {
 
         if (ec) {
             if (!cancel) {
-                _YDEBUG(yield, "Not Serving ", *key, " ec:", ec.message());
+                _YDEBUG(yield, "Not serving: ", *key, "; ec=", ec.message());
             }
             handle_not_found(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
-        _YDEBUG(yield, "Serving ", *key);
+        _YDEBUG(yield, "Serving: ", *key);
 
         bool is_head_request = req.method() == http::verb::head;
 
@@ -258,8 +258,8 @@ struct Client::Impl {
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
-            _ERROR("Purging local cache: failed"
-                   " ec:", ec.message());
+            _ERROR("Purging local cache: failed;"
+                   " ec=", ec.message());
             return or_throw(yield, ec);
         }
 
@@ -319,14 +319,14 @@ struct Client::Impl {
 
         bool rs_available = false;
         auto rs = load_from_local(key, is_head_request, cancel, yield[ec]);
-        _YDEBUG(yield, "looking up local cache ec:", ec.message());
+        _YDEBUG(yield, "Looking up local cache; ec=", ec.message());
         if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
         if (!ec) {
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
             auto rs_sz = _http_store->body_size(key, ec);
             if (ec) {
-                _YERROR(yield, "Failed to get body size of response in local cache ec:", ec.message());
+                _YERROR(yield, "Failed to get body size of response in local cache; ec=", ec.message());
                 rs.close();
             } else {
                 auto data_size_sv = rs.response_header()[http_::response_data_size_hdr];
@@ -362,8 +362,8 @@ struct Client::Impl {
             s.response_header().set( http_::response_source_hdr  // for agent
                                    , http_::response_source_hdr_dist_cache);
         } else if (ec != err::operation_aborted && rs_available) {
-            _YDEBUG(yield, "Multi-peer session creation failed, falling back to incomplete local copy"
-                    " ec:", ec.message());
+            _YDEBUG(yield, "Multi-peer session creation failed, falling back to incomplete local copy;"
+                    " ec=", ec.message());
             // Do not use `.set` as several warnings may co-exist
             // (RFC7234#5.5).
             rs.response_header().insert( http::field::warning
@@ -613,7 +613,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
         if (!is_directory(old_store_dir)) continue;
         _INFO("Removing obsolete HTTP store...");
         fs::remove_all(old_store_dir, ec);
-        if (ec) _ERROR("Removing obsolete HTTP store: failed; ec:", ec.message());
+        if (ec) _ERROR("Removing obsolete HTTP store: failed; ec=", ec.message());
         else _INFO("Removing obsolete HTTP store: done");
         ec = {};
     }

@@ -322,7 +322,7 @@ private:
             else {
                 got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
                 if (!cancel && ec)
-                    _ERROR("Failed to ping injectors ec:", ec.message());
+                    _ERROR("Failed to ping injectors; ec=", ec.message());
                 return_or_throw_on_error(yield, cancel, ec);
                 if (got_reply)
                     _DEBUG("Got pong from injectors, announcing as helper (bridge)");
@@ -505,7 +505,7 @@ void Bep5Client::status_loop(asio::yield_context yield)
         auto inj_n = _injector_swarm->peers().size();
         auto hlp_n = _helpers_swarm ? _helpers_swarm->peers().size() : 0;
         logger.debug(util::str(
-            "Bep5Client: swarm status:",
+            "Bep5Client: Swarm status;",
             " injectors=", inj_n, (inj_n == injector_swarm_capacity ? " (max)" : ""),
             " bridges=", hlp_n, (hlp_n == helper_swarm_capacity ? " (max)" : "")));
     }
@@ -647,16 +647,16 @@ GenericStream Bep5Client::connect( asio::yield_context yield
     if (ec) {
         _last_working_ep = boost::none;
         _DEBUG( "Did not connect to any peer;"
-              , " peers:", i
-              , " ec:", ec.message());
+              , " peers=", i
+              , " ec=", ec.message());
     } else {
         _last_working_ep = ret_ep;
         if (ret_target == Target::injectors) {
             if (_injector_pinger)
                 _injector_pinger->injector_was_seen_now();
-            _DEBUG("Connected to injector peer directly; rep:", ret_ep);
+            _DEBUG("Connected to injector peer directly; rep=", ret_ep);
         } else if (ret_target == Target::helpers)
-            _DEBUG("Connected to injector via helper peer (bridge); rep:", ret_ep);
+            _DEBUG("Connected to injector via helper peer (bridge); rep=", ret_ep);
         else
             assert(0 && "Invalid peer type");
     }
