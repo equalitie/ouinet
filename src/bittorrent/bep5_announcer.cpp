@@ -64,26 +64,26 @@ struct detail::Bep5AnnouncerImpl
     {
         using namespace std::chrono_literals;
 
-        _DEBUG("Start for infohash=", infohash);
+        _DEBUG("Start for infohash: ", infohash);
 
         UniformRandomDuration random_timeout;
 
         while (!cancel) {
             if (type == Type::Manual && !go_again) {
-                _DEBUG("Waiting for manual announce for infohash=", infohash, "...");
+                _DEBUG("Waiting for manual announce for infohash: ", infohash, "...");
                 while (!go_again) {
                     sys::error_code ec;
                     cv.wait(cancel, yield[ec]);
                     if (cancel) return;
                 }
-                _DEBUG("Waiting for manual announce for infohash=", infohash, ": done");
+                _DEBUG("Waiting for manual announce for infohash: ", infohash, ": done");
             }
             go_again = false;
 
             auto dht = dht_w.lock();
             if (!dht) return;
 
-            _DEBUG("Announcing infohash=", infohash, "...");
+            _DEBUG("Announcing infohash: ", infohash, "...");
 
             sys::error_code ec;
             dht->tracker_announce(infohash, boost::none, cancel, yield[ec]);
@@ -93,16 +93,16 @@ struct detail::Bep5AnnouncerImpl
             dht.reset();
 
             if (ec) {
-                _WARN("Announcing infohash=", infohash, ": failed ec:", ec.message());
+                _WARN("Announcing infohash: ", infohash, ": failed; ec=", ec.message());
                 // TODO: Arbitrary timeout
-                _DEBUG("Will retry infohash=", infohash, " because of announcement error");
+                _DEBUG("Will retry infohash because of announcement error: ", infohash);
                 async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
                 go_again = true;  // do not wait for manual request
                 continue;
             }
 
-            _DEBUG("Announcing infohash=", infohash, ": done");
+            _DEBUG("Announcing infohash: ", infohash, ": done");
 
             if (type == Type::Manual) continue;  // wait for new manual request immediately
 
@@ -113,7 +113,7 @@ struct detail::Bep5AnnouncerImpl
             auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 12min);
 
             _DEBUG( "Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
-                  , "s to announce infohash=", infohash);
+                  , "s to announce infohash: ", infohash);
 
             async_sleep(exec, sleep, cancel, yield);
         }
@@ -121,7 +121,7 @@ struct detail::Bep5AnnouncerImpl
 
     void update() {
         if (type != Type::Manual) return;
-        _DEBUG("Manual update requested for infohash=", infohash);
+        _DEBUG("Manual update requested for infohash: ", infohash);
         go_again = true;
         cv.notify();
     }

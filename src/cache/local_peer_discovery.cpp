@@ -81,8 +81,8 @@ struct LocalPeerDiscovery::Impl {
         _socket.set_option(ip::multicast::join_group(multicast_ep.address()));
 
         if (ec) {
-            LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket (ec:"
-                     , ec.message(), ")");
+            LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket;"
+                      " ec=", ec.message());
             return;
         }
 
@@ -103,8 +103,8 @@ struct LocalPeerDiscovery::Impl {
                                  , ep
                                  , yield[ec]);
             if (ec && !cancel) {
-                LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query "
-                        , "(ec:", ec.message(), " ep:", ep, ")");
+                LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query;"
+                          " ec=", ec.message(), " ep=", ep);
             }
         }));
     }
@@ -139,8 +139,8 @@ struct LocalPeerDiscovery::Impl {
             if (cancel) break;
 
             if (ec) {
-                LOG_ERROR("LocalPeerDiscovery: failed to receive (ec:"
-                        , ec.message(), ")");
+                LOG_ERROR("LocalPeerDiscovery: failed to receive;"
+                          " ec=", ec.message());
                 async_sleep(_ex, chrono::seconds(1), cancel, yield);
                 if (cancel) break;
                 continue;

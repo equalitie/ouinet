@@ -515,7 +515,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         sys::error_code ec;
         auto sz = cache_client->local_size(cancel, yield[ec]);
         if (ec) {
-            LOG_ERROR( "Front-end: Failed to get local cache size ec:"
+            LOG_ERROR( "Front-end: Failed to get local cache size; ec="
                      , ec.message());
         } else {
             response["local_cache_size"] = sz;

@@ -41,12 +41,12 @@ create_udp_multiplexer( asio::io_service& ios
             bind(ret, port, ec);
 
             if (!ec) {
-                LOG_INFO("UDP multiplexer bound to last used port:", port);
+                LOG_INFO("UDP multiplexer bound to last used port: ", port);
                 return ret;
             }
 
-            LOG_WARN( "Failed to bind UDP multiplexer to last used port:", port
-                    , " ec:", ec.message());
+            LOG_WARN( "Failed to bind UDP multiplexer to last used port: ", port
+                    , "; ec=", ec.message());
 
         }
         else {
@@ -67,7 +67,7 @@ create_udp_multiplexer( asio::io_service& ios
         assert(!ec);
     }
 
-    LOG_DEBUG("UDP multiplexer bound to:", ret.local_endpoint());
+    LOG_DEBUG("UDP multiplexer bound to: ", ret.local_endpoint());
 
     fstream file( last_used_port.native()
                 , fstream::binary | fstream::trunc | fstream::out);

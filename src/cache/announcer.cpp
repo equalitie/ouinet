@@ -79,10 +79,10 @@ struct Announcer::Loop {
         bool already_has_key = (entry_i != entries.end());
 
         if (already_has_key) {
-            _DEBUG("adding ", key, " (already exists)");
+            _DEBUG("Adding ", key, " (already exists)");
             entry_i->first.to_remove = false;
         } else {
-            _DEBUG("adding ", key);
+            _DEBUG("Adding ", key);
         }
 
         if (already_has_key) return;
@@ -108,7 +108,7 @@ struct Announcer::Loop {
             if (i->first.key == key) break;  // found
         if (i == entries.end()) return;  // not found
 
-        _DEBUG("marking ", key, " for removal");
+        _DEBUG("Marking ", key, " for removal");
         // The actual removal is not done here but in the main loop.
         i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.
@@ -161,14 +161,14 @@ struct Announcer::Loop {
             ss << " ago";
         };
 
-        _DEBUG("entries:");
+        _DEBUG("Entries:");
         for (auto& ep : entries) {
             auto& e = ep.first;
-            ss << " " << e.infohash << " | successful_update:";
+            ss << " " << e.infohash << " | successful_update=";
             print(e.successful_update);
-            ss << " | failed_update:";
+            ss << " | failed_update=";
             print(e.failed_update);
-            ss << " | key:" << e.key;
+            ss << " | key=" << e.key;
 
             _DEBUG(ss.str());
             ss.str({});
@@ -184,7 +184,7 @@ struct Announcer::Loop {
                 // fails to exit.
                 TRACK_HANDLER();
                 sys::error_code ec;
-                _DEBUG("no entries to update, waiting...");
+                _DEBUG("No entries to update, waiting...");
                 entries.async_wait_for_push(cancel, yield[ec]);
                 if (cancel) ec = asio::error::operation_aborted;
                 if (ec) return or_throw(yield, ec, end);
@@ -196,9 +196,9 @@ struct Announcer::Loop {
 
             auto d = next_update_after(i->first);
 
-            _DEBUG( "found entry to update. It'll be updated in "
+            _DEBUG( "Found entry to update. It'll be updated in "
                   , chrono::duration_cast<chrono::seconds>(d).count()
-                  , " seconds; ", i->first.key);
+                  , " seconds: ", i->first.key);
 
             if (d == 0s) return i;
 
@@ -225,17 +225,17 @@ struct Announcer::Loop {
             // fails to exit.
             TRACK_HANDLER();
             sys::error_code ec;
-            _DEBUG("waiting for DHT");
+            _DEBUG("Waiting for DHT");
             dht->wait_all_ready(cancel, yield[ec]);
         }
 
         auto on_exit = defer([&] {
-            _DEBUG("exiting the loop (cancel:", (cancel ? "true":"false"), ")");
+            _DEBUG("Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
         while (!cancel) {
             sys::error_code ec;
-            _DEBUG("picking entry to update");
+            _DEBUG("Picking entry to update");
             auto ei = pick_entry(cancel, yield[ec]);
 
             if (cancel) return;
@@ -281,13 +281,13 @@ struct Announcer::Loop {
 
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
     {
-        _DEBUG("Announcing ", e.key);
+        _DEBUG("Announcing: ", e.key, "...");
 
         sys::error_code ec;
         auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
-        _DEBUG("Announcing ended ", e_key, " ec:", ec.message());
+        _DEBUG("Announcing: ", e_key, ": done; ec=", ec.message());
 
         return or_throw(yield, ec);
     }
