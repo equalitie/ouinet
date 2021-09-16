@@ -1741,6 +1741,7 @@ public:
             }
         }
 
+        const char* final_job = "(none)";
         boost::optional<sys::error_code> final_ec;
 
         for (size_t job_count; (job_count = jobs.count_running()) != 0;) {
@@ -1771,12 +1772,14 @@ public:
             _YDEBUG(yield, "got result from job: ", jobs.as_string(which), " ec:", result.ec.message());
 
             if (!result.ec) {
+                final_job = jobs.as_string(which);
                 final_ec = sys::error_code{}; // success
                 for (auto& job : jobs.running()) {
                     job.stop(yield);
                 }
                 break;
             } else if (!final_ec) {
+                final_job = jobs.as_string(which);
                 final_ec = result.ec;
             }
         }
@@ -1785,7 +1788,7 @@ public:
             final_ec = err::no_protocol_option;
         }
 
-        _YDEBUG(yield, "done (final_ec:", final_ec->message(), ")");
+        _YDEBUG(yield, "done final_job:", final_job, " final_ec:", final_ec->message());
 
         return or_throw(yield, *final_ec);
     }
