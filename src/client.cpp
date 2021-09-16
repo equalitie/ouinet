@@ -1769,7 +1769,7 @@ public:
 
             auto&& result = which->result();
 
-            _YDEBUG(yield, "got result from job: ", jobs.as_string(which), " ec:", result.ec.message());
+            _YDEBUG(yield, "got result job:", jobs.as_string(which), " ec:", result.ec.message());
 
             if (!result.ec) {
                 final_job = jobs.as_string(which);
