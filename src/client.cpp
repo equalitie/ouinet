@@ -1744,6 +1744,11 @@ public:
         const char* final_job = "(none)";
         boost::optional<sys::error_code> final_ec;
 
+        auto target = tnx.request().target();
+        std::string short_target = target.substr(0, 64).to_string();
+        if (target.length() > 64)
+            short_target.replace(short_target.end() - 3, short_target.end(), "...");
+
         for (size_t job_count; (job_count = jobs.count_running()) != 0;) {
             ConditionVariable cv(exec);
             std::array<OptJobCon, jobs.all.size()> cons;
@@ -1769,7 +1774,8 @@ public:
 
             auto&& result = which->result();
 
-            _YDEBUG(yield, "Got result; job=", jobs.as_string(which), " ec=", result.ec.message());
+            _YDEBUG( yield, "Got result; job=", jobs.as_string(which), " ec=", result.ec.message()
+                   , " target=", short_target);
 
             if (!result.ec) {
                 final_job = jobs.as_string(which);
@@ -1788,7 +1794,8 @@ public:
             final_ec = err::no_protocol_option;
         }
 
-        _YDEBUG(yield, "Done; final_job=", final_job, " final_ec=", final_ec->message());
+        _YDEBUG( yield, "Done; final_job=", final_job, " final_ec=", final_ec->message()
+               , " target=", short_target);
 
         return or_throw(yield, *final_ec);
     }
