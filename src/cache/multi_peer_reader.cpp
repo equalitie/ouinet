@@ -400,14 +400,14 @@ public:
             sys::error_code ec;
 
             if (!dbg_tag.empty()) {
-                LOG_INFO(dbg_tag, " Fetching hash list from: ", ep);
+                LOG_DEBUG(dbg_tag, " Fetching hash list from: ", ep);
             }
 
             p->download_hash_list(ep, *_dht, _newest_proto_seen, c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_INFO(dbg_tag, " Done fetching hash list; ep=", ep
-                        , " ec=", ec.message(), " c=", bool(c));
+                LOG_DEBUG(dbg_tag, " Done fetching hash list; ep=", ep
+                         , " ec=", ec.message(), " c=", bool(c));
             }
 
             if (c) return;
