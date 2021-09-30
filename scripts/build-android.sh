@@ -150,7 +150,7 @@ emulator
     # Prefer locally installed platform tools to those in the system.
     export PATH="$SDK_DIR/platform-tools:$PATH"
 
-    export ANDROID_HOME=$(dirname $(dirname $(which adb)))
+    export ANDROID_HOME=$(dirname $(dirname $(command -v adb)))
 }
 
 ######################################################################
@@ -182,7 +182,7 @@ function maybe_install_gradle {
 
     NEED_GRADLE=false
 
-    if ! which gradle 1> /dev/null 2>&1; then
+    if ! command -v gradle > /dev/null; then
        NEED_GRADLE=true
     else
         GRADLE_VERSION=`gradle -v | grep Gradle | cut -d ' ' -f 2`
@@ -259,8 +259,8 @@ function run_emulator {
 The emulated Android environment is now running.
 Once you can interact with it normally, you may execute:
 
-  - To install the APK: $(which adb) -e install $APK
-  - To uninstall the APK: $(which adb) -e uninstall $APK_ID
+  - To install the APK: $(command -v adb) -e install $APK
+  - To uninstall the APK: $(command -v adb) -e uninstall $APK_ID
 
 EOF
     wait $emupid
