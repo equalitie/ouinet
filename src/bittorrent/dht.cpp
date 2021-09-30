@@ -14,6 +14,7 @@
 #include "../async_sleep.h"
 #include "../parse/endpoint.h"
 #include "../or_throw.h"
+#include "../util.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
@@ -1578,11 +1579,13 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
             return ep;
         },
         [&] (std::string addr) {
+            string_view hp(addr), host, port;
+            std::tie(host, port) = util::split_ep(hp);
             auto ep = resolve(
                 _exec,
                 _multiplexer->is_v4() ? udp::v4() : udp::v6(),
-                addr,
-                "6881",
+                host.to_string(),
+                port.empty() ? "6881" : port.to_string(),
                 cancel,
                 yield[ec]
             );
