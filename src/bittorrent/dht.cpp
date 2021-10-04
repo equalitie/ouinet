@@ -15,6 +15,7 @@
 #include "../parse/endpoint.h"
 #include "../or_throw.h"
 #include "../util.h"
+#include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
@@ -316,11 +317,9 @@ void dht::DhtNode::store_contacts() const
         util::file_io::check_or_create_directory(path.parent_path(), ec);
         if (ec) return;
 
-        auto file = util::file_io::open_or_create(exec, path, ec);
+        auto atomic_file = util::atomic_file::make(exec, path, ec);
         if (ec) return;
-
-        util::file_io::truncate(file, 0, ec);
-        if (ec) return;
+        assert(atomic_file);
 
         string data;
 
@@ -343,7 +342,8 @@ void dht::DhtNode::store_contacts() const
             data += util::str(c.id, ",", c.endpoint);
         }
 
-        util::file_io::write(file, asio::buffer(data), cancel, yield[ec]);
+        util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
+        if (!ec) atomic_file->commit(ec);  // ignore commit error
     }));
 }
 

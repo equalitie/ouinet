@@ -60,6 +60,8 @@ file(GLOB bt_cpp_files
     "../src/logger.cpp"
     "../src/util.cpp"
     "../src/util/file_io.cpp"
+    "../src/util/temp_file.cpp"
+    "../src/util/atomic_file.cpp"
     "../src/util/handler_tracker.cpp"
 )
 
