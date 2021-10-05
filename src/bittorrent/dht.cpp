@@ -262,21 +262,19 @@ read_stored_contacts( const asio::executor& exec
 {
     std::set<NodeContact> ret;
 
-    if (path == fs::path()) return ret;
-
     sys::error_code ec;
     auto file = util::file_io::open_readonly(exec, path, ec);
-    if (ec) return ret;
+    if (ec) return or_throw(yield, ec, ret);
 
     size_t filesize = util::file_io::file_size(file, ec);
-    if (ec) return ret;
+    if (ec) return or_throw(yield, ec, ret);
 
     std::string data(filesize, '\0');
 
     util::file_io::read(file, asio::buffer(data), cancel, yield[ec]);
     assert(!cancel || ec == asio::error::operation_aborted);
     if (cancel) ec = asio::error::operation_aborted;
-    if (ec == asio::error::operation_aborted) return or_throw(yield, ec, ret);
+    if (ec) return or_throw(yield, ec, ret);
 
     boost::string_view sw = data;
 
@@ -321,16 +319,13 @@ void write_stored_contacts( const asio::executor& exec
     });
 
     auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
-    if (cancel) {
-        ec = asio::error::operation_aborted;
-        return;
-    }
+    if (cancel) return or_throw(yield, asio::error::operation_aborted);
 
     util::file_io::check_or_create_directory(path.parent_path(), ec);
-    if (ec) return;
+    if (ec) return or_throw(yield, ec);
 
     auto atomic_file = util::atomic_file::make(exec, path, ec);
-    if (ec) return;
+    if (ec) return or_throw(yield, ec);
     assert(atomic_file);
 
     string data;
@@ -356,6 +351,7 @@ void write_stored_contacts( const asio::executor& exec
 
     util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
     if (!ec) atomic_file->commit(ec);
+    if (ec) return or_throw(yield, ec);
 }
 
 void dht::DhtNode::store_contacts() const
@@ -374,8 +370,8 @@ void dht::DhtNode::store_contacts() const
         contacts = move(contacts)
     ] (asio::yield_context yield) mutable {
         Cancel cancel;
-        sys::error_code ec;
-        write_stored_contacts(exec, move(contacts), move(path), cancel, yield[ec]);
+        sys::error_code ignored_ec;
+        write_stored_contacts(exec, move(contacts), move(path), cancel, yield[ignored_ec]);
     }));
 }
 
