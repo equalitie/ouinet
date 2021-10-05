@@ -305,6 +305,55 @@ read_stored_contacts( const asio::executor& exec
     return ret;
 }
 
+static
+void write_stored_contacts( const asio::executor& exec
+                          , std::set<NodeContact> contacts
+                          , fs::path path
+                          , Cancel cancel
+                          , asio::yield_context yield)
+{
+    sys::error_code ec;
+    sys::error_code ignored_ec;
+
+    auto report = defer([&ec] {
+        if (ec) _ERROR("Failed to store contacts; ec=", ec.message());
+        else _DEBUG("Successfully stored contacts");
+    });
+
+    auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
+
+    util::file_io::check_or_create_directory(path.parent_path(), ec);
+    if (ec) return;
+
+    auto atomic_file = util::atomic_file::make(exec, path, ec);
+    if (ec) return;
+    assert(atomic_file);
+
+    string data;
+
+    for (unsigned i = 0; i < 500; ++i) {
+        NodeContact c;
+
+        if (!contacts.empty()) {
+            auto iter = contacts.begin();
+            c = *iter;
+            contacts.erase(iter);
+        } else if (!old_contacts.empty()) {
+            auto iter = old_contacts.begin();
+            c = *iter;
+            old_contacts.erase(iter);
+        } else {
+            break;
+        }
+
+        if (i != 0) data += '\n';
+        data += util::str(c.id, ",", c.endpoint);
+    }
+
+    util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
+    if (!ec) atomic_file->commit(ec);
+}
+
 void dht::DhtNode::store_contacts() const
 {
     if (!_routing_table) return;
@@ -322,45 +371,7 @@ void dht::DhtNode::store_contacts() const
     ] (asio::yield_context yield) mutable {
         Cancel cancel;
         sys::error_code ec;
-        sys::error_code ignored_ec;
-
-        auto report = defer([&ec] {
-            if (ec) _ERROR("Failed to store contacts; ec=", ec.message());
-            else _DEBUG("Successfully stored contacts");
-        });
-
-        auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
-
-        util::file_io::check_or_create_directory(path.parent_path(), ec);
-        if (ec) return;
-
-        auto atomic_file = util::atomic_file::make(exec, path, ec);
-        if (ec) return;
-        assert(atomic_file);
-
-        string data;
-
-        for (unsigned i = 0; i < 500; ++i) {
-            NodeContact c;
-
-            if (!contacts.empty()) {
-                auto iter = contacts.begin();
-                c = *iter;
-                contacts.erase(iter);
-            } else if (!old_contacts.empty()) {
-                auto iter = old_contacts.begin();
-                c = *iter;
-                old_contacts.erase(iter);
-            } else {
-                break;
-            }
-
-            if (i != 0) data += '\n';
-            data += util::str(c.id, ",", c.endpoint);
-        }
-
-        util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
-        if (!ec) atomic_file->commit(ec);
+        write_stored_contacts(exec, move(contacts), move(path), cancel, yield[ec]);
     }));
 }
 
