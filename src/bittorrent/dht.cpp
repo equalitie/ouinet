@@ -256,7 +256,7 @@ fs::path dht::DhtNode::stored_contacts_path() const
 static
 std::set<dht::NodeContact>
 read_stored_contacts( const asio::executor& exec
-                    , fs::path path
+                    , const fs::path& path
                     , Cancel cancel
                     , asio::yield_context yield)
 {
@@ -306,7 +306,7 @@ read_stored_contacts( const asio::executor& exec
 static
 void write_stored_contacts( const asio::executor& exec
                           , std::set<NodeContact> contacts
-                          , fs::path path
+                          , const fs::path& path
                           , Cancel cancel
                           , asio::yield_context yield)
 {
@@ -371,7 +371,7 @@ void dht::DhtNode::store_contacts() const
     ] (asio::yield_context yield) mutable {
         Cancel cancel;
         sys::error_code ignored_ec;
-        write_stored_contacts(exec, move(contacts), move(path), cancel, yield[ignored_ec]);
+        write_stored_contacts(exec, move(contacts), path, cancel, yield[ignored_ec]);
     }));
 }
 
