@@ -321,6 +321,10 @@ void write_stored_contacts( const asio::executor& exec
     });
 
     auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
+    if (cancel) {
+        ec = asio::error::operation_aborted;
+        return;
+    }
 
     util::file_io::check_or_create_directory(path.parent_path(), ec);
     if (ec) return;
