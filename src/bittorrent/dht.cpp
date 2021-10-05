@@ -1703,6 +1703,9 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
     vector<Address> bootstraps { "router.bittorrent.com"
                                , "router.utorrent.com"
+                               // Alternative bootstrap servers from the Ouinet project.
+                               , "router.bt.ouinet.work"
+                               , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
                                // I don't think I have ever seen these two working
                                // (Perhaps they only listen on TCP?)
                                , "dht.transmissionbt.com"
