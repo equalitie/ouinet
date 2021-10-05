@@ -12,9 +12,11 @@
 #include "is_martian.h"
 
 #include "../async_sleep.h"
+#include "../defer.h"
 #include "../parse/endpoint.h"
 #include "../or_throw.h"
 #include "../util.h"
+#include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
@@ -41,6 +43,12 @@
 #include <set>
 
 #include <iostream>
+
+#define _LOGPFX "BT DHT: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 namespace ouinet {
 namespace bittorrent {
@@ -203,8 +211,8 @@ dht::DhtNode::DhtNode(const asio::executor& exec, fs::path storage_dir):
 void dht::DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
 {
     if (local_ep.address().is_loopback()) {
-        LOG_WARN( "BT DhtNode shall be bound to the loopback address and "
-                , "thus won't be able to communicate with the world");
+        _WARN( "Node shall be bound to the loopback address and "
+             , "thus won't be able to communicate with the world");
     }
 
     sys::error_code ec;
@@ -231,6 +239,10 @@ void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
     sys::error_code ec;
     bootstrap(yield[ec]);
 
+    if (!ec) TRACK_SPAWN(_exec, [this] (asio::yield_context yield) {
+        store_contacts_loop(yield);
+    });
+
     return or_throw(yield, ec);
 }
 
@@ -241,30 +253,28 @@ fs::path dht::DhtNode::stored_contacts_path() const
     return _storage_dir / util::str("stored_peers-", ipv, ".txt");
 }
 
-/* static */
+static
 std::set<dht::NodeContact>
-dht::DhtNode::read_stored_contacts( const asio::executor& exec
-                                  , fs::path path
-                                  , Cancel cancel
-                                  , asio::yield_context yield)
+read_stored_contacts( const asio::executor& exec
+                    , const fs::path& path
+                    , Cancel cancel
+                    , asio::yield_context yield)
 {
     std::set<NodeContact> ret;
 
-    if (path == fs::path()) return ret;
-
     sys::error_code ec;
     auto file = util::file_io::open_readonly(exec, path, ec);
-    if (ec) return ret;
+    if (ec) return or_throw(yield, ec, ret);
 
     size_t filesize = util::file_io::file_size(file, ec);
-    if (ec) return ret;
+    if (ec) return or_throw(yield, ec, ret);
 
     std::string data(filesize, '\0');
 
     util::file_io::read(file, asio::buffer(data), cancel, yield[ec]);
     assert(!cancel || ec == asio::error::operation_aborted);
     if (cancel) ec = asio::error::operation_aborted;
-    if (ec == asio::error::operation_aborted) return or_throw(yield, ec, ret);
+    if (ec) return or_throw(yield, ec, ret);
 
     boost::string_view sw = data;
 
@@ -293,6 +303,57 @@ dht::DhtNode::read_stored_contacts( const asio::executor& exec
     return ret;
 }
 
+static
+void write_stored_contacts( const asio::executor& exec
+                          , std::set<NodeContact> contacts
+                          , const fs::path& path
+                          , Cancel cancel
+                          , asio::yield_context yield)
+{
+    sys::error_code ec;
+    sys::error_code ignored_ec;
+
+    auto report = defer([&ec] {
+        if (ec) _ERROR("Failed to store contacts; ec=", ec.message());
+        else _DEBUG("Successfully stored contacts");
+    });
+
+    auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
+    if (cancel) return or_throw(yield, asio::error::operation_aborted);
+
+    util::file_io::check_or_create_directory(path.parent_path(), ec);
+    if (ec) return or_throw(yield, ec);
+
+    auto atomic_file = util::atomic_file::make(exec, path, ec);
+    if (ec) return or_throw(yield, ec);
+    assert(atomic_file);
+
+    string data;
+
+    for (unsigned i = 0; i < 500; ++i) {
+        NodeContact c;
+
+        if (!contacts.empty()) {
+            auto iter = contacts.begin();
+            c = *iter;
+            contacts.erase(iter);
+        } else if (!old_contacts.empty()) {
+            auto iter = old_contacts.begin();
+            c = *iter;
+            old_contacts.erase(iter);
+        } else {
+            break;
+        }
+
+        if (i != 0) data += '\n';
+        data += util::str(c.id, ",", c.endpoint);
+    }
+
+    util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
+    if (!ec) atomic_file->commit(ec);
+    if (ec) return or_throw(yield, ec);
+}
+
 void dht::DhtNode::store_contacts() const
 {
     if (!_routing_table) return;
@@ -309,41 +370,8 @@ void dht::DhtNode::store_contacts() const
         contacts = move(contacts)
     ] (asio::yield_context yield) mutable {
         Cancel cancel;
-        sys::error_code ec;
         sys::error_code ignored_ec;
-        auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
-
-        util::file_io::check_or_create_directory(path.parent_path(), ec);
-        if (ec) return;
-
-        auto file = util::file_io::open_or_create(exec, path, ec);
-        if (ec) return;
-
-        util::file_io::truncate(file, 0, ec);
-        if (ec) return;
-
-        string data;
-
-        for (unsigned i = 0; i < 500; ++i) {
-            NodeContact c;
-
-            if (!contacts.empty()) {
-                auto iter = contacts.begin();
-                c = *iter;
-                contacts.erase(iter);
-            } else if (!old_contacts.empty()) {
-                auto iter = old_contacts.begin();
-                c = *iter;
-                old_contacts.erase(iter);
-            } else {
-                break;
-            }
-
-            if (i != 0) data += '\n';
-            data += util::str(c.id, ",", c.endpoint);
-        }
-
-        util::file_io::write(file, asio::buffer(data), cancel, yield[ec]);
+        write_stored_contacts(exec, move(contacts), path, cancel, yield[ignored_ec]);
     }));
 }
 
@@ -901,6 +929,26 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
                 it->second.callback(std::move(*message_map));
             }
         }
+    }
+}
+
+void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
+{
+    fs::path path = stored_contacts_path();
+    if (path == fs::path()) return;
+
+    while (true) {
+        if (!_routing_table) return;
+        auto contacts = _routing_table->dump_contacts();
+
+        sys::error_code ignored_ec;
+        write_stored_contacts(_exec, move(contacts), path, _cancel, yield[ignored_ec]);
+        if (_cancel) return;
+
+        sys::error_code ec;
+        async_sleep(_exec, std::chrono::minutes(6), _cancel, yield[ec]);
+        if (_cancel) return;
+        return_or_throw_on_error(yield, _cancel, ec);
     }
 }
 
@@ -1593,8 +1641,8 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
             fix_cancel_invariant(cancel, ec);
 
             if (ec && !cancel) {
-                LOG_DEBUG( "Unable to resolve bootstrap server, giving up: "
-                         , addr, "; ec=", ec.message());
+                _DEBUG( "Unable to resolve bootstrap server, giving up: "
+                      , addr, "; ec=", ec.message());
             }
 
             return ep;
@@ -1621,24 +1669,24 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
     }
 
     if (ec) {
-        LOG_DEBUG( "Bootstrap server does not reply, giving up: "
-                 , bootstrap_address, "; ec=", ec.message());
+        _DEBUG( "Bootstrap server does not reply, giving up: "
+              , bootstrap_address, "; ec=", ec.message());
         return or_throw<BootstrapResult>(yield, ec);
     }
 
     auto my_ip = initial_ping_reply["ip"].as_string_view();
 
     if (!my_ip) {
-        LOG_DEBUG("Unexpected bootstrap server reply, giving up (no ip)");
-        LOG_DEBUG("   ", initial_ping_reply);
+        _DEBUG("Unexpected bootstrap server reply, giving up (no IP)");
+        _DEBUG("   ", initial_ping_reply);
         return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
     boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
 
     if (!my_endpoint) {
-        LOG_DEBUG("Unexpected bootstrap server reply, giving up (can't parse ip)");
-        LOG_DEBUG("   ", initial_ping_reply);
+        _DEBUG("Unexpected bootstrap server reply, giving up (can't parse IP)");
+        _DEBUG("   ", initial_ping_reply);
         return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
@@ -1725,13 +1773,13 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
                 ] (asio::yield_context yield) {
                     sys::error_code ec;
 
-                    LOG_DEBUG("Bootstrapping node: ", bs, "...");
+                    _DEBUG("Bootstrapping node: ", bs, "...");
 
                     auto r = bootstrap_single(bs, done_cancel, yield[ec]);
 
                     fix_cancel_invariant(done_cancel, ec);
 
-                    LOG_DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec.message());
+                    _DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec.message());
 
                     if (ec || is_martian(r.my_ep)) return;
 
@@ -1786,7 +1834,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
     _wan_endpoint = my_endpoint;
 
-    LOG_INFO("BT WAN Endpoint: ", _wan_endpoint);
+    _INFO("WAN endpoint: ", _wan_endpoint);
 
     auto send_ping_fn = [&] (const NodeContact& c) { send_ping(c); };
     _node_id = NodeID::generate(_wan_endpoint.address());

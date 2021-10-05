@@ -226,6 +226,7 @@ class DhtNode {
 
     private:
     void receive_loop(asio::yield_context);
+    void store_contacts_loop(asio::yield_context);
 
     void send_datagram(
         udp::endpoint destination,
@@ -347,10 +348,6 @@ class DhtNode {
     fs::path stored_contacts_path() const;
 
     void store_contacts() const;
-
-    static
-    std::set<NodeContact>
-    read_stored_contacts(const asio::executor&, boost::filesystem::path, Cancel, asio::yield_context);
 
     private:
     asio::executor _exec;
