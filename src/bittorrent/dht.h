@@ -349,10 +349,6 @@ class DhtNode {
 
     void store_contacts() const;
 
-    static
-    std::set<NodeContact>
-    read_stored_contacts(const asio::executor&, boost::filesystem::path, Cancel, asio::yield_context);
-
     private:
     asio::executor _exec;
     ip::udp::endpoint _local_endpoint;

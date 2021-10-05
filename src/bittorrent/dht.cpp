@@ -253,12 +253,12 @@ fs::path dht::DhtNode::stored_contacts_path() const
     return _storage_dir / util::str("stored_peers-", ipv, ".txt");
 }
 
-/* static */
+static
 std::set<dht::NodeContact>
-dht::DhtNode::read_stored_contacts( const asio::executor& exec
-                                  , fs::path path
-                                  , Cancel cancel
-                                  , asio::yield_context yield)
+read_stored_contacts( const asio::executor& exec
+                    , fs::path path
+                    , Cancel cancel
+                    , asio::yield_context yield)
 {
     std::set<NodeContact> ret;
 
