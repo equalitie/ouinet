@@ -44,6 +44,12 @@
 
 #include <iostream>
 
+#define _LOGPFX "BT DHT: "
+#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+
 namespace ouinet {
 namespace bittorrent {
 
@@ -205,8 +211,8 @@ dht::DhtNode::DhtNode(const asio::executor& exec, fs::path storage_dir):
 void dht::DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
 {
     if (local_ep.address().is_loopback()) {
-        LOG_WARN( "BT DhtNode shall be bound to the loopback address and "
-                , "thus won't be able to communicate with the world");
+        _WARN( "Node shall be bound to the loopback address and "
+             , "thus won't be able to communicate with the world");
     }
 
     sys::error_code ec;
@@ -315,8 +321,8 @@ void dht::DhtNode::store_contacts() const
         sys::error_code ignored_ec;
 
         auto report = defer([&ec] {
-            if (ec) LOG_ERROR("Failed to store DHT contacts; ec=", ec.message());
-            else LOG_DEBUG("Successfully stored DHT contacts");
+            if (ec) _ERROR("Failed to store contacts; ec=", ec.message());
+            else _DEBUG("Successfully stored contacts");
         });
 
         auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
@@ -1600,8 +1606,8 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
             fix_cancel_invariant(cancel, ec);
 
             if (ec && !cancel) {
-                LOG_DEBUG( "Unable to resolve bootstrap server, giving up: "
-                         , addr, "; ec=", ec.message());
+                _DEBUG( "Unable to resolve bootstrap server, giving up: "
+                      , addr, "; ec=", ec.message());
             }
 
             return ep;
@@ -1628,24 +1634,24 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
     }
 
     if (ec) {
-        LOG_DEBUG( "Bootstrap server does not reply, giving up: "
-                 , bootstrap_address, "; ec=", ec.message());
+        _DEBUG( "Bootstrap server does not reply, giving up: "
+              , bootstrap_address, "; ec=", ec.message());
         return or_throw<BootstrapResult>(yield, ec);
     }
 
     auto my_ip = initial_ping_reply["ip"].as_string_view();
 
     if (!my_ip) {
-        LOG_DEBUG("Unexpected bootstrap server reply, giving up (no ip)");
-        LOG_DEBUG("   ", initial_ping_reply);
+        _DEBUG("Unexpected bootstrap server reply, giving up (no IP)");
+        _DEBUG("   ", initial_ping_reply);
         return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
     boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
 
     if (!my_endpoint) {
-        LOG_DEBUG("Unexpected bootstrap server reply, giving up (can't parse ip)");
-        LOG_DEBUG("   ", initial_ping_reply);
+        _DEBUG("Unexpected bootstrap server reply, giving up (can't parse IP)");
+        _DEBUG("   ", initial_ping_reply);
         return or_throw<BootstrapResult>(yield, asio::error::fault);
     }
 
@@ -1732,13 +1738,13 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
                 ] (asio::yield_context yield) {
                     sys::error_code ec;
 
-                    LOG_DEBUG("Bootstrapping node: ", bs, "...");
+                    _DEBUG("Bootstrapping node: ", bs, "...");
 
                     auto r = bootstrap_single(bs, done_cancel, yield[ec]);
 
                     fix_cancel_invariant(done_cancel, ec);
 
-                    LOG_DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec.message());
+                    _DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec.message());
 
                     if (ec || is_martian(r.my_ep)) return;
 
@@ -1793,7 +1799,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
     _wan_endpoint = my_endpoint;
 
-    LOG_INFO("BT WAN Endpoint: ", _wan_endpoint);
+    _INFO("WAN endpoint: ", _wan_endpoint);
 
     auto send_ping_fn = [&] (const NodeContact& c) { send_ping(c); };
     _node_id = NodeID::generate(_wan_endpoint.address());
