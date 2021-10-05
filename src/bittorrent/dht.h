@@ -226,6 +226,7 @@ class DhtNode {
 
     private:
     void receive_loop(asio::yield_context);
+    void store_contacts_loop(asio::yield_context);
 
     void send_datagram(
         udp::endpoint destination,

@@ -239,6 +239,10 @@ void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
     sys::error_code ec;
     bootstrap(yield[ec]);
 
+    if (!ec) TRACK_SPAWN(_exec, [this] (asio::yield_context yield) {
+        store_contacts_loop(yield);
+    });
+
     return or_throw(yield, ec);
 }
 
@@ -914,6 +918,18 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
                 it->second.callback(std::move(*message_map));
             }
         }
+    }
+}
+
+void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
+{
+    while (true) {
+        store_contacts();
+
+        sys::error_code ec;
+        async_sleep(_exec, std::chrono::minutes(6), _cancel, yield[ec]);
+        if (_cancel) return;
+        return_or_throw_on_error(yield, _cancel, ec);
     }
 }
 
