@@ -12,6 +12,7 @@
 #include "is_martian.h"
 
 #include "../async_sleep.h"
+#include "../defer.h"
 #include "../parse/endpoint.h"
 #include "../or_throw.h"
 #include "../util.h"
@@ -312,6 +313,12 @@ void dht::DhtNode::store_contacts() const
         Cancel cancel;
         sys::error_code ec;
         sys::error_code ignored_ec;
+
+        auto report = defer([&ec] {
+            if (ec) LOG_ERROR("Failed to store DHT contacts; ec=", ec.message());
+            else LOG_DEBUG("Successfully stored DHT contacts");
+        });
+
         auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
 
         util::file_io::check_or_create_directory(path.parent_path(), ec);
@@ -343,7 +350,7 @@ void dht::DhtNode::store_contacts() const
         }
 
         util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
-        if (!ec) atomic_file->commit(ec);  // ignore commit error
+        if (!ec) atomic_file->commit(ec);
     }));
 }
 
