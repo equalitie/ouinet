@@ -715,7 +715,7 @@ container runs), you may start a temporary emulator container like this:
           --mount type=bind,source=$PWD,target=/usr/local/src,ro \
           --mount type=bind,source=/tmp/.X11-unix/X0,target=/tmp/.X11-unix/X0 \
           --mount type=bind,source=$HOME/.Xauthority,target=/root/.Xauthority,ro \
-          -h "$(uname -n)" ouinet:android-emu
+          -h "$(uname -n)" -e DISPLAY ouinet:android-emu
 
 Please note how the Ouinet source directory as well as the X11 socket and
 authentication cookie database are mounted into the container to allow showing
@@ -726,7 +726,7 @@ Docker host).
 Once in the container, you may run the emulator like this:
 
     $ cd /mnt
-    $ DISPLAY=:0.0 /usr/local/src/scripts/build-android.sh emu &
+    $ /usr/local/src/scripts/build-android.sh emu &
 
 You can use `adb` inside of the container to install packages into the
 emulated device.
