@@ -699,6 +699,38 @@ While the emulator is running, you may interact with it using ADB, e.g. to
 install the APK built previously.  See the script's output for particular
 instructions and paths.
 
+#### Running the Android emulator under Docker
+
+The `Dockerfile.android-emu` file can be used to setup a Docker container able
+to run the Android emulator.  First create the emulator image with:
+
+    $ sudo docker build -t ouinet:android-emu - < Dockerfile.android-emu
+
+Then, if `$SDK_PARENT_DIR` is the directory where you want Ouinet's build
+script to place Android SDK downloads (so that you can reuse them between
+container runs), you may start a temporary emulator container like this:
+
+    $ sudo docker run --rm -it \
+          --mount type=bind,source="$(realpath "$SDK_PARENT_DIR")",target=/mnt \
+          --mount type=bind,source=$PWD,target=/usr/local/src,ro \
+          --mount type=bind,source=/tmp/.X11-unix/X0,target=/tmp/.X11-unix/X0 \
+          --mount type=bind,source=$HOME/.Xauthority,target=/root/.Xauthority,ro \
+          -h "$(uname -n)" ouinet:android-emu
+
+Please note how the Ouinet source directory as well as the X11 socket and
+authentication cookie database are mounted into the container to allow showing
+the emulator's screen on your display (without giving access to it to everyone
+via `xhost` -- this is also why the container has the same host name as the
+Docker host).
+
+Once in the container, you may run the emulator like this:
+
+    $ cd /mnt
+    $ DISPLAY=:0.0 /usr/local/src/scripts/build-android.sh emu &
+
+You can use `adb` inside of the container to install packages into the
+emulated device.
+
 ### Integrating the Ouinet library into your app
 
 In order for your Android app to access the resources it needs using the HTTP
