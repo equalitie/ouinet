@@ -88,7 +88,7 @@ function check_mode {
 }
 
 ######################################################################
-function setup_deps {
+function setup_sdk_deps {
     # Install SDK dependencies.
     local toolsfile=sdk-tools-linux-4333796.zip
     local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
@@ -296,7 +296,7 @@ if [ ! "$MODES" ]; then
 fi
 
 if check_mode bootstrap; then
-    setup_deps
+    setup_sdk_deps
     maybe_install_ndk
     maybe_install_gradle
     # TODO: miniupnp
