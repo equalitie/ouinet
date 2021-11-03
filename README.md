@@ -708,7 +708,8 @@ to run the Android emulator.  First create the emulator image with:
 
 Then, if `$SDK_PARENT_DIR` is the directory where you want Ouinet's build
 script to place Android SDK downloads (so that you can reuse them between
-container runs), you may start a temporary emulator container like this:
+container runs or from an existing Ouinet build), you may start a temporary
+emulator container like this:
 
     $ sudo docker run --rm -it \
           --mount type=bind,source="$(realpath "$SDK_PARENT_DIR")",target=/mnt \
