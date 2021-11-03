@@ -126,7 +126,8 @@ platform-tools
 emulator
 "
 
-    # Collect SDK packages that need to be installed for the requested modes.
+    # Collect SDK packages that need to be installed for
+    # all the modes requested in the command line.
     local sdk_pkgs_install mode pkg
     for mode in $ALLOWED_MODES; do
         if check_mode $mode; then
