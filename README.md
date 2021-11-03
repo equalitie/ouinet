@@ -726,7 +726,7 @@ Docker host).
 Once in the container, you may run the emulator like this:
 
     $ cd /mnt
-    $ /usr/local/src/scripts/build-android.sh emu &
+    $ /usr/local/src/scripts/build-android.sh bootstrap emu &
 
 You can use `adb` inside of the container to install packages into the
 emulated device.
