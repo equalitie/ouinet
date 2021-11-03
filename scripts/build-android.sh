@@ -50,6 +50,7 @@ fi
 mkdir -p "${DIR}/${OUTPUT_DIR}"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
+SDK_MANAGER="${SDK_DIR}/tools/bin/sdkmanager"
 
 NDK=android-ndk-r19b
 NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
@@ -88,19 +89,17 @@ function check_mode {
 }
 
 ######################################################################
-function setup_sdk_deps {
-    # Install SDK dependencies.
+function maybe_install_sdk {
     local toolsfile=sdk-tools-linux-4333796.zip
-    local sdkmanager="$SDK_DIR/tools/bin/sdkmanager"
 
     # Reuse downloaded SDK stuff from old versions of this script.
     if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
         mv "$DIR/sdk_root" "$SDK_DIR"
     fi
 
-    if [ ! -f "$sdkmanager" ]; then
-        echo "cannot find sdk manager: $sdkmangaer"
-        echo "downlodaing sdk.."
+    if [ ! -f "$SDK_MANAGER" ]; then
+        echo "cannot find SDK manager: $SDK_MANAGER"
+        echo "downlodaing SDK..."
         [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
         if [ ! -f "$toolsfile" ]; then
             # https://developer.android.com/studio/index.html#command-tools
@@ -108,7 +107,9 @@ function setup_sdk_deps {
         fi
         unzip -q "$toolsfile" -d "$SDK_DIR"
     fi
+}
 
+function setup_sdk_deps {
     # SDK packages needed by the different modes.
     # To get list of all packages, use `sdkmanager --list`.
     local sdk_pkgs
@@ -145,7 +146,7 @@ emulator
     if [ "$sdk_pkgs_install" ]; then
         # This produces progress bars that are very frequently updated
         # and clutter build logs.
-        echo y | "$sdkmanager" $sdk_pkgs_install > /dev/null
+        echo y | "$SDK_MANAGER" $sdk_pkgs_install > /dev/null
     fi
 
     # Prefer locally installed platform tools to those in the system.
@@ -301,6 +302,7 @@ if [ ! "$MODES" ]; then
 fi
 
 if check_mode bootstrap; then
+    maybe_install_sdk
     setup_sdk_deps
     maybe_install_ndk
     maybe_install_gradle
