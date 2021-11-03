@@ -1,0 +1,12 @@
+FROM registry.gitlab.com/equalitie/ouinet:android
+
+# Additional packages to run the Android SDK's emulator
+# from the `build-android.sh` script.
+# The script uses the SDK platform tools' `adb` internally,
+# so the one installed below is just for user convenience.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      adb \
+      libpulse0 \
+      libxcomposite1 \
+      libxcursor1 \
+    && rm -rf /var/lib/apt/lists/*
