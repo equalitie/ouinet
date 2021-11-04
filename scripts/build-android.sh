@@ -52,6 +52,10 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 SDK_MANAGER="${SDK_DIR}/tools/bin/sdkmanager"
 
+# Until we upgrade Gradle to a version which
+# does not need an NDK with the `platforms` directory,
+# install this fixed version manually instead of
+# having Gradle install the latest one.
 NDK=android-ndk-r19b
 NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
@@ -167,6 +171,8 @@ function maybe_create_avd {
 
 ######################################################################
 function maybe_install_ndk {
+    # This would be done automatically by Gradle if
+    # we upgraded it to a version which works with recent NDKs.
     check_mode build || return 0
 
     if [ ! -d "$NDK_DIR" ]; then
