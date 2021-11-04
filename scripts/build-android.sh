@@ -167,7 +167,7 @@ function maybe_create_avd {
 
 ######################################################################
 function maybe_install_ndk {
-    check_mode build || return
+    check_mode build || return 0
 
     if [ ! -d "$NDK_DIR" ]; then
         echo "Installing NDK..."
@@ -181,7 +181,7 @@ function maybe_install_ndk {
 
 ######################################################################
 function maybe_install_gradle {
-    check_mode build || return
+    check_mode build || return 0
 
     GRADLE_REQUIRED_MAJOR_VERSION=4
     GRADLE_REQUIRED_MINOR_VERSION=6
