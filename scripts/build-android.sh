@@ -118,10 +118,8 @@ function setup_sdk_deps {
     # To get list of all packages, use `sdkmanager --list`.
     local sdk_pkgs
     declare -A sdk_pkgs
+    # Build dependencies are handled by Gradle once `$ANDROID_HOME` is set.
     sdk_pkgs[build]="
-platforms;$PLATFORM
-build-tools;29.0.2
-cmake;3.10.2.4988404
 "
     sdk_pkgs[emu]="
 $EMULATOR_IMAGE
