@@ -150,8 +150,12 @@ emulator
     if [ "$sdk_pkgs_install" ]; then
         # This produces progress bars that are very frequently updated
         # and clutter build logs.
-        echo y | "$SDK_MANAGER" $sdk_pkgs_install > /dev/null
+        yes y | "$SDK_MANAGER" $sdk_pkgs_install > /dev/null
     fi
+    # Accept licenses from stuff installed by Gradle on previous runs.
+    # Not very clean, but if Gradle complains about licenses not being accepted,
+    # at least a second run would succeed.
+    yes y | "$SDK_MANAGER" --licenses > /dev/null
 
     # Prefer locally installed platform tools to those in the system.
     export PATH="$SDK_DIR/platform-tools:$PATH"
