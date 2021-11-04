@@ -80,7 +80,7 @@ public class Ouinet {
             Log.d(TAG, "Failed to acquire multicast lock");
         }
 
-        List<String> args = new ArrayList<>();
+        List<String> args = new ArrayList<String>();
         args.add("ouinet-client"); // App name
         args.add("--repo=" + config.getOuinetDirectory());
 
@@ -115,7 +115,7 @@ public class Ouinet {
             args.add("--cache-private");
         }
 
-        List<String> path = new ArrayList<>();
+        List<String> path = new ArrayList<String>();
         if (config.getObfs4ProxyPath() != null) {
             path.add(config.getObfs4ProxyPath());
         }
