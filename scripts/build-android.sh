@@ -245,7 +245,7 @@ function build_ouinet_aar {
         -PbuildDir="${GRADLE_BUILDDIR}" \
         --project-dir="${ROOT}"/android \
         --gradle-user-home "${GRADLE_BUILDDIR}"/.gradle-home \
-        --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache \
+        --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
         --no-daemon
     )
 }
