@@ -121,7 +121,6 @@ function setup_sdk_deps {
     sdk_pkgs[build]="
 platforms;$PLATFORM
 build-tools;29.0.2
-platform-tools
 cmake;3.10.2.4988404
 "
     sdk_pkgs[emu]="
@@ -160,7 +159,7 @@ emulator
     # Prefer locally installed platform tools to those in the system.
     export PATH="$SDK_DIR/platform-tools:$PATH"
 
-    export ANDROID_HOME=$(dirname $(dirname $(command -v adb)))
+    export ANDROID_HOME="$SDK_DIR"
 }
 
 ######################################################################
