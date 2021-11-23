@@ -17,13 +17,13 @@ done
 shift $((OPTIND -1))
 
 if [ "$ABI" = "armeabi-v7a" ]; then
-    EMULATOR_API_LEVEL=19
+    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-19}
 elif [ "$ABI" = "arm64-v8a" ]; then
-    EMULATOR_API_LEVEL=21
+    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-21}
 elif [ "$ABI" = "x86" ]; then
-    EMULATOR_API_LEVEL=19
+    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-19}
 elif [ "$ABI" = "x86_64" ]; then
-    EMULATOR_API_LEVEL=21
+    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-21}
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1
