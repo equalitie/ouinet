@@ -17,17 +17,13 @@ done
 shift $((OPTIND -1))
 
 if [ "$ABI" = "armeabi-v7a" ]; then
-    NDK_PLATFORM=19
-
+    EMULATOR_API_LEVEL=19
 elif [ "$ABI" = "arm64-v8a" ]; then
-    NDK_PLATFORM=21
-
+    EMULATOR_API_LEVEL=21
 elif [ "$ABI" = "x86" ]; then
-    NDK_PLATFORM=19
-
+    EMULATOR_API_LEVEL=19
 elif [ "$ABI" = "x86_64" ]; then
-    NDK_PLATFORM=21
-
+    EMULATOR_API_LEVEL=21
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1
@@ -54,7 +50,7 @@ NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
 # Android API level, see https://redmine.equalit.ie/issues/12143
-PLATFORM=android-${NDK_PLATFORM}
+EMULATOR_PLATFORM=android-${EMULATOR_API_LEVEL}
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -63,7 +59,7 @@ EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
 # The image to be used by the emulator AVD
 EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
-EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
+EMULATOR_IMAGE="system-images;$EMULATOR_PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 
 # To get list of all devices, use `avdmanager list device`.
 EMULATOR_DEV=${EMULATOR_DEV:-Nexus 6}
@@ -71,7 +67,7 @@ EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
 echo "NDK_DIR: "$NDK_DIR
 echo "SDK_DIR: "$SDK_DIR
-echo "PLATFORM: "$PLATFORM
+echo "EMULATOR_PLATFORM: "$EMULATOR_PLATFORM
 
 ######################################################################
 MODES=
@@ -116,7 +112,7 @@ function setup_sdk_deps {
 "
     sdk_pkgs[emu]="
 $EMULATOR_IMAGE
-platforms;$PLATFORM
+platforms;$EMULATOR_PLATFORM
 platform-tools
 emulator
 "
