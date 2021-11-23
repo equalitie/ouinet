@@ -7,15 +7,19 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
 
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
         set(OPENSSL_TARGET "android-arm")
-        set(MAX_API 19)
+        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
+        set(MAX_API 16)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
         set(OPENSSL_TARGET "android-arm64")
+        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
         set(MAX_API 21)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")
         set(OPENSSL_TARGET "android-x86")
-        set(MAX_API 19)
+        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
+        set(MAX_API 16)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         set(OPENSSL_TARGET "android-x86_64")
+        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
         set(MAX_API 21)
     else()
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")

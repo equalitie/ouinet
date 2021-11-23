@@ -17,12 +17,16 @@ done
 shift $((OPTIND -1))
 
 if [ "$ABI" = "armeabi-v7a" ]; then
-    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-19}
+    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
+    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-16}
 elif [ "$ABI" = "arm64-v8a" ]; then
+    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
     EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-21}
 elif [ "$ABI" = "x86" ]; then
-    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-19}
+    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
+    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-16}
 elif [ "$ABI" = "x86_64" ]; then
+    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
     EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-21}
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."

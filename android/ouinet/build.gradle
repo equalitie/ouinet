@@ -4,9 +4,12 @@ def ouinetVersionName = "$versionName"
 def ouinetBuildId = "$buildId"
 
 android {
+    // Please read `doc/android-sdk-versions.md` and keep in sync with it.
     compileSdkVersion 26
     defaultConfig {
-        minSdkVersion 15
+        // Please read `doc/android-sdk-versions.md` and keep in sync with it.
+        minSdkVersion 16
+        // Please read `doc/android-sdk-versions.md` and keep in sync with it.
         targetSdkVersion 26
         versionCode 1
         versionName ouinetVersionName
