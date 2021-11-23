@@ -712,11 +712,14 @@ container runs or from an existing Ouinet build), you may start a temporary
 emulator container like this:
 
     $ sudo docker run --rm -it \
+          --device /dev/kvm \
           --mount type=bind,source="$(realpath "$SDK_PARENT_DIR")",target=/mnt \
           --mount type=bind,source=$PWD,target=/usr/local/src,ro \
           --mount type=bind,source=/tmp/.X11-unix/X0,target=/tmp/.X11-unix/X0 \
           --mount type=bind,source=$HOME/.Xauthority,target=/root/.Xauthority,ro \
           -h "$(uname -n)" -e DISPLAY ouinet:android-emu
+
+The `--device` option is only needed to emulate an `x86_64` device.
 
 Please note how the Ouinet source directory as well as the X11 socket and
 authentication cookie database are mounted into the container to allow showing
