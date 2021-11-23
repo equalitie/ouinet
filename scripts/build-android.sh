@@ -65,9 +65,17 @@ EMULATOR_IMAGE="system-images;$EMULATOR_PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 EMULATOR_DEV=${EMULATOR_DEV:-Nexus 6}
 EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
-echo "NDK_DIR: "$NDK_DIR
-echo "SDK_DIR: "$SDK_DIR
-echo "EMULATOR_PLATFORM: "$EMULATOR_PLATFORM
+cat <<EOF
+Configuration environment variables:
+
+ABI="$ABI"
+NDK_DIR="$NDK_DIR"
+SDK_DIR="$SDK_DIR"
+EMULATOR_AVD="$EMULATOR_AVD"
+EMULATOR_DEV="$EMULATOR_DEV"
+EMULATOR_API_LEVEL="$EMULATOR_API_LEVEL"
+
+EOF
 
 ######################################################################
 MODES=
