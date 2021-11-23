@@ -19,6 +19,18 @@ import java.util.List;
 public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
     static {
+        // Explicitly loading library dependencies is needed for older versions of Android
+        // (probably 16 <= API < 19).
+        // TODO: Use <https://github.com/KeepSafe/ReLinker> to take care of this automatically,
+        // then remove this block of explicit loads
+        // and replace `System.loadLibrary` with `ReLinker.recursively().loadLibrary` below.
+        // BEGIN(explict loads)
+        System.loadLibrary("c++_shared");
+        System.loadLibrary("boost_asio");
+        System.loadLibrary("boost_asio_ssl");
+        System.loadLibrary("gpg-error");
+        System.loadLibrary("gcrypt");
+        // END(explict loads)
         System.loadLibrary("client");
         System.loadLibrary("native-lib");
     }
