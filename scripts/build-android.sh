@@ -16,23 +16,16 @@ while getopts r option; do
 done
 shift $((OPTIND -1))
 
-# Derive other variables from the selected ABI.
-# See `$NDK/build/tools/make_standalone_toolchain.py:get_{triple,abis}()`.
-# See <https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658>.
 if [ "$ABI" = "armeabi-v7a" ]; then
-    NDK_ARCH="arm"
     NDK_PLATFORM=19
 
 elif [ "$ABI" = "arm64-v8a" ]; then
-    NDK_ARCH="arm64"
     NDK_PLATFORM=21
 
 elif [ "$ABI" = "x86" ]; then
-    NDK_ARCH="x86"
     NDK_PLATFORM=19
 
 elif [ "$ABI" = "x86_64" ]; then
-    NDK_ARCH="x86_64"
     NDK_PLATFORM=21
 
 else
