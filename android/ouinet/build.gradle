@@ -5,12 +5,10 @@ def ouinetBuildId = "$buildId"
 
 android {
     // Please read `doc/android-sdk-versions.md` and keep in sync with it.
-    compileSdkVersion 26
+    compileSdkVersion System.getenv('OUINET_TARGET_API').toInteger()
     defaultConfig {
-        // Please read `doc/android-sdk-versions.md` and keep in sync with it.
-        minSdkVersion 16
-        // Please read `doc/android-sdk-versions.md` and keep in sync with it.
-        targetSdkVersion 26
+        minSdkVersion System.getenv('OUINET_MIN_API').toInteger()
+        targetSdkVersion System.getenv('OUINET_TARGET_API').toInteger()
         versionCode 1
         versionName ouinetVersionName
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"

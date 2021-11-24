@@ -16,18 +16,16 @@ while getopts r option; do
 done
 shift $((OPTIND -1))
 
+# Please read `doc/android-sdk-versions.md` and keep in sync with it.
+OUINET_TARGET_API=26
 if [ "$ABI" = "armeabi-v7a" ]; then
-    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-16}
+    OUINET_MIN_API=16
 elif [ "$ABI" = "arm64-v8a" ]; then
-    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-21}
+    OUINET_MIN_API=21
 elif [ "$ABI" = "x86" ]; then
-    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-16}
+    OUINET_MIN_API=16
 elif [ "$ABI" = "x86_64" ]; then
-    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-    EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-21}
+    OUINET_MIN_API=21
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1
@@ -63,6 +61,7 @@ EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
 # The image to be used by the emulator AVD
 EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
+EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-$OUINET_MIN_API}
 EMULATOR_IMAGE="system-images;$EMULATOR_PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 
 # To get list of all devices, use `avdmanager list device`.
@@ -80,6 +79,9 @@ EMULATOR_DEV="$EMULATOR_DEV"
 EMULATOR_API_LEVEL="$EMULATOR_API_LEVEL"
 
 EOF
+
+# Export variables required by subprocesses (always prefixed with `OUINET_`).
+export OUINET_MIN_API OUINET_TARGET_API
 
 ######################################################################
 MODES=

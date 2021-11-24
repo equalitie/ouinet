@@ -7,20 +7,12 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
 
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
         set(OPENSSL_TARGET "android-arm")
-        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-        set(MAX_API 16)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
         set(OPENSSL_TARGET "android-arm64")
-        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-        set(MAX_API 21)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")
         set(OPENSSL_TARGET "android-x86")
-        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-        set(MAX_API 16)
     elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         set(OPENSSL_TARGET "android-x86_64")
-        # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-        set(MAX_API 21)
     else()
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
@@ -28,10 +20,11 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     # openssl does not compile with __ANDROID_API__ past a certain point.
     # Presumably this will get fixed in a future openssl version.
     # For now, defining an old version seems to work.
-    if (${ANDROID_PLATFORM_LEVEL} LESS ${MAX_API})
+    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
+    if (${ANDROID_PLATFORM_LEVEL} LESS $ENV{OUINET_MIN_API})
         set(OPENSSL_ANDROID_VERSION ${ANDROID_PLATFORM_LEVEL})
     else()
-        set(OPENSSL_ANDROID_VERSION ${MAX_API})
+        set(OPENSSL_ANDROID_VERSION $ENV{OUINET_MIN_API})
     endif()
 
     set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
