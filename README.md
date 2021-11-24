@@ -653,17 +653,13 @@ Ouinet AAR library at `build.ouinet/build-android-$ABI/builddir/ouinet/build-and
 #### Using existing Android SDK/NDK and Boost
 
 By default the `build-android.sh` script downloads all dependencies required
-to build the Ouinet Android library, including the Android SDK, Android NDK
-and Boost for Android.  If you already have these installed on your system you
-can tune the script to use them:
+to build the Ouinet Android library, including the Android SDK and NDK.  If
+you already have these installed on your system you can tune the script to use
+them:
 
     $ export SDK_DIR=/opt/android-sdk
     $ export NDK_DIR=/opt/android-sdk/ndk-bundle
     $ export ABI=armeabi-v7a
-    $ export PLATFORM=android-26
-    $ export BOOST_V=1_67_0
-    $ export BOOST_SOURCE=/path/to/Boost-for-Android
-    $ export BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
     $ /path/to/build-android.sh
 
 ### Testing with Android emulator
