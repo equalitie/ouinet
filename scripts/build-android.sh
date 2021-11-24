@@ -16,25 +16,16 @@ while getopts r option; do
 done
 shift $((OPTIND -1))
 
-# Derive other variables from the selected ABI.
-# See `$NDK/build/tools/make_standalone_toolchain.py:get_{triple,abis}()`.
-# See <https://github.com/opencv/opencv/blob/5b868ccd829975da5372bf330994553e176aee09/platforms/android/android.toolchain.cmake#L658>.
+# Please read `doc/android-sdk-versions.md` and keep in sync with it.
+OUINET_TARGET_API=26
 if [ "$ABI" = "armeabi-v7a" ]; then
-    NDK_ARCH="arm"
-    NDK_PLATFORM=19
-
+    OUINET_MIN_API=16
 elif [ "$ABI" = "arm64-v8a" ]; then
-    NDK_ARCH="arm64"
-    NDK_PLATFORM=21
-
+    OUINET_MIN_API=21
 elif [ "$ABI" = "x86" ]; then
-    NDK_ARCH="x86"
-    NDK_PLATFORM=19
-
+    OUINET_MIN_API=16
 elif [ "$ABI" = "x86_64" ]; then
-    NDK_ARCH="x86_64"
-    NDK_PLATFORM=21
-
+    OUINET_MIN_API=21
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1
@@ -52,12 +43,16 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 SDK_MANAGER="${SDK_DIR}/tools/bin/sdkmanager"
 
+# Until we upgrade Gradle to a version which
+# does not need an NDK with the `platforms` directory,
+# install this fixed version manually instead of
+# having Gradle install the latest one.
 NDK=android-ndk-r19b
 NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
 # Android API level, see https://redmine.equalit.ie/issues/12143
-PLATFORM=android-${NDK_PLATFORM}
+EMULATOR_PLATFORM=android-${EMULATOR_API_LEVEL}
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -66,15 +61,27 @@ EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
 # The image to be used by the emulator AVD
 EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
-EMULATOR_IMAGE="system-images;$PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
+EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-$OUINET_MIN_API}
+EMULATOR_IMAGE="system-images;$EMULATOR_PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 
 # To get list of all devices, use `avdmanager list device`.
 EMULATOR_DEV=${EMULATOR_DEV:-Nexus 6}
 EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
 
-echo "NDK_DIR: "$NDK_DIR
-echo "SDK_DIR: "$SDK_DIR
-echo "PLATFORM: "$PLATFORM
+cat <<EOF
+Configuration environment variables:
+
+ABI="$ABI"
+NDK_DIR="$NDK_DIR"
+SDK_DIR="$SDK_DIR"
+EMULATOR_AVD="$EMULATOR_AVD"
+EMULATOR_DEV="$EMULATOR_DEV"
+EMULATOR_API_LEVEL="$EMULATOR_API_LEVEL"
+
+EOF
+
+# Export variables required by subprocesses (always prefixed with `OUINET_`).
+export OUINET_MIN_API OUINET_TARGET_API
 
 ######################################################################
 MODES=
@@ -114,15 +121,12 @@ function setup_sdk_deps {
     # To get list of all packages, use `sdkmanager --list`.
     local sdk_pkgs
     declare -A sdk_pkgs
+    # Build dependencies are handled by Gradle once `$ANDROID_HOME` is set.
     sdk_pkgs[build]="
-platforms;$PLATFORM
-build-tools;29.0.2
-platform-tools
-cmake;3.10.2.4988404
 "
     sdk_pkgs[emu]="
 $EMULATOR_IMAGE
-platforms;$PLATFORM
+platforms;$EMULATOR_PLATFORM
 platform-tools
 emulator
 "
@@ -146,13 +150,17 @@ emulator
     if [ "$sdk_pkgs_install" ]; then
         # This produces progress bars that are very frequently updated
         # and clutter build logs.
-        echo y | "$SDK_MANAGER" $sdk_pkgs_install > /dev/null
+        yes y | "$SDK_MANAGER" $sdk_pkgs_install > /dev/null
     fi
+    # Accept licenses from stuff installed by Gradle on previous runs.
+    # Not very clean, but if Gradle complains about licenses not being accepted,
+    # at least a second run would succeed.
+    yes y | "$SDK_MANAGER" --licenses > /dev/null
 
     # Prefer locally installed platform tools to those in the system.
     export PATH="$SDK_DIR/platform-tools:$PATH"
 
-    export ANDROID_HOME=$(dirname $(dirname $(command -v adb)))
+    export ANDROID_HOME="$SDK_DIR"
 }
 
 ######################################################################
@@ -167,6 +175,8 @@ function maybe_create_avd {
 
 ######################################################################
 function maybe_install_ndk {
+    # This would be done automatically by Gradle if
+    # we upgraded it to a version which works with recent NDKs.
     check_mode build || return 0
 
     if [ ! -d "$NDK_DIR" ]; then
@@ -237,8 +247,8 @@ function build_ouinet_aar {
         -PbuildId="${OUINET_BUILD_ID}" \
         -PbuildDir="${GRADLE_BUILDDIR}" \
         --project-dir="${ROOT}"/android \
-        --gradle-user-home "${GRADLE_BUILDDIR}"/.gradle-home \
-        --project-cache-dir "${GRADLE_BUILDDIR}"/.gradle-cache \
+        --gradle-user-home "${DIR}"/_gradle-home \
+        --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
         --no-daemon
     )
 }

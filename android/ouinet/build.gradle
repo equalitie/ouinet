@@ -4,10 +4,11 @@ def ouinetVersionName = "$versionName"
 def ouinetBuildId = "$buildId"
 
 android {
-    compileSdkVersion 26
+    // Please read `doc/android-sdk-versions.md` and keep in sync with it.
+    compileSdkVersion System.getenv('OUINET_TARGET_API').toInteger()
     defaultConfig {
-        minSdkVersion 15
-        targetSdkVersion 26
+        minSdkVersion System.getenv('OUINET_MIN_API').toInteger()
+        targetSdkVersion System.getenv('OUINET_TARGET_API').toInteger()
         versionCode 1
         versionName ouinetVersionName
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -49,7 +50,8 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'com.android.support:appcompat-v7:26.1.0'
+    // Please read `doc/android-sdk-versions.md` and keep in sync with it.
+    implementation 'com.android.support:support-annotations:26.1.0'
     testImplementation "junit:junit:4.12"
     testImplementation 'org.mockito:mockito-core:2.23.0'
     testImplementation 'org.powermock:powermock-core:2.0.2'
