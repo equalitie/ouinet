@@ -681,6 +681,11 @@ emulator architecture:
 
     host $ env ABI=x86_64 /path/to/build-android.sh emu
 
+You may also set `EMULATOR_API` to start a version of Android different from
+the minimum one supported by Ouinet:
+
+    host $ env EMULATOR_API=30 /path/to/build-android.sh emu  # Android 11
+
 You may pass options to the emulator at the script's command line, after a
 `--` (double dash) argument.  For instance:
 

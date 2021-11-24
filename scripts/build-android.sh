@@ -52,7 +52,7 @@ NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
 NDK_ZIP=${NDK}-linux-x86_64.zip
 
 # Android API level, see https://redmine.equalit.ie/issues/12143
-EMULATOR_PLATFORM=android-${EMULATOR_API_LEVEL}
+EMULATOR_PLATFORM=android-${EMULATOR_API}
 
 EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
@@ -61,7 +61,7 @@ EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
 
 # The image to be used by the emulator AVD
 EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
-EMULATOR_API_LEVEL=${EMULATOR_API_LEVEL:-$OUINET_MIN_API}
+EMULATOR_API=${EMULATOR_API:-$OUINET_MIN_API}
 EMULATOR_IMAGE="system-images;$EMULATOR_PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
 
 # To get list of all devices, use `avdmanager list device`.
@@ -76,7 +76,7 @@ NDK_DIR="$NDK_DIR"
 SDK_DIR="$SDK_DIR"
 EMULATOR_AVD="$EMULATOR_AVD"
 EMULATOR_DEV="$EMULATOR_DEV"
-EMULATOR_API_LEVEL="$EMULATOR_API_LEVEL"
+EMULATOR_API="$EMULATOR_API"
 
 EOF
 
