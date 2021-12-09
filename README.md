@@ -653,17 +653,13 @@ Ouinet AAR library at `build.ouinet/build-android-$ABI/builddir/ouinet/build-and
 #### Using existing Android SDK/NDK and Boost
 
 By default the `build-android.sh` script downloads all dependencies required
-to build the Ouinet Android library, including the Android SDK, Android NDK
-and Boost for Android.  If you already have these installed on your system you
-can tune the script to use them:
+to build the Ouinet Android library, including the Android SDK and NDK.  If
+you already have these installed on your system you can tune the script to use
+them:
 
     $ export SDK_DIR=/opt/android-sdk
     $ export NDK_DIR=/opt/android-sdk/ndk-bundle
     $ export ABI=armeabi-v7a
-    $ export PLATFORM=android-26
-    $ export BOOST_V=1_67_0
-    $ export BOOST_SOURCE=/path/to/Boost-for-Android
-    $ export BOOST_INCLUDEDIR=$BOOST_SOURCE/build/out/${ABI}/include/boost-${BOOST_V}
     $ /path/to/build-android.sh
 
 ### Testing with Android emulator
@@ -684,6 +680,11 @@ The `ABI` environment variable described above also works for selecting the
 emulator architecture:
 
     host $ env ABI=x86_64 /path/to/build-android.sh emu
+
+You may also set `EMULATOR_API` to start a version of Android different from
+the minimum one supported by Ouinet:
+
+    host $ env EMULATOR_API=30 /path/to/build-android.sh emu  # Android 11
 
 You may pass options to the emulator at the script's command line, after a
 `--` (double dash) argument.  For instance:
@@ -712,11 +713,14 @@ container runs or from an existing Ouinet build), you may start a temporary
 emulator container like this:
 
     $ sudo docker run --rm -it \
+          --device /dev/kvm \
           --mount type=bind,source="$(realpath "$SDK_PARENT_DIR")",target=/mnt \
           --mount type=bind,source=$PWD,target=/usr/local/src,ro \
           --mount type=bind,source=/tmp/.X11-unix/X0,target=/tmp/.X11-unix/X0 \
           --mount type=bind,source=$HOME/.Xauthority,target=/root/.Xauthority,ro \
           -h "$(uname -n)" -e DISPLAY ouinet:android-emu
+
+The `--device` option is only needed to emulate an `x86_64` device.
 
 Please note how the Ouinet source directory as well as the X11 socket and
 authentication cookie database are mounted into the container to allow showing
