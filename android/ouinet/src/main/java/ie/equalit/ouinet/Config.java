@@ -52,6 +52,8 @@ public class Config implements Parcelable {
         private LogLevel logLevel = LogLevel.INFO;
 
         public ConfigBuilder(Context context) {
+            Ouinet.maybeLoadLibraries(context);
+
             this.context = context;
         }
 

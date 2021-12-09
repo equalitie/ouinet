@@ -17,8 +17,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Ouinet {
+    private static boolean libsLoaded = false;
+
     // Used to load the 'native-lib' library on application startup.
-    static {
+    public static synchronized void maybeLoadLibraries(Context context) {
+        if (libsLoaded) return;
+
         // Explicitly loading library dependencies is needed for older versions of Android
         // (probably 16 <= API < 19).
         // TODO: Use <https://github.com/KeepSafe/ReLinker> to take care of this automatically,
@@ -33,6 +37,8 @@ public class Ouinet {
         // END(explict loads)
         System.loadLibrary("client");
         System.loadLibrary("native-lib");
+
+        libsLoaded = true;
     }
 
     // Since the client can be started several times,
@@ -59,6 +65,8 @@ public class Ouinet {
     private WifiManager.MulticastLock lock;
 
     public Ouinet(Context context, Config config) {
+        maybeLoadLibraries(context);
+
         this.context = context;
         this.config = config;
     }
