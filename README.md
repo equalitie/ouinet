@@ -765,6 +765,7 @@ And add this:
     flatDir {
       dirs 'libs'
     }
+    mavenCentral()  // for ReLinker
 
 Then look for the following section of your `<PROJECT DIR>/app/build.gradle`:
 
@@ -772,8 +773,9 @@ Then look for the following section of your `<PROJECT DIR>/app/build.gradle`:
       ...
     }
 
-And add this:
+And add these:
 
+    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
     implementation(name:'ouinet-debug', ext:'aar')
 
 At this stage your project should compile with no errors.  Now to tell Ouinet
