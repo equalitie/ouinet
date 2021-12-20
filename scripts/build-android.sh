@@ -35,10 +35,15 @@ fi
 OUTPUT_DIR=build-android-${ABI}
 if [ $RELEASE_BUILD -eq 1 ]; then
     OUTPUT_DIR=${OUTPUT_DIR}-release
+    GRADLE_VARIANT=Release
 else
     OUTPUT_DIR=${OUTPUT_DIR}-debug
+    GRADLE_VARIANT=Debug
 fi
 mkdir -p "${DIR}/${OUTPUT_DIR}"
+# Tasks to be run by Gradle when building the AAR.
+# The explicit tasks are needed since there are no `build{Release,Debug}` tasks.
+GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 SDK_MANAGER="${SDK_DIR}/tools/bin/sdkmanager"
@@ -241,7 +246,7 @@ function build_ouinet_aar {
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${GRADLE_BUILDDIR}";
-      gradle build \
+      gradle $GRADLE_TASKS \
         -Pandroid_abi=${ABI} \
         -PversionName="${OUINET_VERSION_NAME}" \
         -PbuildId="${OUINET_BUILD_ID}" \
