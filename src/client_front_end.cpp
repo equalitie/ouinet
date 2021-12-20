@@ -285,7 +285,7 @@ void ClientFrontEnd::handle_group_list( const Request&
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
-                                  , boost::optional<uint32_t> udp_port
+                                  , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
@@ -408,10 +408,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
 
-    if (udp_port) {
+    if (udp_ep) {
         ss << "Local UDP endpoints:<br>\n";
         ss << "<ul>\n";
-        for (auto& ep : local_udp_endpoints(*udp_port))
+        for (auto& ep : local_udp_endpoints(udp_ep->port()))
             ss << "<li>" << as_safe_html(ep) << "</li>\n";
         ss << "</ul>\n";
     }
@@ -481,7 +481,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
 void ClientFrontEnd::handle_status( ClientConfig& config
                                   , Client::RunningState cstate
-                                  , boost::optional<uint32_t> udp_port
+                                  , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
@@ -504,7 +504,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"logfile", logger.get_log_file() != nullptr}
     };
 
-    if (udp_port) response["local_udp_endpoints"] = local_udp_endpoints(*udp_port);
+    if (udp_ep) response["local_udp_endpoints"] = local_udp_endpoints(udp_ep->port());
 
     response["is_upnp_active"] = upnp_status(upnps);
 
@@ -530,7 +530,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , Client::RunningState client_state
                               , cache::Client* cache_client
                               , const CACertificate& ca
-                              , boost::optional<uint32_t> udp_port
+                              , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
                               , const UPnPs& upnps
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , Yield yield)
@@ -555,12 +555,12 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_group_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {
         sys::error_code e;
-        handle_status( config, client_state, udp_port, upnps, reachability
+        handle_status( config, client_state, udp_ep, upnps, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     } else {
         sys::error_code e;
-        handle_portal( config, client_state, udp_port, upnps, reachability
+        handle_portal( config, client_state, udp_ep, upnps, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     }

@@ -6,6 +6,9 @@
 #include <boost/intrusive/list.hpp>
 #include <chrono>
 //#include <ostream>
+
+#include <asio_utp/udp_multiplexer.hpp>
+
 #include "client.h"
 #include "namespaces.h"
 #include "ssl/ca_certificate.h"
@@ -73,7 +76,7 @@ public:
                   , Client::RunningState
                   , cache::Client*
                   , const CACertificate&
-                  , boost::optional<uint32_t> udp_port
+                  , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
                   , const UPnPs&
                   , const util::UdpServerReachabilityAnalysis*
                   , Yield yield);
@@ -110,7 +113,7 @@ private:
 
     void handle_portal( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<uint32_t> udp_port
+                      , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
@@ -121,7 +124,7 @@ private:
 
     void handle_status( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<uint32_t> udp_port
+                      , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
