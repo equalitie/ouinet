@@ -432,10 +432,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "Now: " << now_as_string()  << "<br>\n";
 
     ss << "<h2>Network</h2>\n";
-    if (auto doh_ep = config.origin_doh_endpoint()) {
-        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
-           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
+
+    if (reachability) {
+        ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
     }
+    ss << "UPnP status: " << upnp_status(upnps) << "<br>\n";
 
     if (local_ep) {
         ss << "Local UDP endpoints:<br>\n";
@@ -445,7 +446,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "</ul>\n";
     }
 
-    ss << "UPnP status: " << upnp_status(upnps) << "<br>\n";
     ss << "External UDP endpoints (via UPnP):<br>\n";
     ss << "<ul>\n";
     for (auto& ep : external_udp_endpoints(upnps))
@@ -460,11 +460,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "</ul>\n";
     }
 
-    if (reachability) {
-        ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
-    }
-
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+    if (auto doh_ep = config.origin_doh_endpoint()) {
+        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
+           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
+    }
 
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
