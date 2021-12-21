@@ -913,7 +913,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 {
     Cancel cancel = _shutdown_signal;
 
-    boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep;
+    boost::optional<ClientFrontEnd::UdpEndpoint> udp_ep;
 
     if (_udp_multiplexer) {
         udp_ep = _udp_multiplexer->local_endpoint();

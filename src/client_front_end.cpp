@@ -285,7 +285,7 @@ void ClientFrontEnd::handle_group_list( const Request&
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
-                                  , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
+                                  , boost::optional<UdpEndpoint> udp_ep
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
@@ -481,7 +481,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
 void ClientFrontEnd::handle_status( ClientConfig& config
                                   , Client::RunningState cstate
-                                  , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
+                                  , boost::optional<UdpEndpoint> udp_ep
                                   , const UPnPs& upnps
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
@@ -530,7 +530,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , Client::RunningState client_state
                               , cache::Client* cache_client
                               , const CACertificate& ca
-                              , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
+                              , boost::optional<UdpEndpoint> udp_ep
                               , const UPnPs& upnps
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , Yield yield)

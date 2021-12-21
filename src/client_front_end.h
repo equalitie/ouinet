@@ -6,9 +6,6 @@
 #include <boost/intrusive/list.hpp>
 #include <chrono>
 //#include <ostream>
-
-#include <asio_utp/udp_multiplexer.hpp>
-
 #include "client.h"
 #include "namespaces.h"
 #include "ssl/ca_certificate.h"
@@ -47,7 +44,8 @@ public:
 public:
     using Request = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
-    using UPnPs = std::map<asio::ip::udp::endpoint, std::unique_ptr<UPnPUpdater>>;
+    using UdpEndpoint = asio::ip::udp::endpoint;
+    using UPnPs = std::map<UdpEndpoint, std::unique_ptr<UPnPUpdater>>;
 
 public:
     class Task : public TaskHook {
@@ -76,7 +74,7 @@ public:
                   , Client::RunningState
                   , cache::Client*
                   , const CACertificate&
-                  , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
+                  , boost::optional<UdpEndpoint> udp_ep
                   , const UPnPs&
                   , const util::UdpServerReachabilityAnalysis*
                   , Yield yield);
@@ -113,7 +111,7 @@ private:
 
     void handle_portal( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
+                      , boost::optional<UdpEndpoint> udp_ep
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
@@ -124,7 +122,7 @@ private:
 
     void handle_status( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<asio_utp::udp_multiplexer::endpoint_type> udp_ep
+                      , boost::optional<UdpEndpoint> udp_ep
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
