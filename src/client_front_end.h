@@ -74,7 +74,7 @@ public:
                   , Client::RunningState
                   , cache::Client*
                   , const CACertificate&
-                  , boost::optional<UdpEndpoint> udp_ep
+                  , boost::optional<UdpEndpoint> local_ep
                   , const UPnPs&
                   , const util::UdpServerReachabilityAnalysis*
                   , Yield yield);
@@ -111,7 +111,7 @@ private:
 
     void handle_portal( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<UdpEndpoint> udp_ep
+                      , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
@@ -122,7 +122,7 @@ private:
 
     void handle_status( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<UdpEndpoint> udp_ep
+                      , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
