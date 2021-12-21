@@ -54,7 +54,8 @@ public:
     }
 
     UdpEndpoints get_external_endpoints() const {
-        return {};  // TODO
+        if (!_external_endpoints) return {};
+        return *_external_endpoints;
     }
 
 private:
@@ -97,6 +98,7 @@ private:
 
             LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\"...");
             size_t success_cnt = 0;
+            auto ext_eps = std::make_unique<UdpEndpoints>();
             boost::optional<steady_clock::time_point> earlier_buggy_timeout;
             for(auto& igd : igds) {
                 auto cancelled = cancel.connect([&] { igd.stop(); });
@@ -131,8 +133,18 @@ private:
                 }
                 LOG_DEBUG("UPnP: Successfully added/refreshed one mapping");
                 success_cnt++;
+
+                // Note down the external endpoint for status repoting.
+                auto r_ext_ep = igd.get_external_address(yield);
+                if (r_ext_ep)
+                    ext_eps->push_back(UdpEndpoint(r_ext_ep.value(), _external_port));
+                else
+                    LOG_WARN("UPnP: Failed to get external address"
+                             " from IGD \"", igd.friendly_name(), "\": ", r_ext_ep.error());
+
                 mapping_enabled();
             }
+            _external_endpoints = move(ext_eps);
             LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\": done");
 
             if (success_cnt == 0 && !earlier_buggy_timeout) mapping_disabled();
@@ -199,6 +211,7 @@ private:
     Cancel _lifetime_cancel;
     uint16_t _external_port;
     uint16_t _internal_port;
+    std::unique_ptr<UdpEndpoints> _external_endpoints;
     // The desciption for mappings includes a random value
     // to ease tracking those added by this UPnP client.
     // Probably not the most secure option but simple enough
