@@ -927,6 +927,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , *_ca_certificate
                                , local_ep
                                , _upnps
+                               , _bt_dht.get()
                                , _udp_reachability.get()
                                , yield[ec].tag("serve_frontend"));
     if (cancel) ec = asio::error::operation_aborted;

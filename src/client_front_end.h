@@ -23,6 +23,10 @@ class GenericStream;
 class ClientConfig;
 class UPnPUpdater;
 
+namespace bittorrent {
+class MainlineDht;
+}
+
 class ClientFrontEnd {
     template<typename E> struct Input;
 
@@ -76,6 +80,7 @@ public:
                   , const CACertificate&
                   , boost::optional<UdpEndpoint> local_ep
                   , const UPnPs&
+                  , const bittorrent::MainlineDht* dht
                   , const util::UdpServerReachabilityAnalysis*
                   , Yield yield);
 
@@ -113,6 +118,7 @@ private:
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
+                      , const bittorrent::MainlineDht*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
@@ -124,6 +130,7 @@ private:
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
+                      , const bittorrent::MainlineDht*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&

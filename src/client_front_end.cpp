@@ -7,6 +7,7 @@
 #include "version.h"
 #include "upnp.h"
 
+#include "bittorrent/dht.h"
 #include "cache/client.h"
 
 #include <boost/algorithm/string/replace.hpp>
@@ -305,6 +306,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
                                   , const UPnPs& upnps
+                                  , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
                                   , cache::Client* cache_client
@@ -506,6 +508,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
                                   , const UPnPs& upnps
+                                  , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
                                   , cache::Client* cache_client
@@ -556,6 +559,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const UPnPs& upnps
+                              , const bittorrent::MainlineDht* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , Yield yield)
 {
@@ -579,12 +583,12 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_group_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {
         sys::error_code e;
-        handle_status( config, client_state, local_ep, upnps, reachability
+        handle_status( config, client_state, local_ep, upnps, dht, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     } else {
         sys::error_code e;
-        handle_portal( config, client_state, local_ep, upnps, reachability
+        handle_portal( config, client_state, local_ep, upnps, dht, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     }
