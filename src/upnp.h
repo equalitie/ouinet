@@ -184,6 +184,7 @@ private:
         if (_mapping_is_active) {
             LOG_WARN("UPnP: Mapping disabled");
         }
+        _external_endpoints = nullptr;
         _mapping_is_active = false;
     }
 
