@@ -227,6 +227,20 @@ local_udp_endpoints(const ClientFrontEnd::UdpEndpoint& local_ep) {
 }
 
 static
+std::vector<std::string>
+external_udp_endpoints(const ClientFrontEnd::UPnPs& upnps) {
+    if (upnps.empty()) return {};
+
+    std::vector<std::string> eps;
+    for (auto& pair : upnps) {
+        if (!pair.second) continue;
+        for (auto& ep : pair.second->get_external_endpoints())
+            eps.push_back(util::str(ep));
+    }
+    return eps;
+}
+
+static
 std::string
 upnp_status(const ClientFrontEnd::UPnPs& upnps) {
     if (upnps.empty()) return "disabled";
@@ -421,6 +435,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     ss << "UPnP status: " << upnp_status(upnps) << "<br>\n";
+    ss << "External UDP endpoints (via UPnP):<br>\n";
+    ss << "<ul>\n";
+    for (auto& ep : external_udp_endpoints(upnps))
+        ss << "<li>" << as_safe_html(ep) << "</li>\n";
+    ss << "</ul>\n";
 
     if (reachability) {
         ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
@@ -511,6 +530,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
 
     response["is_upnp_active"] = upnp_status(upnps);
+    response["external_udp_endpoints"] = external_udp_endpoints(upnps);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 

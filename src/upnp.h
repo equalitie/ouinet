@@ -1,5 +1,8 @@
 #pragma once
 
+#include <vector>
+
+#include <boost/asio/ip/udp.hpp>
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 
@@ -13,6 +16,9 @@
 namespace ouinet {
 
 class UPnPUpdater {
+public:
+    using UdpEndpoint = asio::ip::udp::endpoint;
+    using UdpEndpoints = std::vector<UdpEndpoint>;
 public:
     UPnPUpdater( asio::executor exec
                , uint16_t external_port
@@ -45,6 +51,10 @@ public:
 
     bool mapping_is_active() const {
         return _mapping_is_active;
+    }
+
+    UdpEndpoints get_external_endpoints() const {
+        return {};  // TODO
     }
 
 private:
