@@ -252,6 +252,15 @@ upnp_status(const ClientFrontEnd::UPnPs& upnps) {
 }
 
 static
+std::vector<std::string>
+public_udp_endpoints(const bittorrent::MainlineDht& dht) {
+    std::vector<std::string> eps;
+    for (auto& ep : dht.wan_endpoints())
+        eps.push_back(util::str(ep));
+    return eps;
+}
+
+static
 std::string
 reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
     switch (reachability.judgement()) {
@@ -443,6 +452,14 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "<li>" << as_safe_html(ep) << "</li>\n";
     ss << "</ul>\n";
 
+    if (dht) {
+        ss << "Public UDP endpoints (via BitTorrent DHT):<br>\n";
+        ss << "<ul>\n";
+        for (auto& ep : public_udp_endpoints(*dht))
+            ss << "<li>" << as_safe_html(ep) << "</li>\n";
+        ss << "</ul>\n";
+    }
+
     if (reachability) {
         ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
     }
@@ -534,6 +551,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
     response["is_upnp_active"] = upnp_status(upnps);
     response["external_udp_endpoints"] = external_udp_endpoints(upnps);
+
+    if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
