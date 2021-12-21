@@ -188,36 +188,38 @@ static void load_log_file(stringstream& out_ss) {
              , ostreambuf_iterator<char>(out_ss));
 }
 
-template<class Proto>
+template<class EndPoint>
 static
-boost::optional<asio::ip::udp::endpoint>
-local_endpoint(Proto proto, uint16_t port) {
+boost::optional<EndPoint>
+local_endpoint(const EndPoint& local_ep) {
     using namespace asio::ip;
     asio::io_context ctx;
+    auto proto = local_ep.protocol();
     udp::socket s(ctx, proto);
     sys::error_code ec;
     if (proto == udp::v4()) {
-        s.connect(udp::endpoint(make_address_v4("192.0.2.1"), 1234), ec);
+        s.connect(EndPoint(make_address_v4("192.0.2.1"), 1234), ec);
+    } else if (proto == udp::v6()) {
+        s.connect(EndPoint(make_address_v6("2001:db8::1"), 1234), ec);
     } else {
-        s.connect(udp::endpoint(make_address_v6("2001:db8::1"), 1234), ec);
+        assert(0 && "Invalid local UDP endpoint protocol");
     }
     if (ec) return boost::none;
-    return udp::endpoint(s.local_endpoint().address(), port);
+    return EndPoint(s.local_endpoint().address(), local_ep.port());
 }
 
 static
 std::vector<std::string>
-local_udp_endpoints(uint32_t udp_port) {
-    using namespace asio::ip;
-
-    auto epv4 = local_endpoint(udp::v4(), udp_port);
-    auto epv6 = local_endpoint(udp::v6(), udp_port);
+local_udp_endpoints(const ClientFrontEnd::UdpEndpoint& local_ep) {
+    // This used to return both IPv4 and IPv6 endpoints,
+    // but now we only return the actual endpoint
+    // (still as a vector for backwards compatibility.
+    auto ep = local_endpoint(local_ep);
 
     std::vector<std::string> eps;
-    eps.reserve(2);
+    eps.reserve(1);
 
-    if (epv4) eps.push_back(util::str(*epv4));
-    if (epv6) eps.push_back(util::str(*epv6));
+    if (ep) eps.push_back(util::str(*ep));
 
     return eps;
 }
@@ -411,7 +413,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     if (local_ep) {
         ss << "Local UDP endpoints:<br>\n";
         ss << "<ul>\n";
-        for (auto& ep : local_udp_endpoints(local_ep->port()))
+        for (auto& ep : local_udp_endpoints(*local_ep))
             ss << "<li>" << as_safe_html(ep) << "</li>\n";
         ss << "</ul>\n";
     }
@@ -504,7 +506,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"logfile", logger.get_log_file() != nullptr}
     };
 
-    if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(local_ep->port());
+    if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
 
     response["is_upnp_active"] = upnp_status(upnps);
 
