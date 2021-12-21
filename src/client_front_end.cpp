@@ -198,9 +198,11 @@ local_endpoint(const EndPoint& local_ep) {
     udp::socket s(ctx, proto);
     sys::error_code ec;
     if (proto == udp::v4()) {
-        s.connect(EndPoint(make_address_v4("192.0.2.1"), 1234), ec);
+        if (local_ep.address() != address_v4::any()) return local_ep;  // explicit addr
+        s.connect(EndPoint(make_address_v4("192.0.2.1"), 1234), ec);  // find source addr
     } else if (proto == udp::v6()) {
-        s.connect(EndPoint(make_address_v6("2001:db8::1"), 1234), ec);
+        if (local_ep.address() != address_v6::any()) return local_ep;  // explicit addr
+        s.connect(EndPoint(make_address_v6("2001:db8::1"), 1234), ec);  // find source addr
     } else {
         assert(0 && "Invalid local UDP endpoint protocol");
     }
