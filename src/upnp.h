@@ -208,6 +208,7 @@ private:
 
         // `igd.get_list_of_port_mappings` is more convenient,
         // but that requires full IGDv2 support, so stick to IGDv1 operations.
+        uint16_t stale_ext_port = 0;
         for (uint16_t index = 0; ; ++index) {
             auto r_mapping = igd.get_generic_port_mapping_entry(index, yield);
             if (cancel || !r_mapping) break;  // no more port mappings, or error
@@ -218,11 +219,25 @@ private:
                 return m.lease_duration;
             if ( int_addr
                && *int_addr == m.int_client && _internal_port == m.int_port
-               && desc != description)  // TODO remove the mapping
+               && desc != m.description) {
                 LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
                          " contains stale mapping \"", m.description, "\""
                          " with our current local UDP endpoint "
                          " and duration=", m.lease_duration.count(), "s");
+                stale_ext_port = m.ext_port;
+            }
+        }
+        // Cleanup stale mapping (only one can be removed with IGD interface).
+        if (stale_ext_port != 0) {
+            auto r = igd.delete_port_mapping(upnp::igd::udp, stale_ext_port, yield);
+            if (r)
+                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
+                            " successfully removed stale mapping"
+                            " for external port ", stale_ext_port);
+            else
+                LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                         " failed to remove stale mapping"
+                         " for external port ", stale_ext_port, ": ", r.error());
         }
         return boost::none;
     }
