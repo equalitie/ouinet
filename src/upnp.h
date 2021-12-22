@@ -104,6 +104,7 @@ private:
             auto igds = move(r_igds.value());
 
             LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\"...");
+            auto int_addr = util::get_local_ipv4_address();
             size_t success_cnt = 0;
             auto ext_eps = std::make_unique<UdpEndpoints>();
             boost::optional<steady_clock::time_point> earlier_buggy_timeout;
@@ -120,7 +121,7 @@ private:
                 if (!r) continue;
 
                 auto query_begin = steady_clock::now();
-                auto curr_duration = get_mapping_duration(igd, mapping_desc, cancel, yield);
+                auto curr_duration = get_mapping_duration(igd, mapping_desc, int_addr, cancel, yield);
                 if (curr_duration && *curr_duration > lease_duration) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
                              " reports excessive mapping lease duration"
@@ -200,6 +201,7 @@ private:
 
     boost::optional<std::chrono::seconds>
     get_mapping_duration( upnp::igd& igd, const std::string& desc
+                        , const boost::optional<asio::ip::address>& int_addr
                         , Cancel& cancel, asio::yield_context yield) const
     {
         auto cancelled = cancel.connect([&] { igd.stop(); });
@@ -214,6 +216,13 @@ private:
                && _external_port == m.ext_port && _internal_port == m.int_port
                && desc == m.description)
                 return m.lease_duration;
+            if ( int_addr
+               && *int_addr == m.int_client && _internal_port == m.int_port
+               && desc != description)  // TODO remove the mapping
+                LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                         " contains stale mapping \"", m.description, "\""
+                         " with our current local UDP endpoint "
+                         " and duration=", m.lease_duration.count(), "s");
         }
         return boost::none;
     }
