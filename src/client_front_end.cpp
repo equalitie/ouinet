@@ -7,6 +7,7 @@
 #include "version.h"
 #include "upnp.h"
 
+#include "bittorrent/dht.h"
 #include "cache/client.h"
 
 #include <boost/algorithm/string/replace.hpp>
@@ -188,37 +189,55 @@ static void load_log_file(stringstream& out_ss) {
              , ostreambuf_iterator<char>(out_ss));
 }
 
-template<class Proto>
+template<class EndPoint>
 static
-boost::optional<asio::ip::udp::endpoint>
-local_endpoint(Proto proto, uint16_t port) {
+boost::optional<EndPoint>
+local_endpoint(const EndPoint& local_ep) {
     using namespace asio::ip;
     asio::io_context ctx;
+    auto proto = local_ep.protocol();
     udp::socket s(ctx, proto);
     sys::error_code ec;
     if (proto == udp::v4()) {
-        s.connect(udp::endpoint(make_address_v4("192.0.2.1"), 1234), ec);
+        if (local_ep.address() != address_v4::any()) return local_ep;  // explicit addr
+        s.connect(EndPoint(make_address_v4("192.0.2.1"), 1234), ec);  // find source addr
+    } else if (proto == udp::v6()) {
+        if (local_ep.address() != address_v6::any()) return local_ep;  // explicit addr
+        s.connect(EndPoint(make_address_v6("2001:db8::1"), 1234), ec);  // find source addr
     } else {
-        s.connect(udp::endpoint(make_address_v6("2001:db8::1"), 1234), ec);
+        assert(0 && "Invalid local UDP endpoint protocol");
     }
     if (ec) return boost::none;
-    return udp::endpoint(s.local_endpoint().address(), port);
+    return EndPoint(s.local_endpoint().address(), local_ep.port());
 }
 
 static
 std::vector<std::string>
-local_udp_endpoints(uint32_t udp_port) {
-    using namespace asio::ip;
-
-    auto epv4 = local_endpoint(udp::v4(), udp_port);
-    auto epv6 = local_endpoint(udp::v6(), udp_port);
+local_udp_endpoints(const ClientFrontEnd::UdpEndpoint& local_ep) {
+    // This used to return both IPv4 and IPv6 endpoints,
+    // but now we only return the actual endpoint
+    // (still as a vector for backwards compatibility.
+    auto ep = local_endpoint(local_ep);
 
     std::vector<std::string> eps;
-    eps.reserve(2);
+    eps.reserve(1);
 
-    if (epv4) eps.push_back(util::str(*epv4));
-    if (epv6) eps.push_back(util::str(*epv6));
+    if (ep) eps.push_back(util::str(*ep));
 
+    return eps;
+}
+
+static
+std::vector<std::string>
+external_udp_endpoints(const ClientFrontEnd::UPnPs& upnps) {
+    if (upnps.empty()) return {};
+
+    std::vector<std::string> eps;
+    for (auto& pair : upnps) {
+        if (!pair.second) continue;
+        for (auto& ep : pair.second->get_external_endpoints())
+            eps.push_back(util::str(ep));
+    }
     return eps;
 }
 
@@ -230,6 +249,15 @@ upnp_status(const ClientFrontEnd::UPnPs& upnps) {
     for (auto& pair : upnps)
         if (pair.second->mapping_is_active()) return "enabled";
     return "inactive";
+}
+
+static
+std::vector<std::string>
+public_udp_endpoints(const bittorrent::MainlineDht& dht) {
+    std::vector<std::string> eps;
+    for (auto& ep : dht.wan_endpoints())
+        eps.push_back(util::str(ep));
+    return eps;
 }
 
 static
@@ -285,8 +313,9 @@ void ClientFrontEnd::handle_group_list( const Request&
 
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
-                                  , boost::optional<uint32_t> udp_port
+                                  , boost::optional<UdpEndpoint> local_ep
                                   , const UPnPs& upnps
+                                  , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
                                   , cache::Client* cache_client
@@ -403,26 +432,39 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "Now: " << now_as_string()  << "<br>\n";
 
     ss << "<h2>Network</h2>\n";
-    if (auto doh_ep = config.origin_doh_endpoint()) {
-        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
-           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
-    }
-
-    if (udp_port) {
-        ss << "Local UDP endpoints:<br>\n";
-        ss << "<ul>\n";
-        for (auto& ep : local_udp_endpoints(*udp_port))
-            ss << "<li>" << as_safe_html(ep) << "</li>\n";
-        ss << "</ul>\n";
-    }
-
-    ss << "UPnP status: " << upnp_status(upnps) << "<br>\n";
 
     if (reachability) {
         ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
     }
+    ss << "UPnP status: " << upnp_status(upnps) << "<br>\n";
+
+    if (local_ep) {
+        ss << "Local UDP endpoints:<br>\n";
+        ss << "<ul>\n";
+        for (auto& ep : local_udp_endpoints(*local_ep))
+            ss << "<li>" << as_safe_html(ep) << "</li>\n";
+        ss << "</ul>\n";
+    }
+
+    ss << "External UDP endpoints (via UPnP):<br>\n";
+    ss << "<ul>\n";
+    for (auto& ep : external_udp_endpoints(upnps))
+        ss << "<li>" << as_safe_html(ep) << "</li>\n";
+    ss << "</ul>\n";
+
+    if (dht) {
+        ss << "Public UDP endpoints (via BitTorrent DHT):<br>\n";
+        ss << "<ul>\n";
+        for (auto& ep : public_udp_endpoints(*dht))
+            ss << "<li>" << as_safe_html(ep) << "</li>\n";
+        ss << "</ul>\n";
+    }
 
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+    if (auto doh_ep = config.origin_doh_endpoint()) {
+        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
+           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
+    }
 
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
@@ -481,8 +523,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
 void ClientFrontEnd::handle_status( ClientConfig& config
                                   , Client::RunningState cstate
-                                  , boost::optional<uint32_t> udp_port
+                                  , boost::optional<UdpEndpoint> local_ep
                                   , const UPnPs& upnps
+                                  , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, stringstream& ss
                                   , cache::Client* cache_client
@@ -504,9 +547,12 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"logfile", logger.get_log_file() != nullptr}
     };
 
-    if (udp_port) response["local_udp_endpoints"] = local_udp_endpoints(*udp_port);
+    if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
 
     response["is_upnp_active"] = upnp_status(upnps);
+    response["external_udp_endpoints"] = external_udp_endpoints(upnps);
+
+    if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
@@ -530,8 +576,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , Client::RunningState client_state
                               , cache::Client* cache_client
                               , const CACertificate& ca
-                              , boost::optional<uint32_t> udp_port
+                              , boost::optional<UdpEndpoint> local_ep
                               , const UPnPs& upnps
+                              , const bittorrent::MainlineDht* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , Yield yield)
 {
@@ -555,12 +602,12 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_group_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {
         sys::error_code e;
-        handle_status( config, client_state, udp_port, upnps, reachability
+        handle_status( config, client_state, local_ep, upnps, dht, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     } else {
         sys::error_code e;
-        handle_portal( config, client_state, udp_port, upnps, reachability
+        handle_portal( config, client_state, local_ep, upnps, dht, reachability
                      , req, res, ss, cache_client
                      , yield[e]);
     }

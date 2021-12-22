@@ -23,6 +23,10 @@ class GenericStream;
 class ClientConfig;
 class UPnPUpdater;
 
+namespace bittorrent {
+class MainlineDht;
+}
+
 class ClientFrontEnd {
     template<typename E> struct Input;
 
@@ -44,7 +48,8 @@ public:
 public:
     using Request = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
-    using UPnPs = std::map<asio::ip::udp::endpoint, std::unique_ptr<UPnPUpdater>>;
+    using UdpEndpoint = asio::ip::udp::endpoint;
+    using UPnPs = std::map<UdpEndpoint, std::unique_ptr<UPnPUpdater>>;
 
 public:
     class Task : public TaskHook {
@@ -73,8 +78,9 @@ public:
                   , Client::RunningState
                   , cache::Client*
                   , const CACertificate&
-                  , boost::optional<uint32_t> udp_port
+                  , boost::optional<UdpEndpoint> local_ep
                   , const UPnPs&
+                  , const bittorrent::MainlineDht* dht
                   , const util::UdpServerReachabilityAnalysis*
                   , Yield yield);
 
@@ -110,8 +116,9 @@ private:
 
     void handle_portal( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<uint32_t> udp_port
+                      , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
+                      , const bittorrent::MainlineDht*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
@@ -121,8 +128,9 @@ private:
 
     void handle_status( ClientConfig&
                       , Client::RunningState
-                      , boost::optional<uint32_t> udp_port
+                      , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
+                      , const bittorrent::MainlineDht*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&

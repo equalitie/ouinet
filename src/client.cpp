@@ -913,10 +913,10 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 {
     Cancel cancel = _shutdown_signal;
 
-    boost::optional<uint32_t> udp_port;
+    boost::optional<ClientFrontEnd::UdpEndpoint> local_ep;
 
     if (_udp_multiplexer) {
-        udp_port = _udp_multiplexer->local_endpoint().port();
+        local_ep = _udp_multiplexer->local_endpoint();
     }
 
     sys::error_code ec;
@@ -925,8 +925,9 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , get_state()
                                , _cache.get()
                                , *_ca_certificate
-                               , udp_port
+                               , local_ep
                                , _upnps
+                               , _bt_dht.get()
                                , _udp_reachability.get()
                                , yield[ec].tag("serve_frontend"));
     if (cancel) ec = asio::error::operation_aborted;
