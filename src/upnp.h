@@ -9,6 +9,7 @@
 #include <upnp.h>
 #include <util/random.h>
 #include <util/signal.h>
+#include <util/str.h>
 #include <async_sleep.h>
 #include <defer.h>
 #include "util/handler_tracker.h"
@@ -122,16 +123,19 @@ private:
                 auto curr_duration = get_mapping_duration(igd, mapping_desc, cancel, yield);
                 if (curr_duration && *curr_duration > lease_duration) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " reports excessive mapping lease duration, ignoring");
+                             " reports excessive mapping lease duration"
+                             " (", curr_duration->count(), "s), ignoring");
                     continue;
                 }
                 if (!curr_duration || lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to refresh existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
+                    auto dur = curr_duration ? util::str(curr_duration->count(), "s") : "none";
                     LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
                                 " did not add/refresh mapping for \"", mapping_desc, "\""
-                                " but reported no error; buggy IGD/router?");
+                                " but reported no error; buggy IGD/router?"
+                                " (duration=", dur, ")");
                     auto mapping_timeout = query_begin + (curr_duration ? *curr_duration : seconds(0));
                     if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
                         earlier_buggy_timeout = mapping_timeout;
