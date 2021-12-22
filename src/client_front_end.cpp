@@ -453,7 +453,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (upnp_status_ == "enabled") {
-        ss << "External UDP endpoints (via UPnP):<br>\n";
+        ss << "External UDP endpoints (from UPnP):<br>\n";
         ss << "<ul>\n";
         for (auto& ep : external_udp_endpoints(upnps))
             ss << "<li>" << as_safe_html(ep) << "</li>\n";
@@ -461,7 +461,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (dht) {
-        ss << "Public UDP endpoints (via BitTorrent DHT):<br>\n";
+        ss << "Public UDP endpoints (from BitTorrent DHT):<br>\n";
         ss << "<ul>\n";
         for (auto& ep : public_udp_endpoints(*dht))
             ss << "<li>" << as_safe_html(ep) << "</li>\n";
