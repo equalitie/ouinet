@@ -49,6 +49,10 @@ public:
         _lifetime_cancel();
     }
 
+    bool is_available() const {
+        return _is_available;
+    }
+
     bool mapping_is_active() const {
         return _mapping_is_active;
     }
@@ -87,12 +91,14 @@ private:
             if (cancel) return;
 
             if (!r_igds) {
+                _is_available = false;
                 mapping_disabled();
                 LOG_DEBUG("UPnP: No IGDs found, waiting");
                 async_sleep(exec, failure_wait_time, cancel, yield);
                 if (cancel) return;
                 continue;
             }
+            _is_available = true;
 
             auto igds = move(r_igds.value());
 
@@ -219,6 +225,7 @@ private:
     // without having to check our own address (which is probaly unreliable).
     uint16_t _random_id;
     bool _mapping_is_active = false;
+    bool _is_available = false;
 };
 
 } // namespace ouinet
