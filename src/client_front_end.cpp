@@ -441,7 +441,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     if (reachability) {
         ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
     }
-    ss << "UPnP status: " << upnp_status(upnps) << "<br>\n";
+    auto upnp_status_ = upnp_status(upnps);
+    ss << "UPnP status: " << upnp_status_ << "<br>\n";
 
     if (local_ep) {
         ss << "Local UDP endpoints:<br>\n";
@@ -451,11 +452,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "</ul>\n";
     }
 
-    ss << "External UDP endpoints (via UPnP):<br>\n";
-    ss << "<ul>\n";
-    for (auto& ep : external_udp_endpoints(upnps))
-        ss << "<li>" << as_safe_html(ep) << "</li>\n";
-    ss << "</ul>\n";
+    if (upnp_status_ == "enabled") {
+        ss << "External UDP endpoints (via UPnP):<br>\n";
+        ss << "<ul>\n";
+        for (auto& ep : external_udp_endpoints(upnps))
+            ss << "<li>" << as_safe_html(ep) << "</li>\n";
+        ss << "</ul>\n";
+    }
 
     if (dht) {
         ss << "Public UDP endpoints (via BitTorrent DHT):<br>\n";
@@ -554,8 +557,10 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
 
-    response["is_upnp_active"] = upnp_status(upnps);
-    response["external_udp_endpoints"] = external_udp_endpoints(upnps);
+    auto upnp_status_ = upnp_status(upnps);
+    response["is_upnp_active"] = upnp_status_;
+    if (upnp_status_ == "enabled")
+        response["external_udp_endpoints"] = external_udp_endpoints(upnps);
 
     if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
 
