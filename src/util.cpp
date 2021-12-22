@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include <boost/asio/ip/udp.hpp>
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 #include <boost/iostreams/copy.hpp>
@@ -14,6 +15,30 @@
 
 using namespace std;
 
+
+boost::optional<boost::asio::ip::address>
+get_local_ip_address(const boost::asio::ip::udp::endpoint& ep) {
+    boost::asio::io_context ctx;
+    boost::asio::ip::udp::socket s(ctx, ep.protocol());
+    boost::system::error_code ec;
+    s.connect(ep, ec);
+    if (ec) return boost::none;
+    return s.local_endpoint().address();
+}
+
+boost::optional<boost::asio::ip::address>
+ouinet::util::get_local_ipv4_address() {
+    using namespace boost::asio::ip;
+    static const udp::endpoint ep(make_address_v4("192.0.2.1"), 1234);
+    return get_local_ip_address(ep);
+}
+
+boost::optional<boost::asio::ip::address>
+ouinet::util::get_local_ipv6_address() {
+    using namespace boost::asio::ip;
+    static const udp::endpoint ep(make_address_v6("2001:db8::1"), 1234);
+    return get_local_ip_address(ep);
+}
 
 std::pair<boost::string_view, boost::string_view>
 ouinet::util::split_ep(const boost::string_view ep) {
