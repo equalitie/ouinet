@@ -246,9 +246,14 @@ std::string
 upnp_status(const ClientFrontEnd::UPnPs& upnps) {
     if (upnps.empty()) return "disabled";
 
-    for (auto& pair : upnps)
+    bool available = false;
+    for (auto& pair : upnps) {
         if (pair.second->mapping_is_active()) return "enabled";
-    return "inactive";
+        available = available || pair.second->is_available();
+    }
+    // A stable "inactive" value should be taken as a warning sign of
+    // something not properly working with the UPnP setup.
+    return available ? "inactive" : "disabled";
 }
 
 static
