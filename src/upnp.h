@@ -122,7 +122,11 @@ private:
 
                 auto query_begin = steady_clock::now();
                 auto curr_duration = get_mapping_duration(igd, mapping_desc, int_addr, cancel, yield);
-                if (curr_duration && *curr_duration > lease_duration) {
+                if ( curr_duration
+                   && ( *curr_duration > lease_duration
+                      // Zero duration indicates a static port mapping,
+                      // which should not happen for an entry created by the client.
+                      || curr_duration->count() == 0)) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
                              " reports excessive mapping lease duration"
                              " (", curr_duration->count(), "s), ignoring");
