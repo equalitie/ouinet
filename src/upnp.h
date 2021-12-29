@@ -227,8 +227,9 @@ private:
                && *int_addr == m.int_client && _internal_port == m.int_port
                && desc != m.description) {
                 LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
-                            " contains stale mapping \"", m.description, "\""
-                            " with our current local UDP endpoint"
+                            " has stale mapping \"", m.description, "\""
+                            " for external port ", m.ext_port,
+                            " with our same local UDP endpoint"
                             " and duration=", m.lease_duration.count(), "s");
                 stale_ext_port = m.ext_port;
             }
