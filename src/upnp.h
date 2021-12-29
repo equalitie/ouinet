@@ -118,33 +118,37 @@ private:
                                              , lease_duration
                                              , yield);
                 if (cancel) return;
-                if (!r) continue;
+                if (!r) continue;  // failure, no buggy timeout
 
                 auto query_begin = steady_clock::now();
                 auto curr_duration = get_mapping_duration(igd, mapping_desc, int_addr, cancel, yield);
-                if ( curr_duration
-                   && ( *curr_duration > lease_duration
+                if (!curr_duration) {
+                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                             " did not set mapping \"", mapping_desc, "\""
+                             " but reported no error; buggy IGD/router?");
+                    continue;  // failure, no buggy timeout
+                }
+                if ( *curr_duration > lease_duration
                       // Zero duration indicates a static port mapping,
                       // which should not happen for an entry created by the client.
-                      || curr_duration->count() == 0)) {
+                   || curr_duration->count() == 0) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
                              " reports excessive mapping lease duration"
                              " (", curr_duration->count(), "s), ignoring");
-                    continue;
+                    continue;  // failure, no buggy timeout
                 }
-                if (!curr_duration || lease_duration >= *curr_duration + recent_margin) {
+                if (lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to update existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
-                    auto dur = curr_duration ? util::str(curr_duration->count(), "s") : "none";
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " did not add/update mapping for \"", mapping_desc, "\""
+                             " did not update mapping \"", mapping_desc, "\""
                              " but reported no error; buggy IGD/router?"
-                             " (duration=", dur, ")");
-                    auto mapping_timeout = query_begin + (curr_duration ? *curr_duration : seconds(0));
+                             " (duration=", curr_duration->count(), "s)");
+                    auto mapping_timeout = query_begin + *curr_duration;
                     if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
                         earlier_buggy_timeout = mapping_timeout;
-                    continue;
+                    continue;  // buggy timeout
                 }
                 LOG_DEBUG("UPnP: Successfully added/updated one mapping");
                 success_cnt++;
