@@ -128,15 +128,6 @@ private:
                              " but reported no error; buggy IGD/router?");
                     continue;  // failure, no buggy timeout
                 }
-                if ( *curr_duration > lease_duration
-                      // Zero duration indicates a static port mapping,
-                      // which should not happen for an entry created by the client.
-                   || curr_duration->count() == 0) {
-                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " reports excessive mapping lease duration"
-                             " (", curr_duration->count(), "s), ignoring");
-                    continue;  // failure, no buggy timeout
-                }
                 if (lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to update existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
@@ -149,6 +140,16 @@ private:
                     if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
                         earlier_buggy_timeout = mapping_timeout;
                     continue;  // buggy timeout
+                }
+                if ( *curr_duration > lease_duration
+                      // Zero duration indicates a static port mapping,
+                      // which should not happen for an entry created by the client.
+                   || curr_duration->count() == 0) {
+                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                             " reports excessive mapping lease duration"
+                             " (", curr_duration->count(), "s)");
+                    // The mapping is ours and it should be operational, though,
+                    // so proceed.
                 }
                 LOG_DEBUG("UPnP: Successfully added/updated one mapping");
                 success_cnt++;
