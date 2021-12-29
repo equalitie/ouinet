@@ -111,6 +111,8 @@ private:
             for(auto& igd : igds) {
                 auto cancelled = cancel.connect([&] { igd.stop(); });
 
+                // With a correctly working UPnP IGD, this should automatically update
+                // an existing mapping for the same internal host and external port.
                 auto r = igd.add_port_mapping( upnp::igd::udp
                                              , _external_port
                                              , _internal_port
