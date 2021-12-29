@@ -213,6 +213,8 @@ private:
             auto r_mapping = igd.get_generic_port_mapping_entry(index, yield);
             if (cancel || !r_mapping) break;  // no more port mappings, or error
             const auto& m = r_mapping.value();
+
+            if (m.proto != upnp::igd::udp) continue;
             if ( m.enabled
                && _external_port == m.ext_port && _internal_port == m.int_port
                && desc == m.description)
