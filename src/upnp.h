@@ -103,7 +103,7 @@ private:
 
             auto igds = move(r_igds.value());
 
-            LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\"...");
+            LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\"...");
             auto int_addr = util::get_local_ipv4_address();
             size_t success_cnt = 0;
             auto ext_eps = std::make_unique<UdpEndpoints>();
@@ -129,12 +129,12 @@ private:
                     continue;
                 }
                 if (!curr_duration || lease_duration >= *curr_duration + recent_margin) {
-                    // Versions of MiniUPnPd before 2015-07-09 fail to refresh existing mappings,
+                    // Versions of MiniUPnPd before 2015-07-09 fail to update existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
                     auto dur = curr_duration ? util::str(curr_duration->count(), "s") : "none";
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " did not add/refresh mapping for \"", mapping_desc, "\""
+                             " did not add/update mapping for \"", mapping_desc, "\""
                              " but reported no error; buggy IGD/router?"
                              " (duration=", dur, ")");
                     auto mapping_timeout = query_begin + (curr_duration ? *curr_duration : seconds(0));
@@ -142,7 +142,7 @@ private:
                         earlier_buggy_timeout = mapping_timeout;
                     continue;
                 }
-                LOG_DEBUG("UPnP: Successfully added/refreshed one mapping");
+                LOG_DEBUG("UPnP: Successfully added/updated one mapping");
                 success_cnt++;
 
                 // Note down the external endpoint for status repoting.
@@ -156,7 +156,7 @@ private:
                 mapping_enabled();
             }
             _external_endpoints = move(ext_eps);
-            LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\": done");
+            LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\": done");
 
             if (success_cnt == 0 && !earlier_buggy_timeout) mapping_disabled();
 
@@ -166,14 +166,14 @@ private:
                     // but only if we just got to add mappings to buggy IGDs.
                     if (!earlier_buggy_timeout) return failure_wait_time;
                     auto now = steady_clock::now();
-                    auto buggy_refresh = *earlier_buggy_timeout + timeout_pause;
-                    if (buggy_refresh < now) return seconds(0);
+                    auto buggy_update = *earlier_buggy_timeout + timeout_pause;
+                    if (buggy_update < now) return seconds(0);
                     return [] (auto d) {  // std::chrono::ceil not in c++1z
                         auto t = duration_cast<seconds>(d);
                         return t + seconds(t < d ? 1 : 0);
-                    }(buggy_refresh - now);
+                    }(buggy_update - now);
                 }
-                // Wait until a little before mappings would time out to refresh them.
+                // Wait until a little before mappings would time out to update them.
                 auto round_elapsed = steady_clock::now() - round_begin;
                 if (round_elapsed >= success_wait_time) return seconds(0);
                 return duration_cast<seconds>(success_wait_time - round_elapsed);
