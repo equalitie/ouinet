@@ -133,10 +133,10 @@ private:
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
                     auto dur = curr_duration ? util::str(curr_duration->count(), "s") : "none";
-                    LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
-                                " did not add/refresh mapping for \"", mapping_desc, "\""
-                                " but reported no error; buggy IGD/router?"
-                                " (duration=", dur, ")");
+                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                             " did not add/refresh mapping for \"", mapping_desc, "\""
+                             " but reported no error; buggy IGD/router?"
+                             " (duration=", dur, ")");
                     auto mapping_timeout = query_begin + (curr_duration ? *curr_duration : seconds(0));
                     if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
                         earlier_buggy_timeout = mapping_timeout;
@@ -220,10 +220,10 @@ private:
             if ( int_addr
                && *int_addr == m.int_client && _internal_port == m.int_port
                && desc != m.description) {
-                LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                         " contains stale mapping \"", m.description, "\""
-                         " with our current local UDP endpoint "
-                         " and duration=", m.lease_duration.count(), "s");
+                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
+                            " contains stale mapping \"", m.description, "\""
+                            " with our current local UDP endpoint"
+                            " and duration=", m.lease_duration.count(), "s");
                 stale_ext_port = m.ext_port;
             }
         }
