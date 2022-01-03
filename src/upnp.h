@@ -137,7 +137,8 @@ private:
                 if (!curr_duration) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
                              " did not set mapping \"", mapping_desc, "\""
-                             " but reported no error; buggy IGD/router?");
+                             " but reported no error"
+                             "; buggy IGD/router?");
                     continue;  // failure, no buggy timeout
                 }
                 if (lease_duration >= *curr_duration + recent_margin) {
@@ -146,8 +147,9 @@ private:
                     // so check actual result and do not count if failed.
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
                              " did not update mapping \"", mapping_desc, "\""
-                             " but reported no error; buggy IGD/router?"
-                             " (duration=", curr_duration->count(), "s)");
+                             " with duration=", curr_duration->count(), "s"
+                             " but reported no error"
+                             "; buggy IGD/router?");
                     auto mapping_timeout = query_begin + *curr_duration;
                     if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
                         earlier_buggy_timeout = mapping_timeout;
@@ -158,9 +160,9 @@ private:
                       // which should not happen for an entry created by the client.
                    || curr_duration->count() == 0) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " reports excessive mapping lease duration"
-                             " (", curr_duration->count(), "s)");
-                    // The mapping is ours and it should be operational, though,
+                             " reports excessive mapping lease duration=", curr_duration->count(), "s"
+                             "; buggy IGD/router?");
+                    // The mapping has our config and it should be operational, though,
                     // so proceed.
                 }
                 LOG_DEBUG("UPnP: Successfully added/updated one mapping");
