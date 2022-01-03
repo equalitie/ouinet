@@ -88,6 +88,12 @@ private:
         {
             auto round_begin = steady_clock::now();
 
+            auto int_addr = util::get_local_ipv4_address();
+            if (!int_addr) {
+                LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting");
+                continue;  // probably no connection
+            }
+
             auto r_igds = upnp::igd::discover(exec, yield);
             if (cancel) return;
 
@@ -104,7 +110,6 @@ private:
             auto igds = move(r_igds.value());
 
             LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\"...");
-            auto int_addr = util::get_local_ipv4_address();
             size_t success_cnt = 0;
             auto ext_eps = std::make_unique<UdpEndpoints>();
             boost::optional<steady_clock::time_point> earlier_buggy_timeout;
@@ -128,7 +133,7 @@ private:
                 }
 
                 auto query_begin = steady_clock::now();
-                auto curr_duration = get_mapping_duration(igd, mapping_desc, int_addr, cancel, yield);
+                auto curr_duration = get_mapping_duration(igd, mapping_desc, *int_addr, cancel, yield);
                 if (!curr_duration) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
                              " did not set mapping \"", mapping_desc, "\""
@@ -217,7 +222,7 @@ private:
 
     boost::optional<std::chrono::seconds>
     get_mapping_duration( upnp::igd& igd, const std::string& desc
-                        , const boost::optional<asio::ip::address>& int_addr
+                        , const asio::ip::address& int_addr
                         , Cancel& cancel, asio::yield_context yield) const
     {
         auto cancelled = cancel.connect([&] { igd.stop(); });
@@ -235,8 +240,7 @@ private:
                && _external_port == m.ext_port && _internal_port == m.int_port
                && desc == m.description)
                 return m.lease_duration;
-            if ( int_addr
-               && *int_addr == m.int_client && _internal_port == m.int_port
+            if ( int_addr == m.int_client && _internal_port == m.int_port
                && desc != m.description) {
                 LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
                             " has stale mapping \"", m.description, "\""
