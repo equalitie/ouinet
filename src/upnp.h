@@ -235,9 +235,11 @@ private:
             if (cancel || !r_mapping) break;  // no more port mappings, or error
             const auto& m = r_mapping.value();
 
-            if (m.proto != upnp::igd::udp) continue;
+            if (m.ext_port != _external_port) continue;  // unrelated
+            if (m.proto != upnp::igd::udp) continue;  // unrelated
+
             if ( m.enabled
-               && _external_port == m.ext_port && _internal_port == m.int_port
+               && _internal_port == m.int_port
                && desc == m.description)
                 return m.lease_duration;
             if ( int_addr == m.int_client && _internal_port == m.int_port
