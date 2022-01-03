@@ -220,6 +220,7 @@ private:
         _mapping_is_active = false;
     }
 
+    // This assumes that an attempt to add such entry has just taken place.
     boost::optional<std::chrono::seconds>
     get_mapping_duration( upnp::igd& igd, const std::string& desc
                         , const asio::ip::address& int_addr
@@ -229,7 +230,6 @@ private:
 
         // `igd.get_list_of_port_mappings` is more convenient,
         // but that requires full IGDv2 support, so stick to IGDv1 operations.
-        uint16_t stale_ext_port = 0;
         for (uint16_t index = 0; ; ++index) {
             auto r_mapping = igd.get_generic_port_mapping_entry(index, yield);
             if (cancel || !r_mapping) break;  // no more port mappings, or error
@@ -238,31 +238,35 @@ private:
             if (m.ext_port != _external_port) continue;  // unrelated
             if (m.proto != upnp::igd::udp) continue;  // unrelated
 
-            if ( m.enabled
-               && _internal_port == m.int_port
-               && desc == m.description)
-                return m.lease_duration;
-            if ( int_addr == m.int_client && _internal_port == m.int_port
-               && desc != m.description) {
-                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
-                            " has stale mapping \"", m.description, "\""
-                            " for external port ", m.ext_port,
-                            " with our same local UDP endpoint"
-                            " and duration=", m.lease_duration.count(), "s");
-                stale_ext_port = m.ext_port;
+            if (int_addr != m.int_client) {
+                LOG_WARN("UPnP: External port ", m.ext_port,
+                         " taken by client on internal IP address ", m.int_client);
+                break;
             }
-        }
-        // Cleanup stale mapping (only one can be removed with IGD interface).
-        if (stale_ext_port != 0) {
-            auto r = igd.delete_port_mapping(upnp::igd::udp, stale_ext_port, yield);
-            if (r)
+
+            if (_internal_port != m.int_port) {
+                LOG_WARN("UPnP: External port ", m.ext_port,
+                         " taken by local client on UDP port ", m.int_port);
+                break;
+            }
+
+            // After this, the mapping is either ours or equivalent.
+
+            if (!m.enabled) {
                 LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
-                            " successfully removed stale mapping"
-                            " for external port ", stale_ext_port);
-            else
-                LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                         " failed to remove stale mapping"
-                         " for external port ", stale_ext_port, ": ", r.error());
+                            " keeps equivalent disabled mapping \"", m.description, "\""
+                            " with duration=", m.lease_duration.count(), "s"
+                            "; buggy IGD/router?");
+                continue;
+            }
+
+            if (desc != m.description)  // old but still useable
+                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
+                            " keeps equivalent stale mapping \"", m.description, "\""
+                            " with duration=", m.lease_duration.count(), "s"
+                            "; buggy IGD/router?");
+
+            return m.lease_duration;
         }
         return boost::none;
     }
