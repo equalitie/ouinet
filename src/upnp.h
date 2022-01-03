@@ -120,7 +120,12 @@ private:
                                              , lease_duration
                                              , yield);
                 if (cancel) return;
-                if (!r) continue;  // failure, no buggy timeout
+                if (!r) {
+                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                             " failed to add/update mapping \"", mapping_desc, "\""
+                             " for external port ", _external_port, ": ", r.error());
+                    continue;  // failure, no buggy timeout
+                }
 
                 auto query_begin = steady_clock::now();
                 auto curr_duration = get_mapping_duration(igd, mapping_desc, int_addr, cancel, yield);
