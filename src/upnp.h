@@ -141,7 +141,7 @@ private:
                              "; buggy IGD/router?");
                     continue;  // failure, no buggy timeout
                 }
-                if (lease_duration >= *curr_duration + recent_margin) {
+                if (curr_duration->count() > 0 && lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to update existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
