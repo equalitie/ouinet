@@ -156,14 +156,15 @@ private:
                     continue;  // buggy timeout
                 }
                 if ( *curr_duration > lease_duration
-                      // Zero duration indicates a static port mapping,
-                      // which should not happen for an entry created by the client.
+                   // Zero duration indicates a static port mapping,
+                   // which should not happen for an entry created by the client.
                    || curr_duration->count() == 0) {
-                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " reports excessive mapping lease duration=", curr_duration->count(), "s"
+                    LOG_WARN("UPnP: reusing mapping\"", mapping_desc, "\""
+                             " from IGD \"", igd.friendly_name(), "\""
+                             " with excessive lease duration=", curr_duration->count(), "s"
                              "; buggy IGD/router?");
                     // The mapping has our config and it should be operational, though,
-                    // so proceed.
+                    // so proceed normally.
                 }
                 LOG_DEBUG("UPnP: Successfully added/updated one mapping");
                 success_cnt++;
