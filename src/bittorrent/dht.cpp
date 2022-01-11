@@ -2540,6 +2540,7 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
         }
     }
 
+    // Ensure that there are nodes for each address in `eps` (create if needed)
     for (auto ep : eps) {
         if (_nodes.count(ep)) continue;
 
@@ -2547,11 +2548,11 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
         sys::error_code ec;
         m.bind(ep, ec);
         assert(!ec);
-        set_endpoint(move(m));
+        add_endpoint(move(m));
     }
 }
 
-void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
+void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
 
@@ -2575,7 +2576,7 @@ void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
 }
 
 asio::ip::udp::endpoint
-MainlineDht::set_endpoint( asio_utp::udp_multiplexer m
+MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
                          , asio::yield_context yield)
 {
     auto local_ep = m.local_endpoint();

@@ -395,9 +395,11 @@ class MainlineDht {
 
     ~MainlineDht();
 
+    // This removes existing endpoints not in the given set.
     void set_endpoints(const std::set<udp::endpoint>&);
-    void set_endpoint(asio_utp::udp_multiplexer);
-    udp::endpoint set_endpoint(asio_utp::udp_multiplexer, asio::yield_context);
+
+    void add_endpoint(asio_utp::udp_multiplexer);
+    udp::endpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context);
 
 
     std::set<udp::endpoint> local_endpoints() const {

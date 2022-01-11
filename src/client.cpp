@@ -281,7 +281,7 @@ public:
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
-        auto ext_ep = bt_dht->set_endpoint(move(m), yield[ec]);
+        auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
         if (ec) return or_throw(yield, ec, _bt_dht);
 
         setup_upnp(ext_ep.port(), mpl.local_endpoint());
