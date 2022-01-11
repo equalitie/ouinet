@@ -272,6 +272,26 @@ public:
         auto bt_dht = make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                   , _config.repo_root() / "dht");
 
+        // Port allocation works like this:
+        //
+        // 1. The client tries to bind to the internal UDP port last used
+        //    (a default one on first run), or a random one if it is busy.
+        // 2. The BT DHT is setup to use that internal endpoint, then bootstrapped,
+        //    yielding the public endpoint seen by the DHT node used too bootstrap.
+        // 3. The port of that endpoint is configured as external UPnP port.
+        //
+        // Note that this approach still has some issues:
+        //
+        // - A NAT box may use different external ports depending on various factors like
+        //   the remote endpoint and the presence of other devices in the LAN
+        //   using the same internal port number (esp. other Ouinet clients),
+        //   i.e. different bootstrap nodes may see the same or different source port numbers.
+        // - If there is an extra NAT box in the middle (e.g. with CGNAT),
+        //   the public port number may differ from that (or rather those) used by the "closest" NAT box,
+        //   which would create a useless UPnP mapping.
+        //
+        // But, for the majority of cases, this may still be a reasonable bet.
+
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);
