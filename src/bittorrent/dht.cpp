@@ -23,6 +23,7 @@
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
 #include "../util/file_io.h"
+#include "../util/quote_error_message.h"
 #include "../util/variant.h"
 #include "../logger.h"
 
@@ -314,7 +315,7 @@ void write_stored_contacts( const asio::executor& exec
     sys::error_code ignored_ec;
 
     auto report = defer([&ec] {
-        if (ec) _ERROR("Failed to store contacts; ec=", ec.message());
+        if (ec) _ERROR("Failed to store contacts; ec=", ec);
         else _DEBUG("Successfully stored contacts");
     });
 
@@ -1642,7 +1643,7 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
 
             if (ec && !cancel) {
                 _DEBUG( "Unable to resolve bootstrap server, giving up: "
-                      , addr, "; ec=", ec.message());
+                      , addr, "; ec=", ec);
             }
 
             return ep;
@@ -1670,7 +1671,7 @@ dht::DhtNode::bootstrap_single( Address bootstrap_address
 
     if (ec) {
         _DEBUG( "Bootstrap server does not reply, giving up: "
-              , bootstrap_address, "; ec=", ec.message());
+              , bootstrap_address, "; ec=", ec);
         return or_throw<BootstrapResult>(yield, ec);
     }
 
@@ -1782,7 +1783,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
                     fix_cancel_invariant(done_cancel, ec);
 
-                    _DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec.message());
+                    _DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec);
 
                     if (ec || is_martian(r.my_ep)) return;
 
@@ -2357,7 +2358,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
         yield[ec]
     );
 
-    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << ec.message() << "\n";
+    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << ec << "\n";
     sys::error_code ec_;
 
     if (cancel_signal) ec = asio::error::operation_aborted;
@@ -2415,7 +2416,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
         yield[ec]
     );
 
-    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << ec.message() << "\n";
+    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << ec << "\n";
 
     if (cancel_signal) ec = asio::error::operation_aborted;
 

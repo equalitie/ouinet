@@ -4,6 +4,7 @@
 #include "../../async_sleep.h"
 #include "../../logger.h"
 #include "../../util/handler_tracker.h"
+#include "../../util/quote_error_message.h"
 
 using namespace std;
 using namespace ouinet;
@@ -90,7 +91,7 @@ void MultiUtpServer::start_listen(asio::yield_context yield)
         sys::error_code ec;
         s->start(_accept_queue, _cancel, yield[ec]);
         if (ec) {
-            LOG_ERROR("MultiUtpServer: Failed to start listen: ", ec.message());
+            LOG_ERROR("MultiUtpServer: Failed to start listen; ec=", ec);
         }
     }
 }

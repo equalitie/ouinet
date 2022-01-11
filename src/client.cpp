@@ -41,6 +41,7 @@
 #include "constants.h"
 #include "util/async_queue_reader.h"
 #include "util/queue_reader.h"
+#include "util/quote_error_message.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
@@ -382,7 +383,7 @@ private:
         _##WHAT##_starting->wait(yield[ec]); \
         if (cancel) ec = asio::error::operation_aborted; \
         if (ec && ec != asio::error::operation_aborted) \
-            LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec.message()); \
+            LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
         return or_throw(yield, ec); \
     }
     DEF_WAIT_FOR(injector)
@@ -466,7 +467,7 @@ private:
             _multi_utp_server->start_listen(yield[ec]);
 
             if (ec) {
-                LOG_ERROR("Failed to start accepting on multi uTP service; ec=", ec.message());
+                LOG_ERROR("Failed to start accepting on multi uTP service; ec=", ec);
                 return;
             }
 
@@ -476,7 +477,7 @@ private:
                 if (c) return;
                 if (ec == asio::error::operation_aborted) return;
                 if (ec) {
-                    LOG_WARN("Bep5Http: Failure to accept; ec=", ec.message());
+                    LOG_WARN("Bep5Http: Failure to accept; ec=", ec);
                     async_sleep(_ctx, 200ms, c, yield);
                     continue;
                 }
@@ -729,7 +730,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
         if (ec) {
             if (ec != asio::error::operation_aborted) {
-                _YERROR(yield, "Failed to connect to self; ec=", ec.message());
+                _YERROR(yield, "Failed to connect to self; ec=", ec);
             }
             return or_throw<Session>(yield, ec);
         }
@@ -760,7 +761,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     }
 
     if (ec) {
-        _YERROR(yield, "Failed to send request to self; ec=", ec.message());
+        _YERROR(yield, "Failed to send request to self; ec=", ec);
     }
 
     if (ec) return or_throw<Session>(yield, ec);
@@ -857,14 +858,14 @@ Client::State::resolve_tcp_doh( const std::string& host
 
     wc.wait(yield.tag("wait"));
 
-    _YDEBUG(yield, "DoH query; ip4_ec=", ec4.message(), " ip6_ec=", ec6.message());
+    _YDEBUG(yield, "DoH query; ip4_ec=", ec4, " ip6_ec=", ec6);
     if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
 
     doh::Answers answers4, answers6;
     if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
     if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
 
-    _YDEBUG(yield, "DoH parse; ip4_ec=", ec4.message(), " ip6_ec=", ec6.message());
+    _YDEBUG(yield, "DoH parse; ip4_ec=", ec4, " ip6_ec=", ec6);
     if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
 
     answers4.insert( answers4.end()
@@ -904,7 +905,7 @@ Client::State::connect_to_origin( const Request& rq
         ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
-           , host, "; naddrs=", lookup.size(), " ec=", ec.message());
+           , host, "; naddrs=", lookup.size(), " ec=", ec);
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host(lookup, _ctx.get_executor(), cancel, yield[ec]);
@@ -1159,7 +1160,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
         if (ec) {
             if (ec != asio::error::operation_aborted) {
-                _YWARN(yield, "Failed to connect to injector; ec=", ec.message());
+                _YWARN(yield, "Failed to connect to injector; ec=", ec);
             }
             return or_throw<Session>(yield, ec);
         }
@@ -1190,7 +1191,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     }
 
     if (ec) {
-        _YWARN(yield, "Failed to send request to the injector; ec=", ec.message());
+        _YWARN(yield, "Failed to send request to the injector; ec=", ec);
     }
 
     if (ec) return or_throw<Session>(yield, ec);
@@ -1213,7 +1214,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         // the Injector mechanism being disabled.
         ec = asio::error::operation_not_supported;
 
-    _YDEBUG(yield, "End reading response; ec=", ec.message());
+    _YDEBUG(yield, "End reading response; ec=", ec);
 
     if (ec) return or_throw(yield, ec, std::move(session));
 
@@ -1344,9 +1345,9 @@ public:
                                                                   , yield[ec]);
 
             if (!ec) {
-                _YDEBUG(yield, "Finish; ec=", ec.message(), " status=", s.response_header().result());
+                _YDEBUG(yield, "Finish; ec=", ec, " status=", s.response_header().result());
             } else {
-                _YDEBUG(yield, "Finish; ec=", ec.message());
+                _YDEBUG(yield, "Finish; ec=", ec);
             }
 
             return or_throw(yield, ec, move(s));
@@ -1365,7 +1366,7 @@ public:
                                                         , cancel
                                                         , yield[ec]);
 
-            _YDEBUG(yield, "Finish; ec=", ec.message(), " canceled=", bool(cancel));
+            _YDEBUG(yield, "Finish; ec=", ec, " canceled=", bool(cancel));
 
             return or_throw(yield, ec, move(r));
         };
@@ -1395,13 +1396,13 @@ public:
         auto session = client_state.fetch_fresh_from_origin( tnx.request(), tnx.meta()
                                                            , cancel, yield[ec]);
 
-        _YDEBUG(yield, "Fetch; ec=", ec.message());
+        _YDEBUG(yield, "Fetch; ec=", ec);
 
         return_or_throw_on_error(yield, cancel, ec);
 
         tnx.write_to_user_agent(session, cancel, yield[ec]);
 
-        _YDEBUG(yield, "Flush; ec=", ec.message());
+        _YDEBUG(yield, "Flush; ec=", ec);
 
         return or_throw(yield, ec);
     }
@@ -1427,13 +1428,13 @@ public:
                     (rq, false, cancel, yield[ec]);
         }
 
-        _YDEBUG(yield, "Proxy fetch; ec=", ec.message());
+        _YDEBUG(yield, "Proxy fetch; ec=", ec);
 
         return_or_throw_on_error(yield, cancel, ec);
 
         tnx.write_to_user_agent(session, cancel, yield[ec]);
 
-        _YDEBUG(yield, "Flush; ec=", ec.message());
+        _YDEBUG(yield, "Flush; ec=", ec);
 
         return or_throw(yield, ec);
     }
@@ -1459,9 +1460,9 @@ public:
 
         auto session = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
 
-        _YDEBUG(yield, "cc.fetch; ec=", ec.message(),
-                       " fresh_ec=", fresh_ec.message(),
-                       " cache_ec=", cache_ec.message());
+        _YDEBUG(yield, "cc.fetch; ec=", ec,
+                       " fresh_ec=", fresh_ec,
+                       " cache_ec=", cache_ec);
 
         if (ec) return or_throw(yield, ec);
 
@@ -1540,7 +1541,7 @@ public:
 
         wc.wait(yield);
 
-        _YDEBUG(yield, "Finish; ec=", ec.message());
+        _YDEBUG(yield, "Finish; ec=", ec);
 
         return or_throw(yield, ec);
     }
@@ -1795,7 +1796,7 @@ public:
 
             auto&& result = which->result();
 
-            _YDEBUG( yield, "Got result; job=", jobs.as_string(which), " ec=", result.ec.message()
+            _YDEBUG( yield, "Got result; job=", jobs.as_string(which), " ec=", result.ec
                    , " target=", short_target);
 
             if (!result.ec) {
@@ -1815,7 +1816,7 @@ public:
             final_ec = err::no_protocol_option;
         }
 
-        _YDEBUG( yield, "Done; final_job=", final_job, " final_ec=", final_ec->message()
+        _YDEBUG( yield, "Done; final_job=", final_job, " final_ec=", *final_ec
                , " target=", short_target);
 
         return or_throw(yield, *final_ec);
@@ -2206,7 +2207,7 @@ void Client::State::serve_request( GenericStream&& con
 
         if (ec) {
             if (ec != asio::error::operation_aborted) {
-                LOG_WARN("Failed to read request; ec=", ec.message());
+                LOG_WARN("Failed to read request; ec=", ec);
             }
             return;
         }
@@ -2228,7 +2229,7 @@ void Client::State::serve_request( GenericStream&& con
             // Subsequent access to the connection will use the encrypted channel.
             con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_hanshake"));
             if (ec) {
-                _YERROR(yield, "MitM exception; ec=", ec.message());
+                _YERROR(yield, "MitM exception; ec=", ec);
                 return;
             }
             mitm = true;
@@ -2303,7 +2304,7 @@ void Client::State::serve_request( GenericStream&& con
         cache_control.mixed_fetch(tnx, yield[ec].tag("mixed_fetch"));
 
         if (ec) {
-            _YERROR(yield, "Error writing back response; ec=", ec.message());
+            _YERROR(yield, "Error writing back response; ec=", ec);
 
             if (!tnx.user_agent_was_written_to() && !cancel && con.is_open()) {
                 sys::error_code ec_;
@@ -2339,7 +2340,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     auto dht = bittorrent_dht(yield[ec]);
     if (ec) {
         if (ec != asio::error::operation_aborted) {
-            LOG_ERROR("Failed to initialize BT DHT; ec=", ec.message());
+            LOG_ERROR("Failed to initialize BT DHT; ec=", ec);
         }
         return or_throw(yield, ec);
     }
@@ -2363,8 +2364,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     if (_shutdown_signal) ec = asio::error::operation_aborted;
     if (ec) {
         if (ec != asio::error::operation_aborted) {
-            LOG_ERROR("Failed to initialize cache::Client; ec="
-                     , ec.message());
+            LOG_ERROR("Failed to initialize cache::Client; ec=", ec);
         }
         return or_throw(yield, ec);
     }
@@ -2372,7 +2372,7 @@ void Client::State::setup_cache(asio::yield_context yield)
     idempotent_start_accepting_on_utp(yield[ec]);
 
     if (ec) {
-        LOG_ERROR("Failed to start accepting on uTP; ec=", ec.message());
+        LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
         ec = {};
     }
 }
@@ -2388,8 +2388,7 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
 
     acceptor.open(local_endpoint.protocol(), ec);
     if (ec) {
-        throw runtime_error(util::str( "Failed to open TCP acceptor for service: ", service, "; ec="
-                                     , ec.message()));
+        throw runtime_error(util::str("Failed to open TCP acceptor for service: ", service, "; ec=", ec));
     }
 
     acceptor.set_option(asio::socket_base::reuse_address(true));
@@ -2397,15 +2396,13 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
     if (ec) {
-        throw runtime_error(util::str( "Failed to bind TCP acceptor for service: ", service, "; ec="
-                                     , ec.message()));
+        throw runtime_error(util::str("Failed to bind TCP acceptor for service: ", service, "; ec=", ec));
     }
 
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_connections, ec);
     if (ec) {
-        throw runtime_error(util::str( "Failed to 'listen' to service on TCP acceptor: ", service, "; ec="
-                                     , ec.message()));
+        throw runtime_error(util::str("Failed to 'listen' to service on TCP acceptor: ", service, "; ec=", ec));
     }
 
     LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
@@ -2435,7 +2432,7 @@ void Client::State::listen_tcp
         if(ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec.message());
+            LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
 
             if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -2565,7 +2562,7 @@ void Client::State::start()
         setup_injector(yield[ec]);
 
         if (ec && ec != asio::error::operation_aborted)
-            LOG_ERROR("Failed to setup injector; ec=", ec.message());
+            LOG_ERROR("Failed to setup injector; ec=", ec);
     }));
 
     TRACK_SPAWN(_ctx, ([
@@ -2577,7 +2574,7 @@ void Client::State::start()
         setup_cache(yield[ec]);
 
         if (ec && ec != asio::error::operation_aborted)
-            LOG_ERROR("Failed to setup cache; ec=", ec.message());
+            LOG_ERROR("Failed to setup cache; ec=", ec);
     }));
 }
 
@@ -2651,7 +2648,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
             if (ec != asio::error::operation_aborted) {
-                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec.message());
+                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);
             }
             return or_throw(yield, ec);
         }
@@ -2674,7 +2671,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         idempotent_start_accepting_on_utp(yield[ec]);
 
         if (ec) {
-            LOG_ERROR("Failed to start accepting on uTP; ec=", ec.message());
+            LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
             ec = {};
         }
 /*

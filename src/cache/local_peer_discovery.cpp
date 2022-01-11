@@ -3,6 +3,7 @@
 #include "local_peer_discovery.h"
 #include "../../util/random.h"
 #include "../../util/handler_tracker.h"
+#include "../../util/quote_error_message.h"
 #include "../../parse/number.h"
 #include "../../parse/endpoint.h"
 #include "../../logger.h"
@@ -82,7 +83,7 @@ struct LocalPeerDiscovery::Impl {
 
         if (ec) {
             LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket;"
-                      " ec=", ec.message());
+                      " ec=", ec);
             return;
         }
 
@@ -104,7 +105,7 @@ struct LocalPeerDiscovery::Impl {
                                  , yield[ec]);
             if (ec && !cancel) {
                 LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query;"
-                          " ec=", ec.message(), " ep=", ep);
+                          " ec=", ec, " ep=", ep);
             }
         }));
     }
@@ -140,7 +141,7 @@ struct LocalPeerDiscovery::Impl {
 
             if (ec) {
                 LOG_ERROR("LocalPeerDiscovery: failed to receive;"
-                          " ec=", ec.message());
+                          " ec=", ec);
                 async_sleep(_ex, chrono::seconds(1), cancel, yield);
                 if (cancel) break;
                 continue;

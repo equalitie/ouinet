@@ -45,8 +45,9 @@ create_udp_multiplexer( asio::io_service& ios
                 return ret;
             }
 
+            // TODO: Move code to implementation file, use `util/quote_error_message.h`.
             LOG_WARN( "Failed to bind UDP multiplexer to last used port: ", port
-                    , "; ec=", ec.message());
+                    , "; ec=\"", ec.message(), "\"");
 
         }
         else {

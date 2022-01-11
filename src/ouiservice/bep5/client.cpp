@@ -13,6 +13,7 @@
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
 #include "../../util/handler_tracker.h"
+#include "../../util/quote_error_message.h"
 
 #define _LOGPFX "Bep5Client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -322,7 +323,7 @@ private:
             else {
                 got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
                 if (!cancel && ec)
-                    _ERROR("Failed to ping injectors; ec=", ec.message());
+                    _ERROR("Failed to ping injectors; ec=", ec);
                 return_or_throw_on_error(yield, cancel, ec);
                 if (got_reply)
                     _DEBUG("Got pong from injectors, announcing as helper (bridge)");
@@ -648,7 +649,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         _last_working_ep = boost::none;
         _DEBUG( "Did not connect to any peer;"
               , " peers=", i
-              , " ec=", ec.message());
+              , " ec=", ec);
     } else {
         _last_working_ep = ret_ep;
         if (ret_target == Target::injectors) {

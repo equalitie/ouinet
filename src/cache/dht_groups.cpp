@@ -3,6 +3,7 @@
 #include "../util/file_io.h"
 #include "../util/bytes.h"
 #include "../util/hash.h"
+#include "../util/quote_error_message.h"
 
 #include <algorithm>
 #include <map>
@@ -88,7 +89,7 @@ try_remove(const fs::path& path)
     sys::error_code ec;
     fs::remove_all(path, ec);
     if (ec) _WARN( "Failed to remove cached response: "
-                 , path, "; ec=", ec.message());
+                 , path, "; ec=", ec);
     // The parent directory may be left empty.
 }
 
@@ -222,7 +223,7 @@ DhtGroupsImpl::load( fs::path root_dir
         sys::error_code ec;
         fs::create_directories(root_dir, ec);
         if (ec) {
-            _ERROR("Failed to create directory: ", root_dir, "; ec=", ec.message());
+            _ERROR("Failed to create directory: ", root_dir, "; ec=", ec);
             return or_throw<Ret>(yield, ec);
         }
     } else {
@@ -289,13 +290,13 @@ void DhtGroupsImpl::add( const GroupName& group_name
         sys::error_code ec;
         fs::create_directories(group_p, ec);
         if (ec) {
-            _ERROR("Failed to create directory for group: ", group_name, "; ec=", ec.message());
+            _ERROR("Failed to create directory for group: ", group_name, "; ec=", ec);
             return or_throw(yield, ec);
         }
 
         auto group_name_f = file_io::open_or_create(_ex, group_p/"group_name", ec);
         if (ec) {
-            _ERROR("Failed to create group name file for group: ", group_name, "; ec=", ec.message());
+            _ERROR("Failed to create group name file for group: ", group_name, "; ec=", ec);
             try_remove(group_p);
             return or_throw(yield, ec);
         }
@@ -304,7 +305,7 @@ void DhtGroupsImpl::add( const GroupName& group_name
 
         if (ec) {
             if (!cancel) {
-                _ERROR("Failed write group name: ", group_name, "; ec=", ec.message());
+                _ERROR("Failed write group name: ", group_name, "; ec=", ec);
             }
             try_remove(group_p);
             return or_throw(yield, ec);
@@ -317,7 +318,7 @@ void DhtGroupsImpl::add( const GroupName& group_name
     if (!fs::is_directory(items_p)) {
         fs::create_directories(items_p, ec);
         if (ec) {
-            _ERROR("Failed to create items path: ", items_p, "; ec=", ec.message());
+            _ERROR("Failed to create items path: ", items_p, "; ec=", ec);
             try_remove(group_p);
             return or_throw(yield, ec);
         }
@@ -326,7 +327,7 @@ void DhtGroupsImpl::add( const GroupName& group_name
     auto item_f = file_io::open_or_create(_ex, item_path(group_name, item_name), ec);
 
     if (ec) {
-        _ERROR("Failed to create group item; ec=", ec.message());
+        _ERROR("Failed to create group item; ec=", ec);
         if (fs::is_empty(items_p)) try_remove(group_p);
         return or_throw(yield, ec);
     }
@@ -334,7 +335,7 @@ void DhtGroupsImpl::add( const GroupName& group_name
     file_io::truncate(item_f, 0, ec);
 
     if (ec) {
-        _ERROR("Failed to truncate group item file; ec=", ec.message());
+        _ERROR("Failed to truncate group item file; ec=", ec);
         if (fs::is_empty(items_p)) try_remove(group_p);
         return or_throw(yield, ec);
     }
@@ -343,7 +344,7 @@ void DhtGroupsImpl::add( const GroupName& group_name
 
     if (ec) {
         if (!cancel) {
-            _ERROR("Failed write to group item; ec=", ec.message());
+            _ERROR("Failed write to group item; ec=", ec);
         }
         if (fs::is_empty(items_p)) try_remove(group_p);
         return or_throw(yield, ec);

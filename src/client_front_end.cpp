@@ -2,6 +2,7 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "util/bytes.h"
+#include "util/quote_error_message.h"
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
@@ -571,8 +572,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         sys::error_code ec;
         auto sz = cache_client->local_size(cancel, yield[ec]);
         if (ec) {
-            LOG_ERROR( "Front-end: Failed to get local cache size; ec="
-                     , ec.message());
+            LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
         } else {
             response["local_cache_size"] = sz;
         }

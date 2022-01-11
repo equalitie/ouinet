@@ -4,6 +4,7 @@
 #include <boost/asio/spawn.hpp>
 
 #include "or_throw.h"
+#include "util/quote_error_message.h"
 #include "util/signal.h"
 #include "util/timeout.h"
 #include "util/yield.h"
@@ -42,7 +43,7 @@ fetch_http( Stream& con
         ec = asio::error::operation_aborted;
     }
     if (ec) {
-        yield.log("Failed to http::async_write ", ec.message());
+        yield.log("Failed to http::async_write; ec=", ec);
     }
 
     // Ignore end_of_stream error, there may still be data in
@@ -59,7 +60,7 @@ fetch_http( Stream& con
         ec = asio::error::operation_aborted;
     }
     if (ec) {
-        yield.log("Failed to http::async_read ", ec.message());
+        yield.log("Failed to http::async_read; ec=", ec);
     }
 
     return or_throw(yield, ec, move(res));

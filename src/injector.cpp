@@ -52,6 +52,7 @@
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
+#include "util/quote_error_message.h"
 #include "util/yield.h"
 
 #include "logger.h"
@@ -239,7 +240,7 @@ void handle_connect_request( GenericStream client_c
     http::async_write(client_c, res, yield[ec]);
 
     if (ec) {
-        yield.log("Failed sending CONNECT response: ", ec.message());
+        yield.log("Failed sending CONNECT response; ec=", ec);
         return;
     }
 
@@ -322,7 +323,7 @@ private:
         auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to get connection: ", ec.message());
+        if (ec) yield.log("Failed to get connection; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
 
         // Send HTTP request to origin.
@@ -331,7 +332,7 @@ private:
         util::http_request(orig_con, orig_rq, timeout_cancel, yield.tag("request")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to send request: ", ec.message());
+        if (ec) yield.log("Failed to send request; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
 
 
@@ -352,7 +353,7 @@ private:
                                         , timeout_cancel, yield.tag("read-hdr")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to process response head: ", ec.message());
+        if (ec) yield.log("Failed to process response head; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
 
         // Keep origin connection if the origin wants to.
@@ -363,7 +364,7 @@ private:
         orig_sess.flush_response(con, timeout_cancel, yield.tag("flush")[ec]);
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to process response: ", ec.message());
+        if (ec) yield.log("Failed to process response; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
         yield.log("Injection end");
 
@@ -627,7 +628,7 @@ void listen( InjectorConfig& config
     sys::error_code ec;
     proxy_server.start_listen(yield[ec]);
     if (ec) {
-        LOG_ERROR("Failed to setup ouiservice proxy server: ", ec.message());
+        LOG_ERROR("Failed to setup ouiservice proxy server; ec=", ec);
         return;
     }
 

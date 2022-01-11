@@ -6,6 +6,7 @@
 #include "../../async_sleep.h"
 #include "../../bittorrent/node_id.h"
 #include "../../util/handler_tracker.h"
+#include "../../util/quote_error_message.h"
 #include <boost/utility/string_view.hpp>
 
 #define _LOGPFX "Announcer: "
@@ -287,7 +288,7 @@ struct Announcer::Loop {
         auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
-        _DEBUG("Announcing: ", e_key, ": done; ec=", ec.message());
+        _DEBUG("Announcing: ", e_key, ": done; ec=", ec);
 
         return or_throw(yield, ec);
     }

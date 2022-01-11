@@ -2,6 +2,7 @@
 #include "../async_sleep.h"
 #include "../logger.h"
 #include "../util/handler_tracker.h"
+#include "../util/quote_error_message.h"
 #include <random>
 #include <iostream>
 
@@ -93,7 +94,7 @@ struct detail::Bep5AnnouncerImpl
             dht.reset();
 
             if (ec) {
-                _WARN("Announcing infohash: ", infohash, ": failed; ec=", ec.message());
+                _WARN("Announcing infohash: ", infohash, ": failed; ec=", ec);
                 // TODO: Arbitrary timeout
                 _DEBUG("Will retry infohash because of announcement error: ", infohash);
                 async_sleep(exec, random_timeout(1s, 1min), cancel, yield);

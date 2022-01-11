@@ -5,6 +5,7 @@
 #include "../util/str.h"
 #include "../util/watch_dog.h"
 #include "../util/handler_tracker.h"
+#include "../util/quote_error_message.h"
 #include "../async_sleep.h"
 
 namespace ouinet {
@@ -25,7 +26,7 @@ UtpOuiServiceServer::UtpOuiServiceServer( const asio::executor& ex
 
     if (ec) {
         LOG_ERROR("uTP: Failed to bind UtpOuiServiceServer to "
-                 , local_endpoint, "; ec=", ec.message());
+                 , local_endpoint, "; ec=", ec);
     } else {
         LOG_DEBUG("uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
     }
@@ -53,7 +54,7 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
             if (ec) {
                 assert(ec != asio::error::operation_aborted);
                 LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s;"
-                         , " lep=", local_ep, " ec=", ec.message());
+                         , " lep=", local_ep, " ec=", ec);
                 async_sleep(_ex, 5s, cancel, yield[ec]);
                 continue;
             }

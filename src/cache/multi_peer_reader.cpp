@@ -16,6 +16,7 @@
 #include "../util/part_io.h"
 #include "../util/async_job.h"
 #include "../util/condition_variable.h"
+#include "../util/quote_error_message.h"
 #include "signed_head.h"
 
 #include <random>
@@ -367,7 +368,7 @@ public:
             auto dht_eps = _dht_lookup->get(c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " DHT lookup result; ec=", ec.message(), " eps=", dht_eps);
+                LOG_DEBUG(dbg_tag, " DHT lookup result; ec=", ec, " eps=", dht_eps);
             }
 
             if (c) return;
@@ -407,7 +408,7 @@ public:
 
             if (!dbg_tag.empty()) {
                 LOG_DEBUG(dbg_tag, " Done fetching hash list; ep=", ep
-                         , " ec=", ec.message(), " c=", bool(c));
+                         , " ec=", ec, " c=", bool(c));
             }
 
             if (c) return;

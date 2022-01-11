@@ -24,6 +24,7 @@
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/file_io.h"
+#include "../util/quote_error_message.h"
 #include "../util/str.h"
 #include "../util/variant.h"
 #include "http_sign.h"
@@ -694,7 +695,7 @@ canonical_from_content_relpath( const fs::path& body_path_p
     auto body_cp = fs::canonical(body_rp, cdirp, ec);
     if (ec) {
         _ERROR( "Failed to get canonical path of static cache content file: ", body_path_p
-              , "; ec=", ec.message());
+              , "; ec=", ec);
         return boost::none;
     }
     // Avoid symlinks in actual body path pointing out of content directory.
@@ -1091,7 +1092,7 @@ try_remove(const fs::path& path)
     sys::error_code ec;
     fs::remove_all(path, ec);
     if (ec) _WARN( "Failed to remove cached response: "
-                 , path, "; ec=", ec.message());
+                 , path, "; ec=", ec);
     // The parent directory may be left empty.
 }
 
@@ -1222,7 +1223,7 @@ FullHttpStore::for_each( keep_func keep
 
             auto rr = http_store_reader(p, executor, ec);
             if (ec) {
-               _WARN("Failed to open cached response: ", p, "; ec=", ec.message());
+               _WARN("Failed to open cached response: ", p, "; ec=", ec);
                try_remove(p); continue;
             }
             assert(rr);
@@ -1231,7 +1232,7 @@ FullHttpStore::for_each( keep_func keep
             if (cancel) ec = asio::error::operation_aborted;
             if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {
-                _WARN("Failed to check cached response: ", p, "; ec=", ec.message());
+                _WARN("Failed to check cached response: ", p, "; ec=", ec);
                 try_remove(p); continue;
             }
 
@@ -1263,7 +1264,7 @@ FullHttpStore::store( const std::string& key, http_response::AbstractReader& r
     if (!ec) dir->commit(ec);
     if (!ec) _DEBUG("Stored to directory; key=", key, " path=", kpath);
     else _ERROR( "Failed to store response; key=", key, " path=", kpath
-               , " ec=", ec.message());
+               , " ec=", ec);
     return or_throw(yield, ec);
 }
 
