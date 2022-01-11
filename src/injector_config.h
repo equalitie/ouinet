@@ -38,10 +38,10 @@ public:
         return _bep5_injector_swarm_name;
     }
 
-    boost::optional<asio::ip::udp::endpoint> bittorrent_endpoint() const
+    asio::ip::udp::endpoint bittorrent_endpoint() const
     {
-        if (_utp_tls_endpoint) return _utp_tls_endpoint;
-        if (_utp_endpoint) return _utp_endpoint;
+        if (_utp_tls_endpoint) return *_utp_tls_endpoint;
+        if (_utp_endpoint) return *_utp_endpoint;
         return asio::ip::udp::endpoint(asio::ip::address_v4::any(), 4567);
     }
 

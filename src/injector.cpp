@@ -722,9 +722,9 @@ int main(int argc, const char* argv[])
     shared_ptr<bt::MainlineDht> bt_dht_ptr;
 
     auto bittorrent_dht = [&bt_dht_ptr, &config, ex] {
-        if (!config.bittorrent_endpoint() || bt_dht_ptr) return bt_dht_ptr;
+        if (bt_dht_ptr) return bt_dht_ptr;
         bt_dht_ptr = make_shared<bt::MainlineDht>(ex);
-        bt_dht_ptr->set_endpoints({*config.bittorrent_endpoint()});
+        bt_dht_ptr->set_endpoints({config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
     };
