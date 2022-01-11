@@ -2548,6 +2548,7 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
         sys::error_code ec;
         m.bind(ep, ec);
         assert(!ec);
+        if (ec) continue;
         add_endpoint(move(m));
     }
 }

@@ -396,6 +396,8 @@ class MainlineDht {
     ~MainlineDht();
 
     // This removes existing endpoints not in the given set.
+    // Since adding some endpoints may fail (e.g. because of port busy),
+    // you may want to check `local_endpoints()` after this operation.
     void set_endpoints(const std::set<udp::endpoint>&);
 
     void add_endpoint(asio_utp::udp_multiplexer);

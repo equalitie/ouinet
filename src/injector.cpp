@@ -802,6 +802,8 @@ int main(int argc, const char* argv[])
         auto dht = bittorrent_dht();
         assert(dht);
         assert(!dht->local_endpoints().empty());
+        if (dht->local_endpoints().empty())
+            LOG_ERROR("Failed to bind the BitTorrent DHT to any local endpoint");
         proxy_server.add(make_unique<ouiservice::Bep5Server>
                 (move(dht), &ssl_context, config.bep5_injector_swarm_name()));
     }
