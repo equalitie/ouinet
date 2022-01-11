@@ -2553,13 +2553,16 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
 
 void MainlineDht::set_endpoint(asio_utp::udp_multiplexer m)
 {
-    auto it = _nodes.find(m.local_endpoint());
+    auto local_ep = m.local_endpoint();
 
-    if (it != _nodes.end()) {
-        it = _nodes.erase(it);
+    {  // replace the node if existing
+        auto it = _nodes.find(local_ep);
+        if (it != _nodes.end()) {
+            _nodes.erase(it);
+        }
     }
 
-    _nodes[m.local_endpoint()] = make_unique<dht::DhtNode>(_exec, _storage_dir);
+    _nodes[local_ep] = make_unique<dht::DhtNode>(_exec, _storage_dir);
 
     TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();
@@ -2577,10 +2580,9 @@ MainlineDht::set_endpoint( asio_utp::udp_multiplexer m
 {
     auto local_ep = m.local_endpoint();
 
-    {
-        auto it = _nodes.find(m.local_endpoint());
+    {  // replace the node if existing
+        auto it = _nodes.find(local_ep);
         if (it != _nodes.end()) {
-            assert(0);
             _nodes.erase(it);
         }
     }
