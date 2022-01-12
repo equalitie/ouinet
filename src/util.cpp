@@ -51,7 +51,7 @@ string zlib_filter(const boost::string_view& in) {
     zip.push(Filter());
     zip.push(in_ss);
 
-    stringstream out_ss;
+    ostringstream out_ss;
     boost::iostreams::copy(zip, out_ss);
     return out_ss.str();
 }

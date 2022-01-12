@@ -101,7 +101,7 @@ dns_query(const std::string& name, bool ipv6)
     // as per RFC1035#3.1.
     if (name.size() > 253) return boost::none;
 
-    std::stringstream dq;
+    std::ostringstream dq;
 
     dq << dq_prefix;
 

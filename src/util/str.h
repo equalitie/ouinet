@@ -17,7 +17,7 @@ void args_to_stream(std::ostream& s, Arg&& arg, Args&&... args) {
 template<class... Args>
 inline
 std::string str(Args&&... args) {
-    std::stringstream ss;
+    std::ostringstream ss;
     args_to_stream(ss, std::forward<Args>(args)...);
     return ss.str();
 }

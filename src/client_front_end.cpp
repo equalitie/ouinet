@@ -84,7 +84,7 @@ struct ClientFrontEnd::Input {
         if (s.empty() || s[0] != '=') return false;
         s = s.substr(1);
         for (auto v : values) {
-            stringstream ss;
+            ostringstream ss;
             ss << v;
             if (ss.str() == s) {
                 E prev = current_value;
@@ -154,7 +154,7 @@ ClientFrontEnd::ClientFrontEnd()
     : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, logger.get_threshold()))
 {}
 
-void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, stringstream& ss
+void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringstream& ss
                                   , const CACertificate& ca)
 {
     res.set(http::field::content_type, "application/x-x509-ca-cert");
@@ -180,7 +180,7 @@ void ClientFrontEnd::disable_log_to_file() {
     }
 }
 
-static void load_log_file(stringstream& out_ss) {
+static void load_log_file(ostringstream& out_ss) {
     std::fstream* logfile = logger.get_log_file();
     if (logfile == nullptr) return;
     logfile->flush();
@@ -306,7 +306,7 @@ client_state(Client::RunningState cstate) {
 
 void ClientFrontEnd::handle_group_list( const Request&
                                       , Response& res
-                                      , std::stringstream& ss
+                                      , std::ostringstream& ss
                                       , cache::Client* cache_client)
 {
     res.set(http::field::content_type, "text/plain");
@@ -323,7 +323,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const UPnPs& upnps
                                   , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
-                                  , const Request& req, Response& res, stringstream& ss
+                                  , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
                                   , Yield yield)
 {
@@ -536,7 +536,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const UPnPs& upnps
                                   , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
-                                  , const Request& req, Response& res, stringstream& ss
+                                  , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
                                   , Yield yield)
 {
@@ -596,7 +596,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.keep_alive(false);
 
-    stringstream ss;
+    ostringstream ss;
 
     util::url_match url;
     match_http_url(req.target(), url);

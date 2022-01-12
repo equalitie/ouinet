@@ -201,7 +201,7 @@ std::string
 block_chunk_ext( const opt_sig_array_t& sig
                , const opt_block_digest_t& prev_digest)
 {
-    std::stringstream exts;
+    std::ostringstream exts;
 
     static const auto fmt_sx = ";" + http_::response_block_signature_ext + "=\"%s\"";
     if (sig) {

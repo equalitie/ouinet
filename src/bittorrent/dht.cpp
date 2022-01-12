@@ -956,7 +956,7 @@ void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
 std::string dht::DhtNode::new_transaction_string()
 {
 #if 0 // Useful for debugging
-    std::stringstream ss;
+    std::ostringstream ss;
     ss << _next_transaction_id++;
     return ss.str();
 #else

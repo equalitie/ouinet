@@ -106,12 +106,12 @@ private:
         , boost::intrusive::constant_time_size<false>
         > _pending_tasks;
 
-    void handle_ca_pem( const Request&, Response&, std::stringstream&
+    void handle_ca_pem( const Request&, Response&, std::ostringstream&
                       , const CACertificate& );
 
     void handle_group_list( const Request&
                           , Response&
-                          , std::stringstream&
+                          , std::ostringstream&
                           , cache::Client*);
 
     void handle_portal( ClientConfig&
@@ -122,7 +122,7 @@ private:
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
-                      , std::stringstream&
+                      , std::ostringstream&
                       , cache::Client*
                       , Yield);
 
@@ -134,7 +134,7 @@ private:
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
-                      , std::stringstream&
+                      , std::ostringstream&
                       , cache::Client*
                       , Yield);
 

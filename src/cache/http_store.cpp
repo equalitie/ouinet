@@ -135,7 +135,7 @@ struct SigEntry {
 
     std::string chunk_exts() const
     {
-        std::stringstream exts;
+        std::ostringstream exts;
 
         static const auto fmt_sx = ";" + http_::response_block_signature_ext + "=\"%s\"";
         if (!signature.empty())

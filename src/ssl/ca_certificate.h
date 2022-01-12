@@ -91,7 +91,7 @@ get_or_gen_tls_cert( const std::string& cn
     if (fs::exists(tls_cert_path) && fs::exists(tls_key_path) && fs::exists(tls_dh_path)) {
         d::log_load(tls_certificate);
         auto read_pem = [](auto path) {
-            std::stringstream ss;
+            std::ostringstream ss;
             ss << fs::ifstream(path).rdbuf();
             return ss.str();
         };

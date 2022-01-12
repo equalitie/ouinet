@@ -138,7 +138,7 @@ struct Announcer::Loop {
 
     void print_entries() const {
         auto now = Clock::now();
-        stringstream ss;
+        ostringstream ss;
         auto print = [&] (Clock::time_point t) {
             if (t == Clock::time_point()) {
                 ss << "--:--:--";

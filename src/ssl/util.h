@@ -134,7 +134,7 @@ void load_tls_ca_certificates( asio::ssl::context& ctx
     fs::path path = path_str;
 
     if (!exists(path)) {
-        stringstream ss;
+        ostringstream ss;
         ss << "Can not read CA certificates from \"" << path << "\": "
            << "No such file or directory";
         throw runtime_error(ss.str());
@@ -145,7 +145,7 @@ void load_tls_ca_certificates( asio::ssl::context& ctx
         return;
     }
 
-    stringstream ss;
+    ostringstream ss;
     ss << fs::ifstream(path).rdbuf();
     ctx.add_certificate_authority(asio::buffer(ss.str()));
 }

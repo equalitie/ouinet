@@ -242,7 +242,7 @@ ouinet::util::format_date(posix_time::ptime date)
 
     facet->format("%a, %d %b %Y %H:%M:%S");
 
-    stringstream ss;
+    ostringstream ss;
 
     ss.imbue(std::locale(std::locale::classic(), facet));
     ss << date;

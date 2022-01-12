@@ -158,21 +158,21 @@ struct LocalPeerDiscovery::Impl {
     }
 
     string query_message() const {
-        stringstream ss;
+        ostringstream ss;
         ss << MSG_PREFIX << _id << ":" << MSG_QUERY_CMD;
         for (auto ep :  _advertised_eps) { ss << ep << ";"; }
         return ss.str();
     }
 
     string reply_message() const {
-        stringstream ss;
+        ostringstream ss;
         ss << MSG_PREFIX << _id << ":" << MSG_REPLY_CMD;
         for (auto ep :  _advertised_eps) { ss << ep << ";"; }
         return ss.str();
     }
 
     string bye_message() const {
-        stringstream ss;
+        ostringstream ss;
         ss << MSG_PREFIX << _id << ":" << MSG_BYE_CMD;
         return ss.str();
     }
@@ -229,7 +229,7 @@ struct LocalPeerDiscovery::Impl {
         if (i == _peers.end()) return;
 
         if (logger.would_log(INFO)) {
-            stringstream ss;
+            ostringstream ss;
             for (auto ep : i->second.advertised_eps) { ss << ep << ";"; }
             LOG_INFO("LocalPeerDiscovery: Lost local ouinet peer(s) ", ss.str());
         }
@@ -240,7 +240,7 @@ struct LocalPeerDiscovery::Impl {
     void add_endpoints(PeerId peer_id, udp::endpoint peer_ep, set<udp::endpoint> eps)
     {
         if (logger.would_log(INFO)) {
-            stringstream ss;
+            ostringstream ss;
             for (auto ep : eps) { ss << ep << ";"; }
             LOG_INFO("LocalPeerDiscovery: Found local ouinet peer(s) ", ss.str());
         }
