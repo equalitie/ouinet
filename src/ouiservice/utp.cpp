@@ -5,7 +5,6 @@
 #include "../util/str.h"
 #include "../util/watch_dog.h"
 #include "../util/handler_tracker.h"
-#include "../util/quote_error_message.h"
 #include "../async_sleep.h"
 
 namespace ouinet {

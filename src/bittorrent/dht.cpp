@@ -20,10 +20,10 @@
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
+#include "../util/str.h"
 #include "../util/success_condition.h"
 #include "../util/wait_condition.h"
 #include "../util/file_io.h"
-#include "../util/quote_error_message.h"
 #include "../util/variant.h"
 #include "../logger.h"
 
@@ -2358,7 +2358,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
         yield[ec]
     );
 
-    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << ec << "\n";
+    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << util::str(ec) << "\n";
     sys::error_code ec_;
 
     if (cancel_signal) ec = asio::error::operation_aborted;
@@ -2416,7 +2416,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
         yield[ec]
     );
 
-    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << ec << "\n";
+    if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << util::str(ec) << "\n";
 
     if (cancel_signal) ec = asio::error::operation_aborted;
 

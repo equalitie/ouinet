@@ -41,7 +41,6 @@
 #include "constants.h"
 #include "util/async_queue_reader.h"
 #include "util/queue_reader.h"
-#include "util/quote_error_message.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"

@@ -4,7 +4,6 @@
 #include <boost/asio/spawn.hpp>
 
 #include "or_throw.h"
-#include "util/quote_error_message.h"
 #include "util/signal.h"
 #include "util/timeout.h"
 #include "util/yield.h"

@@ -24,7 +24,6 @@
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/file_io.h"
-#include "../util/quote_error_message.h"
 #include "../util/str.h"
 #include "../util/variant.h"
 #include "http_sign.h"

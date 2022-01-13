@@ -16,7 +16,6 @@
 #include "../util/part_io.h"
 #include "../util/async_job.h"
 #include "../util/condition_variable.h"
-#include "../util/quote_error_message.h"
 #include "signed_head.h"
 
 #include <random>

@@ -3,7 +3,6 @@
 #include "../util/file_io.h"
 #include "../util/bytes.h"
 #include "../util/hash.h"
-#include "../util/quote_error_message.h"
 
 #include <algorithm>
 #include <map>

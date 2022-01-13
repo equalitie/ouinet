@@ -52,7 +52,6 @@
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/file_posix_with_offset.h"
-#include "util/quote_error_message.h"
 #include "util/yield.h"
 
 #include "logger.h"

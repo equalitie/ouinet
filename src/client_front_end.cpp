@@ -2,7 +2,6 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "util/bytes.h"
-#include "util/quote_error_message.h"
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"

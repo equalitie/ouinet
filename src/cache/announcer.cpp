@@ -6,7 +6,6 @@
 #include "../../async_sleep.h"
 #include "../../bittorrent/node_id.h"
 #include "../../util/handler_tracker.h"
-#include "../../util/quote_error_message.h"
 #include <boost/utility/string_view.hpp>
 
 #define _LOGPFX "Announcer: "

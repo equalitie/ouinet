@@ -3,7 +3,6 @@
 #include "local_peer_discovery.h"
 #include "../../util/random.h"
 #include "../../util/handler_tracker.h"
-#include "../../util/quote_error_message.h"
 #include "../../parse/number.h"
 #include "../../parse/endpoint.h"
 #include "../../logger.h"

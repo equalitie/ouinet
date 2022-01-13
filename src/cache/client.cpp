@@ -11,7 +11,6 @@
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
-#include "../util/quote_error_message.h"
 #include "../bittorrent/dht.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
