@@ -159,8 +159,7 @@ private:
                    // Zero duration indicates a static port mapping,
                    // which should not happen for an entry created by the client.
                    || curr_duration->count() == 0) {
-                    LOG_WARN("UPnP: Reusing mapping\"", mapping_desc, "\""
-                             " from IGD \"", igd.friendly_name(), "\""
+                    LOG_WARN("UPnP: Reusing mapping from IGD \"", igd.friendly_name(), "\""
                              " with excessive lease duration=", curr_duration->count(), "s"
                              "; buggy IGD/router?");
                     // The mapping has our config and it should be operational, though,
