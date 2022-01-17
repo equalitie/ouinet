@@ -194,21 +194,19 @@ static
 boost::optional<EndPoint>
 local_endpoint(const EndPoint& local_ep) {
     using namespace asio::ip;
-    asio::io_context ctx;
+    boost::optional<address> local_addr;
     auto proto = local_ep.protocol();
-    udp::socket s(ctx, proto);
-    sys::error_code ec;
     if (proto == udp::v4()) {
         if (local_ep.address() != address_v4::any()) return local_ep;  // explicit addr
-        s.connect(EndPoint(make_address_v4("192.0.2.1"), 1234), ec);  // find source addr
+        local_addr = util::get_local_ipv4_address();  // find source addr
     } else if (proto == udp::v6()) {
         if (local_ep.address() != address_v6::any()) return local_ep;  // explicit addr
-        s.connect(EndPoint(make_address_v6("2001:db8::1"), 1234), ec);  // find source addr
+        local_addr = util::get_local_ipv6_address();  // find source addr
     } else {
         assert(0 && "Invalid local UDP endpoint protocol");
     }
-    if (ec) return boost::none;
-    return EndPoint(s.local_endpoint().address(), local_ep.port());
+    if (!local_addr) return boost::none;
+    return EndPoint(*local_addr, local_ep.port());
 }
 
 static

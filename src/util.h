@@ -4,6 +4,7 @@
 #include <string>
 
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
@@ -82,6 +83,12 @@ std::string canonical_url(const boost::string_view url) {
     if (!match_http_url(url, urlm)) return {};  // error
     return canonical_url(std::move(urlm));
 }
+
+// Get the source IPv4 address used when communicating with external hosts.
+boost::optional<asio::ip::address> get_local_ipv4_address();
+
+// Get the source IPv6 address used when communicating with external hosts.
+boost::optional<asio::ip::address> get_local_ipv6_address();
 
 inline
 auto tcp_async_resolve( const std::string& host

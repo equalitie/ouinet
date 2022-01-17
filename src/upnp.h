@@ -88,6 +88,12 @@ private:
         {
             auto round_begin = steady_clock::now();
 
+            auto int_addr = util::get_local_ipv4_address();
+            if (!int_addr) {
+                LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting");
+                continue;  // probably no connection
+            }
+
             auto r_igds = upnp::igd::discover(exec, yield);
             if (cancel) return;
 
@@ -103,13 +109,15 @@ private:
 
             auto igds = move(r_igds.value());
 
-            LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\"...");
+            LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\"...");
             size_t success_cnt = 0;
             auto ext_eps = std::make_unique<UdpEndpoints>();
             boost::optional<steady_clock::time_point> earlier_buggy_timeout;
             for(auto& igd : igds) {
                 auto cancelled = cancel.connect([&] { igd.stop(); });
 
+                // With a correctly working UPnP IGD, this should automatically update
+                // an existing mapping for the same internal host and external port.
                 auto r = igd.add_port_mapping( upnp::igd::udp
                                              , _external_port
                                              , _internal_port
@@ -117,31 +125,47 @@ private:
                                              , lease_duration
                                              , yield);
                 if (cancel) return;
-                if (!r) continue;
+                if (!r) {
+                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                             " failed to add/update mapping \"", mapping_desc, "\""
+                             " for external port ", _external_port, ": ", r.error());
+                    continue;  // failure, no buggy timeout
+                }
 
                 auto query_begin = steady_clock::now();
-                auto curr_duration = get_mapping_duration(igd, mapping_desc, cancel, yield);
-                if (curr_duration && *curr_duration > lease_duration) {
+                auto curr_duration = get_mapping_duration(igd, mapping_desc, *int_addr, cancel, yield);
+                if (!curr_duration) {
                     LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " reports excessive mapping lease duration"
-                             " (", curr_duration->count(), "s), ignoring");
-                    continue;
+                             " did not set mapping \"", mapping_desc, "\""
+                             " but reported no error"
+                             "; buggy IGD/router?");
+                    continue;  // failure, no buggy timeout
                 }
-                if (!curr_duration || lease_duration >= *curr_duration + recent_margin) {
-                    // Versions of MiniUPnPd before 2015-07-09 fail to refresh existing mappings,
+                if (curr_duration->count() > 0 && lease_duration >= *curr_duration + recent_margin) {
+                    // Versions of MiniUPnPd before 2015-07-09 fail to update existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
-                    auto dur = curr_duration ? util::str(curr_duration->count(), "s") : "none";
-                    LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
-                                " did not add/refresh mapping for \"", mapping_desc, "\""
-                                " but reported no error; buggy IGD/router?"
-                                " (duration=", dur, ")");
-                    auto mapping_timeout = query_begin + (curr_duration ? *curr_duration : seconds(0));
+                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                             " did not update mapping \"", mapping_desc, "\""
+                             " with duration=", curr_duration->count(), "s"
+                             " but reported no error"
+                             "; buggy IGD/router?");
+                    auto mapping_timeout = query_begin + *curr_duration;
                     if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
                         earlier_buggy_timeout = mapping_timeout;
-                    continue;
+                    continue;  // buggy timeout
                 }
-                LOG_DEBUG("UPnP: Successfully added/refreshed one mapping");
+                if ( *curr_duration > lease_duration
+                   // Zero duration indicates a static port mapping,
+                   // which should not happen for an entry created by the client.
+                   || curr_duration->count() == 0) {
+                    LOG_WARN("UPnP: Reusing mapping from IGD \"", igd.friendly_name(), "\""
+                             " with excessive lease duration=", curr_duration->count(), "s"
+                             "; buggy IGD/router?");
+                    // The mapping has our config and it should be operational, though,
+                    // so proceed normally.
+                }
+                LOG_DEBUG("UPnP: Successfully added/updated one mapping");
                 success_cnt++;
 
                 // Note down the external endpoint for status repoting.
@@ -155,7 +179,7 @@ private:
                 mapping_enabled();
             }
             _external_endpoints = move(ext_eps);
-            LOG_DEBUG("UPnP: Adding mappings for \"", mapping_desc, "\": done");
+            LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\": done");
 
             if (success_cnt == 0 && !earlier_buggy_timeout) mapping_disabled();
 
@@ -165,14 +189,14 @@ private:
                     // but only if we just got to add mappings to buggy IGDs.
                     if (!earlier_buggy_timeout) return failure_wait_time;
                     auto now = steady_clock::now();
-                    auto buggy_refresh = *earlier_buggy_timeout + timeout_pause;
-                    if (buggy_refresh < now) return seconds(0);
+                    auto buggy_update = *earlier_buggy_timeout + timeout_pause;
+                    if (buggy_update < now) return seconds(0);
                     return [] (auto d) {  // std::chrono::ceil not in c++1z
                         auto t = duration_cast<seconds>(d);
                         return t + seconds(t < d ? 1 : 0);
-                    }(buggy_refresh - now);
+                    }(buggy_update - now);
                 }
-                // Wait until a little before mappings would time out to refresh them.
+                // Wait until a little before mappings would time out to update them.
                 auto round_elapsed = steady_clock::now() - round_begin;
                 if (round_elapsed >= success_wait_time) return seconds(0);
                 return duration_cast<seconds>(success_wait_time - round_elapsed);
@@ -198,8 +222,10 @@ private:
         _mapping_is_active = false;
     }
 
+    // This assumes that an attempt to add such entry has just taken place.
     boost::optional<std::chrono::seconds>
     get_mapping_duration( upnp::igd& igd, const std::string& desc
+                        , const asio::ip::address& int_addr
                         , Cancel& cancel, asio::yield_context yield) const
     {
         auto cancelled = cancel.connect([&] { igd.stop(); });
@@ -210,10 +236,39 @@ private:
             auto r_mapping = igd.get_generic_port_mapping_entry(index, yield);
             if (cancel || !r_mapping) break;  // no more port mappings, or error
             const auto& m = r_mapping.value();
-            if ( m.enabled
-               && _external_port == m.ext_port && _internal_port == m.int_port
-               && desc == m.description)
-                return m.lease_duration;
+
+            if (m.ext_port != _external_port) continue;  // unrelated
+            if (m.proto != upnp::igd::udp) continue;  // unrelated
+
+            if (int_addr != m.int_client) {
+                LOG_WARN("UPnP: External port ", m.ext_port,
+                         " taken by client on internal IP address ", m.int_client);
+                break;
+            }
+
+            if (_internal_port != m.int_port) {
+                LOG_WARN("UPnP: External port ", m.ext_port,
+                         " taken by local client on UDP port ", m.int_port);
+                break;
+            }
+
+            // After this, the mapping is either ours or equivalent.
+
+            if (!m.enabled) {
+                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
+                            " keeps equivalent disabled mapping \"", m.description, "\""
+                            " with duration=", m.lease_duration.count(), "s"
+                            "; buggy IGD/router?");
+                continue;
+            }
+
+            if (desc != m.description)  // old but still useable
+                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
+                            " keeps equivalent stale mapping \"", m.description, "\""
+                            " with duration=", m.lease_duration.count(), "s"
+                            "; buggy IGD/router?");
+
+            return m.lease_duration;
         }
         return boost::none;
     }
