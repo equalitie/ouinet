@@ -501,7 +501,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             tested_r.close();
         });
 
-        wc.wait(yield);
+        wc.wait(static_cast<asio::yield_context>(yield));
     });
 }
 
@@ -610,7 +610,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             tested_r.close();
         });
 
-        wc.wait(yield);
+        wc.wait(static_cast<asio::yield_context>(yield));
     });
 }
 
@@ -711,7 +711,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             tested_r.close();
         });
 
-        wc.wait(yield);
+        wc.wait(static_cast<asio::yield_context>(yield));
     });
 }
 
@@ -812,7 +812,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             tested_r.close();
         });
 
-        wc.wait(yield);
+        wc.wait(static_cast<asio::yield_context>(yield));
     });
 }
 
@@ -933,7 +933,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             tested_r.close();
         });
 
-        wc.wait(yield);
+        wc.wait(static_cast<asio::yield_context>(yield));
     });
 }
 

@@ -184,7 +184,8 @@ struct Client::Impl {
 
         if (req.method() == http::verb::propfind) {
             _YDEBUG(yield, "Serving propfind for ", *key);
-            auto hl = _http_store->load_hash_list(*key, cancel, yield[ec]);
+            auto hl = _http_store->load_hash_list
+                (*key, cancel, static_cast<asio::yield_context>(yield[ec]));
 
             _YDEBUG(yield, "Load; ec=", ec);
             if (ec) {
@@ -193,7 +194,10 @@ struct Client::Impl {
                 return or_throw(yield, ec, bool(!ec));
             }
             return_or_throw_on_error(yield, cancel, ec, false);
-            hl.write(sink, cancel, yield[ec].tag("write-propfind"));
+            {
+                auto y = yield[ec].tag("write_propfind");
+                hl.write(sink, cancel, static_cast<asio::yield_context>(y));
+            }
             _YDEBUG(yield, "Write; ec=", ec);
             return or_throw(yield, ec, bool(!ec));
         }
@@ -221,13 +225,19 @@ struct Client::Impl {
 
         bool is_head_request = req.method() == http::verb::head;
 
-        auto s = Session::create(move(rr), is_head_request, cancel, yield[ec].tag("read_header"));
+        auto s = [&, y = yield[ec].tag("read_header")] {
+            return Session::create( move(rr), is_head_request
+                                  , cancel, static_cast<asio::yield_context>(y));
+        }();
 
         if (ec) return or_throw(yield, ec, false);
 
         bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
 
-        s.flush_response(sink, cancel, yield[ec].tag("flush"));
+        {
+            auto y = yield[ec].tag("flush");
+            s.flush_response(sink, cancel, static_cast<asio::yield_context>(y));
+        }
 
         return or_throw(yield, ec, keep_alive);
     }
@@ -273,7 +283,7 @@ struct Client::Impl {
                           , Yield yield)
     {
         auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
-        http::async_write(con, res, yield);
+        http::async_write(con, res, static_cast<asio::yield_context>(yield));
     }
 
     void handle_bad_request( GenericStream& con
@@ -356,7 +366,10 @@ struct Client::Impl {
             , _newest_proto_seen
             , debug_tag);
 
-        auto s = Session::create(std::move(reader), is_head_request, cancel, yield[ec].tag("create_session"));
+        auto s = [&, y = yield[ec].tag("create_session")] {
+            return Session::create( std::move(reader), is_head_request
+                                  , cancel, static_cast<asio::yield_context>(y));
+        }();
 
         if (!ec) {
             s.response_header().set( http_::response_source_hdr  // for agent
@@ -382,7 +395,8 @@ struct Client::Impl {
         sys::error_code ec;
         auto rr = _http_store->reader(key, ec);
         if (ec) return or_throw<Session>(yield, ec);
-        auto rs = Session::create(move(rr), is_head_request, cancel, yield[ec]);
+        auto rs = Session::create( move(rr), is_head_request
+                                 , cancel, static_cast<asio::yield_context>(yield[ec]));
         assert(!cancel || ec == asio::error::operation_aborted);
         if (!ec) rs.response_header().set( http_::response_source_hdr  // for agent
                                          , http_::response_source_hdr_local_cache);

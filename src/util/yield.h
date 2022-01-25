@@ -4,6 +4,7 @@
 #include "../namespaces.h"
 #include "../util/str.h"
 #include "../logger.h"
+#include "../or_throw.h"
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -119,7 +120,7 @@ public:
         return {*this, _asio_yield[ec]};
     }
 
-    operator asio::yield_context() const
+    explicit operator asio::yield_context() const
     {
         return _asio_yield;
     }
@@ -293,6 +294,23 @@ void Yield::log(log_level_t log_level, boost::string_view str)
 
         str = str.substr(endl+1);
     }
+}
+
+
+template<class Ret>
+inline
+Ret or_throw( Yield yield
+            , const sys::error_code& ec
+            , Ret&& ret = {})
+{
+    return or_throw(static_cast<asio::yield_context>(yield), ec, std::forward<Ret>(ret));
+}
+
+inline
+void or_throw( Yield yield
+             , const sys::error_code& ec)
+{
+    return or_throw(static_cast<asio::yield_context>(yield), ec);
 }
 
 } // ouinet namespace

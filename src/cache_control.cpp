@@ -457,7 +457,7 @@ CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
         fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
     }
 
-    fs.fetch_fresh->wait_for_finish(yield);
+    fs.fetch_fresh->wait_for_finish(static_cast<asio::yield_context>(yield));
 
     auto result = move(fs.fetch_fresh->result());
     auto rs = move(result.retval);
@@ -530,7 +530,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         if (!fs.fetch_stored->has_result()) {
-            cv.wait(yield);
+            cv.wait(static_cast<asio::yield_context>(yield));
         }
     }
 
@@ -545,7 +545,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         // fetch_fresh errored, wait for the stored version
-        fs.fetch_stored->wait_for_finish(yield);
+        fs.fetch_stored->wait_for_finish(static_cast<asio::yield_context>(yield));
 
         auto& r2 = fs.fetch_stored->result();
         return or_throw(yield, r2.ec, move(r2.retval));

@@ -37,7 +37,7 @@ fetch_http( Stream& con
     sys::error_code ec;
 
     // Send the HTTP request to the remote host
-    http::async_write(con, req, yield[ec]);
+    http::async_write(con, req, static_cast<asio::yield_context>(yield[ec]));
     if (cancel_slot) {
         ec = asio::error::operation_aborted;
     }
@@ -54,7 +54,7 @@ fetch_http( Stream& con
     if (ec) return or_throw(yield, ec, move(res));
 
     // Receive the HTTP response
-    _recv_http_response(con, buffer, res, yield[ec]);
+    _recv_http_response(con, buffer, res, static_cast<asio::yield_context>(yield[ec]));
     if (cancel_slot) {
         ec = asio::error::operation_aborted;
     }
