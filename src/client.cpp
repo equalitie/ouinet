@@ -595,7 +595,10 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
         auto wd = watch_dog(_ctx , rq_read_timeout, [&] { con.close(); });
 
-        http::async_read(con, buffer, req, yield[ec].tag("read"));
+        {
+            auto y = yield[ec].tag("read_req");
+            http::async_read(con, buffer, req, y);
+        }
 
         if (!wd.is_running()) {
             return or_throw(yield, asio::error::timed_out);
@@ -753,7 +756,10 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
     _YDEBUG(yield, "Sending a request to self");
     // Send request
-    http::async_write(con, request, yield[ec].tag("self-request"));
+    {
+        auto y = yield[ec].tag("write_self_req");
+        http::async_write(con, request, y);
+    }
 
     if (cancel_slot) {
         ec = asio::error::operation_aborted;
@@ -1001,7 +1007,8 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     // Send request
     {
         auto con_close = cancel.connect([&] { con.close(); });
-        http::async_write(con, rq_, yield[ec].tag("send-origin-request"));
+        auto y = yield[ec].tag("write_origin_req");
+        http::async_write(con, rq_, y);
     }
 
     if (cancel) {
@@ -1110,7 +1117,8 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     {
         auto slot = cancel.connect([&con] { con.close(); });
-        http::async_write(con, rq_, yield[ec]);
+        auto y = yield[ec].tag("write_req");
+        http::async_write(con, rq_, y);
         return_or_throw_on_error(yield, cancel, ec, Session());
     }
 
@@ -1183,7 +1191,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request
-    http::async_write(con, request, yield[ec].tag("inj-request"));
+    {
+        auto y = yield[ec].tag("write_injector_req");
+        http::async_write(con, request, y);
+    }
 
     if (cancel_slot) {
         ec = asio::error::operation_aborted;
@@ -1935,19 +1946,31 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (ec) return or_throw(yield, ec, true);
 
-    http::async_write(origin, rq, yield[ec]);
+    {
+        auto y = yield[ec].tag("write_req");
+        http::async_write(origin, rq, y);
+    }
 
     beast::flat_buffer buffer;
     Response rs;
-    http::async_read(origin, buffer, rs, yield[ec]);
+    {
+        auto y = yield[ec].tag("read_res");
+        http::async_read(origin, buffer, rs, y);
+    }
 
     if (ec) return or_throw(yield, ec, true);
 
-    http::async_write(browser, rs, yield[ec]);
+    {
+        auto y = yield[ec].tag("write_res");
+        http::async_write(browser, rs, y);
+    }
 
     if (rs.result() != http::status::switching_protocols) return true;
 
-    full_duplex(move(browser), move(origin), yield[ec]);
+    {
+        auto y = yield[ec].tag("full_duplex");
+        full_duplex(move(browser), move(origin), y);
+    }
 
     return or_throw(yield, ec, true);
 }
@@ -2197,9 +2220,12 @@ void Client::State::serve_request( GenericStream&& con
         // Based on <https://stackoverflow.com/a/50359998>.
         http::request_parser<Request::body_type> reqhp;
         reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
-        http::async_read(con, buffer, reqhp, yield_[ec]);
 
         Yield yield(_ctx.get_executor(), yield_, util::str('C', connection_id));
+        {
+            auto y = yield[ec].tag("read_req");
+            http::async_read(con, buffer, reqhp, y);
+        }
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;
@@ -2538,8 +2564,11 @@ void Client::State::start()
                   Yield yield(_ctx, yield_, "frontend");
                   sys::error_code ec;
                   Request rq;
-                  beast::flat_buffer buffer;
-                  http::async_read(c, buffer, rq, yield[ec]);
+                  {
+                      beast::flat_buffer buffer;
+                      auto y = yield[ec].tag("read_req");
+                      http::async_read(c, buffer, rq, y);
+                  }
 
                   if (ec) return;
 
@@ -2547,7 +2576,8 @@ void Client::State::start()
 
                   if (ec) return;
 
-                  http::async_write(c, rs, yield[ec]);
+                  auto y = yield[ec].tag("write_res");
+                  http::async_write(c, rs, y);
             });
         }));
     }

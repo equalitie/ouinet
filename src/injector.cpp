@@ -236,14 +236,18 @@ void handle_connect_request( GenericStream client_c
     http::response<http::empty_body> res{http::status::ok, req.version()};
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-    http::async_write(client_c, res, yield[ec]);
+    {
+        auto y = yield[ec].tag("write_res");
+        http::async_write(client_c, res, y);
+    }
 
     if (ec) {
         yield.log("Failed sending CONNECT response; ec=", ec);
         return;
     }
 
-    full_duplex(move(client_c), move(origin_c), yield);
+    auto y = yield.tag("full_duplex");
+    full_duplex(move(client_c), move(origin_c), y);
 }
 
 //------------------------------------------------------------------------------
@@ -328,7 +332,10 @@ private:
         // Send HTTP request to origin.
         auto orig_rq = util::to_origin_request(cache_rq);
         orig_rq.keep_alive(true);  // regardless of what client wants
-        util::http_request(orig_con, orig_rq, timeout_cancel, yield.tag("request")[ec]);
+        {
+            auto y = yield[ec].tag("request");
+            util::http_request(orig_con, orig_rq, timeout_cancel, y);
+        }
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to send request; ec=", ec);
@@ -446,7 +453,8 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         rs.keep_alive(rq.keep_alive());
         rs.prepare_payload();
 
-        http::async_write(con, rs, yield);
+        auto y = yield.tag("write_res");
+        http::async_write(con, rs, y);
         return;
     }
 
@@ -485,11 +493,14 @@ void serve( InjectorConfig& config
 
         Request req;
         beast::flat_buffer buffer;
-        http::async_read(con, buffer, req, yield_[ec]);
-
-        if (ec) break;
 
         Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
+        {
+            auto y = yield[ec].tag("read_req");
+            http::async_read(con, buffer, req, y);
+        }
+
+        if (ec) break;
 
         yield.log("=== New request ===");
         yield.log(req.base());
@@ -556,7 +567,11 @@ void serve( InjectorConfig& config
             if (!ec) {
                 http_response::Reader rr(move(orig_con));
                 while (!ec) {
-                    auto opt_part = rr.async_read_part(cancel, yield[ec]);
+                    boost::optional<http_response::Part> opt_part;
+                    {
+                        auto y = yield[ec].tag("proxy/plain/read_part");
+                        opt_part = rr.async_read_part(cancel, y);
+                    }
                     if (ec || !opt_part) break;
                     if (auto inh = opt_part->as_head()) {
                         // Keep proxy connection if the proxy wants to.
@@ -573,7 +588,10 @@ void serve( InjectorConfig& config
                     } else if (auto cb = opt_part->as_chunk_body()) {
                         forwarded += cb->size();
                     }
-                    opt_part->async_write(con, cancel, yield[ec]);
+                    {
+                        auto y = yield[ec].tag("proxy/plain/write_part");
+                        opt_part->async_write(con, cancel, y);
+                    }
                 }
                 orig_con = rr.release_stream();  // may be reused with keep-alive
             }
@@ -594,9 +612,10 @@ void serve( InjectorConfig& config
             auto opt_err_res = util::http_proto_version_error( req, version_hdr_i->value()
                                                              , OUINET_INJECTOR_SERVER_STRING);
 
-            if (opt_err_res)
-                http::async_write(con, *opt_err_res, yield[ec]);
-            else if (is_restricted_target(req.target()))
+            if (opt_err_res) {
+                auto y = yield[ec].tag("inject/write_proto_version_error");
+                http::async_write(con, *opt_err_res, y);
+            } else if (is_restricted_target(req.target()))
                 handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed
                             , "Target not allowed"
