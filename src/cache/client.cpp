@@ -225,7 +225,7 @@ struct Client::Impl {
 
         bool is_head_request = req.method() == http::verb::head;
 
-        auto s = [&, y = yield[ec].tag("read_header")] {
+        auto s = [&, y = yield[ec].tag("read_hdr")] {
             return Session::create( move(rr), is_head_request
                                   , cancel, static_cast<asio::yield_context>(y));
         }();
@@ -366,7 +366,7 @@ struct Client::Impl {
             , _newest_proto_seen
             , debug_tag);
 
-        auto s = [&, y = yield[ec].tag("create_session")] {
+        auto s = [&, y = yield[ec].tag("read_hdr")] {
             return Session::create( std::move(reader), is_head_request
                                   , cancel, static_cast<asio::yield_context>(y));
         }();
@@ -395,8 +395,10 @@ struct Client::Impl {
         sys::error_code ec;
         auto rr = _http_store->reader(key, ec);
         if (ec) return or_throw<Session>(yield, ec);
-        auto rs = Session::create( move(rr), is_head_request
-                                 , cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto rs = [&, y = yield[ec].tag("read_hdr")] {
+            return Session::create( move(rr), is_head_request
+                                  , cancel, static_cast<asio::yield_context>(y));
+        }();
         assert(!cancel || ec == asio::error::operation_aborted);
         if (!ec) rs.response_header().set( http_::response_source_hdr  // for agent
                                          , http_::response_source_hdr_local_cache);

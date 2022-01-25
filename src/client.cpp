@@ -771,8 +771,9 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
     if (ec) return or_throw<Session>(yield, ec);
 
+    auto y = yield.tag("read_hdr");
     return Session::create( move(con), request.method() == http::verb::head
-                          , cancel, static_cast<asio::yield_context>(yield));
+                          , cancel, static_cast<asio::yield_context>(y));
 }
 
 // Transforms addresses to endpoints with the given port.
@@ -1023,8 +1024,10 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     }
     if (ec) return or_throw<Session>(yield, ec);
 
-    auto ret = Session::create( std::move(con), rq.method() == http::verb::head
-                              , cancel, static_cast<asio::yield_context>(yield[ec]));
+    auto ret = [&, y = yield[ec].tag("read_hdr")] {
+        return Session::create( std::move(con), rq.method() == http::verb::head
+                              , cancel, static_cast<asio::yield_context>(y));
+    }();
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
@@ -1103,8 +1106,10 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
         auto r = std::make_unique<QueueReader>(_ctx.get_executor());
         r->insert(http_response::Part(http_response::Head(std::move(rsh))));
-        auto s = Session::create( std::move(r), rq.method() == http::verb::head
-                                , cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto s = [&, y = yield[ec].tag("read_hdr")] {
+            return Session::create( std::move(r), rq.method() == http::verb::head
+                                  , cancel, static_cast<asio::yield_context>(y));
+        }();
         return or_throw(yield, ec, std::move(s));
     }
 
@@ -1132,8 +1137,10 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         return_or_throw_on_error(yield, cancel, ec, Session());
     }
 
-    auto session = Session::create( move(con), rq.method() == http::verb::head
-                                  , cancel, static_cast<asio::yield_context>(yield[ec]));
+    auto session = [&, y = yield[ec].tag("read_hdr")] {
+        return Session::create( move(con), rq.method() == http::verb::head
+                              , cancel, static_cast<asio::yield_context>(y));
+    }();
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
@@ -1224,8 +1231,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
     cancel_slot = {};
 
     // Receive response
-    auto session = Session::create( move(con), request.method() == http::verb::head
-                                  , cancel, static_cast<asio::yield_context>(yield[ec]));
+    auto session = [&, y = yield[ec].tag("read_hdr")] {
+        return Session::create( move(con), request.method() == http::verb::head
+                              , cancel, static_cast<asio::yield_context>(y));
+    }();
 
     auto& hdr = session.response_header();
 
