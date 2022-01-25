@@ -11,7 +11,6 @@
 #include "../util/intrusive_list.h"
 #include "../bittorrent/is_martian.h"
 #include "../constants.h"
-#include "../util/yield.h"
 #include "../util/set_io.h"
 #include "../util/part_io.h"
 #include "../util/async_job.h"
