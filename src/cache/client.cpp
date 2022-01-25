@@ -270,7 +270,7 @@ struct Client::Impl {
                           , const http::request<http::empty_body>& req
                           , http::status status
                           , const string& proto_error
-                          , asio::yield_context yield)
+                          , Yield yield)
     {
         auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
         http::async_write(con, res, yield);
@@ -278,14 +278,14 @@ struct Client::Impl {
 
     void handle_bad_request( GenericStream& con
                            , const http::request<http::empty_body>& req
-                           , asio::yield_context yield)
+                           , Yield yield)
     {
         return handle_http_error(con, req, http::status::bad_request, "", yield);
     }
 
     void handle_not_found( GenericStream& con
                          , const http::request<http::empty_body>& req
-                         , asio::yield_context yield)
+                         , Yield yield)
     {
         return handle_http_error( con, req, http::status::not_found
                                 , http_::response_error_hdr_retrieval_failed, yield);
