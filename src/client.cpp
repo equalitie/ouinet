@@ -561,8 +561,7 @@ void handle_bad_request( GenericStream& con
     auto res = util::http_error( req, http::status::bad_request
                                , OUINET_CLIENT_SERVER_STRING
                                , "", message);
-    auto yield_ = yield.tag("handle_bad_request");
-    return handle_http_error(con, res, yield_);
+    return handle_http_error(con, res, yield);
 }
 
 //------------------------------------------------------------------------------
