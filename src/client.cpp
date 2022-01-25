@@ -488,7 +488,7 @@ private:
                            , (logger.get_threshold() <= DEBUG)
                              ? "uTPAccept(" + con.remote_endpoint() + ")"
                              : "uTPAccept");
-                    serve_utp_request(move(con), y[ec]);
+                    serve_utp_request(move(con), y[ec].tag("serve_utp_req"));
                 }));
             }
         }));
@@ -616,7 +616,8 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // Connect to the injector and tunnel the transaction through it
 
         if (!_bep5_client) {
-            return handle_bad_request(con, req, "No known injectors", yield[ec]);
+            return handle_bad_request( con, req, "No known injectors"
+                                     , yield[ec].tag("handle_no_injectors_error"));
         }
 
         auto inj = [&] () {
@@ -2542,7 +2543,7 @@ void Client::State::start()
 
                   if (ec) return;
 
-                  auto rs = fetch_fresh_from_front_end(rq, yield[ec]);
+                  auto rs = fetch_fresh_from_front_end(rq, yield[ec].tag("get_res"));
 
                   if (ec) return;
 

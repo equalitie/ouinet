@@ -180,7 +180,7 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec]);
+    TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec].tag("resolve"));
 
     if (ec) {
         string host;
@@ -212,19 +212,19 @@ void handle_connect_request( GenericStream client_c
                            , http::status::forbidden
                            , http_::response_error_hdr_target_not_allowed
                            , "Illegal CONNECT target: " + ep
-                           , yield[ec]);
+                           , yield[ec].tag("handle_bad_port_error"));
     }
 
     auto origin_c = connect_to_host( lookup, exec
                                    , default_timeout::tcp_connect()
-                                   , cancel, yield[ec]);
+                                   , cancel, yield[ec].tag("connect"));
 
     if (ec) {
         return handle_error( client_c, req
                            , http::status::bad_gateway
                            , http_::response_error_hdr_retrieval_failed
                            , "Failed to connect to origin: " + ec.message()
-                           , yield[ec]);
+                           , yield[ec].tag("handle_connect_error"));
     }
 
     auto disconnect_origin_slot = cancel.connect([&origin_c] {
@@ -450,7 +450,8 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         return;
     }
 
-    handle_error(con, rq, http::status::not_found, "Unknown injector request", yield);
+    handle_error( con, rq, http::status::not_found, "Unknown injector request"
+                , yield.tag("handle_req_error"));
 }
 
 //------------------------------------------------------------------------------
@@ -497,7 +498,7 @@ void serve( InjectorConfig& config
         bool req_keep_alive = req.keep_alive();
 
         if (is_request_to_this(req)) {
-            handle_request_to_this(req, con, yield[ec]);
+            handle_request_to_this(req, con, yield[ec].tag("this"));
             if (ec || !req_keep_alive) break;
             continue;
         }
@@ -544,12 +545,12 @@ void serve( InjectorConfig& config
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            auto orig_con = cc.get_connection(req, cancel, yield[ec]);
+            auto orig_con = cc.get_connection(req, cancel, yield[ec].tag("proxy/plain/get_connection"));
             size_t forwarded = 0;
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                util::http_request(orig_con, orig_req, cancel, yield[ec]);
+                util::http_request(orig_con, orig_req, cancel, yield[ec].tag("proxy/plain/send_request"));
             }
             bool res_keep_alive = false;
             if (!ec) {
