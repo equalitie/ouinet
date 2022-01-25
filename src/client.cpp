@@ -631,8 +631,8 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         if (ec == asio::error::operation_aborted) return;
         if (ec) {
             ec = {};
-            auto y = yield[ec].tag("handle_bad_request");
-            return handle_bad_request(con, req, "Failed to connect to injector", y);
+            return handle_bad_request( con, req, "Failed to connect to injector"
+                                     , yield[ec].tag("handle_injector_unreachable"));
         }
 
         // Send the client an OK message indicating that the tunnel
@@ -644,7 +644,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
         {
-            auto y = yield[ec].tag("write");
+            auto y = yield[ec].tag("write_res");
             http::async_write(con, res, y);
         }
 
@@ -2534,7 +2534,7 @@ void Client::State::start()
                       , move(acceptor)
                       , [this, self]
                         (GenericStream c, asio::yield_context yield_) {
-                  Yield yield(_ctx, yield_, "Frontend");
+                  Yield yield(_ctx, yield_, "frontend");
                   sys::error_code ec;
                   Request rq;
                   beast::flat_buffer buffer;

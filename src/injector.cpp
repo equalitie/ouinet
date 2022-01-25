@@ -189,14 +189,14 @@ void handle_connect_request( GenericStream client_c
         if (ec == asio::error::invalid_argument)
             return handle_error( client_c, req, http::status::bad_request
                                , "Illegal target host: " + host
-                               , yield[ec].tag("handle_error"));
+                               , yield[ec].tag("handle_no_host_error"));
 
         return handle_error( client_c, req, http::status::bad_gateway
                            , http_::response_error_hdr_retrieval_failed
                            , (ec == asio::error::netdb_errors::host_not_found)
                              ? ("Could not resolve host: " + host)
                              : ("Unknown resolver error: " + ec.message())
-                           , yield[ec].tag("handle_error"));
+                           , yield[ec].tag("handle_resolve_error"));
     }
 
     assert(!lookup.empty());
@@ -540,7 +540,7 @@ void serve( InjectorConfig& config
                 handle_error( con, req
                             , http::status::bad_request
                             , "Invalid or missing host in request"
-                            , yield[ec].tag("proxy/plain/handle_error"));
+                            , yield[ec].tag("proxy/plain/handle_no_host_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
