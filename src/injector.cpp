@@ -215,11 +215,10 @@ void handle_connect_request( GenericStream client_c
                            , yield[ec].tag("handle_bad_port_error"));
     }
 
-    auto origin_c = [&, y = yield[ec].tag("connect")] {
-        return connect_to_host( lookup, exec
-                              , default_timeout::tcp_connect()
-                              , cancel, static_cast<asio::yield_context>(y));
-    }();
+    auto origin_c = yield[ec].tag("connect").run([&] (auto y) {
+        return connect_to_host( lookup, exec, default_timeout::tcp_connect()
+                              , cancel, y);
+    });
 
     if (ec) {
         return handle_error( client_c, req
@@ -238,18 +237,18 @@ void handle_connect_request( GenericStream client_c
     http::response<http::empty_body> res{http::status::ok, req.version()};
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-    {
-        auto y = yield[ec].tag("write_res");
-        http::async_write(client_c, res, static_cast<asio::yield_context>(y));
-    }
+    yield[ec].tag("write_res").run([&] (auto y) {
+        http::async_write(client_c, res, y);
+    });
 
     if (ec) {
         yield.log("Failed sending CONNECT response; ec=", ec);
         return;
     }
 
-    auto y = yield.tag("full_duplex");
-    full_duplex(move(client_c), move(origin_c), static_cast<asio::yield_context>(y));
+    yield.tag("full_duplex").run([&] (auto y) {
+        full_duplex(move(client_c), move(origin_c), y);
+    });
 }
 
 //------------------------------------------------------------------------------
@@ -334,10 +333,9 @@ private:
         // Send HTTP request to origin.
         auto orig_rq = util::to_origin_request(cache_rq);
         orig_rq.keep_alive(true);  // regardless of what client wants
-        {
-            auto y = yield[ec].tag("request");
-            util::http_request(orig_con, orig_rq, timeout_cancel, static_cast<asio::yield_context>(y));
-        }
+        yield[ec].tag("request").run([&] (auto y) {
+            util::http_request(orig_con, orig_rq, timeout_cancel, y);
+        });
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to send request; ec=", ec);
@@ -357,10 +355,10 @@ private:
             sig_reader = make_unique<http_response::Reader>(move(orig_con));
         }
 
-        auto orig_sess = [&, y = yield[ec].tag("read_hdr")] {
+        auto orig_sess = yield[ec].tag("read_hdr").run([&] (auto y) {
             return Session::create( move(sig_reader), cache_rq_method == http::verb::head
-                                  , timeout_cancel, static_cast<asio::yield_context>(y));
-        }();
+                                  , timeout_cancel, y);
+        });
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response head; ec=", ec);
@@ -371,10 +369,9 @@ private:
         // Keep client connection if the client wants to.
         orig_sess.response_header().keep_alive(rq_keep_alive);
 
-        {
-            auto y = yield.tag("flush")[ec];
-            orig_sess.flush_response(con, timeout_cancel, static_cast<asio::yield_context>(y));
-        }
+        yield.tag("flush")[ec].run([&] (auto y) {
+            orig_sess.flush_response(con, timeout_cancel, y);
+        });
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response; ec=", ec);
@@ -460,8 +457,9 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         rs.keep_alive(rq.keep_alive());
         rs.prepare_payload();
 
-        auto y = yield.tag("write_res");
-        http::async_write(con, rs, static_cast<asio::yield_context>(y));
+        yield.tag("write_res").run([&] (auto y) {
+            http::async_write(con, rs, y);
+        });
         return;
     }
 
@@ -502,10 +500,9 @@ void serve( InjectorConfig& config
         beast::flat_buffer buffer;
 
         Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
-        {
-            auto y = yield[ec].tag("read_req");
-            http::async_read(con, buffer, req, static_cast<asio::yield_context>(y));
-        }
+        yield[ec].tag("read_req").run([&] (auto y) {
+            http::async_read(con, buffer, req, y);
+        });
 
         if (ec) break;
 
@@ -521,10 +518,9 @@ void serve( InjectorConfig& config
             continue;
         }
 
-        bool auth = [&, y = yield[ec].tag("auth")] {
-            return authenticate( req, con, config.credentials()
-                               , static_cast<asio::yield_context>(y));
-        }();
+        bool auth = yield[ec].tag("auth").run([&] (auto y) {
+            return authenticate(req, con, config.credentials(), y);
+        });
         if (!auth) {
             if (ec || !req_keep_alive) break;
             continue;
@@ -572,18 +568,17 @@ void serve( InjectorConfig& config
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                {
-                    auto y = yield[ec].tag("proxy/plain/send_request");
-                    util::http_request(orig_con, orig_req, cancel, static_cast<asio::yield_context>(y));
-                }
+                yield[ec].tag("proxy/plain/send_request").run([&] (auto y) {
+                    util::http_request(orig_con, orig_req, cancel, y);
+                });
             }
             bool res_keep_alive = false;
             if (!ec) {
                 http_response::Reader rr(move(orig_con));
                 while (!ec) {
-                    auto opt_part = [&, y = yield[ec].tag("proxy/plain/read_part")] {
-                        return rr.async_read_part(cancel, static_cast<asio::yield_context>(y));
-                    }();
+                    auto opt_part = yield[ec].tag("proxy/plain/read_part").run([&] (auto y) {
+                        return rr.async_read_part(cancel, y);
+                    });
                     if (ec || !opt_part) break;
                     if (auto inh = opt_part->as_head()) {
                         // Keep proxy connection if the proxy wants to.
@@ -600,10 +595,9 @@ void serve( InjectorConfig& config
                     } else if (auto cb = opt_part->as_chunk_body()) {
                         forwarded += cb->size();
                     }
-                    {
-                        auto y = yield[ec].tag("proxy/plain/write_part");
-                        opt_part->async_write(con, cancel, static_cast<asio::yield_context>(y));
-                    }
+                    yield[ec].tag("proxy/plain/write_part").run([&] (auto y) {
+                        opt_part->async_write(con, cancel, y);
+                    });
                 }
                 orig_con = rr.release_stream();  // may be reused with keep-alive
             }
@@ -625,8 +619,9 @@ void serve( InjectorConfig& config
                                                              , OUINET_INJECTOR_SERVER_STRING);
 
             if (opt_err_res) {
-                auto y = yield[ec].tag("inject/write_proto_version_error");
-                http::async_write(con, *opt_err_res, static_cast<asio::yield_context>(y));
+                yield[ec].tag("inject/write_proto_version_error").run([&] (auto y) {
+                    http::async_write(con, *opt_err_res, y);
+                });
             } else if (is_restricted_target(req.target()))
                 handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed
