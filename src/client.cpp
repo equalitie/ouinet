@@ -595,10 +595,9 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
         auto wd = watch_dog(_ctx , rq_read_timeout, [&] { con.close(); });
 
-        {
-            auto y = yield[ec].tag("read_req");
-            http::async_read(con, buffer, req, static_cast<asio::yield_context>(y));
-        }
+        yield[ec].tag("read_req").run([&] (auto y) {
+            http::async_read(con, buffer, req, y);
+        });
 
         if (!wd.is_running()) {
             return or_throw(yield, asio::error::timed_out);
@@ -623,12 +622,10 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
                                      , yield[ec].tag("handle_no_injectors_error"));
         }
 
-        auto inj = [&, y = yield[ec].tag("connect_to_injector")] {
-            return _bep5_client->connect( static_cast<asio::yield_context>(y)
-                                        , cancel
-                                        , false
-                                        , ouiservice::Bep5Client::injectors);
-        }();
+        auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
+            return _bep5_client->connect( y, cancel
+                                        , false, ouiservice::Bep5Client::injectors);
+        });
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) return;
@@ -646,18 +643,16 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
         // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
-        {
-            auto y = yield[ec].tag("write_res");
-            http::async_write(con, res, static_cast<asio::yield_context>(y));
-        }
+        yield[ec].tag("write_res").run([&] (auto y) {
+            http::async_write(con, res, y);
+        });
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return;
 
-        {
-            auto y = yield[ec].tag("full_duplex");
-            full_duplex(move(con), move(inj), static_cast<asio::yield_context>(y));
-        }
+        yield[ec].tag("full_duplex").run([&] (auto y) {
+            full_duplex(move(con), move(inj), y);
+        });
         return;
     }
 }
@@ -756,10 +751,9 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
     _YDEBUG(yield, "Sending a request to self");
     // Send request
-    {
-        auto y = yield[ec].tag("write_self_req");
-        http::async_write(con, request, static_cast<asio::yield_context>(y));
-    }
+    yield[ec].tag("write_self_req").run([&] (auto y) {
+        http::async_write(con, request, y);
+    });
 
     if (cancel_slot) {
         ec = asio::error::operation_aborted;
@@ -771,9 +765,10 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
     if (ec) return or_throw<Session>(yield, ec);
 
-    auto y = yield.tag("read_hdr");
-    return Session::create( move(con), request.method() == http::verb::head
-                          , cancel, static_cast<asio::yield_context>(y));
+    return yield.tag("read_hdr").run([&] (auto y) {
+        return Session::create( move(con), request.method() == http::verb::head
+                              , cancel, y);
+    });
 }
 
 // Transforms addresses to endpoints with the given port.
@@ -856,18 +851,18 @@ Client::State::resolve_tcp_doh( const std::string& host
         auto y = yield.detach(y_); \
         auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch##VER")); \
         if (ec) { ec##VER = ec; return; } \
-        auto yy = y[ec].tag("slurp##VER"); \
-        rs##VER = http_response::slurp_response<doh::Response::body_type> \
-            (s, doh::payload_size, cancel, static_cast<asio::yield_context>(yy)); \
+        rs##VER = y[ec].tag("slurp##VER").run([&] (auto yy) { \
+            return http_response::slurp_response<doh::Response::body_type> \
+                (s, doh::payload_size, cancel, yy); \
+        }); \
         if (ec) { ec##VER = ec; return; } \
     }));
     SPAWN_QUERY(4);
     SPAWN_QUERY(6);
 
-    {
-        auto y = yield.tag("wait");
-        wc.wait(static_cast<asio::yield_context>(y));
-    }
+    yield.tag("wait").run([&] (auto y) {
+        wc.wait(y);
+    });
 
     _YDEBUG(yield, "DoH query; ip4_ec=", ec4, " ip6_ec=", ec6);
     if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
@@ -1012,11 +1007,10 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     // Send request
-    {
+    yield[ec].tag("write_origin_req").run([&] (auto y) {
         auto con_close = cancel.connect([&] { con.close(); });
-        auto y = yield[ec].tag("write_origin_req");
-        http::async_write(con, rq_, static_cast<asio::yield_context>(y));
-    }
+        http::async_write(con, rq_, y);
+    });
 
     if (cancel) {
         ec = watch_dog.is_running() ? ec = asio::error::operation_aborted
@@ -1024,10 +1018,10 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     }
     if (ec) return or_throw<Session>(yield, ec);
 
-    auto ret = [&, y = yield[ec].tag("read_hdr")] {
+    auto ret = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( std::move(con), rq.method() == http::verb::head
-                              , cancel, static_cast<asio::yield_context>(y));
-    }();
+                              , cancel, y);
+    });
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
@@ -1061,9 +1055,9 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // Connect to the injector/proxy.
     sys::error_code ec;
 
-    auto inj = [&, y = yield[ec].tag("connect_to_injector")] {
-        return _injector->connect(static_cast<asio::yield_context>(y), cancel);
-    }();
+    auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
+        return _injector->connect(y, cancel);
+    });
 
     if (ec) return or_throw<Session>(yield, ec);
 
@@ -1106,10 +1100,10 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
         auto r = std::make_unique<QueueReader>(_ctx.get_executor());
         r->insert(http_response::Part(http_response::Head(std::move(rsh))));
-        auto s = [&, y = yield[ec].tag("read_hdr")] {
+        auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
             return Session::create( std::move(r), rq.method() == http::verb::head
-                                  , cancel, static_cast<asio::yield_context>(y));
-        }();
+                                  , cancel, y);
+        });
         return or_throw(yield, ec, std::move(s));
     }
 
@@ -1130,17 +1124,16 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
-    {
+    yield[ec].tag("write_req").run([&] (auto y) {
         auto slot = cancel.connect([&con] { con.close(); });
-        auto y = yield[ec].tag("write_req");
-        http::async_write(con, rq_, static_cast<asio::yield_context>(y));
-        return_or_throw_on_error(yield, cancel, ec, Session());
-    }
+        http::async_write(con, rq_, y);
+    });
+    return_or_throw_on_error(yield, cancel, ec, Session());
 
-    auto session = [&, y = yield[ec].tag("read_hdr")] {
+    auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), rq.method() == http::verb::head
-                              , cancel, static_cast<asio::yield_context>(y));
-    }();
+                              , cancel, y);
+    });
     return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Prevent others from inserting ouinet headers.
@@ -1179,9 +1172,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
     if (_injector_connections.empty()) {
         _YDEBUG(yield, "Connecting to the injector");
 
-        auto c = [&, y = yield[ec].tag("connect_to_injector2")] {
-            return _injector->connect(static_cast<asio::yield_context>(y), cancel);
-        }();
+        auto c = yield[ec].tag("connect_to_injector2").run([&] (auto y) {
+            return _injector->connect(y, cancel);
+        });
 
         assert(!cancel || ec == asio::error::operation_aborted);
 
@@ -1211,10 +1204,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request
-    {
-        auto y = yield[ec].tag("write_injector_req");
-        http::async_write(con, request, static_cast<asio::yield_context>(y));
-    }
+    yield[ec].tag("write_injector_req").run([&] (auto y) {
+        http::async_write(con, request, y);
+    });
 
     if (cancel_slot) {
         ec = asio::error::operation_aborted;
@@ -1231,10 +1223,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
     cancel_slot = {};
 
     // Receive response
-    auto session = [&, y = yield[ec].tag("read_hdr")] {
+    auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), request.method() == http::verb::head
-                              , cancel, static_cast<asio::yield_context>(y));
-    }();
+                              , cancel, y);
+    });
 
     auto& hdr = session.response_header();
 
@@ -1542,8 +1534,9 @@ public:
                 auto key = key_from_http_req(rq); assert(key);
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;
-                auto y_ = yield.detach(yield_);
-                cache->store(*key, *meta.dht_group, rr, cancel, static_cast<asio::yield_context>(y_[ec]));
+                yield.detach(yield_)[ec].run([&] (auto y) {
+                    cache->store(*key, *meta.dht_group, rr, cancel, y);
+                });
             }));
         } else if (no_cache_reason)
             _YDEBUG(yield, "Not ok to cache response: ", no_cache_reason);
@@ -1971,31 +1964,27 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (ec) return or_throw(yield, ec, true);
 
-    {
-        auto y = yield[ec].tag("write_req");
-        http::async_write(origin, rq, static_cast<asio::yield_context>(y));
-    }
+    yield[ec].tag("write_req").run([&] (auto y) {
+        http::async_write(origin, rq, y);
+    });
 
     beast::flat_buffer buffer;
     Response rs;
-    {
-        auto y = yield[ec].tag("read_res");
-        http::async_read(origin, buffer, rs, static_cast<asio::yield_context>(y));
-    }
+    yield[ec].tag("read_res").run([&] (auto y) {
+        http::async_read(origin, buffer, rs, y);
+    });
 
     if (ec) return or_throw(yield, ec, true);
 
-    {
-        auto y = yield[ec].tag("write_res");
-        http::async_write(browser, rs, static_cast<asio::yield_context>(y));
-    }
+    yield[ec].tag("write_res").run([&] (auto y) {
+        http::async_write(browser, rs, y);
+    });
 
     if (rs.result() != http::status::switching_protocols) return true;
 
-    {
-        auto y = yield[ec].tag("full_duplex");
-        full_duplex(move(browser), move(origin), static_cast<asio::yield_context>(y));
-    }
+    yield[ec].tag("full_duplex").run([&] (auto y) {
+        full_duplex(move(browser), move(origin), y);
+    });
 
     return or_throw(yield, ec, true);
 }
@@ -2247,10 +2236,9 @@ void Client::State::serve_request( GenericStream&& con
         reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
 
         Yield yield(_ctx.get_executor(), yield_, util::str('C', connection_id));
-        {
-            auto y = yield[ec].tag("read_req");
-            http::async_read(con, buffer, reqhp, static_cast<asio::yield_context>(y));
-        }
+        yield[ec].tag("read_req").run([&] (auto y) {
+            http::async_read(con, buffer, reqhp, y);
+        });
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated) break;
@@ -2264,10 +2252,9 @@ void Client::State::serve_request( GenericStream&& con
 
         Request req(reqhp.release());
 
-        bool auth = [&, y = yield[ec].tag("auth")] {
-            return authenticate( req, con, _config.client_credentials()
-                               , static_cast<asio::yield_context>(y));
-        }();
+        bool auth = yield[ec].tag("auth").run([&] (auto y) {
+            return authenticate(req, con, _config.client_credentials(), y);
+        });
         if (!auth) {
             continue;
         }
@@ -2281,10 +2268,9 @@ void Client::State::serve_request( GenericStream&& con
         if (!mitm && req.method() == http::verb::connect) {
             sys::error_code ec;
             // Subsequent access to the connection will use the encrypted channel.
-            {
-                auto y = yield[ec].tag("mitm_handshake");
-                con = ssl_mitm_handshake(move(con), req, static_cast<asio::yield_context>(y));
-            }
+            yield[ec].tag("mitm_handshake").run([&] (auto y) {
+                con = ssl_mitm_handshake(move(con), req, y);
+            });
             if (ec) {
                 _YERROR(yield, "MitM exception; ec=", ec);
                 return;
@@ -2598,11 +2584,10 @@ void Client::State::start()
                   Yield yield(_ctx, yield_, "frontend");
                   sys::error_code ec;
                   Request rq;
-                  {
+                  yield[ec].tag("read_req").run([&] (auto y) {
                       beast::flat_buffer buffer;
-                      auto y = yield[ec].tag("read_req");
-                      http::async_read(c, buffer, rq, static_cast<asio::yield_context>(y));
-                  }
+                      http::async_read(c, buffer, rq, y);
+                  });
 
                   if (ec) return;
 
@@ -2610,8 +2595,9 @@ void Client::State::start()
 
                   if (ec) return;
 
-                  auto y = yield[ec].tag("write_res");
-                  http::async_write(c, rs, static_cast<asio::yield_context>(y));
+                  yield[ec].tag("write_res").run([&] (auto y) {
+                      http::async_write(c, rs, y);
+                  });
             });
         }));
     }
