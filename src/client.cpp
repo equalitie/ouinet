@@ -575,6 +575,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     }
 
     Cancel cancel = _shutdown_signal;
+    cancel.connect([&] { con.close(); });
 
     sys::error_code ec;
 
