@@ -375,7 +375,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?purge_cache=") != string::npos && cache_client) {
             Cancel cancel;
             sys::error_code ec;
-            cache_client->local_purge(cancel, yield[ec]);
+            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield[ec]));
         }
 
         // Redirect back to the portal.
@@ -498,7 +498,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
         Cancel cancel;
         sys::error_code ec;
-        auto local_size = cache_client->local_size(cancel, yield[ec]);
+        auto local_size = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
         ss << "Approximate size of content cached locally: ";
         if (ec) ss << "(unknown)";
         else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
@@ -567,7 +567,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     if (cache_client) {
         Cancel cancel;
         sys::error_code ec;
-        auto sz = cache_client->local_size(cancel, yield[ec]);
+        auto sz = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
         if (ec) {
             LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
         } else {

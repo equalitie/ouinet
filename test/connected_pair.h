@@ -3,6 +3,7 @@
 #include <boost/asio/ip/tcp.hpp>
 
 #include "../src/util/wait_condition.h"
+#include "../src/util/yield.h"
 #include "../src/namespaces.h"
 
 namespace ouinet { namespace util {
@@ -43,5 +44,18 @@ connected_pair(asio::io_context& ctx, asio::yield_context yield)
     return connected_pair(ctx.get_executor(), yield);
 }
 
+inline
+std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
+connected_pair(const asio::executor& ex, Yield yield)
+{
+    return connected_pair(ex, static_cast<asio::yield_context>(yield));
+}
+
+inline
+std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
+connected_pair(asio::io_context& ctx, Yield yield)
+{
+    return connected_pair(ctx, static_cast<asio::yield_context>(yield));
+}
 
 }} // namespaces

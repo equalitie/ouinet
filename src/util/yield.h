@@ -4,6 +4,7 @@
 #include "../namespaces.h"
 #include "../util/str.h"
 #include "../logger.h"
+#include "../or_throw.h"
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -119,7 +120,7 @@ public:
         return {*this, _asio_yield[ec]};
     }
 
-    operator asio::yield_context() const
+    explicit operator asio::yield_context() const
     {
         return _asio_yield;
     }
@@ -127,6 +128,29 @@ public:
     Yield ignore_error()
     {
         return {*this, _asio_yield[*_ignored_error]};
+    }
+
+    // Use this to keep this instance (with tag, tracking, etc.) alive
+    // while running code which only accepts plain `asio::yield_context`.
+    //
+    // Example:
+    //
+    //     auto foo = yield[ec].tag("foo").run([&] (auto y) { return do_foo(a, y); });
+    //
+    // Where `do_foo` only accepts `asio::yield_context`.
+    //
+    // You can spare some boilerplate by defining a macro like:
+    //
+    //     #define YIELD_KEEP(_Y, _C) ((_Y).run([&] (auto __Y) { return (_C); }));
+    //
+    // And using it like:
+    //
+    //     auto foo = YIELD_KEEP(yield[ec].tag("foo"), do_foo(a, __Y));
+    //
+    template<class F>
+    auto
+    run(F&& f) {
+        return std::forward<F>(f)(_asio_yield);
     }
 
     ~Yield()
@@ -293,6 +317,23 @@ void Yield::log(log_level_t log_level, boost::string_view str)
 
         str = str.substr(endl+1);
     }
+}
+
+
+template<class Ret>
+inline
+Ret or_throw( Yield yield
+            , const sys::error_code& ec
+            , Ret&& ret = {})
+{
+    return or_throw(static_cast<asio::yield_context>(yield), ec, std::forward<Ret>(ret));
+}
+
+inline
+void or_throw( Yield yield
+             , const sys::error_code& ec)
+{
+    return or_throw(static_cast<asio::yield_context>(yield), ec);
 }
 
 } // ouinet namespace

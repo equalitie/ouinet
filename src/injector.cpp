@@ -95,7 +95,7 @@ void handle_error( GenericStream& con
     yield.log("=== Sending back response ===");
     yield.log(res);
 
-    http::async_write(con, res, yield);
+    http::async_write(con, res, static_cast<asio::yield_context>(yield));
 }
 
 static
@@ -144,7 +144,7 @@ resolve_target( const Request& req
         lookup = util::tcp_async_resolve( host, port
                                         , exec
                                         , cancel
-                                        , yield[ec]);
+                                        , static_cast<asio::yield_context>(yield[ec]));
 
     if (ec) return or_throw<TcpLookup>(yield, ec);
 
@@ -180,7 +180,7 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec]);
+    TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec].tag("resolve"));
 
     if (ec) {
         string host;
@@ -189,14 +189,14 @@ void handle_connect_request( GenericStream client_c
         if (ec == asio::error::invalid_argument)
             return handle_error( client_c, req, http::status::bad_request
                                , "Illegal target host: " + host
-                               , yield[ec].tag("handle_error"));
+                               , yield[ec].tag("handle_no_host_error"));
 
         return handle_error( client_c, req, http::status::bad_gateway
                            , http_::response_error_hdr_retrieval_failed
                            , (ec == asio::error::netdb_errors::host_not_found)
                              ? ("Could not resolve host: " + host)
                              : ("Unknown resolver error: " + ec.message())
-                           , yield[ec].tag("handle_error"));
+                           , yield[ec].tag("handle_resolve_error"));
     }
 
     assert(!lookup.empty());
@@ -212,19 +212,20 @@ void handle_connect_request( GenericStream client_c
                            , http::status::forbidden
                            , http_::response_error_hdr_target_not_allowed
                            , "Illegal CONNECT target: " + ep
-                           , yield[ec]);
+                           , yield[ec].tag("handle_bad_port_error"));
     }
 
-    auto origin_c = connect_to_host( lookup, exec
-                                   , default_timeout::tcp_connect()
-                                   , cancel, yield[ec]);
+    auto origin_c = yield[ec].tag("connect").run([&] (auto y) {
+        return connect_to_host( lookup, exec, default_timeout::tcp_connect()
+                              , cancel, y);
+    });
 
     if (ec) {
         return handle_error( client_c, req
                            , http::status::bad_gateway
                            , http_::response_error_hdr_retrieval_failed
                            , "Failed to connect to origin: " + ec.message()
-                           , yield[ec]);
+                           , yield[ec].tag("handle_connect_error"));
     }
 
     auto disconnect_origin_slot = cancel.connect([&origin_c] {
@@ -236,14 +237,18 @@ void handle_connect_request( GenericStream client_c
     http::response<http::empty_body> res{http::status::ok, req.version()};
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-    http::async_write(client_c, res, yield[ec]);
+    yield[ec].tag("write_res").run([&] (auto y) {
+        http::async_write(client_c, res, y);
+    });
 
     if (ec) {
         yield.log("Failed sending CONNECT response; ec=", ec);
         return;
     }
 
-    full_duplex(move(client_c), move(origin_c), yield);
+    yield.tag("full_duplex").run([&] (auto y) {
+        full_duplex(move(client_c), move(origin_c), y);
+    });
 }
 
 //------------------------------------------------------------------------------
@@ -272,7 +277,7 @@ class InjectorCacheControl {
         auto socket = connect_to_host( lookup
                                      , executor
                                      , cancel
-                                     , yield[ec]);
+                                     , static_cast<asio::yield_context>(yield[ec]));
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -281,7 +286,7 @@ class InjectorCacheControl {
                                                 , ssl_ctx
                                                 , url.host
                                                 , cancel
-                                                , yield[ec]);
+                                                , static_cast<asio::yield_context>(yield[ec]));
 
             return or_throw(yield, ec, move(c));
         } else {
@@ -328,7 +333,9 @@ private:
         // Send HTTP request to origin.
         auto orig_rq = util::to_origin_request(cache_rq);
         orig_rq.keep_alive(true);  // regardless of what client wants
-        util::http_request(orig_con, orig_rq, timeout_cancel, yield.tag("request")[ec]);
+        yield[ec].tag("request").run([&] (auto y) {
+            util::http_request(orig_con, orig_rq, timeout_cancel, y);
+        });
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to send request; ec=", ec);
@@ -348,8 +355,10 @@ private:
             sig_reader = make_unique<http_response::Reader>(move(orig_con));
         }
 
-        auto orig_sess = Session::create( move(sig_reader), cache_rq_method == http::verb::head
-                                        , timeout_cancel, yield.tag("read-hdr")[ec]);
+        auto orig_sess = yield[ec].tag("read_hdr").run([&] (auto y) {
+            return Session::create( move(sig_reader), cache_rq_method == http::verb::head
+                                  , timeout_cancel, y);
+        });
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response head; ec=", ec);
@@ -360,7 +369,9 @@ private:
         // Keep client connection if the client wants to.
         orig_sess.response_header().keep_alive(rq_keep_alive);
 
-        orig_sess.flush_response(con, timeout_cancel, yield.tag("flush")[ec]);
+        yield.tag("flush")[ec].run([&] (auto y) {
+            orig_sess.flush_response(con, timeout_cancel, y);
+        });
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response; ec=", ec);
@@ -446,11 +457,14 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         rs.keep_alive(rq.keep_alive());
         rs.prepare_payload();
 
-        http::async_write(con, rs, yield);
+        yield.tag("write_res").run([&] (auto y) {
+            http::async_write(con, rs, y);
+        });
         return;
     }
 
-    handle_error(con, rq, http::status::not_found, "Unknown injector request", yield);
+    handle_error( con, rq, http::status::not_found, "Unknown injector request"
+                , yield.tag("handle_req_error"));
 }
 
 //------------------------------------------------------------------------------
@@ -484,11 +498,13 @@ void serve( InjectorConfig& config
 
         Request req;
         beast::flat_buffer buffer;
-        http::async_read(con, buffer, req, yield_[ec]);
-
-        if (ec) break;
 
         Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
+        yield[ec].tag("read_req").run([&] (auto y) {
+            http::async_read(con, buffer, req, y);
+        });
+
+        if (ec) break;
 
         yield.log("=== New request ===");
         yield.log(req.base());
@@ -497,12 +513,15 @@ void serve( InjectorConfig& config
         bool req_keep_alive = req.keep_alive();
 
         if (is_request_to_this(req)) {
-            handle_request_to_this(req, con, yield[ec]);
+            handle_request_to_this(req, con, yield[ec].tag("this"));
             if (ec || !req_keep_alive) break;
             continue;
         }
 
-        if (!authenticate(req, con, config.credentials(), yield[ec].tag("auth"))) {
+        bool auth = yield[ec].tag("auth").run([&] (auto y) {
+            return authenticate(req, con, config.credentials(), y);
+        });
+        if (!auth) {
             if (ec || !req_keep_alive) break;
             continue;
         }
@@ -540,22 +559,26 @@ void serve( InjectorConfig& config
                 handle_error( con, req
                             , http::status::bad_request
                             , "Invalid or missing host in request"
-                            , yield[ec].tag("proxy/plain/handle_error"));
+                            , yield[ec].tag("proxy/plain/handle_no_host_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            auto orig_con = cc.get_connection(req, cancel, yield[ec]);
+            auto orig_con = cc.get_connection(req, cancel, yield[ec].tag("proxy/plain/get_connection"));
             size_t forwarded = 0;
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                util::http_request(orig_con, orig_req, cancel, yield[ec]);
+                yield[ec].tag("proxy/plain/send_request").run([&] (auto y) {
+                    util::http_request(orig_con, orig_req, cancel, y);
+                });
             }
             bool res_keep_alive = false;
             if (!ec) {
                 http_response::Reader rr(move(orig_con));
                 while (!ec) {
-                    auto opt_part = rr.async_read_part(cancel, yield[ec]);
+                    auto opt_part = yield[ec].tag("proxy/plain/read_part").run([&] (auto y) {
+                        return rr.async_read_part(cancel, y);
+                    });
                     if (ec || !opt_part) break;
                     if (auto inh = opt_part->as_head()) {
                         // Keep proxy connection if the proxy wants to.
@@ -572,7 +595,9 @@ void serve( InjectorConfig& config
                     } else if (auto cb = opt_part->as_chunk_body()) {
                         forwarded += cb->size();
                     }
-                    opt_part->async_write(con, cancel, yield[ec]);
+                    yield[ec].tag("proxy/plain/write_part").run([&] (auto y) {
+                        opt_part->async_write(con, cancel, y);
+                    });
                 }
                 orig_con = rr.release_stream();  // may be reused with keep-alive
             }
@@ -593,9 +618,11 @@ void serve( InjectorConfig& config
             auto opt_err_res = util::http_proto_version_error( req, version_hdr_i->value()
                                                              , OUINET_INJECTOR_SERVER_STRING);
 
-            if (opt_err_res)
-                http::async_write(con, *opt_err_res, yield[ec]);
-            else if (is_restricted_target(req.target()))
+            if (opt_err_res) {
+                yield[ec].tag("inject/write_proto_version_error").run([&] (auto y) {
+                    http::async_write(con, *opt_err_res, y);
+                });
+            } else if (is_restricted_target(req.target()))
                 handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed
                             , "Target not allowed"

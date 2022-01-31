@@ -94,6 +94,14 @@ Session make_session(
     return Session::create(move(pipe.source), false, c, y);
 }
 
+Session make_session(
+        asio::io_context& ctx,
+        Response rs,
+        Yield y)
+{
+    return make_session(ctx, move(rs), static_cast<asio::yield_context>(y));
+}
+
 Entry make_entry(
         asio::io_context& ctx,
         posix_time::ptime created,
@@ -102,6 +110,15 @@ Entry make_entry(
 {
     Session s = make_session(ctx, move(rs), y);
     return Entry{ created , move(s) };
+}
+
+Entry make_entry(
+        asio::io_context& ctx,
+        posix_time::ptime created,
+        Response rs,
+        Yield y)
+{
+    return make_entry(ctx, move(created), move(rs), static_cast<asio::yield_context>(y));
 }
 
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
