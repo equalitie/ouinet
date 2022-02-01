@@ -81,6 +81,18 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 
 //------------------------------------------------------------------------------
+template<class Res>
+static
+void send_response( GenericStream& con
+                  , const Res& res
+                  , Yield yield)
+{
+    yield.log("=== Sending back response ===");
+    yield.log(res);
+
+    http::async_write(con, res, static_cast<asio::yield_context>(yield));
+}
+
 static
 void handle_error( GenericStream& con
                  , const Request& req
@@ -91,11 +103,7 @@ void handle_error( GenericStream& con
 {
     auto res = util::http_error( req, status
                                , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
-
-    yield.log("=== Sending back response ===");
-    yield.log(res);
-
-    http::async_write(con, res, static_cast<asio::yield_context>(yield));
+    send_response(con, res, yield);
 }
 
 static
@@ -237,9 +245,7 @@ void handle_connect_request( GenericStream client_c
     http::response<http::empty_body> res{http::status::ok, req.version()};
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-    yield[ec].tag("write_res").run([&] (auto y) {
-        http::async_write(client_c, res, y);
-    });
+    send_response(client_c, res, yield[ec].tag("write_res"));
 
     if (ec) {
         yield.log("Failed sending CONNECT response; ec=", ec);
@@ -633,9 +639,8 @@ void serve( InjectorConfig& config
                                                              , OUINET_INJECTOR_SERVER_STRING);
 
             if (opt_err_res) {
-                yield[ec].tag("inject/write_proto_version_error").run([&] (auto y) {
-                    http::async_write(con, *opt_err_res, y);
-                });
+                send_response( con, *opt_err_res
+                             , yield[ec].tag("inject/write_proto_version_error"));
             } else if (is_restricted_target(req.target()))
                 handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed
