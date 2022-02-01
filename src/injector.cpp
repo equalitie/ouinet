@@ -247,7 +247,7 @@ void handle_connect_request( GenericStream client_c
     }
 
     yield.tag("full_duplex").run([&] (auto y) {
-        full_duplex(move(client_c), move(origin_c), y);
+        full_duplex(move(client_c), move(origin_c), cancel, y);
     });
 }
 

@@ -652,7 +652,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         if (ec) return;
 
         yield[ec].tag("full_duplex").run([&] (auto y) {
-            full_duplex(move(con), move(inj), y);
+            full_duplex(move(con), move(inj), cancel, y);
         });
         return;
     }
@@ -1984,7 +1984,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     if (rs.result() != http::status::switching_protocols) return true;
 
     yield[ec].tag("full_duplex").run([&] (auto y) {
-        full_duplex(move(browser), move(origin), y);
+        full_duplex(move(browser), move(origin), cancel, y);
     });
 
     return or_throw(yield, ec, true);

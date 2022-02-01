@@ -2,6 +2,7 @@
 
 #include <boost/asio/read.hpp>
 #include "generic_stream.h"
+#include "util/signal.h"
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
 
@@ -9,7 +10,7 @@ namespace ouinet {
 
 template<class Stream1, class Stream2>
 inline
-void full_duplex(Stream1 c1, Stream2 c2, asio::yield_context yield)
+void full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
 {
     static const auto timeout = std::chrono::seconds(60);
 
@@ -31,6 +32,8 @@ void full_duplex(Stream1 c1, Stream2 c2, asio::yield_context yield)
             wdog.expires_after(timeout);
         }
     };
+
+    auto cancel_slot = cancel.connect([&] { c1.close(); c2.close(); });
 
     WatchDog wdog( c1.get_executor()
                  , timeout
