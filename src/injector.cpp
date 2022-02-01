@@ -495,12 +495,11 @@ void serve( InjectorConfig& config
 
     for (;;) {
         sys::error_code ec;
+        Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
 
         Request req;
-        beast::flat_buffer buffer;
-
-        Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
         yield[ec].tag("read_req").run([&] (auto y) {
+            beast::flat_buffer buffer;
             http::async_read(con, buffer, req, y);
         });
 
