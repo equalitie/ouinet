@@ -493,15 +493,30 @@ void serve( InjectorConfig& config
         return !boost::regex_match(target.begin(), target.end(), *rx_o);
     };
 
+    // We expect the first request right a way. Consecutive requests may arrive with
+    // various delays.
+    bool is_first_request = true;
+
     for (;;) {
         sys::error_code ec;
         Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
+
+        chrono::seconds rq_read_timeout = chrono::seconds(55);
+
+        if (is_first_request) {
+            is_first_request = false;
+            rq_read_timeout = chrono::seconds(5);
+        }
+
+        auto wd = watch_dog(con.get_executor() , rq_read_timeout, [&] { con.close(); });
 
         Request req;
         yield[ec].tag("read_req").run([&] (auto y) {
             beast::flat_buffer buffer;
             http::async_read(con, buffer, req, y);
         });
+
+        if (!wd.is_running()) break;
 
         if (ec || cancel) break;
 
