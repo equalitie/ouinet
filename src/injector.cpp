@@ -504,7 +504,7 @@ void serve( InjectorConfig& config
             http::async_read(con, buffer, req, y);
         });
 
-        if (ec) break;
+        if (ec || cancel) break;
 
         yield.log("=== New request ===");
         yield.log(req.base());
