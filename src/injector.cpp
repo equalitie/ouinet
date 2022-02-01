@@ -90,7 +90,14 @@ void send_response( GenericStream& con
     yield.log("=== Sending back response ===");
     yield.log(res);
 
-    http::async_write(con, res, static_cast<asio::yield_context>(yield));
+    auto wd = watch_dog( con.get_executor(), chrono::minutes(3)
+                       , [&] { con.close(); });
+
+    sys::error_code ec;
+    http::async_write(con, res, static_cast<asio::yield_context>(yield[ec]));
+    if (!wd.is_running()) ec = asio::error::timed_out;
+
+    return or_throw(yield, ec);
 }
 
 static
