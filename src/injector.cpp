@@ -79,6 +79,8 @@ static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
+static const auto contact_timeout = chrono::minutes(3);
+
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -90,7 +92,7 @@ void send_response( GenericStream& con
     yield.log("=== Sending back response ===");
     yield.log(res);
 
-    auto wd = watch_dog( con.get_executor(), chrono::minutes(3)
+    auto wd = watch_dog( con.get_executor(), contact_timeout
                        , [&] { con.close(); });
 
     sys::error_code ec;
@@ -333,7 +335,8 @@ private:
         yield.log("Injection begin");
 
         Cancel timeout_cancel(cancel);
-        WatchDog wd(executor, chrono::hours(24), [&] { timeout_cancel(); });
+        // Start a short timeout for initial contact.
+        WatchDog contact_wd(executor, contact_timeout, [&] { timeout_cancel(); });
 
         sys::error_code ec;
 
@@ -376,6 +379,13 @@ private:
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response head; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
+
+        contact_wd.stop();  // end of short initial contact timeout
+        // Start a longer timeout for the main forwarding between origin and user,
+        // and make it trigger even if the connection is moving data,
+        // e.g. to avoid HTTP tar pits or endless transfers
+        // which do not make much sense for Injector (the user may choose Proxy for those).
+        auto overlong_wd = watch_dog(executor, chrono::hours(24), [&] { timeout_cancel(); });
 
         // Keep origin connection if the origin wants to.
         auto rs_keep_alive = orig_sess.response_header().keep_alive();
