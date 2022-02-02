@@ -587,24 +587,25 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     bool is_first_request = true;
 
     while (true) {
-        chrono::seconds rq_read_timeout = chrono::seconds(55);
+        {
+            auto rq_read_timeout = chrono::seconds(55);
+            if (is_first_request) {
+                is_first_request = false;
+                rq_read_timeout = chrono::seconds(5);
+            }
 
-        if (is_first_request) {
-            is_first_request = false;
-            rq_read_timeout = chrono::seconds(5);
+            auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });
+
+            yield[ec].tag("read_req").run([&] (auto y) {
+                http::async_read(con, buffer, req, y);
+            });
+
+            if (!wd.is_running()) {
+                return or_throw(yield, asio::error::timed_out);
+            }
+
+            if (ec || cancel) return;
         }
-
-        auto wd = watch_dog(_ctx , rq_read_timeout, [&] { con.close(); });
-
-        yield[ec].tag("read_req").run([&] (auto y) {
-            http::async_read(con, buffer, req, y);
-        });
-
-        if (!wd.is_running()) {
-            return or_throw(yield, asio::error::timed_out);
-        }
-
-        if (ec || cancel) return;
 
         if (req.method() != http::verb::connect) {
             auto keep_alive = _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));

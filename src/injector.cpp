@@ -533,24 +533,25 @@ void serve( InjectorConfig& config
         sys::error_code ec;
         Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
 
-        chrono::seconds rq_read_timeout = chrono::seconds(55);
-
-        if (is_first_request) {
-            is_first_request = false;
-            rq_read_timeout = chrono::seconds(5);
-        }
-
-        auto wd = watch_dog(con.get_executor() , rq_read_timeout, [&] { con.close(); });
-
         Request req;
-        yield[ec].tag("read_req").run([&] (auto y) {
-            beast::flat_buffer buffer;
-            http::async_read(con, buffer, req, y);
-        });
+        {
+            auto rq_read_timeout = chrono::seconds(55);
+            if (is_first_request) {
+                is_first_request = false;
+                rq_read_timeout = chrono::seconds(5);
+            }
 
-        if (!wd.is_running()) break;
+            auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
 
-        if (ec || cancel) break;
+            yield[ec].tag("read_req").run([&] (auto y) {
+                beast::flat_buffer buffer;
+                http::async_read(con, buffer, req, y);
+            });
+
+            if (!wd.is_running()) break;
+
+            if (ec || cancel) break;
+        }
 
         yield.log("=== New request ===");
         yield.log(req.base());
@@ -564,9 +565,14 @@ void serve( InjectorConfig& config
             continue;
         }
 
-        bool auth = yield[ec].tag("auth").run([&] (auto y) {
-            return authenticate(req, con, config.credentials(), y);
-        });
+        bool auth = false;
+        {
+            auto wd = watch_dog(con.get_executor(), chrono::seconds(5), [&] { con.close(); });
+            auth = yield[ec].tag("auth").run([&] (auto y) {
+                return authenticate(req, con, config.credentials(), y);
+            });
+            if (!wd.is_running()) ec = asio::error::timed_out;
+        }
         if (!auth) {
             if (ec || !req_keep_alive) break;
             continue;
