@@ -393,7 +393,16 @@ private:
         orig_sess.response_header().keep_alive(rq_keep_alive);
 
         yield.tag("flush")[ec].run([&] (auto y) {
-            orig_sess.flush_response(con, timeout_cancel, y);
+            // This short timeout will get reset with each successful send/recv operation,
+            // so an exchange with no traffic at all does not get stuck for too long.
+            auto op_wd = watch_dog(executor, contact_timeout, [&] { timeout_cancel(); });
+            orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con] (auto&& part, auto& cc, auto yy) {
+                op_wd.expires_after(contact_timeout);  // the part was successfully read
+                sys::error_code ee;
+                part.async_write(con, cc, yy[ee]);
+                return_or_throw_on_error(yy, cc, ee);
+                op_wd.expires_after(contact_timeout);  // the part was successfully written
+            });
         });
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
