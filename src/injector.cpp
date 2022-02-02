@@ -619,6 +619,7 @@ void serve( InjectorConfig& config
                 });
             }
             bool res_keep_alive = false;
+            bool client_was_written_to = false;
             if (!ec) {
                 http_response::Reader rr(move(orig_con));
                 while (!ec) {
@@ -644,15 +645,17 @@ void serve( InjectorConfig& config
                     yield[ec].tag("proxy/plain/write_part").run([&] (auto y) {
                         opt_part->async_write(con, cancel, y);
                     });
+                    client_was_written_to = true;  // even with error (possible partial write)
                 }
                 orig_con = rr.release_stream();  // may be reused with keep-alive
             }
             if (ec) {
-                handle_error( con, req
-                            , http::status::bad_gateway
-                            , http_::response_error_hdr_retrieval_failed
-                            , "Failed to retrieve content from origin: " + ec.message()
-                            , yield[ec].tag("proxy/plain/handle_error"));
+                if (!client_was_written_to)
+                    handle_error( con, req
+                                , http::status::bad_gateway
+                                , http_::response_error_hdr_retrieval_failed
+                                , "Failed to retrieve content from origin: " + ec.message()
+                                , yield[ec].tag("proxy/plain/handle_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
