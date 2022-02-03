@@ -643,18 +643,26 @@ void serve( InjectorConfig& config
                     yield.log("=== Sending back proxy response ===");
                     yield.log(inh);
 
+                    Cancel timeout_cancel(cancel);
                     yield[ec].tag("proxy/plain/flush").run([&] (auto y) {
-                        orig_sess.flush_response(cancel, y, [&] (auto&& part, auto& cc, auto yy) {
+                        // This short timeout will get reset with each successful send/recv operation,
+                        // so an exchange with no traffic at all does not get stuck for too long.
+                        auto op_wd = watch_dog(orig_sess.get_executor(), contact_timeout, [&] { timeout_cancel(); });
+                        orig_sess.flush_response(timeout_cancel, y, [&] (auto&& part, auto& cc, auto yy) {
                             if (auto b = part.as_body())
                                 forwarded += b->size();
                             else if (auto cb = part.as_chunk_body())
                                 forwarded += cb->size();
+                            op_wd.expires_after(contact_timeout);  // the part was successfully read
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
                             client_was_written_to = true;  // even with error (possible partial write)
                             return_or_throw_on_error(yy, cc, ee);
+                            op_wd.expires_after(contact_timeout);  // the part was successfully written
                         });
                     });
+                    if (timeout_cancel) ec = asio::error::timed_out;
+                    if (cancel) ec = asio::error::operation_aborted;
                 }
                 rrp = orig_sess.release_reader();
                 assert(rrp);
