@@ -79,8 +79,6 @@ static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
-static const auto contact_timeout = chrono::minutes(3);
-
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -335,8 +333,8 @@ private:
         yield.log("Injection begin");
 
         Cancel timeout_cancel(cancel);
-        // Start a short timeout for initial contact.
-        WatchDog contact_wd(executor, contact_timeout, [&] { timeout_cancel(); });
+        // Start a short timeout for initial fetch.
+        WatchDog fetch_wd(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
 
         sys::error_code ec;
 
@@ -380,7 +378,7 @@ private:
         if (ec) yield.log("Failed to process response head; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
 
-        contact_wd.stop();  // end of short initial contact timeout
+        fetch_wd.stop();  // end of short initial fetch timeout
         // Start a longer timeout for the main forwarding between origin and user,
         // and make it trigger even if the connection is moving data,
         // e.g. to avoid HTTP tar pits or endless transfers

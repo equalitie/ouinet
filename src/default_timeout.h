@@ -21,6 +21,9 @@ static inline auto http_recv_simple() { return std::chrono::seconds(55); }
 // (so that accidental connections get closed fast).
 static inline auto http_recv_simple_first() { return std::chrono::seconds(5); }
 
+// The whole operation of looking up a host, connecting to it,
+// sending an HTTP request, and getting the response head
+// (not including the body).
 static inline auto fetch_http() { return std::chrono::minutes(8); }
 
 }} // namespaces
