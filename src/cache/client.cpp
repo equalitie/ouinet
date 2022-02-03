@@ -5,12 +5,14 @@
 #include "dht_groups.h"
 #include "http_sign.h"
 #include "http_store.h"
+#include "../default_timeout.h"
 #include "../http_util.h"
 #include "../parse/number.h"
 #include "../util/wait_condition.h"
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
+#include "../util/watch_dog.h"
 #include "../bittorrent/dht.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
@@ -232,9 +234,21 @@ struct Client::Impl {
 
         bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
 
+        Cancel timeout_cancel(cancel);
         yield[ec].tag("flush").run([&] (auto y) {
-            s.flush_response(sink, cancel, y);
+            // This short timeout will get reset with each successful send/recv operation,
+            // so an exchange with no traffic at all does not get stuck for too long.
+            auto op_wd = watch_dog( s.get_executor(), default_timeout::activity()
+                                  , [&] { timeout_cancel(); });
+            s.flush_response(timeout_cancel, y, [&op_wd, &sink] (auto&& part, auto& cc, auto yy) {
+                sys::error_code ee;
+                part.async_write(sink, cc, yy[ee]);
+                return_or_throw_on_error(yy, cc, ee);
+                op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
+            });
         });
+        if (timeout_cancel) ec = asio::error::timed_out;
+        if (cancel) ec = asio::error::operation_aborted;
 
         return or_throw(yield, ec, keep_alive);
     }
