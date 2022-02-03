@@ -395,13 +395,13 @@ private:
         yield.tag("flush")[ec].run([&] (auto y) {
             // This short timeout will get reset with each successful send/recv operation,
             // so an exchange with no traffic at all does not get stuck for too long.
-            auto op_wd = watch_dog(executor, contact_timeout, [&] { timeout_cancel(); });
+            auto op_wd = watch_dog(executor, default_timeout::activity(), [&] { timeout_cancel(); });
             orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con] (auto&& part, auto& cc, auto yy) {
-                op_wd.expires_after(contact_timeout);  // the part was successfully read
+                op_wd.expires_after(default_timeout::activity());  // the part was successfully read
                 sys::error_code ee;
                 part.async_write(con, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
-                op_wd.expires_after(contact_timeout);  // the part was successfully written
+                op_wd.expires_after(default_timeout::activity());  // the part was successfully written
             });
         });
         if (!overlong_wd.is_running()) ec = asio::error::connection_aborted;
@@ -647,18 +647,18 @@ void serve( InjectorConfig& config
                     yield[ec].tag("proxy/plain/flush").run([&] (auto y) {
                         // This short timeout will get reset with each successful send/recv operation,
                         // so an exchange with no traffic at all does not get stuck for too long.
-                        auto op_wd = watch_dog(orig_sess.get_executor(), contact_timeout, [&] { timeout_cancel(); });
+                        auto op_wd = watch_dog(orig_sess.get_executor(), default_timeout::activity(), [&] { timeout_cancel(); });
                         orig_sess.flush_response(timeout_cancel, y, [&] (auto&& part, auto& cc, auto yy) {
                             if (auto b = part.as_body())
                                 forwarded += b->size();
                             else if (auto cb = part.as_chunk_body())
                                 forwarded += cb->size();
-                            op_wd.expires_after(contact_timeout);  // the part was successfully read
+                            op_wd.expires_after(default_timeout::activity());  // the part was successfully read
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
                             client_was_written_to = true;  // even with error (possible partial write)
                             return_or_throw_on_error(yy, cc, ee);
-                            op_wd.expires_after(contact_timeout);  // the part was successfully written
+                            op_wd.expires_after(default_timeout::activity());  // the part was successfully written
                         });
                     });
                     if (timeout_cancel) ec = asio::error::timed_out;
