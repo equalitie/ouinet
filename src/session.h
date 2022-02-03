@@ -48,6 +48,13 @@ public:
         _reader->close();
     }
 
+    // The session object should not be used after calling this.
+    reader_uptr release_reader() {
+        auto r = std::move(_reader);
+        _reader = nullptr;
+        return r;
+    }
+
     bool keep_alive() const {
         return _head.keep_alive();
     }

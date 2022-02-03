@@ -628,33 +628,37 @@ void serve( InjectorConfig& config
             bool res_keep_alive = false;
             bool client_was_written_to = false;
             if (!ec) {
-                http_response::Reader rr(move(orig_con));
-                while (!ec) {
-                    auto opt_part = yield[ec].tag("proxy/plain/read_part").run([&] (auto y) {
-                        return rr.async_read_part(cancel, y);
+                Session::reader_uptr rrp = std::make_unique<http_response::Reader>(move(orig_con));
+                auto orig_sess = yield[ec].tag("proxy/plain/read_hdr").run([&] (auto y) {
+                    return Session::create(move(rrp), req.method() == http::verb::head, cancel, y);
+                });
+                if (!ec) {
+                    auto& inh = orig_sess.response_header();
+                    // Keep proxy connection if the proxy wants to.
+                    res_keep_alive = inh.keep_alive();
+                    // Keep client connection if the client wants to.
+                    inh.keep_alive(req_keep_alive);
+                    // Prevent others from inserting ouinet specific header fields.
+                    util::remove_ouinet_fields_ref(inh);
+                    yield.log("=== Sending back proxy response ===");
+                    yield.log(inh);
+
+                    yield[ec].tag("proxy/plain/flush").run([&] (auto y) {
+                        orig_sess.flush_response(cancel, y, [&] (auto&& part, auto& cc, auto yy) {
+                            if (auto b = part.as_body())
+                                forwarded += b->size();
+                            else if (auto cb = part.as_chunk_body())
+                                forwarded += cb->size();
+                            sys::error_code ee;
+                            part.async_write(con, cc, yy[ee]);
+                            client_was_written_to = true;  // even with error (possible partial write)
+                            return_or_throw_on_error(yy, cc, ee);
+                        });
                     });
-                    if (ec || !opt_part) break;
-                    if (auto inh = opt_part->as_head()) {
-                        // Keep proxy connection if the proxy wants to.
-                        res_keep_alive = inh->keep_alive();
-                        // Keep client connection if the client wants to.
-                        inh->keep_alive(req_keep_alive);
-                        // Prevent others from inserting ouinet specific header fields.
-                        auto outh = util::remove_ouinet_fields(move(*inh));
-                        yield.log("=== Sending back proxy response ===");
-                        yield.log(outh);
-                        opt_part = move(outh);
-                    } else if (auto b = opt_part->as_body()) {
-                        forwarded += b->size();
-                    } else if (auto cb = opt_part->as_chunk_body()) {
-                        forwarded += cb->size();
-                    }
-                    yield[ec].tag("proxy/plain/write_part").run([&] (auto y) {
-                        opt_part->async_write(con, cancel, y);
-                    });
-                    client_was_written_to = true;  // even with error (possible partial write)
                 }
-                orig_con = rr.release_stream();  // may be reused with keep-alive
+                rrp = orig_sess.release_reader();
+                assert(rrp);
+                orig_con = ((http_response::Reader*)(rrp.get()))->release_stream();  // may be reused with keep-alive
             }
             if (ec) {
                 if (!client_was_written_to)
