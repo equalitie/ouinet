@@ -397,11 +397,10 @@ private:
             // so an exchange with no traffic at all does not get stuck for too long.
             auto op_wd = watch_dog(executor, default_timeout::activity(), [&] { timeout_cancel(); });
             orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con] (auto&& part, auto& cc, auto yy) {
-                op_wd.expires_after(default_timeout::activity());  // the part was successfully read
                 sys::error_code ee;
                 part.async_write(con, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
-                op_wd.expires_after(default_timeout::activity());  // the part was successfully written
+                op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
             });
         });
         if (!overlong_wd.is_running()) ec = asio::error::connection_aborted;
@@ -653,12 +652,11 @@ void serve( InjectorConfig& config
                                 forwarded += b->size();
                             else if (auto cb = part.as_chunk_body())
                                 forwarded += cb->size();
-                            op_wd.expires_after(default_timeout::activity());  // the part was successfully read
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
                             client_was_written_to = true;  // even with error (possible partial write)
                             return_or_throw_on_error(yy, cc, ee);
-                            op_wd.expires_after(default_timeout::activity());  // the part was successfully written
+                            op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
                         });
                     });
                     if (timeout_cancel) ec = asio::error::timed_out;
