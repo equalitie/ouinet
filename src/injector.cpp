@@ -92,7 +92,7 @@ void send_response( GenericStream& con
     yield.log("=== Sending back response ===");
     yield.log(res);
 
-    auto wd = watch_dog( con.get_executor(), contact_timeout
+    auto wd = watch_dog( con.get_executor(), default_timeout::http_send_simple()
                        , [&] { con.close(); });
 
     sys::error_code ec;
@@ -567,7 +567,8 @@ void serve( InjectorConfig& config
 
         bool auth = false;
         {
-            auto wd = watch_dog(con.get_executor(), chrono::seconds(5), [&] { con.close(); });
+            auto wd = watch_dog( con.get_executor(), default_timeout::http_send_simple()
+                               , [&] { con.close(); });
             auth = yield[ec].tag("auth").run([&] (auto y) {
                 return authenticate(req, con, config.credentials(), y);
             });

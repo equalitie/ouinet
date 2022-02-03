@@ -646,7 +646,8 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
         {
-            auto wd = watch_dog(con.get_executor(), chrono::seconds(5), [&] { con.close(); });
+            auto wd = watch_dog( con.get_executor(), default_timeout::http_send_simple()
+                               , [&] { con.close(); });
             yield[ec].tag("write_res").run([&] (auto y) {
                 http::async_write(con, res, y);
             });
