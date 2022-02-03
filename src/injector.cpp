@@ -385,7 +385,7 @@ private:
         // and make it trigger even if the connection is moving data,
         // e.g. to avoid HTTP tar pits or endless transfers
         // which do not make much sense for Injector (the user may choose Proxy for those).
-        auto overlong_wd = watch_dog(executor, chrono::hours(24), [&] { timeout_cancel(); });
+        auto overlong_wd = watch_dog(executor, chrono::hours(24), [&] { con.close(); });
 
         // Keep origin connection if the origin wants to.
         auto rs_keep_alive = orig_sess.response_header().keep_alive();
@@ -404,6 +404,7 @@ private:
                 op_wd.expires_after(contact_timeout);  // the part was successfully written
             });
         });
+        if (!overlong_wd.is_running()) ec = asio::error::connection_aborted;
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response; ec=", ec);
