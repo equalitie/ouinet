@@ -280,7 +280,7 @@ struct Client::Impl {
                           , Yield yield)
     {
         auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
-        http::async_write(con, res, static_cast<asio::yield_context>(yield));
+        util::http_reply(con, res, static_cast<asio::yield_context>(yield));
     }
 
     void handle_bad_request( GenericStream& con

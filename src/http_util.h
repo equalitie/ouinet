@@ -113,6 +113,26 @@ http_request( StreamIn& in
         return or_throw(yield, ec);
 }
 
+// Send the HTTP response `rs` over `out`,
+// trigger an error on timeout or cancellation,
+// closing `out`.
+template<class StreamOut, class Response>
+inline
+void
+http_reply( StreamOut& out
+          , const Response& rs
+          , asio::yield_context yield)
+{
+    auto wd = watch_dog( out.get_executor(), default_timeout::http_send_simple()
+                       , [&] { out.close(); });
+
+    sys::error_code ec;
+    http::async_write(out, rs, yield[ec]);
+    if (!wd.is_running()) ec = asio::error::timed_out;
+
+    return or_throw(yield, ec);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 namespace detail {
     boost::optional<http::response<http::empty_body>>

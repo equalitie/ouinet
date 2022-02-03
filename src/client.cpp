@@ -548,7 +548,7 @@ void handle_http_error( GenericStream& con
     _YDEBUG(yield, "=== Sending back response ===");
     _YDEBUG(yield, res);
 
-    http::async_write(con, res, static_cast<asio::yield_context>(yield));
+    util::http_reply(con, res, static_cast<asio::yield_context>(yield));
 }
 
 template<class ReqBody>
