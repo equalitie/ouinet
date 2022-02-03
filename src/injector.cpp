@@ -535,10 +535,10 @@ void serve( InjectorConfig& config
 
         Request req;
         {
-            auto rq_read_timeout = chrono::seconds(55);
+            auto rq_read_timeout = default_timeout::http_recv_simple();
             if (is_first_request) {
                 is_first_request = false;
-                rq_read_timeout = chrono::seconds(5);
+                rq_read_timeout = default_timeout::http_recv_simple_first();
             }
 
             auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });

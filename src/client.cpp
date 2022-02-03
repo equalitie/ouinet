@@ -588,10 +588,10 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
     while (true) {
         {
-            auto rq_read_timeout = chrono::seconds(55);
+            auto rq_read_timeout = default_timeout::http_recv_simple();
             if (is_first_request) {
                 is_first_request = false;
-                rq_read_timeout = chrono::seconds(5);
+                rq_read_timeout = default_timeout::http_recv_simple_first();
             }
 
             auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });

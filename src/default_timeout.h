@@ -13,6 +13,14 @@ static inline auto tcp_connect() { return std::chrono::minutes(4); }
 // either without body (just the head) or a small one.
 static inline auto http_send_simple() { return std::chrono::seconds(60); }
 
+// Receiving an HTTP message over an existing connection,
+// either without body (just the head) or a small one.
+static inline auto http_recv_simple() { return std::chrono::seconds(55); }
+
+// Same thing, but for the first message in an incoming connection
+// (so that accidental connections get closed fast).
+static inline auto http_recv_simple_first() { return std::chrono::seconds(5); }
+
 static inline auto fetch_http() { return std::chrono::minutes(8); }
 
 }} // namespaces
