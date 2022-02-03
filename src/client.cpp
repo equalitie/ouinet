@@ -645,14 +645,9 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
         // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
-        {
-            auto wd = watch_dog( con.get_executor(), default_timeout::http_send_simple()
-                               , [&] { con.close(); });
-            yield[ec].tag("write_res").run([&] (auto y) {
-                http::async_write(con, res, y);
-            });
-            if (!wd.is_running()) ec = asio::error::timed_out;
-        }
+        yield[ec].tag("write_res").run([&] (auto y) {
+            util::http_reply(con, res, y);
+        });
 
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return;

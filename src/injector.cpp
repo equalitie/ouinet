@@ -481,7 +481,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         rs.prepare_payload();
 
         yield.tag("write_res").run([&] (auto y) {
-            http::async_write(con, rs, y);
+            util::http_reply(con, rs, y);
         });
         return;
     }
@@ -556,15 +556,9 @@ void serve( InjectorConfig& config
             continue;
         }
 
-        bool auth = false;
-        {
-            auto wd = watch_dog( con.get_executor(), default_timeout::http_send_simple()
-                               , [&] { con.close(); });
-            auth = yield[ec].tag("auth").run([&] (auto y) {
+        bool auth = yield[ec].tag("auth").run([&] (auto y) {
                 return authenticate(req, con, config.credentials(), y);
-            });
-            if (!wd.is_running()) ec = asio::error::timed_out;
-        }
+        });
         if (!auth) {
             if (ec || !req_keep_alive) break;
             continue;
