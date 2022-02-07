@@ -613,7 +613,8 @@ void serve( InjectorConfig& config
             bool res_keep_alive = false;
             bool client_was_written_to = false;
             if (!ec) {
-                Session::reader_uptr rrp = std::make_unique<http_response::Reader>(move(orig_con));
+                using OrigReader = http_response::Reader;
+                Session::reader_uptr rrp = std::make_unique<OrigReader>(move(orig_con));
                 auto orig_sess = yield[ec].tag("proxy/plain/read_hdr").run([&] (auto y) {
                     return Session::create(move(rrp), req.method() == http::verb::head, cancel, y);
                 });
@@ -650,7 +651,7 @@ void serve( InjectorConfig& config
                 }
                 rrp = orig_sess.release_reader();
                 assert(rrp);
-                orig_con = ((http_response::Reader*)(rrp.get()))->release_stream();  // may be reused with keep-alive
+                orig_con = ((OrigReader*)(rrp.get()))->release_stream();  // may be reused with keep-alive
             }
             if (ec) {
                 if (!client_was_written_to)
