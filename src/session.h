@@ -138,32 +138,6 @@ Session::async_read_part(Cancel cancel, asio::yield_context yield)
     return _reader->async_read_part(cancel, yield);
 }
 
-template<class SinkStream>
-inline
-void
-Session::flush_response(SinkStream& sink,
-                        Cancel& cancel,
-                        asio::yield_context yield)
-{
-    assert(!_head_was_read);
-    sys::error_code ec;
-
-    _head_was_read = true;
-    _head.async_write(sink, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec);
-
-    if (_is_head_response) return;
-
-    while (true) {
-        auto opt_part = _reader->async_read_part(cancel, yield[ec]);
-        assert(ec != http::error::end_of_stream);
-        return_or_throw_on_error(yield, cancel, ec);
-        if (!opt_part) break;
-        opt_part->async_write(sink, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-    }
-}
-
 template<class Handler>
 inline
 void
@@ -192,6 +166,18 @@ Session::flush_response(Cancel& cancel,
         if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec);
     }
+}
+
+template<class SinkStream>
+inline
+void
+Session::flush_response(SinkStream& sink,
+                        Cancel& cancel,
+                        asio::yield_context yield)
+{
+    return flush_response(cancel, yield, [&sink] (auto&& part, auto& c, auto y) {
+        part.async_write(sink, c, y);
+    });
 }
 
 } // namespaces
