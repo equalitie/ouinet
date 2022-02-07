@@ -81,6 +81,18 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 
 //------------------------------------------------------------------------------
+template<class Res>
+static
+void send_response( GenericStream& con
+                  , const Res& res
+                  , Yield yield)
+{
+    yield.log("=== Sending back response ===");
+    yield.log(res);
+
+    util::http_reply(con, res, static_cast<asio::yield_context>(yield));
+}
+
 static
 void handle_error( GenericStream& con
                  , const Request& req
@@ -91,11 +103,7 @@ void handle_error( GenericStream& con
 {
     auto res = util::http_error( req, status
                                , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
-
-    yield.log("=== Sending back response ===");
-    yield.log(res);
-
-    http::async_write(con, res, static_cast<asio::yield_context>(yield));
+    send_response(con, res, yield);
 }
 
 static
@@ -237,9 +245,7 @@ void handle_connect_request( GenericStream client_c
     http::response<http::empty_body> res{http::status::ok, req.version()};
     // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
     // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-    yield[ec].tag("write_res").run([&] (auto y) {
-        http::async_write(client_c, res, y);
-    });
+    send_response(client_c, res, yield[ec].tag("write_res"));
 
     if (ec) {
         yield.log("Failed sending CONNECT response; ec=", ec);
@@ -320,7 +326,8 @@ private:
         yield.log("Injection begin");
 
         Cancel timeout_cancel(cancel);
-        WatchDog wd(executor, chrono::hours(24), [&] { timeout_cancel(); });
+        // Start a short timeout for initial fetch.
+        WatchDog fetch_wd(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
 
         sys::error_code ec;
 
@@ -364,14 +371,30 @@ private:
         if (ec) yield.log("Failed to process response head; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
 
+        fetch_wd.stop();  // end of short initial fetch timeout
+        // Start a longer timeout for the main forwarding between origin and user,
+        // and make it trigger even if the connection is moving data,
+        // e.g. to avoid HTTP tar pits or endless transfers
+        // which do not make much sense for Injector (the user may choose Proxy for those).
+        auto overlong_wd = watch_dog(executor, chrono::hours(24), [&] { con.close(); });
+
         // Keep origin connection if the origin wants to.
         auto rs_keep_alive = orig_sess.response_header().keep_alive();
         // Keep client connection if the client wants to.
         orig_sess.response_header().keep_alive(rq_keep_alive);
 
         yield.tag("flush")[ec].run([&] (auto y) {
-            orig_sess.flush_response(con, timeout_cancel, y);
+            // This short timeout will get reset with each successful send/recv operation,
+            // so an exchange with no traffic at all does not get stuck for too long.
+            auto op_wd = watch_dog(executor, default_timeout::activity(), [&] { timeout_cancel(); });
+            orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con] (auto&& part, auto& cc, auto yy) {
+                sys::error_code ee;
+                part.async_write(con, cc, yy[ee]);
+                return_or_throw_on_error(yy, cc, ee);
+                op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
+            });
         });
+        if (!overlong_wd.is_running()) ec = asio::error::connection_aborted;
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response; ec=", ec);
@@ -458,7 +481,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
         rs.prepare_payload();
 
         yield.tag("write_res").run([&] (auto y) {
-            http::async_write(con, rs, y);
+            util::http_reply(con, rs, y);
         });
         return;
     }
@@ -493,17 +516,33 @@ void serve( InjectorConfig& config
         return !boost::regex_match(target.begin(), target.end(), *rx_o);
     };
 
+    // We expect the first request right a way. Consecutive requests may arrive with
+    // various delays.
+    bool is_first_request = true;
+
     for (;;) {
         sys::error_code ec;
         Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
 
         Request req;
-        yield[ec].tag("read_req").run([&] (auto y) {
-            beast::flat_buffer buffer;
-            http::async_read(con, buffer, req, y);
-        });
+        {
+            auto rq_read_timeout = default_timeout::http_recv_simple();
+            if (is_first_request) {
+                is_first_request = false;
+                rq_read_timeout = default_timeout::http_recv_simple_first();
+            }
 
-        if (ec || cancel) break;
+            auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
+
+            yield[ec].tag("read_req").run([&] (auto y) {
+                beast::flat_buffer buffer;
+                http::async_read(con, buffer, req, y);
+            });
+
+            if (!wd.is_running()) break;
+
+            if (ec || cancel) break;
+        }
 
         yield.log("=== New request ===");
         yield.log(req.base());
@@ -518,7 +557,7 @@ void serve( InjectorConfig& config
         }
 
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
-            return authenticate(req, con, config.credentials(), y);
+                return authenticate(req, con, config.credentials(), y);
         });
         if (!auth) {
             if (ec || !req_keep_alive) break;
@@ -572,40 +611,55 @@ void serve( InjectorConfig& config
                 });
             }
             bool res_keep_alive = false;
+            bool client_was_written_to = false;
             if (!ec) {
-                http_response::Reader rr(move(orig_con));
-                while (!ec) {
-                    auto opt_part = yield[ec].tag("proxy/plain/read_part").run([&] (auto y) {
-                        return rr.async_read_part(cancel, y);
+                using OrigReader = http_response::Reader;
+                Session::reader_uptr rrp = std::make_unique<OrigReader>(move(orig_con));
+                auto orig_sess = yield[ec].tag("proxy/plain/read_hdr").run([&] (auto y) {
+                    return Session::create(move(rrp), req.method() == http::verb::head, cancel, y);
+                });
+                if (!ec) {
+                    auto& inh = orig_sess.response_header();
+                    // Keep proxy connection if the proxy wants to.
+                    res_keep_alive = inh.keep_alive();
+                    // Keep client connection if the client wants to.
+                    inh.keep_alive(req_keep_alive);
+                    // Prevent others from inserting ouinet specific header fields.
+                    util::remove_ouinet_fields_ref(inh);
+                    yield.log("=== Sending back proxy response ===");
+                    yield.log(inh);
+
+                    Cancel timeout_cancel(cancel);
+                    yield[ec].tag("proxy/plain/flush").run([&] (auto y) {
+                        // This short timeout will get reset with each successful send/recv operation,
+                        // so an exchange with no traffic at all does not get stuck for too long.
+                        auto op_wd = watch_dog(orig_sess.get_executor(), default_timeout::activity(), [&] { timeout_cancel(); });
+                        orig_sess.flush_response(timeout_cancel, y, [&] (auto&& part, auto& cc, auto yy) {
+                            if (auto b = part.as_body())
+                                forwarded += b->size();
+                            else if (auto cb = part.as_chunk_body())
+                                forwarded += cb->size();
+                            sys::error_code ee;
+                            part.async_write(con, cc, yy[ee]);
+                            client_was_written_to = true;  // even with error (possible partial write)
+                            return_or_throw_on_error(yy, cc, ee);
+                            op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
+                        });
                     });
-                    if (ec || !opt_part) break;
-                    if (auto inh = opt_part->as_head()) {
-                        // Keep proxy connection if the proxy wants to.
-                        res_keep_alive = inh->keep_alive();
-                        // Keep client connection if the client wants to.
-                        inh->keep_alive(req_keep_alive);
-                        // Prevent others from inserting ouinet specific header fields.
-                        auto outh = util::remove_ouinet_fields(move(*inh));
-                        yield.log("=== Sending back proxy response ===");
-                        yield.log(outh);
-                        opt_part = move(outh);
-                    } else if (auto b = opt_part->as_body()) {
-                        forwarded += b->size();
-                    } else if (auto cb = opt_part->as_chunk_body()) {
-                        forwarded += cb->size();
-                    }
-                    yield[ec].tag("proxy/plain/write_part").run([&] (auto y) {
-                        opt_part->async_write(con, cancel, y);
-                    });
+                    if (timeout_cancel) ec = asio::error::timed_out;
+                    if (cancel) ec = asio::error::operation_aborted;
                 }
-                orig_con = rr.release_stream();  // may be reused with keep-alive
+                rrp = orig_sess.release_reader();
+                assert(rrp);
+                orig_con = ((OrigReader*)(rrp.get()))->release_stream();  // may be reused with keep-alive
             }
             if (ec) {
-                handle_error( con, req
-                            , http::status::bad_gateway
-                            , http_::response_error_hdr_retrieval_failed
-                            , "Failed to retrieve content from origin: " + ec.message()
-                            , yield[ec].tag("proxy/plain/handle_error"));
+                if (!client_was_written_to)
+                    handle_error( con, req
+                                , http::status::bad_gateway
+                                , http_::response_error_hdr_retrieval_failed
+                                , "Failed to retrieve content from origin: " + ec.message()
+                                , yield[ec].tag("proxy/plain/handle_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -618,9 +672,8 @@ void serve( InjectorConfig& config
                                                              , OUINET_INJECTOR_SERVER_STRING);
 
             if (opt_err_res) {
-                yield[ec].tag("inject/write_proto_version_error").run([&] (auto y) {
-                    http::async_write(con, *opt_err_res, y);
-                });
+                send_response( con, *opt_err_res
+                             , yield[ec].tag("inject/write_proto_version_error"));
             } else if (is_restricted_target(req.target()))
                 handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed

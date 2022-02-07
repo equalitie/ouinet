@@ -548,7 +548,7 @@ void handle_http_error( GenericStream& con
     _YDEBUG(yield, "=== Sending back response ===");
     _YDEBUG(yield, res);
 
-    http::async_write(con, res, static_cast<asio::yield_context>(yield));
+    util::http_reply(con, res, static_cast<asio::yield_context>(yield));
 }
 
 template<class ReqBody>
@@ -587,24 +587,25 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     bool is_first_request = true;
 
     while (true) {
-        chrono::seconds rq_read_timeout = chrono::seconds(55);
+        {
+            auto rq_read_timeout = default_timeout::http_recv_simple();
+            if (is_first_request) {
+                is_first_request = false;
+                rq_read_timeout = default_timeout::http_recv_simple_first();
+            }
 
-        if (is_first_request) {
-            is_first_request = false;
-            rq_read_timeout = chrono::seconds(5);
+            auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });
+
+            yield[ec].tag("read_req").run([&] (auto y) {
+                http::async_read(con, buffer, req, y);
+            });
+
+            if (!wd.is_running()) {
+                return or_throw(yield, asio::error::timed_out);
+            }
+
+            if (ec || cancel) return;
         }
-
-        auto wd = watch_dog(_ctx , rq_read_timeout, [&] { con.close(); });
-
-        yield[ec].tag("read_req").run([&] (auto y) {
-            http::async_read(con, buffer, req, y);
-        });
-
-        if (!wd.is_running()) {
-            return or_throw(yield, asio::error::timed_out);
-        }
-
-        if (ec || cancel) return;
 
         if (req.method() != http::verb::connect) {
             auto keep_alive = _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));
@@ -645,7 +646,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
         yield[ec].tag("write_res").run([&] (auto y) {
-            http::async_write(con, res, y);
+            util::http_reply(con, res, y);
         });
 
         if (cancel) ec = asio::error::operation_aborted;

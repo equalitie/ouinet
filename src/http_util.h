@@ -97,7 +97,7 @@ http_request( StreamIn& in
     bool timed_out = false;
     sys::error_code ec;
 
-    WatchDog wdog( in.get_executor(), default_timeout::http_request()
+    WatchDog wdog( in.get_executor(), default_timeout::http_send_simple()
                  , [&] { timed_out = true; in.close(); });
     http::async_write(in, rq, yield[ec]);
 
@@ -111,6 +111,26 @@ http_request( StreamIn& in
         ec = asio::error::operation_aborted;
     if (ec)
         return or_throw(yield, ec);
+}
+
+// Send the HTTP response `rs` over `out`,
+// trigger an error on timeout or cancellation,
+// closing `out`.
+template<class StreamOut, class Response>
+inline
+void
+http_reply( StreamOut& out
+          , const Response& rs
+          , asio::yield_context yield)
+{
+    auto wd = watch_dog( out.get_executor(), default_timeout::http_send_simple()
+                       , [&] { out.close(); });
+
+    sys::error_code ec;
+    http::async_write(out, rs, yield[ec]);
+    if (!wd.is_running()) ec = asio::error::timed_out;
+
+    return or_throw(yield, ec);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

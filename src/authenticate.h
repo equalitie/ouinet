@@ -3,6 +3,7 @@
 #include <boost/beast/core/detail/base64.hpp>
 #include "namespaces.h"
 #include "generic_stream.h"
+#include "http_util.h"
 #include "util.h"
 
 namespace ouinet {
@@ -35,6 +36,8 @@ namespace authenticate_detail {
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
+//
+// This times out if an authentication error message fails to be sent.
 template<class Request>
 inline
 bool authenticate( Request& req
@@ -68,9 +71,9 @@ bool authenticate( Request& req
     res.prepare_payload();
 
     sys::error_code ec;
-    http::async_write(con, res, yield[ec]);
+    util::http_reply(con, res, yield[ec]);
 
-    return false;
+    return or_throw(yield, ec, false);
 }
 
 template<class Request>

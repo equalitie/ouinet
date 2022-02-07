@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/read.hpp>
+#include "default_timeout.h"
 #include "generic_stream.h"
 #include "util/signal.h"
 #include "util/wait_condition.h"
@@ -12,7 +13,7 @@ template<class Stream1, class Stream2>
 inline
 void full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
 {
-    static const auto timeout = std::chrono::seconds(60);
+    static const auto timeout = default_timeout::activity();
 
     static const auto half_duplex = []( auto& in
                                       , auto& out
