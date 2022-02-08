@@ -36,9 +36,9 @@ void full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yiel
 
     auto cancel_slot = cancel.connect([&] { c1.close(); c2.close(); });
 
-    WatchDog wdog( c1.get_executor()
-                 , timeout
-                 , [&] { c1.close(); c2.close(); });
+    auto wdog = watch_dog( c1.get_executor()
+                         , timeout
+                         , [&] { c1.close(); c2.close(); });
 
     WaitCondition wait_condition(c1.get_executor());
 
