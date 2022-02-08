@@ -97,8 +97,8 @@ http_request( StreamIn& in
     bool timed_out = false;
     sys::error_code ec;
 
-    WatchDog wdog( in.get_executor(), default_timeout::http_send_simple()
-                 , [&] { timed_out = true; in.close(); });
+    auto wdog = watch_dog( in.get_executor(), default_timeout::http_send_simple()
+                         , [&] { timed_out = true; in.close(); });
     http::async_write(in, rq, yield[ec]);
 
     // Ignore `end_of_stream` error, there may still be data in

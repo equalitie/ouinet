@@ -125,7 +125,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 
         bool timed_out = false;
 
-        WatchDog wd(_ex, retry_timeout[i], [&] {
+        auto wd = watch_dog(_ex, retry_timeout[i], [&] {
                 timed_out = true;
                 socket.close();
         });

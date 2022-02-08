@@ -976,9 +976,9 @@ Session Client::State::fetch_fresh_from_origin( Request rq
                                               , const UserAgentMetaData& meta
                                               , Cancel cancel, Yield yield)
 {
-    WatchDog watch_dog(_ctx
-                      , default_timeout::fetch_http()
-                      , [&] { cancel(); });
+    auto watch_dog = ouinet::watch_dog( _ctx
+                                      , default_timeout::fetch_http()
+                                      , [&] { cancel(); });
 
     assert(!rq[http::field::host].empty());  // origin pools require host
     util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
@@ -1044,7 +1044,9 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // and responses and thus can't be used for full-dupplex forwarding.
 
     Cancel cancel(cancel_);
-    WatchDog watch_dog(_ctx, default_timeout::fetch_http(), [&]{ cancel(); });
+    auto watch_dog = ouinet::watch_dog( _ctx
+                                      , default_timeout::fetch_http()
+                                      , [&]{ cancel(); });
 
     // Parse the URL to tell HTTP/HTTPS, host, port.
     util::url_match url;
