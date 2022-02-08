@@ -325,53 +325,54 @@ private:
     {
         yield.log("Injection begin");
 
-        Cancel timeout_cancel(cancel);
-        // Start a short timeout for initial fetch.
-        WatchDog fetch_wd(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
-
         sys::error_code ec;
+        Cancel timeout_cancel(cancel);
 
-        auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to get connection; ec=", ec);
-        return_or_throw_on_error(yield, cancel, ec);
+        Session orig_sess;
+        {
+            // Start a short timeout for initial fetch.
+            auto fetch_wd = watch_dog(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
 
-        // Send HTTP request to origin.
-        auto orig_rq = util::to_origin_request(cache_rq);
-        orig_rq.keep_alive(true);  // regardless of what client wants
-        yield[ec].tag("request").run([&] (auto y) {
-            util::http_request(orig_con, orig_rq, timeout_cancel, y);
-        });
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to send request; ec=", ec);
-        return_or_throw_on_error(yield, cancel, ec);
+            auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
+            if (timeout_cancel) ec = asio::error::timed_out;
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec) yield.log("Failed to get connection; ec=", ec);
+            return_or_throw_on_error(yield, cancel, ec);
 
+            // Send HTTP request to origin.
+            auto orig_rq = util::to_origin_request(cache_rq);
+            orig_rq.keep_alive(true);  // regardless of what client wants
+            yield[ec].tag("request").run([&] (auto y) {
+                util::http_request(orig_con, orig_rq, timeout_cancel, y);
+            });
+            if (timeout_cancel) ec = asio::error::timed_out;
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec) yield.log("Failed to send request; ec=", ec);
+            return_or_throw_on_error(yield, cancel, ec);
 
-        Session::reader_uptr sig_reader;
-        auto cache_rq_method = cache_rq.method();
-        if (cache_rq_method == http::verb::get || cache_rq_method == http::verb::head) {
-            auto insert_id = to_string(genuuid());
-            auto insert_ts = chrono::seconds(time(nullptr)).count();
-            sig_reader = make_unique<cache::SigningReader>
-                (move(orig_con), cache_rq, move(insert_id), insert_ts, config.cache_private_key());
-        } else {
-            // Responses of unsafe or uncacheable requests should not be cached.
-            yield.log("Not signing response: not a GET or HEAD request");
-            sig_reader = make_unique<http_response::Reader>(move(orig_con));
+            Session::reader_uptr sig_reader;
+            auto cache_rq_method = cache_rq.method();
+            if (cache_rq_method == http::verb::get || cache_rq_method == http::verb::head) {
+                auto insert_id = to_string(genuuid());
+                auto insert_ts = chrono::seconds(time(nullptr)).count();
+                sig_reader = make_unique<cache::SigningReader>
+                    (move(orig_con), cache_rq, move(insert_id), insert_ts, config.cache_private_key());
+            } else {
+                // Responses of unsafe or uncacheable requests should not be cached.
+                yield.log("Not signing response: not a GET or HEAD request");
+                sig_reader = make_unique<http_response::Reader>(move(orig_con));
+            }
+
+            orig_sess = yield[ec].tag("read_hdr").run([&] (auto y) {
+                return Session::create( move(sig_reader), cache_rq_method == http::verb::head
+                                      , timeout_cancel, y);
+            });
+            if (timeout_cancel) ec = asio::error::timed_out;
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec) yield.log("Failed to process response head; ec=", ec);
+            return_or_throw_on_error(yield, cancel, ec);
         }
 
-        auto orig_sess = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return Session::create( move(sig_reader), cache_rq_method == http::verb::head
-                                  , timeout_cancel, y);
-        });
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to process response head; ec=", ec);
-        return_or_throw_on_error(yield, cancel, ec);
-
-        fetch_wd.stop();  // end of short initial fetch timeout
         // Start a longer timeout for the main forwarding between origin and user,
         // and make it trigger even if the connection is moving data,
         // e.g. to avoid HTTP tar pits or endless transfers
