@@ -254,7 +254,7 @@ CacheControl::do_fetch(
         asio::yield_context y(yield);
         {
 #           ifndef NDEBUG
-            WatchDog wdog(_ex, std::chrono::seconds(10), [&] {
+            auto wdog = watch_dog(_ex, std::chrono::seconds(10), [&] {
                     yield.log("Fetch fresh failed to stop");
                     assert(0);
                 });
@@ -264,7 +264,7 @@ CacheControl::do_fetch(
         }
         {
 #           ifndef NDEBUG
-            WatchDog wdog(_ex, std::chrono::seconds(10), [&] {
+            auto wdog = watch_dog(_ex, std::chrono::seconds(10), [&] {
                     yield.log("Fetch stored failed to stop");
                     assert(0);
                 });
