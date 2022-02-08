@@ -269,6 +269,7 @@ public:
         if (state) {
             state->timer.cancel();
             state->self = nullptr;
+            state = nullptr;
         }
 
         return ret;
