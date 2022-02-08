@@ -383,6 +383,9 @@ private:
         // Keep client connection if the client wants to.
         orig_sess.response_header().keep_alive(rq_keep_alive);
 
+        yield.log("=== Sending back injector response ===");
+        yield.log(orig_sess.response_header());
+
         yield.tag("flush")[ec].run([&] (auto y) {
             // This short timeout will get reset with each successful send/recv operation,
             // so an exchange with no traffic at all does not get stuck for too long.
