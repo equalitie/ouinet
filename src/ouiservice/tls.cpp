@@ -48,7 +48,8 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                     sys::error_code ec;
                     bool timed_out = false;
 
-                    WatchDog wd(ex, 10s, [&] {
+                    auto wd = watch_dog( ex, 10s
+                                       , [&] {
                                              tls_con->next_layer().close();
                                              timed_out = true;
                                          });

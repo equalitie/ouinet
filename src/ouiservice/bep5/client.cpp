@@ -365,7 +365,7 @@ private:
                 auto sc = success_cancel.connect([&] { c(); });
 
                 sys::error_code ec;
-                WatchDog wd(ex, injector_pong_timeout, [&] { c(); });
+                auto wd = watch_dog(ex, injector_pong_timeout, [&] { c(); });
                 if (ping_one_injector(inj, c, yield[ec])) {
                     success_cancel();
                 }
