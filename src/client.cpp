@@ -489,6 +489,7 @@ private:
                              ? "uTPAccept(" + con.remote_endpoint() + ")"
                              : "uTPAccept");
                     serve_utp_request(move(con), y[ec].tag("serve_utp_req"));
+                    _YDEBUG(y, "Done");
                 }));
             }
         }));
@@ -2225,6 +2226,7 @@ void Client::State::serve_request( GenericStream&& con
     });
 
     auto connection_id = _next_connection_id++;
+    auto connection_idstr = util::str('C', connection_id);
 
     // Is MitM active?
     bool mitm = false;
@@ -2239,7 +2241,7 @@ void Client::State::serve_request( GenericStream&& con
         http::request_parser<Request::body_type> reqhp;
         reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
 
-        Yield yield(_ctx.get_executor(), yield_, util::str('C', connection_id));
+        Yield yield(_ctx.get_executor(), yield_, connection_idstr);
         yield[ec].tag("read_req").run([&] (auto y) {
             http::async_read(con, buffer, reqhp, y);
         });
@@ -2255,6 +2257,7 @@ void Client::State::serve_request( GenericStream&& con
         }
 
         Request req(reqhp.release());
+        auto req_done = defer([&yield] { _YDEBUG(yield, "Done"); });
 
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
             return authenticate(req, con, _config.client_credentials(), y);
@@ -2367,6 +2370,8 @@ void Client::State::serve_request( GenericStream&& con
             break;
         }
     }
+
+    LOG_DEBUG(connection_idstr, " Done");
 }
 
 //------------------------------------------------------------------------------
