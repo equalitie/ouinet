@@ -2263,6 +2263,7 @@ void Client::State::serve_request( GenericStream&& con
             return authenticate(req, con, _config.client_credentials(), y);
         });
         if (!auth) {
+            _YWARN(yield, "Request authentication failed, discarding");
             continue;
         }
 
