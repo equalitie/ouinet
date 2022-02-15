@@ -2358,13 +2358,15 @@ void Client::State::serve_request( GenericStream&& con
         if (ec) {
             _YERROR(yield, "Error writing back response; ec=", ec);
 
-            if (!tnx.user_agent_was_written_to() && !cancel && con.is_open()) {
+            if (tnx.user_agent_was_written_to())
+                con.close();  // it may already be closed
+            if (con.is_open() && !cancel) {
                 sys::error_code ec_;
                 tnx.write_to_user_agent( retrieval_failure_response(req)
                                        , cancel, static_cast<asio::yield_context>(yield[ec_]));
             }
-
-            if (con.is_open() && !req.keep_alive()) con.close();
+            if (!req.keep_alive())
+                con.close();
         }
 
         if (!con.is_open()) {
