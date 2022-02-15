@@ -1334,6 +1334,10 @@ public:
         return _ua_was_written_to;
     }
 
+    bool is_open() const {
+        return _ua_con.is_open();
+    }
+
     const UserAgentMetaData& meta() const { return _meta; }
 private:
     /*
@@ -1561,8 +1565,19 @@ public:
         session.flush_response(cancel, static_cast<asio::yield_context>(yield[ec]),
             [&] ( Part&& part
                 , Cancel& cancel
-                , asio::yield_context)
+                , asio::yield_context y)
             {
+                // If the user agent closed its connection, stop getting data from the injector too.
+                // Otherwise, besides continuing to transfer data to the local cache,
+                // it will also accumulate in memory (at the `qag` queue, which is no longer read),
+                // with both being especially problematic with big resources like videos.
+                //
+                // Please note that this will cause an incomplete response to be stored;
+                // hopefully the Injector mechanism may be faster to respond
+                // if the client tries to download the same resource again.
+                // Another fix would be to have the local cache participate in multi-peer downloads.
+                if (!tnx.is_open())
+                    return or_throw(y, asio::error::broken_pipe);
                 if (do_cache) qst.push_back(part);
                 qag.push_back(std::move(part));
             });
