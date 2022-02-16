@@ -514,7 +514,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             store_s.flush_response(loaded_w, c, y[e]);
-            BOOST_CHECK(!complete || !e);
+            BOOST_CHECK_EQUAL(e.message(), complete ? "Success" : "Software caused connection abort");
             loaded_w.close();
         });
 

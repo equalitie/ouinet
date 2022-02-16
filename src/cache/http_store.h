@@ -82,6 +82,11 @@ void http_store( http_response::AbstractReader&, const fs::path&
 //
 // The response will be provided using chunked transfer encoding,
 // with all the metadata needed to verify and further share it.
+//
+// An incomplete response will work as usual,
+// but cause `boost::asio::error::connection_aborted` ("Software caused connection abort")
+// when no more body data is available.
+// To detect such cases beforehand, use `http_store_body_size`.
 reader_uptr
 http_store_reader(const fs::path& dirp, asio::executor, sys::error_code&);
 

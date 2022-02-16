@@ -531,8 +531,10 @@ private:
         // it may still be worth sending it in this chunk header
         // (to allow the receiving end to process it).
         // Otherwise it is not worth sending anything.
-        if (!sig_entry && next_chunk_exts.empty())
-            return boost::none;
+        if (!sig_entry && next_chunk_exts.empty()) {
+            if (!data_size) ec = asio::error::connection_aborted;  // incomplete
+            return or_throw(yield, ec, boost::none);
+        }
         auto chunk_body = get_chunk_body(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, boost::none);
         // Validate block offset and size.
