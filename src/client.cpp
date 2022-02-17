@@ -2295,7 +2295,7 @@ void Client::State::serve_request( GenericStream&& con
             });
             if (ec) {
                 _YERROR(yield, "MitM exception; ec=", ec);
-                return;
+                break;
             }
             mitm = true;
             // Save CONNECT target (minus standard HTTPS port ``:443`` if present)
@@ -2341,7 +2341,7 @@ void Client::State::serve_request( GenericStream&& con
                 sys::error_code ec_;
                 handle_bad_request(con, req, "Not a proxy request", yield[ec_]);
                 if (req.keep_alive()) continue;
-                else return;
+                else break;
             }
         }
         // Ensure that the request has a `Host:` header
@@ -2350,7 +2350,7 @@ void Client::State::serve_request( GenericStream&& con
             sys::error_code ec_;
             handle_bad_request(con, req, "Invalid or missing host in request", yield[ec_]);
             if (req.keep_alive()) continue;
-            else return;
+            else break;
         }
 
         request_config = route_choose_config(req, matches, default_request_config);
@@ -2363,7 +2363,7 @@ void Client::State::serve_request( GenericStream&& con
             sys::error_code ec;
             tnx.write_to_user_agent( retrieval_failure_response(req)
                                    , cancel, static_cast<asio::yield_context>(yield[ec]));
-            if (ec || cancel) return;
+            if (ec || cancel) break;
             continue;
         }
 
