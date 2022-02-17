@@ -51,7 +51,7 @@ slurp_response( AbstractReader& reader, size_t max_body_size
     auto part = reader.async_read_part(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, std::move(rs));
 
-    if (!part) ec = asio::error::broken_pipe;
+    if (!part) ec = http::error::end_of_stream;
     else if (!part->is_head()) ec = asio::error::invalid_argument;
     if (ec) return or_throw(yield, ec, std::move(rs));
     rs.base() = *(part->as_head());
