@@ -114,8 +114,9 @@ Session Session::create( std::unique_ptr<Reader>&& reader
     }
 
     if (!ec && !head_opt_part) {
-        assert(ec);
-        ec = http::error::unexpected_body;
+        // This is ok for the reader,
+        // but it should be made explicit to code creating sessions.
+        ec = http::error::end_of_stream;
     }
 
     if (ec) return or_throw<Session>(yield, ec);
