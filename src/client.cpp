@@ -2262,13 +2262,12 @@ void Client::State::serve_request( GenericStream&& con
         });
 
         if ( ec == http::error::end_of_stream
-          || ec == asio::ssl::error::stream_truncated) break;
+          || ec == asio::ssl::error::stream_truncated
+          || ec == asio::error::operation_aborted) break;
 
         if (ec) {
-            if (ec != asio::error::operation_aborted) {
-                LOG_WARN("Failed to read request; ec=", ec);
-            }
-            return;
+            LOG_WARN("Failed to read request; ec=", ec);
+            break;
         }
 
         Request req(reqhp.release());
