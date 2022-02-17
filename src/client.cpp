@@ -2256,6 +2256,9 @@ void Client::State::serve_request( GenericStream&& con
         http::request_parser<Request::body_type> reqhp;
         reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
 
+        // No timeout either, a keep-alive connection to the user agent
+        // will remain open and waiting for new requests
+        // until the later desires to close it.
         Yield yield(_ctx.get_executor(), yield_, connection_idstr);
         yield[ec].tag("read_req").run([&] (auto y) {
             http::async_read(con, buffer, reqhp, y);
