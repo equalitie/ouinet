@@ -32,6 +32,17 @@ void full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yiel
 
             wdog.expires_after(timeout);
         }
+        // On error, force the other half-duplex task to finish by closing both streams.
+        // Otherwise, it will not notice until
+        // (i) it reads and fails to write, or (ii) it times out on read.
+        //
+        // **Note:** This assumes that the other endoint wants
+        // to shut both send & recv channels at roughly the same time.
+        // We should look out for (esp. tunneled) protocols where this does not hold.
+        if (ec) {
+            in.close();
+            out.close();
+        }
     };
 
     auto cancel_slot = cancel.connect([&] { c1.close(); c2.close(); });
