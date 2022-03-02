@@ -1063,8 +1063,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
         return _injector->connect(y, cancel);
     });
-
-    if (ec) return or_throw<Session>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, Session());
 
     // Build the actual request to send to the proxy.
     Request connreq = { http::verb::connect
@@ -1123,8 +1122,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     } else {
         con = move(inj.connection);
     }
-
-    if (ec) return or_throw<Session>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, Session());
 
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
