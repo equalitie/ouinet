@@ -42,8 +42,8 @@ class ClientFrontEnd {
 
 public:
     // Absolute paths of allowed URLs.
-    inline static const std::string log_file_apath = "/logfile.txt";
-    inline static const std::string group_list_apath = "/groups.txt";
+    static constexpr const char* log_file_apath = "/logfile.txt";
+    static constexpr const char* group_list_apath = "/groups.txt";
 
 public:
     using Request = http::request<http::string_body>;
