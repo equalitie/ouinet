@@ -654,8 +654,10 @@ void serve( InjectorConfig& config
                     if (cancel) ec = asio::error::operation_aborted;
                 }
                 rrp = orig_sess.release_reader();
-                assert(rrp);
-                orig_con = ((OrigReader*)(rrp.get()))->release_stream();  // may be reused with keep-alive
+                if (rrp)
+                    orig_con = ((OrigReader*)(rrp.get()))->release_stream();  // may be reused with keep-alive
+                else
+                    res_keep_alive = false;
             }
             if (ec) {
                 if (!client_was_written_to)
