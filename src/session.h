@@ -54,10 +54,12 @@ public:
     void close() override {
         if (!_reader) return;
         _reader->close();
+        _reader = nullptr;
     }
 
     // The session object should not be used after calling this.
     reader_uptr release_reader() {
+        if (!_reader) return nullptr;
         auto r = std::move(_reader);
         _reader = nullptr;
         return r;
@@ -133,6 +135,9 @@ inline
 boost::optional<http_response::Part>
 Session::async_read_part(Cancel cancel, asio::yield_context yield)
 {
+    if (!_reader)
+        return or_throw(yield, asio::error::not_connected, boost::none);
+
     if (!_head_was_read) {
         _head_was_read = true;
         return {{_head}};
@@ -147,6 +152,9 @@ Session::flush_response(Cancel& cancel,
                         asio::yield_context yield,
                         Handler&& h)
 {
+    if (!_reader)
+        return or_throw(yield, asio::error::not_connected);
+
     assert(!_head_was_read);
 
     sys::error_code ec;
@@ -160,6 +168,9 @@ Session::flush_response(Cancel& cancel,
     if (_is_head_response) return;
 
     while (true) {
+        if (!_reader)
+            return or_throw(yield, asio::error::not_connected);
+
         auto opt_part = _reader->async_read_part(cancel, yield[ec]);
         assert(ec != http::error::end_of_stream);
         return_or_throw_on_error(yield, cancel, ec);
