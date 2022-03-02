@@ -21,6 +21,14 @@ public:
     Session(Session&&) = default;
     Session& operator=(Session&&) = default;
 
+    // Low-level session creation for partially read responses,
+    // please consider using `create` below instead.
+    Session(http_response::Head&& head, bool is_head_response, reader_uptr&& reader)
+        : _head(std::move(head))
+        , _reader(std::move(reader))
+        , _is_head_response(is_head_response)
+    {}
+
     // Construct the session and read response head
     static Session create(GenericStream, bool is_head_response, Cancel, asio::yield_context);
 
@@ -66,13 +74,6 @@ public:
 
     void debug() { _debug = true; }
     void debug_prefix(std::string s) { _debug_prefix = std::move(s); }
-
-private:
-    Session(http_response::Head&& head, bool is_head_response, reader_uptr&& reader)
-        : _head(std::move(head))
-        , _reader(std::move(reader))
-        , _is_head_response(is_head_response)
-    {}
 
 private:
     http_response::Head _head;
