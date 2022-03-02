@@ -1087,7 +1087,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // Only get the head of the CONNECT response
     // (otherwise we would get stuck waiting to read
     // a body whose length we do not know
-    // since the respone should have no content length).
+    // since a successful respone should have no content length as per RFC7231#4.3.6).
     {
         auto r = std::make_unique<http_response::Reader>(std::move(inj.connection));
 
@@ -1097,7 +1097,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         return_or_throw_on_error(yield, cancel, ec, Session());
         assert(part && part->is_head());
 
-        if (part->as_head()->result() != http::status::ok) {
+        if (http::to_status_class(part->as_head()->result()) != http::status_class::successful) {
             auto rsh = std::move(*(part->as_head()));
             _YERROR(yield.tag("proxy_connect"), rsh);
 
