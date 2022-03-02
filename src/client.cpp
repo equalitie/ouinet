@@ -25,8 +25,8 @@
 #include "origin_pools.h"
 #include "doh.h"
 #include "http_util.h"
-#include "fetch_http_page.h"
 #include "client_front_end.h"
+#include "connect_to_host.h"
 #include "generic_stream.h"
 #include "util.h"
 #include "async_sleep.h"
@@ -1079,36 +1079,35 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     // Open a tunnel to the origin
     // (to later perform the SSL handshake and send the request).
+    yield[ec].tag("connreq").run([&] (auto y) {
+        util::http_request(inj.connection, connreq, cancel, y);
+    });
+    return_or_throw_on_error(yield, cancel, ec, Session());
+
     // Only get the head of the CONNECT response
     // (otherwise we would get stuck waiting to read
     // a body whose length we do not know
     // since the respone should have no content length).
-    auto connres = fetch_http<http::empty_body>
-                        ( _ctx.get_executor()
-                        , inj.connection
-                        , connreq
-                        , default_timeout::fetch_http()
-                        , cancel
-                        , yield[ec].tag("connreq"));
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    {
+        auto r = std::make_unique<http_response::Reader>(std::move(inj.connection));
 
-    if (connres.result() != http::status::ok) {
-        _YERROR(yield.tag("proxy_connect"), connres);
-        // The use of `fetch_http<http::empty_body>` above precludes us from
-        // using the response body in a normal `Session` or `Reader`,
-        // so drop it altogether (TODO).
-        auto rsh = util::without_framing(connres.base());
-        rsh.set(http::field::content_length, 0);  // avoid blocking the agent
-        util::remove_ouinet_nonerrors_ref(rsh);
-        rsh.set(http_::response_source_hdr, http_::response_source_hdr_proxy);
-
-        auto r = std::make_unique<QueueReader>(_ctx.get_executor());
-        r->insert(http_response::Part(http_response::Head(std::move(rsh))));
-        auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return Session::create( std::move(r), rq.method() == http::verb::head
-                                  , cancel, y);
+        auto part = yield[ec].tag("read_hdr").run([&] (auto y) {
+            return r->async_read_part(cancel, y);
         });
-        return or_throw(yield, ec, std::move(s));
+        return_or_throw_on_error(yield, cancel, ec, Session());
+        assert(part && part->is_head());
+
+        if (part->as_head()->result() != http::status::ok) {
+            auto rsh = std::move(*(part->as_head()));
+            _YERROR(yield.tag("proxy_connect"), rsh);
+
+            util::remove_ouinet_nonerrors_ref(rsh);
+            rsh.set(http_::response_source_hdr, http_::response_source_hdr_proxy);
+
+            return Session(std::move(rsh), rq.method() == http::verb::head, std::move(r));
+        }
+
+        inj.connection = r->release_stream();
     }
 
     GenericStream con;
