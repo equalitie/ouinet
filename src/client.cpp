@@ -578,16 +578,14 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     Cancel cancel = _shutdown_signal;
     auto cancel_slot = cancel.connect([&] { con.close(); });
 
-    sys::error_code ec;
-
-    http::request<http::empty_body> req;
-    beast::flat_buffer buffer;
-
     // We expect the first request right a way. Consecutive requests may arrive with
     // various delays.
     bool is_first_request = true;
 
     while (true) {
+        sys::error_code ec;
+
+        http::request<http::empty_body> req;
         {
             auto rq_read_timeout = default_timeout::http_recv_simple();
             if (is_first_request) {
@@ -598,6 +596,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
             auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });
 
             yield[ec].tag("read_req").run([&] (auto y) {
+                beast::flat_buffer buffer;
                 http::async_read(con, buffer, req, y);
             });
 
