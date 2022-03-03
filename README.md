@@ -474,12 +474,12 @@ directory in the example below) which uses the Ouinet client as an HTTP proxy
 another shell:
 
     mkdir -p ff-profile
-    env http_proxy='http://localhost:8077/' firefox --no-remote --profile ff-profile
+    env http_proxy='http://localhost:8077/' https_proxy='http://localhost:8077/' \
+        firefox --no-remote --profile ff-profile
 
-Otherwise you may manually [modify your browser's settings][Firefox proxy] to:
-
-  - Make the client (listening on port `localhost:8077` here) its HTTP proxy
-  - Check *Use this proxy for all protocols* (mostly for HTTPS)
+Otherwise you may manually [modify your browser's settings][Firefox proxy] to
+make the client (listening on port `localhost:8077` here) its HTTP and
+HTTPS/SSL proxy.
 
 [Firefox proxy]: http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox
     "How to Enter Proxy Settings in Firefox"
