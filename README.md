@@ -478,8 +478,8 @@ another shell:
         firefox --no-remote --profile ff-profile
 
 Otherwise you may manually [modify your browser's settings][Firefox proxy] to
-make the client (listening on port `localhost:8077` here) its HTTP and
-HTTPS/SSL proxy.
+make the client (listening on host `localhost` and port 8077 here) its HTTP
+and HTTPS/SSL proxy.
 
 [Firefox proxy]: http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox
     "How to Enter Proxy Settings in Firefox"
