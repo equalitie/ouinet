@@ -484,6 +484,10 @@ and HTTPS/SSL proxy.
 [Firefox proxy]: http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox
     "How to Enter Proxy Settings in Firefox"
 
+Please note that you do not need to change proxy settings at all when using
+CENO Extension >= v1.4.0 (see below), as long as your client is listening on
+the default address shown above.
+
 To reduce noise in the client log, you may want to disable Firefox's data
 collection by unchecking all options from "Preferences / Privacy & Security /
 Firefox Data Collection and Use", and maybe entering `about:config` in the
