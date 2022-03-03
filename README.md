@@ -167,7 +167,7 @@ And restart the environment:
     $ vagrant up
 
 Then you can configure your browser to use `localhost` port 8077 to contact
-the HTTP proxy.
+the HTTP proxy (see the section further below).
 
 ## Docker development environment
 
