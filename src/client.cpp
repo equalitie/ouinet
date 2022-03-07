@@ -1984,10 +1984,10 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
         http::async_write(origin, rq, y);
     });
 
-    beast::flat_buffer buffer;
+    beast::flat_buffer origin_rbuf;
     Response rs;
     yield[ec].tag("read_res").run([&] (auto y) {
-        http::async_read(origin, buffer, rs, y);
+        http::async_read(origin, origin_rbuf, rs, y);
     });
 
     if (ec) return or_throw(yield, ec, true);
@@ -2065,7 +2065,6 @@ void Client::State::serve_request( GenericStream&& con
     Client::ClientCacheControl cache_control(*this, request_config);
 
     sys::error_code ec;
-    beast::flat_buffer buffer;
 
     // Expressions to test the request against and configurations to be used.
     // TODO: Create once and reuse.
@@ -2244,7 +2243,10 @@ void Client::State::serve_request( GenericStream&& con
 
     // Saved host/port from CONNECT request.
     string connect_hp;
+
     // Process the different requests that may come over the same connection.
+    beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
+
     for (;;) {  // continue for next request; break for no more requests
         // Read the (clear-text) HTTP request
         // (without a size limit, in case we are uploading a big file).
@@ -2257,7 +2259,7 @@ void Client::State::serve_request( GenericStream&& con
         // until the later desires to close it.
         Yield yield(_ctx.get_executor(), yield_, connection_idstr);
         yield[ec].tag("read_req").run([&] (auto y) {
-            http::async_read(con, buffer, reqhp, y);
+            http::async_read(con, con_rbuf, reqhp, y);
         });
 
         if ( ec == http::error::end_of_stream
@@ -2608,10 +2610,10 @@ void Client::State::start()
                         (GenericStream c, asio::yield_context yield_) {
                   Yield yield(_ctx, yield_, "frontend");
                   sys::error_code ec;
+                  beast::flat_buffer c_rbuf;
                   Request rq;
                   yield[ec].tag("read_req").run([&] (auto y) {
-                      beast::flat_buffer buffer;
-                      http::async_read(c, buffer, rq, y);
+                      http::async_read(c, c_rbuf, rq, y);
                   });
 
                   if (ec) return;
