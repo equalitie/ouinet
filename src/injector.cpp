@@ -174,8 +174,12 @@ resolve_target( const Request& req
 // Note: the connection is attempted towards
 // the already resolved endpoints in `lookup`,
 // only headers are used from `req`.
+//
+// `client_c_rbuf` contains data already read from `client_c`
+// but not yet processed.
 static
 void handle_connect_request( GenericStream client_c
+                           , beast::flat_buffer client_c_rbuf
                            , const Request& req
                            , Cancel& cancel
                            , Yield yield)
@@ -252,6 +256,14 @@ void handle_connect_request( GenericStream client_c
         return;
     }
 
+    // First send unused but already read data from the client to the origin.
+    if (client_c_rbuf.size() > 0) yield.tag("write_rbuf")[ec].run([&] (auto y) {
+        auto op_wd = watch_dog(exec, default_timeout::activity(), [&] { cancel(); });
+        return asio::async_write(origin_c, client_c_rbuf, static_cast<asio::yield_context>(y));
+    });
+    if (ec || cancel) return;
+
+    // Forward the rest of data in both directions.
     yield.tag("full_duplex").run([&] (auto y) {
         full_duplex(move(client_c), move(origin_c), cancel, y);
     });
@@ -523,6 +535,7 @@ void serve( InjectorConfig& config
     // We expect the first request right a way. Consecutive requests may arrive with
     // various delays.
     bool is_first_request = true;
+    beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
 
     for (;;) {
         sys::error_code ec;
@@ -539,8 +552,7 @@ void serve( InjectorConfig& config
             auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
 
             yield[ec].tag("read_req").run([&] (auto y) {
-                beast::flat_buffer buffer;
-                http::async_read(con, buffer, req, y);
+                http::async_read(con, con_rbuf, req, y);
             });
 
             if (!wd.is_running()) break;
@@ -574,7 +586,7 @@ void serve( InjectorConfig& config
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            return handle_connect_request( move(con)
+            return handle_connect_request( move(con), move(con_rbuf)
                                          , req
                                          , cancel
                                          , yield.tag("proxy/connect/handle_connect"));

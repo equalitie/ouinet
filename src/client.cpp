@@ -581,6 +581,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
     // We expect the first request right a way. Consecutive requests may arrive with
     // various delays.
     bool is_first_request = true;
+    beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
 
     while (true) {
         sys::error_code ec;
@@ -596,8 +597,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
             auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });
 
             yield[ec].tag("read_req").run([&] (auto y) {
-                beast::flat_buffer buffer;
-                http::async_read(con, buffer, req, y);
+                http::async_read(con, con_rbuf, req, y);
             });
 
             if (!wd.is_running()) {
@@ -652,6 +652,15 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return;
 
+        // First send unused but already read data from the other client to the injector.
+        if (con_rbuf.size() > 0) yield.tag("write_rbuf")[ec].run([&] (auto y) {
+            auto exec = _ctx.get_executor();
+            auto op_wd = watch_dog(exec, default_timeout::activity(), [&] { cancel(); });
+            return asio::async_write(inj, con_rbuf, static_cast<asio::yield_context>(y));
+        });
+        if (ec || cancel) return;
+
+        // Forward the rest of data in both directions.
         yield[ec].tag("full_duplex").run([&] (auto y) {
             full_duplex(move(con), move(inj), cancel, y);
         });
@@ -1984,10 +1993,10 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
         http::async_write(origin, rq, y);
     });
 
-    beast::flat_buffer buffer;
+    beast::flat_buffer origin_rbuf;
     Response rs;
     yield[ec].tag("read_res").run([&] (auto y) {
-        http::async_read(origin, buffer, rs, y);
+        http::async_read(origin, origin_rbuf, rs, y);
     });
 
     if (ec) return or_throw(yield, ec, true);
@@ -1998,6 +2007,15 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (rs.result() != http::status::switching_protocols) return true;
 
+    // First send unused but already read data from the origin to the browser.
+    if (origin_rbuf.size() > 0) yield.tag("write_rbuf")[ec].run([&] (auto y) {
+        auto exec = _ctx.get_executor();
+        auto op_wd = watch_dog(exec, default_timeout::activity(), [&] { cancel(); });
+        return asio::async_write(browser, origin_rbuf, static_cast<asio::yield_context>(y));
+    });
+    return_or_throw_on_error(yield, cancel, ec, true);
+
+    // Forward the rest of data in both directions.
     yield[ec].tag("full_duplex").run([&] (auto y) {
         full_duplex(move(browser), move(origin), cancel, y);
     });
@@ -2065,7 +2083,6 @@ void Client::State::serve_request( GenericStream&& con
     Client::ClientCacheControl cache_control(*this, request_config);
 
     sys::error_code ec;
-    beast::flat_buffer buffer;
 
     // Expressions to test the request against and configurations to be used.
     // TODO: Create once and reuse.
@@ -2244,7 +2261,10 @@ void Client::State::serve_request( GenericStream&& con
 
     // Saved host/port from CONNECT request.
     string connect_hp;
+
     // Process the different requests that may come over the same connection.
+    beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
+
     for (;;) {  // continue for next request; break for no more requests
         // Read the (clear-text) HTTP request
         // (without a size limit, in case we are uploading a big file).
@@ -2257,7 +2277,7 @@ void Client::State::serve_request( GenericStream&& con
         // until the later desires to close it.
         Yield yield(_ctx.get_executor(), yield_, connection_idstr);
         yield[ec].tag("read_req").run([&] (auto y) {
-            http::async_read(con, buffer, reqhp, y);
+            http::async_read(con, con_rbuf, reqhp, y);
         });
 
         if ( ec == http::error::end_of_stream
@@ -2608,10 +2628,10 @@ void Client::State::start()
                         (GenericStream c, asio::yield_context yield_) {
                   Yield yield(_ctx, yield_, "frontend");
                   sys::error_code ec;
+                  beast::flat_buffer c_rbuf;
                   Request rq;
                   yield[ec].tag("read_req").run([&] (auto y) {
-                      beast::flat_buffer buffer;
-                      http::async_read(c, buffer, rq, y);
+                      http::async_read(c, c_rbuf, rq, y);
                   });
 
                   if (ec) return;
