@@ -523,6 +523,7 @@ void serve( InjectorConfig& config
     // We expect the first request right a way. Consecutive requests may arrive with
     // various delays.
     bool is_first_request = true;
+    beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
 
     for (;;) {
         sys::error_code ec;
@@ -539,8 +540,7 @@ void serve( InjectorConfig& config
             auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
 
             yield[ec].tag("read_req").run([&] (auto y) {
-                beast::flat_buffer buffer;
-                http::async_read(con, buffer, req, y);
+                http::async_read(con, con_rbuf, req, y);
             });
 
             if (!wd.is_running()) break;
