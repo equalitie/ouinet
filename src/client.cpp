@@ -652,6 +652,15 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return;
 
+        // First send unused but already read data from the other client to the injector.
+        if (con_rbuf.size() > 0) yield.tag("write_rbuf")[ec].run([&] (auto y) {
+            auto exec = _ctx.get_executor();
+            auto op_wd = watch_dog(exec, default_timeout::activity(), [&] { cancel(); });
+            return asio::async_write(inj, con_rbuf, static_cast<asio::yield_context>(y));
+        });
+        if (ec || cancel) return;
+
+        // Forward the rest of data in both directions.
         yield[ec].tag("full_duplex").run([&] (auto y) {
             full_duplex(move(con), move(inj), cancel, y);
         });
@@ -1998,6 +2007,15 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (rs.result() != http::status::switching_protocols) return true;
 
+    // First send unused but already read data from the origin to the browser.
+    if (origin_rbuf.size() > 0) yield.tag("write_rbuf")[ec].run([&] (auto y) {
+        auto exec = _ctx.get_executor();
+        auto op_wd = watch_dog(exec, default_timeout::activity(), [&] { cancel(); });
+        return asio::async_write(browser, origin_rbuf, static_cast<asio::yield_context>(y));
+    });
+    return_or_throw_on_error(yield, cancel, ec, true);
+
+    // Forward the rest of data in both directions.
     yield[ec].tag("full_duplex").run([&] (auto y) {
         full_duplex(move(browser), move(origin), cancel, y);
     });

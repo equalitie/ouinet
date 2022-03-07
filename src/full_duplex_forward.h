@@ -9,6 +9,8 @@
 
 namespace ouinet {
 
+// This assumes that there is no data already read from either connection,
+// but pending send.  If there is, please send it beforehand.
 template<class Stream1, class Stream2>
 inline
 void full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
