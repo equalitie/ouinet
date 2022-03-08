@@ -256,12 +256,9 @@ void handle_connect_request( GenericStream client_c
         return;
     }
 
-    // First send unused but already read data from the client to the origin.
-    if (client_c_rbuf.size() > 0) yield.tag("write_rbuf")[ec].run([&] (auto y) {
-        auto op_wd = watch_dog(exec, default_timeout::activity(), [&] { cancel(); });
-        return asio::async_write(origin_c, client_c_rbuf, static_cast<asio::yield_context>(y));
-    });
-    if (ec || cancel) return;
+    // First queue unused but already read data back into the client connnection.
+    if (client_c_rbuf.size() > 0) client_c.put_back(client_c_rbuf.data(), ec);
+    assert(!ec);
 
     // Forward the rest of data in both directions.
     yield.tag("full_duplex").run([&] (auto y) {
