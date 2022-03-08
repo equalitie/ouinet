@@ -320,12 +320,11 @@ public:
         auto handler = make_shared<Handler>(std::move(init.completion_handler));
 
         if (_impl) {
-            _impl->read_buffers.resize(distance( asio::buffer_sequence_begin(bs)
-                                               , asio::buffer_sequence_end(bs)));
-
-            copy( asio::buffer_sequence_begin(bs)
-                , asio::buffer_sequence_end(bs)
-                , _impl->read_buffers.begin());
+            {
+                system::error_code ec;
+                put_back(bs, ec);
+                assert(!ec);
+            }
 
             // TODO: It should not be necessary to check whether the underlying
             // implementation has been closed (Asio itself doesn't guarantee
