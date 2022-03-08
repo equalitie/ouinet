@@ -489,7 +489,7 @@ private:
                              ? "uTPAccept(" + con.remote_endpoint() + ")"
                              : "uTPAccept");
                     serve_utp_request(move(con), y[ec].tag("serve_utp_req"));
-                    _YDEBUG(y, "Done");
+                    _YDEBUG(y, "Done; ec=", ec);
                 }));
             }
         }));
@@ -604,15 +604,16 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
                 return or_throw(yield, asio::error::timed_out);
             }
 
-            if (ec || cancel) return;
+            if (cancel) ec = asio::error::operation_aborted;
+            if (ec) return or_throw(yield, ec);
         }
 
         if (req.method() != http::verb::connect) {
             auto keep_alive = _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));
             if (keep_alive) {
-                continue;
+                continue;  // possible error is recoverable
             }
-            return;
+            return or_throw(yield, ec);  // done or unrecoverable error
         }
 
         _YDEBUG(yield, "Client: Received uTP/CONNECT request");
@@ -621,7 +622,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
         if (!_bep5_client) {
             return handle_bad_request( con, req, "No known injectors"
-                                     , yield[ec].tag("handle_no_injectors_error"));
+                                     , yield.tag("handle_no_injectors_error"));
         }
 
         auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
@@ -630,11 +631,10 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         });
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return;
+        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
         if (ec) {
-            sys::error_code hbr_ec;
             return handle_bad_request( con, req, "Failed to connect to injector"
-                                     , yield[hbr_ec].tag("handle_injector_unreachable"));
+                                     , yield.tag("handle_injector_unreachable"));
         }
 
         // Send the client an OK message indicating that the tunnel
@@ -650,7 +650,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         });
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return;
+        if (ec) return or_throw(yield, ec);
 
         // First queue unused but already read data back into the other client connnection.
         if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
@@ -660,7 +660,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         yield[ec].tag("full_duplex").run([&] (auto y) {
             full_duplex(move(con), move(inj), cancel, y);
         });
-        return;
+        return or_throw(yield, ec);
     }
 }
 
