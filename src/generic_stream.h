@@ -278,6 +278,24 @@ public:
         return _impl->is_open();
     }
 
+    // Put data in the given buffers back into the read buffers,
+    // so that it is returned on the next read operation.
+    template<class ConstBufferSequence>
+    void put_back(const ConstBufferSequence& bs, sys::error_code& ec)
+    {
+        if (!_impl) {
+            ec = asio::error::bad_descriptor;
+            return;
+        }
+
+        _impl->read_buffers.resize(std::distance( asio::buffer_sequence_begin(bs)
+                                                , asio::buffer_sequence_end(bs)));
+
+        std::copy( asio::buffer_sequence_begin(bs)
+                 , asio::buffer_sequence_end(bs)
+                 , _impl->read_buffers.begin());
+    }
+
     template< class MutableBufferSequence
             , class Token>
     auto async_read_some(const MutableBufferSequence& bs, Token&& token)
