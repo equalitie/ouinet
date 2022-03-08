@@ -632,9 +632,9 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         if (cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) return;
         if (ec) {
-            ec = {};
+            sys::error_code hbr_ec;
             return handle_bad_request( con, req, "Failed to connect to injector"
-                                     , yield[ec].tag("handle_injector_unreachable"));
+                                     , yield[hbr_ec].tag("handle_injector_unreachable"));
         }
 
         // Send the client an OK message indicating that the tunnel
@@ -2511,7 +2511,7 @@ void Client::State::listen_tcp
         tcp::socket socket(_ctx);
         acceptor.async_accept(socket, yield[ec]);
 
-        if(ec) {
+        if (ec) {
             if (ec == asio::error::operation_aborted) break;
 
             LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);

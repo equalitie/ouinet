@@ -195,20 +195,21 @@ void handle_connect_request( GenericStream client_c
     TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec].tag("resolve"));
 
     if (ec) {
+        sys::error_code he_ec;
         string host;
         tie(host, ignore) = util::get_host_port(req);
 
         if (ec == asio::error::invalid_argument)
             return handle_error( client_c, req, http::status::bad_request
                                , "Illegal target host: " + host
-                               , yield[ec].tag("handle_no_host_error"));
+                               , yield[he_ec].tag("handle_no_host_error"));
 
         return handle_error( client_c, req, http::status::bad_gateway
                            , http_::response_error_hdr_retrieval_failed
                            , (ec == asio::error::netdb_errors::host_not_found)
                              ? ("Could not resolve host: " + host)
                              : ("Unknown resolver error: " + ec.message())
-                           , yield[ec].tag("handle_resolve_error"));
+                           , yield[he_ec].tag("handle_resolve_error"));
     }
 
     assert(!lookup.empty());
@@ -233,11 +234,12 @@ void handle_connect_request( GenericStream client_c
     });
 
     if (ec) {
+        sys::error_code he_ec;
         return handle_error( client_c, req
                            , http::status::bad_gateway
                            , http_::response_error_hdr_retrieval_failed
                            , "Failed to connect to origin: " + ec.message()
-                           , yield[ec].tag("handle_connect_error"));
+                           , yield[he_ec].tag("handle_connect_error"));
     }
 
     auto disconnect_origin_slot = cancel.connect([&origin_c] {
@@ -669,12 +671,14 @@ void serve( InjectorConfig& config
                     res_keep_alive = false;
             }
             if (ec) {
-                if (!client_was_written_to)
+                if (!client_was_written_to) {
+                    sys::error_code he_ec;
                     handle_error( con, req
                                 , http::status::bad_gateway
                                 , http_::response_error_hdr_retrieval_failed
                                 , "Failed to retrieve content from origin: " + ec.message()
-                                , yield[ec].tag("proxy/plain/handle_error"));
+                                , yield[he_ec].tag("proxy/plain/handle_error"));
+                }
                 if (ec || !req_keep_alive) break;
                 continue;
             }

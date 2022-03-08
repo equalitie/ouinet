@@ -191,9 +191,9 @@ struct Client::Impl {
 
             _YDEBUG(yield, "Load; ec=", ec);
             if (ec) {
-                ec = {};
-                handle_not_found(sink, req, yield[ec]);
-                return or_throw(yield, ec, bool(!ec));
+                sys::error_code hnf_ec;
+                handle_not_found(sink, req, yield[hnf_ec]);
+                return or_throw(yield, hnf_ec, bool(!hnf_ec));
             }
             return_or_throw_on_error(yield, cancel, ec, false);
             yield[ec].tag("write_propfind").run([&] (auto y) {
@@ -218,8 +218,9 @@ struct Client::Impl {
             if (!cancel) {
                 _YDEBUG(yield, "Not serving: ", *key, "; ec=", ec);
             }
-            handle_not_found(sink, req, yield[ec]);
-            return or_throw(yield, ec, req.keep_alive());
+            sys::error_code hnf_ec;
+            handle_not_found(sink, req, yield[hnf_ec]);
+            return or_throw(yield, hnf_ec, req.keep_alive());
         }
 
         _YDEBUG(yield, "Serving: ", *key);
