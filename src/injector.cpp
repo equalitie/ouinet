@@ -561,7 +561,7 @@ void serve( InjectorConfig& config
 
         yield.log("=== New request ===");
         yield.log(req.base());
-        auto on_exit = defer([&] { yield.log("Done"); });
+        auto on_exit = defer([&] { yield.log("Done; ec=", ec); });
 
         bool req_keep_alive = req.keep_alive();
 
@@ -588,7 +588,7 @@ void serve( InjectorConfig& config
             return handle_connect_request( move(con), move(con_rbuf)
                                          , req
                                          , cancel
-                                         , yield.tag("proxy/connect/handle_connect"));
+                                         , yield[ec].tag("proxy/connect/handle_connect"));
         }
 
         auto version_hdr_i = req.find(http_::protocol_version_hdr);
