@@ -375,11 +375,13 @@ private:
     }
 
 #define DEF_WAIT_FOR(WHAT) \
-    void wait_for_##WHAT(Cancel& cancel, asio::yield_context yield) { \
+    void wait_for_##WHAT(Cancel& cancel, Yield yield) { \
         if (!_##WHAT##_starting) return; \
         \
         sys::error_code ec; \
-        _##WHAT##_starting->wait(yield[ec]); \
+        yield[ec].tag("wait_for_" #WHAT).run([&] (auto y) { \
+            _##WHAT##_starting->wait(y); \
+        }); \
         if (cancel) ec = asio::error::operation_aborted; \
         if (ec && ec != asio::error::operation_aborted) \
             LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
@@ -1445,7 +1447,7 @@ public:
     void proxy_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         sys::error_code ec;
 
-        client_state.wait_for_injector(cancel, static_cast<asio::yield_context>(yield[ec]));
+        client_state.wait_for_injector(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
         _YDEBUG(yield, "Start");
@@ -1481,10 +1483,10 @@ public:
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
 
-        client_state.wait_for_injector(cancel, static_cast<asio::yield_context>(yield[ec]));
+        client_state.wait_for_injector(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
-        client_state.wait_for_cache(cancel, static_cast<asio::yield_context>(yield[ec]));
+        client_state.wait_for_cache(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
         _YDEBUG(yield, "Start");
