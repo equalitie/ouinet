@@ -380,7 +380,7 @@ private:
         \
         sys::error_code ec; \
         yield[ec].tag("wait_for_" #WHAT).run([&] (auto y) { \
-            _##WHAT##_starting->wait(y); \
+            _##WHAT##_starting->wait(cancel, y); \
         }); \
         if (cancel) ec = asio::error::operation_aborted; \
         if (ec && ec != asio::error::operation_aborted) \
