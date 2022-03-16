@@ -674,6 +674,11 @@ Client::State::fetch_stored_in_dcache( const Request& request
                                      , Cancel& cancel
                                      , Yield yield)
 {
+    sys::error_code ec;
+
+    wait_for_cache(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
+
     auto c = get_cache();
 
     const bool cache_is_disabled
@@ -684,8 +689,6 @@ Client::State::fetch_stored_in_dcache( const Request& request
         return or_throw<CacheEntry>( yield
                                    , asio::error::operation_not_supported);
     }
-
-    sys::error_code ec;
 
     auto key = key_from_http_req(request);
     if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
@@ -1486,9 +1489,6 @@ public:
         sys::error_code ec;
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
-
-        client_state.wait_for_cache(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
 
         _YDEBUG(yield, "Start");
         _YDEBUG(yield, tnx.request());
