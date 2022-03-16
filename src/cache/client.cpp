@@ -560,9 +560,7 @@ struct Client::Impl {
                     bad_items.insert(group_item);
                 }
             }
-            if (good_items > 0)
-                _announcer.add(compute_swarm_name(group_name));
-            else {
+            if (good_items == 0) {
                 _WARN("Not announcing group with no resources in HTTP store: ", group_name);
                 bad_groups.insert(group_name);
             }
@@ -571,6 +569,10 @@ struct Client::Impl {
             _dht_groups->remove_group(group_name);
         for (auto& item_name : bad_items)
             _dht_groups->remove(item_name);
+
+        // Finally, announce the standing groups.
+        for (auto& group_name : _dht_groups->groups())
+            _announcer.add(compute_swarm_name(group_name));
     }
 
     void stop() {
