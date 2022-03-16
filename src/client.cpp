@@ -1066,6 +1066,9 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // Connect to the injector/proxy.
     sys::error_code ec;
 
+    wait_for_injector(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, Session{});
+
     auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
         return _injector->connect(y, cancel);
     });
@@ -1176,6 +1179,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Connect to the injector.
     // TODO: Maybe refactor with `fetch_via_self`.
+
+    wait_for_injector(cancel, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec, Session{});
+
     ConnectionPool<Endpoint>::Connection con;
     if (_injector_connections.empty()) {
         _YDEBUG(yield, "Connecting to the injector");
@@ -1446,9 +1453,6 @@ public:
 
     void proxy_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         sys::error_code ec;
-
-        client_state.wait_for_injector(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
 
         _YDEBUG(yield, "Start");
 
