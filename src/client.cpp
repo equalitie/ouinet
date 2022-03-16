@@ -1487,9 +1487,6 @@ public:
         sys::error_code fresh_ec;
         sys::error_code cache_ec;
 
-        client_state.wait_for_injector(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-
         client_state.wait_for_cache(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
 
