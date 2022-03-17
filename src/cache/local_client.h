@@ -88,9 +88,8 @@ public:
 
     void purge(Cancel, asio::yield_context);
 
-    // Get all groups being announced to the distributed cache index
-    // by this client.
-    std::set<std::string> get_announced_groups() const;
+    // Get all groups being present in this client.
+    std::set<std::string> get_groups() const;
 
     ~LocalClient();
 

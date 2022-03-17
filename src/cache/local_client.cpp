@@ -93,6 +93,40 @@ struct LocalClient::Impl {
           }, _ex)
     {}
 
+    std::size_t size( Cancel cancel
+                    , asio::yield_context yield) const
+    {
+        return _http_store->size(cancel, yield);
+    }
+
+    void purge( Cancel cancel
+              , asio::yield_context yield)
+    {
+        // TODO: avoid overlapping with garbage collector
+        _DEBUG("Purging local cache...");
+
+        sys::error_code ec;
+        _http_store->for_each([&] (auto rr, auto y) {
+            // TODO: Implement specific purge operations
+            // for DHT groups and announcer
+            // to avoid having to parse all stored heads.
+            sys::error_code e;
+            auto hdr = read_response_header(*rr, yield[e]);
+            if (e) return false;
+            auto key = hdr[http_::response_uri_hdr];
+            if (key.empty()) return false;
+            remove_cache_entry(key.to_string());
+            return false;  // remove all entries
+        }, cancel, yield[ec]);
+        if (ec) {
+            _ERROR("Purging local cache: failed;"
+                   " ec=", ec);
+            return or_throw(yield, ec);
+        }
+
+        _DEBUG("Purging local cache: done");
+    }
+
     http::response_header<>
     read_response_header( http_response::AbstractReader& reader
                         , asio::yield_context yield)
@@ -235,6 +269,10 @@ struct LocalClient::Impl {
     void stop() {
         _lifetime_cancel();
     }
+
+    std::set<std::string> get_groups() const {
+        return _dht_groups->groups();
+    }
 };
 
 /* static */
@@ -315,6 +353,23 @@ LocalClient::build( asio::executor exec
 LocalClient::LocalClient(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
+
+std::size_t LocalClient::size( Cancel cancel
+                             , asio::yield_context yield) const
+{
+    return _impl->size(cancel, yield);
+}
+
+void LocalClient::purge( Cancel cancel
+                       , asio::yield_context yield)
+{
+    _impl->purge(cancel, yield);
+}
+
+std::set<std::string> LocalClient::get_groups() const
+{
+    return _impl->get_groups();
+}
 
 LocalClient::~LocalClient()
 {
