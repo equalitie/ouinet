@@ -23,7 +23,8 @@ private:
     using opt_path = boost::optional<fs::path>;
 
     static std::unique_ptr<LocalClient>
-    build( util::Ed25519PublicKey cache_pk
+    build( asio::executor exec
+         , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , opt_path static_cache_dir
@@ -32,19 +33,21 @@ private:
 
 public:
     static std::unique_ptr<LocalClient>
-    build( util::Ed25519PublicKey cache_pk
+    build( asio::executor exec
+         , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , asio::yield_context yield)
     {
-        return build( std::move(cache_pk)
+        return build( std::move(exec), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , boost::none, boost::none
                     , yield);
     }
 
     static std::unique_ptr<LocalClient>
-    build( util::Ed25519PublicKey cache_pk
+    build( asio::executor exec
+         , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , fs::path static_cache_dir
@@ -53,7 +56,7 @@ public:
     {
         assert(!static_cache_dir.empty());
         assert(!static_cache_content_dir.empty());
-        return build( std::move(cache_pk)
+        return build( std::move(exec), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , opt_path{std::move(static_cache_dir)}
                     , opt_path{std::move(static_cache_content_dir)}
