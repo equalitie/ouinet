@@ -1,5 +1,6 @@
 #include "local_client.h"
 
+#include "../async_sleep.h"
 #include "dht_groups.h"
 #include "http_store.h"
 
@@ -18,6 +19,51 @@ using namespace ouinet::cache;
 namespace fs = boost::filesystem;
 
 
+struct GarbageCollector {
+    cache::HttpStore& http_store;  // for looping over entries
+    cache::HttpStore::keep_func keep;  // caller-provided checks
+
+    asio::executor _executor;
+    Cancel _cancel;
+
+    GarbageCollector( cache::HttpStore& http_store
+                    , cache::HttpStore::keep_func keep
+                    , asio::executor ex)
+        : http_store(http_store)
+        , keep(move(keep))
+        , _executor(ex)
+    {}
+
+    ~GarbageCollector() { _cancel(); }
+
+    void start()
+    {
+        asio::spawn(_executor, [&] (asio::yield_context yield) {
+            TRACK_HANDLER();
+            Cancel cancel(_cancel);
+
+            _DEBUG("Garbage collector started");
+            while (!cancel) {
+                sys::error_code ec;
+                async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
+                if (cancel || ec) break;
+
+                _DEBUG("Collecting garbage...");
+                http_store.for_each([&] (auto rr, auto y) {
+                    sys::error_code e;
+                    auto k = keep(std::move(rr), y[e]);
+                    if (cancel) ec = asio::error::operation_aborted;
+                    return or_throw(y, e, k);
+                }, cancel, yield[ec]);
+                if (ec) _WARN("Collecting garbage: failed;"
+                              " ec=", ec);
+                _DEBUG("Collecting garbage: done");
+            }
+            _DEBUG("Garbage collector stopped");
+        });
+    }
+};
+
 struct LocalClient::Impl {
     asio::executor _ex;
     util::Ed25519PublicKey _cache_pk;
@@ -26,6 +72,7 @@ struct LocalClient::Impl {
     unique_ptr<cache::HttpStore> _http_store;
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
+    GarbageCollector _gc;
     std::unique_ptr<DhtGroups> _dht_groups;
 
 
@@ -41,6 +88,9 @@ struct LocalClient::Impl {
         , _static_cache_dir(std::move(static_cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
+        , _gc(*_http_store, [&] (auto rr, auto y) {
+              return keep_cache_entry(move(rr), y);
+          }, _ex)
     {}
 
     http::response_header<>
@@ -257,7 +307,7 @@ LocalClient::build( asio::executor exec
 
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<LocalClientPtr>(yield, ec);
-    //TODO impl->_gc.start();
+    impl->_gc.start();
 
     return unique_ptr<LocalClient>(new LocalClient(move(impl)));
 }
