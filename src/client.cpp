@@ -20,6 +20,7 @@
 #include <cstdlib>  // for atexit()
 
 #include "cache/client.h"
+#include "cache/local_client.h"
 
 #include "namespaces.h"
 #include "origin_pools.h"
@@ -510,6 +511,7 @@ private:
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
+    std::shared_ptr<cache::LocalClient> _local_cache;
     std::unique_ptr<cache::Client> _cache;
     boost::optional<ConditionVariable> _injector_starting, _cache_starting;
     sys::error_code _injector_start_ec, _cache_start_ec;
@@ -2421,6 +2423,28 @@ void Client::State::setup_cache(asio::yield_context yield)
         _cache_starting->notify(ec);
         _cache_starting.reset();
     });
+
+    _local_cache = _config.cache_static_content_path().empty()
+        ? cache::LocalClient::build( _ctx.get_executor()
+                                   , *_config.cache_http_pub_key()
+                                   , _config.repo_root()/"bep5_http"
+                                   , _config.max_cached_age()
+                                   , yield[ec])
+        : cache::LocalClient::build( _ctx.get_executor()
+                                   , *_config.cache_http_pub_key()
+                                   , _config.repo_root()/"bep5_http"
+                                   , _config.max_cached_age()
+                                   , _config.cache_static_path()
+                                   , _config.cache_static_content_path()
+                                   , yield[ec]);
+
+    if (_shutdown_signal) ec = asio::error::operation_aborted;
+    if (ec) {
+        if (ec != asio::error::operation_aborted) {
+            LOG_ERROR("Failed to initialize cache::LocalClient; ec=", ec);
+        }
+        return or_throw(yield, ec);
+    }
 
     auto dht = bittorrent_dht(yield[ec]);
     if (ec) {
