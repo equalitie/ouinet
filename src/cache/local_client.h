@@ -1,13 +1,15 @@
 #pragma once
 
+#include <set>
+
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/optional.hpp>
+
 #include "../../response_reader.h"
 #include "../../util/crypto.h"
 #include "../../util/yield.h"
 #include "cache_entry.h"
-#include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/optional.hpp>
-#include <set>
 
 namespace ouinet {
 
@@ -86,7 +88,7 @@ public:
     // Get all groups being announced to the distributed cache index
     // by this client.
     std::set<std::string> get_announced_groups() const;
-  
+
     ~LocalClient();
 
 private:
