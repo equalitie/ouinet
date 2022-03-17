@@ -270,6 +270,21 @@ struct LocalClient::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
+    void store( const std::string& key
+              , const std::string& dht_group
+              , http_response::AbstractReader& r
+              , Cancel cancel
+              , asio::yield_context yield)
+    {
+        sys::error_code ec;
+        cache::KeepSignedReader fr(r);
+        _http_store->store(key, fr, cancel, yield[ec]);
+        if (ec) return or_throw(yield, ec);
+
+        _dht_groups->add(dht_group, key, cancel, yield[ec]);
+        if (ec) return or_throw(yield, ec);
+    }
+
     http::response_header<>
     read_response_header( http_response::AbstractReader& reader
                         , asio::yield_context yield)
