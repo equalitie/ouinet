@@ -561,6 +561,24 @@ LocalClient::LocalClient(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
 
+Session LocalClient::load( const std::string& key
+                         , const GroupName& group
+                         , bool is_head_request
+                         , bool& is_complete
+                         , Cancel cancel, Yield yield)
+{
+    return _impl->load(key, group, is_head_request, is_complete, cancel, yield);
+}
+
+void LocalClient::store( const std::string& key
+                       , const GroupName& group
+                       , http_response::AbstractReader& r
+                       , Cancel cancel
+                       , asio::yield_context yield)
+{
+    _impl->store(key, group, r, cancel, yield);
+}
+
 bool LocalClient::serve( const http::request<http::empty_body>& req
                        , GenericStream& sink
                        , Cancel& cancel
