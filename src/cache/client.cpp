@@ -5,14 +5,11 @@
 #include "dht_groups.h"
 #include "http_sign.h"
 #include "http_store.h"
-#include "../default_timeout.h"
 #include "../http_util.h"
 #include "../parse/number.h"
-#include "../util/wait_condition.h"
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
-#include "../util/watch_dog.h"
 #include "../bittorrent/dht.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
@@ -21,7 +18,6 @@
 #include "../session.h"
 #include "../bep5_swarms.h"
 #include "multi_peer_reader.h"
-#include <ctime>
 #include <map>
 
 #define _LOGPFX "cache/client: "
