@@ -67,6 +67,7 @@ struct GarbageCollector {
 
 struct LocalClient::Impl {
     using GroupName = LocalClient::GroupName;
+    using GroupRemoveHook = LocalClient::GroupRemoveHook;
 
     asio::executor _ex;
     util::Ed25519PublicKey _cache_pk;
@@ -77,6 +78,7 @@ struct LocalClient::Impl {
     Cancel _lifetime_cancel;
     GarbageCollector _gc;
     std::unique_ptr<DhtGroups> _groups;
+    GroupRemoveHook _group_remove_hook;
 
 
     Impl( asio::executor exec_
@@ -94,7 +96,20 @@ struct LocalClient::Impl {
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
+        , _group_remove_hook([] (auto) {})
     {}
+
+    GroupRemoveHook on_group_remove(GroupRemoveHook hook)
+    {
+        auto old_hook = move(_group_remove_hook);
+        _group_remove_hook = move(hook);
+        return old_hook;
+    }
+
+    GroupRemoveHook on_group_remove()
+    {
+        return on_group_remove([] (auto) {});
+    }
 
     template<class Body>
     static
@@ -356,7 +371,7 @@ struct LocalClient::Impl {
     void remove_cache_entry(const std::string& key)
     {
         auto empty_groups = _groups->remove(key);
-        //TODO for (const auto& eg : empty_groups) on_remove_group_hook(eg);
+        for (const auto& eg : empty_groups) _group_remove_hook(eg);
     }
 
     // Return whether the entry should be kept in storage.

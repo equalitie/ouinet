@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <set>
 
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -34,6 +35,7 @@ private:
 
 public:
     using GroupName = BaseDhtGroups::GroupName;
+    using GroupRemoveHook = std::function<void (const GroupName&)>;
 
 public:
     static std::unique_ptr<LocalClient>
@@ -67,6 +69,15 @@ public:
                     , yield);
     }
 
+    // Use to call the given hook when a group is removed.
+    //
+    // The previous hook is returned.
+    GroupRemoveHook on_group_remove(GroupRemoveHook);
+
+    // Remove the hook called when a group is removed.
+    //
+    // The previous hook is returned.
+    GroupRemoveHook on_group_remove();
 
     // This may add a response source header.
     //
