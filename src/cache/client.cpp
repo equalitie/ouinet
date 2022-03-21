@@ -9,11 +9,9 @@
 #include "../parse/number.h"
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
-#include "../util/handler_tracker.h"
 #include "../bittorrent/dht.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
-#include "../async_sleep.h"
 #include "../constants.h"
 #include "../session.h"
 #include "../bep5_swarms.h"
@@ -36,51 +34,6 @@ using udp = asio::ip::udp;
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
 
-struct GarbageCollector {
-    cache::HttpStore& http_store;  // for looping over entries
-    cache::HttpStore::keep_func keep;  // caller-provided checks
-
-    asio::executor _executor;
-    Cancel _cancel;
-
-    GarbageCollector( cache::HttpStore& http_store
-                    , cache::HttpStore::keep_func keep
-                    , asio::executor ex)
-        : http_store(http_store)
-        , keep(move(keep))
-        , _executor(ex)
-    {}
-
-    ~GarbageCollector() { _cancel(); }
-
-    void start()
-    {
-        asio::spawn(_executor, [&] (asio::yield_context yield) {
-            TRACK_HANDLER();
-            Cancel cancel(_cancel);
-
-            _DEBUG("Garbage collector started");
-            while (!cancel) {
-                sys::error_code ec;
-                async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
-                if (cancel || ec) break;
-
-                _DEBUG("Collecting garbage...");
-                http_store.for_each([&] (auto rr, auto y) {
-                    sys::error_code e;
-                    auto k = keep(std::move(rr), y[e]);
-                    if (cancel) ec = asio::error::operation_aborted;
-                    return or_throw(y, e, k);
-                }, cancel, yield[ec]);
-                if (ec) _WARN("Collecting garbage: failed;"
-                              " ec=", ec);
-                _DEBUG("Collecting garbage: done");
-            }
-            _DEBUG("Garbage collector stopped");
-        });
-    }
-};
-
 struct Client::Impl {
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from injector-signed cached content).
@@ -96,7 +49,6 @@ struct Client::Impl {
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
     Announcer _announcer;
-    GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<DhtLookup>> _dht_lookups;
     LocalPeerDiscovery _local_peer_discovery;
@@ -120,9 +72,6 @@ struct Client::Impl {
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
         , _announcer(_dht)
-        , _gc(*_http_store, [&] (auto rr, auto y) {
-              return keep_cache_entry(move(rr), y);
-          }, _ex)
         , _dht_lookups(256)
         , _local_peer_discovery(_ex, _dht->local_endpoints())
     {}
@@ -475,7 +424,6 @@ Client::build( shared_ptr<bt::MainlineDht> dht
 
     impl->announce_stored_data(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
-    impl->_gc.start();
 
     return unique_ptr<Client>(new Client(move(impl)));
 }
