@@ -10,6 +10,7 @@
 #include "../../util/crypto.h"
 #include "../../util/yield.h"
 #include "cache_entry.h"
+#include "dht_groups.h"
 
 namespace ouinet {
 
@@ -30,6 +31,9 @@ private:
          , opt_path static_cache_dir
          , opt_path static_cache_content_dir
          , asio::yield_context);
+
+public:
+    using GroupName = BaseDhtGroups::GroupName;
 
 public:
     static std::unique_ptr<LocalClient>
@@ -70,14 +74,14 @@ public:
     // `is_complete` is changed to indicate
     // whether the response body in the store is complete.
     Session load( const std::string& key
-                , const std::string& dht_group
+                , const GroupName& group
                 , bool is_head_request
                 , bool& is_complete
                 , Cancel
                 , Yield);
 
     void store( const std::string& key
-              , const std::string& dht_group
+              , const GroupName& group
               , http_response::AbstractReader&
               , Cancel
               , asio::yield_context);
@@ -94,7 +98,7 @@ public:
     void purge(Cancel, asio::yield_context);
 
     // Get all groups being present in this client.
-    std::set<std::string> get_groups() const;
+    std::set<GroupName> get_groups() const;
 
     ~LocalClient();
 

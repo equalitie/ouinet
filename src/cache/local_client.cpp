@@ -1,7 +1,6 @@
 #include "local_client.h"
 
 #include "../async_sleep.h"
-#include "dht_groups.h"
 #include "http_store.h"
 
 
@@ -67,6 +66,8 @@ struct GarbageCollector {
 };
 
 struct LocalClient::Impl {
+    using GroupName = LocalClient::GroupName;
+
     asio::executor _ex;
     util::Ed25519PublicKey _cache_pk;
     fs::path _cache_dir;
@@ -75,7 +76,7 @@ struct LocalClient::Impl {
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
     GarbageCollector _gc;
-    std::unique_ptr<DhtGroups> _dht_groups;
+    std::unique_ptr<DhtGroups> _groups;
 
 
     Impl( asio::executor exec_
@@ -272,7 +273,7 @@ struct LocalClient::Impl {
     }
 
     Session load( const std::string& key
-                , const std::string& dht_group
+                , const GroupName& group
                 , bool is_head_request
                 , bool& is_complete
                 , Cancel cancel
@@ -304,7 +305,7 @@ struct LocalClient::Impl {
     }
 
     void store( const std::string& key
-              , const std::string& dht_group
+              , const GroupName& group
               , http_response::AbstractReader& r
               , Cancel cancel
               , asio::yield_context yield)
@@ -314,7 +315,7 @@ struct LocalClient::Impl {
         _http_store->store(key, fr, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        _dht_groups->add(dht_group, key, cancel, yield[ec]);
+        _groups->add(group, key, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
     }
 
@@ -354,7 +355,7 @@ struct LocalClient::Impl {
     inline
     void remove_cache_entry(const std::string& key)
     {
-        auto empty_groups = _dht_groups->remove(key);
+        auto empty_groups = _groups->remove(key);
         //TODO for (const auto& eg : empty_groups) on_remove_group_hook(eg);
     }
 
@@ -363,7 +364,7 @@ struct LocalClient::Impl {
     {
         // This should be available to
         // allow removing keys of entries to be evicted.
-        assert(_dht_groups);
+        assert(_groups);
 
         sys::error_code ec;
 
@@ -405,21 +406,21 @@ struct LocalClient::Impl {
 
         sys::error_code e;
 
-        // Use static DHT groups if its directory is provided.
-        std::unique_ptr<BaseDhtGroups> static_dht_groups;
+        // Use static groups if its directory is provided.
+        std::unique_ptr<BaseDhtGroups> static_groups;
         if (_static_cache_dir) {
             auto groups_dir = *_static_cache_dir / groups_curver_subdir;
             if (!is_directory(groups_dir)) {
-                _ERROR("No DHT groups of supported version under static cache, ignoring: ", *_static_cache_dir);
+                _ERROR("No groups of supported version under static cache, ignoring: ", *_static_cache_dir);
             } else {
-                static_dht_groups = load_static_dht_groups(move(groups_dir), _ex, cancel, y[e]);
-                if (e) _ERROR("Failed to load static DHT groups, ignoring: ", *_static_cache_dir);
+                static_groups = load_static_dht_groups(move(groups_dir), _ex, cancel, y[e]);
+                if (e) _ERROR("Failed to load static groups, ignoring: ", *_static_cache_dir);
             }
         }
 
         auto groups_dir = _cache_dir / groups_curver_subdir;
-        _dht_groups = static_dht_groups
-            ? load_backed_dht_groups(groups_dir, move(static_dht_groups), _ex, cancel, y[e])
+        _groups = static_groups
+            ? load_backed_dht_groups(groups_dir, move(static_groups), _ex, cancel, y[e])
             : load_dht_groups(groups_dir, _ex, cancel, y[e]);
 
         if (cancel) e = asio::error::operation_aborted;
@@ -434,9 +435,9 @@ struct LocalClient::Impl {
         // between resource groups and the HTTP store.
         std::set<DhtGroups::ItemName> bad_items;
         std::set<DhtGroups::GroupName> bad_groups;
-        for (auto& group_name : _dht_groups->groups()) {
+        for (auto& group_name : _groups->groups()) {
             unsigned good_items = 0;
-            for (auto& group_item : _dht_groups->items(group_name)) {
+            for (auto& group_item : _groups->items(group_name)) {
                 // TODO: This implies opening all cache items (again for local cache), make lighter.
                 sys::error_code ec;
                 if (_http_store->reader(group_item, ec) != nullptr)
@@ -452,17 +453,17 @@ struct LocalClient::Impl {
             }
         }
         for (auto& group_name : bad_groups)
-            _dht_groups->remove_group(group_name);
+            _groups->remove_group(group_name);
         for (auto& item_name : bad_items)
-            _dht_groups->remove(item_name);
+            _groups->remove(item_name);
     }
 
     void stop() {
         _lifetime_cancel();
     }
 
-    std::set<std::string> get_groups() const {
-        return _dht_groups->groups();
+    std::set<GroupName> get_groups() const {
+        return _groups->groups();
     }
 };
 
@@ -565,7 +566,7 @@ void LocalClient::purge( Cancel cancel
     _impl->purge(cancel, yield);
 }
 
-std::set<std::string> LocalClient::get_groups() const
+std::set<LocalClient::GroupName> LocalClient::get_groups() const
 {
     return _impl->get_groups();
 }
