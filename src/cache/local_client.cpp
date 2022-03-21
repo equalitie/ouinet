@@ -270,6 +270,24 @@ struct LocalClient::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
+    Session load( const std::string& key
+                , const std::string& dht_group
+                , bool is_head_request
+                , Cancel cancel
+                , Yield yield)
+    {
+        sys::error_code ec;
+        auto rr = _http_store->reader(key, ec);
+        if (ec) return or_throw<Session>(yield, ec);
+        auto rs = yield[ec].tag("read_hdr").run([&] (auto y) {
+            return Session::create(move(rr), is_head_request, cancel, y);
+        });
+        assert(!cancel || ec == asio::error::operation_aborted);
+        if (!ec) rs.response_header().set( http_::response_source_hdr  // for agent
+                                         , http_::response_source_hdr_local_cache);
+        return or_throw(yield, ec, move(rs));
+    }
+
     void store( const std::string& key
               , const std::string& dht_group
               , http_response::AbstractReader& r
