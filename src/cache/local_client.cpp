@@ -561,6 +561,18 @@ LocalClient::LocalClient(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
 
+LocalClient::GroupRemoveHook
+LocalClient::on_group_remove(LocalClient::GroupRemoveHook hook)
+{
+    return _impl->on_group_remove(move(hook));
+}
+
+LocalClient::GroupRemoveHook
+LocalClient::on_group_remove()
+{
+    return _impl->on_group_remove();
+}
+
 Session LocalClient::load( const std::string& key
                          , const GroupName& group
                          , bool is_head_request
