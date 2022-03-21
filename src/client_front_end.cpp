@@ -304,7 +304,7 @@ client_state(Client::RunningState cstate) {
 void ClientFrontEnd::handle_group_list( const Request&
                                       , Response& res
                                       , std::ostringstream& ss
-                                      , cache::LocalClient* cache_client)
+                                      , CacheClientPtr cache_client)
 {
     res.set(http::field::content_type, "text/plain");
 
@@ -321,7 +321,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
-                                  , cache::LocalClient* cache_client
+                                  , CacheClientPtr cache_client
                                   , Yield yield)
 {
     res.set(http::field::content_type, "text/html");
@@ -534,7 +534,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
-                                  , cache::LocalClient* cache_client
+                                  , CacheClientPtr cache_client
                                   , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
@@ -581,7 +581,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , Client::RunningState client_state
-                              , cache::LocalClient* cache_client
+                              , CacheClientPtr cache_client
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const UPnPs& upnps

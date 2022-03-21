@@ -965,7 +965,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
     auto res = _front_end.serve( _config
                                , rq
                                , get_state()
-                               , _local_cache.get()
+                               , _local_cache
                                , *_ca_certificate
                                , local_ep
                                , _upnps

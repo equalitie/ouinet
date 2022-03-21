@@ -50,6 +50,7 @@ public:
     using Response = http::response<http::dynamic_body>;
     using UdpEndpoint = asio::ip::udp::endpoint;
     using UPnPs = std::map<UdpEndpoint, std::unique_ptr<UPnPUpdater>>;
+    using CacheClientPtr = std::shared_ptr<cache::LocalClient>;
 
 public:
     class Task : public TaskHook {
@@ -76,7 +77,7 @@ public:
     Response serve( ClientConfig&
                   , const http::request<http::string_body>&
                   , Client::RunningState
-                  , cache::LocalClient*
+                  , CacheClientPtr
                   , const CACertificate&
                   , boost::optional<UdpEndpoint> local_ep
                   , const UPnPs&
@@ -112,7 +113,7 @@ private:
     void handle_group_list( const Request&
                           , Response&
                           , std::ostringstream&
-                          , cache::LocalClient*);
+                          , CacheClientPtr);
 
     void handle_portal( ClientConfig&
                       , Client::RunningState
@@ -123,7 +124,7 @@ private:
                       , const Request&
                       , Response&
                       , std::ostringstream&
-                      , cache::LocalClient*
+                      , CacheClientPtr
                       , Yield);
 
     void handle_status( ClientConfig&
@@ -135,7 +136,7 @@ private:
                       , const Request&
                       , Response&
                       , std::ostringstream&
-                      , cache::LocalClient*
+                      , CacheClientPtr
                       , Yield);
 
     // Enabling the log file also enables debugging temporarily.
