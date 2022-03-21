@@ -137,182 +137,6 @@ struct Client::Impl {
                 dht_group);
     }
 
-    template<class Body>
-    static
-    boost::optional<util::HttpRequestByteRange> get_range(const http::request<Body>& rq)
-    {
-        auto rs = util::HttpRequestByteRange::parse(rq[http::field::range]);
-        if (!rs) return boost::none;
-        // XXX: We currently support max 1 rage in the request
-        if ((*rs).size() != 1) return boost::none;
-        return (*rs)[0];
-    }
-
-    bool serve_local( const http::request<http::empty_body>& req
-                    , GenericStream& sink
-                    , Cancel& cancel
-                    , Yield& yield)
-    {
-        sys::error_code ec;
-
-        _YDEBUG(yield, "Start\n", req);
-
-        // Usually we would
-        // (1) check that the request matches our protocol version, and
-        // (2) check that we can derive a key to look up the local cache.
-        // However, we still want to blindly send a response we have cached
-        // if the request looks like a Ouinet one and we can derive a key,
-        // to help the requesting client get the result and other information
-        // like a potential new protocol version.
-        // The requesting client may choose to drop the response
-        // or attempt to extract useful information from it.
-
-        auto req_proto = req[http_::protocol_version_hdr];
-        if (!boost::regex_match( req_proto.begin(), req_proto.end()
-                               , http_::protocol_version_rx)) {
-            _YDEBUG(yield, "Not a Ouinet request\n", req);
-            handle_bad_request(sink, req, yield[ec]);
-            return or_throw(yield, ec, req.keep_alive());
-        }
-
-        auto key = key_from_http_req(req);
-        if (!key) {
-            _YDEBUG(yield, "Cannot derive key from request\n", req);
-            handle_bad_request(sink, req, yield[ec]);
-            return or_throw(yield, ec, req.keep_alive());
-        }
-
-        _YDEBUG(yield, "Received request for ", *key);
-
-        if (req.method() == http::verb::propfind) {
-            _YDEBUG(yield, "Serving propfind for ", *key);
-            auto hl = _http_store->load_hash_list
-                (*key, cancel, static_cast<asio::yield_context>(yield[ec]));
-
-            _YDEBUG(yield, "Load; ec=", ec);
-            if (ec) {
-                sys::error_code hnf_ec;
-                handle_not_found(sink, req, yield[hnf_ec]);
-                return or_throw(yield, hnf_ec, bool(!hnf_ec));
-            }
-            return_or_throw_on_error(yield, cancel, ec, false);
-            yield[ec].tag("write_propfind").run([&] (auto y) {
-                hl.write(sink, cancel, y);
-            });
-            _YDEBUG(yield, "Write; ec=", ec);
-            return or_throw(yield, ec, bool(!ec));
-        }
-
-        cache::reader_uptr rr;
-
-        auto range = get_range(req);
-
-        if (range) {
-            rr = _http_store->range_reader(*key, range->first, range->last, ec);
-            assert(rr);
-        } else {
-            rr = _http_store->reader(*key, ec);
-        }
-
-        if (ec) {
-            if (!cancel) {
-                _YDEBUG(yield, "Not serving: ", *key, "; ec=", ec);
-            }
-            sys::error_code hnf_ec;
-            handle_not_found(sink, req, yield[hnf_ec]);
-            return or_throw(yield, hnf_ec, req.keep_alive());
-        }
-
-        _YDEBUG(yield, "Serving: ", *key);
-
-        bool is_head_request = req.method() == http::verb::head;
-
-        auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return Session::create(move(rr), is_head_request, cancel, y);
-        });
-
-        if (ec) return or_throw(yield, ec, false);
-
-        bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
-
-        Cancel timeout_cancel(cancel);
-        yield[ec].tag("flush").run([&] (auto y) {
-            // This short timeout will get reset with each successful send/recv operation,
-            // so an exchange with no traffic at all does not get stuck for too long.
-            auto op_wd = watch_dog( s.get_executor(), default_timeout::activity()
-                                  , [&] { timeout_cancel(); });
-            s.flush_response(timeout_cancel, y, [&op_wd, &sink] (auto&& part, auto& cc, auto yy) {
-                sys::error_code ee;
-                part.async_write(sink, cc, yy[ee]);
-                return_or_throw_on_error(yy, cc, ee);
-                op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
-            });
-        });
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-
-        return or_throw(yield, ec, keep_alive);
-    }
-
-    std::size_t local_size( Cancel cancel
-                          , asio::yield_context yield) const
-    {
-        return _http_store->size(cancel, yield);
-    }
-
-    void local_purge( Cancel cancel
-                    , asio::yield_context yield)
-    {
-        // TODO: avoid overlapping with garbage collector
-        _DEBUG("Purging local cache...");
-
-        sys::error_code ec;
-        _http_store->for_each([&] (auto rr, auto y) {
-            // TODO: Implement specific purge operations
-            // for DHT groups and announcer
-            // to avoid having to parse all stored heads.
-            sys::error_code e;
-            auto hdr = read_response_header(*rr, yield[e]);
-            if (e) return false;
-            auto key = hdr[http_::response_uri_hdr];
-            if (key.empty()) return false;
-            unpublish_cache_entry(key.to_string());
-            return false;  // remove all entries
-        }, cancel, yield[ec]);
-        if (ec) {
-            _ERROR("Purging local cache: failed;"
-                   " ec=", ec);
-            return or_throw(yield, ec);
-        }
-
-        _DEBUG("Purging local cache: done");
-    }
-
-    void handle_http_error( GenericStream& con
-                          , const http::request<http::empty_body>& req
-                          , http::status status
-                          , const string& proto_error
-                          , Yield yield)
-    {
-        auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
-        util::http_reply(con, res, static_cast<asio::yield_context>(yield));
-    }
-
-    void handle_bad_request( GenericStream& con
-                           , const http::request<http::empty_body>& req
-                           , Yield yield)
-    {
-        return handle_http_error(con, req, http::status::bad_request, "", yield);
-    }
-
-    void handle_not_found( GenericStream& con
-                         , const http::request<http::empty_body>& req
-                         , Yield yield)
-    {
-        return handle_http_error( con, req, http::status::not_found
-                                , http_::response_error_hdr_retrieval_failed, yield);
-    }
-
     shared_ptr<DhtLookup> dht_lookup(std::string swarm_name)
     {
         auto* lookup = _dht_lookups.get(swarm_name);
@@ -583,10 +407,6 @@ struct Client::Impl {
     unsigned get_newest_proto_version() const {
         return *_newest_proto_seen;
     }
-
-    std::set<std::string> get_announced_groups() const {
-        return _dht_groups->groups();
-    }
 };
 
 /* static */
@@ -685,34 +505,9 @@ void Client::store( const std::string& key
     _impl->store(key, dht_group, r, cancel, yield);
 }
 
-bool Client::serve_local( const http::request<http::empty_body>& req
-                        , GenericStream& sink
-                        , Cancel& cancel
-                        , Yield yield)
-{
-    return _impl->serve_local(req, sink, cancel, yield);
-}
-
-std::size_t Client::local_size( Cancel cancel
-                              , asio::yield_context yield) const
-{
-    return _impl->local_size(cancel, yield);
-}
-
-void Client::local_purge( Cancel cancel
-                        , asio::yield_context yield)
-{
-    _impl->local_purge(cancel, yield);
-}
-
 unsigned Client::get_newest_proto_version() const
 {
     return _impl->get_newest_proto_version();
-}
-
-std::set<std::string> Client::get_announced_groups() const
-{
-    return _impl->get_announced_groups();
 }
 
 Client::~Client()

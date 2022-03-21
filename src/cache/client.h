@@ -79,27 +79,10 @@ public:
               , Cancel
               , asio::yield_context);
 
-    // Returns true if both request and response had keep-alive == true.
-    // Times out if forwarding to the sink gets stuck.
-    bool serve_local( const http::request<http::empty_body>&
-                    , GenericStream& sink
-                    , Cancel&
-                    , Yield);
-
-    std::size_t local_size( Cancel
-                          , asio::yield_context) const;
-
-    void local_purge( Cancel
-                    , asio::yield_context);
-
     // Get the newest protocol version that has been seen in the network
     // (e.g. to warn about potential upgrades).
     unsigned get_newest_proto_version() const;
 
-    // Get all groups being announced to the distributed cache index
-    // by this client.
-    std::set<std::string> get_announced_groups() const;
-  
     ~Client();
 
 private:

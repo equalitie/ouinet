@@ -8,7 +8,7 @@
 #include "upnp.h"
 
 #include "bittorrent/dht.h"
-#include "cache/client.h"
+#include "cache/local_client.h"
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/address.hpp>
@@ -304,13 +304,13 @@ client_state(Client::RunningState cstate) {
 void ClientFrontEnd::handle_group_list( const Request&
                                       , Response& res
                                       , std::ostringstream& ss
-                                      , cache::Client* cache_client)
+                                      , cache::LocalClient* cache_client)
 {
     res.set(http::field::content_type, "text/plain");
 
     if (!cache_client) return;
 
-    for (const auto& g : cache_client->get_announced_groups())
+    for (const auto& g : cache_client->get_groups())
         ss << g << std::endl;
 }
 
@@ -321,7 +321,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
-                                  , cache::Client* cache_client
+                                  , cache::LocalClient* cache_client
                                   , Yield yield)
 {
     res.set(http::field::content_type, "text/html");
@@ -375,7 +375,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?purge_cache=") != string::npos && cache_client) {
             Cancel cancel;
             sys::error_code ec;
-            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield[ec]));
+            cache_client->purge(cancel, static_cast<asio::yield_context>(yield[ec]));
         }
 
         // Redirect back to the portal.
@@ -498,7 +498,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
         Cancel cancel;
         sys::error_code ec;
-        auto local_size = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto local_size = cache_client->size(cancel, static_cast<asio::yield_context>(yield[ec]));
         ss << "Approximate size of content cached locally: ";
         if (ec) ss << "(unknown)";
         else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
@@ -534,7 +534,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
-                                  , cache::Client* cache_client
+                                  , cache::LocalClient* cache_client
                                   , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
@@ -567,7 +567,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     if (cache_client) {
         Cancel cancel;
         sys::error_code ec;
-        auto sz = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto sz = cache_client->size(cancel, static_cast<asio::yield_context>(yield[ec]));
         if (ec) {
             LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
         } else {
@@ -581,7 +581,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , Client::RunningState client_state
-                              , cache::Client* cache_client
+                              , cache::LocalClient* cache_client
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const UPnPs& upnps

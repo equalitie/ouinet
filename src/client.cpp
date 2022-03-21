@@ -613,7 +613,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         }
 
         if (req.method() != http::verb::connect) {
-            auto keep_alive = _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));
+            auto keep_alive = _local_cache->serve(req, con, cancel, yield[ec].tag("serve_local"));
             if (keep_alive) {
                 continue;  // possible error is recoverable
             }
@@ -965,7 +965,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
     auto res = _front_end.serve( _config
                                , rq
                                , get_state()
-                               , _cache.get()
+                               , _local_cache.get()
                                , *_ca_certificate
                                , local_ep
                                , _upnps
