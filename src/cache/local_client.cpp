@@ -11,6 +11,7 @@
 #define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 #define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+#define _YERROR(y, ...) do { if (logger.get_threshold() <= ERROR) y.log(ERROR, __VA_ARGS__); } while (false)
 
 
 using namespace std;
@@ -273,6 +274,7 @@ struct LocalClient::Impl {
     Session load( const std::string& key
                 , const std::string& dht_group
                 , bool is_head_request
+                , bool& is_complete
                 , Cancel cancel
                 , Yield yield)
     {
@@ -284,8 +286,20 @@ struct LocalClient::Impl {
         });
         return_or_throw_on_error(yield, cancel, ec, move(rs));
 
-        rs.response_header().set( http_::response_source_hdr  // for agent
-                                , http_::response_source_hdr_local_cache);
+        auto rh = rs.response_header();
+        rh.set( http_::response_source_hdr  // for agent
+              , http_::response_source_hdr_local_cache);
+        if (is_head_request) return rs;
+
+        auto rs_sz = _http_store->body_size(key, ec);
+        if (ec) {
+            _YERROR(yield, "Failed to get body size of response in local cache; ec=", ec);
+            return or_throw(yield, ec, move(rs));
+        }
+
+        auto data_size_sv = rh[http_::response_data_size_hdr];
+        auto data_size_o = parse::number<std::size_t>(data_size_sv);
+        is_complete = (data_size_o && rs_sz == *data_size_o);
         return rs;
     }
 

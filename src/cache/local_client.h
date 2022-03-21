@@ -65,9 +65,14 @@ public:
 
 
     // This may add a response source header.
+    //
+    // If the operation is successful and the request is not just for the head,
+    // `is_complete` is changed to indicate
+    // whether the response body in the store is complete.
     Session load( const std::string& key
                 , const std::string& dht_group
                 , bool is_head_request
+                , bool& is_complete
                 , Cancel
                 , Yield);
 
