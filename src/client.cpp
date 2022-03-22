@@ -2424,6 +2424,12 @@ void Client::State::setup_cache(asio::yield_context yield)
         _cache_starting.reset();
     });
 
+#define fail_on_error(_msg) \
+    if (_shutdown_signal) ec = asio::error::operation_aborted; \
+    if (ec && ec != asio::error::operation_aborted) \
+        LOG_ERROR(_msg "; ec=", ec); \
+    return_or_throw_on_error(yield, _shutdown_signal, ec);
+
     _local_cache = _config.cache_static_content_path().empty()
         ? cache::LocalClient::build( _ctx.get_executor()
                                    , *_config.cache_http_pub_key()
@@ -2437,35 +2443,21 @@ void Client::State::setup_cache(asio::yield_context yield)
                                    , _config.cache_static_path()
                                    , _config.cache_static_content_path()
                                    , yield[ec]);
-
-    if (_shutdown_signal) ec = asio::error::operation_aborted;
-    if (ec && ec != asio::error::operation_aborted)
-        LOG_ERROR("Failed to initialize cache::LocalClient; ec=", ec);
-    return_or_throw_on_error(yield, _shutdown_signal, ec);
+    fail_on_error("Failed to initialize cache::LocalClient");
 
     auto dht = bittorrent_dht(yield[ec]);
-
-    if (_shutdown_signal) ec = asio::error::operation_aborted;
-    if (ec && ec != asio::error::operation_aborted)
-        LOG_ERROR("Failed to initialize BT DHT; ec=", ec);
-    return_or_throw_on_error(yield, _shutdown_signal, ec);
+    fail_on_error("Failed to initialize BT DHT");
 
     _cache = cache::Client::build( dht
                                  , *_config.cache_http_pub_key()
                                  , _local_cache
                                  , yield[ec]);
-
-    if (_shutdown_signal) ec = asio::error::operation_aborted;
-    if (ec && ec != asio::error::operation_aborted)
-        LOG_ERROR("Failed to initialize cache::Client; ec=", ec);
-    return_or_throw_on_error(yield, _shutdown_signal, ec);
+    fail_on_error("Failed to initialize cache::Client");
 
     idempotent_start_accepting_on_utp(yield[ec]);
+    fail_on_error("Failed to start accepting on uTP");
 
-    if (_shutdown_signal) ec = asio::error::operation_aborted;
-    if (ec && ec != asio::error::operation_aborted)
-        LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
-    return_or_throw_on_error(yield, _shutdown_signal, ec);
+#undef fail_on_error
 }
 
 //------------------------------------------------------------------------------
