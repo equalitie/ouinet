@@ -561,10 +561,10 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
 {
     _peers = make_unique<Peers>(ex
                                , move(local_endpoints)
-                               , local_peers
-                               , cache_pk
-                               , key
-                               , newest_proto_seen
+                               , move(local_peers)
+                               , move(cache_pk)
+                               , move(key)
+                               , move(newest_proto_seen)
                                , dbg_tag);
 }
 
@@ -583,12 +583,12 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
     _peers = make_unique<Peers>(ex
                                , move(dht.local_endpoints())
                                , move(dht.wan_endpoints())
-                               , local_peers
-                               , cache_pk
-                               , key
-                               , dht_group
-                               , dht_lookup
-                               , newest_proto_seen
+                               , move(local_peers)
+                               , move(cache_pk)
+                               , move(key)
+                               , move(dht_group)
+                               , move(dht_lookup)
+                               , move(newest_proto_seen)
                                , dbg_tag);
 }
 
