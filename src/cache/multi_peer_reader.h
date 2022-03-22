@@ -37,7 +37,6 @@ public:
                    , std::set<asio::ip::udp::endpoint> local_peers
                    , std::string key
                    , const bittorrent::MainlineDht& dht
-                   , std::string dht_group
                    , std::shared_ptr<DhtLookup> dht_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , const std::string& dbg_tag);

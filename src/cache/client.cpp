@@ -362,9 +362,17 @@ struct Client::Impl {
         }
         ec = {};  // try distributed cache
 
+        auto peer_lookup = dht_lookup(compute_swarm_name(dht_group));
+
         string debug_tag;
         if (logger.get_threshold() <= DEBUG) {
             debug_tag = yield.tag() + "/multi_peer_reader";
+
+            LOG_DEBUG(debug_tag, " DHT lookup:");
+            LOG_DEBUG(debug_tag, "    key=        ", key);
+            LOG_DEBUG(debug_tag, "    dht_group=  ", dht_group);
+            LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup->swarm_name());
+            LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup->infohash());
         };
 
         auto reader = std::make_unique<MultiPeerReader>
@@ -373,8 +381,7 @@ struct Client::Impl {
             , _local_peer_discovery.found_peers()
             , key
             , *_dht
-            , dht_group
-            , dht_lookup(compute_swarm_name(dht_group))
+            , move(peer_lookup)
             , _newest_proto_seen
             , debug_tag);
 

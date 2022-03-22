@@ -330,7 +330,6 @@ public:
          , set<udp::endpoint> local_peer_eps
          , util::Ed25519PublicKey cache_pk
          , const std::string& key
-         , const std::string& dht_group
          , std::shared_ptr<DhtLookup> dht_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
          , std::string dbg_tag)
@@ -341,7 +340,6 @@ public:
         , _local_endpoints(move(local_endpoints))
         , _our_endpoints(move(wan_endpoints))
         , _key(move(key))
-        , _dht_group(move(dht_group))
         , _dht_lookup(move(dht_lookup))
         , _newest_proto_seen(move(newest_proto_seen))
         , _dbg_tag(move(dbg_tag))
@@ -359,14 +357,6 @@ public:
         asio::spawn(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
-
-            if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " DHT lookup:");
-                LOG_DEBUG(dbg_tag, "    key=        ", _key);
-                LOG_DEBUG(dbg_tag, "    dht_group=  ", _dht_group);
-                LOG_DEBUG(dbg_tag, "    swarm_name= ", _dht_lookup->swarm_name());
-                LOG_DEBUG(dbg_tag, "    infohash=   ", _dht_lookup->infohash());
-            }
 
             auto dht_eps = _dht_lookup->get(c, y[ec]);
 
@@ -394,8 +384,7 @@ public:
          , std::shared_ptr<unsigned> newest_proto_seen
          , std::string dbg_tag)
         : Peers( exec, move(local_endpoints), {}, move(local_peer_eps)
-               , move(cache_pk), key
-               , {}, nullptr
+               , move(cache_pk), key, nullptr
                , move(newest_proto_seen), move(dbg_tag))
     {}
 
@@ -538,7 +527,6 @@ private:
     std::set<asio::ip::udp::endpoint> _local_endpoints;
     std::set<asio::ip::udp::endpoint> _our_endpoints;
     std::string _key;
-    std::string _dht_group;
     std::shared_ptr<DhtLookup> _dht_lookup;
     std::shared_ptr<unsigned> _newest_proto_seen;
     std::string _dbg_tag;
@@ -573,7 +561,6 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                 , std::set<asio::ip::udp::endpoint> local_peers
                                 , std::string key
                                 , const bittorrent::MainlineDht& dht
-                                , std::string dht_group
                                 , std::shared_ptr<DhtLookup> dht_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , const std::string& dbg_tag)
@@ -586,7 +573,6 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                , move(local_peers)
                                , move(cache_pk)
                                , move(key)
-                               , move(dht_group)
                                , move(dht_lookup)
                                , move(newest_proto_seen)
                                , dbg_tag);
