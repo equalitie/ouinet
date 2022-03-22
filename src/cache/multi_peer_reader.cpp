@@ -330,7 +330,7 @@ public:
          , set<udp::endpoint> local_peer_eps
          , util::Ed25519PublicKey cache_pk
          , const std::string& key
-         , std::shared_ptr<DhtLookup> dht_lookup
+         , std::shared_ptr<PeerLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
          , std::string dbg_tag)
         : _exec(exec)
@@ -340,7 +340,7 @@ public:
         , _local_endpoints(move(local_endpoints))
         , _our_endpoints(move(wan_endpoints))
         , _key(move(key))
-        , _dht_lookup(move(dht_lookup))
+        , _peer_lookup(move(peer_lookup))
         , _newest_proto_seen(move(newest_proto_seen))
         , _dbg_tag(move(dbg_tag))
         , _random_generator(_random_device())
@@ -349,7 +349,7 @@ public:
             add_candidate(ep);
         }
 
-        if (!_dht_lookup) {
+        if (!_peer_lookup) {
             _cv.notify();
             return;
         }
@@ -358,18 +358,18 @@ public:
             TRACK_HANDLER();
             sys::error_code ec;
 
-            auto dht_eps = _dht_lookup->get(c, y[ec]);
+            auto peer_eps = _peer_lookup->get(c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " DHT lookup result; ec=", ec, " eps=", dht_eps);
+                LOG_DEBUG(dbg_tag, " Peer lookup result; ec=", ec, " eps=", peer_eps);
             }
 
             if (c) return;
 
-            _dht_lookup.reset();
+            _peer_lookup.reset();
 
             if (!ec) {
-                for (auto ep : dht_eps) add_candidate(ep);
+                for (auto ep : peer_eps) add_candidate(ep);
             }
 
             _cv.notify();
@@ -427,12 +427,12 @@ public:
     }
 
     bool still_waiting_for_candidates() const {
-        return _dht_lookup || !_candidate_peers.empty();
+        return _peer_lookup || !_candidate_peers.empty();
     }
 
     bool has_enough_good_peers() const {
         // TODO: This can be improved to (e.g.) be also a function of time
-        // since DHT lookup finished.
+        // since peer lookup finished.
         return !_good_peers.empty();
     }
 
@@ -527,7 +527,7 @@ private:
     std::set<asio::ip::udp::endpoint> _local_endpoints;
     std::set<asio::ip::udp::endpoint> _our_endpoints;
     std::string _key;
-    std::shared_ptr<DhtLookup> _dht_lookup;
+    std::shared_ptr<PeerLookup> _peer_lookup;
     std::shared_ptr<unsigned> _newest_proto_seen;
     std::string _dbg_tag;
 
@@ -561,7 +561,7 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                 , std::set<asio::ip::udp::endpoint> local_peers
                                 , std::string key
                                 , const bittorrent::MainlineDht& dht
-                                , std::shared_ptr<DhtLookup> dht_lookup
+                                , std::shared_ptr<PeerLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , const std::string& dbg_tag)
     : _executor(ex)
@@ -573,7 +573,7 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                , move(local_peers)
                                , move(cache_pk)
                                , move(key)
-                               , move(dht_lookup)
+                               , move(peer_lookup)
                                , move(newest_proto_seen)
                                , dbg_tag);
 }

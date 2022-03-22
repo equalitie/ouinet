@@ -368,7 +368,7 @@ struct Client::Impl {
         if (logger.get_threshold() <= DEBUG) {
             debug_tag = yield.tag() + "/multi_peer_reader";
 
-            LOG_DEBUG(debug_tag, " DHT lookup:");
+            LOG_DEBUG(debug_tag, " DHT peer lookup:");
             LOG_DEBUG(debug_tag, "    key=        ", key);
             LOG_DEBUG(debug_tag, "    dht_group=  ", dht_group);
             LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup->swarm_name());
