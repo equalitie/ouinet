@@ -351,6 +351,11 @@ public:
             add_candidate(ep);
         }
 
+        if (!_dht_lookup) {
+            _cv.notify();
+            return;
+        }
+
         asio::spawn(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
@@ -380,6 +385,19 @@ public:
             _cv.notify();
         });
     }
+
+    Peers(asio::executor exec
+         , set<udp::endpoint> local_endpoints
+         , set<udp::endpoint> local_peer_eps
+         , util::Ed25519PublicKey cache_pk
+         , const std::string& key
+         , std::shared_ptr<unsigned> newest_proto_seen
+         , std::string dbg_tag)
+        : Peers( exec, move(local_endpoints), {}, move(local_peer_eps)
+               , move(cache_pk), key
+               , {}, nullptr
+               , move(newest_proto_seen), move(dbg_tag))
+    {}
 
     void add_candidate(udp::endpoint ep) {
         if (bt::is_martian(ep)) return;
@@ -530,6 +548,25 @@ private:
     std::random_device _random_device;
     std::mt19937 _random_generator;
 };
+
+MultiPeerReader::MultiPeerReader( asio::executor ex
+                                , util::Ed25519PublicKey cache_pk
+                                , std::set<asio::ip::udp::endpoint> local_peers
+                                , std::string key
+                                , std::set<asio::ip::udp::endpoint> local_endpoints
+                                , std::shared_ptr<unsigned> newest_proto_seen
+                                , const std::string& dbg_tag)
+    : _executor(ex)
+    , _dbg_tag(dbg_tag)
+{
+    _peers = make_unique<Peers>(ex
+                               , move(local_endpoints)
+                               , local_peers
+                               , cache_pk
+                               , key
+                               , newest_proto_seen
+                               , dbg_tag);
+}
 
 MultiPeerReader::MultiPeerReader( asio::executor ex
                                 , util::Ed25519PublicKey cache_pk

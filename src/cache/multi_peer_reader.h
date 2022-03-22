@@ -28,6 +28,14 @@ public:
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> local_peers
                    , std::string key
+                   , std::set<asio::ip::udp::endpoint> local_endpoints
+                   , std::shared_ptr<unsigned> newest_proto_seen
+                   , const std::string& dbg_tag);
+
+    MultiPeerReader( asio::executor ex
+                   , util::Ed25519PublicKey cache_pk
+                   , std::set<asio::ip::udp::endpoint> local_peers
+                   , std::string key
                    , const bittorrent::MainlineDht& dht
                    , std::string dht_group
                    , std::shared_ptr<DhtLookup> dht_lookup
