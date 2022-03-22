@@ -28,7 +28,7 @@ public:
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> local_peers
                    , std::string key
-                   , std::shared_ptr<bittorrent::MainlineDht> dht
+                   , const bittorrent::MainlineDht& dht
                    , std::string dht_group
                    , std::shared_ptr<DhtLookup> dht_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen

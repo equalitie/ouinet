@@ -372,7 +372,7 @@ struct Client::Impl {
             , _cache_pk
             , _local_peer_discovery.found_peers()
             , key
-            , _dht
+            , *_dht
             , dht_group
             , dht_lookup(compute_swarm_name(dht_group))
             , _newest_proto_seen
