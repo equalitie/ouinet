@@ -95,7 +95,7 @@ struct Client::Impl {
     std::shared_ptr<unsigned> _newest_proto_seen;
 
     asio::executor _ex;
-    std::set<udp::endpoint> _lan_my_endpoints;  // TODO: set when no DHT
+    std::set<udp::endpoint> _lan_my_endpoints;
     shared_ptr<bt::MainlineDht> _dht;
     string _uri_swarm_prefix;
     util::Ed25519PublicKey _cache_pk;
@@ -104,7 +104,7 @@ struct Client::Impl {
     unique_ptr<cache::HttpStore> _http_store;
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
-    std::unique_ptr<Announcer> _announcer;  // TODO: not set when no DHT
+    std::unique_ptr<Announcer> _announcer;
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<PeerLookup>> _peer_lookups;
@@ -112,15 +112,16 @@ struct Client::Impl {
     std::unique_ptr<Groups> _groups;
 
 
-    Impl( shared_ptr<bt::MainlineDht> dht_
+    Impl( asio::executor ex
+        , std::set<udp::endpoint> lan_my_eps
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
         , Client::opt_path static_cache_dir
         , unique_ptr<cache::HttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
-        , _ex(dht_->get_executor())
-        , _dht(move(dht_))
+        , _ex(ex)
+        , _lan_my_endpoints(move(lan_my_eps))
         , _uri_swarm_prefix(bep5::compute_uri_swarm_prefix
               (cache_pk, http_::protocol_version_current))
         , _cache_pk(cache_pk)
@@ -128,18 +129,29 @@ struct Client::Impl {
         , _static_cache_dir(std::move(static_cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
-        , _announcer(std::make_unique<Announcer>(_dht))
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
         , _peer_lookups(256)
-        , _local_peer_discovery(_ex, _dht->local_endpoints())
+        , _local_peer_discovery(_ex, _lan_my_endpoints)
     {}
 
     std::string compute_swarm_name(boost::string_view group) const {
         return bep5::compute_uri_swarm_name(
                 _uri_swarm_prefix,
                 group);
+    }
+
+    void use_dht(shared_ptr<bt::MainlineDht> dht) {
+        assert(!_dht);
+        assert(!_announcer);
+
+        _dht = move(dht);
+        _announcer = std::make_unique<Announcer>(_dht);
+
+        // Announce all groups.
+        for (auto& group_name : _groups->groups())
+            _announcer->add(compute_swarm_name(group_name));
     }
 
     template<class Body>
@@ -320,6 +332,8 @@ struct Client::Impl {
 
     shared_ptr<PeerLookup> peer_lookup(std::string swarm_name)
     {
+        assert(_dht);
+
         auto* lookup = _peer_lookups.get(swarm_name);
 
         if (!lookup) {
@@ -601,12 +615,6 @@ struct Client::Impl {
             _groups->remove(item_name);
     }
 
-    void announce_all_groups() {
-        assert(_announcer);
-        for (auto& group_name : _groups->groups())
-            _announcer->add(compute_swarm_name(group_name));
-    }
-
     void stop() {
         _lifetime_cancel();
         _local_peer_discovery.stop();
@@ -634,6 +642,9 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     using ClientPtr = unique_ptr<Client>;
     static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2"};
     static const auto store_curver_subdir = "data-v3";
+
+    auto ex = dht->get_executor();
+    auto lan_my_eps = dht->local_endpoints();
 
     sys::error_code ec;
 
@@ -663,7 +674,7 @@ Client::build( shared_ptr<bt::MainlineDht> dht
             static_http_store = make_static_http_store( move(store_dir)
                                                       , move(canon_content_dir)
                                                       , cache_pk
-                                                      , dht->get_executor());
+                                                      , ex);
         ec = {};
     }
 
@@ -682,17 +693,17 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     auto http_store = static_http_store
-        ? make_backed_http_store(move(store_dir), move(static_http_store), dht->get_executor())
-        : make_http_store(move(store_dir), dht->get_executor());
+        ? make_backed_http_store(move(store_dir), move(static_http_store), ex)
+        : make_http_store(move(store_dir), ex);
 
-    unique_ptr<Impl> impl(new Impl( move(dht)
+    unique_ptr<Impl> impl(new Impl( ex, move(lan_my_eps)
                                   , cache_pk, move(cache_dir), std::move(static_cache_dir)
                                   , move(http_store), max_cached_age));
 
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     impl->_gc.start();
-    impl->announce_all_groups();
+    impl->use_dht(move(dht));
     return unique_ptr<Client>(new Client(move(impl)));
 }
 
