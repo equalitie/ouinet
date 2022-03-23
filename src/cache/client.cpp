@@ -104,7 +104,7 @@ struct Client::Impl {
     unique_ptr<cache::HttpStore> _http_store;
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
-    Announcer _announcer;
+    std::unique_ptr<Announcer> _announcer;  // TODO: not set when no DHT
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<PeerLookup>> _peer_lookups;
@@ -128,7 +128,7 @@ struct Client::Impl {
         , _static_cache_dir(std::move(static_cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
-        , _announcer(_dht)
+        , _announcer(std::make_unique<Announcer>(_dht))
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
@@ -456,7 +456,8 @@ struct Client::Impl {
         _groups->add(group, key, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        _announcer.add(compute_swarm_name(group));
+        if (!_announcer) return;
+        _announcer->add(compute_swarm_name(group));
     }
 
     http::response_header<>
@@ -496,7 +497,9 @@ struct Client::Impl {
     void unpublish_cache_entry(const std::string& key)
     {
         auto empty_groups = _groups->remove(key);
-        for (const auto& eg : empty_groups) _announcer.remove(compute_swarm_name(eg));
+
+        if (!_announcer) return;
+        for (const auto& eg : empty_groups) _announcer->remove(compute_swarm_name(eg));
     }
 
     // Return whether the entry should be kept in storage.
@@ -538,7 +541,7 @@ struct Client::Impl {
         return true;
     }
 
-    void announce_stored_data(asio::yield_context y)
+    void load_stored_groups(asio::yield_context y)
     {
         static const auto groups_curver_subdir = "dht_groups";
 
@@ -596,10 +599,12 @@ struct Client::Impl {
             _groups->remove_group(group_name);
         for (auto& item_name : bad_items)
             _groups->remove(item_name);
+    }
 
-        // Finally, announce the standing groups.
+    void announce_all_groups() {
+        assert(_announcer);
         for (auto& group_name : _groups->groups())
-            _announcer.add(compute_swarm_name(group_name));
+            _announcer->add(compute_swarm_name(group_name));
     }
 
     void stop() {
@@ -684,10 +689,10 @@ Client::build( shared_ptr<bt::MainlineDht> dht
                                   , cache_pk, move(cache_dir), std::move(static_cache_dir)
                                   , move(http_store), max_cached_age));
 
-    impl->announce_stored_data(yield[ec]);
+    impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     impl->_gc.start();
-
+    impl->announce_all_groups();
     return unique_ptr<Client>(new Client(move(impl)));
 }
 
