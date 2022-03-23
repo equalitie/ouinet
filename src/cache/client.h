@@ -10,6 +10,7 @@
 #include "../../util/crypto.h"
 #include "../../util/yield.h"
 #include "cache_entry.h"
+#include "dht_groups.h"
 
 
 namespace ouinet {
@@ -35,6 +36,9 @@ private:
          , opt_path static_cache_dir
          , opt_path static_cache_content_dir
          , asio::yield_context);
+
+public:
+    using GroupName = BaseDhtGroups::GroupName;
 
 public:
     static std::unique_ptr<Client>
@@ -71,13 +75,13 @@ public:
 
     // This may add a response source header.
     Session load( const std::string& key
-                , const std::string& dht_group
+                , const GroupName& group
                 , bool is_head_request
                 , Cancel
                 , Yield);
 
     void store( const std::string& key
-              , const std::string& dht_group
+              , const GroupName& group
               , http_response::AbstractReader&
               , Cancel
               , asio::yield_context);
@@ -99,9 +103,8 @@ public:
     // (e.g. to warn about potential upgrades).
     unsigned get_newest_proto_version() const;
 
-    // Get all groups being announced to the distributed cache index
-    // by this client.
-    std::set<std::string> get_announced_groups() const;
+    // Get all groups present in this client.
+    std::set<GroupName> get_groups() const;
 
     ~Client();
 

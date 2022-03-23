@@ -2,7 +2,6 @@
 #include "announcer.h"
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
-#include "dht_groups.h"
 #include "http_sign.h"
 #include "http_store.h"
 #include "../default_timeout.h"
@@ -86,6 +85,11 @@ struct GarbageCollector {
 };
 
 struct Client::Impl {
+    using GroupName = Client::GroupName;
+    using PeerLookup = DhtLookup;
+    using BaseGroups = BaseDhtGroups;
+    using Groups = DhtGroups;
+
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from injector-signed cached content).
     std::shared_ptr<unsigned> _newest_proto_seen;
@@ -103,9 +107,9 @@ struct Client::Impl {
     Announcer _announcer;
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
-    util::LruCache<std::string, shared_ptr<DhtLookup>> _dht_lookups;
+    util::LruCache<std::string, shared_ptr<PeerLookup>> _peer_lookups;
     LocalPeerDiscovery _local_peer_discovery;
-    std::unique_ptr<DhtGroups> _dht_groups;
+    std::unique_ptr<Groups> _groups;
 
 
     Impl( shared_ptr<bt::MainlineDht> dht_
@@ -128,14 +132,14 @@ struct Client::Impl {
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
-        , _dht_lookups(256)
+        , _peer_lookups(256)
         , _local_peer_discovery(_ex, _dht->local_endpoints())
     {}
 
-    std::string compute_swarm_name(boost::string_view dht_group) const {
+    std::string compute_swarm_name(boost::string_view group) const {
         return bep5::compute_uri_swarm_name(
                 _uri_swarm_prefix,
-                dht_group);
+                group);
     }
 
     template<class Body>
@@ -314,20 +318,20 @@ struct Client::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
-    shared_ptr<DhtLookup> dht_lookup(std::string swarm_name)
+    shared_ptr<PeerLookup> peer_lookup(std::string swarm_name)
     {
-        auto* lookup = _dht_lookups.get(swarm_name);
+        auto* lookup = _peer_lookups.get(swarm_name);
 
         if (!lookup) {
-            lookup = _dht_lookups.put( swarm_name
-                                     , make_shared<DhtLookup>(_dht, swarm_name));
+            lookup = _peer_lookups.put( swarm_name
+                                      , make_shared<PeerLookup>(_dht, swarm_name));
         }
 
         return *lookup;
     }
 
     Session load( const std::string& key
-                , const std::string& dht_group
+                , const GroupName& group
                 , bool is_head_request
                 , Cancel cancel
                 , Yield yield_)
@@ -370,14 +374,14 @@ struct Client::Impl {
 
         std::unique_ptr<MultiPeerReader> reader;
         if (_dht) {
-            auto peer_lookup = dht_lookup(compute_swarm_name(dht_group));
+            auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
 
             if (!debug_tag.empty()) {
                 LOG_DEBUG(debug_tag, " DHT peer lookup:");
                 LOG_DEBUG(debug_tag, "    key=        ", key);
-                LOG_DEBUG(debug_tag, "    dht_group=  ", dht_group);
-                LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup->swarm_name());
-                LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup->infohash());
+                LOG_DEBUG(debug_tag, "    group=      ", group);
+                LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup_->swarm_name());
+                LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup_->infohash());
             };
 
             reader = std::make_unique<MultiPeerReader>
@@ -387,7 +391,7 @@ struct Client::Impl {
                 , _local_peer_discovery.found_peers()
                 , _dht->local_endpoints()
                 , _dht->wan_endpoints()
-                , move(peer_lookup)
+                , move(peer_lookup_)
                 , _newest_proto_seen
                 , debug_tag);
         } else {
@@ -439,7 +443,7 @@ struct Client::Impl {
     }
 
     void store( const std::string& key
-              , const std::string& dht_group
+              , const GroupName& group
               , http_response::AbstractReader& r
               , Cancel cancel
               , asio::yield_context yield)
@@ -449,10 +453,10 @@ struct Client::Impl {
         _http_store->store(key, fr, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        _dht_groups->add(dht_group, key, cancel, yield[ec]);
+        _groups->add(group, key, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        _announcer.add(compute_swarm_name(dht_group));
+        _announcer.add(compute_swarm_name(group));
     }
 
     http::response_header<>
@@ -491,7 +495,7 @@ struct Client::Impl {
     inline
     void unpublish_cache_entry(const std::string& key)
     {
-        auto empty_groups = _dht_groups->remove(key);
+        auto empty_groups = _groups->remove(key);
         for (const auto& eg : empty_groups) _announcer.remove(compute_swarm_name(eg));
     }
 
@@ -500,7 +504,7 @@ struct Client::Impl {
     {
         // This should be available to
         // allow removing keys of entries to be evicted.
-        assert(_dht_groups);
+        assert(_groups);
 
         sys::error_code ec;
 
@@ -542,21 +546,21 @@ struct Client::Impl {
 
         sys::error_code e;
 
-        // Use static DHT groups if its directory is provided.
-        std::unique_ptr<BaseDhtGroups> static_dht_groups;
+        // Use static groups if its directory is provided.
+        std::unique_ptr<BaseGroups> static_groups;
         if (_static_cache_dir) {
             auto groups_dir = *_static_cache_dir / groups_curver_subdir;
             if (!is_directory(groups_dir)) {
-                _ERROR("No DHT groups of supported version under static cache, ignoring: ", *_static_cache_dir);
+                _ERROR("No groups of supported version under static cache, ignoring: ", *_static_cache_dir);
             } else {
-                static_dht_groups = load_static_dht_groups(move(groups_dir), _ex, cancel, y[e]);
-                if (e) _ERROR("Failed to load static DHT groups, ignoring: ", *_static_cache_dir);
+                static_groups = load_static_dht_groups(move(groups_dir), _ex, cancel, y[e]);
+                if (e) _ERROR("Failed to load static groups, ignoring: ", *_static_cache_dir);
             }
         }
 
         auto groups_dir = _cache_dir / groups_curver_subdir;
-        _dht_groups = static_dht_groups
-            ? load_backed_dht_groups(groups_dir, move(static_dht_groups), _ex, cancel, y[e])
+        _groups = static_groups
+            ? load_backed_dht_groups(groups_dir, move(static_groups), _ex, cancel, y[e])
             : load_dht_groups(groups_dir, _ex, cancel, y[e]);
 
         if (cancel) e = asio::error::operation_aborted;
@@ -569,11 +573,11 @@ struct Client::Impl {
 
         // These checks are not bullet-proof, but they should catch some inconsistencies
         // between resource groups and the HTTP store.
-        std::set<DhtGroups::ItemName> bad_items;
-        std::set<DhtGroups::GroupName> bad_groups;
-        for (auto& group_name : _dht_groups->groups()) {
+        std::set<BaseGroups::ItemName> bad_items;
+        std::set<BaseGroups::GroupName> bad_groups;
+        for (auto& group_name : _groups->groups()) {
             unsigned good_items = 0;
-            for (auto& group_item : _dht_groups->items(group_name)) {
+            for (auto& group_item : _groups->items(group_name)) {
                 // TODO: This implies opening all cache items (again for local cache), make lighter.
                 sys::error_code ec;
                 if (_http_store->reader(group_item, ec) != nullptr)
@@ -589,12 +593,12 @@ struct Client::Impl {
             }
         }
         for (auto& group_name : bad_groups)
-            _dht_groups->remove_group(group_name);
+            _groups->remove_group(group_name);
         for (auto& item_name : bad_items)
-            _dht_groups->remove(item_name);
+            _groups->remove(item_name);
 
         // Finally, announce the standing groups.
-        for (auto& group_name : _dht_groups->groups())
+        for (auto& group_name : _groups->groups())
             _announcer.add(compute_swarm_name(group_name));
     }
 
@@ -607,8 +611,8 @@ struct Client::Impl {
         return *_newest_proto_seen;
     }
 
-    std::set<std::string> get_announced_groups() const {
-        return _dht_groups->groups();
+    std::set<GroupName> get_groups() const {
+        return _groups->groups();
     }
 };
 
@@ -692,20 +696,20 @@ Client::Client(unique_ptr<Impl> impl)
 {}
 
 Session Client::load( const std::string& key
-                    , const std::string& dht_group
+                    , const GroupName& group
                     , bool is_head_request
                     , Cancel cancel, Yield yield)
 {
-    return _impl->load(key, dht_group, is_head_request, cancel, yield);
+    return _impl->load(key, group, is_head_request, cancel, yield);
 }
 
 void Client::store( const std::string& key
-                  , const std::string& dht_group
+                  , const GroupName& group
                   , http_response::AbstractReader& r
                   , Cancel cancel
                   , asio::yield_context yield)
 {
-    _impl->store(key, dht_group, r, cancel, yield);
+    _impl->store(key, group, r, cancel, yield);
 }
 
 bool Client::serve_local( const http::request<http::empty_body>& req
@@ -733,9 +737,9 @@ unsigned Client::get_newest_proto_version() const
     return _impl->get_newest_proto_version();
 }
 
-std::set<std::string> Client::get_announced_groups() const
+std::set<Client::GroupName> Client::get_groups() const
 {
-    return _impl->get_announced_groups();
+    return _impl->get_groups();
 }
 
 Client::~Client()
