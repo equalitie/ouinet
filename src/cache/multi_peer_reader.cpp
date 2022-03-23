@@ -560,7 +560,8 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                 , util::Ed25519PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::string key
-                                , const bittorrent::MainlineDht& dht
+                                , std::set<asio::ip::udp::endpoint> lan_my_eps
+                                , std::set<asio::ip::udp::endpoint> wan_my_eps
                                 , std::shared_ptr<PeerLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , const std::string& dbg_tag)
@@ -568,8 +569,8 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
     , _dbg_tag(dbg_tag)
 {
     _peers = make_unique<Peers>(ex
-                               , move(dht.local_endpoints())
-                               , move(dht.wan_endpoints())
+                               , move(lan_my_eps)
+                               , move(wan_my_eps)
                                , move(lan_peer_eps)
                                , move(cache_pk)
                                , move(key)

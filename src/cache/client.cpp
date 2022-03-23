@@ -380,7 +380,8 @@ struct Client::Impl {
             , _cache_pk
             , _local_peer_discovery.found_peers()
             , key
-            , *_dht
+            , _dht->local_endpoints()
+            , _dht->wan_endpoints()
             , move(peer_lookup)
             , _newest_proto_seen
             , debug_tag);
