@@ -377,9 +377,9 @@ struct Client::Impl {
 
         auto reader = std::make_unique<MultiPeerReader>
             ( _ex
+            , key
             , _cache_pk
             , _local_peer_discovery.found_peers()
-            , key
             , _dht->local_endpoints()
             , _dht->wan_endpoints()
             , move(peer_lookup)
