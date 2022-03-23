@@ -91,6 +91,7 @@ struct Client::Impl {
     std::shared_ptr<unsigned> _newest_proto_seen;
 
     asio::executor _ex;
+    std::set<udp::endpoint> _lan_my_endpoints;  // TODO: set when no DHT
     shared_ptr<bt::MainlineDht> _dht;
     string _uri_swarm_prefix;
     util::Ed25519PublicKey _cache_pk;
@@ -362,29 +363,43 @@ struct Client::Impl {
         }
         ec = {};  // try distributed cache
 
-        auto peer_lookup = dht_lookup(compute_swarm_name(dht_group));
-
         string debug_tag;
         if (logger.get_threshold() <= DEBUG) {
             debug_tag = yield.tag() + "/multi_peer_reader";
-
-            LOG_DEBUG(debug_tag, " DHT peer lookup:");
-            LOG_DEBUG(debug_tag, "    key=        ", key);
-            LOG_DEBUG(debug_tag, "    dht_group=  ", dht_group);
-            LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup->swarm_name());
-            LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup->infohash());
         };
 
-        auto reader = std::make_unique<MultiPeerReader>
-            ( _ex
-            , key
-            , _cache_pk
-            , _local_peer_discovery.found_peers()
-            , _dht->local_endpoints()
-            , _dht->wan_endpoints()
-            , move(peer_lookup)
-            , _newest_proto_seen
-            , debug_tag);
+        std::unique_ptr<MultiPeerReader> reader;
+        if (_dht) {
+            auto peer_lookup = dht_lookup(compute_swarm_name(dht_group));
+
+            if (!debug_tag.empty()) {
+                LOG_DEBUG(debug_tag, " DHT peer lookup:");
+                LOG_DEBUG(debug_tag, "    key=        ", key);
+                LOG_DEBUG(debug_tag, "    dht_group=  ", dht_group);
+                LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup->swarm_name());
+                LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup->infohash());
+            };
+
+            reader = std::make_unique<MultiPeerReader>
+                ( _ex
+                , key
+                , _cache_pk
+                , _local_peer_discovery.found_peers()
+                , _dht->local_endpoints()
+                , _dht->wan_endpoints()
+                , move(peer_lookup)
+                , _newest_proto_seen
+                , debug_tag);
+        } else {
+            reader = std::make_unique<MultiPeerReader>
+                ( _ex
+                , key
+                , _cache_pk
+                , _local_peer_discovery.found_peers()
+                , _lan_my_endpoints
+                , _newest_proto_seen
+                , debug_tag);
+        }
 
         auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
             return Session::create(std::move(reader), is_head_request, cancel, y);
