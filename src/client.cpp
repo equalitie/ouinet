@@ -1072,6 +1072,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     wait_for_injector(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session{});
+    assert(_injector);
 
     auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
         return _injector->connect(y, cancel);
@@ -1186,6 +1187,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     wait_for_injector(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session{});
+    assert(_injector);
 
     ConnectionPool<Endpoint>::Connection con;
     if (_injector_connections.empty()) {
@@ -2693,8 +2695,6 @@ void Client::State::setup_injector(asio::yield_context yield)
         _injector_starting.reset();
     });
 
-    _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
-
     auto injector_ep = _config.injector_endpoint();
     if (!injector_ep) {
         ec = asio::error::operation_not_supported;
@@ -2797,8 +2797,8 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = std::move(obfs4_client);
     }
 
+    _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
     _injector->add(*injector_ep, std::move(client));
-
     _injector->start(yield[ec]);
     return or_throw(yield, ec);
 }
