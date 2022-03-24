@@ -2432,13 +2432,16 @@ void Client::State::setup_cache(asio::yield_context yield)
 
     assert(!_shutdown_signal || ec == asio::error::operation_aborted);
 
+    assert(_udp_multiplexer);
     _cache = _config.cache_static_content_path().empty()
-        ? cache::Client::build( dht
+        ? cache::Client::build( _ctx.get_executor()
+                              , {_udp_multiplexer->local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
                               , yield[ec])
-        : cache::Client::build( dht
+        : cache::Client::build( _ctx.get_executor()
+                              , {_udp_multiplexer->local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
@@ -2451,6 +2454,12 @@ void Client::State::setup_cache(asio::yield_context yield)
         if (ec != asio::error::operation_aborted) {
             LOG_ERROR("Failed to initialize cache::Client; ec=", ec);
         }
+        return or_throw(yield, ec);
+    }
+
+    if (!_cache->enable_dht(dht)) {
+        LOG_ERROR("Failed to enable DHT in cache::Client");
+        ec = asio::error::invalid_argument;
         return or_throw(yield, ec);
     }
 

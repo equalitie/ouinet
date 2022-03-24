@@ -12,7 +12,6 @@
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
 #include "../util/watch_dog.h"
-#include "../bittorrent/dht.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
 #include "../async_sleep.h"
@@ -632,7 +631,8 @@ struct Client::Impl {
 
 /* static */
 std::unique_ptr<Client>
-Client::build( shared_ptr<bt::MainlineDht> dht
+Client::build( asio::executor ex
+             , std::set<udp::endpoint> lan_my_eps
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
@@ -643,9 +643,6 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     using ClientPtr = unique_ptr<Client>;
     static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2"};
     static const auto store_curver_subdir = "data-v3";
-
-    auto ex = dht->get_executor();
-    auto lan_my_eps = dht->local_endpoints();
 
     sys::error_code ec;
 
@@ -704,16 +701,16 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     impl->_gc.start();
-    if (!impl->enable_dht(move(dht))) {
-        assert(0 && "Cache client is already using a DHT");
-        return or_throw<ClientPtr>(yield, asio::error::invalid_argument);
-    }
     return unique_ptr<Client>(new Client(move(impl)));
 }
 
 Client::Client(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
+
+bool Client::enable_dht(shared_ptr<bt::MainlineDht> dht) {
+    return _impl->enable_dht(move(dht));
+}
 
 Session Client::load( const std::string& key
                     , const GroupName& group
