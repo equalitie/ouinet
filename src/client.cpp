@@ -2447,14 +2447,14 @@ void Client::State::setup_cache(asio::yield_context yield)
                               , yield[ec]);
     fail_on_error("Failed to initialize cache::Client");
 
+    idempotent_start_accepting_on_utp(yield[ec]);
+    fail_on_error("Failed to start accepting on uTP");
+
     auto dht = bittorrent_dht(yield[ec]);
     fail_on_error("Failed to initialize BT DHT");
 
     if (!_cache->enable_dht(dht)) ec = asio::error::invalid_argument;
     fail_on_error("Failed to enable BT DHT in cache::Client");
-
-    idempotent_start_accepting_on_utp(yield[ec]);
-    fail_on_error("Failed to start accepting on uTP");
 
 #undef fail_on_error
 }
