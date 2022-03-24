@@ -7,10 +7,10 @@
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 
-#include "../../bittorrent/dht.h"
-#include "../../response_reader.h"
-#include "../../util/crypto.h"
-#include "../../util/yield.h"
+#include "../bittorrent/dht.h"
+#include "../response_reader.h"
+#include "../util/crypto.h"
+#include "../util/yield.h"
 #include "cache_entry.h"
 #include "dht_groups.h"
 
