@@ -453,14 +453,9 @@ private:
         if (_multi_utp_server) return;
         auto lock = _multi_utp_server_wc.lock();
 
-        auto dht = bittorrent_dht(yield[ec]);
-        if (ec) return or_throw(yield, ec);
-
-        auto exec = _ctx.get_executor();
-        auto local_eps = dht->local_endpoints();
-
-        _multi_utp_server
-            = make_unique<ouiservice::MultiUtpServer>(exec, local_eps, nullptr);
+        _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
+            _ctx.get_executor()
+            , std::set{common_udp_multiplexer().local_endpoint()}, nullptr);
 
         TRACK_SPAWN(_ctx, ([&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
