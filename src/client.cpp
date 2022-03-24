@@ -2422,16 +2422,6 @@ void Client::State::setup_cache(asio::yield_context yield)
         _cache_starting.reset();
     });
 
-    auto dht = bittorrent_dht(yield[ec]);
-    if (ec) {
-        if (ec != asio::error::operation_aborted) {
-            LOG_ERROR("Failed to initialize BT DHT; ec=", ec);
-        }
-        return or_throw(yield, ec);
-    }
-
-    assert(!_shutdown_signal || ec == asio::error::operation_aborted);
-
     assert(_udp_multiplexer);
     _cache = _config.cache_static_content_path().empty()
         ? cache::Client::build( _ctx.get_executor()
@@ -2456,6 +2446,16 @@ void Client::State::setup_cache(asio::yield_context yield)
         }
         return or_throw(yield, ec);
     }
+
+    auto dht = bittorrent_dht(yield[ec]);
+    if (ec) {
+        if (ec != asio::error::operation_aborted) {
+            LOG_ERROR("Failed to initialize BT DHT; ec=", ec);
+        }
+        return or_throw(yield, ec);
+    }
+
+    assert(!_shutdown_signal || ec == asio::error::operation_aborted);
 
     if (!_cache->enable_dht(dht)) {
         LOG_ERROR("Failed to enable DHT in cache::Client");
