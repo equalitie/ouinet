@@ -376,7 +376,8 @@ private:
 
 #define DEF_WAIT_FOR(WHAT) \
     void wait_for_##WHAT(Cancel& cancel, Yield yield) { \
-        if (!_##WHAT##_starting) return; \
+        if (!_##WHAT##_starting) \
+            return or_throw(yield, _##WHAT##_start_ec); \
         \
         sys::error_code ec; \
         yield[ec].tag("wait_for_" #WHAT).run([&] (auto y) { \
@@ -2418,7 +2419,10 @@ void Client::State::setup_cache(asio::yield_context yield)
         _cache_starting.reset();
     });
 
-    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) return;
+    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) {
+        ec = asio::error::operation_not_supported;
+        return;
+    };
 
     LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
@@ -2692,8 +2696,10 @@ void Client::State::setup_injector(asio::yield_context yield)
     _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
 
     auto injector_ep = _config.injector_endpoint();
-
-    if (!injector_ep) return;
+    if (!injector_ep) {
+        ec = asio::error::operation_not_supported;
+        return;
+    }
 
     LOG_INFO("Setting up injector: ", *injector_ep);
 
