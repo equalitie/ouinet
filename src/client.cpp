@@ -2429,16 +2429,15 @@ void Client::State::setup_cache(asio::yield_context yield)
     return_or_throw_on_error(yield, _shutdown_signal, ec); \
 }
 
-    assert(_udp_multiplexer);
     _cache = _config.cache_static_content_path().empty()
         ? cache::Client::build( _ctx.get_executor()
-                              , {_udp_multiplexer->local_endpoint()}
+                              , {common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
                               , yield[ec])
         : cache::Client::build( _ctx.get_executor()
-                              , {_udp_multiplexer->local_endpoint()}
+                              , {common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
