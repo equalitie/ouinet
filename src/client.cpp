@@ -2408,10 +2408,6 @@ void Client::State::serve_request( GenericStream&& con
 //------------------------------------------------------------------------------
 void Client::State::setup_cache(asio::yield_context yield)
 {
-    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) return;
-
-    LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
-
     // Remember to always set before return in case of error,
     // or the notification may not pass the right error code to listeners.
     sys::error_code ec;
@@ -2421,6 +2417,10 @@ void Client::State::setup_cache(asio::yield_context yield)
         _cache_starting->notify(ec);
         _cache_starting.reset();
     });
+
+    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) return;
+
+    LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
 #define fail_on_error(__msg) { \
     if (_shutdown_signal) ec = asio::error::operation_aborted; \
