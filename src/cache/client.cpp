@@ -142,9 +142,8 @@ struct Client::Impl {
                 group);
     }
 
-    void use_dht(shared_ptr<bt::MainlineDht> dht) {
-        assert(!_dht);
-        assert(!_announcer);
+    bool enable_dht(shared_ptr<bt::MainlineDht> dht) {
+        if (_dht || _announcer) return false;
 
         _dht = move(dht);
         _announcer = std::make_unique<Announcer>(_dht);
@@ -152,6 +151,8 @@ struct Client::Impl {
         // Announce all groups.
         for (auto& group_name : _groups->groups())
             _announcer->add(compute_swarm_name(group_name));
+
+        return true;
     }
 
     template<class Body>
@@ -703,7 +704,10 @@ Client::build( shared_ptr<bt::MainlineDht> dht
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     impl->_gc.start();
-    impl->use_dht(move(dht));
+    if (!impl->enable_dht(move(dht))) {
+        assert(0 && "Cache client is already using a DHT");
+        return or_throw<ClientPtr>(yield, asio::error::invalid_argument);
+    }
     return unique_ptr<Client>(new Client(move(impl)));
 }
 
