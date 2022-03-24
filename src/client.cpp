@@ -2440,35 +2440,30 @@ void Client::State::setup_cache(asio::yield_context yield)
                               , yield[ec]);
 
     if (_shutdown_signal) ec = asio::error::operation_aborted;
-    if (ec) {
-        if (ec != asio::error::operation_aborted) {
-            LOG_ERROR("Failed to initialize cache::Client; ec=", ec);
-        }
-        return or_throw(yield, ec);
-    }
+    if (ec && ec != asio::error::operation_aborted)
+        LOG_ERROR("Failed to initialize cache::Client; ec=", ec);
+    return_or_throw_on_error(yield, _shutdown_signal, ec);
 
     auto dht = bittorrent_dht(yield[ec]);
-    if (ec) {
-        if (ec != asio::error::operation_aborted) {
-            LOG_ERROR("Failed to initialize BT DHT; ec=", ec);
-        }
-        return or_throw(yield, ec);
-    }
 
-    assert(!_shutdown_signal || ec == asio::error::operation_aborted);
+    if (_shutdown_signal) ec = asio::error::operation_aborted;
+    if (ec && ec != asio::error::operation_aborted)
+        LOG_ERROR("Failed to initialize BT DHT; ec=", ec);
+    return_or_throw_on_error(yield, _shutdown_signal, ec);
 
-    if (!_cache->enable_dht(dht)) {
-        LOG_ERROR("Failed to enable DHT in cache::Client");
-        ec = asio::error::invalid_argument;
-        return or_throw(yield, ec);
-    }
+    if (!_cache->enable_dht(dht)) ec = asio::error::invalid_argument;
+
+    if (_shutdown_signal) ec = asio::error::operation_aborted;
+    if (ec && ec != asio::error::operation_aborted)
+        LOG_ERROR("Failed to enable DHT in cache::Client; ec=", ec);
+    return_or_throw_on_error(yield, _shutdown_signal, ec);
 
     idempotent_start_accepting_on_utp(yield[ec]);
 
-    if (ec) {
+    if (_shutdown_signal) ec = asio::error::operation_aborted;
+    if (ec && ec != asio::error::operation_aborted)
         LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
-        ec = {};
-    }
+    return_or_throw_on_error(yield, _shutdown_signal, ec);
 }
 
 //------------------------------------------------------------------------------
