@@ -51,11 +51,10 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 
 static
 boost::optional<asio_utp::udp_multiplexer>
-choose_multiplexer_for(asio::executor exec, const udp::endpoint& ep, bt::MainlineDht& dht)
+choose_multiplexer_for( asio::executor exec, const udp::endpoint& ep
+                      , const set<udp::endpoint>& lan_my_eps)
 {
-    auto eps = dht.local_endpoints();
-
-    for (auto& e : eps) {
+    for (auto& e : lan_my_eps) {
         if (same_ipv(ep, e)) {
             asio_utp::udp_multiplexer m(exec);
             sys::error_code ec;
@@ -71,12 +70,12 @@ choose_multiplexer_for(asio::executor exec, const udp::endpoint& ep, bt::Mainlin
 static
 GenericStream connect( asio::executor exec
                      , udp::endpoint ep
-                     , bt::MainlineDht& dht
+                     , const set<udp::endpoint>& lan_my_eps
                      , Cancel cancel
                      , asio::yield_context yield)
 {
     sys::error_code ec;
-    auto opt_m = choose_multiplexer_for(exec, ep, dht);
+    auto opt_m = choose_multiplexer_for(exec, ep, lan_my_eps);
     assert(opt_m);
     asio_utp::socket s(exec);
     s.bind(*opt_m, ec);
@@ -278,7 +277,7 @@ public:
 
     void download_hash_list(
             udp::endpoint ep,
-            bt::MainlineDht& dht,
+            const set<udp::endpoint>& lan_my_eps,
             std::shared_ptr<unsigned> newest_proto_seen,
             Cancel cancel,
             asio::yield_context yield)
@@ -289,7 +288,7 @@ public:
 
         auto wd = watch_dog(_exec, chrono::seconds(10), [&] { timeout_cancel(); });
 
-        auto con = connect(_exec, ep, dht, timeout_cancel, yield[ec]);
+        auto con = connect(_exec, ep, lan_my_eps, timeout_cancel, yield[ec]);
 
         if (timeout_cancel) ec = asio::error::timed_out;
         if (cancel) ec = asio::error::operation_aborted;
@@ -326,64 +325,72 @@ public:
 class MultiPeerReader::Peers {
 public:
     Peers(asio::executor exec
-         , set<udp::endpoint> local_peer_eps
+         , set<udp::endpoint> lan_my_eps
+         , set<udp::endpoint> wan_my_eps
+         , set<udp::endpoint> lan_peer_eps
          , util::Ed25519PublicKey cache_pk
          , const std::string& key
-         , const std::string& dht_group
-         , std::shared_ptr<bittorrent::MainlineDht> dht
-         , std::shared_ptr<DhtLookup> dht_lookup
+         , std::shared_ptr<PeerLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
          , std::string dbg_tag)
         : _exec(exec)
         , _cv(_exec)
         , _cache_pk(move(cache_pk))
-        , _local_peer_eps(move(local_peer_eps))
+        , _lan_peer_eps(move(lan_peer_eps))
+        , _lan_my_eps(move(lan_my_eps))
+        , _wan_my_eps(move(wan_my_eps))
         , _key(move(key))
-        , _dht(move(dht))
-        , _dht_group(move(dht_group))
-        , _dht_lookup(move(dht_lookup))
+        , _peer_lookup(move(peer_lookup))
         , _newest_proto_seen(move(newest_proto_seen))
-        , _our_endpoints(_dht->wan_endpoints())
         , _dbg_tag(move(dbg_tag))
         , _random_generator(_random_device())
     {
-        for (auto ep : _local_peer_eps) {
+        for (auto ep : _lan_peer_eps) {
             add_candidate(ep);
+        }
+
+        if (!_peer_lookup) {
+            _cv.notify();
+            return;
         }
 
         asio::spawn(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
-            if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " DHT lookup:");
-                LOG_DEBUG(dbg_tag, "    key=        ", _key);
-                LOG_DEBUG(dbg_tag, "    dht_group=  ", _dht_group);
-                LOG_DEBUG(dbg_tag, "    swarm_name= ", _dht_lookup->swarm_name());
-                LOG_DEBUG(dbg_tag, "    infohash=   ", _dht_lookup->infohash());
-            }
-
-            auto dht_eps = _dht_lookup->get(c, y[ec]);
+            auto peer_eps = _peer_lookup->get(c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " DHT lookup result; ec=", ec, " eps=", dht_eps);
+                LOG_DEBUG(dbg_tag, " Peer lookup result; ec=", ec, " eps=", peer_eps);
             }
 
             if (c) return;
 
-            _dht_lookup.reset();
+            _peer_lookup.reset();
 
             if (!ec) {
-                for (auto ep : dht_eps) add_candidate(ep);
+                for (auto ep : peer_eps) add_candidate(ep);
             }
 
             _cv.notify();
         });
     }
 
+    Peers(asio::executor exec
+         , set<udp::endpoint> lan_my_eps
+         , set<udp::endpoint> lan_peer_eps
+         , util::Ed25519PublicKey cache_pk
+         , const std::string& key
+         , std::shared_ptr<unsigned> newest_proto_seen
+         , std::string dbg_tag)
+        : Peers( exec, move(lan_my_eps), {}, move(lan_peer_eps)
+               , move(cache_pk), key, nullptr
+               , move(newest_proto_seen), move(dbg_tag))
+    {}
+
     void add_candidate(udp::endpoint ep) {
         if (bt::is_martian(ep)) return;
-        if (_our_endpoints.count(ep)) return;
+        if (_wan_my_eps.count(ep)) return;
 
         auto ip = _all_peers.insert({ep, unique_ptr<Peer>()});
 
@@ -402,7 +409,7 @@ public:
                 LOG_DEBUG(dbg_tag, " Fetching hash list from: ", ep);
             }
 
-            p->download_hash_list(ep, *_dht, _newest_proto_seen, c, y[ec]);
+            p->download_hash_list(ep, _lan_my_eps, _newest_proto_seen, c, y[ec]);
 
             if (!dbg_tag.empty()) {
                 LOG_DEBUG(dbg_tag, " Done fetching hash list; ep=", ep
@@ -420,12 +427,12 @@ public:
     }
 
     bool still_waiting_for_candidates() const {
-        return _dht_lookup || !_candidate_peers.empty();
+        return _peer_lookup || !_candidate_peers.empty();
     }
 
     bool has_enough_good_peers() const {
         // TODO: This can be improved to (e.g.) be also a function of time
-        // since DHT lookup finished.
+        // since peer lookup finished.
         return !_good_peers.empty();
     }
 
@@ -516,13 +523,12 @@ private:
     ConditionVariable _cv;
 
     util::Ed25519PublicKey _cache_pk;
-    std::set<asio::ip::udp::endpoint> _local_peer_eps;
+    std::set<asio::ip::udp::endpoint> _lan_peer_eps;
+    std::set<asio::ip::udp::endpoint> _lan_my_eps;
+    std::set<asio::ip::udp::endpoint> _wan_my_eps;
     std::string _key;
-    std::shared_ptr<bittorrent::MainlineDht> _dht;
-    std::string _dht_group;
-    std::shared_ptr<DhtLookup> _dht_lookup;
+    std::shared_ptr<PeerLookup> _peer_lookup;
     std::shared_ptr<unsigned> _newest_proto_seen;
-    set<udp::endpoint> _our_endpoints;
     std::string _dbg_tag;
 
     Cancel _lifetime_cancel;
@@ -532,25 +538,44 @@ private:
 };
 
 MultiPeerReader::MultiPeerReader( asio::executor ex
-                                , util::Ed25519PublicKey cache_pk
-                                , std::set<asio::ip::udp::endpoint> local_peers
                                 , std::string key
-                                , std::shared_ptr<bittorrent::MainlineDht> dht
-                                , std::string dht_group
-                                , std::shared_ptr<DhtLookup> dht_lookup
+                                , util::Ed25519PublicKey cache_pk
+                                , std::set<asio::ip::udp::endpoint> lan_peer_eps
+                                , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , const std::string& dbg_tag)
     : _executor(ex)
     , _dbg_tag(dbg_tag)
 {
     _peers = make_unique<Peers>(ex
-                               , local_peers
-                               , cache_pk
-                               , key
-                               , dht_group
-                               , dht
-                               , dht_lookup
-                               , newest_proto_seen
+                               , move(lan_my_eps)
+                               , move(lan_peer_eps)
+                               , move(cache_pk)
+                               , move(key)
+                               , move(newest_proto_seen)
+                               , dbg_tag);
+}
+
+MultiPeerReader::MultiPeerReader( asio::executor ex
+                                , std::string key
+                                , util::Ed25519PublicKey cache_pk
+                                , std::set<asio::ip::udp::endpoint> lan_peer_eps
+                                , std::set<asio::ip::udp::endpoint> lan_my_eps
+                                , std::set<asio::ip::udp::endpoint> wan_my_eps
+                                , std::shared_ptr<PeerLookup> peer_lookup
+                                , std::shared_ptr<unsigned> newest_proto_seen
+                                , const std::string& dbg_tag)
+    : _executor(ex)
+    , _dbg_tag(dbg_tag)
+{
+    _peers = make_unique<Peers>(ex
+                               , move(lan_my_eps)
+                               , move(wan_my_eps)
+                               , move(lan_peer_eps)
+                               , move(cache_pk)
+                               , move(key)
+                               , move(peer_lookup)
+                               , move(newest_proto_seen)
                                , dbg_tag);
 }
 

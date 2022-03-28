@@ -310,7 +310,7 @@ void ClientFrontEnd::handle_group_list( const Request&
 
     if (!cache_client) return;
 
-    for (const auto& g : cache_client->get_announced_groups())
+    for (const auto& g : cache_client->get_groups())
         ss << g << std::endl;
 }
 

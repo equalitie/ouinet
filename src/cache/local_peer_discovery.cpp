@@ -78,7 +78,7 @@ struct LocalPeerDiscovery::Impl {
         _socket.set_option(udp::socket::reuse_address(true));
         _socket.bind({asio::ip::address_v4::any(), multicast_ep.port()}, ec);
 
-        _socket.set_option(ip::multicast::join_group(multicast_ep.address()));
+        if (!ec) _socket.set_option(ip::multicast::join_group(multicast_ep.address()), ec);
 
         if (ec) {
             LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket;"

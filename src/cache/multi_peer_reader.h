@@ -4,7 +4,6 @@
 #include <boost/asio/ip/udp.hpp>
 #include "../response_reader.h"
 #include "../namespaces.h"
-#include "../bittorrent/dht.h"
 #include "dht_lookup.h"
 #include "hash_list.h"
 #include "../util/async_generator.h"
@@ -24,13 +23,26 @@ private:
     enum class State { active, done, closed };
 
 public:
+    using PeerLookup = DhtLookup;
+
+public:
+    // Use this for local cache and LAN retrieval only.
     MultiPeerReader( asio::executor ex
-                   , util::Ed25519PublicKey cache_pk
-                   , std::set<asio::ip::udp::endpoint> local_peers
                    , std::string key
-                   , std::shared_ptr<bittorrent::MainlineDht> dht
-                   , std::string dht_group
-                   , std::shared_ptr<DhtLookup> dht_lookup
+                   , util::Ed25519PublicKey cache_pk
+                   , std::set<asio::ip::udp::endpoint> lan_peers
+                   , std::set<asio::ip::udp::endpoint> lan_my_endpoints
+                   , std::shared_ptr<unsigned> newest_proto_seen
+                   , const std::string& dbg_tag);
+
+    // Use this to include peers on the Internet.
+    MultiPeerReader( asio::executor ex
+                   , std::string key
+                   , util::Ed25519PublicKey cache_pk
+                   , std::set<asio::ip::udp::endpoint> lan_peers
+                   , std::set<asio::ip::udp::endpoint> lan_my_endpoints
+                   , std::set<asio::ip::udp::endpoint> wan_my_endpoints
+                   , std::shared_ptr<PeerLookup> peer_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , const std::string& dbg_tag);
 

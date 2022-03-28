@@ -1,13 +1,19 @@
 #pragma once
 
-#include "../../response_reader.h"
-#include "../../util/crypto.h"
-#include "../../util/yield.h"
-#include "cache_entry.h"
+#include <set>
+
+#include <boost/asio/ip/udp.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
-#include <set>
+
+#include "../bittorrent/dht.h"
+#include "../response_reader.h"
+#include "../util/crypto.h"
+#include "../util/yield.h"
+#include "cache_entry.h"
+#include "dht_groups.h"
+
 
 namespace ouinet {
 
@@ -25,7 +31,8 @@ private:
     using opt_path = boost::optional<fs::path>;
 
     static std::unique_ptr<Client>
-    build( std::shared_ptr<bittorrent::MainlineDht>
+    build( asio::executor ex
+         , std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -34,21 +41,26 @@ private:
          , asio::yield_context);
 
 public:
+    using GroupName = BaseDhtGroups::GroupName;
+
+public:
     static std::unique_ptr<Client>
-    build( std::shared_ptr<bittorrent::MainlineDht> dht
+    build( asio::executor ex
+         , std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , asio::yield_context yield)
     {
-        return build( std::move(dht), std::move(cache_pk)
+        return build( ex, std::move(lan_my_endpoints), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , boost::none, boost::none
                     , yield);
     }
 
     static std::unique_ptr<Client>
-    build( std::shared_ptr<bittorrent::MainlineDht> dht
+    build( asio::executor ex
+         , std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -58,23 +70,27 @@ public:
     {
         assert(!static_cache_dir.empty());
         assert(!static_cache_content_dir.empty());
-        return build( std::move(dht), std::move(cache_pk)
+        return build( ex, std::move(lan_my_endpoints), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , opt_path{std::move(static_cache_dir)}
                     , opt_path{std::move(static_cache_content_dir)}
                     , yield);
     }
 
+    // Returns true the first time the DHT is successfully enabled,
+    // false otherwise.
+    bool enable_dht(std::shared_ptr<bittorrent::MainlineDht>);
+
 
     // This may add a response source header.
     Session load( const std::string& key
-                , const std::string& dht_group
+                , const GroupName& group
                 , bool is_head_request
                 , Cancel
                 , Yield);
 
     void store( const std::string& key
-              , const std::string& dht_group
+              , const GroupName& group
               , http_response::AbstractReader&
               , Cancel
               , asio::yield_context);
@@ -96,10 +112,9 @@ public:
     // (e.g. to warn about potential upgrades).
     unsigned get_newest_proto_version() const;
 
-    // Get all groups being announced to the distributed cache index
-    // by this client.
-    std::set<std::string> get_announced_groups() const;
-  
+    // Get all groups present in this client.
+    std::set<GroupName> get_groups() const;
+
     ~Client();
 
 private:
