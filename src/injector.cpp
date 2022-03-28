@@ -608,9 +608,11 @@ void serve( InjectorConfig& config
         bool proxy = (version_hdr_i == req.end());
 
         if (proxy) {
+            auto pyield = yield.tag("proxy/plain");
+
             // No Ouinet header, behave like a (non-caching) proxy.
             if (!config.is_proxy_enabled()) {
-                handle_no_proxy(con, req, yield[ec].tag("proxy/plain/handle_no_proxy"));
+                handle_no_proxy(con, req, pyield[ec].tag("handle_no_proxy"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -622,16 +624,16 @@ void serve( InjectorConfig& config
                 handle_error( con, req
                             , http::status::bad_request
                             , "Invalid or missing host in request"
-                            , yield[ec].tag("proxy/plain/handle_no_host_error"));
+                            , pyield[ec].tag("handle_no_host_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            auto orig_con = cc.get_connection(req, cancel, yield[ec].tag("proxy/plain/get_connection"));
+            auto orig_con = cc.get_connection(req, cancel, pyield[ec].tag("get_connection"));
             size_t forwarded = 0;
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                yield[ec].tag("proxy/plain/send_request").run([&] (auto y) {
+                pyield[ec].tag("send_request").run([&] (auto y) {
                     util::http_request(orig_con, orig_req, cancel, y);
                 });
             }
@@ -640,7 +642,7 @@ void serve( InjectorConfig& config
             if (!ec) {
                 using OrigReader = http_response::Reader;
                 Session::reader_uptr rrp = std::make_unique<OrigReader>(move(orig_con));
-                auto orig_sess = yield[ec].tag("proxy/plain/read_hdr").run([&] (auto y) {
+                auto orig_sess = pyield[ec].tag("read_hdr").run([&] (auto y) {
                     return Session::create(move(rrp), req.method() == http::verb::head, cancel, y);
                 });
                 if (!ec) {
@@ -651,11 +653,11 @@ void serve( InjectorConfig& config
                     inh.keep_alive(req_keep_alive);
                     // Prevent others from inserting ouinet specific header fields.
                     util::remove_ouinet_fields_ref(inh);
-                    yield.log("=== Sending back proxy response ===");
-                    yield.log(inh);
+                    pyield.log("=== Sending back proxy response ===");
+                    pyield.log(inh);
 
                     Cancel timeout_cancel(cancel);
-                    yield[ec].tag("proxy/plain/flush").run([&] (auto y) {
+                    pyield[ec].tag("flush").run([&] (auto y) {
                         // This short timeout will get reset with each successful send/recv operation,
                         // so an exchange with no traffic at all does not get stuck for too long.
                         auto op_wd = watch_dog(orig_sess.get_executor(), default_timeout::activity(), [&] { timeout_cancel(); });
@@ -687,12 +689,12 @@ void serve( InjectorConfig& config
                                 , http::status::bad_gateway
                                 , http_::response_error_hdr_retrieval_failed
                                 , "Failed to retrieve content from origin: " + ec.message()
-                                , yield[he_ec].tag("proxy/plain/handle_error"));
+                                , pyield[he_ec].tag("handle_error"));
                 }
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            yield.log("Forwarded data bytes: ", forwarded);
+            pyield.log("Forwarded data bytes: ", forwarded);
             cc.keep_connection_if(move(orig_con), res_keep_alive);
         }
         else {
