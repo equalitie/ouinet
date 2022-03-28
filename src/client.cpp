@@ -92,6 +92,7 @@ using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
+using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -455,7 +456,7 @@ private:
 
         _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
             _ctx.get_executor()
-            , std::set{common_udp_multiplexer().local_endpoint()}, nullptr);
+            , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr);
 
         TRACK_SPAWN(_ctx, ([&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
@@ -2436,13 +2437,13 @@ void Client::State::setup_cache(asio::yield_context yield)
 
     _cache = _config.cache_static_content_path().empty()
         ? cache::Client::build( _ctx.get_executor()
-                              , {common_udp_multiplexer().local_endpoint()}
+                              , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
                               , yield[ec])
         : cache::Client::build( _ctx.get_executor()
-                              , {common_udp_multiplexer().local_endpoint()}
+                              , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
