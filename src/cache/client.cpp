@@ -238,6 +238,15 @@ struct Client::Impl {
             return or_throw(yield, hnf_ec, req.keep_alive());
         }
 
+        _YDEBUG(yield, "BEGIN");
+
+        // Remember to always set `ec` before return in case of error,
+        // or the wrong error code will be reported.
+        size_t fwd_bytes = 0;
+        auto log_result = defer([&] {
+            _YDEBUG(yield, "END; ec=", ec, " fwd_bytes=", fwd_bytes);
+        });
+
         _YDEBUG(yield, "Serving: ", *key);
 
         bool is_head_request = req.method() == http::verb::head;
@@ -256,10 +265,14 @@ struct Client::Impl {
             // so an exchange with no traffic at all does not get stuck for too long.
             auto op_wd = watch_dog( s.get_executor(), default_timeout::activity()
                                   , [&] { timeout_cancel(); });
-            s.flush_response(timeout_cancel, y, [&op_wd, &sink] (auto&& part, auto& cc, auto yy) {
+            s.flush_response(timeout_cancel, y, [&op_wd, &sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(sink, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
+                if (auto b = part.as_body())
+                    fwd_bytes += b->size();
+                else if (auto cb = part.as_chunk_body())
+                    fwd_bytes += cb->size();
                 op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
             });
         });
