@@ -2409,11 +2409,15 @@ void Client::State::setup_cache(asio::yield_context yield)
     // Remember to always set before return in case of error,
     // or the notification may not pass the right error code to listeners.
     sys::error_code ec;
-    auto notify_ready = defer([&] {
+    auto do_notify_ready = [&] {
         if (!_cache_starting) return;
         _cache_start_ec = ec;
         _cache_starting->notify(ec);
         _cache_starting.reset();
+    };
+
+    auto notify_ready = defer([&] {
+        do_notify_ready();
     });
 
     if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) {
@@ -2449,6 +2453,10 @@ void Client::State::setup_cache(asio::yield_context yield)
 
     idempotent_start_accepting_on_utp(yield[ec]);
     fail_on_error("Failed to start accepting on uTP for cache::Client");
+
+    // Subsequent calls below will not alter cache start result,
+    // but they will still report and error code to the caller.
+    do_notify_ready();
 
     auto dht = bittorrent_dht(yield[ec]);
     fail_on_error("Failed to initialize BT DHT for cache::Client");
