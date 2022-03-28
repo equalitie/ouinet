@@ -628,7 +628,6 @@ void serve( InjectorConfig& config
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            auto orig_con = cc.get_connection(req, cancel, pyield[ec].tag("get_connection"));
 
             pyield.log("BEGIN");
 
@@ -639,6 +638,7 @@ void serve( InjectorConfig& config
                 pyield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
             });
 
+            auto orig_con = cc.get_connection(req, cancel, pyield[ec].tag("get_connection"));
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
