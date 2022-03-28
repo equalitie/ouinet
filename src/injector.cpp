@@ -334,9 +334,16 @@ private:
                      , Cancel& cancel
                      , Yield yield)
     {
-        yield.log("Injection begin");
+        yield.log("BEGIN");
 
+        // Remember to always set before return in case of error,
+        // or the wrong error code will be reported.
         sys::error_code ec;
+        size_t fwd_bytes = 0;
+        auto log_result = defer([&] {
+            yield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
+        });
+
         Cancel timeout_cancel(cancel);
 
         Session orig_sess;
@@ -402,10 +409,14 @@ private:
             // This short timeout will get reset with each successful send/recv operation,
             // so an exchange with no traffic at all does not get stuck for too long.
             auto op_wd = watch_dog(executor, default_timeout::activity(), [&] { timeout_cancel(); });
-            orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con] (auto&& part, auto& cc, auto yy) {
+            orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(con, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
+                if (auto b = part.as_body())
+                    fwd_bytes += b->size();
+                else if (auto cb = part.as_chunk_body())
+                    fwd_bytes += cb->size();
                 op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
             });
         });
@@ -414,7 +425,6 @@ private:
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
-        yield.log("Injection end");
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
     }
