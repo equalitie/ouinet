@@ -629,7 +629,16 @@ void serve( InjectorConfig& config
                 continue;
             }
             auto orig_con = cc.get_connection(req, cancel, pyield[ec].tag("get_connection"));
-            size_t forwarded = 0;
+
+            pyield.log("BEGIN");
+
+            // Remember to always set `ec` before return in case of error,
+            // or the wrong error code will be reported.
+            size_t fwd_bytes = 0;
+            auto log_result = defer([&] {
+                pyield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
+            });
+
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
@@ -662,14 +671,14 @@ void serve( InjectorConfig& config
                         // so an exchange with no traffic at all does not get stuck for too long.
                         auto op_wd = watch_dog(orig_sess.get_executor(), default_timeout::activity(), [&] { timeout_cancel(); });
                         orig_sess.flush_response(timeout_cancel, y, [&] (auto&& part, auto& cc, auto yy) {
-                            if (auto b = part.as_body())
-                                forwarded += b->size();
-                            else if (auto cb = part.as_chunk_body())
-                                forwarded += cb->size();
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
                             client_was_written_to = true;  // even with error (possible partial write)
                             return_or_throw_on_error(yy, cc, ee);
+                            if (auto b = part.as_body())
+                                fwd_bytes += b->size();
+                            else if (auto cb = part.as_chunk_body())
+                                fwd_bytes += cb->size();
                             op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
                         });
                     });
@@ -694,7 +703,7 @@ void serve( InjectorConfig& config
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            pyield.log("Forwarded data bytes: ", forwarded);
+
             cc.keep_connection_if(move(orig_con), res_keep_alive);
         }
         else {
