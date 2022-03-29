@@ -228,6 +228,15 @@ void handle_connect_request( GenericStream client_c
                            , yield[ec].tag("handle_bad_port_error"));
     }
 
+    yield.log("BEGIN");
+
+    // Remember to always set `ec` before return in case of error,
+    // or the wrong error code will be reported.
+    size_t fwd_bytes_c2o = 0, fwd_bytes_o2c = 0;
+    auto log_result = defer([&] {
+        yield.log("END; ec=", ec, " fwd_bytes_c2o=", fwd_bytes_c2o, " fwd_bytes_o2c=", fwd_bytes_o2c);
+    });
+
     auto origin_c = yield[ec].tag("connect").run([&] (auto y) {
         return connect_to_host( lookup, exec, default_timeout::tcp_connect()
                               , cancel, y);
@@ -263,9 +272,11 @@ void handle_connect_request( GenericStream client_c
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    yield.tag("full_duplex").run([&] (auto y) {
-        full_duplex(move(client_c), move(origin_c), cancel, y);
+    auto c2o_o2c = yield[ec].tag("full_duplex").run([&] (auto y) {
+        return full_duplex(move(client_c), move(origin_c), cancel, y);
     });
+    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) = c2o_o2c;
+    return or_throw(yield, ec);
 }
 
 //------------------------------------------------------------------------------
