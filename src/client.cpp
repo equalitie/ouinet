@@ -615,25 +615,27 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
             return or_throw(yield, ec);  // done or unrecoverable error
         }
 
-        _YDEBUG(yield, "Client: Received uTP/CONNECT request");
+        auto cyield = yield.tag("connect");
+
+        _YDEBUG(cyield, "Client: Received uTP/CONNECT request");
 
         // Connect to the injector and tunnel the transaction through it
 
         if (!_bep5_client) {
             return handle_bad_request( con, req, "No known injectors"
-                                     , yield.tag("handle_no_injectors_error"));
+                                     , cyield.tag("handle_no_injectors_error"));
         }
 
-        auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
+        auto inj = cyield[ec].tag("connect_to_injector").run([&] (auto y) {
             return _bep5_client->connect( y, cancel
                                         , false, ouiservice::Bep5Client::injectors);
         });
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
+        if (ec == asio::error::operation_aborted) return or_throw(cyield, ec);
         if (ec) {
             return handle_bad_request( con, req, "Failed to connect to injector"
-                                     , yield.tag("handle_injector_unreachable"));
+                                     , cyield.tag("handle_injector_unreachable"));
         }
 
         // Send the client an OK message indicating that the tunnel
@@ -644,22 +646,32 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
         // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
-        yield[ec].tag("write_res").run([&] (auto y) {
+        _YDEBUG(cyield, "BEGIN");
+
+        // Remember to always set `ec` before return in case of error,
+        // or the wrong error code will be reported.
+        size_t fwd_bytes_c2i = 0, fwd_bytes_i2c = 0;
+        auto log_result = defer([&] {
+            _YDEBUG(cyield, "END; ec=", ec, " fwd_bytes_c2i=", fwd_bytes_c2i, " fwd_bytes_i2c=", fwd_bytes_i2c);
+        });
+
+        cyield[ec].tag("write_res").run([&] (auto y) {
             util::http_reply(con, res, y);
         });
 
         if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        if (ec) return or_throw(cyield, ec);
 
         // First queue unused but already read data back into the other client connnection.
         if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
         assert(!ec);
 
         // Forward the rest of data in both directions.
-        yield[ec].tag("full_duplex").run([&] (auto y) {
-            full_duplex(move(con), move(inj), cancel, y);
+        auto c2i_i2c = cyield[ec].tag("full_duplex").run([&] (auto y) {
+            return full_duplex(move(con), move(inj), cancel, y);
         });
-        return or_throw(yield, ec);
+        std::tie(fwd_bytes_c2i, fwd_bytes_i2c) = c2i_i2c;
+        return or_throw(cyield, ec);
     }
 }
 
