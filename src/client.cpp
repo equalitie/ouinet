@@ -646,6 +646,15 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
         // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
+        _YDEBUG(cyield, "BEGIN");
+
+        // Remember to always set `ec` before return in case of error,
+        // or the wrong error code will be reported.
+        size_t fwd_bytes_c2i = 0, fwd_bytes_i2c = 0;
+        auto log_result = defer([&] {
+            _YDEBUG(cyield, "END; ec=", ec, " fwd_bytes_c2i=", fwd_bytes_c2i, " fwd_bytes_i2c=", fwd_bytes_i2c);
+        });
+
         cyield[ec].tag("write_res").run([&] (auto y) {
             util::http_reply(con, res, y);
         });
@@ -658,9 +667,10 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         assert(!ec);
 
         // Forward the rest of data in both directions.
-        cyield[ec].tag("full_duplex").run([&] (auto y) {
-            full_duplex(move(con), move(inj), cancel, y);
+        auto c2i_i2c = cyield[ec].tag("full_duplex").run([&] (auto y) {
+            return full_duplex(move(con), move(inj), cancel, y);
         });
+        std::tie(fwd_bytes_c2i, fwd_bytes_i2c) = c2i_i2c;
         return or_throw(cyield, ec);
     }
 }
