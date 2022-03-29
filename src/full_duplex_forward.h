@@ -5,6 +5,7 @@
 #include <boost/asio/read.hpp>
 #include "default_timeout.h"
 #include "generic_stream.h"
+#include "or_throw.h"
 #include "util/signal.h"
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
@@ -75,9 +76,11 @@ full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
               half_duplex(c2, c1, fwd_bytes_c2_c1, wdog, yield);
           });
 
-    wait_condition.wait(yield);
+    sys::error_code ec;
+    wait_condition.wait(yield[ec]);  // leave cancellation handling to tasks
+    if (cancel) ec = asio::error::operation_aborted;
 
-    return std::make_pair(fwd_bytes_c1_c2, fwd_bytes_c2_c1);
+    return or_throw(yield, ec, std::make_pair(fwd_bytes_c1_c2, fwd_bytes_c2_c1));
 }
 
 } // ouinet namespace
