@@ -9,20 +9,21 @@ To start the environment straight away:
               --manifest=/path/to/ouinet/guix/manifest.scm \
               --expose=/path/to/ouinet
 
-If you instead want to keep the Guix profile as `$HOME/env/guix/ouinet/guix`
-for future invocations (e.g. to avoid it from being accidentally
+If you instead want to keep the build profile as `$HOME/env/guix/ouinet/build`
+for future invocations (e.g. to avoid its packages from being accidentally
 garbage-collected), run:
 
-    $ guix pull --channels=/path/to/ouinet/guix/channels.scm \
-           --profile=$HOME/env/guix/ouinet/guix
+    $ mkdir -p $HOME/env/guix/ouinet
+    $ guix time-machine --channels=/path/to/ouinet/guix/channels.scm \
+           -- package --profile=$HOME/env/guix/ouinet/build \
+              --manifest=/path/to/ouinet/guix/manifest.scm
 
 You need to do that whenever the `channels.scm` file changes.  Each time you
 want to start the environment based on that profile, run:
 
-    $ $HOME/env/guix/ouinet/guix/bin/guix \
-          environment -CN --pure \
-          --manifest=/path/to/ouinet/guix/manifest.scm \
-          --expose=/path/to/ouinet
+    $ guix shell -CN --pure \
+           --profile=$HOME/env/guix/ouinet/build \
+           --expose=/path/to/ouinet
 
 To build source inside of the environment:
 

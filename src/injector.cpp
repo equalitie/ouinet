@@ -228,6 +228,15 @@ void handle_connect_request( GenericStream client_c
                            , yield[ec].tag("handle_bad_port_error"));
     }
 
+    yield.log("BEGIN");
+
+    // Remember to always set `ec` before return in case of error,
+    // or the wrong error code will be reported.
+    size_t fwd_bytes_c2o = 0, fwd_bytes_o2c = 0;
+    auto log_result = defer([&] {
+        yield.log("END; ec=", ec, " fwd_bytes_c2o=", fwd_bytes_c2o, " fwd_bytes_o2c=", fwd_bytes_o2c);
+    });
+
     auto origin_c = yield[ec].tag("connect").run([&] (auto y) {
         return connect_to_host( lookup, exec, default_timeout::tcp_connect()
                               , cancel, y);
@@ -263,9 +272,11 @@ void handle_connect_request( GenericStream client_c
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    yield.tag("full_duplex").run([&] (auto y) {
-        full_duplex(move(client_c), move(origin_c), cancel, y);
+    auto c2o_o2c = yield[ec].tag("full_duplex").run([&] (auto y) {
+        return full_duplex(move(client_c), move(origin_c), cancel, y);
     });
+    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) = c2o_o2c;
+    return or_throw(yield, ec);
 }
 
 //------------------------------------------------------------------------------
@@ -334,9 +345,16 @@ private:
                      , Cancel& cancel
                      , Yield yield)
     {
-        yield.log("Injection begin");
+        yield.log("BEGIN");
 
+        // Remember to always set before return in case of error,
+        // or the wrong error code will be reported.
         sys::error_code ec;
+        size_t fwd_bytes = 0;
+        auto log_result = defer([&] {
+            yield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
+        });
+
         Cancel timeout_cancel(cancel);
 
         Session orig_sess;
@@ -402,10 +420,14 @@ private:
             // This short timeout will get reset with each successful send/recv operation,
             // so an exchange with no traffic at all does not get stuck for too long.
             auto op_wd = watch_dog(executor, default_timeout::activity(), [&] { timeout_cancel(); });
-            orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con] (auto&& part, auto& cc, auto yy) {
+            orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(con, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
+                if (auto b = part.as_body())
+                    fwd_bytes += b->size();
+                else if (auto cb = part.as_chunk_body())
+                    fwd_bytes += cb->size();
                 op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
             });
         });
@@ -414,7 +436,6 @@ private:
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) yield.log("Failed to process response; ec=", ec);
         return_or_throw_on_error(yield, cancel, ec);
-        yield.log("Injection end");
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
     }
@@ -598,9 +619,11 @@ void serve( InjectorConfig& config
         bool proxy = (version_hdr_i == req.end());
 
         if (proxy) {
+            auto pyield = yield.tag("proxy/plain");
+
             // No Ouinet header, behave like a (non-caching) proxy.
             if (!config.is_proxy_enabled()) {
-                handle_no_proxy(con, req, yield[ec].tag("proxy/plain/handle_no_proxy"));
+                handle_no_proxy(con, req, pyield[ec].tag("handle_no_proxy"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
@@ -612,16 +635,25 @@ void serve( InjectorConfig& config
                 handle_error( con, req
                             , http::status::bad_request
                             , "Invalid or missing host in request"
-                            , yield[ec].tag("proxy/plain/handle_no_host_error"));
+                            , pyield[ec].tag("handle_no_host_error"));
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            auto orig_con = cc.get_connection(req, cancel, yield[ec].tag("proxy/plain/get_connection"));
-            size_t forwarded = 0;
+
+            pyield.log("BEGIN");
+
+            // Remember to always set `ec` before return in case of error,
+            // or the wrong error code will be reported.
+            size_t fwd_bytes = 0;
+            auto log_result = defer([&] {
+                pyield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
+            });
+
+            auto orig_con = cc.get_connection(req, cancel, pyield[ec].tag("get_connection"));
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                yield[ec].tag("proxy/plain/send_request").run([&] (auto y) {
+                pyield[ec].tag("send_request").run([&] (auto y) {
                     util::http_request(orig_con, orig_req, cancel, y);
                 });
             }
@@ -630,7 +662,7 @@ void serve( InjectorConfig& config
             if (!ec) {
                 using OrigReader = http_response::Reader;
                 Session::reader_uptr rrp = std::make_unique<OrigReader>(move(orig_con));
-                auto orig_sess = yield[ec].tag("proxy/plain/read_hdr").run([&] (auto y) {
+                auto orig_sess = pyield[ec].tag("read_hdr").run([&] (auto y) {
                     return Session::create(move(rrp), req.method() == http::verb::head, cancel, y);
                 });
                 if (!ec) {
@@ -641,23 +673,23 @@ void serve( InjectorConfig& config
                     inh.keep_alive(req_keep_alive);
                     // Prevent others from inserting ouinet specific header fields.
                     util::remove_ouinet_fields_ref(inh);
-                    yield.log("=== Sending back proxy response ===");
-                    yield.log(inh);
+                    pyield.log("=== Sending back proxy response ===");
+                    pyield.log(inh);
 
                     Cancel timeout_cancel(cancel);
-                    yield[ec].tag("proxy/plain/flush").run([&] (auto y) {
+                    pyield[ec].tag("flush").run([&] (auto y) {
                         // This short timeout will get reset with each successful send/recv operation,
                         // so an exchange with no traffic at all does not get stuck for too long.
                         auto op_wd = watch_dog(orig_sess.get_executor(), default_timeout::activity(), [&] { timeout_cancel(); });
                         orig_sess.flush_response(timeout_cancel, y, [&] (auto&& part, auto& cc, auto yy) {
-                            if (auto b = part.as_body())
-                                forwarded += b->size();
-                            else if (auto cb = part.as_chunk_body())
-                                forwarded += cb->size();
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
                             client_was_written_to = true;  // even with error (possible partial write)
                             return_or_throw_on_error(yy, cc, ee);
+                            if (auto b = part.as_body())
+                                fwd_bytes += b->size();
+                            else if (auto cb = part.as_chunk_body())
+                                fwd_bytes += cb->size();
                             op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
                         });
                     });
@@ -677,12 +709,12 @@ void serve( InjectorConfig& config
                                 , http::status::bad_gateway
                                 , http_::response_error_hdr_retrieval_failed
                                 , "Failed to retrieve content from origin: " + ec.message()
-                                , yield[he_ec].tag("proxy/plain/handle_error"));
+                                , pyield[he_ec].tag("handle_error"));
                 }
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            yield.log("Forwarded data bytes: ", forwarded);
+
             cc.keep_connection_if(move(orig_con), res_keep_alive);
         }
         else {
