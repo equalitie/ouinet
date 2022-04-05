@@ -93,7 +93,7 @@ private:
 
     bool is_older_than_max_cache_age(const boost::posix_time::ptime&) const;
 
-    auto make_fetch_fresh_job(const Request&, const CacheEntry*, Yield&);
+    auto make_fetch_fresh_job(const Request&, const CacheEntry*, Yield);
 
     bool has_temporary_result(const Session&) const;
 

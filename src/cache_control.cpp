@@ -431,7 +431,7 @@ posix_time::time_duration CacheControl::max_cached_age() const
 //------------------------------------------------------------------------------
 auto CacheControl::make_fetch_fresh_job( const Request& rq
                                        , const CacheEntry* cached
-                                       , Yield& yield)
+                                       , Yield yield)
 {
     AsyncJob<Session> job(_ex);
 
@@ -485,7 +485,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
     if (_parallel_fetch_enabled && !fs.fetch_fresh) {
-        fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield);
+        fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
     }
 
     if (!fs.fetch_stored) {
