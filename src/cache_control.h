@@ -25,7 +25,9 @@ public:
     using Response = http::response<http::dynamic_body>;
 
     using FetchStored = std::function<CacheEntry(const Request&, const DhtGroup&, Cancel&, Yield)>;
-    using FetchFresh  = std::function<Session(const Request&, Cancel&, Yield)>;
+    // If not null, the given cache entry is already available
+    // (e.g. this may be a revalidation).
+    using FetchFresh  = std::function<Session(const Request&, const CacheEntry*, Cancel&, Yield)>;
 
 public:
     CacheControl(const asio::executor& ex, std::string server_name)
@@ -79,7 +81,7 @@ private:
             Cancel&,
             Yield);
 
-    Session do_fetch_fresh(FetchState&, const Request&, Yield);
+    Session do_fetch_fresh( FetchState&, const Request&, const CacheEntry*, Yield);
     CacheEntry do_fetch_stored( FetchState&
                               , const Request&
                               , const boost::optional<DhtGroup>&
@@ -91,7 +93,7 @@ private:
 
     bool is_older_than_max_cache_age(const boost::posix_time::ptime&) const;
 
-    auto make_fetch_fresh_job(const Request&, Yield&);
+    auto make_fetch_fresh_job(const Request&, const CacheEntry*, Yield&);
 
     bool has_temporary_result(const Session&) const;
 

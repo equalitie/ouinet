@@ -138,7 +138,7 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
                 y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
         return or_throw<Session>(y, asio::error::connection_reset);
     };
@@ -183,7 +183,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
         return make_entry(ctx, created, rs, y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
         BOOST_CHECK_EQUAL(rq.target(), "old");
         return make_session(ctx, {http::status::ok, rq.version()}, y);
@@ -243,7 +243,7 @@ BOOST_AUTO_TEST_CASE(test_maxage)
         return make_entry(ctx, created, rs, y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
         return make_session(ctx, rs, y);
@@ -309,7 +309,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
         return make_entry(ctx, created, rs, y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
         return make_session(ctx, rs, y);
@@ -346,7 +346,7 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
         return make_entry(ctx, current_time(), Response{}, y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
         Response rs{http::status::ok, rq.version()};
         rs.set("X-Test", "from-origin");
@@ -378,7 +378,7 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
         return make_entry(ctx, current_time(), {}, y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
 
         auto etag = get(rq, http::field::if_none_match);
@@ -442,7 +442,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         return make_entry(ctx, current_time() - seconds(20), rs, y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
 
         auto etag = get(rq, http::field::if_none_match);
@@ -507,7 +507,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         return make_entry(ctx, current_time(), rs, y);
     };
 
-    cc.fetch_fresh = [&](auto rq, auto&, auto y) {
+    cc.fetch_fresh = [&](auto rq, auto, auto&, auto y) {
         origin_check++;
         // Force using version from origin instead of validated version from cache
         // (i.e. not returning "304 Not Modified" here).

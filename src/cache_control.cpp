@@ -277,7 +277,7 @@ CacheControl::do_fetch(
     namespace err = asio::error;
 
     if (must_revalidate(request)) {
-        auto res = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
+        auto res = do_fetch_fresh(fetch_state, request, nullptr, yield[fresh_ec]);
 
         if (!fresh_ec) {
             cache_ec = err::operation_aborted;
@@ -323,7 +323,7 @@ CacheControl::do_fetch(
 
     if (cache_ec) {
         // Retrieving from cache failed.
-        auto res = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
+        auto res = do_fetch_fresh(fetch_state, request, nullptr, yield[fresh_ec]);
 
         if (!fresh_ec) {
             LOG_DEBUG(yield.tag(), ": Cache retrieval failed, but we got fresh entry");
@@ -353,7 +353,7 @@ CacheControl::do_fetch(
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)
         || has_temporary_result(cache_entry.response)) {
-        auto response = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
+        auto response = do_fetch_fresh(fetch_state, request, &cache_entry, yield[fresh_ec]);
 
         if (!fresh_ec) {
             cache_ec = err::operation_aborted;
@@ -385,7 +385,7 @@ CacheControl::do_fetch(
 
         rq.set(http::field::if_none_match, *cache_etag);
 
-        auto response = do_fetch_fresh(fetch_state, rq, yield[fresh_ec]);
+        auto response = do_fetch_fresh(fetch_state, rq, &cache_entry, yield[fresh_ec]);
 
         if (fresh_ec) {
             LOG_DEBUG(yield.tag(), ": Response was served from cache: revalidation failed");
@@ -404,7 +404,7 @@ CacheControl::do_fetch(
         return response;
     }
 
-    auto response = do_fetch_fresh(fetch_state, request, yield[fresh_ec]);
+    auto response = do_fetch_fresh(fetch_state, request, &cache_entry, yield[fresh_ec]);
 
     if (fresh_ec) {
         LOG_DEBUG(yield.tag(), ": Response was served from cache: requesting fresh response failed");
@@ -429,14 +429,16 @@ posix_time::time_duration CacheControl::max_cached_age() const
 }
 
 //------------------------------------------------------------------------------
-auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
+auto CacheControl::make_fetch_fresh_job( const Request& rq
+                                       , const CacheEntry* cached
+                                       , Yield& yield)
 {
     AsyncJob<Session> job(_ex);
 
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
             auto y = yield.detach(yield_);
             sys::error_code ec;
-            auto r = fetch_fresh(rq, cancel, y[ec]);
+            auto r = fetch_fresh(rq, cached, cancel, y[ec]);
             assert(!cancel || ec == asio::error::operation_aborted);
             if (ec) return or_throw(y, ec, move(r));
             return r;
@@ -447,14 +449,17 @@ auto CacheControl::make_fetch_fresh_job(const Request& rq, Yield& yield)
 
 //------------------------------------------------------------------------------
 Session
-CacheControl::do_fetch_fresh(FetchState& fs, const Request& rq, Yield yield)
+CacheControl::do_fetch_fresh( FetchState& fs
+                            , const Request& rq
+                            , const CacheEntry* cached
+                            , Yield yield)
 {
     if (!fetch_fresh) {
         return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 
     if (!fs.fetch_fresh) {
-        fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
+        fs.fetch_fresh = make_fetch_fresh_job(rq, cached, yield);
     }
 
     fs.fetch_fresh->wait_for_finish(static_cast<asio::yield_context>(yield));
@@ -480,7 +485,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
     if (_parallel_fetch_enabled && !fs.fetch_fresh) {
-        fs.fetch_fresh = make_fetch_fresh_job(rq, yield);
+        fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield);
     }
 
     if (!fs.fetch_stored) {

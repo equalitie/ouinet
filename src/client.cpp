@@ -343,6 +343,7 @@ private:
     Session fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
     Session fetch_fresh_through_simple_proxy( Request
+                                            , const CacheEntry* cached
                                             , bool can_inject
                                             , Cancel& cancel
                                             , Yield);
@@ -1170,6 +1171,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_through_simple_proxy
         ( Request request
+        , const CacheEntry* cached
         , bool can_inject
         , Cancel& cancel
         , Yield yield)
@@ -1193,6 +1195,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     // Connect to the injector.
     // TODO: Maybe refactor with `fetch_via_self`.
 
+    // TODO: Timeout if cached entry available.
     wait_for_injector(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session{});
     assert(_injector);
@@ -1383,7 +1386,9 @@ public:
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield_) {
+        cc.fetch_fresh = [&] ( const Request& rq
+                             , const CacheEntry* cached
+                             , Cancel& cancel, Yield yield_) {
             auto yield = yield_.tag("injector");
 
             namespace err = asio::error;
@@ -1398,6 +1403,7 @@ public:
 
             sys::error_code ec;
             auto s = client_state.fetch_fresh_through_simple_proxy( rq
+                                                                  , cached
                                                                   , true
                                                                   , cancel
                                                                   , yield[ec]);
@@ -1480,7 +1486,7 @@ public:
         }
         else {
             session = client_state.fetch_fresh_through_simple_proxy
-                    (rq, false, cancel, yield[ec]);
+                    (rq, nullptr, false, cancel, yield[ec]);
         }
 
         _YDEBUG(yield, "Proxy fetch; ec=", ec);
