@@ -480,6 +480,19 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
             }
 
             {
+
+                // In this test, the user agent provides the existing etag.
+                Request rq{http::verb::get, "mypage", 11};
+                rq.set(http::field::if_none_match, "123");
+                Cancel cancel;
+                sys::error_code fresh_ec, cache_ec;
+                auto s = cc.fetch(rq, dht_group, fresh_ec, cache_ec, cancel, yield);
+                auto h = s.response_header();
+                BOOST_CHECK_EQUAL(h.result(), http::status::not_modified);
+                BOOST_CHECK_EQUAL(h["X-Test"], "from-origin-not-modified");
+            }
+
+            {
                 // In this test, the user agent provides its own etag.
                 Request rq{http::verb::get, "mypage", 11};
                 rq.set(http::field::if_none_match, "abc");
@@ -493,7 +506,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         });
 
     BOOST_CHECK_EQUAL(cache_check, 1u);
-    BOOST_CHECK_EQUAL(origin_check, 2u);
+    BOOST_CHECK_EQUAL(origin_check, 3u);
 }
 
 BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
