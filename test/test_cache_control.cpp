@@ -532,6 +532,9 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         origin_check++;
         // No check for available cache entry since it may or may not have been checked.
 
+        auto nocache = get(rq, http::field::cache_control);
+        BOOST_REQUIRE(nocache);
+
         // Force using version from origin instead of validated version from cache
         // (i.e. not returning "304 Not Modified" here).
         Response rs{http::status::ok, rq.version()};
