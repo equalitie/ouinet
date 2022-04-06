@@ -1193,7 +1193,12 @@ Session Client::State::fetch_fresh_through_simple_proxy
     // Connect to the injector.
     // TODO: Maybe refactor with `fetch_via_self`.
 
-    // TODO: Timeout if cached entry available.
+    if (cached && _injector_starting)
+        // This is a revalidation, so go with the available cache entry
+        // and do not even try to get a response from the injector
+        // (as it would probably block, indefinitely when missing connectivity).
+        return or_throw<Session>(yield, asio::error::try_again);
+
     wait_for_injector(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session{});
     assert(_injector);
