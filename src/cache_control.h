@@ -28,6 +28,9 @@ public:
     // If not null, the given cache entry is already available
     // (e.g. this may be a revalidation).
     using FetchFresh  = std::function<Session(const Request&, const CacheEntry*, Cancel&, Yield)>;
+    // When fetching stored (which may be slow), a parallel request to fetch fresh is started
+    // only if this is not null and it returns true.
+    using ParallelFresh = std::function<bool(const Request&, const boost::optional<DhtGroup>&)>;
 
 public:
     CacheControl(const asio::executor& ex, std::string server_name)
@@ -49,6 +52,7 @@ public:
 
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;
+    ParallelFresh parallel_fresh;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
@@ -60,10 +64,6 @@ public:
                            , const http::response_header<>& response
                            , bool cache_private = false
                            , const char** reason = nullptr);
-
-    void enable_parallel_fetch(bool value) {
-        _parallel_fetch_enabled = value;
-    }
 
     static
     bool is_expired( const http::response_header<>&
@@ -100,7 +100,6 @@ private:
 private:
     asio::executor _ex;
     std::string _server_name;
-    bool _parallel_fetch_enabled = true;
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;

@@ -126,6 +126,8 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
 
+    cc.parallel_fresh = [] (auto, auto) { return true; };
+
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
@@ -163,8 +165,6 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
 {
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
-
-    cc.enable_parallel_fetch(false);
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -221,8 +221,6 @@ BOOST_AUTO_TEST_CASE(test_maxage)
 
     CacheControl cc(ctx, "test");
 
-    cc.enable_parallel_fetch(false);
-
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
@@ -275,8 +273,6 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
 {
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
-
-    cc.enable_parallel_fetch(false);
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -343,6 +339,8 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
 
+    cc.parallel_fresh = [] (auto, auto) { return true; };
+
     unsigned origin_check = 0;
 
     cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
@@ -375,6 +373,8 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
 {
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
+
+    cc.parallel_fresh = [] (auto, auto) { return true; };
 
     unsigned origin_check = 0;
 
@@ -431,8 +431,6 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 {
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
-
-    cc.enable_parallel_fetch(false);
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -513,8 +511,6 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
 {
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
-
-    cc.enable_parallel_fetch(false);
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;

@@ -494,7 +494,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
 
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
-    if (_parallel_fetch_enabled && !fs.fetch_fresh) {
+    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq, dht_group)) {
         fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
     }
 
