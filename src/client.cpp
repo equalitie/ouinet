@@ -343,6 +343,7 @@ private:
     Session fetch_fresh_through_connect_proxy(const Request&, Cancel&, Yield);
 
     Session fetch_fresh_through_simple_proxy( Request
+                                            , const CacheEntry* cached
                                             , bool can_inject
                                             , Cancel& cancel
                                             , Yield);
@@ -359,8 +360,6 @@ private:
                    , "Newer Ouinet protocol found in network, "
                      "please consider upgrading.");
     };
-
-    CacheControl build_cache_control(request_route::Config& request_config);
 
     tcp::acceptor make_acceptor( const tcp::endpoint&
                                , const char* service) const;
@@ -1170,6 +1169,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_through_simple_proxy
         ( Request request
+        , const CacheEntry* cached
         , bool can_inject
         , Cancel& cancel
         , Yield yield)
@@ -1192,6 +1192,12 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Connect to the injector.
     // TODO: Maybe refactor with `fetch_via_self`.
+
+    if (cached && _injector_starting)
+        // This is a revalidation, so go with the available cache entry
+        // and do not even try to get a response from the injector
+        // (as it would probably block, indefinitely when missing connectivity).
+        return or_throw<Session>(yield, asio::error::try_again);
 
     wait_for_injector(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, Session{});
@@ -1383,7 +1389,9 @@ public:
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] (const Request& rq, Cancel& cancel, Yield yield_) {
+        cc.fetch_fresh = [&] ( const Request& rq
+                             , const CacheEntry* cached
+                             , Cancel& cancel, Yield yield_) {
             auto yield = yield_.tag("injector");
 
             namespace err = asio::error;
@@ -1398,6 +1406,7 @@ public:
 
             sys::error_code ec;
             auto s = client_state.fetch_fresh_through_simple_proxy( rq
+                                                                  , cached
                                                                   , true
                                                                   , cancel
                                                                   , yield[ec]);
@@ -1428,6 +1437,11 @@ public:
 
             return or_throw(yield, ec, move(r));
         };
+
+        // Do not even attempt parallel fetch fresh if the injector is still starting.
+        // This prevents requests from getting stuck waiting for the injector
+        // when missing connectivity.
+        cc.parallel_fresh = [&] (auto, auto) { return !client_state._injector_starting; };
 
         //------------------------------------------------------------
         cc.max_cached_age(client_state._config.max_cached_age());
@@ -1480,7 +1494,7 @@ public:
         }
         else {
             session = client_state.fetch_fresh_through_simple_proxy
-                    (rq, false, cancel, yield[ec]);
+                    (rq, nullptr, false, cancel, yield[ec]);
         }
 
         _YDEBUG(yield, "Proxy fetch; ec=", ec);
@@ -1620,14 +1634,16 @@ public:
         // boost::none_t as a temporary hack.
         using Retval = boost::none_t;
         using Job = AsyncJob<Retval>;
+        using BoolFunc = std::function<bool(void)>;
 
-        Jobs(asio::executor exec)
+        Jobs(asio::executor exec, BoolFunc is_injector_starting)
             : exec(exec)
             , front_end(exec)
             , origin(exec)
             , proxy(exec)
             , injector_or_dcache(exec)
             , all({&front_end, &origin, &proxy, &injector_or_dcache})
+            , is_injector_starting{std::move(is_injector_starting)}
         {}
 
         asio::executor exec;
@@ -1640,6 +1656,8 @@ public:
         // All jobs, even those that never started.
         // Unfortunately C++14 is not letting me have array of references.
         const std::array<Job*, 4> all;
+
+        BoolFunc is_injector_starting;
 
         auto running() const {
             static const auto is_running
@@ -1709,8 +1727,14 @@ public:
                     jc = origin.on_finish_sig([&c] { c(); });
                 }
 
-                async_sleep( exec, n * chrono::seconds(3)
-                           , c, static_cast<asio::yield_context>(yield));
+                // If the injector is still starting, push injector/cache job a little earlier
+                // (reducing the latency of local cache use)
+                // since connectivity may be missing and origin will eventually fail.
+                auto delay = (job_type == Type::injector_or_dcache && is_injector_starting())
+                    ? n * chrono::seconds(1)
+                    : n * chrono::seconds(3);
+
+                async_sleep(exec, delay, c, static_cast<asio::yield_context>(yield));
             } else if (job_type == Type::front_end) {
                 // No pause for front-end jobs.
             } else {
@@ -1756,7 +1780,7 @@ public:
 
         auto exec = client_state.get_io_context().get_executor();
 
-        Jobs jobs(exec);
+        Jobs jobs(exec, [&] { return bool(client_state._injector_starting); });
 
         auto cancel_con = cancel.connect([&] {
             for (auto& job : jobs.running()) job.cancel();
