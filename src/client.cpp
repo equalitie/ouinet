@@ -1634,14 +1634,16 @@ public:
         // boost::none_t as a temporary hack.
         using Retval = boost::none_t;
         using Job = AsyncJob<Retval>;
+        using BoolFunc = std::function<bool(void)>;
 
-        Jobs(asio::executor exec)
+        Jobs(asio::executor exec, BoolFunc is_injector_starting)
             : exec(exec)
             , front_end(exec)
             , origin(exec)
             , proxy(exec)
             , injector_or_dcache(exec)
             , all({&front_end, &origin, &proxy, &injector_or_dcache})
+            , is_injector_starting{std::move(is_injector_starting)}
         {}
 
         asio::executor exec;
@@ -1654,6 +1656,8 @@ public:
         // All jobs, even those that never started.
         // Unfortunately C++14 is not letting me have array of references.
         const std::array<Job*, 4> all;
+
+        BoolFunc is_injector_starting;
 
         auto running() const {
             static const auto is_running
@@ -1723,8 +1727,14 @@ public:
                     jc = origin.on_finish_sig([&c] { c(); });
                 }
 
-                async_sleep( exec, n * chrono::seconds(3)
-                           , c, static_cast<asio::yield_context>(yield));
+                // If the injector is still starting, push injector/cache job a little earlier
+                // (reducing the latency of local cache use)
+                // since connectivity may be missing and origin will eventually fail.
+                auto delay = (job_type == Type::injector_or_dcache && is_injector_starting())
+                    ? n * chrono::seconds(1)
+                    : n * chrono::seconds(3);
+
+                async_sleep(exec, delay, c, static_cast<asio::yield_context>(yield));
             } else if (job_type == Type::front_end) {
                 // No pause for front-end jobs.
             } else {
@@ -1770,7 +1780,7 @@ public:
 
         auto exec = client_state.get_io_context().get_executor();
 
-        Jobs jobs(exec);
+        Jobs jobs(exec, [&] { return bool(client_state._injector_starting); });
 
         auto cancel_con = cancel.connect([&] {
             for (auto& job : jobs.running()) job.cancel();
