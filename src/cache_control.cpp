@@ -278,6 +278,7 @@ CacheControl::do_fetch(
 
     if (must_revalidate(request)) {
         auto ryield = yield.tag("force_reval");
+        LOG_DEBUG(ryield.tag(), ": User requested revalidation, attempting to fetch fresh");
 
         auto res = do_fetch_fresh(fetch_state, request, nullptr, ryield[fresh_ec]);
 
@@ -293,14 +294,15 @@ CacheControl::do_fetch(
             return or_throw(ryield, fresh_ec, move(res));
         }
 
+        LOG_DEBUG(ryield.tag(), ": Revalidation failed, attempting to fetch from cache");
         bool is_fresh = false;
         auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, ryield[cache_ec]);
         if (!cache_ec) {
             if (is_fresh) {
-                LOG_DEBUG(ryield.tag(), ": Revalidation failed, cached entry is fresh");
+                LOG_DEBUG(ryield.tag(), ": Revalidation failed, cached response is fresh");
                 return move(cache_entry.response);
             }
-            LOG_DEBUG(ryield.tag(), ": Revalidation failed, cached entry is stale");
+            LOG_DEBUG(ryield.tag(), ": Revalidation failed, cached response is stale");
             return add_warning( move(cache_entry.response)
                                     , "111 Ouinet \"Revalidation Failed\"");
         }
@@ -325,12 +327,13 @@ CacheControl::do_fetch(
 
     if (cache_ec) {
         auto myield = yield.tag("cache_miss");
+        LOG_DEBUG(myield.tag(), ": Cache retrieval failed, attempting to fetch fresh");
 
         // Retrieving from cache failed.
         auto res = do_fetch_fresh(fetch_state, request, nullptr, myield[fresh_ec]);
 
         if (!fresh_ec) {
-            LOG_DEBUG(myield.tag(), ": Cache retrieval failed, but we got fresh entry");
+            LOG_DEBUG(myield.tag(), ": Cache retrieval failed, but we got fresh response");
             return res;
         }
 
@@ -358,6 +361,7 @@ CacheControl::do_fetch(
         || is_older_than_max_cache_age(cache_entry.time_stamp)
         || has_temporary_result(cache_entry.response)) {
         auto oyield = yield.tag("cache_old");
+        LOG_DEBUG(oyield.tag(), ": Cached response is private or too old, attempting to fetch fresh");
 
         auto response = do_fetch_fresh(fetch_state, request, &cache_entry, oyield[fresh_ec]);
 
@@ -367,7 +371,7 @@ CacheControl::do_fetch(
             return response;
         }
 
-        LOG_DEBUG(oyield.tag(), ": Response was served from cached: cannot reach the injector");
+        LOG_DEBUG(oyield.tag(), ": Response was served from cache: cannot reach the injector");
 
         if (is_expired(cache_entry)) {
             cache_entry.response = add_stale_warning(move(cache_entry.response));
@@ -387,8 +391,8 @@ CacheControl::do_fetch(
 
     if (cache_etag && !rq_etag) {
         auto ryield = yield.tag("cache_reval");
-
         LOG_DEBUG(ryield.tag(), ": Attempting to revalidate cached response");
+
         auto rq = request; // Make a copy because `request` is const&.
 
         rq.set(http::field::if_none_match, *cache_etag);
@@ -413,6 +417,7 @@ CacheControl::do_fetch(
     }
 
     auto eyield = yield.tag("cache_notag");
+    LOG_DEBUG(eyield.tag(), ": Cached response has no tag, attempting to fetch fresh");
 
     auto response = do_fetch_fresh(fetch_state, request, &cache_entry, eyield[fresh_ec]);
 
