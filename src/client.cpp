@@ -361,8 +361,6 @@ private:
                      "please consider upgrading.");
     };
 
-    CacheControl build_cache_control(request_route::Config& request_config);
-
     tcp::acceptor make_acceptor( const tcp::endpoint&
                                , const char* service) const;
 
