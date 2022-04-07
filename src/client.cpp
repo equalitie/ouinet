@@ -1559,11 +1559,11 @@ public:
         const char* no_cache_reason = nullptr;
         bool do_cache =
             ( cache
+            && meta.dht_group
             && rq.method() == http::verb::get  // TODO: storing HEAD response not yet supported
             && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
             && CacheControl::ok_to_cache( rq, rsh, client_state._config.do_cache_private()
-                                        , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr))
-            && meta.dht_group);
+                                        , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
 
         if (do_cache) {
             TRACK_SPAWN(ctx, ([
@@ -1577,8 +1577,12 @@ public:
                     cache->store(*key, *meta.dht_group, rr, cancel, y);
                 });
             }));
-        } else if (no_cache_reason)
-            _YDEBUG(yield, "Not ok to cache response: ", no_cache_reason);
+        } else
+            _YDEBUG( yield, "Not ok to cache response: "
+                   , no_cache_reason
+                         ? no_cache_reason
+                         : (!cache ? "cache not available"
+                                   : "disabled for this request/response"));
 
         TRACK_SPAWN(ctx, ([
             &,
