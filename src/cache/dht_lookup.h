@@ -8,10 +8,7 @@
 
 namespace std {
     template<> struct hash<ouinet::bittorrent::NodeID> {
-        using argument_type = ouinet::bittorrent::NodeID;
-        using result_type = typename std::hash<std::string>::result_type;
-
-        result_type operator()(argument_type const& a) const noexcept {
+        auto operator()(ouinet::bittorrent::NodeID const& a) const noexcept {
             return std::hash<std::string>{}(a.to_hex());
         }
     };
