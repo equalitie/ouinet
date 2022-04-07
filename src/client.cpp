@@ -700,7 +700,8 @@ Client::State::fetch_stored_in_dcache( const Request& request
 
     auto key = key_from_http_req(request);
     if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
-    auto s = c->load(move(*key), dht_group, request.method() == http::verb::head, cancel, yield[ec]);
+    auto s = c->load( move(*key), dht_group, request.method() == http::verb::head
+                    , cancel, yield[ec].tag("load"));
     return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
 
     s.debug();

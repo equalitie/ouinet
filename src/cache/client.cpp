@@ -359,10 +359,8 @@ struct Client::Impl {
                 , const GroupName& group
                 , bool is_head_request
                 , Cancel cancel
-                , Yield yield_)
+                , Yield yield)
     {
-        Yield yield = yield_.tag("cache/client/load");
-
         namespace err = asio::error;
 
         sys::error_code ec;
