@@ -649,7 +649,7 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
             break;
         // TODO: Other response codes
         default:
-            if (reason) *reason = "Response status";
+            if (reason) *reason = "response status";
             return false;
     }
 
@@ -659,7 +659,7 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
         for (auto v : SplitString(req_cache_control_i->value(), ',')) {
             // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
             if (iequals(v, "no-store")) {
-                if (reason) *reason = "request has no-store";
+                if (reason) *reason = "request contains \"Cache-Control: no-store\"";
                 return false;
             }
         }
@@ -686,9 +686,8 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
 
         if (!allowed) {
             if (reason)
-                *reason = "request contains auth, but response's cache control "
-                          "header field contains none of "
-                          "{must-revalidate, public, s-maxage}";
+                *reason = "request has auth, but response's \"Cache-Control\""
+                          " contains none of {must-revalidate, public, s-maxage}";
 
             return false;
         }
@@ -703,7 +702,7 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
 
         // https://tools.ietf.org/html/rfc7234#section-3 (bullet #3)
         if (iequals(key, "no-store")) {
-            if (reason) *reason = "response contains cache-control: no-store";
+            if (reason) *reason = "response contains \"Cache-Control: no-store\"";
 
             return false;
         }
@@ -722,7 +721,7 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
             // - if present - re-fetch from origin if possible.
             if (contains_private_data(request)) {
                 if (reason)
-                    *reason = "response contains cache-control: private";
+                    *reason = "response contains \"Cache-Control: private\"";
 
                 return false;
             }
