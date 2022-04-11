@@ -870,21 +870,30 @@ _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cd
                      , asio::executor ex
                      , sys::error_code& ec)
 {
+    namespace errc = sys::errc;
     assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
 
+    // At least the head file should exist,
+    // otherwise opening the body file may fail
+    // because the entry does not exist in the cache at all.
+    if (!fs::exists(dirp / head_fname, ec)) {
+        if (!ec) ec = errc::make_error_code(errc::no_such_file_or_directory);
+        return 0;
+    }
+
     auto bodysz = fs::file_size(dirp / body_fname, ec);
-    if (!ec || ec != sys::errc::no_such_file_or_directory)
+    if (!ec || ec != errc::no_such_file_or_directory)
         return bodysz;
 
-    assert(ec == sys::errc::no_such_file_or_directory);
+    assert(ec == errc::no_such_file_or_directory);
     ec = {};
     if (!cdirp) return 0;  // considered incomplete response
 
     bodysz = body_size_external(dirp, *cdirp, ec);
-    if (!ec || ec != sys::errc::no_such_file_or_directory)
+    if (!ec || ec != errc::no_such_file_or_directory)
         return bodysz;
 
-    assert(ec == sys::errc::no_such_file_or_directory);
+    assert(ec == errc::no_such_file_or_directory);
     ec = {};
     return 0;  // also considered incomplete response
 }

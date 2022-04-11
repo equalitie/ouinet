@@ -140,6 +140,9 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
 // Return the size of body data currently stored for a response under the given directory `dirp`.
 //
 // For an incomplete respone, this may be less than the size claimed in its head.
+//
+// If the response does not exist in the store,
+// a `sys::errc::no_such_file_or_directory` error is reported.
 std::size_t
 http_store_body_size( const fs::path& dirp, asio::executor
                     , sys::error_code&);
