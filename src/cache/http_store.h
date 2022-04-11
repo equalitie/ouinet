@@ -176,6 +176,12 @@ public:
     virtual reader_uptr
     reader(const std::string& key, sys::error_code&) = 0;
 
+    // This version puts the size of stored body data in `body_size`
+    // unless the response does not exist in the store.
+    // Besides, an `asio::error::no_data` error is reported if the body is missing.
+    virtual reader_uptr
+    reader(const std::string& key, std::size_t& body_size, sys::error_code&) = 0;
+
     virtual reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code&) = 0;
 

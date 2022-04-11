@@ -990,6 +990,15 @@ public:
     }
 
     reader_uptr
+    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        auto rr = http_store_reader(kpath, executor, ec);
+        if (!ec) body_size = http_store_body_size(kpath, executor, ec);
+        return rr;
+    }
+
+    reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
     {
         auto kpath = path_from_key(path, key);
@@ -1043,6 +1052,16 @@ public:
         // acts as a good citizen and avoids spreading such content to others.
         return std::make_unique<VerifyingReader>
             (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
+    }
+
+    reader_uptr
+    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        auto rr = std::make_unique<VerifyingReader>
+            (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
+        if (!ec) body_size = http_store_body_size(kpath, content_path, executor, ec);
+        return rr;
     }
 
     reader_uptr
@@ -1166,6 +1185,10 @@ public:
     reader_uptr
     reader(const std::string& key, sys::error_code& ec) override
     { return read_store->reader(key, ec); }
+
+    reader_uptr
+    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
+    { return read_store->reader(key, body_size, ec); }
 
     reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
@@ -1302,6 +1325,15 @@ public:
         if (!ec) return ret;
         _DEBUG("Failed to create reader for key, trying fallback store: ", key);
         return fallback_store->reader(key, ec = {});
+    }
+
+    reader_uptr
+    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
+    {
+        auto ret = FullHttpStore::reader(key, body_size, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to create reader for key, trying fallback store: ", key);
+        return fallback_store->reader(key, body_size, ec = {});
     }
 
     reader_uptr
