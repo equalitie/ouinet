@@ -375,6 +375,8 @@ struct Client::Impl {
         if (!ec) {
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
+            if (is_head_request) return rs;  // do not care about body size
+
             auto data_size_sv = rs.response_header()[http_::response_data_size_hdr];
             auto data_size_o = parse::number<std::size_t>(data_size_sv);
             if (data_size_o && rs_sz == *data_size_o)
@@ -450,7 +452,9 @@ struct Client::Impl {
                            , Yield yield)
     {
         sys::error_code ec;
-        auto rr = _http_store->reader(key, body_size, ec);
+        auto rr = is_head_request
+            ? _http_store->reader(key, ec)
+            : _http_store->reader(key, body_size, ec);
         if (ec) return or_throw<Session>(yield, ec);
         auto rs = yield[ec].tag("read_hdr").run([&] (auto y) {
             return Session::create(move(rr), is_head_request, cancel, y);
