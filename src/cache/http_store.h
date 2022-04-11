@@ -143,6 +143,8 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
 //
 // If the response does not exist in the store,
 // a `sys::errc::no_such_file_or_directory` error is reported.
+// If the response exists, but it is missing body data,
+// an `asio::error::no_data` error is reported.
 std::size_t
 http_store_body_size( const fs::path& dirp, asio::executor
                     , sys::error_code&);

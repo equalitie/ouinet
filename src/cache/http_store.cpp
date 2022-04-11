@@ -882,19 +882,18 @@ _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cd
     }
 
     auto bodysz = fs::file_size(dirp / body_fname, ec);
-    if (!ec || ec != errc::no_such_file_or_directory)
-        return bodysz;
+    if (!ec) return bodysz;
+    if (ec != errc::no_such_file_or_directory) return 0;
 
-    assert(ec == errc::no_such_file_or_directory);
-    ec = {};
+    ec = asio::error::no_data;
     if (!cdirp) return 0;  // considered incomplete response
 
+    ec = {};  // retry with content directory
     bodysz = body_size_external(dirp, *cdirp, ec);
-    if (!ec || ec != errc::no_such_file_or_directory)
-        return bodysz;
+    if (!ec) return bodysz;
+    if (ec != errc::no_such_file_or_directory) return 0;
 
-    assert(ec == errc::no_such_file_or_directory);
-    ec = {};
+    ec = asio::error::no_data;
     return 0;  // also considered incomplete response
 }
 
