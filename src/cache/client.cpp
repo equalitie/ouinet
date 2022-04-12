@@ -452,9 +452,11 @@ struct Client::Impl {
                            , Yield yield)
     {
         sys::error_code ec;
-        auto rr = is_head_request
-            ? _http_store->reader(key, ec)
-            : _http_store->reader(key, body_size, ec);
+        cache::reader_uptr rr;
+        if (is_head_request)
+            rr = _http_store->reader(key, ec);
+        else
+            std::tie(rr, body_size) = _http_store->reader_and_size(key, ec);
         if (ec) return or_throw<Session>(yield, ec);
         auto rs = yield[ec].tag("read_hdr").run([&] (auto y) {
             return Session::create(move(rr), is_head_request, cancel, y);

@@ -989,13 +989,14 @@ public:
         return http_store_reader(kpath, executor, ec);
     }
 
-    reader_uptr
-    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
     {
         auto kpath = path_from_key(path, key);
         auto rr = http_store_reader(kpath, executor, ec);
-        if (!ec) body_size = http_store_body_size(kpath, executor, ec);
-        return rr;
+        if (ec) return {};
+        auto bs = http_store_body_size(kpath, executor, ec);
+        return {std::move(rr), bs};
     }
 
     reader_uptr
@@ -1054,14 +1055,15 @@ public:
             (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
     }
 
-    reader_uptr
-    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
     {
         auto kpath = path_from_key(path, key);
         auto rr = std::make_unique<VerifyingReader>
             (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
-        if (!ec) body_size = http_store_body_size(kpath, content_path, executor, ec);
-        return rr;
+        if (ec) return {};
+        auto bs = http_store_body_size(kpath, content_path, executor, ec);
+        return {std::move(rr), bs};
     }
 
     reader_uptr
@@ -1186,9 +1188,9 @@ public:
     reader(const std::string& key, sys::error_code& ec) override
     { return read_store->reader(key, ec); }
 
-    reader_uptr
-    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
-    { return read_store->reader(key, body_size, ec); }
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
+    { return read_store->reader_and_size(key, ec); }
 
     reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
@@ -1327,13 +1329,13 @@ public:
         return fallback_store->reader(key, ec = {});
     }
 
-    reader_uptr
-    reader(const std::string& key, std::size_t& body_size, sys::error_code& ec) override
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
     {
-        auto ret = FullHttpStore::reader(key, body_size, ec);
+        auto ret = FullHttpStore::reader_and_size(key, ec);
         if (!ec) return ret;
         _DEBUG("Failed to create reader for key, trying fallback store: ", key);
-        return fallback_store->reader(key, body_size, ec = {});
+        return fallback_store->reader_and_size(key, ec = {});
     }
 
     reader_uptr
