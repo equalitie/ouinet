@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <utility>
 
 #include <boost/asio/executor.hpp>
 #include <boost/asio/spawn.hpp>
@@ -140,6 +141,11 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
 // Return the size of body data currently stored for a response under the given directory `dirp`.
 //
 // For an incomplete respone, this may be less than the size claimed in its head.
+//
+// If the response does not exist in the store,
+// a `sys::errc::no_such_file_or_directory` error is reported.
+// If the response exists, but it is missing body data,
+// an `asio::error::no_data` error is reported.
 std::size_t
 http_store_body_size( const fs::path& dirp, asio::executor
                     , sys::error_code&);
@@ -166,10 +172,28 @@ http_store_load_hash_list(const fs::path&, asio::executor, Cancel&, asio::yield_
 // `DIGEST = LOWER_HEX(SHA1(KEY))`) under the given directory.
 class BaseHttpStore {
 public:
+    using ReaderAndSize = std::pair<reader_uptr, std::size_t>;
+
+public:
     virtual ~BaseHttpStore() = default;
 
+    // If the response does not exist in the store,
+    // a `sys::errc::no_such_file_or_directory` error is reported.
+    //
+    // Body data may be partial or entirely missing, in which case
+    // a `boost::asio::error::connection_aborted` is reported
+    // when trying to read missing data.
+    // Otherwise no error is reported,
+    // so this is also convenient for reading just the response head if present
+    // (i.e. for a `HEAD` request).
     virtual reader_uptr
     reader(const std::string& key, sys::error_code&) = 0;
+
+    // This is similar to `reader` above,
+    // but it also returns the size of stored body data.
+    // Also, an `asio::error::no_data` error is reported if the body is missing.
+    virtual ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code&) = 0;
 
     virtual reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code&) = 0;

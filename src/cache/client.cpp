@@ -368,25 +368,22 @@ struct Client::Impl {
         _YDEBUG(yield, "Requesting from the cache: ", key);
 
         bool rs_available = false;
-        auto rs = load_from_local(key, is_head_request, cancel, yield[ec]);
+        std::size_t rs_sz = 0;
+        auto rs = load_from_local(key, is_head_request, rs_sz, cancel, yield[ec]);
         _YDEBUG(yield, "Looking up local cache; ec=", ec);
         if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
         if (!ec) {
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
-            auto rs_sz = _http_store->body_size(key, ec);
-            if (ec) {
-                _YERROR(yield, "Failed to get body size of response in local cache; ec=", ec);
-                rs.close();
-            } else {
-                auto data_size_sv = rs.response_header()[http_::response_data_size_hdr];
-                auto data_size_o = parse::number<std::size_t>(data_size_sv);
-                if (data_size_o && rs_sz == *data_size_o)
-                    return rs;  // local copy available and complete, use it
-                rs_available = true;  // available but incomplete
-                // TODO: Ideally, an incomplete or stale local cache entry
-                // could be reused in the multi-peer download below.
-            }
+            if (is_head_request) return rs;  // do not care about body size
+
+            auto data_size_sv = rs.response_header()[http_::response_data_size_hdr];
+            auto data_size_o = parse::number<std::size_t>(data_size_sv);
+            if (data_size_o && rs_sz == *data_size_o)
+                return rs;  // local copy available and complete, use it
+            rs_available = true;  // available but incomplete
+            // TODO: Ideally, an incomplete or stale local cache entry
+            // could be reused in the multi-peer download below.
         }
         ec = {};  // try distributed cache
 
@@ -450,11 +447,16 @@ struct Client::Impl {
 
     Session load_from_local( const std::string& key
                            , bool is_head_request
+                           , std::size_t& body_size
                            , Cancel cancel
                            , Yield yield)
     {
         sys::error_code ec;
-        auto rr = _http_store->reader(key, ec);
+        cache::reader_uptr rr;
+        if (is_head_request)
+            rr = _http_store->reader(key, ec);
+        else
+            std::tie(rr, body_size) = _http_store->reader_and_size(key, ec);
         if (ec) return or_throw<Session>(yield, ec);
         auto rs = yield[ec].tag("read_hdr").run([&] (auto y) {
             return Session::create(move(rr), is_head_request, cancel, y);

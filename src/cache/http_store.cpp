@@ -870,22 +870,30 @@ _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cd
                      , asio::executor ex
                      , sys::error_code& ec)
 {
+    namespace errc = sys::errc;
     assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
 
-    auto bodysz = fs::file_size(dirp / body_fname, ec);
-    if (!ec || ec != sys::errc::no_such_file_or_directory)
-        return bodysz;
+    // At least the head file should exist,
+    // otherwise opening the body file may fail
+    // because the entry does not exist in the cache at all.
+    if (!fs::exists(dirp / head_fname, ec)) {
+        if (!ec) ec = errc::make_error_code(errc::no_such_file_or_directory);
+        return 0;
+    }
 
-    assert(ec == sys::errc::no_such_file_or_directory);
-    ec = {};
+    auto bodysz = fs::file_size(dirp / body_fname, ec);
+    if (!ec) return bodysz;
+    if (ec != errc::no_such_file_or_directory) return 0;
+
+    ec = asio::error::no_data;
     if (!cdirp) return 0;  // considered incomplete response
 
+    ec = {};  // retry with content directory
     bodysz = body_size_external(dirp, *cdirp, ec);
-    if (!ec || ec != sys::errc::no_such_file_or_directory)
-        return bodysz;
+    if (!ec) return bodysz;
+    if (ec != errc::no_such_file_or_directory) return 0;
 
-    assert(ec == sys::errc::no_such_file_or_directory);
-    ec = {};
+    ec = asio::error::no_data;
     return 0;  // also considered incomplete response
 }
 
@@ -981,6 +989,16 @@ public:
         return http_store_reader(kpath, executor, ec);
     }
 
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        auto rr = http_store_reader(kpath, executor, ec);
+        if (ec) return {};
+        auto bs = http_store_body_size(kpath, executor, ec);
+        return {std::move(rr), bs};
+    }
+
     reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
     {
@@ -1035,6 +1053,17 @@ public:
         // acts as a good citizen and avoids spreading such content to others.
         return std::make_unique<VerifyingReader>
             (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
+    }
+
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
+    {
+        auto kpath = path_from_key(path, key);
+        auto rr = std::make_unique<VerifyingReader>
+            (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
+        if (ec) return {};
+        auto bs = http_store_body_size(kpath, content_path, executor, ec);
+        return {std::move(rr), bs};
     }
 
     reader_uptr
@@ -1158,6 +1187,10 @@ public:
     reader_uptr
     reader(const std::string& key, sys::error_code& ec) override
     { return read_store->reader(key, ec); }
+
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
+    { return read_store->reader_and_size(key, ec); }
 
     reader_uptr
     range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
@@ -1294,6 +1327,15 @@ public:
         if (!ec) return ret;
         _DEBUG("Failed to create reader for key, trying fallback store: ", key);
         return fallback_store->reader(key, ec = {});
+    }
+
+    ReaderAndSize
+    reader_and_size(const std::string& key, sys::error_code& ec) override
+    {
+        auto ret = FullHttpStore::reader_and_size(key, ec);
+        if (!ec) return ret;
+        _DEBUG("Failed to create reader for key, trying fallback store: ", key);
+        return fallback_store->reader_and_size(key, ec = {});
     }
 
     reader_uptr
