@@ -173,6 +173,15 @@ class BaseHttpStore {
 public:
     virtual ~BaseHttpStore() = default;
 
+    // If the response does not exist in the store,
+    // a `sys::errc::no_such_file_or_directory` error is reported.
+    //
+    // Body data may be partial or entirely missing, in which case
+    // a `boost::asio::error::connection_aborted` is reported
+    // when trying to read missing data.
+    // Otherwise no error is reported,
+    // so this is also convenient for reading just the response head if present
+    // (i.e. for a `HEAD` request).
     virtual reader_uptr
     reader(const std::string& key, sys::error_code&) = 0;
 
