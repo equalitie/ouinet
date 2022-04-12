@@ -227,6 +227,13 @@ struct Client::Impl {
             assert(rr);
         } else {
             rr = _http_store->reader(*key, ec);
+            // We may also, depending on whether the request is `HEAD`:
+            // (tru) the operation above (which may work for an entry missing a body),
+            // or (false) `_http_store->reader_and_size` instead so as to choose
+            // between the entries in the internal and static caches
+            // the one which does have a body.
+            // Using `_http_store->reader` exclusively just tends to use
+            // the version in the internal cache, which may be more recent.
         }
 
         if (ec) {
