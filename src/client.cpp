@@ -1250,9 +1250,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     if (ec) {
         _YWARN(yield, "Failed to send request to the injector; ec=", ec);
+        return or_throw<Session>(yield, ec);
     }
-
-    if (ec) return or_throw<Session>(yield, ec);
 
     _YDEBUG(yield, "Reading response");
 
