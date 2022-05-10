@@ -694,6 +694,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
        || !_config.is_cache_access_enabled();
 
     if (cache_is_disabled) {
+        _YDEBUG(yield, "Cache is disabled");
         return or_throw<CacheEntry>( yield
                                    , asio::error::operation_not_supported);
     }
@@ -1071,7 +1072,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     util::url_match url;
 
     if (!match_http_url(rq.target(), url)) {
-        // unsupported URL
+        _YERROR(yield, "Unsupported target URL");
         return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 
@@ -1269,10 +1270,11 @@ Session Client::State::fetch_fresh_through_simple_proxy
         ec = asio::error::operation_aborted;
     else if ( !ec
             && can_inject
-            && !util::http_proto_version_check_trusted(hdr, newest_proto_seen))
-        // The injector using an unacceptable protocol version is treated like
-        // the Injector mechanism being disabled.
+            && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
+        // This is treated like the Injector mechanism being disabled.
+        _YWARN(yield, "Injector is using an unacceptable protocol version: ", hdr);
         ec = asio::error::operation_not_supported;
+    }
 
     _YDEBUG(yield, "End reading response; ec=", ec);
 
@@ -1400,7 +1402,6 @@ public:
 
             if (!client_state._config.is_injector_access_enabled()) {
                 _YDEBUG(yield, "Disabled");
-
                 return or_throw<Session>(yield, err::operation_not_supported);
             }
 

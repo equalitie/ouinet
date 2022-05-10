@@ -291,6 +291,7 @@ class InjectorCacheControl {
         util::url_match url;
 
         if (!util::match_http_url(rq.target(), url)) {
+            yield.log("Unsupported target URL");
             return or_throw<GenericStream>( yield
                                           , asio::error::operation_not_supported);
         }
