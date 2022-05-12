@@ -42,8 +42,6 @@ public:
         return _injector_ep;
     }
 
-    void set_injector_endpoint(const Endpoint& ep);
-
     const std::string& tls_injector_cert_path() const {
         return _tls_injector_cert_path;
     }
@@ -83,11 +81,6 @@ public:
         auto i = _injector_credentials.find(injector);
         if (i == _injector_credentials.end()) return {};
         return i->second;
-    }
-
-    void set_credentials( const Endpoint& injector
-                        , const std::string& cred) {
-        _injector_credentials[injector] = cred;
     }
 
     asio::ip::tcp::endpoint front_end_endpoint() const {
@@ -466,7 +459,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 "'--injector-ep'");
         }
 
-        set_credentials(*_injector_ep, cred);
+        _injector_credentials[*_injector_ep] = cred;
     }
 
     if (_cache_type == CacheType::None) {
@@ -513,12 +506,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error(util::str(
                     "Invalid URL for '--origin-doh-base': ", doh_base));
     }
-}
-
-inline
-void ClientConfig::set_injector_endpoint(const Endpoint& ep)
-{
-    _injector_ep = ep;
 }
 
 #undef _DEFAULT_STATIC_CACHE_SUBDIR
