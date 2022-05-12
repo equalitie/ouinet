@@ -306,18 +306,17 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
-
-    if (!fs::is_regular_file(ouinet_conf_path)) {
-        throw std::runtime_error(
-                util::str("The path ", _repo_root, " does not contain the "
-                         , _ouinet_conf_file, " configuration file"));
+    {
+        fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
+        if (!fs::is_regular_file(ouinet_conf_path)) {
+            throw std::runtime_error(
+                    util::str("The path ", _repo_root, " does not contain the "
+                             , _ouinet_conf_file, " configuration file"));
+        }
+        ifstream ouinet_conf(ouinet_conf_path.native());
+        po::store(po::parse_config_file(ouinet_conf, desc), vm);
+        po::notify(vm);
     }
-
-    ifstream ouinet_conf(ouinet_conf_path.native());
-
-    po::store(po::parse_config_file(ouinet_conf, desc), vm);
-    po::notify(vm);
 
     if (vm.count("log-level")) {
         auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
