@@ -229,7 +229,7 @@ public:
         // TODO: check proxy acceptor
         // TODO: check front-end acceptor
         bool use_injector(_config.injector_endpoint());
-        bool use_cache(_config.cache_type() != ClientConfig::CacheType::None);
+        bool use_cache(_config.cache_enabled());
         if (use_injector && _injector_starting)
             return Client::RunningState::Starting;
         if (use_cache && _cache_starting)
