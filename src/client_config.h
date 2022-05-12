@@ -186,6 +186,26 @@ public:
         return desc;
     }
 
+private:
+    // A restricted version of the above, only accepting persistent configuration changes,
+    // with no defaults nor descriptions.
+    boost::program_options::options_description description_changes()
+    {
+        namespace po = boost::program_options;
+
+        po::options_description desc;
+        desc.add_options()  // TODO: use notifiers to record actual changes
+            ("log-level", po::value<std::string>())
+            // TODO: log-file
+            ("disable-origin-access", po::bool_switch(&_disable_origin_access))
+            ("disable-injector-access", po::bool_switch(&_disable_injector_access))
+            ("disable-cache-access", po::bool_switch(&_disable_cache_access))
+            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access))
+            ;
+        return desc;
+    }
+
+public:
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
 
@@ -298,10 +318,11 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     // Load the persisted configuration changes file, if it exists.
     {
+        po::options_description desc_chgs = description_changes();
         fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
         if (fs::is_regular_file(ouinet_chgs_path)) {
             ifstream ouinet_conf(ouinet_chgs_path.native());
-            po::store(po::parse_config_file(ouinet_conf, desc), vm);
+            po::store(po::parse_config_file(ouinet_conf, desc_chgs), vm);
             po::notify(vm);
         }
     }
