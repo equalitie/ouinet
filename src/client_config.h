@@ -205,21 +205,31 @@ private:
         return desc;
     }
 
+    void persist_changes() {
+        // TODO: implement
+    }
+
 public:
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
 
+#define CHANGE_AND_PERSIST(_F, _V) { \
+    _F = _V; \
+    _F##_changed = true; \
+    persist_changes(); \
+}
+
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
-    void is_cache_access_enabled(bool v) { _disable_cache_access = !v; }
+    void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
 
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
-    void is_origin_access_enabled(bool v) { _disable_origin_access = !v; }
+    void is_origin_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_origin_access, !v); }
 
     bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
-    void is_proxy_access_enabled(bool v) { _disable_proxy_access = !v; }
+    void is_proxy_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_proxy_access, !v); }
 
     bool is_injector_access_enabled() const { return !_disable_injector_access; }
-    void is_injector_access_enabled(bool v) { _disable_injector_access = !v; }
+    void is_injector_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_injector_access, !v); }
 
     std::string local_domain() const { return _local_domain; }
 
@@ -227,7 +237,8 @@ public:
         return _origin_doh_endpoint;
     }
 
-    bool log_level(const std::string& level) {
+private:
+    bool _set_log_level(const std::string& level) {
         if (level == "SILLY") {
             logger.set_threshold(SILLY);
         } else if (level == "DEBUG") {
@@ -247,6 +258,16 @@ public:
         }
         return true;
     }
+
+public:
+    bool log_level(const std::string& level) {
+        if (!_set_log_level(level)) return false;
+        _log_level_changed = true;
+        persist_changes();
+        return true;
+    }
+
+#undef CHANGE_AND_PERSIST
 
 private:
     bool _is_help = false;
@@ -276,6 +297,13 @@ private:
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
+
+    // Persistent configuration options, see `description_changes` above.
+    bool _log_level_changed = false;
+    bool _disable_origin_access_changed = false;
+    bool _disable_injector_access_changed = false;
+    bool _disable_cache_access_changed = false;
+    bool _disable_proxy_access_changed = false;
 };
 
 inline
@@ -341,7 +369,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm.count("log-level")) {
         auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
-        if (!log_level(level))
+        if (!_set_log_level(level))
             throw std::runtime_error(util::str("Invalid log level: ", level));
         LOG_INFO("Log level set to: ", level);
     }
