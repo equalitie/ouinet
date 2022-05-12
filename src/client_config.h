@@ -186,10 +186,10 @@ public:
         return desc;
     }
 
-    bool cache_enabled() const { return _cache_type != CacheType::None; }
+    bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
 
-    bool is_cache_access_enabled() const { return cache_enabled() && !_disable_cache_access; }
+    bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
     void is_cache_access_enabled(bool v) { _disable_cache_access = !v; }
 
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
@@ -465,7 +465,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         LOG_WARN("Not using d-cache");
     }
 
-    if (cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {
+    if (is_cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {
         throw std::runtime_error("BEP5/HTTP cache selected but no injector HTTP public key specified");
     }
 
