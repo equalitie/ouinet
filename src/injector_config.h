@@ -205,15 +205,19 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     }
 
     if (!vm.count("repo")) {
-        throw std::runtime_error("The 'repo' argument is missing");
+        throw std::runtime_error("The '--repo' option is missing");
     }
 
     _repo_root = vm["repo"].as<string>();
 
-    if (!exists(_repo_root) || !is_directory(_repo_root)) {
-        throw std::runtime_error(util::str(
-            "The path ", _repo_root, " either doesn't exist or"
-            " isn't a directory."));
+    if (!fs::exists(_repo_root)) {
+        throw std::runtime_error(
+                util::str("No such directory: ", _repo_root));
+    }
+
+    if (!fs::is_directory(_repo_root)) {
+        throw std::runtime_error(
+                util::str("The path is not a directory: ", _repo_root));
     }
 
     fs::path ouinet_conf_path = _repo_root/OUINET_CONF_FILE;
@@ -221,7 +225,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (!fs::is_regular_file(ouinet_conf_path)) {
         throw std::runtime_error(util::str(
             "The path ", _repo_root, " does not contain the "
-            , OUINET_CONF_FILE, " configuration file."));
+            , OUINET_CONF_FILE, " configuration file"));
     }
 
     std::ifstream ouinet_conf(ouinet_conf_path.native());
@@ -246,8 +250,8 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         if (!_credentials.empty() && _credentials.find(':') == string::npos) {
             throw std::runtime_error(util::str(
                 "The '--credentials' argument expects a string "
-                "in the format <username>:<password>. But the provided "
-                "string \"", _credentials, "\" is missing a colon."));
+                "in the format <username>:<password>, but the provided "
+                "string is missing a colon: ", _credentials));
         }
     }
 
@@ -264,7 +268,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
         if (value != "" && value != "true" && value != "false") {
             throw std::runtime_error(
-                "The listen-on-i2p parameter may be either 'true' or 'false'");
+                "The '--listen-on-i2p' argument may be either 'true' or 'false'");
         }
 
         _listen_on_i2p = (value == "true");
@@ -273,7 +277,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (vm.count("listen-on-tcp")) {
         auto opt_tcp_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
         if (!opt_tcp_endpoint) {
-            throw std::runtime_error("Failed to parse listen-on-tcp argument");
+            throw std::runtime_error("Failed to parse '--listen-on-tcp' argument");
         }
         _tcp_endpoint = *opt_tcp_endpoint;
     }
@@ -281,7 +285,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (vm.count("listen-on-tcp-tls")) {
         auto opt_tcp_tls_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp-tls"].as<string>());
         if (!opt_tcp_tls_endpoint) {
-            throw std::runtime_error("Failed to parse listen-on-tcp-tls argument");
+            throw std::runtime_error("Failed to parse '--listen-on-tcp-tls' argument");
         }
         _tcp_tls_endpoint = *opt_tcp_tls_endpoint;
     }
@@ -289,14 +293,14 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (vm.count("listen-on-utp")) {
         sys::error_code ec;
         auto ep = parse::endpoint<asio::ip::udp>(vm["listen-on-utp"].as<string>(), ec);
-        if (ec) throw std::runtime_error("Failed to parse utp endpoint");
+        if (ec) throw std::runtime_error("Failed to parse uTP endpoint");
         _utp_endpoint = ep;
     }
 
     if (vm.count("listen-on-utp-tls")) {
         sys::error_code ec;
         auto ep = parse::endpoint<asio::ip::udp>(vm["listen-on-utp-tls"].as<string>(), ec);
-        if (ec) throw std::runtime_error("Failed to parse utp endpoint");
+        if (ec) throw std::runtime_error("Failed to parse uTP endpoint");
         _utp_tls_endpoint = ep;
     }
 

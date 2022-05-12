@@ -285,21 +285,19 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (!vm.count("repo")) {
         throw std::runtime_error(
-                util::str("The 'repo' argument is missing\n", desc, "\n"));
+                util::str("The '--repo' option is missing"));
     }
 
     _repo_root = fs::path(vm["repo"].as<string>());
 
     if (!fs::exists(_repo_root)) {
         throw std::runtime_error(
-                util::str("Directory ", _repo_root, " does not exist.\n"
-                         , desc, "\n"));
+                util::str("No such directory: ", _repo_root));
     }
 
     if (!fs::is_directory(_repo_root)) {
         throw std::runtime_error(
-                util::str("The path ", _repo_root, " is not a directory.\n"
-                         , desc, "\n"));
+                util::str("The path is not a directory: ", _repo_root));
     }
 
     fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
@@ -307,8 +305,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     if (!fs::is_regular_file(ouinet_conf_path)) {
         throw std::runtime_error(
                 util::str("The path ", _repo_root, " does not contain the "
-                         , _ouinet_conf_file, " configuration file.\n"
-                         , desc));
+                         , _ouinet_conf_file, " configuration file"));
     }
 
     ifstream ouinet_conf(ouinet_conf_path.native());
@@ -334,8 +331,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (!vm.count("listen-on-tcp")) {
         throw std::runtime_error(
-                util::str( "The parameter 'listen-on-tcp' is missing.\n"
-                         , desc, "\n"));
+                util::str("The '--listen-on-tcp' option is missing"));
     }
 
     auto opt_local_ep = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
@@ -353,8 +349,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             auto opt = parse_endpoint(injector_ep_str);
 
             if (!opt) {
-                throw std::runtime_error( "Failed to parse endpoint \""
-                        + injector_ep_str + "\"");
+                throw std::runtime_error(util::str(
+                        "Failed to parse endpoint: ", injector_ep_str));
             }
 
             _injector_ep = *opt;
@@ -365,15 +361,15 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         auto ep_str = vm["front-end-ep"].as<string>();
 
         if (ep_str.empty()) {
-            throw std::runtime_error("--front-end-ep must not be empty");
+            throw std::runtime_error("The '--front-end-ep' argument must not be empty");
         }
 
         sys::error_code ec;
         _front_end_endpoint = parse::endpoint<asio::ip::tcp>(ep_str, ec);
 
         if (ec) {
-            throw std::runtime_error( "Failed to parse endpoint \""
-                    + ep_str + "\"");
+            throw std::runtime_error(util::str(
+                    "Failed to parse endpoint: ", ep_str));
         }
     }
 
@@ -383,8 +379,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (!cred.empty() && cred.find(':') == string::npos) {
             throw std::runtime_error(util::str(
                 "The '--client-credentials' argument expects a string "
-                "in the format <username>:<password>. But the provided "
-                "string \"", cred, "\" is missing a colon."));
+                "in the format <username>:<password>, but the provided "
+                "string is missing a colon: ", cred));
         }
 
         _client_credentials = move(cred);
@@ -407,7 +403,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
             if (!pk) {
                 throw std::runtime_error(
-                        util::str("Failed parsing '", value, "' as Ed25519 public key"));
+                        util::str("Failed to parse Ed25519 public key: ", value));
             }
         }
     };
@@ -425,14 +421,14 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
             if (!_cache_http_pubkey) {
                 throw std::runtime_error(
-                    "--cache-type=bep5-http must be used with --cache-http-public-key");
+                    "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
             }
 
             if (_injector_ep && _injector_ep->type == Endpoint::Bep5Endpoint) {
                 throw std::runtime_error(
                     util::str("A BEP5 injector endpoint is derived implicitly"
-                        " when using --cache-type=bep5-http,"
-                        " but it is already set to ", *_injector_ep));
+                        " when using '--cache-type=bep5-http',"
+                        " but it is already set to: ", *_injector_ep));
             }
             if (!_injector_ep) {
                 _injector_ep = Endpoint{
@@ -446,7 +442,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
         else {
             throw std::runtime_error(
-                    util::str("Unknown cache-type \"", type_str, "\""));
+                    util::str("Unknown '--cache-type' argument: ", type_str));
         }
 
     }
@@ -458,14 +454,14 @@ ClientConfig::ClientConfig(int argc, char* argv[])
           && cred.find(':') == string::npos) {
             throw std::runtime_error(util::str(
                 "The '--injector-credentials' argument expects a string "
-                "in the format <username>:<password>. But the provided "
-                "string \"", cred, "\" is missing a colon."));
+                "in the format <username>:<password>, but the provided "
+                "string is missing a colon: ", cred));
         }
 
         if (!_injector_ep) {
-            throw std::runtime_error(util::str(
+            throw std::runtime_error(
                 "The '--injector-credentials' argument must be used with "
-                "'--injector-ep'"));
+                "'--injector-ep'");
         }
 
         set_credentials(*_injector_ep, cred);
@@ -486,13 +482,13 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 util::str("No such directory: ", _cache_static_content_path));
         if (!vm.count("cache-static-repo")) {
             _cache_static_path = _cache_static_content_path / default_static_cache_subdir;
-            LOG_INFO("No static cache repository given, assuming ", _cache_static_path, ".");
+            LOG_INFO("No static cache repository given, assuming: ", _cache_static_path);
         }
     }
     if (vm.count("cache-static-repo")) {
         _cache_static_path = vm["cache-static-repo"].as<string>();
         if (!vm.count("cache-static-root"))
-            throw std::runtime_error("A content root must be explicity given when using a static cache");
+            throw std::runtime_error("'--cache-static-root' must be explicity given when using a static cache");
     }
     if (!_cache_static_path.empty() && !fs::is_directory(_cache_static_path))
         throw std::runtime_error(
@@ -502,15 +498,18 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         auto tld_rx = boost::regex("[-0-9a-zA-Z]+");
         auto local_domain = vm["local-domain"].as<string>();
         if (!boost::regex_match(local_domain, tld_rx)) {
-            throw std::runtime_error("Invalid TLD for --local-domain");
-        } _local_domain = boost::algorithm::to_lower_copy(local_domain);
+            throw std::runtime_error(util::str(
+                    "Invalid TLD for '--local-domain': ", local_domain));
+        }
+        _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
     if (vm.count("origin-doh-base")) {
         auto doh_base = vm["origin-doh-base"].as<string>();
         _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
         if (!_origin_doh_endpoint)
-            throw std::runtime_error("Invalid URL for --origin-doh-base");
+            throw std::runtime_error(util::str(
+                    "Invalid URL for '--origin-doh-base': ", doh_base));
     }
 }
 
