@@ -87,20 +87,20 @@ public:
     util::Ed25519PrivateKey cache_private_key() const
     { return _ed25519_private_key; }
 
-    bool set_log_level(const std::string& log_level) {
-        if (log_level == "SILLY") {
+    bool log_level(const std::string& level) {
+        if (level == "SILLY") {
            logger.set_threshold(SILLY);
-        } else if (log_level == "DEBUG") {
+        } else if (level == "DEBUG") {
             logger.set_threshold(DEBUG);
-        } else if (log_level == "VERBOSE") {
+        } else if (level == "VERBOSE") {
             logger.set_threshold(VERBOSE);
-        } else if (log_level == "INFO") {
+        } else if (level == "INFO") {
             logger.set_threshold(INFO);
-        } else if (log_level == "WARN") {
+        } else if (level == "WARN") {
             logger.set_threshold(WARN);
-        } else if (log_level == "ERROR") {
+        } else if (level == "ERROR") {
             logger.set_threshold(ERROR);
-        } else if (log_level == "ABORT") {
+        } else if (level == "ABORT") {
             logger.set_threshold(ABORT);
         } else {
             return false;
@@ -234,11 +234,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     po::notify(vm);
 
     if (vm.count("log-level")) {
-        auto log_level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
-        if (!set_log_level(log_level))
-            throw std::runtime_error(
-                    util::str("Invalid log level: ", log_level));
-        LOG_INFO("Log level set to: ", log_level);
+        auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
+        if (!log_level(level))
+            throw std::runtime_error(util::str("Invalid log level: ", level));
+        LOG_INFO("Log level set to: ", level);
     }
 
     if (vm.count("open-file-limit")) {
