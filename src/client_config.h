@@ -232,6 +232,7 @@ private:
     bool _is_help = false;
     fs::path _repo_root;
     fs::path _ouinet_conf_file = "ouinet-client.conf";
+    fs::path _ouinet_conf_chgs_file = "ouinet-client.changes.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
@@ -293,6 +294,16 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     if (!fs::is_directory(_repo_root)) {
         throw std::runtime_error(
                 util::str("The path is not a directory: ", _repo_root));
+    }
+
+    // Load the persisted configuration changes file, if it exists.
+    {
+        fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
+        if (fs::is_regular_file(ouinet_chgs_path)) {
+            ifstream ouinet_conf(ouinet_chgs_path.native());
+            po::store(po::parse_config_file(ouinet_conf, desc), vm);
+            po::notify(vm);
+        }
     }
 
     fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
