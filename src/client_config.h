@@ -196,19 +196,13 @@ public:
     }
 
 private:
-    static auto
-    persisted_bool_switch(bool* v, bool& changed) {
-        return boost::program_options::bool_switch(v)
-            ->notifier([&] (auto) { changed = true; });
-    }
-
-#define PERSISTED_BOOL(_F) persisted_bool_switch(&_F, _F##_changed)
-
     // A restricted version of the above, only accepting persistent configuration changes,
     // with no defaults nor descriptions.
     boost::program_options::options_description description_changes()
     {
         namespace po = boost::program_options;
+
+#define PERSISTED_BOOL(_F) po::bool_switch(&_F)->notifier([&] (auto) { _F##_changed = true; })
 
         po::options_description desc;
         desc.add_options()
@@ -221,9 +215,9 @@ private:
             ("disable-proxy-access", PERSISTED_BOOL(_disable_proxy_access))
             ;
         return desc;
-    }
 
 #undef PERSISTED_BOOL
+    }
 
     bool _set_log_level(const std::string& level) {
         if (level == "SILLY") {
