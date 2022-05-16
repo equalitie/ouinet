@@ -187,6 +187,14 @@ public:
     }
 
 private:
+    static auto
+    persisted_bool_switch(bool* v, bool& changed) {
+        return boost::program_options::bool_switch(v)
+            ->notifier([&] (auto) { changed = true; });
+    }
+
+#define PERSISTED_BOOL(_F) persisted_bool_switch(&_F, _F##_changed)
+
     // A restricted version of the above, only accepting persistent configuration changes,
     // with no defaults nor descriptions.
     boost::program_options::options_description description_changes()
@@ -198,17 +206,15 @@ private:
             ("log-level", po::value<std::string>()
              ->notifier([&] (auto) { _log_level_changed = true; }))
             // TODO: log-file
-            ("disable-origin-access", po::bool_switch(&_disable_origin_access)
-             ->notifier([&] (auto) { _disable_origin_access_changed = true; }))
-            ("disable-injector-access", po::bool_switch(&_disable_injector_access)
-             ->notifier([&] (auto) { _disable_injector_access_changed = true; }))
-            ("disable-cache-access", po::bool_switch(&_disable_cache_access)
-             ->notifier([&] (auto) { _disable_cache_access_changed = true; }))
-            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)
-             ->notifier([&] (auto) { _disable_proxy_access_changed = true; }))
+            ("disable-origin-access", PERSISTED_BOOL(_disable_origin_access))
+            ("disable-injector-access", PERSISTED_BOOL(_disable_injector_access))
+            ("disable-cache-access", PERSISTED_BOOL(_disable_cache_access))
+            ("disable-proxy-access", PERSISTED_BOOL(_disable_proxy_access))
             ;
         return desc;
     }
+
+#undef PERSISTED_BOOL
 
     void persist_changes() {
         // TODO: implement
