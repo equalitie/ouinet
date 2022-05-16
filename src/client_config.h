@@ -194,13 +194,18 @@ private:
         namespace po = boost::program_options;
 
         po::options_description desc;
-        desc.add_options()  // TODO: use notifiers to record actual changes
-            ("log-level", po::value<std::string>())
+        desc.add_options()
+            ("log-level", po::value<std::string>()
+             ->notifier([&] (auto) { _log_level_changed = true; }))
             // TODO: log-file
-            ("disable-origin-access", po::bool_switch(&_disable_origin_access))
-            ("disable-injector-access", po::bool_switch(&_disable_injector_access))
-            ("disable-cache-access", po::bool_switch(&_disable_cache_access))
-            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access))
+            ("disable-origin-access", po::bool_switch(&_disable_origin_access)
+             ->notifier([&] (auto) { _disable_origin_access_changed = true; }))
+            ("disable-injector-access", po::bool_switch(&_disable_injector_access)
+             ->notifier([&] (auto) { _disable_injector_access_changed = true; }))
+            ("disable-cache-access", po::bool_switch(&_disable_cache_access)
+             ->notifier([&] (auto) { _disable_cache_access_changed = true; }))
+            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)
+             ->notifier([&] (auto) { _disable_proxy_access_changed = true; }))
             ;
         return desc;
     }
