@@ -104,7 +104,12 @@ public:
 
     bool is_help() const { return _is_help; }
 
-    boost::program_options::options_description description()
+    auto description() {
+        return description_full();
+    }
+
+private:
+    boost::program_options::options_description description_full()
     {
         using namespace std;
         namespace po = boost::program_options;
@@ -319,7 +324,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     namespace po = boost::program_options;
     namespace fs = boost::filesystem;
 
-    auto desc = description();
+    auto desc = description_full();
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
