@@ -207,17 +207,17 @@ private:
     {
         namespace po = boost::program_options;
 
-#define PERSISTED_BOOL_VAR(_F) po::bool_switch(&_F)->notifier([&] (auto) { _F##_changed = true; })
+#define PERSISTED_BOOL_VAR(_F, _DEF) po::bool_switch(&_F)->notifier([&] (auto v) { if (v != DEF) _F##_changed = true; })
 
         po::options_description desc;
         desc.add_options()
             ("log-level", po::value<std::string>()
-             ->notifier([&] (auto) { _log_level_changed = true; }))
+             ->notifier([&] (auto v) { if (v != "INFO") _log_level_changed = true; }))
             // TODO: log-file
-            ("disable-origin-access", PERSISTED_BOOL_VAR(_disable_origin_access))
-            ("disable-injector-access", PERSISTED_BOOL_VAR(_disable_injector_access))
-            ("disable-cache-access", PERSISTED_BOOL_VAR(_disable_cache_access))
-            ("disable-proxy-access", PERSISTED_BOOL_VAR(_disable_proxy_access))
+            ("disable-origin-access", PERSISTED_BOOL_VAR(_disable_origin_access, false))
+            ("disable-injector-access", PERSISTED_BOOL_VAR(_disable_injector_access, false))
+            ("disable-cache-access", PERSISTED_BOOL_VAR(_disable_cache_access, false))
+            ("disable-proxy-access", PERSISTED_BOOL_VAR(_disable_proxy_access, false))
             ;
         return desc;
 
