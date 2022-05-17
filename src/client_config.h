@@ -6,6 +6,7 @@
 
 #include "namespaces.h"
 #include "cache_control.h"
+#include "defer.h"
 #include "doh.h"
 #include "util.h"
 #include "util/bytes.h"
@@ -109,11 +110,15 @@ public:
     }
 
 private:
+    auto with_inhibit_flag_changes() {
+        _flag_changes = false;
+        return defer([&] () { _flag_changes = true; });
+    }
 
 #define PERSISTED_VALUE(_V, _F, _DEF) \
     ( _V \
       ->default_value(_DEF) \
-      ->notifier([&] (auto v) { if (v != _DEF) _F##_changed = true; }) )
+      ->notifier([&] (auto v) { if (_flag_changes && v != _DEF) _F##_changed = true; }) )
 
 #define PERSISTED_STRING(_F, _DEF) \
     PERSISTED_VALUE(boost::program_options::value<std::string>(), _F, _DEF)
@@ -322,6 +327,8 @@ private:
     bool _disable_injector_access_changed = false;
     bool _disable_cache_access_changed = false;
     bool _disable_proxy_access_changed = false;
+
+    bool _flag_changes = true;
 };
 
 inline
@@ -374,6 +381,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     }
 
     {
+        // Temporarily disable flagging changes to persistent options,
+        // as values loaded from the configuration file are not considered changes.
+        auto ifc = with_inhibit_flag_changes();
+
         fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
         if (!fs::is_regular_file(ouinet_conf_path)) {
             throw std::runtime_error(
