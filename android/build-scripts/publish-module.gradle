@@ -1,0 +1,62 @@
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+
+task androidSourcesJar(type: Jar) {
+    archiveClassifier.set('sources')
+    if (project.plugins.findPlugin("com.android.library")) {
+        from android.sourceSets.main.java.srcDirs
+    }
+}
+
+artifacts {
+    archives androidSourcesJar
+}
+
+group = PUBLISH_GROUP_ID
+version = PUBLISH_VERSION
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                // The coordinates of the library, being set from variables that
+                // we'll set up later
+                groupId PUBLISH_GROUP_ID
+                artifactId PUBLISH_ARTIFACT_ID
+                version PUBLISH_VERSION
+
+                // Two artifacts, the `aar` (or `jar`) and the sources
+                artifact androidSourcesJar
+                artifact("$buildDir/outputs/aar/ouinet-release.aar")
+
+                pom {
+                    name = PUBLISH_ARTIFACT_ID
+                    description = 'Library to enable decentralized web requests'
+                    url = 'https://github.com/equalitie/ouinet'
+                    licenses {
+                        license {
+                            name = 'MIT License'
+                            url = 'https://github.com/equalitie/ouinet/blob/master/LICENSE'
+                        }
+                    }
+                    developers {
+                        developer {
+                            name = 'Ouinet Developers'
+                            email = 'ouinet@equalit.ie'
+                        }
+                    }
+
+                    scm {
+                        connection = 'scm:git:github.com/equalitie/ouinet.git'
+                        developerConnection = 'scm:git:ssh://github.com/equalitie/ouinet.git'
+                        url = 'https://github.com/equalitie/ouinet/tree/master'
+                    }
+                }
+            }
+        }
+    }
+}
+
+signing {
+    sign publishing.publications
+}
