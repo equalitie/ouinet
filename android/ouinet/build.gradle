@@ -63,3 +63,9 @@ dependencies {
     testImplementation 'com.android.support.test:runner:1.0.2'
     testImplementation 'org.assertj:assertj-core:3.11.1'
 }
+
+ext {
+    PUBLISH_GROUP_ID = 'ie.equalit.ouinet'
+    PUBLISH_VERSION = '1.5.0'
+    PUBLISH_ARTIFACT_ID = 'ouinet'
+}
