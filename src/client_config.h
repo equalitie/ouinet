@@ -109,6 +109,18 @@ public:
     }
 
 private:
+
+#define PERSISTED_VALUE(_V, _F, _DEF) \
+    ( _V \
+      ->default_value(_DEF) \
+      ->notifier([&] (auto v) { if (v != _DEF) _F##_changed = true; }) )
+
+#define PERSISTED_STRING(_F, _DEF) \
+    PERSISTED_VALUE(boost::program_options::value<std::string>(), _F, _DEF)
+
+#define PERSISTED_BOOL_VAR(_F, _DEF) \
+    PERSISTED_VALUE(boost::program_options::bool_switch(&_F), _F, _DEF)
+
     boost::program_options::options_description description_full()
     {
         using namespace std;
@@ -119,7 +131,7 @@ private:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
+           ("log-level", PERSISTED_STRING(_log_level, "INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
 
            // Client options
            ("listen-on-tcp"
@@ -181,13 +193,13 @@ private:
              "The static cache always requires this (even if empty).")
 
            // Request routing options
-           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
+           ("disable-origin-access", PERSISTED_BOOL_VAR(_disable_origin_access, false)
             , "Disable direct access to the origin (forces use of injector and the cache)")
-           ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
+           ("disable-injector-access", PERSISTED_BOOL_VAR(_disable_injector_access, false)
             , "Disable access to the injector")
-           ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false)
+           ("disable-cache-access", PERSISTED_BOOL_VAR(_disable_cache_access, false)
             , "Disable access to cached content")
-           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
+           ("disable-proxy-access", PERSISTED_BOOL_VAR(_disable_proxy_access, false)
             , "Disable proxied access to the origin (via the injector)")
            ("local-domain"
             , po::value<string>()->default_value("local")
@@ -206,12 +218,9 @@ private:
     {
         namespace po = boost::program_options;
 
-#define PERSISTED_BOOL_VAR(_F, _DEF) po::bool_switch(&_F)->notifier([&] (auto v) { if (v != DEF) _F##_changed = true; })
-
         po::options_description desc;
         desc.add_options()
-            ("log-level", po::value<std::string>()
-             ->notifier([&] (auto v) { if (v != "INFO") _log_level_changed = true; }))
+            ("log-level", PERSISTED_STRING(_log_level, "INFO"))
             // TODO: log-file
             ("disable-origin-access", PERSISTED_BOOL_VAR(_disable_origin_access, false))
             ("disable-injector-access", PERSISTED_BOOL_VAR(_disable_injector_access, false))
@@ -219,10 +228,11 @@ private:
             ("disable-proxy-access", PERSISTED_BOOL_VAR(_disable_proxy_access, false))
             ;
         return desc;
-
-#undef PERSISTED_BOOL_VAR
-
     }
+
+#undef PERSISTED_VALUE
+#undef PERSISTED_STRING
+#undef PERSISTED_BOOL_VAR
 
     bool _set_log_level(const std::string& level) {
         if (level == "SILLY") {
