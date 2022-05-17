@@ -267,6 +267,7 @@ private:
 public:
     bool log_level(const std::string& level) {
         if (!_set_log_level(level)) return false;
+        if (!_flag_changes) return true;
         _log_level_changed = true;
         persist_changes();
         return true;
@@ -274,8 +275,10 @@ public:
 
 #define CHANGE_AND_PERSIST(_F, _V) { \
     _F = _V; \
-    _F##_changed = true; \
-    persist_changes(); \
+    if (_flag_changes) { \
+        _F##_changed = true; \
+        persist_changes(); \
+    } \
 }
 
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
