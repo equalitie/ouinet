@@ -200,7 +200,6 @@ private:
         return desc;
     }
 
-private:
     // A restricted version of the above, only accepting persistent configuration changes,
     // with no defaults nor descriptions.
     boost::program_options::options_description description_changes()
