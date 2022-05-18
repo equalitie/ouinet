@@ -266,7 +266,7 @@ private:
         using namespace std;
         ostringstream ss;
 
-#define DUMP_OPT_GET(_O, _F, _G) if (_F##_changed) ss << _O " = " << _G << endl;
+#define DUMP_OPT_GET(_O, _F, _GET) if (_F##_changed) ss << _O " = " << (_GET) << endl;
 #define DUMP_OPT(_O, _F) DUMP_OPT_GET(_O, _F, _F)
 
         DUMP_OPT_GET("log-level", _log_level, log_level());
