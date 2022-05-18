@@ -8,7 +8,6 @@
 
 #include "namespaces.h"
 #include "cache_control.h"
-#include "defer.h"
 #include "doh.h"
 #include "util.h"
 #include "util/bytes.h"
@@ -112,27 +111,6 @@ public:
     }
 
 private:
-    // Use this to temporarily flag option changes only if
-    // the new values do not match the option default.
-    auto with_flag_nondefault() {
-        _flag_nondefault = true;
-        return defer([&] () { _flag_nondefault = false; });
-    }
-
-#define PERSISTED_VALUE(_V, _F, _DEF, _GET) \
-    ( _V \
-      ->default_value(_DEF) \
-      ->notifier([&] (auto v) { \
-          if (_flag_nondefault) { if (v != _DEF) _F##_changed = true; } \
-          else if ( v != (_GET) ) _F##_changed = true; \
-      }) )
-
-#define PERSISTED_STRING(_F, _DEF, _GET) \
-    PERSISTED_VALUE(boost::program_options::value<std::string>(), _F, _DEF, _GET)
-
-#define PERSISTED_BOOL_VAR(_F, _DEF) \
-    PERSISTED_VALUE(boost::program_options::bool_switch(&_F), _F, _DEF, _F)
-
     boost::program_options::options_description description_full()
     {
         using namespace std;
@@ -143,7 +121,7 @@ private:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("log-level", PERSISTED_STRING(_log_level, "INFO", _get_log_level()), "Set log level: silly, debug, verbose, info, warn, error, abort")
+           ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
 
            // Client options
            ("listen-on-tcp"
@@ -205,13 +183,13 @@ private:
              "The static cache always requires this (even if empty).")
 
            // Request routing options
-           ("disable-origin-access", PERSISTED_BOOL_VAR(_disable_origin_access, false)
+           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
             , "Disable direct access to the origin (forces use of injector and the cache)")
-           ("disable-injector-access", PERSISTED_BOOL_VAR(_disable_injector_access, false)
+           ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
             , "Disable access to the injector")
-           ("disable-cache-access", PERSISTED_BOOL_VAR(_disable_cache_access, false)
+           ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false)
             , "Disable access to cached content")
-           ("disable-proxy-access", PERSISTED_BOOL_VAR(_disable_proxy_access, false)
+           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
             , "Disable proxied access to the origin (via the injector)")
            ("local-domain"
             , po::value<string>()->default_value("local")
@@ -232,25 +210,14 @@ private:
 
         po::options_description desc;
         desc.add_options()
-            ("log-level", PERSISTED_STRING(_log_level, "INFO", _get_log_level()))
+            ("log-level", po::value<std::string>()->default_value("INFO"))
             // TODO: log-file
-            ("disable-origin-access", PERSISTED_BOOL_VAR(_disable_origin_access, false))
-            ("disable-injector-access", PERSISTED_BOOL_VAR(_disable_injector_access, false))
-            ("disable-cache-access", PERSISTED_BOOL_VAR(_disable_cache_access, false))
-            ("disable-proxy-access", PERSISTED_BOOL_VAR(_disable_proxy_access, false))
+            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false))
+            ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false))
+            ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false))
+            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false))
             ;
         return desc;
-    }
-
-#undef PERSISTED_VALUE
-#undef PERSISTED_STRING
-#undef PERSISTED_BOOL_VAR
-
-    // TODO: Move all these conversions to `logger.h`.
-    std::string _get_log_level() const {
-        std::stringstream ss;
-        ss << logger.get_threshold();
-        return ss.str();
     }
 
     bool _set_log_level(const std::string& level) {
@@ -278,7 +245,7 @@ private:
         using namespace std;
         ostringstream ss;
 
-#define DUMP_OPT_GET(_O, _F, _GET) if (_F##_changed) ss << _O " = " << (_GET) << endl;
+#define DUMP_OPT_GET(_O, _F, _GET) ss << _O " = " << (_GET) << endl;
 #define DUMP_OPT(_O, _F) DUMP_OPT_GET(_O, _F, _F)
 
         DUMP_OPT_GET("log-level", _log_level, log_level());
@@ -301,18 +268,15 @@ private:
 
 public:
 
-#define CHANGE_AND_PERSIST_OPS(_F, _CMP, _SET) { \
+#define CHANGE_AND_PERSIST_OPS(_CMP, _SET) { \
     bool changed = !(_CMP); \
     _SET; \
-    if (changed) { \
-        _F##_changed = true; \
-        persist_changes(); \
-    } \
+    if (changed) persist_changes(); \
 }
-#define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_OPS(_F, (_V) == _F, _F = (_V))
+#define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_OPS((_V) == _F, _F = (_V))
 
     log_level_t log_level() const { return logger.get_threshold(); }
-    void log_level(log_level_t level) { CHANGE_AND_PERSIST_OPS(_log_level, level == logger.get_threshold(), logger.set_threshold(level)); }
+    void log_level(log_level_t level) { CHANGE_AND_PERSIST_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
 
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
     void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
@@ -357,15 +321,6 @@ private:
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
-
-    // Persistent configuration options, see `description_changes` above.
-    bool _log_level_changed = false;
-    bool _disable_origin_access_changed = false;
-    bool _disable_injector_access_changed = false;
-    bool _disable_cache_access_changed = false;
-    bool _disable_proxy_access_changed = false;
-
-    bool _flag_nondefault = false;
 };
 
 inline
@@ -379,14 +334,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     namespace fs = boost::filesystem;
 
     auto desc = description_full();
+
     po::variables_map vm;
-
-    {
-        auto fnd = with_flag_nondefault();
-
-        po::store(po::parse_command_line(argc, argv, desc), vm);
-        po::notify(vm);
-    }
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
 
     if (vm.count("help")) {
         _is_help = true;
@@ -412,8 +363,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     // Load the persisted configuration changes file, if it exists.
     {
-        auto fnd = with_flag_nondefault();
-
         po::options_description desc_chgs = description_changes();
         fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
         if (fs::is_regular_file(ouinet_chgs_path)) {
