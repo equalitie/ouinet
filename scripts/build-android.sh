@@ -266,7 +266,9 @@ function publish_ouinet_aar {
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${GRADLE_BUILDDIR}";
-      gradle publishToSonatype \
+      gradle \
+        publishToSonatype \
+        closeAndReleaseSonatypeStagingRepository \
         -Pandroid_abi=${ABI} \
         -PversionName="${OUINET_VERSION_NAME}" \
         -PbuildId="${OUINET_BUILD_ID}" \
