@@ -112,21 +112,26 @@ public:
     }
 
 private:
-    auto with_inhibit_flag_changes() {
-        _flag_changes = false;
-        return defer([&] () { _flag_changes = true; });
+    // Use this to temporarily flag option changes only if
+    // the new values do not match the option default.
+    auto with_flag_nondefault() {
+        _flag_nondefault = true;
+        return defer([&] () { _flag_nondefault = false; });
     }
 
-#define PERSISTED_VALUE(_V, _F, _DEF) \
+#define PERSISTED_VALUE(_V, _F, _DEF, _GET) \
     ( _V \
       ->default_value(_DEF) \
-      ->notifier([&] (auto v) { if (_flag_changes && v != _DEF) _F##_changed = true; }) )
+      ->notifier([&] (auto v) { \
+          if (_flag_nondefault) { if (v != _DEF) _F##_changed = true; } \
+          else if ( v != (_GET) ) _F##_changed = true; \
+      }) )
 
-#define PERSISTED_STRING(_F, _DEF) \
-    PERSISTED_VALUE(boost::program_options::value<std::string>(), _F, _DEF)
+#define PERSISTED_STRING(_F, _DEF, _GET) \
+    PERSISTED_VALUE(boost::program_options::value<std::string>(), _F, _DEF, _GET)
 
 #define PERSISTED_BOOL_VAR(_F, _DEF) \
-    PERSISTED_VALUE(boost::program_options::bool_switch(&_F), _F, _DEF)
+    PERSISTED_VALUE(boost::program_options::bool_switch(&_F), _F, _DEF, _F)
 
     boost::program_options::options_description description_full()
     {
@@ -138,7 +143,7 @@ private:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("log-level", PERSISTED_STRING(_log_level, "INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
+           ("log-level", PERSISTED_STRING(_log_level, "INFO", _get_log_level()), "Set log level: silly, debug, verbose, info, warn, error, abort")
 
            // Client options
            ("listen-on-tcp"
@@ -227,7 +232,7 @@ private:
 
         po::options_description desc;
         desc.add_options()
-            ("log-level", PERSISTED_STRING(_log_level, "INFO"))
+            ("log-level", PERSISTED_STRING(_log_level, "INFO", _get_log_level()))
             // TODO: log-file
             ("disable-origin-access", PERSISTED_BOOL_VAR(_disable_origin_access, false))
             ("disable-injector-access", PERSISTED_BOOL_VAR(_disable_injector_access, false))
@@ -240,6 +245,13 @@ private:
 #undef PERSISTED_VALUE
 #undef PERSISTED_STRING
 #undef PERSISTED_BOOL_VAR
+
+    // TODO: Move all these conversions to `logger.h`.
+    std::string _get_log_level() const {
+        std::stringstream ss;
+        ss << logger.get_threshold();
+        return ss.str();
+    }
 
     bool _set_log_level(const std::string& level) {
         if (level == "SILLY") {
@@ -289,17 +301,18 @@ private:
 
 public:
 
-#define CHANGE_AND_PERSIST_SET(_F, _SET) { \
+#define CHANGE_AND_PERSIST_OPS(_F, _CMP, _SET) { \
+    bool changed = !(_CMP); \
     _SET; \
-    if (_flag_changes) { \
+    if (changed) { \
         _F##_changed = true; \
         persist_changes(); \
     } \
 }
-#define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_SET(_F, _F = _V)
+#define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_OPS(_F, (_V) == _F, _F = (_V))
 
     log_level_t log_level() const { return logger.get_threshold(); }
-    void log_level(log_level_t level) { CHANGE_AND_PERSIST_SET(_log_level, logger.set_threshold(level)); }
+    void log_level(log_level_t level) { CHANGE_AND_PERSIST_OPS(_log_level, level == logger.get_threshold(), logger.set_threshold(level)); }
 
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
     void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
@@ -313,7 +326,7 @@ public:
     bool is_injector_access_enabled() const { return !_disable_injector_access; }
     void is_injector_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_injector_access, !v); }
 
-#undef CHANGE_AND_PERSIST_SET
+#undef CHANGE_AND_PERSIST_OPS
 #undef CHANGE_AND_PERSIST
 
 private:
@@ -352,7 +365,7 @@ private:
     bool _disable_cache_access_changed = false;
     bool _disable_proxy_access_changed = false;
 
-    bool _flag_changes = true;
+    bool _flag_nondefault = false;
 };
 
 inline
@@ -366,10 +379,14 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     namespace fs = boost::filesystem;
 
     auto desc = description_full();
-
     po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-    po::notify(vm);
+
+    {
+        auto fnd = with_flag_nondefault();
+
+        po::store(po::parse_command_line(argc, argv, desc), vm);
+        po::notify(vm);
+    }
 
     if (vm.count("help")) {
         _is_help = true;
@@ -395,6 +412,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     // Load the persisted configuration changes file, if it exists.
     {
+        auto fnd = with_flag_nondefault();
+
         po::options_description desc_chgs = description_changes();
         fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
         if (fs::is_regular_file(ouinet_chgs_path)) {
@@ -405,10 +424,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     }
 
     {
-        // Temporarily disable flagging changes to persistent options,
-        // as values loaded from the configuration file are not considered changes.
-        auto ifc = with_inhibit_flag_changes();
-
         fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
         if (!fs::is_regular_file(ouinet_conf_path)) {
             throw std::runtime_error(
