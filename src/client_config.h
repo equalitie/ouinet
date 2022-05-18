@@ -288,12 +288,16 @@ private:
     }
 
 public:
-    bool log_level(const std::string& level) {
-        if (!_set_log_level(level)) return false;
-        if (!_flag_changes) return true;
-        _log_level_changed = true;
-        persist_changes();
-        return true;
+    log_level_t log_level() const {
+        return logger.get_threshold();
+    }
+
+    void log_level(log_level_t level) {
+        logger.set_threshold(level);
+        if (_flag_changes) {
+            _log_level_changed = true;
+            persist_changes();
+        }
     }
 
 #define CHANGE_AND_PERSIST(_F, _V) { \
