@@ -420,8 +420,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         po::notify(vm);
     }
 
-    persist_changes();
-
     if (vm.count("log-level")) {
         auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
         if (!_set_log_level(level))
@@ -619,6 +617,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error(util::str(
                     "Invalid URL for '--origin-doh-base': ", doh_base));
     }
+
+    persist_changes();  // only if no errors happened
 }
 
 #undef _DEFAULT_STATIC_CACHE_SUBDIR
