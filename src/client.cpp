@@ -155,6 +155,7 @@ public:
         , _ssl_certificate_cache(1000)
         , _injector_starting{get_executor()}
         , _cache_starting{get_executor()}
+        , _front_end(_config)
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
         , _bt_dht_wc(_ctx)

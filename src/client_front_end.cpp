@@ -149,8 +149,8 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 } // ouinet namespace
 
-ClientFrontEnd::ClientFrontEnd()
-    : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, logger.get_threshold()))
+ClientFrontEnd::ClientFrontEnd(const ClientConfig& config)
+    : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, config.log_level()))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringstream& ss

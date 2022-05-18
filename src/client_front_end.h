@@ -91,7 +91,7 @@ public:
         return task;
     }
 
-    ClientFrontEnd();
+    ClientFrontEnd(const ClientConfig&);
     ~ClientFrontEnd();
 
 private:
