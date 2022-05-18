@@ -210,12 +210,12 @@ private:
 
         po::options_description desc;
         desc.add_options()
-            ("log-level", po::value<std::string>()->default_value("INFO"))
+            ("log-level", po::value<std::string>())
             // TODO: log-file
-            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false))
-            ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false))
-            ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false))
-            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false))
+            ("disable-origin-access", po::bool_switch(&_disable_origin_access))
+            ("disable-injector-access", po::bool_switch(&_disable_injector_access))
+            ("disable-cache-access", po::bool_switch(&_disable_cache_access))
+            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access))
             ;
         return desc;
     }
