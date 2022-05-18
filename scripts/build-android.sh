@@ -90,7 +90,7 @@ export OUINET_MIN_API OUINET_TARGET_API
 
 ######################################################################
 MODES=
-ALLOWED_MODES="bootstrap build emu"
+ALLOWED_MODES="bootstrap build emu publish"
 DEFAULT_MODES="bootstrap build"
 
 function check_mode {
@@ -259,6 +259,26 @@ function build_ouinet_aar {
 }
 
 ######################################################################
+# Publish AAR artifacts to Maven Central
+function publish_ouinet_aar {
+    GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
+    OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
+    OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
+    mkdir -p "${GRADLE_BUILDDIR}"
+    ( cd "${GRADLE_BUILDDIR}";
+      gradle publishToSonatype \
+        -Pandroid_abi=${ABI} \
+        -PversionName="${OUINET_VERSION_NAME}" \
+        -PbuildId="${OUINET_BUILD_ID}" \
+        -PbuildDir="${GRADLE_BUILDDIR}" \
+        --project-dir="${ROOT}"/android \
+        --gradle-user-home "${DIR}"/_gradle-home \
+        --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
+        --no-daemon \
+    )
+}
+
+######################################################################
 # Run the Android emulator with the AVD created above.
 # The `-use-system-libs` option is necessary to avoid errors like
 # "libGL error: unable to load driver" and X error `BadValue` on
@@ -326,6 +346,15 @@ fi
 
 if check_mode build; then
     build_ouinet_aar
+fi
+
+if check_mode publish; then
+    if [[ "${GRADLE_VARIANT}" != "Release" ]]; then
+      echo "Artifacts can be published only when the build is a Release."
+      exit 1;
+    else
+      publish_ouinet_aar
+    fi
 fi
 
 if check_mode emu; then
