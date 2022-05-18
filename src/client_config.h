@@ -288,25 +288,18 @@ private:
     }
 
 public:
-    log_level_t log_level() const {
-        return logger.get_threshold();
-    }
 
-    void log_level(log_level_t level) {
-        logger.set_threshold(level);
-        if (_flag_changes) {
-            _log_level_changed = true;
-            persist_changes();
-        }
-    }
-
-#define CHANGE_AND_PERSIST(_F, _V) { \
-    _F = _V; \
+#define CHANGE_AND_PERSIST_SET(_F, _SET) { \
+    _SET; \
     if (_flag_changes) { \
         _F##_changed = true; \
         persist_changes(); \
     } \
 }
+#define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_SET(_F, _F = _V)
+
+    log_level_t log_level() const { return logger.get_threshold(); }
+    void log_level(log_level_t level) { CHANGE_AND_PERSIST_SET(_log_level, logger.set_threshold(level)); }
 
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
     void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
@@ -320,6 +313,7 @@ public:
     bool is_injector_access_enabled() const { return !_disable_injector_access; }
     void is_injector_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_injector_access, !v); }
 
+#undef CHANGE_AND_PERSIST_SET
 #undef CHANGE_AND_PERSIST
 
 private:
