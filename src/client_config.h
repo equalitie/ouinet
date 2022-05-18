@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sstream>
+
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -261,7 +263,28 @@ private:
     }
 
     void persist_changes() {
-        // TODO: implement
+        using namespace std;
+        ostringstream ss;
+
+#define DUMP_OPT_GET(_O, _F, _G) if (_F##_changed) ss << _O " = " << _G << endl;
+#define DUMP_OPT(_O, _F) DUMP_OPT_GET(_O, _F, _F)
+
+        DUMP_OPT_GET("log-level", _log_level, log_level());
+        DUMP_OPT("disable-origin-access", _disable_origin_access);
+        DUMP_OPT("disable-injector-access", _disable_injector_access);
+        DUMP_OPT("disable-cache-access", _disable_cache_access);
+        DUMP_OPT("disable-proxy-access", _disable_proxy_access);
+
+#undef DUMP_OPT_GET
+#undef DUMP_OPT
+
+        try {
+            fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
+            LOG_DEBUG("Persisting changed options");
+            ofstream(ouinet_chgs_path.native(), fstream::out | fstream::trunc) << ss.str();
+        } catch (const exception& e) {
+            LOG_ERROR("Failed to persist changed options: ", e.what());
+        }
     }
 
 public:
