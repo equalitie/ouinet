@@ -245,17 +245,11 @@ private:
         using namespace std;
         ostringstream ss;
 
-#define DUMP_OPT_GET(_O, _F, _GET) ss << _O " = " << (_GET) << endl;
-#define DUMP_OPT(_O, _F) DUMP_OPT_GET(_O, _F, _F)
-
-        DUMP_OPT_GET("log-level", _log_level, log_level());
-        DUMP_OPT("disable-origin-access", _disable_origin_access);
-        DUMP_OPT("disable-injector-access", _disable_injector_access);
-        DUMP_OPT("disable-cache-access", _disable_cache_access);
-        DUMP_OPT("disable-proxy-access", _disable_proxy_access);
-
-#undef DUMP_OPT_GET
-#undef DUMP_OPT
+        ss << "log-level = " << log_level() << endl;
+        ss << "disable-origin-access = " << _disable_origin_access << endl;
+        ss << "disable-injector-access = " << _disable_injector_access << endl;
+        ss << "disable-cache-access = " << _disable_cache_access << endl;
+        ss << "disable-proxy-access = " << _disable_proxy_access << endl;
 
         try {
             fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
