@@ -139,8 +139,8 @@ private:
                       , Yield);
 
     // Enabling the log file also enables debugging temporarily.
-    void enable_log_to_file(const std::string& path);
-    void disable_log_to_file();
+    void enable_log_to_file(ClientConfig&);
+    void disable_log_to_file(ClientConfig&);
 };
 
 } // ouinet namespace

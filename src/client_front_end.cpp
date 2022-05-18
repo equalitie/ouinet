@@ -162,18 +162,18 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringst
     ss << ca.pem_certificate();
 }
 
-void ClientFrontEnd::enable_log_to_file(const std::string& path) {
+void ClientFrontEnd::enable_log_to_file(ClientConfig& config) {
     if (!_log_level_no_file)   // not when changing active log file
-        _log_level_no_file = logger.get_threshold();
+        _log_level_no_file = config.log_level();
     _log_level_input->current_value = DEBUG;
-    logger.set_threshold(DEBUG);
-    logger.log_to_file(path);
+    config.log_level(DEBUG);
+    logger.log_to_file((config.repo_root()/"log.txt").native());
 }
 
-void ClientFrontEnd::disable_log_to_file() {
+void ClientFrontEnd::disable_log_to_file(ClientConfig& config) {
     logger.log_to_file("");
     if (_log_level_no_file) {
-        logger.set_threshold(*_log_level_no_file);
+        config.log_level(*_log_level_no_file);
         _log_level_input->current_value = *_log_level_no_file;
         _log_level_no_file = boost::none;
     }
@@ -329,7 +329,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     auto target = req.target();
 
     if (_log_level_input->update(target)) {
-        logger.set_threshold(_log_level_input->current_value);
+        config.log_level(_log_level_input->current_value);
         if (logger.get_log_file() != nullptr)  // remember explicitly set level
             _log_level_no_file = _log_level_input->current_value;
     }
@@ -367,10 +367,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             config.is_cache_access_enabled(false);
         }
         else if (target.find("?logfile=enable") != string::npos) {
-            enable_log_to_file((config.repo_root()/"log.txt").string());
+            enable_log_to_file(config);
         }
         else if (target.find("?logfile=disable") != string::npos) {
-            disable_log_to_file();
+            disable_log_to_file(config);
         }
         else if (target.find("?purge_cache=") != string::npos && cache_client) {
             Cancel cancel;
