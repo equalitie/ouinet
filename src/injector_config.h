@@ -220,18 +220,17 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
                 util::str("The path is not a directory: ", _repo_root));
     }
 
-    fs::path ouinet_conf_path = _repo_root/OUINET_CONF_FILE;
-
-    if (!fs::is_regular_file(ouinet_conf_path)) {
-        throw std::runtime_error(util::str(
-            "The path ", _repo_root, " does not contain the "
-            , OUINET_CONF_FILE, " configuration file"));
+    {
+        fs::path ouinet_conf_path = _repo_root/OUINET_CONF_FILE;
+        if (!fs::is_regular_file(ouinet_conf_path)) {
+            throw std::runtime_error(util::str(
+                "The path ", _repo_root, " does not contain the "
+                , OUINET_CONF_FILE, " configuration file"));
+        }
+        std::ifstream ouinet_conf(ouinet_conf_path.native());
+        po::store(po::parse_config_file(ouinet_conf, desc), vm);
+        po::notify(vm);
     }
-
-    std::ifstream ouinet_conf(ouinet_conf_path.native());
-
-    po::store(po::parse_config_file(ouinet_conf, desc), vm);
-    po::notify(vm);
 
     if (vm.count("log-level")) {
         auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());

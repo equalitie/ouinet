@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sstream>
+
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -54,6 +56,9 @@ public:
         return _local_ep;
     }
 
+    bool is_cache_enabled() const { return _cache_type != CacheType::None; }
+    CacheType cache_type() const { return _cache_type; }
+
     boost::posix_time::time_duration max_cached_age() const {
         return _max_cached_age;
     }
@@ -93,9 +98,20 @@ public:
 
     const std::string& client_credentials() const { return _client_credentials; }
 
+    std::string local_domain() const { return _local_domain; }
+
+    boost::optional<std::string> origin_doh_endpoint() const {
+        return _origin_doh_endpoint;
+    }
+
     bool is_help() const { return _is_help; }
 
-    boost::program_options::options_description description()
+    auto description() {
+        return description_full();
+    }
+
+private:
+    boost::program_options::options_description description_full()
     {
         using namespace std;
         namespace po = boost::program_options;
@@ -186,28 +202,25 @@ public:
         return desc;
     }
 
-    bool is_cache_enabled() const { return _cache_type != CacheType::None; }
-    CacheType cache_type() const { return _cache_type; }
+    // A restricted version of the above, only accepting persistent configuration changes,
+    // with no defaults nor descriptions.
+    boost::program_options::options_description description_changes()
+    {
+        namespace po = boost::program_options;
 
-    bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
-    void is_cache_access_enabled(bool v) { _disable_cache_access = !v; }
-
-    bool is_origin_access_enabled() const { return !_disable_origin_access; }
-    void is_origin_access_enabled(bool v) { _disable_origin_access = !v; }
-
-    bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
-    void is_proxy_access_enabled(bool v) { _disable_proxy_access = !v; }
-
-    bool is_injector_access_enabled() const { return !_disable_injector_access; }
-    void is_injector_access_enabled(bool v) { _disable_injector_access = !v; }
-
-    std::string local_domain() const { return _local_domain; }
-
-    boost::optional<std::string> origin_doh_endpoint() const {
-        return _origin_doh_endpoint;
+        po::options_description desc;
+        desc.add_options()
+            ("log-level", po::value<std::string>())
+            // TODO: log-file
+            ("disable-origin-access", po::bool_switch(&_disable_origin_access))
+            ("disable-injector-access", po::bool_switch(&_disable_injector_access))
+            ("disable-cache-access", po::bool_switch(&_disable_cache_access))
+            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access))
+            ;
+        return desc;
     }
 
-    bool log_level(const std::string& level) {
+    bool _set_log_level(const std::string& level) {
         if (level == "SILLY") {
             logger.set_threshold(SILLY);
         } else if (level == "DEBUG") {
@@ -228,10 +241,57 @@ public:
         return true;
     }
 
+    void persist_changes() {
+        using namespace std;
+        ostringstream ss;
+
+        ss << "log-level = " << log_level() << endl;
+        ss << "disable-origin-access = " << _disable_origin_access << endl;
+        ss << "disable-injector-access = " << _disable_injector_access << endl;
+        ss << "disable-cache-access = " << _disable_cache_access << endl;
+        ss << "disable-proxy-access = " << _disable_proxy_access << endl;
+
+        try {
+            fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
+            LOG_DEBUG("Persisting changed options");
+            ofstream(ouinet_chgs_path.native(), fstream::out | fstream::trunc) << ss.str();
+        } catch (const exception& e) {
+            LOG_ERROR("Failed to persist changed options: ", e.what());
+        }
+    }
+
+public:
+
+#define CHANGE_AND_PERSIST_OPS(_CMP, _SET) { \
+    bool changed = !(_CMP); \
+    _SET; \
+    if (changed) persist_changes(); \
+}
+#define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_OPS((_V) == _F, _F = (_V))
+
+    log_level_t log_level() const { return logger.get_threshold(); }
+    void log_level(log_level_t level) { CHANGE_AND_PERSIST_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
+
+    bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
+    void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
+
+    bool is_origin_access_enabled() const { return !_disable_origin_access; }
+    void is_origin_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_origin_access, !v); }
+
+    bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
+    void is_proxy_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_proxy_access, !v); }
+
+    bool is_injector_access_enabled() const { return !_disable_injector_access; }
+    void is_injector_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_injector_access, !v); }
+
+#undef CHANGE_AND_PERSIST_OPS
+#undef CHANGE_AND_PERSIST
+
 private:
     bool _is_help = false;
     fs::path _repo_root;
     fs::path _ouinet_conf_file = "ouinet-client.conf";
+    fs::path _ouinet_conf_chgs_file = "ouinet-client.changes.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
@@ -267,7 +327,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     namespace po = boost::program_options;
     namespace fs = boost::filesystem;
 
-    auto desc = description();
+    auto desc = description_full();
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -295,22 +355,32 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 util::str("The path is not a directory: ", _repo_root));
     }
 
-    fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
-
-    if (!fs::is_regular_file(ouinet_conf_path)) {
-        throw std::runtime_error(
-                util::str("The path ", _repo_root, " does not contain the "
-                         , _ouinet_conf_file, " configuration file"));
+    // Load the persisted configuration changes file, if it exists.
+    {
+        po::options_description desc_chgs = description_changes();
+        fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
+        if (fs::is_regular_file(ouinet_chgs_path)) {
+            ifstream ouinet_conf(ouinet_chgs_path.native());
+            po::store(po::parse_config_file(ouinet_conf, desc_chgs), vm);
+            po::notify(vm);
+        }
     }
 
-    ifstream ouinet_conf(ouinet_conf_path.native());
-
-    po::store(po::parse_config_file(ouinet_conf, desc), vm);
-    po::notify(vm);
+    {
+        fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
+        if (!fs::is_regular_file(ouinet_conf_path)) {
+            throw std::runtime_error(
+                    util::str("The path ", _repo_root, " does not contain the "
+                             , _ouinet_conf_file, " configuration file"));
+        }
+        ifstream ouinet_conf(ouinet_conf_path.native());
+        po::store(po::parse_config_file(ouinet_conf, desc), vm);
+        po::notify(vm);
+    }
 
     if (vm.count("log-level")) {
         auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
-        if (!log_level(level))
+        if (!_set_log_level(level))
             throw std::runtime_error(util::str("Invalid log level: ", level));
         LOG_INFO("Log level set to: ", level);
     }
@@ -505,6 +575,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error(util::str(
                     "Invalid URL for '--origin-doh-base': ", doh_base));
     }
+
+    persist_changes();  // only if no errors happened
 }
 
 #undef _DEFAULT_STATIC_CACHE_SUBDIR
