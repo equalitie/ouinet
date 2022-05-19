@@ -163,6 +163,8 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringst
 }
 
 void ClientFrontEnd::enable_log_to_file(ClientConfig& config) {
+    if (config.is_log_file_enabled()) return;
+
     if (!_log_level_no_file)   // not when changing active log file
         _log_level_no_file = config.log_level();
     _log_level_input->current_value = DEBUG;
@@ -171,6 +173,8 @@ void ClientFrontEnd::enable_log_to_file(ClientConfig& config) {
 }
 
 void ClientFrontEnd::disable_log_to_file(ClientConfig& config) {
+    if (!config.is_log_file_enabled()) return;
+
     config.is_log_file_enabled(false);
     if (_log_level_no_file) {
         config.log_level(*_log_level_no_file);
