@@ -87,27 +87,6 @@ public:
     util::Ed25519PrivateKey cache_private_key() const
     { return _ed25519_private_key; }
 
-    bool log_level(const std::string& level) {
-        if (level == "SILLY") {
-           logger.set_threshold(SILLY);
-        } else if (level == "DEBUG") {
-            logger.set_threshold(DEBUG);
-        } else if (level == "VERBOSE") {
-            logger.set_threshold(VERBOSE);
-        } else if (level == "INFO") {
-            logger.set_threshold(INFO);
-        } else if (level == "WARN") {
-            logger.set_threshold(WARN);
-        } else if (level == "ERROR") {
-            logger.set_threshold(ERROR);
-        } else if (level == "ABORT") {
-            logger.set_threshold(ABORT);
-        } else {
-            return false;
-        }
-        return true;
-    }
-
 private:
     void setup_ed25519_private_key(const std::string& hex);
 
@@ -234,8 +213,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm.count("log-level")) {
         auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
-        if (!log_level(level))
+        auto ll_o = log_level_from_string(level);
+        if (!ll_o)
             throw std::runtime_error(util::str("Invalid log level: ", level));
+        logger.set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
     }
 
