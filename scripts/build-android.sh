@@ -268,7 +268,7 @@ function publish_ouinet_aar {
     ( cd "${GRADLE_BUILDDIR}";
       gradle \
         publishToSonatype \
-        closeAndReleaseSonatypeStagingRepository \
+        closeSonatypeStagingRepository \
         -Pandroid_abi=${ABI} \
         -PversionName="${OUINET_VERSION_NAME}" \
         -PbuildId="${OUINET_BUILD_ID}" \
