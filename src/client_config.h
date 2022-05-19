@@ -124,6 +124,9 @@ private:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
+           ("drop-saved-opts", po::bool_switch()->default_value(false)
+            , "Drop saved persistent options right before start "
+              "(only use command line arguments and configuration file)")
            ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
             , "Set log level: silly, debug, verbose, info, warn, error, abort. "
               "This option is persistent.")
@@ -375,11 +378,15 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 util::str("The path is not a directory: ", _repo_root));
     }
 
-    // Load the file with saved configuration options, if it exists.
+    // Load the file with saved configuration options, if it exists
+    // (or remove it if requested).
     {
         po::options_description desc_save = description_saved();
         fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
-        if (fs::is_regular_file(ouinet_save_path)) {
+        if (vm["drop-saved-opts"].as<bool>()) {
+            sys::error_code ignored_ec;
+            fs::remove(ouinet_save_path, ignored_ec);
+        } else if (fs::is_regular_file(ouinet_save_path)) {
             ifstream ouinet_conf(ouinet_save_path.native());
             po::store(po::parse_config_file(ouinet_conf, desc_save), vm);
             po::notify(vm);
