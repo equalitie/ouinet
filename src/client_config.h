@@ -251,8 +251,10 @@ public:
 
 #define CHANGE_AND_PERSIST_OPS(_CMP, _SET) { \
     bool changed = !(_CMP); \
-    _SET; \
-    if (changed) persist_changes(); \
+    if (changed) { \
+        _SET; \
+        persist_changes(); \
+    } \
 }
 #define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_OPS((_V) == _F, _F = (_V))
 
