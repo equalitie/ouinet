@@ -125,10 +125,12 @@ private:
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
            ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
-            , "Set log level: silly, debug, verbose, info, warn, error, abort")
+            , "Set log level: silly, debug, verbose, info, warn, error, abort. "
+              "This option is persistent.")
            ("enable-log-file", po::bool_switch()->default_value(false)
             , "Enable writing log messages to "
-              "log file \"" _LOG_FILE_NAME "\" under the repository root")
+              "log file \"" _LOG_FILE_NAME "\" under the repository root. "
+              "This option is persistent.")
 
            // Client options
            ("listen-on-tcp"
@@ -191,13 +193,17 @@ private:
 
            // Request routing options
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
-            , "Disable direct access to the origin (forces use of injector and the cache)")
+            , "Disable direct access to the origin (forces use of injector and the cache). "
+              "This option is persistent.")
            ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
-            , "Disable access to the injector")
+            , "Disable access to the injector. "
+              "This option is persistent.")
            ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false)
-            , "Disable access to cached content")
+            , "Disable access to cached content. "
+              "This option is persistent.")
            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
-            , "Disable proxied access to the origin (via the injector)")
+            , "Disable proxied access to the origin (via the injector). "
+              "This option is persistent.")
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
