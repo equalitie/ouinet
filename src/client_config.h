@@ -374,18 +374,14 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _max_cached_age = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
     }
 
-    if (!vm.count("listen-on-tcp")) {
-        throw std::runtime_error(
-                util::str("The '--listen-on-tcp' option is missing"));
+    assert(vm.count("listen-on-tcp"));
+    {
+        auto opt_local_ep = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
+        if (!opt_local_ep) {
+            throw std::runtime_error("Failed to parse '--listen-on-tcp' argument");
+        }
+        _local_ep = *opt_local_ep;
     }
-
-    auto opt_local_ep = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
-
-    if (!opt_local_ep) {
-        throw std::runtime_error("Failed to parse local endpoint");
-    }
-
-    _local_ep = *opt_local_ep;
 
     if (vm.count("injector-ep")) {
         auto injector_ep_str = vm["injector-ep"].as<string>();
@@ -402,20 +398,13 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("front-end-ep")) {
-        auto ep_str = vm["front-end-ep"].as<string>();
-
-        if (ep_str.empty()) {
-            throw std::runtime_error("The '--front-end-ep' argument must not be empty");
+    assert(vm.count("front-end-ep"));
+    {
+        auto opt_fe_ep = parse::endpoint<asio::ip::tcp>(vm["front-end-ep"].as<string>());
+        if (!opt_fe_ep) {
+            throw std::runtime_error("Failed to parse '--front-end-ep' argument");
         }
-
-        sys::error_code ec;
-        _front_end_endpoint = parse::endpoint<asio::ip::tcp>(ep_str, ec);
-
-        if (ec) {
-            throw std::runtime_error(util::str(
-                    "Failed to parse endpoint: ", ep_str));
-        }
+        _front_end_endpoint = *opt_fe_ep;
     }
 
     if (vm.count("client-credentials")) {
