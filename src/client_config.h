@@ -124,7 +124,8 @@ private:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
+           ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
+            , "Set log level: silly, debug, verbose, info, warn, error, abort")
            ("enable-log-file", po::bool_switch()->default_value(false)
             , "Enable writing log messages to "
               "log file \"" _LOG_FILE_NAME "\" under the repository root")
