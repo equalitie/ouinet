@@ -21,6 +21,9 @@
 
 namespace ouinet {
 
+#define _LOG_FILE_NAME "log.txt"
+static const fs::path log_file_name{_LOG_FILE_NAME};
+
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
@@ -122,6 +125,9 @@ private:
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
            ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
+           ("enable-log-file", po::bool_switch()->default_value(false)
+            , "Enable writing log messages to "
+              "log file \"" _LOG_FILE_NAME "\" under the repository root")
 
            // Client options
            ("listen-on-tcp"
@@ -211,7 +217,7 @@ private:
         po::options_description desc;
         desc.add_options()
             ("log-level", po::value<std::string>())
-            // TODO: log-file
+            ("enable-log-file", po::bool_switch())
             ("disable-origin-access", po::bool_switch(&_disable_origin_access))
             ("disable-injector-access", po::bool_switch(&_disable_injector_access))
             ("disable-cache-access", po::bool_switch(&_disable_cache_access))
@@ -549,5 +555,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     persist_changes();  // only if no errors happened
 }
 
+#undef _LOG_FILE_NAME
 #undef _DEFAULT_STATIC_CACHE_SUBDIR
 } // ouinet namespace
