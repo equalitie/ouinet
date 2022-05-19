@@ -163,25 +163,28 @@ void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringst
 }
 
 void ClientFrontEnd::enable_log_to_file(ClientConfig& config) {
-    if (!_log_level_no_file)   // not when changing active log file
-        _log_level_no_file = config.log_level();
+    if (config.is_log_file_enabled()) return;
+
+    _log_level_no_file = config.log_level();
     _log_level_input->current_value = DEBUG;
     config.log_level(DEBUG);
-    logger.log_to_file((config.repo_root()/"log.txt").native());
+    config.is_log_file_enabled(true);
 }
 
 void ClientFrontEnd::disable_log_to_file(ClientConfig& config) {
-    logger.log_to_file("");
-    if (_log_level_no_file) {
-        config.log_level(*_log_level_no_file);
-        _log_level_input->current_value = *_log_level_no_file;
-        _log_level_no_file = boost::none;
-    }
+    if (!config.is_log_file_enabled()) return;
+
+    config.is_log_file_enabled(false);
+    if (!_log_level_no_file)  // enabled in a previous run
+        _log_level_no_file = default_log_level();
+    config.log_level(*_log_level_no_file);
+    _log_level_input->current_value = *_log_level_no_file;
 }
 
-static void load_log_file(ostringstream& out_ss) {
+static void load_log_file(ClientConfig& config, ostringstream& out_ss) {
+    if (!config.is_log_file_enabled()) return;
     std::fstream* logfile = logger.get_log_file();
-    if (logfile == nullptr) return;
+    assert(logfile && "No log file in spite of configuration saying so");
     logfile->flush();
     logfile->seekg(0);
     std::copy( istreambuf_iterator<char>(*logfile)
@@ -330,7 +333,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (_log_level_input->update(target)) {
         config.log_level(_log_level_input->current_value);
-        if (logger.get_log_file() != nullptr)  // remember explicitly set level
+        if (config.is_log_file_enabled())  // remember explicitly set level
             _log_level_no_file = _log_level_input->current_value;
     }
 
@@ -421,7 +424,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
-    bool log_file_enabled = logger.get_log_file() != nullptr;
+    bool log_file_enabled = config.is_log_file_enabled();
     ss << ToggleInput{"<u>L</u>og file", "logfile", 'l', log_file_enabled};
     if (log_file_enabled)
         ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
@@ -550,7 +553,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"ouinet_build_id", Version::BUILD_ID},
         {"ouinet_protocol", http_::protocol_version_current},
         {"state", client_state(cstate)},
-        {"logfile", logger.get_log_file() != nullptr}
+        {"logfile", config.is_log_file_enabled()}
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
@@ -604,7 +607,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_ca_pem(req, res, ss, ca);
     } else if (path == log_file_apath) {
         res.set(http::field::content_type, "text/plain");
-        load_log_file(ss);
+        load_log_file(config, ss);
     } else if (path == group_list_apath) {
         handle_group_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {

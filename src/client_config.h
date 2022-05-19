@@ -21,6 +21,9 @@
 
 namespace ouinet {
 
+#define _LOG_FILE_NAME "log.txt"
+static const fs::path log_file_name{_LOG_FILE_NAME};
+
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
@@ -121,7 +124,11 @@ private:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
-           ("log-level", po::value<string>()->default_value("INFO"), "Set log level: silly, debug, verbose, info, warn, error, abort")
+           ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
+            , "Set log level: silly, debug, verbose, info, warn, error, abort")
+           ("enable-log-file", po::bool_switch()->default_value(false)
+            , "Enable writing log messages to "
+              "log file \"" _LOG_FILE_NAME "\" under the repository root")
 
            // Client options
            ("listen-on-tcp"
@@ -211,7 +218,7 @@ private:
         po::options_description desc;
         desc.add_options()
             ("log-level", po::value<std::string>())
-            // TODO: log-file
+            ("enable-log-file", po::bool_switch())
             ("disable-origin-access", po::bool_switch(&_disable_origin_access))
             ("disable-injector-access", po::bool_switch(&_disable_injector_access))
             ("disable-cache-access", po::bool_switch(&_disable_cache_access))
@@ -225,6 +232,7 @@ private:
         ostringstream ss;
 
         ss << "log-level = " << log_level() << endl;
+        ss << "enable-log-file = " << is_log_file_enabled() << endl;
         ss << "disable-origin-access = " << _disable_origin_access << endl;
         ss << "disable-injector-access = " << _disable_injector_access << endl;
         ss << "disable-cache-access = " << _disable_cache_access << endl;
@@ -251,6 +259,9 @@ public:
     log_level_t log_level() const { return logger.get_threshold(); }
     void log_level(log_level_t level) { CHANGE_AND_PERSIST_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
 
+    bool is_log_file_enabled() const { return _is_log_file_enabled(); }
+    void is_log_file_enabled(bool v) { CHANGE_AND_PERSIST_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
+
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
     void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
 
@@ -265,6 +276,28 @@ public:
 
 #undef CHANGE_AND_PERSIST_OPS
 #undef CHANGE_AND_PERSIST
+
+private:
+    inline bool _is_log_file_enabled() const {
+        return logger.get_log_file() != nullptr;
+    }
+
+    inline void _is_log_file_enabled(bool v) {
+        if (!v) {
+            logger.log_to_file("");
+            return;
+        }
+
+        if (_is_log_file_enabled()) return;
+
+        auto current_log_path = logger.current_log_file();
+        auto ouinet_log_path = current_log_path.empty()
+            ? (_repo_root / log_file_name).native()
+            : current_log_path;
+
+        logger.log_to_file(ouinet_log_path);
+        LOG_INFO("Log file set to: ", ouinet_log_path);
+    }
 
 private:
     bool _is_help = false;
@@ -364,6 +397,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error(util::str("Invalid log level: ", level));
         logger.set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
+    }
+
+    if (vm["enable-log-file"].as<bool>()) {
+        _is_log_file_enabled(true);
     }
 
     if (vm.count("open-file-limit")) {
@@ -549,5 +586,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     persist_changes();  // only if no errors happened
 }
 
+#undef _LOG_FILE_NAME
 #undef _DEFAULT_STATIC_CACHE_SUBDIR
 } // ouinet namespace
