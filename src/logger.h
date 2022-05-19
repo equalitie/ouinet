@@ -51,6 +51,18 @@ inline std::ostream& operator<<(std::ostream& os, log_level_t ll) {
     return os << "???";
 }
 
+// The input string should be in ALL CAPS for the parsing to succeed.
+inline boost::optional<log_level_t> log_level_from_string(const std::string& ll) {
+    if (ll == "SILLY") return SILLY;
+    if (ll == "DEBUG") return DEBUG;
+    if (ll == "VERBOSE") return VERBOSE;
+    if (ll == "INFO") return INFO;
+    if (ll == "WARN") return WARN;
+    if (ll == "ERROR") return ERROR;
+    if (ll == "ABORT") return ABORT;
+    return {};
+}
+
 class Logger
 {
   protected:
