@@ -257,6 +257,9 @@ public:
     log_level_t log_level() const { return logger.get_threshold(); }
     void log_level(log_level_t level) { CHANGE_AND_PERSIST_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
 
+    bool is_log_file_enabled() const { return _is_log_file_enabled(); }
+    void is_log_file_enabled(bool v) { CHANGE_AND_PERSIST_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
+
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
     void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
 
@@ -271,6 +274,28 @@ public:
 
 #undef CHANGE_AND_PERSIST_OPS
 #undef CHANGE_AND_PERSIST
+
+private:
+    inline bool _is_log_file_enabled() const {
+        return logger.get_log_file() != nullptr;
+    }
+
+    inline void _is_log_file_enabled(bool v) {
+        if (!v) {
+            logger.log_to_file("");
+            return;
+        }
+
+        if (_is_log_file_enabled()) return;
+
+        auto current_log_path = logger.current_log_file();
+        auto ouinet_log_path = current_log_path.empty()
+            ? (_repo_root / log_file_name).native()
+            : current_log_path;
+
+        logger.log_to_file(ouinet_log_path);
+        LOG_INFO("Log file set to: ", ouinet_log_path);
+    }
 
 private:
     bool _is_help = false;
@@ -370,6 +395,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error(util::str("Invalid log level: ", level));
         logger.set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
+    }
+
+    if (vm["enable-log-file"].as<bool>()) {
+        _is_log_file_enabled(true);
     }
 
     if (vm.count("open-file-limit")) {
