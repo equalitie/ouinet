@@ -198,8 +198,8 @@ function maybe_install_ndk {
 function maybe_install_gradle {
     check_mode build || return 0
 
-    GRADLE_REQUIRED_MAJOR_VERSION=4
-    GRADLE_REQUIRED_MINOR_VERSION=6
+    GRADLE_REQUIRED_MAJOR_VERSION=6
+    GRADLE_REQUIRED_MINOR_VERSION=0
 
     NEED_GRADLE=false
 
@@ -224,7 +224,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-5.5.1
+        local GRADLE=gradle-6.0
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
