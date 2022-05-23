@@ -49,7 +49,7 @@ public class Config implements Parcelable {
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
         private boolean disableInjectorAccess = false;
-        private LogLevel logLevel = LogLevel.INFO;
+        private LogLevel logLevel = null;
 
         public ConfigBuilder(Context context) {
             Ouinet.maybeLoadLibraries(context);
@@ -378,7 +378,7 @@ public class Config implements Parcelable {
         out.writeInt(disableProxyAccess ? 1 : 0);
         out.writeInt(disableInjectorAccess ? 1 : 0);
         // https://stackoverflow.com/a/48533385/273348
-        out.writeInt(logLevel.ordinal());
+        out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -397,7 +397,8 @@ public class Config implements Parcelable {
         disableProxyAccess    = in.readInt() != 0;
         disableInjectorAccess = in.readInt() != 0;
 
-        logLevel = LogLevel.values()[in.readInt()];
+        int logLevelInt = in.readInt();
+        logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
     }
 
 }
