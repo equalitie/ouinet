@@ -2915,7 +2915,7 @@ int main(int argc, char* argv[])
     }
 
     if (cfg.is_help()) {
-        cout << "Usage:" << endl;
+        cout << "Usage: client [OPTION...]" << endl;
         cout << cfg.description() << endl;
         return 0;
     }

@@ -119,7 +119,7 @@ private:
         using namespace std;
         namespace po = boost::program_options;
 
-        po::options_description general("General");
+        po::options_description general("General options");
         general.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
@@ -138,7 +138,7 @@ private:
             , "To increase the maximum number of open files")
            ;
 
-        po::options_description services("Services");
+        po::options_description services("Service options");
         services.add_options()
            ("listen-on-tcp"
             , po::value<string>()->default_value("127.0.0.1:8077")
@@ -152,7 +152,7 @@ private:
             , "Front-end's endpoint (in <IP>:<PORT> format)")
            ;
 
-        po::options_description injector("Injector");
+        po::options_description injector("Injector options");
         injector.add_options()
            ("injector-ep"
             , po::value<string>()
@@ -167,7 +167,7 @@ private:
             , "Path to the injector's TLS certificate; enable TLS for TCP and uTP")
            ;
 
-        po::options_description cache("Cache");
+        po::options_description cache("Cache options");
         cache.add_options()
            ("cache-type", po::value<string>()->default_value("none")
             , "Type of d-cache {none, bep5-http}")
@@ -200,7 +200,7 @@ private:
              "The static cache always requires this (even if empty).")
           ;
 
-        po::options_description requests("Requests");
+        po::options_description requests("Request options");
         requests.add_options()
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
             , "Disable direct access to the origin (forces use of injector and the cache). "

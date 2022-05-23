@@ -119,7 +119,7 @@ InjectorConfig::options_description()
     namespace po = boost::program_options;
     using std::string;
 
-    po::options_description desc("\nOptions");
+    po::options_description desc("Options");
 
     desc.add_options()
         ("help", "Produce this help message")

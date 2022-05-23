@@ -831,6 +831,7 @@ int main(int argc, const char* argv[])
     }
 
     if (config.is_help()) {
+        cout << "Usage: injector [OPTION...]" << endl;
         cout << config.options_description() << endl;
         return EXIT_SUCCESS;
     }
