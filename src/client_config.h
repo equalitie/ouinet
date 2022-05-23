@@ -119,9 +119,8 @@ private:
         using namespace std;
         namespace po = boost::program_options;
 
-        po::options_description desc;
-
-        desc.add_options()
+        po::options_description general("General");
+        general.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
            ("drop-saved-opts", po::bool_switch()->default_value(false)
@@ -134,21 +133,27 @@ private:
             , "Enable writing log messages to "
               "log file \"" _LOG_FILE_NAME "\" under the repository root. "
               "This option is persistent.")
-
-           // Client options
-           ("listen-on-tcp"
-            , po::value<string>()->default_value("127.0.0.1:8077")
-            , "HTTP proxy endpoint (in <IP>:<PORT> format)")
-           ("front-end-ep"
-            , po::value<string>()->default_value("127.0.0.1:8078")
-            , "Front-end's endpoint (in <IP>:<PORT> format)")
-           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
-            , "Path to the CA certificate store file")
            ("open-file-limit"
             , po::value<unsigned int>()
             , "To increase the maximum number of open files")
+           ;
 
-           // Transport options
+        po::options_description services("Services");
+        services.add_options()
+           ("listen-on-tcp"
+            , po::value<string>()->default_value("127.0.0.1:8077")
+            , "HTTP proxy endpoint (in <IP>:<PORT> format)")
+           ("client-credentials", po::value<string>()
+            , "<username>:<password> authentication pair for the client")
+           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
+            , "Path to the CA certificate store file")
+           ("front-end-ep"
+            , po::value<string>()->default_value("127.0.0.1:8078")
+            , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ;
+
+        po::options_description injector("Injector");
+        injector.add_options()
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint as <TYPE>:<EP>, "
@@ -156,14 +161,14 @@ private:
               "and <EP> depends on the type of endpoint: "
               "<IP>:<PORT> for TCP and uTP, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
               "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P")
-           ("client-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the client")
            ("injector-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the injector")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the injector's TLS certificate; enable TLS for TCP and uTP")
+           ;
 
-           // Cache options
+        po::options_description cache("Cache");
+        cache.add_options()
            ("cache-type", po::value<string>()->default_value("none")
             , "Type of d-cache {none, bep5-http}")
            ("cache-http-public-key"
@@ -193,8 +198,10 @@ private:
            , po::value<string>()
            , "Root directory for content files of the static cache. "
              "The static cache always requires this (even if empty).")
+          ;
 
-           // Request routing options
+        po::options_description requests("Requests");
+        requests.add_options()
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
             , "Disable direct access to the origin (forces use of injector and the cache). "
               "This option is persistent.")
@@ -215,6 +222,13 @@ private:
               "the \"dns=...\" query argument will be added for the GET request.")
            ;
 
+        po::options_description desc;
+        desc
+            .add(general)
+            .add(services)
+            .add(injector)
+            .add(cache)
+            .add(requests);
         return desc;
     }
 
