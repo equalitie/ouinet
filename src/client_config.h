@@ -124,11 +124,16 @@ private:
         desc.add_options()
            ("help", "Produce this help message")
            ("repo", po::value<string>(), "Path to the repository root")
+           ("drop-saved-opts", po::bool_switch()->default_value(false)
+            , "Drop saved persistent options right before start "
+              "(only use command line arguments and configuration file)")
            ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
-            , "Set log level: silly, debug, verbose, info, warn, error, abort")
+            , "Set log level: silly, debug, verbose, info, warn, error, abort. "
+              "This option is persistent.")
            ("enable-log-file", po::bool_switch()->default_value(false)
             , "Enable writing log messages to "
-              "log file \"" _LOG_FILE_NAME "\" under the repository root")
+              "log file \"" _LOG_FILE_NAME "\" under the repository root. "
+              "This option is persistent.")
 
            // Client options
            ("listen-on-tcp"
@@ -191,13 +196,17 @@ private:
 
            // Request routing options
            ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
-            , "Disable direct access to the origin (forces use of injector and the cache)")
+            , "Disable direct access to the origin (forces use of injector and the cache). "
+              "This option is persistent.")
            ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
-            , "Disable access to the injector")
+            , "Disable access to the injector. "
+              "This option is persistent.")
            ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false)
-            , "Disable access to cached content")
+            , "Disable access to cached content. "
+              "This option is persistent.")
            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
-            , "Disable proxied access to the origin (via the injector)")
+            , "Disable proxied access to the origin (via the injector). "
+              "This option is persistent.")
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
@@ -209,9 +218,9 @@ private:
         return desc;
     }
 
-    // A restricted version of the above, only accepting persistent configuration changes,
+    // A restricted version of the above, only accepting persistent configuration options,
     // with no defaults nor descriptions.
-    boost::program_options::options_description description_changes()
+    boost::program_options::options_description description_saved()
     {
         namespace po = boost::program_options;
 
@@ -227,7 +236,7 @@ private:
         return desc;
     }
 
-    void persist_changes() {
+    void save_persistent() {
         using namespace std;
         ostringstream ss;
 
@@ -239,43 +248,45 @@ private:
         ss << "disable-proxy-access = " << _disable_proxy_access << endl;
 
         try {
-            fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
-            LOG_DEBUG("Persisting changed options");
-            ofstream(ouinet_chgs_path.native(), fstream::out | fstream::trunc) << ss.str();
+            fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
+            LOG_DEBUG("Saving persistent options");
+            ofstream(ouinet_save_path.native(), fstream::out | fstream::trunc) << ss.str();
         } catch (const exception& e) {
-            LOG_ERROR("Failed to persist changed options: ", e.what());
+            LOG_ERROR("Failed to save persistent options: ", e.what());
         }
     }
 
 public:
 
-#define CHANGE_AND_PERSIST_OPS(_CMP, _SET) { \
+#define CHANGE_AND_SAVE_OPS(_CMP, _SET) { \
     bool changed = !(_CMP); \
-    _SET; \
-    if (changed) persist_changes(); \
+    if (changed) { \
+        _SET; \
+        save_persistent(); \
+    } \
 }
-#define CHANGE_AND_PERSIST(_F, _V) CHANGE_AND_PERSIST_OPS((_V) == _F, _F = (_V))
+#define CHANGE_AND_SAVE(_F, _V) CHANGE_AND_SAVE_OPS((_V) == _F, _F = (_V))
 
     log_level_t log_level() const { return logger.get_threshold(); }
-    void log_level(log_level_t level) { CHANGE_AND_PERSIST_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
+    void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
 
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
-    void is_log_file_enabled(bool v) { CHANGE_AND_PERSIST_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
+    void is_log_file_enabled(bool v) { CHANGE_AND_SAVE_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
 
     bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
-    void is_cache_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_cache_access, !v); }
+    void is_cache_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_cache_access, !v); }
 
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
-    void is_origin_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_origin_access, !v); }
+    void is_origin_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_origin_access, !v); }
 
     bool is_proxy_access_enabled() const { return !_disable_proxy_access; }
-    void is_proxy_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_proxy_access, !v); }
+    void is_proxy_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_proxy_access, !v); }
 
     bool is_injector_access_enabled() const { return !_disable_injector_access; }
-    void is_injector_access_enabled(bool v) { CHANGE_AND_PERSIST(_disable_injector_access, !v); }
+    void is_injector_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_injector_access, !v); }
 
-#undef CHANGE_AND_PERSIST_OPS
-#undef CHANGE_AND_PERSIST
+#undef CHANGE_AND_SAVE_OPS
+#undef CHANGE_AND_SAVE
 
 private:
     inline bool _is_log_file_enabled() const {
@@ -303,7 +314,7 @@ private:
     bool _is_help = false;
     fs::path _repo_root;
     fs::path _ouinet_conf_file = "ouinet-client.conf";
-    fs::path _ouinet_conf_chgs_file = "ouinet-client.changes.conf";
+    fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
@@ -367,13 +378,17 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 util::str("The path is not a directory: ", _repo_root));
     }
 
-    // Load the persisted configuration changes file, if it exists.
+    // Load the file with saved configuration options, if it exists
+    // (or remove it if requested).
     {
-        po::options_description desc_chgs = description_changes();
-        fs::path ouinet_chgs_path = _repo_root/_ouinet_conf_chgs_file;
-        if (fs::is_regular_file(ouinet_chgs_path)) {
-            ifstream ouinet_conf(ouinet_chgs_path.native());
-            po::store(po::parse_config_file(ouinet_conf, desc_chgs), vm);
+        po::options_description desc_save = description_saved();
+        fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
+        if (vm["drop-saved-opts"].as<bool>()) {
+            sys::error_code ignored_ec;
+            fs::remove(ouinet_save_path, ignored_ec);
+        } else if (fs::is_regular_file(ouinet_save_path)) {
+            ifstream ouinet_conf(ouinet_save_path.native());
+            po::store(po::parse_config_file(ouinet_conf, desc_save), vm);
             po::notify(vm);
         }
     }
@@ -583,7 +598,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     "Invalid URL for '--origin-doh-base': ", doh_base));
     }
 
-    persist_changes();  // only if no errors happened
+    save_persistent();  // only if no errors happened
 }
 
 #undef _LOG_FILE_NAME
