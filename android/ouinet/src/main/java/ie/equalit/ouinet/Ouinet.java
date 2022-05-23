@@ -130,6 +130,10 @@ public class Ouinet {
             args.add("--log-level=" + config.getLogLevel().name());
         }
 
+        if (config.getEnableLogFile()) {
+            args.add("--enable-log-file");
+        }
+
         if (config.getDisableOriginAccess()) {
             args.add("--disable-origin-access");
         }
