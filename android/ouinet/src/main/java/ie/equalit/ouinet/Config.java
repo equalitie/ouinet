@@ -50,6 +50,7 @@ public class Config implements Parcelable {
         private boolean disableProxyAccess    = false;
         private boolean disableInjectorAccess = false;
         private LogLevel logLevel = null;
+        private boolean enableLogFile = false;
 
         public ConfigBuilder(Context context) {
             Ouinet.maybeLoadLibraries(context);
@@ -107,6 +108,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setLogLevel(LogLevel logLevel){
             this.logLevel = logLevel;
+            return this;
+        }
+        public ConfigBuilder setEnableLogFile(boolean enableLogFile){
+            this.enableLogFile = enableLogFile;
             return this;
         }
 
@@ -248,7 +253,8 @@ public class Config implements Parcelable {
                     disableOriginAccess,
                     disableProxyAccess,
                     disableInjectorAccess,
-                    logLevel);
+                    logLevel,
+                    enableLogFile);
         }
     }
 
@@ -267,6 +273,7 @@ public class Config implements Parcelable {
     private boolean disableProxyAccess;
     private boolean disableInjectorAccess;
     private LogLevel logLevel;
+    private boolean enableLogFile;
 
     private Config(String ouinetDirectory,
                   String cacheHttpPubKey,
@@ -282,7 +289,8 @@ public class Config implements Parcelable {
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
                   boolean disableInjectorAccess,
-                  LogLevel logLevel) {
+                  LogLevel logLevel,
+                  boolean enableLogFile) {
         this.ouinetDirectory = ouinetDirectory;
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
@@ -298,6 +306,7 @@ public class Config implements Parcelable {
         this.disableProxyAccess = disableProxyAccess;
         this.disableInjectorAccess = disableInjectorAccess;
         this.logLevel = logLevel;
+        this.enableLogFile = enableLogFile;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -344,6 +353,9 @@ public class Config implements Parcelable {
     public LogLevel getLogLevel() {
         return logLevel;
     }
+    public boolean getEnableLogFile() {
+        return enableLogFile;
+    }
 
     public static final Parcelable.Creator<Config> CREATOR
             = new Parcelable.Creator<Config>() {
@@ -379,6 +391,7 @@ public class Config implements Parcelable {
         out.writeInt(disableInjectorAccess ? 1 : 0);
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
+        out.writeInt(enableLogFile ? 1 : 0);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -399,6 +412,8 @@ public class Config implements Parcelable {
 
         int logLevelInt = in.readInt();
         logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
+
+        enableLogFile = in.readInt() != 0;
     }
 
 }
