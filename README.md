@@ -465,6 +465,18 @@ to retrieve the resource.
 When you are done testing the Ouinet client, you may shut it down by hitting
 Ctrl+C.
 
+#### A note on persistent options
+
+Please note that a few selected options (like the log level and which request
+mechanisms are enabled) are saved when changed, either from the command line
+or the client front-end (see below).
+
+On client start, the values of saved options take precedence over those in the
+configuration file, but not over those in the command line.  You can use the
+`--drop-saved-opts` option to drop the values of saved options altogether.
+
+Please run the client with `--help` to see which options are persistent.
+
 ### Testing the client with a browser
 
 Once your local Ouinet client is running (see above), if you have Firefox
