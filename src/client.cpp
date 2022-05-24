@@ -1576,6 +1576,8 @@ public:
                 yield.detach(yield_)[ec].run([&] (auto y) {
                     cache->store(*key, *meta.dht_group, rr, cancel, y);
                 });
+                if (ec && ec != asio::error::operation_aborted)
+                    _YERROR(yield, "Failed to write response to cache; ec=", ec);
             }));
         } else
             _YDEBUG( yield, "Not ok to cache response: "
@@ -1594,6 +1596,8 @@ public:
             if (cancel) return;
             if (ec) return;
             tnx.write_to_user_agent(sag, cancel, yield_[ec]);
+            if (ec && ec != asio::error::operation_aborted)
+                _YERROR(yield, "Failed to write response to user agent; ec=", ec);
         }));
 
         yield[ec].tag("flush").run([&] (auto yy) {
