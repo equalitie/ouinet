@@ -1523,11 +1523,10 @@ public:
         const auto& rq   = tnx.request();
         const auto& meta = tnx.meta();
 
-        auto session = cc.fetch(rq, meta.dht_group, fresh_ec, cache_ec, cancel, yield[ec]);
-
-        _YDEBUG(yield, "cc.fetch; ec=", ec,
-                       " fresh_ec=", fresh_ec,
-                       " cache_ec=", cache_ec);
+        auto session = cc.fetch( rq, meta.dht_group, fresh_ec, cache_ec
+                               , cancel, yield[ec].tag("cc_fetch"));
+        _YDEBUG( yield.tag("cc_fetch")
+               , "Done; ec=", ec, " fresh_ec=", fresh_ec, " cache_ec=", cache_ec);
 
         if (ec) return or_throw(yield, ec);
 
@@ -1597,30 +1596,34 @@ public:
             tnx.write_to_user_agent(sag, cancel, yield_[ec]);
         }));
 
-        session.flush_response(cancel, static_cast<asio::yield_context>(yield[ec]),
-            [&] ( Part&& part
-                , Cancel& cancel
-                , asio::yield_context y)
-            {
-                // If the user agent closed its connection, stop getting data from the injector too.
-                // Otherwise, besides continuing to transfer data to the local cache,
-                // it will also accumulate in memory (at the `qag` queue, which is no longer read),
-                // with both being especially problematic with big resources like videos.
-                //
-                // Please note that this will cause an incomplete response to be stored;
-                // hopefully the Injector mechanism may be faster to respond
-                // if the client tries to download the same resource again.
-                // Another fix would be to have the local cache participate in multi-peer downloads.
-                if (!tnx.is_open())
-                    return or_throw(y, asio::error::broken_pipe);
-                if (do_cache) qst.push_back(part);
-                qag.push_back(std::move(part));
-            });
+        yield[ec].tag("flush").run([&] (auto yy) {
+            session.flush_response(cancel, yy,
+                [&] ( Part&& part
+                    , Cancel& cancel
+                    , asio::yield_context y)
+                {
+                    // If the user agent closed its connection, stop getting data from the injector too.
+                    // Otherwise, besides continuing to transfer data to the local cache,
+                    // it will also accumulate in memory (at the `qag` queue, which is no longer read),
+                    // with both being especially problematic with big resources like videos.
+                    //
+                    // Please note that this will cause an incomplete response to be stored;
+                    // hopefully the Injector mechanism may be faster to respond
+                    // if the client tries to download the same resource again.
+                    // Another fix would be to have the local cache participate in multi-peer downloads.
+                    if (!tnx.is_open())
+                        return or_throw(y, asio::error::broken_pipe);
+                    if (do_cache) qst.push_back(part);
+                    qag.push_back(std::move(part));
+                });
+        });
 
         if (do_cache) qst.push_back(boost::none);
         qag.push_back(boost::none);
 
-        wc.wait(static_cast<asio::yield_context>(yield));
+        yield.tag("wait").run([&] (auto y) {
+            wc.wait(y);
+        });
 
         _YDEBUG(yield, "Finish; ec=", ec);
 
