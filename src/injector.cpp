@@ -597,6 +597,7 @@ void serve( InjectorConfig& config
                 return authenticate(req, con, config.credentials(), y);
         });
         if (!auth) {
+            yield.log("Proxy authentication failed");
             if (ec || !req_keep_alive) break;
             continue;
         }
