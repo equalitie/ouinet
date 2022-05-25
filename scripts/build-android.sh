@@ -90,7 +90,7 @@ export OUINET_MIN_API OUINET_TARGET_API
 
 ######################################################################
 MODES=
-ALLOWED_MODES="bootstrap build emu"
+ALLOWED_MODES="bootstrap build emu publish"
 DEFAULT_MODES="bootstrap build"
 
 function check_mode {
@@ -198,8 +198,8 @@ function maybe_install_ndk {
 function maybe_install_gradle {
     check_mode build || return 0
 
-    GRADLE_REQUIRED_MAJOR_VERSION=4
-    GRADLE_REQUIRED_MINOR_VERSION=6
+    GRADLE_REQUIRED_MAJOR_VERSION=6
+    GRADLE_REQUIRED_MINOR_VERSION=0
 
     NEED_GRADLE=false
 
@@ -224,7 +224,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-5.5.1
+        local GRADLE=gradle-6.0
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
@@ -247,6 +247,28 @@ function build_ouinet_aar {
     mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${GRADLE_BUILDDIR}";
       gradle $GRADLE_TASKS \
+        -Pandroid_abi=${ABI} \
+        -PversionName="${OUINET_VERSION_NAME}" \
+        -PbuildId="${OUINET_BUILD_ID}" \
+        -PbuildDir="${GRADLE_BUILDDIR}" \
+        --project-dir="${ROOT}"/android \
+        --gradle-user-home "${DIR}"/_gradle-home \
+        --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
+        --no-daemon
+    )
+}
+
+######################################################################
+# Publish AAR artifacts to Maven Central
+function publish_ouinet_aar {
+    GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
+    OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
+    OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
+    mkdir -p "${GRADLE_BUILDDIR}"
+    ( cd "${GRADLE_BUILDDIR}";
+      gradle \
+        publishToSonatype \
+        closeSonatypeStagingRepository \
         -Pandroid_abi=${ABI} \
         -PversionName="${OUINET_VERSION_NAME}" \
         -PbuildId="${OUINET_BUILD_ID}" \
@@ -326,6 +348,15 @@ fi
 
 if check_mode build; then
     build_ouinet_aar
+fi
+
+if check_mode publish; then
+    if [[ "${GRADLE_VARIANT}" != "Release" ]]; then
+      echo "Artifacts can be published only when the build is a Release."
+      exit 1;
+    else
+      publish_ouinet_aar
+    fi
 fi
 
 if check_mode emu; then
