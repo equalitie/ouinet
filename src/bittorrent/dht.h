@@ -12,6 +12,7 @@
 #include <asio_utp/udp_multiplexer.hpp>
 
 #include "bencoding.h"
+#include "bootstrap.h"
 #include "dht_storage.h"
 #include "mutable_data.h"
 #include "node_id.h"
@@ -267,11 +268,8 @@ class DhtNode {
         asio::ip::udp::endpoint node_ep;
     };
 
-    using Address = boost::variant< udp::endpoint
-                                  , std::string /* domain name */>;
-
     BootstrapResult
-    bootstrap_single(Address, Cancel, asio::yield_context);
+    bootstrap_single(bootstrap::Address, Cancel, asio::yield_context);
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,

@@ -1617,7 +1617,7 @@ static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
 }
 
 dht::DhtNode::BootstrapResult
-dht::DhtNode::bootstrap_single( Address bootstrap_address
+dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
                               , Cancel cancel
                               , asio::yield_context yield)
 {
@@ -1702,7 +1702,8 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     sys::error_code ec;
     sys::error_code ignored_ec;
 
-    vector<Address> bootstraps { "router.bittorrent.com"
+    vector<bootstrap::Address> bootstraps {
+                               "router.bittorrent.com"
                                , "router.utorrent.com"
                                // Alternative bootstrap servers from the Ouinet project.
                                , "router.bt.ouinet.work"
@@ -1752,7 +1753,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
             return stats;
         };
 
-        auto score_of = [](const Address a) {
+        auto score_of = [](const bootstrap::Address a) {
             // We don't necessarily fully trust the nodes we know from previous
             // app runs. Thus we require SCORE_GOAL of them to respond with the
             // same (our) IP address to consider them trust-worthy.
