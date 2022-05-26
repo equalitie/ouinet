@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <sstream>
 
 #include <boost/algorithm/string/case_conv.hpp>
@@ -133,6 +134,11 @@ private:
             , "Enable writing log messages to "
               "log file \"" _LOG_FILE_NAME "\" under the repository root. "
               "This option is persistent.")
+           ("bt-bootstrap-extra", po::value<vector<string>>()->composing()
+            , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
+              "to start the DHT (can be used several times). "
+              "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
+              "This option is persistent.")
            ("open-file-limit"
             , po::value<unsigned int>()
             , "To increase the maximum number of open files")
@@ -242,6 +248,7 @@ private:
         desc.add_options()
             ("log-level", po::value<std::string>())
             ("enable-log-file", po::bool_switch())
+            ("bt-bootstrap-extra", po::value<std::vector<std::string>>()->composing())
             ("disable-origin-access", po::bool_switch(&_disable_origin_access))
             ("disable-injector-access", po::bool_switch(&_disable_injector_access))
             ("disable-cache-access", po::bool_switch(&_disable_cache_access))
