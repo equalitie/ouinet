@@ -14,6 +14,7 @@ namespace bootstrap {
 static const unsigned short default_port = 6881;
 
 using Address = boost::variant< asio::ip::udp::endpoint
+                              , asio::ip::address
                               , std::string /* domain_name[:port] */>;
 
 } // bootstrap namespace
