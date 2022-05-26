@@ -1637,7 +1637,7 @@ dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
                 _exec,
                 _multiplexer->is_v4() ? udp::v4() : udp::v6(),
                 host.to_string(),
-                port.empty() ? "6881" : port.to_string(),
+                port.empty() ? util::str(bootstrap::default_port) : port.to_string(),
                 cancel,
                 yield[ec]
             );
