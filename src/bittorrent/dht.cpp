@@ -1624,13 +1624,13 @@ dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
     sys::error_code ec;
 
     udp::endpoint bootstrap_ep = util::apply(bootstrap_address,
-        [&] (udp::endpoint ep) {
+        [&] (const udp::endpoint& ep) {
             return ep;
         },
-        [&] (asio::ip::address addr) {
+        [&] (const asio::ip::address& addr) {
             return udp::endpoint{addr, bootstrap::default_port};
         },
-        [&] (std::string addr) {
+        [&] (const std::string& addr) {
             string_view hp(addr), host, port;
             std::tie(host, port) = util::split_ep(hp);
             auto ep = resolve(
@@ -1760,10 +1760,10 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
             // We don't necessarily fully trust the nodes we know from previous
             // app runs. Thus we require SCORE_GOAL of them to respond with the
             // same (our) IP address to consider them trust-worthy.
-            return util::apply(a, [](udp::endpoint)     { return size_t(1); }
+            return util::apply(a, [](const udp::endpoint&)     { return size_t(1); }
                                 // These come from the user or this code, trust them.
-                                , [](asio::ip::address) { return SCORE_GOAL; }
-                                , [](std::string)       { return SCORE_GOAL; });
+                                , [](const asio::ip::address&) { return SCORE_GOAL; }
+                                , [](const std::string&)       { return SCORE_GOAL; });
         };
 
         while (!cancel) {
