@@ -46,6 +46,8 @@ public class Config implements Parcelable {
         private boolean cachePrivate = false;
         private String cacheStaticPath;
         private String cacheStaticContentPath;
+        private String listenOnTcp;
+        private String frontEndEp;
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
         private boolean disableInjectorAccess = false;
@@ -92,6 +94,14 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setCacheStaticContentPath(String cacheStaticContentPath){
             this.cacheStaticContentPath = cacheStaticContentPath;
+            return this;
+        }
+        public ConfigBuilder setListenOnTcp(String listenOnTcp){
+            this.listenOnTcp = listenOnTcp;
+            return this;
+        }
+        public ConfigBuilder setFrontEndEp(String frontEndEp){
+            this.frontEndEp = frontEndEp;
             return this;
         }
         public ConfigBuilder setDisableOriginAccess(boolean disableOriginAccess){
@@ -250,6 +260,8 @@ public class Config implements Parcelable {
                     cachePrivate,
                     cacheStaticPath,
                     cacheStaticContentPath,
+                    listenOnTcp,
+                    frontEndEp,
                     disableOriginAccess,
                     disableProxyAccess,
                     disableInjectorAccess,
@@ -269,6 +281,8 @@ public class Config implements Parcelable {
     private boolean cachePrivate;
     private String cacheStaticPath;
     private String cacheStaticContentPath;
+    private String listenOnTcp;
+    private String frontEndEp;
     private boolean disableOriginAccess;
     private boolean disableProxyAccess;
     private boolean disableInjectorAccess;
@@ -286,6 +300,8 @@ public class Config implements Parcelable {
                   boolean cachePrivate,
                   String cacheStaticPath,
                   String cacheStaticContentPath,
+                  String listenOnTcp,
+                  String frontEndEp,
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
                   boolean disableInjectorAccess,
@@ -302,6 +318,8 @@ public class Config implements Parcelable {
         this.cachePrivate = cachePrivate;
         this.cacheStaticPath = cacheStaticPath;
         this.cacheStaticContentPath = cacheStaticContentPath;
+        this.listenOnTcp = listenOnTcp;
+        this.frontEndEp = frontEndEp;
         this.disableOriginAccess = disableOriginAccess;
         this.disableProxyAccess = disableProxyAccess;
         this.disableInjectorAccess = disableInjectorAccess;
@@ -340,6 +358,12 @@ public class Config implements Parcelable {
     }
     public String getCacheStaticContentPath() {
         return cacheStaticContentPath;
+    }
+    public String getListenOnTcp() {
+        return listenOnTcp;
+    }
+    public String getFrontEndEp() {
+        return frontEndEp;
     }
     public boolean getDisableOriginAccess() {
         return disableOriginAccess;
@@ -386,6 +410,8 @@ public class Config implements Parcelable {
         out.writeInt(cachePrivate ? 1 : 0);
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
+        out.writeString(listenOnTcp);
+        out.writeString(frontEndEp);
         out.writeInt(disableOriginAccess ? 1 : 0);
         out.writeInt(disableProxyAccess ? 1 : 0);
         out.writeInt(disableInjectorAccess ? 1 : 0);
@@ -405,6 +431,8 @@ public class Config implements Parcelable {
         cachePrivate = in.readInt() != 0;
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
+        listenOnTcp= in.readString();
+        frontEndEp = in.readString();
 
         disableOriginAccess   = in.readInt() != 0;
         disableProxyAccess    = in.readInt() != 0;
