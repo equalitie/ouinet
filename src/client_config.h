@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vector>
+#include <set>
 #include <sstream>
+#include <vector>
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
@@ -340,6 +341,7 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
+    std::set<std::string> _bt_bootstrap_extra;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
@@ -437,6 +439,17 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm["enable-log-file"].as<bool>()) {
         _is_log_file_enabled(true);
+    }
+
+    if (vm.count("bt-bootstrap-extra")) {
+        for (const auto& btbsx : vm["bt-bootstrap-extra"].as<vector<string>>()) {
+            // Better processing will take place later on, just very basic checking here.
+            boost::string_view hp(btbsx), host, port;
+            std::tie(host, port) = util::split_ep(hp);
+            if (host.empty())
+                throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
+            _bt_bootstrap_extra.insert(btbsx);
+        }
     }
 
     if (vm.count("open-file-limit")) {
