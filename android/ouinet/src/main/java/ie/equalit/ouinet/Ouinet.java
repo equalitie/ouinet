@@ -114,9 +114,10 @@ public class Ouinet {
         args.add("--repo=" + config.getOuinetDirectory());
 
         // If default client endpoints clash with other ports,
-        // uncomment these and change `http(s).proxyPort` above to match.
-        //args.add("--listen-on-tcp=127.0.0.1:8177");
-        //args.add("--front-end-ep=127.0.0.1:8178");
+        // use setListenOnTcp or setFrontEndEp in the Config builder
+        // and change `http(s).proxyPort` to match.
+        maybeAdd(args, "--listen-on-tcp",          config.getListenOnTcp());
+        maybeAdd(args, "--front-end-ep",           config.getFrontEndEp());
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());

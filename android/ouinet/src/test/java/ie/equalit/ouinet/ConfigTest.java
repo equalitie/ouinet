@@ -38,6 +38,8 @@ public class ConfigTest {
     private static String CACHE_TYPE = "bep5-http";
     private static String CACHE_STATIC_PATH = "static-cache";
     private static String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
+    private static String LISTEN_ON_TCP = "0.0.0.0:8077";
+    private static String FRONT_END_EP = "0.0.0.0:8078";
 
     @Mock
     private Context mockContext;
@@ -77,6 +79,8 @@ public class ConfigTest {
                 .setCacheType(CACHE_TYPE)
                 .setCacheStaticPath(cacheStaticPath)
                 .setCacheStaticContentPath(cacheStaticContentPath)
+                .setListenOnTcp(LISTEN_ON_TCP)
+                .setFrontEndEp(FRONT_END_EP)
                 .build();
 
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
@@ -86,6 +90,9 @@ public class ConfigTest {
         assertThat(config.getCacheType(), is(CACHE_TYPE));
         assertThat(config.getCacheStaticPath(), is(cacheStaticPath));
         assertThat(config.getCacheStaticContentPath(), is(cacheStaticContentPath));
+
+        assertThat(config.getListenOnTcp(), is(LISTEN_ON_TCP));
+        assertThat(config.getFrontEndEp(), is(FRONT_END_EP));
 
         assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));
         assertThat(contentOf(new File(config.getTlsCaCertStorePath())), is(TLS_CA_CERT));
