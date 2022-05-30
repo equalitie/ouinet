@@ -20,6 +20,7 @@
 #include "logger.h"
 #include "constants.h"
 #include "bep5_swarms.h"
+#include "bittorrent/bootstrap.h"
 
 namespace ouinet {
 
@@ -444,9 +445,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     if (vm.count("bt-bootstrap-extra")) {
         for (const auto& btbsx : vm["bt-bootstrap-extra"].as<vector<string>>()) {
             // Better processing will take place later on, just very basic checking here.
-            boost::string_view hp(btbsx), host, port;
-            std::tie(host, port) = util::split_ep(hp);
-            if (host.empty())
+            if (!bittorrent::bootstrap::parse_address(btbsx))
                 throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
             _bt_bootstrap_extra.insert(btbsx);
         }
