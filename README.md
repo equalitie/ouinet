@@ -796,33 +796,43 @@ aiming at (e.g. `armeabi-v7a` or `x86_64`) as described above.  After the
 `build_android.sh` script finishes successfully, you can copy the
 `ouinet-debug.aar` file to your app libs folder:
 
-    $ cp /path/to/ouinet-debug.aar <PROJECT DIR>/app/libs/
+```sh
+$ cp /path/to/ouinet-debug.aar <PROJECT DIR>/app/libs/
+```
 
 Then look for the following section of your `<PROJECT DIR>/build.gradle`:
 
-    allprojects {
-      repositories {
-        ...
-      }
-    }
+```groovy
+allprojects {
+  repositories {
+    // ...
+  }
+}
+```
 
 And add this:
 
-    flatDir {
-      dirs 'libs'
-    }
-    mavenCentral()  // for ReLinker
+```groovy
+flatDir {
+  dirs 'libs'
+}
+mavenCentral()  // for ReLinker
+```
 
 Then look for the following section of your `<PROJECT DIR>/app/build.gradle`:
 
-    dependencies {
-      ...
-    }
+```groovy
+dependencies {
+  // ...
+}
+```
 
 And add these:
 
-    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
-    implementation(name:'ouinet-debug', ext:'aar')
+```groovy
+implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
+implementation(name:'ouinet-debug', ext:'aar')
+```
 
 #### Initialize Ouinet
 
@@ -830,25 +840,31 @@ At this stage your project should compile with no errors.  Now to tell Ouinet
 to take over the app's HTTP communications, in the `MainActivity.java` of your
 app import Ouinet:
 
-    import ie.equalit.ouinet.Ouinet;
+```java
+import ie.equalit.ouinet.Ouinet;
+```
 
 Then add a private member to your `MainActivity` class:
 
-    private Ouinet ouinet;
+```java
+private Ouinet ouinet;
+```
 
 And in its `OnCreate` method initiate the Ouinet object (using the BEP5/HTTP
 cache):
 
-    Config config = new Config.ConfigBuilder(this)
-                .setCacheType("bep5-http")
-                .setCacheHttpPubKey(<CACHE_PUB_KEY>)
-                .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
-                .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
-                .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
-                .build()
+```java
+Config config = new Config.ConfigBuilder(this)
+            .setCacheType("bep5-http")
+            .setCacheHttpPubKey(<CACHE_PUB_KEY>)
+            .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
+            .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
+            .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
+            .build()
 
-    ouinet = new Ouinet(this, config);
-    ouinet.start();
+ouinet = new Ouinet(this, config);
+ouinet.start();
+```
 
 From now on, all of the app's HTTP communication will be handled by Ouinet.
 
