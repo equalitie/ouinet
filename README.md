@@ -761,6 +761,36 @@ request handling, you need to take few simple steps.
 Here we assume that the app is developed in the Android Studio environment,
 and that `<PROJECT DIR>` is your app's project directory.
 
+#### Option A: Get Ouinet from Maven Central
+
+Select the Ouinet version according to your app's ABI (we officially support
+`ouinet-armeabi-v7a` and `ouinet-arm64-v8a`), and also add Relinker as a
+dependency in `<PROJECT DIR>/app/build.gradle`:
+
+```groovy
+dependencies {
+    //...
+    implementation 'ie.equalit.ouinet:ouinet-armeabi-v7a:0.20.0'
+    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
+}
+```
+
+Check that Maven Central is added to the list of repositories used by
+Gradle:
+
+```groovy
+allprojects {
+    repositories {
+        // ...
+        mavenCentral()
+    }
+}
+```
+
+Now the Ouinet library will be automatically fetched by Gradle when your app is built.
+
+#### Option B: Use your own compiled version of Ouinet
+
 First, you need to compile the Ouinet library for the ABI environment you are
 aiming at (e.g. `armeabi-v7a` or `x86_64`) as described above.  After the
 `build_android.sh` script finishes successfully, you can copy the
@@ -793,6 +823,8 @@ And add these:
 
     implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
     implementation(name:'ouinet-debug', ext:'aar')
+
+#### Initialize Ouinet
 
 At this stage your project should compile with no errors.  Now to tell Ouinet
 to take over the app's HTTP communications, in the `MainActivity.java` of your
