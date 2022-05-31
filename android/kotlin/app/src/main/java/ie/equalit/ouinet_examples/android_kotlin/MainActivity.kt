@@ -11,6 +11,7 @@ class MainActivity : AppCompatActivity() {
 
         var config = Config.ConfigBuilder(this)
             .setCacheType("bep5-http")
+            .setTlsCaCertStorePath("file:///android_asset/cacert.pem")
             .build()
     }
 }
