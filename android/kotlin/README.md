@@ -1,4 +1,4 @@
-# Ouinet's test app
+# Ouinet's test application in Kotlin
 
 ## Prepare your app for using Ouinet
 
