@@ -10,6 +10,7 @@
 #include "../parse/number.h"
 #include "../util.h"
 #include "../util/str.h"
+#include "../util/variant.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -49,6 +50,29 @@ parse_address(const std::string& addr) {
 
     if (!port_n) return Address{host};
     return Address{util::str(host, ':', port_n)};
+}
+
+static void
+print_ip_address(std::ostream& os, const asio::ip::address& ad) {
+    if (ad.is_v6()) os << '[';
+    os << ad;
+    if (ad.is_v6()) os << ']';
+}
+
+std::ostream&
+operator<<(std::ostream& os, const Address& a) {
+    util::apply
+        ( a
+        , [&os] (const asio::ip::udp::endpoint& ep) {
+              print_ip_address(os, ep.address());
+              os << ':' << ep.port();
+        }
+        , [&os] (const asio::ip::address& ad) {
+              print_ip_address(os, ad);
+          }
+        , [&os] (const std::string& s) { os << s; }
+        );
+    return os;
 }
 
 } // bootstrap namespace
