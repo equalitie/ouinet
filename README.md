@@ -761,67 +761,121 @@ request handling, you need to take few simple steps.
 Here we assume that the app is developed in the Android Studio environment,
 and that `<PROJECT DIR>` is your app's project directory.
 
+#### Option A: Get Ouinet from Maven Central
+
+Select the Ouinet version according to your app's ABI (we officially support
+`ouinet-armeabi-v7a` and `ouinet-arm64-v8a`), and also add Relinker as a
+dependency in `<PROJECT DIR>/app/build.gradle`:
+
+```groovy
+dependencies {
+    //...
+    implementation 'ie.equalit.ouinet:ouinet-armeabi-v7a:0.20.0'
+    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
+}
+```
+
+Check that Maven Central is added to the list of repositories used by
+Gradle:
+
+```groovy
+allprojects {
+    repositories {
+        // ...
+        mavenCentral()
+    }
+}
+```
+
+Now the Ouinet library will be automatically fetched by Gradle when your app is built.
+
+#### Option B: Use your own compiled version of Ouinet
+
 First, you need to compile the Ouinet library for the ABI environment you are
 aiming at (e.g. `armeabi-v7a` or `x86_64`) as described above.  After the
 `build_android.sh` script finishes successfully, you can copy the
 `ouinet-debug.aar` file to your app libs folder:
 
-    $ cp /path/to/ouinet-debug.aar <PROJECT DIR>/app/libs/
+```sh
+$ cp /path/to/ouinet-debug.aar <PROJECT DIR>/app/libs/
+```
 
 Then look for the following section of your `<PROJECT DIR>/build.gradle`:
 
-    allprojects {
-      repositories {
-        ...
-      }
-    }
+```groovy
+allprojects {
+  repositories {
+    // ...
+  }
+}
+```
 
 And add this:
 
-    flatDir {
-      dirs 'libs'
-    }
-    mavenCentral()  // for ReLinker
+```groovy
+flatDir {
+  dirs 'libs'
+}
+mavenCentral()  // for ReLinker
+```
 
 Then look for the following section of your `<PROJECT DIR>/app/build.gradle`:
 
-    dependencies {
-      ...
-    }
+```groovy
+dependencies {
+  // ...
+}
+```
 
 And add these:
 
-    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
-    implementation(name:'ouinet-debug', ext:'aar')
+```groovy
+implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
+implementation(name:'ouinet-debug', ext:'aar')
+```
+
+#### Initialize Ouinet
 
 At this stage your project should compile with no errors.  Now to tell Ouinet
 to take over the app's HTTP communications, in the `MainActivity.java` of your
 app import Ouinet:
 
-    import ie.equalit.ouinet.Ouinet;
+```java
+import ie.equalit.ouinet.Ouinet;
+```
 
 Then add a private member to your `MainActivity` class:
 
-    private Ouinet ouinet;
+```java
+private Ouinet ouinet;
+```
 
 And in its `OnCreate` method initiate the Ouinet object (using the BEP5/HTTP
 cache):
 
-    Config config = new Config.ConfigBuilder(this)
-                .setCacheType("bep5-http")
-                .setCacheHttpPubKey(<CACHE_PUB_KEY>)
-                .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
-                .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
-                .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
-                .build()
+```java
+Config config = new Config.ConfigBuilder(this)
+            .setCacheType("bep5-http")
+            .setCacheHttpPubKey(<CACHE_PUB_KEY>)
+            .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
+            .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
+            .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
+            .build()
 
-    ouinet = new Ouinet(this, config);
-    ouinet.start();
+ouinet = new Ouinet(this, config);
+ouinet.start();
+```
 
-From now on all of the app's HTTP communication will be handled by Ouinet.
+From now on, all of the app's HTTP communication will be handled by Ouinet.
 
-Please note that if you plan to use a directary for Ouinet's static cache in
+Please note that if you plan to use a directory for Ouinet's static cache in
 your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
 `setCacheStaticContentPath()`), then besides the permissions declared by the
 library in its manifest, your app will need the `READ_EXTERNAL_STORAGE`
 permission (Ouinet will not attempt to write to that directory).
+
+#### Integration Examples
+
+You can find additional information and samples of Android applications using
+Ouinet in the following repository:
+[equalitie/ouinet-examples](https://github.com/equalitie/ouinet-examples).
