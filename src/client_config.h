@@ -342,7 +342,7 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
-    std::set<std::string> _bt_bootstrap_extra;
+    std::set<bittorrent::bootstrap::Address> _bt_bootstrap_extra;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
@@ -445,9 +445,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     if (vm.count("bt-bootstrap-extra")) {
         for (const auto& btbsx : vm["bt-bootstrap-extra"].as<vector<string>>()) {
             // Better processing will take place later on, just very basic checking here.
-            if (!bittorrent::bootstrap::parse_address(btbsx))
+            auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
+            if (!btbs_addr)
                 throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
-            _bt_bootstrap_extra.insert(btbsx);
+            _bt_bootstrap_extra.insert(*btbs_addr);
         }
     }
 
