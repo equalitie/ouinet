@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">java-android</string>
+    <string name="app_name">ouitest1</string>
+    <string name="ouinet_tester">Ouinet Tester</string>
+    <string name="fetch">Fetch</string>
+    <string name="https_example_com">https://censorship.no</string>
+    <string name="get">Get</string>
 </resources>
