@@ -2529,7 +2529,7 @@ MainlineDht::MainlineDht( const asio::executor& exec
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)
-    , _storage_dir(move(storage_dir))
+    , _storage_dir(std::move(storage_dir))
     , _extra_bs(std::move(extra_bs))
 {
 }

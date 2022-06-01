@@ -381,12 +381,12 @@ class DhtNode {
 class MainlineDht {
     public:
     MainlineDht( const asio::executor&
-               , boost::filesystem::path storage_dir = boost::filesystem::path()
-               , std::set<bootstrap::Address> extra_bs = std::set<bootstrap::Address>());
+               , boost::filesystem::path storage_dir = {}
+               , std::set<bootstrap::Address> extra_bs = {});
 
     MainlineDht( asio::io_context& ctx
-               , boost::filesystem::path storage_dir = boost::filesystem::path()
-               , std::set<bootstrap::Address> extra_bs = std::set<bootstrap::Address>())
+               , boost::filesystem::path storage_dir = {}
+               , std::set<bootstrap::Address> extra_bs = {})
         : MainlineDht(ctx.get_executor(), std::move(storage_dir), std::move(extra_bs))
     {}
 
