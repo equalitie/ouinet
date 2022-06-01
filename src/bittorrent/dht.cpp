@@ -1713,7 +1713,8 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
                                , "router.utorrent.com"
                                // Alternative bootstrap servers from the Ouinet project.
                                , "router.bt.ouinet.work"
-                               , "74.3.163.127"  // part of previous name (in case of DNS failure)
+                               // Part of previous name (in case of DNS failure).
+                               , asio::ip::make_address("74.3.163.127")
                                , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
                                // I don't think I have ever seen these two working
                                // (Perhaps they only listen on TCP?)
