@@ -201,11 +201,14 @@ static bool read_nodes( bool is_v4
     return true;
 }
 
-dht::DhtNode::DhtNode(const asio::executor& exec, fs::path storage_dir):
+dht::DhtNode::DhtNode( const asio::executor& exec
+                     , fs::path storage_dir
+                     , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
-    _storage_dir(move(storage_dir))
+    _storage_dir(std::move(storage_dir)),
+    _extra_bs(std::move(extra_bs))
 {
 }
 
@@ -2599,7 +2602,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
         }
     }
 
-    auto node = make_unique<dht::DhtNode>(_exec, _storage_dir);
+    auto node = make_unique<dht::DhtNode>(_exec, _storage_dir, _extra_bs);
 
     auto cc = _cancel.connect([&] { node = nullptr; });
 

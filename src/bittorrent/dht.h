@@ -76,11 +76,13 @@ class DhtNode {
 
     public:
     DhtNode( const asio::executor&
-           , boost::filesystem::path storage_dir = boost::filesystem::path());
+           , boost::filesystem::path storage_dir = {}
+           , std::set<bootstrap::Address> extra_bs = {});
 
     DhtNode( asio::io_context& ctx
-           , boost::filesystem::path storage_dir = boost::filesystem::path())
-        : DhtNode(ctx.get_executor(), std::move(storage_dir))
+           , boost::filesystem::path storage_dir = {}
+           , std::set<bootstrap::Address> extra_bs = {})
+        : DhtNode(ctx.get_executor(), std::move(storage_dir), std::move(extra_bs))
     {}
 
     void start(udp::endpoint, asio::yield_context yield);
@@ -374,6 +376,7 @@ class DhtNode {
     class Stats;
     std::unique_ptr<Stats> _stats;
     boost::filesystem::path _storage_dir;
+    std::set<bootstrap::Address> _extra_bs;
 };
 
 } // dht namespace
