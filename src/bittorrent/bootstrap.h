@@ -19,6 +19,9 @@ using Address = boost::variant< asio::ip::udp::endpoint
                               , asio::ip::address
                               , std::string /* domain_name[:port] */>;
 
+// Parse an address in `<HOST>` or `<HOST>:<PORT>` format,
+// where `<HOST>` can be a host name, `<IPv4>` address, or `<[IPv6]>` address (bracketed).
+// Host names are always converted to lower case.
 boost::optional<Address>
 parse_address(const std::string& addr);
 
