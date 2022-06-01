@@ -284,6 +284,7 @@ private:
     }
 
 public:
+    using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 
 #define CHANGE_AND_SAVE_OPS(_CMP, _SET) { \
     bool changed = !(_CMP); \
@@ -296,6 +297,13 @@ public:
 
     log_level_t log_level() const { return logger.get_threshold(); }
     void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
+
+    const ExtraBtBsServers& bt_bootstrap_extra() const {
+        return _bt_bootstrap_extra;
+    }
+    void bt_bootstrap_extra(ExtraBtBsServers bts) {
+        CHANGE_AND_SAVE_OPS(bts == _bt_bootstrap_extra, _bt_bootstrap_extra = std::move(bts));
+    }
 
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
     void is_log_file_enabled(bool v) { CHANGE_AND_SAVE_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
@@ -346,7 +354,7 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
-    std::set<bittorrent::bootstrap::Address> _bt_bootstrap_extra;
+    ExtraBtBsServers _bt_bootstrap_extra;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
