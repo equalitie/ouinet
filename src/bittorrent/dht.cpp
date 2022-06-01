@@ -1720,6 +1720,10 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
                                , "dht.transmissionbt.com"
                                , "dht.vuze.com" };
 
+    for (auto& bootstrap : _extra_bs) {
+        bootstraps.push_back(bootstrap);
+    }
+
     auto old_contacts = read_stored_contacts(_exec
                                             , stored_contacts_path()
                                             , cancel
