@@ -1,5 +1,5 @@
 # ouinet-examples
-Sample applications using Ouinet library.
+Sample applications using [Ouinet](https://github.com/equalitie/ouinet) library.
 
 ## Android
 
