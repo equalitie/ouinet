@@ -271,8 +271,9 @@ public:
         if (_bt_dht) return _bt_dht;
         auto lock = _bt_dht_wc.lock();
 
-        auto bt_dht = make_shared<bt::MainlineDht>( _ctx.get_executor()
-                                                  , _config.repo_root() / "dht");
+        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
+                                                       , _config.repo_root() / "dht"
+                                                       , _config.bt_bootstrap_extra());
 
         // Port allocation works like this:
         //

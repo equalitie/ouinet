@@ -381,11 +381,13 @@ class DhtNode {
 class MainlineDht {
     public:
     MainlineDht( const asio::executor&
-               , boost::filesystem::path storage_dir = boost::filesystem::path());
+               , boost::filesystem::path storage_dir = boost::filesystem::path()
+               , std::set<bootstrap::Address> extra_bs = std::set<bootstrap::Address>());
 
     MainlineDht( asio::io_context& ctx
-               , boost::filesystem::path storage_dir = boost::filesystem::path())
-        : MainlineDht(ctx.get_executor(), std::move(storage_dir))
+               , boost::filesystem::path storage_dir = boost::filesystem::path()
+               , std::set<bootstrap::Address> extra_bs = std::set<bootstrap::Address>())
+        : MainlineDht(ctx.get_executor(), std::move(storage_dir), std::move(extra_bs))
     {}
 
     MainlineDht(const MainlineDht&) = delete;
@@ -472,6 +474,7 @@ class MainlineDht {
     std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;
     Cancel _cancel;
     boost::filesystem::path _storage_dir;
+    std::set<bootstrap::Address> _extra_bs;
 };
 
 } // bittorrent namespace
