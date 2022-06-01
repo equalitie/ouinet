@@ -873,3 +873,9 @@ your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
 `setCacheStaticContentPath()`), then besides the permissions declared by the
 library in its manifest, your app will need the `READ_EXTERNAL_STORAGE`
 permission (Ouinet will not attempt to write to that directory).
+
+#### Integration Examples
+
+You can find additional information and samples of Android applications using
+Ouinet in the following repository:
+[equalitie/ouinet-examples](https://github.com/equalitie/ouinet-examples).
