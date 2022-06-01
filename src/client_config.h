@@ -265,6 +265,10 @@ private:
 
         ss << "log-level = " << log_level() << endl;
         ss << "enable-log-file = " << is_log_file_enabled() << endl;
+
+        for (const auto& btbs_addr : _bt_bootstrap_extra)
+            ss << "bt-bootstrap-extra = " << btbs_addr << endl;
+
         ss << "disable-origin-access = " << _disable_origin_access << endl;
         ss << "disable-injector-access = " << _disable_injector_access << endl;
         ss << "disable-cache-access = " << _disable_cache_access << endl;
