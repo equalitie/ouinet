@@ -267,6 +267,15 @@ public_udp_endpoints(const bittorrent::MainlineDht& dht) {
 }
 
 static
+std::vector<std::string>
+bt_extra_bootstraps(const ClientConfig& config) {
+    std::vector<std::string> bsx;
+    for (auto& bs : config.bt_bootstrap_extra())
+        bsx.push_back(util::str(bs));
+    return bsx;
+}
+
+static
 std::string
 reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
     switch (reachability.judgement()) {
@@ -564,6 +573,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         response["external_udp_endpoints"] = external_udp_endpoints(upnps);
 
     if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
+
+    response["bt_extra_bootstraps"] = bt_extra_bootstraps(config);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
