@@ -10,6 +10,7 @@
 #include "bittorrent/dht.h"
 #include "cache/client.h"
 
+#include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional/optional_io.hpp>
@@ -51,6 +52,12 @@ static string as_safe_html(string s) {
     boost::replace_all(s, "'", "&#39;");
     return s;
 }
+
+struct TextInput {
+    beast::string_view text;
+    beast::string_view name;
+    std::string current_value;
+};
 
 struct ToggleInput {
     beast::string_view text;
@@ -96,6 +103,17 @@ struct ClientFrontEnd::Input {
 };
 
 namespace ouinet { // Need namespace here for argument-dependent-lookups to work
+
+ostream& operator<<(ostream& os, const TextInput& i) {
+    return os <<
+          "<form method=\"get\">\n"
+          "    " << i.text << ": "
+                    "<input type=\"text\" "
+                           "name=\""  << i.name << "\" "
+                           "value=\"" << as_safe_html(i.current_value) << "\"/>"
+                    "<input type=\"submit\" value=\"set\"/>\n"
+          "</form>\n";
+}
 
 ostream& operator<<(ostream& os, const ToggleInput& i) {
     auto cur_value  = i.current_value ? "enabled" : "disabled";
@@ -483,6 +501,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
+
+    ss << TextInput{ "BitTorrent extra bootstraps (space-separated)"
+                   , "bt_extra_bootstraps"
+                   , boost::algorithm::join(bt_extra_bootstraps(config), " ")};
 
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
