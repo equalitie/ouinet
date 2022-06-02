@@ -303,7 +303,8 @@ get_bt_extra_bootstraps(ClientConfig& config) {
 static
 bool
 set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
-    auto split = SplitString(v, '+');  // form URL-encoded spaces
+    // Limit input length and undo form URL-encoded spaces.
+    auto split = SplitString(v.substr(0, 256), '+');
 
     ClientConfig::ExtraBtBsServers bsx;
     for (const auto& bs : split) {
