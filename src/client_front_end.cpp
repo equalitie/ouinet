@@ -295,6 +295,12 @@ bt_extra_bootstraps(const ClientConfig& config) {
 }
 
 static
+std::string
+get_bt_extra_bootstraps(ClientConfig& config) {
+    return boost::algorithm::join(bt_extra_bootstraps(config), " ");
+}
+
+static
 bool
 set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
     auto split = SplitString(v, '+');  // form URL-encoded spaces
@@ -525,7 +531,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << TextInput{ "BitTorrent extra bootstraps (space-separated)"
                    , "bt_extra_bootstraps"
-                   , boost::algorithm::join(bt_extra_bootstraps(config), " ")};
+                   , get_bt_extra_bootstraps(config)};
 
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
