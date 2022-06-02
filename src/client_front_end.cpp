@@ -6,6 +6,7 @@
 #include "client_config.h"
 #include "version.h"
 #include "upnp.h"
+#include "split_string.h"
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
@@ -294,6 +295,22 @@ bt_extra_bootstraps(const ClientConfig& config) {
 }
 
 static
+bool
+set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
+    auto split = SplitString(v, '+');  // form URL-encoded spaces
+
+    ClientConfig::ExtraBtBsServers bsx;
+    for (const auto& bs : split) {
+        if (bs.empty()) continue;
+        auto bs_addr = bittorrent::bootstrap::parse_address(bs);
+        if (!bs_addr) return false;
+        bsx.insert(*bs_addr);
+    }
+    config.bt_bootstrap_extra(std::move(bsx));
+    return true;
+}
+
+static
 std::string
 reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
     switch (reachability.judgement()) {
@@ -406,6 +423,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             Cancel cancel;
             sys::error_code ec;
             cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield[ec]));
+        }
+        else if (target.find("?bt_extra_bootstraps=") != string::npos) {
+            auto eqpos = target.rfind('=');
+            set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
         }
 
         // Redirect back to the portal.
