@@ -5,6 +5,7 @@
 
 #include <boost/asio/ip/udp.hpp>
 #include <boost/optional.hpp>
+#include <boost/utility/string_view.hpp>
 #include <boost/variant.hpp>
 
 #include "../namespaces.h"
@@ -24,6 +25,9 @@ using Address = boost::variant< asio::ip::udp::endpoint
 // Host names are always converted to lower case.
 boost::optional<Address>
 parse_address(const std::string& addr);
+
+boost::optional<Address>
+parse_address(boost::string_view addr);
 
 // Represent the address as `<HOST>` or `<HOST>:<PORT>`,
 // where `<HOST>` can be a host name, `<IPv4>` address, or `<[IPv6]>` address (bracketed).

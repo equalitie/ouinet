@@ -18,8 +18,13 @@ namespace bootstrap {
 
 boost::optional<Address>
 parse_address(const std::string& addr) {
-    boost::string_view hp(addr), host_v, port_v;
-    std::tie(host_v, port_v) = util::split_ep(hp);
+    return parse_address(boost::string_view(addr));
+}
+
+boost::optional<Address>
+parse_address(boost::string_view addr) {
+    boost::string_view host_v, port_v;
+    std::tie(host_v, port_v) = util::split_ep(addr);
 
     if (host_v.empty()) return boost::none;
 
