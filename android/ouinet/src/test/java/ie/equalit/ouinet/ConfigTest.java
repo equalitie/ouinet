@@ -18,6 +18,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.contentOf;
 import static org.hamcrest.CoreMatchers.is;
@@ -28,6 +30,7 @@ import static org.mockito.Mockito.when;
 @PrepareForTest({Ouinet.class})
 @SuppressStaticInitializationFor("ie.equalit.ouinet.Ouinet")
 public class ConfigTest {
+    private static Set<String> BT_BOOTSTRAP_EXTRAS = new HashSet<>();
     private static String CACHE_HTTP_PUB_KEY = "cachehttppubkey1234567890";
     private static String INJECTOR_ENDPOINT = "injectorendpoint789123";
     private static String INJECTOR_CREDENTIALS = "injectorcredentials29384293847928498492849284";
@@ -38,6 +41,15 @@ public class ConfigTest {
     private static String CACHE_TYPE = "bep5-http";
     private static String CACHE_STATIC_PATH = "static-cache";
     private static String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
+
+    static {
+        BT_BOOTSTRAP_EXTRAS.add("192.0.2.1");
+        BT_BOOTSTRAP_EXTRAS.add("192.0.2.2:6882");
+        BT_BOOTSTRAP_EXTRAS.add("[2001:db8::1]");
+        BT_BOOTSTRAP_EXTRAS.add("[2001:db8::2]:6882");
+        BT_BOOTSTRAP_EXTRAS.add("example.com");
+        BT_BOOTSTRAP_EXTRAS.add("example.net:6882");
+    }
 
     @Mock
     private Context mockContext;
@@ -70,6 +82,7 @@ public class ConfigTest {
         when(Ouinet.getCARootCert(ouinetDir)).thenReturn(caRootCertPath);
 
         Config config = new Config.ConfigBuilder(mockContext)
+                .setBtBootstrapExtras(BT_BOOTSTRAP_EXTRAS)
                 .setCacheHttpPubKey(CACHE_HTTP_PUB_KEY)
                 .setInjectorCredentials(INJECTOR_CREDENTIALS)
                 .setInjectorTlsCert(INJECTOR_TLS_CERT)
@@ -80,6 +93,7 @@ public class ConfigTest {
                 .build();
 
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
+        assertThat(config.getBtBootstrapExtras(), is(BT_BOOTSTRAP_EXTRAS));
         assertThat(config.getCacheHttpPubKey(), is(CACHE_HTTP_PUB_KEY));
         assertThat(config.getInjectorCredentials(), is(INJECTOR_CREDENTIALS));
         assertThat(config.getCaRootCertPath(), is(caRootCertPath));
