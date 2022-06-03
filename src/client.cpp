@@ -273,7 +273,7 @@ public:
 
         auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                        , _config.repo_root() / "dht"
-                                                       , _config.bt_bootstrap_extra());
+                                                       , _config.bt_bootstrap_extras());
 
         // Port allocation works like this:
         //

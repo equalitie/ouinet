@@ -266,7 +266,7 @@ private:
         ss << "log-level = " << log_level() << endl;
         ss << "enable-log-file = " << is_log_file_enabled() << endl;
 
-        for (const auto& btbs_addr : _bt_bootstrap_extra)
+        for (const auto& btbs_addr : _bt_bootstrap_extras)
             ss << "bt-bootstrap-extra = " << btbs_addr << endl;
 
         ss << "disable-origin-access = " << _disable_origin_access << endl;
@@ -298,11 +298,11 @@ public:
     log_level_t log_level() const { return logger.get_threshold(); }
     void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
 
-    const ExtraBtBsServers& bt_bootstrap_extra() const {
-        return _bt_bootstrap_extra;
+    const ExtraBtBsServers& bt_bootstrap_extras() const {
+        return _bt_bootstrap_extras;
     }
-    void bt_bootstrap_extra(ExtraBtBsServers bts) {
-        CHANGE_AND_SAVE_OPS(bts == _bt_bootstrap_extra, _bt_bootstrap_extra = std::move(bts));
+    void bt_bootstrap_extras(ExtraBtBsServers bts) {
+        CHANGE_AND_SAVE_OPS(bts == _bt_bootstrap_extras, _bt_bootstrap_extras = std::move(bts));
     }
 
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
@@ -354,7 +354,7 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
-    ExtraBtBsServers _bt_bootstrap_extra;
+    ExtraBtBsServers _bt_bootstrap_extras;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
@@ -460,7 +460,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
             if (!btbs_addr)
                 throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
-            _bt_bootstrap_extra.insert(*btbs_addr);
+            _bt_bootstrap_extras.insert(*btbs_addr);
         }
     }
 

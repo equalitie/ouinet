@@ -30,8 +30,8 @@ public:
     bool is_help() const
     { return _is_help; }
 
-    const ExtraBtBsServers& bt_bootstrap_extra() const {
-        return _bt_bootstrap_extra;
+    const ExtraBtBsServers& bt_bootstrap_extras() const {
+        return _bt_bootstrap_extras;
     }
 
     boost::optional<size_t> open_file_limit() const
@@ -103,7 +103,7 @@ private:
 private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
-    ExtraBtBsServers _bt_bootstrap_extra;
+    ExtraBtBsServers _bt_bootstrap_extras;
     boost::optional<size_t> _open_file_limit;
     bool _listen_on_i2p = false;
     std::string _tls_ca_cert_store_path;
@@ -243,7 +243,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
             auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
             if (!btbs_addr)
                 throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
-            _bt_bootstrap_extra.insert(*btbs_addr);
+            _bt_bootstrap_extras.insert(*btbs_addr);
         }
     }
 

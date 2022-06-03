@@ -289,7 +289,7 @@ static
 std::vector<std::string>
 bt_extra_bootstraps(const ClientConfig& config) {
     std::vector<std::string> bsx;
-    for (auto& bs : config.bt_bootstrap_extra())
+    for (auto& bs : config.bt_bootstrap_extras())
         bsx.push_back(util::str(bs));
     return bsx;
 }
@@ -313,7 +313,7 @@ set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
         if (!bs_addr) return false;
         bsx.insert(*bs_addr);
     }
-    config.bt_bootstrap_extra(std::move(bsx));
+    config.bt_bootstrap_extras(std::move(bsx));
     return true;
 }
 

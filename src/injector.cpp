@@ -861,7 +861,7 @@ int main(int argc, const char* argv[])
         // using extra BT bootstrap servers may be useful
         // in environments like isolated LANs or community networks.
         bt_dht_ptr = std::make_shared<bt::MainlineDht>
-            (ex, fs::path{}, config.bt_bootstrap_extra());  // default storage dir
+            (ex, fs::path{}, config.bt_bootstrap_extras());  // default storage dir
         bt_dht_ptr->set_endpoints({config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
