@@ -1,5 +1,8 @@
 #pragma once
 
+#include <set>
+#include <vector>
+
 #include <boost/asio/ip/udp.hpp>
 #include <boost/regex.hpp>
 
@@ -7,11 +10,14 @@
 #include "util/crypto.h"
 #include "parse/endpoint.h"
 #include "bep5_swarms.h"
+#include "bittorrent/bootstrap.h"
 
 namespace ouinet {
 
 class InjectorConfig {
 public:
+    using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
+
     InjectorConfig() = default;
     InjectorConfig(const InjectorConfig&) = default;
     InjectorConfig(InjectorConfig&&) = default;
@@ -23,6 +29,10 @@ public:
 
     bool is_help() const
     { return _is_help; }
+
+    const ExtraBtBsServers& bt_bootstrap_extra() const {
+        return _bt_bootstrap_extra;
+    }
 
     boost::optional<size_t> open_file_limit() const
     { return _open_file_limit; }
@@ -93,6 +103,7 @@ private:
 private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
+    ExtraBtBsServers _bt_bootstrap_extra;
     boost::optional<size_t> _open_file_limit;
     bool _listen_on_i2p = false;
     std::string _tls_ca_cert_store_path;
@@ -126,6 +137,11 @@ InjectorConfig::options_description()
         ("repo", po::value<string>(), "Path to the repository root")
         ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
          , "Set log level: silly, debug, verbose, info, warn, error, abort")
+        ("bt-bootstrap-extra", po::value<std::vector<string>>()->composing()
+         , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
+           "to start the DHT (can be used several times). "
+           "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
+           "This option is persistent.")
 
         // Injector options
         ("open-file-limit"
@@ -219,6 +235,16 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
             throw std::runtime_error(util::str("Invalid log level: ", level));
         logger.set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
+    }
+
+    if (vm.count("bt-bootstrap-extra")) {
+        for (const auto& btbsx : vm["bt-bootstrap-extra"].as<std::vector<string>>()) {
+            // Better processing will take place later on, just very basic checking here.
+            auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
+            if (!btbs_addr)
+                throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
+            _bt_bootstrap_extra.insert(*btbs_addr);
+        }
     }
 
     if (vm.count("open-file-limit")) {
