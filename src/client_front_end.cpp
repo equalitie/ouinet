@@ -54,9 +54,14 @@ static string as_safe_html(string s) {
     return s;
 }
 
+static string as_safe_html(beast::string_view s) {
+    return as_safe_html(s.to_string());
+}
+
 struct TextInput {
     beast::string_view text;
     beast::string_view name;
+    beast::string_view placeholder;
     std::string current_value;
 };
 
@@ -111,6 +116,7 @@ ostream& operator<<(ostream& os, const TextInput& i) {
           "    " << i.text << ": "
                     "<input type=\"text\" "
                            "name=\""  << i.name << "\" "
+                           "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
                            "value=\"" << as_safe_html(i.current_value) << "\"/>"
                     "<input type=\"submit\" value=\"set\"/>\n"
           "</form>\n";
@@ -532,6 +538,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << TextInput{ "BitTorrent extra bootstraps (space-separated)"
                    , "bt_extra_bootstraps"
+                   , "HOST1 HOST2:PORT ..."
                    , get_bt_extra_bootstraps(config)};
 
     if (_show_pending_tasks) {
