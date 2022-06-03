@@ -856,7 +856,12 @@ int main(int argc, const char* argv[])
 
     auto bittorrent_dht = [&bt_dht_ptr, &config, ex] {
         if (bt_dht_ptr) return bt_dht_ptr;
-        bt_dht_ptr = make_shared<bt::MainlineDht>(ex);
+        // Although injectors are usually run in networks
+        // without connectivity restrictions,
+        // using extra BT bootstrap servers may be useful
+        // in environments like isolated LANs or community networks.
+        bt_dht_ptr = std::make_shared<bt::MainlineDht>
+            (ex, fs::path{}, config.bt_bootstrap_extras());  // default storage dir
         bt_dht_ptr->set_endpoints({config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;

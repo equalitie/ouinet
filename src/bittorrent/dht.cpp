@@ -201,11 +201,14 @@ static bool read_nodes( bool is_v4
     return true;
 }
 
-dht::DhtNode::DhtNode(const asio::executor& exec, fs::path storage_dir):
+dht::DhtNode::DhtNode( const asio::executor& exec
+                     , fs::path storage_dir
+                     , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
-    _storage_dir(move(storage_dir))
+    _storage_dir(std::move(storage_dir)),
+    _extra_bs(std::move(extra_bs))
 {
 }
 
@@ -1617,24 +1620,27 @@ static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
 }
 
 dht::DhtNode::BootstrapResult
-dht::DhtNode::bootstrap_single( Address bootstrap_address
+dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
                               , Cancel cancel
                               , asio::yield_context yield)
 {
     sys::error_code ec;
 
     udp::endpoint bootstrap_ep = util::apply(bootstrap_address,
-        [&] (udp::endpoint ep) {
+        [&] (const udp::endpoint& ep) {
             return ep;
         },
-        [&] (std::string addr) {
+        [&] (const asio::ip::address& addr) {
+            return udp::endpoint{addr, bootstrap::default_port};
+        },
+        [&] (const std::string& addr) {
             string_view hp(addr), host, port;
             std::tie(host, port) = util::split_ep(hp);
             auto ep = resolve(
                 _exec,
                 _multiplexer->is_v4() ? udp::v4() : udp::v6(),
                 host.to_string(),
-                port.empty() ? "6881" : port.to_string(),
+                port.empty() ? util::str(bootstrap::default_port) : port.to_string(),
                 cancel,
                 yield[ec]
             );
@@ -1702,16 +1708,22 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     sys::error_code ec;
     sys::error_code ignored_ec;
 
-    vector<Address> bootstraps { "router.bittorrent.com"
+    vector<bootstrap::Address> bootstraps {
+                               "router.bittorrent.com"
                                , "router.utorrent.com"
                                // Alternative bootstrap servers from the Ouinet project.
                                , "router.bt.ouinet.work"
-                               , "74.3.163.127"  // part of previous name (in case of DNS failure)
+                               // Part of previous name (in case of DNS failure).
+                               , asio::ip::make_address("74.3.163.127")
                                , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
                                // I don't think I have ever seen these two working
                                // (Perhaps they only listen on TCP?)
                                , "dht.transmissionbt.com"
                                , "dht.vuze.com" };
+
+    for (auto& bootstrap : _extra_bs) {
+        bootstraps.push_back(bootstrap);
+    }
 
     auto old_contacts = read_stored_contacts(_exec
                                             , stored_contacts_path()
@@ -1752,12 +1764,14 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
             return stats;
         };
 
-        auto score_of = [](const Address a) {
+        auto score_of = [](const bootstrap::Address a) {
             // We don't necessarily fully trust the nodes we know from previous
             // app runs. Thus we require SCORE_GOAL of them to respond with the
             // same (our) IP address to consider them trust-worthy.
-            return util::apply(a, [](udp::endpoint) { return size_t(1); }
-                                , [](std::string)   { return SCORE_GOAL; });
+            return util::apply(a, [](const udp::endpoint&)     { return size_t(1); }
+                                // These come from the user or this code, trust them.
+                                , [](const asio::ip::address&) { return SCORE_GOAL; }
+                                , [](const std::string&)       { return SCORE_GOAL; });
         };
 
         while (!cancel) {
@@ -2520,9 +2534,11 @@ void dht::DhtNode::tracker_do_search_peers(
 
 
 MainlineDht::MainlineDht( const asio::executor& exec
-                        , fs::path storage_dir)
+                        , fs::path storage_dir
+                        , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)
-    , _storage_dir(move(storage_dir))
+    , _storage_dir(std::move(storage_dir))
+    , _extra_bs(std::move(extra_bs))
 {
 }
 
@@ -2591,7 +2607,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
         }
     }
 
-    auto node = make_unique<dht::DhtNode>(_exec, _storage_dir);
+    auto node = make_unique<dht::DhtNode>(_exec, _storage_dir, _extra_bs);
 
     auto cc = _cancel.connect([&] { node = nullptr; });
 

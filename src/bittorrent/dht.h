@@ -12,6 +12,7 @@
 #include <asio_utp/udp_multiplexer.hpp>
 
 #include "bencoding.h"
+#include "bootstrap.h"
 #include "dht_storage.h"
 #include "mutable_data.h"
 #include "node_id.h"
@@ -75,11 +76,13 @@ class DhtNode {
 
     public:
     DhtNode( const asio::executor&
-           , boost::filesystem::path storage_dir = boost::filesystem::path());
+           , boost::filesystem::path storage_dir = {}
+           , std::set<bootstrap::Address> extra_bs = {});
 
     DhtNode( asio::io_context& ctx
-           , boost::filesystem::path storage_dir = boost::filesystem::path())
-        : DhtNode(ctx.get_executor(), std::move(storage_dir))
+           , boost::filesystem::path storage_dir = {}
+           , std::set<bootstrap::Address> extra_bs = {})
+        : DhtNode(ctx.get_executor(), std::move(storage_dir), std::move(extra_bs))
     {}
 
     void start(udp::endpoint, asio::yield_context yield);
@@ -267,11 +270,8 @@ class DhtNode {
         asio::ip::udp::endpoint node_ep;
     };
 
-    using Address = boost::variant< udp::endpoint
-                                  , std::string /* domain name */>;
-
     BootstrapResult
-    bootstrap_single(Address, Cancel, asio::yield_context);
+    bootstrap_single(bootstrap::Address, Cancel, asio::yield_context);
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
@@ -376,6 +376,7 @@ class DhtNode {
     class Stats;
     std::unique_ptr<Stats> _stats;
     boost::filesystem::path _storage_dir;
+    std::set<bootstrap::Address> _extra_bs;
 };
 
 } // dht namespace
@@ -383,11 +384,13 @@ class DhtNode {
 class MainlineDht {
     public:
     MainlineDht( const asio::executor&
-               , boost::filesystem::path storage_dir = boost::filesystem::path());
+               , boost::filesystem::path storage_dir = {}
+               , std::set<bootstrap::Address> extra_bs = {});
 
     MainlineDht( asio::io_context& ctx
-               , boost::filesystem::path storage_dir = boost::filesystem::path())
-        : MainlineDht(ctx.get_executor(), std::move(storage_dir))
+               , boost::filesystem::path storage_dir = {}
+               , std::set<bootstrap::Address> extra_bs = {})
+        : MainlineDht(ctx.get_executor(), std::move(storage_dir), std::move(extra_bs))
     {}
 
     MainlineDht(const MainlineDht&) = delete;
@@ -474,6 +477,7 @@ class MainlineDht {
     std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;
     Cancel _cancel;
     boost::filesystem::path _storage_dir;
+    std::set<bootstrap::Address> _extra_bs;
 };
 
 } // bittorrent namespace

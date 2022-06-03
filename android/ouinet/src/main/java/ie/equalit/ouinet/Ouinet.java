@@ -18,7 +18,9 @@ import com.getkeepsafe.relinker.ReLinkerInstance;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class Ouinet {
     private static boolean libsLoaded = false;
@@ -149,6 +151,13 @@ public class Ouinet {
 
         if (config.getCachePrivate()) {
             args.add("--cache-private");
+        }
+
+        Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
+        if (btBootstrapExtras != null) {
+            for (String x : btBootstrapExtras) {
+                args.add("--bt-bootstrap-extra=" + x);
+            }
         }
 
         List<String> path = new ArrayList<String>();

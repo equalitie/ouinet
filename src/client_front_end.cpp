@@ -6,10 +6,12 @@
 #include "client_config.h"
 #include "version.h"
 #include "upnp.h"
+#include "split_string.h"
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
 
+#include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional/optional_io.hpp>
@@ -51,6 +53,17 @@ static string as_safe_html(string s) {
     boost::replace_all(s, "'", "&#39;");
     return s;
 }
+
+static string as_safe_html(beast::string_view s) {
+    return as_safe_html(s.to_string());
+}
+
+struct TextInput {
+    beast::string_view text;
+    beast::string_view name;
+    beast::string_view placeholder;
+    std::string current_value;
+};
 
 struct ToggleInput {
     beast::string_view text;
@@ -96,6 +109,18 @@ struct ClientFrontEnd::Input {
 };
 
 namespace ouinet { // Need namespace here for argument-dependent-lookups to work
+
+ostream& operator<<(ostream& os, const TextInput& i) {
+    return os <<
+          "<form method=\"get\">\n"
+          "    " << i.text << ": "
+                    "<input type=\"text\" "
+                           "name=\""  << i.name << "\" "
+                           "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
+                           "value=\"" << as_safe_html(i.current_value) << "\"/>"
+                    "<input type=\"submit\" value=\"set\"/>\n"
+          "</form>\n";
+}
 
 ostream& operator<<(ostream& os, const ToggleInput& i) {
     auto cur_value  = i.current_value ? "enabled" : "disabled";
@@ -267,6 +292,38 @@ public_udp_endpoints(const bittorrent::MainlineDht& dht) {
 }
 
 static
+std::vector<std::string>
+bt_extra_bootstraps(const ClientConfig& config) {
+    std::vector<std::string> bsx;
+    for (auto& bs : config.bt_bootstrap_extras())
+        bsx.push_back(util::str(bs));
+    return bsx;
+}
+
+static
+std::string
+get_bt_extra_bootstraps(ClientConfig& config) {
+    return boost::algorithm::join(bt_extra_bootstraps(config), " ");
+}
+
+static
+bool
+set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
+    // Limit input length and undo form URL-encoded spaces.
+    auto split = SplitString(v.substr(0, 256), '+');
+
+    ClientConfig::ExtraBtBsServers bsx;
+    for (const auto& bs : split) {
+        if (bs.empty()) continue;
+        auto bs_addr = bittorrent::bootstrap::parse_address(bs);
+        if (!bs_addr) return false;
+        bsx.insert(*bs_addr);
+    }
+    config.bt_bootstrap_extras(std::move(bsx));
+    return true;
+}
+
+static
 std::string
 reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
     switch (reachability.judgement()) {
@@ -380,6 +437,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             sys::error_code ec;
             cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield[ec]));
         }
+        else if (target.find("?bt_extra_bootstraps=") != string::npos) {
+            auto eqpos = target.rfind('=');
+            set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
+        }
 
         // Redirect back to the portal.
         ss << "<!DOCTYPE html>\n"
@@ -475,6 +536,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
 
+    ss << TextInput{ "BitTorrent extra bootstraps (space-separated, applied on restart)"
+                   , "bt_extra_bootstraps"
+                   , "HOST1 HOST2:PORT ..."
+                   , get_bt_extra_bootstraps(config)};
+
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
         ss << "        <ul>\n";
@@ -564,6 +630,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         response["external_udp_endpoints"] = external_udp_endpoints(upnps);
 
     if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
+
+    response["bt_extra_bootstraps"] = bt_extra_bootstraps(config);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 

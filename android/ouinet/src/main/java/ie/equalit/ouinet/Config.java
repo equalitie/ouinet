@@ -11,6 +11,8 @@ import android.util.Log;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Contains the configuration settings for the Ouinet service. The config is immutable and can
@@ -38,6 +40,7 @@ public class Config implements Parcelable {
 
     public static class ConfigBuilder {
         private Context context;
+        private Set<String> btBootstrapExtras = null;
         private String cacheHttpPubKey;
         private String injectorCredentials;
         private String injectorTlsCert;
@@ -58,6 +61,23 @@ public class Config implements Parcelable {
             Ouinet.maybeLoadLibraries(context);
 
             this.context = context;
+        }
+
+        public ConfigBuilder addBtBootstrapExtra(String btBootstrapExtra){
+            if (btBootstrapExtra == null)
+                return this;
+
+            if (this.btBootstrapExtras == null)
+                this.btBootstrapExtras = new HashSet<>();
+            // Leave validation to the client.
+            this.btBootstrapExtras.add(btBootstrapExtra);
+            return this;
+        }
+
+        public ConfigBuilder setBtBootstrapExtras(Set<String> btBootstrapExtras){
+            // Leave validation to the client.
+            this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
+            return this;
         }
 
         public ConfigBuilder setCacheHttpPubKey(String cacheHttpPubKey){
@@ -250,6 +270,7 @@ public class Config implements Parcelable {
 
             return new Config(
                     ouinetDirectory,
+                    btBootstrapExtras,
                     cacheHttpPubKey,
                     injectorCredentials,
                     setupInjectorTlsCert(ouinetDirectory),
@@ -271,6 +292,7 @@ public class Config implements Parcelable {
     }
 
     private String ouinetDirectory;
+    private Set<String> btBootstrapExtras;
     private String cacheHttpPubKey;
     private String injectorCredentials;
     private String injectorTlsCertPath;
@@ -290,6 +312,7 @@ public class Config implements Parcelable {
     private boolean enableLogFile;
 
     private Config(String ouinetDirectory,
+                  Set<String> btBootstrapExtras,
                   String cacheHttpPubKey,
                   String injectorCredentials,
                   String injectorTlsCertPath,
@@ -308,6 +331,7 @@ public class Config implements Parcelable {
                   LogLevel logLevel,
                   boolean enableLogFile) {
         this.ouinetDirectory = ouinetDirectory;
+        this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
         this.injectorTlsCertPath = injectorTlsCertPath;
@@ -328,6 +352,9 @@ public class Config implements Parcelable {
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
+    }
+    public Set<String> getBtBootstrapExtras() {
+        return (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
     }
     public String getCacheHttpPubKey() {
         return cacheHttpPubKey;
@@ -400,6 +427,7 @@ public class Config implements Parcelable {
     @Override
     public void writeToParcel(Parcel out, int flags) {
         out.writeString(ouinetDirectory);
+        out.writeStringArray(btBootstrapExtras == null ? null : btBootstrapExtras.toArray(new String[0]));
         out.writeString(cacheHttpPubKey);
         out.writeString(injectorCredentials);
         out.writeString(injectorTlsCertPath);
@@ -421,6 +449,16 @@ public class Config implements Parcelable {
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
+
+        String[] btBootstrapExtrasArray = in.createStringArray();
+        if (btBootstrapExtrasArray == null)
+            btBootstrapExtras = null;
+        else {
+            btBootstrapExtras = new HashSet<>();
+            for (String x : btBootstrapExtrasArray)
+                btBootstrapExtras.add(x);
+        }
+
         cacheHttpPubKey = in.readString();
         injectorCredentials = in.readString();
         injectorTlsCertPath = in.readString();

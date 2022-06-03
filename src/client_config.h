@@ -1,6 +1,8 @@
 #pragma once
 
+#include <set>
 #include <sstream>
+#include <vector>
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
@@ -18,6 +20,7 @@
 #include "logger.h"
 #include "constants.h"
 #include "bep5_swarms.h"
+#include "bittorrent/bootstrap.h"
 
 namespace ouinet {
 
@@ -133,6 +136,11 @@ private:
             , "Enable writing log messages to "
               "log file \"" _LOG_FILE_NAME "\" under the repository root. "
               "This option is persistent.")
+           ("bt-bootstrap-extra", po::value<vector<string>>()->composing()
+            , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
+              "to start the DHT (can be used several times). "
+              "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
+              "This option is persistent.")
            ("open-file-limit"
             , po::value<unsigned int>()
             , "To increase the maximum number of open files")
@@ -242,6 +250,7 @@ private:
         desc.add_options()
             ("log-level", po::value<std::string>())
             ("enable-log-file", po::bool_switch())
+            ("bt-bootstrap-extra", po::value<std::vector<std::string>>()->composing())
             ("disable-origin-access", po::bool_switch(&_disable_origin_access))
             ("disable-injector-access", po::bool_switch(&_disable_injector_access))
             ("disable-cache-access", po::bool_switch(&_disable_cache_access))
@@ -256,6 +265,10 @@ private:
 
         ss << "log-level = " << log_level() << endl;
         ss << "enable-log-file = " << is_log_file_enabled() << endl;
+
+        for (const auto& btbs_addr : _bt_bootstrap_extras)
+            ss << "bt-bootstrap-extra = " << btbs_addr << endl;
+
         ss << "disable-origin-access = " << _disable_origin_access << endl;
         ss << "disable-injector-access = " << _disable_injector_access << endl;
         ss << "disable-cache-access = " << _disable_cache_access << endl;
@@ -271,6 +284,7 @@ private:
     }
 
 public:
+    using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 
 #define CHANGE_AND_SAVE_OPS(_CMP, _SET) { \
     bool changed = !(_CMP); \
@@ -283,6 +297,13 @@ public:
 
     log_level_t log_level() const { return logger.get_threshold(); }
     void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
+
+    const ExtraBtBsServers& bt_bootstrap_extras() const {
+        return _bt_bootstrap_extras;
+    }
+    void bt_bootstrap_extras(ExtraBtBsServers bts) {
+        CHANGE_AND_SAVE_OPS(bts == _bt_bootstrap_extras, _bt_bootstrap_extras = std::move(bts));
+    }
 
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
     void is_log_file_enabled(bool v) { CHANGE_AND_SAVE_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
@@ -333,6 +354,7 @@ private:
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
+    ExtraBtBsServers _bt_bootstrap_extras;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
@@ -430,6 +452,16 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm["enable-log-file"].as<bool>()) {
         _is_log_file_enabled(true);
+    }
+
+    if (vm.count("bt-bootstrap-extra")) {
+        for (const auto& btbsx : vm["bt-bootstrap-extra"].as<vector<string>>()) {
+            // Better processing will take place later on, just very basic checking here.
+            auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
+            if (!btbs_addr)
+                throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
+            _bt_bootstrap_extras.insert(*btbs_addr);
+        }
     }
 
     if (vm.count("open-file-limit")) {
