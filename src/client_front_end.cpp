@@ -536,7 +536,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
 
-    ss << TextInput{ "BitTorrent extra bootstraps (space-separated)"
+    ss << TextInput{ "BitTorrent extra bootstraps (space-separated, applied on restart)"
                    , "bt_extra_bootstraps"
                    , "HOST1 HOST2:PORT ..."
                    , get_bt_extra_bootstraps(config)};
