@@ -113,12 +113,12 @@ namespace ouinet { // Need namespace here for argument-dependent-lookups to work
 ostream& operator<<(ostream& os, const TextInput& i) {
     return os <<
           "<form method=\"get\">\n"
-          "    " << i.text << ": "
+          "    <label>" << i.text << ": "
                     "<input type=\"text\" "
                            "name=\""  << i.name << "\" "
                            "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
                            "value=\"" << as_safe_html(i.current_value) << "\"/>"
-                    "<input type=\"submit\" value=\"set\"/>\n"
+                    "<input type=\"submit\" value=\"set\"/></label>\n"
           "</form>\n";
 }
 
@@ -128,18 +128,18 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
 
     return os <<
           "<form method=\"get\">\n"
-          "    " << i.text << ": " << cur_value << "&nbsp;"
+          "    <label>" << i.text << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
                            "name=\""  << i.name << "\" "
                            "accesskey=\""  << i.shortcut << "\" "
-                           "value=\"" << next_value << "\"/>\n"
+                           "value=\"" << next_value << "\"/></label>\n"
           "</form>\n";
 }
 
 template<typename E>
 ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     os << "<form method=\"get\">\n"
-          "    " << i.text << ": " << i.current_value << "&nbsp;"
+          "    <label>" << i.text << ": " << i.current_value << "&nbsp;"
           "        <select onchange=\"this.form.submit()\" name=\"" << i.name << "\">";
 
     for (auto e : i.values) {
@@ -147,7 +147,7 @@ ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
         os << "<option value=\"" << e << "\" " << selected << ">" << e << "</option>";
     }
 
-    os << "        </select>"
+    os << "        </select></label>"
           "</form>\n";
 
     return os;
