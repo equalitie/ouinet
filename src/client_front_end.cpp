@@ -77,12 +77,15 @@ template<typename E>
 struct ClientFrontEnd::Input {
     string html_label;
     string name;
+    char shortcut;
     vector<E> values;
     E current_value;
 
-    Input(string html_label, string name, vector<E> values, E current_value)
+    Input( string html_label, string name, char shortcut
+         , vector<E> values, E current_value)
         : html_label(move(html_label))
         , name(move(name))
+        , shortcut(shortcut)
         , values(move(values))
         , current_value(current_value)
     {}
@@ -142,6 +145,7 @@ ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     os << "<form method=\"get\">\n"
           "    <label>" << i.html_label << ": " << as_safe_html(i.current_value) << "&nbsp;"
           "        <select onchange=\"this.form.submit()\" "
+                          "accesskey=\""  << i.shortcut << "\" "
                           "name=\"" << i.name << "\" id=\"input-" << i.name << "\">";
 
     for (auto e : i.values) {
@@ -178,7 +182,8 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 } // ouinet namespace
 
 ClientFrontEnd::ClientFrontEnd(const ClientConfig& config)
-    : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, config.log_level()))
+    : _log_level_input(new Input<log_level_t>( "Log le<u>v</u>el", "loglevel", 'v'
+                                             , { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, config.log_level()))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringstream& ss
