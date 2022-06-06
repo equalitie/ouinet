@@ -61,6 +61,7 @@ static string as_safe_html(E e) {
 
 struct TextInput {
     beast::string_view html_label;
+    char shortcut;
     beast::string_view name;
     beast::string_view placeholder;
     std::string current_value;
@@ -120,6 +121,7 @@ ostream& operator<<(ostream& os, const TextInput& i) {
           "    <label>" << i.html_label << ": "
                     "<input type=\"text\" "
                            "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
+                           "accesskey=\""  << i.shortcut << "\" "
                            "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
                            "value=\"" << as_safe_html(i.current_value) << "\"/>"
                     "<input type=\"submit\" value=\"set\"/></label>\n"
@@ -544,7 +546,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
 
-    ss << TextInput{ "BitTorrent extra bootstraps (space-separated, applied on restart)"
+    ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
                    , "bt_extra_bootstraps"
                    , "HOST1 HOST2:PORT ..."
                    , get_bt_extra_bootstraps(config)};
