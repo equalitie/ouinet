@@ -54,33 +54,38 @@ static string as_safe_html(string s) {
     return s;
 }
 
-static string as_safe_html(beast::string_view s) {
-    return as_safe_html(s.to_string());
+template<typename E>
+static string as_safe_html(E e) {
+    return as_safe_html(util::str(e));
 }
 
 struct TextInput {
-    beast::string_view text;
+    beast::string_view html_label;
+    char shortcut;
     beast::string_view name;
     beast::string_view placeholder;
     std::string current_value;
 };
 
 struct ToggleInput {
-    beast::string_view text;
-    beast::string_view name;
+    beast::string_view html_label;
     char shortcut;
+    beast::string_view name;
     bool current_value;
 };
 
 template<typename E>
 struct ClientFrontEnd::Input {
-    string text;
+    string html_label;
+    char shortcut;
     string name;
     vector<E> values;
     E current_value;
 
-    Input(string text, string name, vector<E> values, E current_value)
-        : text(move(text))
+    Input( string html_label, char shortcut, string name
+         , vector<E> values, E current_value)
+        : html_label(move(html_label))
+        , shortcut(shortcut)
         , name(move(name))
         , values(move(values))
         , current_value(current_value)
@@ -113,12 +118,13 @@ namespace ouinet { // Need namespace here for argument-dependent-lookups to work
 ostream& operator<<(ostream& os, const TextInput& i) {
     return os <<
           "<form method=\"get\">\n"
-          "    " << i.text << ": "
+          "    <label>" << i.html_label << ": "
                     "<input type=\"text\" "
-                           "name=\""  << i.name << "\" "
-                           "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
-                           "value=\"" << as_safe_html(i.current_value) << "\"/>"
-                    "<input type=\"submit\" value=\"set\"/>\n"
+                           "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
+                           "accesskey=\""  << i.shortcut << "\" "
+                           "value=\"" << as_safe_html(i.current_value) << "\" "
+                           "placeholder=\"" << as_safe_html(i.placeholder) << "\"/>"
+                    "<input type=\"submit\" value=\"set\"/></label>\n"
           "</form>\n";
 }
 
@@ -128,26 +134,29 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
 
     return os <<
           "<form method=\"get\">\n"
-          "    " << i.text << ": " << cur_value << "&nbsp;"
+          "    <label>" << i.html_label << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
-                           "name=\""  << i.name << "\" "
+                           "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "accesskey=\""  << i.shortcut << "\" "
-                           "value=\"" << next_value << "\"/>\n"
+                           "value=\"" << next_value << "\"/></label>\n"
           "</form>\n";
 }
 
 template<typename E>
 ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     os << "<form method=\"get\">\n"
-          "    " << i.text << ": " << i.current_value << "&nbsp;"
-          "        <select onchange=\"this.form.submit()\" name=\"" << i.name << "\">";
+          "    <label>" << i.html_label << ": " << as_safe_html(i.current_value) << "&nbsp;"
+                    "<select onchange=\"this.form.submit()\" "
+                            "name=\"" << i.name << "\" id=\"input-" << i.name << "\" "
+                            "accesskey=\""  << i.shortcut << "\">";
 
     for (auto e : i.values) {
-        const char* selected = (e == i.current_value) ? "selected" : "";
-        os << "<option value=\"" << e << "\" " << selected << ">" << e << "</option>";
+        const char* selected = (e == i.current_value) ? " selected" : "";
+        os << "<option value=\"" << as_safe_html(e) << "\"" << selected << ">"
+           << as_safe_html(e) << "</option>";
     }
 
-    os << "        </select>"
+    os << "</select></label>\n"
           "</form>\n";
 
     return os;
@@ -175,7 +184,8 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 } // ouinet namespace
 
 ClientFrontEnd::ClientFrontEnd(const ClientConfig& config)
-    : _log_level_input(new Input<log_level_t>("Log level", "loglevel", { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, config.log_level()))
+    : _log_level_input(new Input<log_level_t>( "Log le<u>v</u>el", 'v', "loglevel"
+                                             , { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, config.log_level()))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringstream& ss
@@ -475,18 +485,18 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "      Verification of HTTPS content coming from the origin will be performed by your Ouinet client\n"
           "      using system-accepted Certification Authorities.</p>\n";
 
-    ss << ToggleInput{"<u>A</u>uto refresh",   "auto_refresh",   'a', _auto_refresh_enabled};
+    ss << ToggleInput{"<u>A</u>uto refresh", 'a',      "auto_refresh", _auto_refresh_enabled};
 
     ss << "<h2>Request mechanisms</h2>\n";
-    ss << ToggleInput{"<u>O</u>rigin access",  "origin_access",  'o', config.is_origin_access_enabled()};
-    ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
-    ss << ToggleInput{"<u>I</u>njector proxy", "injector_access",'i', config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
+    ss << ToggleInput{"<u>O</u>rigin access",'o',      "origin_access", config.is_origin_access_enabled()};
+    ss << ToggleInput{"<u>P</u>roxy access", 'p',      "proxy_access", config.is_proxy_access_enabled()};
+    ss << ToggleInput{"<u>I</u>njector proxy", 'i',    "injector_access", config.is_injector_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_access_enabled()};
 
     ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
     bool log_file_enabled = config.is_log_file_enabled();
-    ss << ToggleInput{"<u>L</u>og file", "logfile", 'l', log_file_enabled};
+    ss << ToggleInput{"<u>L</u>og file", 'l', "logfile", log_file_enabled};
     if (log_file_enabled)
         ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
            << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
@@ -536,7 +546,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
            << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
     }
 
-    ss << TextInput{ "BitTorrent extra bootstraps (space-separated, applied on restart)"
+    ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
                    , "bt_extra_bootstraps"
                    , "HOST1 HOST2:PORT ..."
                    , get_bt_extra_bootstraps(config)};
@@ -574,9 +584,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "<br>\n";
 
         ss << "<form method=\"get\">\n"
-              "<input type=\"submit\" "
-                            "name=\"purge_cache\" "
-                            "value=\"Purge cache now\"/>\n"
+              "    <input type=\"submit\" "
+                         "name=\"purge_cache\" id=\"input-purge_cache\" "
+                         "value=\"Purge cache now\"/>\n"
               "</form>\n";
         ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
 
@@ -591,6 +601,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             ss << "</ul>\n";
         }
     }
+
+    // Highlight the label/form containing the input selected via the URL fragment.
+    ss << "<script>var eid = window.location.hash.substr(1); "
+          "if (eid) { var e = document.getElementById(eid); "
+                     "if (e) e.parentElement.style.backgroundColor = \"yellow\"; }</script>\n";
 
     ss << "    </body>\n"
           "</html>\n";
