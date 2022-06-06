@@ -54,8 +54,9 @@ static string as_safe_html(string s) {
     return s;
 }
 
-static string as_safe_html(beast::string_view s) {
-    return as_safe_html(s.to_string());
+template<typename E>
+static string as_safe_html(E e) {
+    return as_safe_html(util::str(e));
 }
 
 struct TextInput {
@@ -139,13 +140,14 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
 template<typename E>
 ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     os << "<form method=\"get\">\n"
-          "    <label>" << i.text << ": " << i.current_value << "&nbsp;"
+          "    <label>" << i.text << ": " << as_safe_html(i.current_value) << "&nbsp;"
           "        <select onchange=\"this.form.submit()\" "
                           "name=\"" << i.name << "\" id=\"input-" << i.name << "\">";
 
     for (auto e : i.values) {
         const char* selected = (e == i.current_value) ? "selected" : "";
-        os << "<option value=\"" << e << "\" " << selected << ">" << e << "</option>";
+        os << "<option value=\"" << as_safe_html(e) << "\" " << selected << ">"
+           << as_safe_html(e) << "</option>";
     }
 
     os << "        </select></label>"
