@@ -68,24 +68,24 @@ struct TextInput {
 
 struct ToggleInput {
     beast::string_view html_label;
-    beast::string_view name;
     char shortcut;
+    beast::string_view name;
     bool current_value;
 };
 
 template<typename E>
 struct ClientFrontEnd::Input {
     string html_label;
-    string name;
     char shortcut;
+    string name;
     vector<E> values;
     E current_value;
 
-    Input( string html_label, string name, char shortcut
+    Input( string html_label, char shortcut, string name
          , vector<E> values, E current_value)
         : html_label(move(html_label))
-        , name(move(name))
         , shortcut(shortcut)
+        , name(move(name))
         , values(move(values))
         , current_value(current_value)
     {}
@@ -182,7 +182,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 } // ouinet namespace
 
 ClientFrontEnd::ClientFrontEnd(const ClientConfig& config)
-    : _log_level_input(new Input<log_level_t>( "Log le<u>v</u>el", "loglevel", 'v'
+    : _log_level_input(new Input<log_level_t>( "Log le<u>v</u>el", 'v', "loglevel"
                                              , { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, config.log_level()))
 {}
 
@@ -483,18 +483,18 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "      Verification of HTTPS content coming from the origin will be performed by your Ouinet client\n"
           "      using system-accepted Certification Authorities.</p>\n";
 
-    ss << ToggleInput{"<u>A</u>uto refresh",   "auto_refresh",   'a', _auto_refresh_enabled};
+    ss << ToggleInput{"<u>A</u>uto refresh", 'a',      "auto_refresh", _auto_refresh_enabled};
 
     ss << "<h2>Request mechanisms</h2>\n";
-    ss << ToggleInput{"<u>O</u>rigin access",  "origin_access",  'o', config.is_origin_access_enabled()};
-    ss << ToggleInput{"<u>P</u>roxy access",   "proxy_access",   'p', config.is_proxy_access_enabled()};
-    ss << ToggleInput{"<u>I</u>njector proxy", "injector_access",'i', config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", "distributed_cache",  'c', config.is_cache_access_enabled()};
+    ss << ToggleInput{"<u>O</u>rigin access",'o',      "origin_access", config.is_origin_access_enabled()};
+    ss << ToggleInput{"<u>P</u>roxy access", 'p',      "proxy_access", config.is_proxy_access_enabled()};
+    ss << ToggleInput{"<u>I</u>njector proxy", 'i',    "injector_access", config.is_injector_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_access_enabled()};
 
     ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
     bool log_file_enabled = config.is_log_file_enabled();
-    ss << ToggleInput{"<u>L</u>og file", "logfile", 'l', log_file_enabled};
+    ss << ToggleInput{"<u>L</u>og file", 'l', "logfile", log_file_enabled};
     if (log_file_enabled)
         ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
            << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
