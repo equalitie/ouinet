@@ -122,8 +122,8 @@ ostream& operator<<(ostream& os, const TextInput& i) {
                     "<input type=\"text\" "
                            "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "accesskey=\""  << i.shortcut << "\" "
-                           "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
-                           "value=\"" << as_safe_html(i.current_value) << "\"/>"
+                           "value=\"" << as_safe_html(i.current_value) << "\" "
+                           "placeholder=\"" << as_safe_html(i.placeholder) << "\"/>"
                     "<input type=\"submit\" value=\"set\"/></label>\n"
           "</form>\n";
 }
@@ -146,17 +146,17 @@ template<typename E>
 ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     os << "<form method=\"get\">\n"
           "    <label>" << i.html_label << ": " << as_safe_html(i.current_value) << "&nbsp;"
-          "        <select onchange=\"this.form.submit()\" "
-                          "accesskey=\""  << i.shortcut << "\" "
-                          "name=\"" << i.name << "\" id=\"input-" << i.name << "\">";
+                    "<select onchange=\"this.form.submit()\" "
+                            "name=\"" << i.name << "\" id=\"input-" << i.name << "\" "
+                            "accesskey=\""  << i.shortcut << "\">";
 
     for (auto e : i.values) {
-        const char* selected = (e == i.current_value) ? "selected" : "";
-        os << "<option value=\"" << as_safe_html(e) << "\" " << selected << ">"
+        const char* selected = (e == i.current_value) ? " selected" : "";
+        os << "<option value=\"" << as_safe_html(e) << "\"" << selected << ">"
            << as_safe_html(e) << "</option>";
     }
 
-    os << "        </select></label>"
+    os << "</select></label>\n"
           "</form>\n";
 
     return os;
@@ -584,9 +584,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "<br>\n";
 
         ss << "<form method=\"get\">\n"
-              "<input type=\"submit\" "
-                            "name=\"purge_cache\" id=\"input-purge_cache\" "
-                            "value=\"Purge cache now\"/>\n"
+              "    <input type=\"submit\" "
+                         "name=\"purge_cache\" id=\"input-purge_cache\" "
+                         "value=\"Purge cache now\"/>\n"
               "</form>\n";
         ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
 
@@ -603,7 +603,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     // Highlight the label/form containing the input selected via the URL fragment.
-    ss << "  <script>var eid = window.location.hash.substr(1); "
+    ss << "<script>var eid = window.location.hash.substr(1); "
           "if (eid) { var e = document.getElementById(eid); "
                      "if (e) e.parentElement.style.backgroundColor = \"yellow\"; }</script>\n";
 
