@@ -115,7 +115,7 @@ ostream& operator<<(ostream& os, const TextInput& i) {
           "<form method=\"get\">\n"
           "    <label>" << i.text << ": "
                     "<input type=\"text\" "
-                           "name=\""  << i.name << "\" "
+                           "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
                            "value=\"" << as_safe_html(i.current_value) << "\"/>"
                     "<input type=\"submit\" value=\"set\"/></label>\n"
@@ -130,7 +130,7 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
           "<form method=\"get\">\n"
           "    <label>" << i.text << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
-                           "name=\""  << i.name << "\" "
+                           "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "accesskey=\""  << i.shortcut << "\" "
                            "value=\"" << next_value << "\"/></label>\n"
           "</form>\n";
@@ -140,7 +140,8 @@ template<typename E>
 ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     os << "<form method=\"get\">\n"
           "    <label>" << i.text << ": " << i.current_value << "&nbsp;"
-          "        <select onchange=\"this.form.submit()\" name=\"" << i.name << "\">";
+          "        <select onchange=\"this.form.submit()\" "
+                          "name=\"" << i.name << "\" id=\"input-" << i.name << "\">";
 
     for (auto e : i.values) {
         const char* selected = (e == i.current_value) ? "selected" : "";
@@ -575,7 +576,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
         ss << "<form method=\"get\">\n"
               "<input type=\"submit\" "
-                            "name=\"purge_cache\" "
+                            "name=\"purge_cache\" id=\"input-purge_cache\" "
                             "value=\"Purge cache now\"/>\n"
               "</form>\n";
         ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
