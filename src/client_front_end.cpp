@@ -60,14 +60,14 @@ static string as_safe_html(E e) {
 }
 
 struct TextInput {
-    beast::string_view text;
+    beast::string_view html_label;
     beast::string_view name;
     beast::string_view placeholder;
     std::string current_value;
 };
 
 struct ToggleInput {
-    beast::string_view text;
+    beast::string_view html_label;
     beast::string_view name;
     char shortcut;
     bool current_value;
@@ -75,13 +75,13 @@ struct ToggleInput {
 
 template<typename E>
 struct ClientFrontEnd::Input {
-    string text;
+    string html_label;
     string name;
     vector<E> values;
     E current_value;
 
-    Input(string text, string name, vector<E> values, E current_value)
-        : text(move(text))
+    Input(string html_label, string name, vector<E> values, E current_value)
+        : html_label(move(html_label))
         , name(move(name))
         , values(move(values))
         , current_value(current_value)
@@ -114,7 +114,7 @@ namespace ouinet { // Need namespace here for argument-dependent-lookups to work
 ostream& operator<<(ostream& os, const TextInput& i) {
     return os <<
           "<form method=\"get\">\n"
-          "    <label>" << i.text << ": "
+          "    <label>" << i.html_label << ": "
                     "<input type=\"text\" "
                            "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "placeholder=\"" << as_safe_html(i.placeholder) << "\" "
@@ -129,7 +129,7 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
 
     return os <<
           "<form method=\"get\">\n"
-          "    <label>" << i.text << ": " << cur_value << "&nbsp;"
+          "    <label>" << i.html_label << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
                            "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "accesskey=\""  << i.shortcut << "\" "
@@ -140,7 +140,7 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
 template<typename E>
 ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     os << "<form method=\"get\">\n"
-          "    <label>" << i.text << ": " << as_safe_html(i.current_value) << "&nbsp;"
+          "    <label>" << i.html_label << ": " << as_safe_html(i.current_value) << "&nbsp;"
           "        <select onchange=\"this.form.submit()\" "
                           "name=\"" << i.name << "\" id=\"input-" << i.name << "\">";
 
