@@ -593,6 +593,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         }
     }
 
+    // Highlight the label/form containing the input selected via the URL fragment.
+    ss << "  <script>var eid = window.location.hash.substr(1); "
+          "if (eid) { var e = document.getElementById(eid); "
+                     "if (e) e.parentElement.style.backgroundColor = \"yellow\"; }</script>\n";
+
     ss << "    </body>\n"
           "</html>\n";
 }
