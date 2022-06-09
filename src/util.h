@@ -229,6 +229,9 @@ base64_decode(const boost::string_view in) {
     return ret;
 }
 
+// Returns an empty string on error (or empty input).
+std::string percent_decode(const boost::string_view);
+
 ///////////////////////////////////////////////////////////////////////////////
 // Write a small file at the given `path` with a `line` of content.
 // If existing, truncate it.

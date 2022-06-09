@@ -1,6 +1,7 @@
 #include "util.h"
 
 #include <algorithm>
+#include <iterator>
 
 #include <boost/asio/ip/udp.hpp>
 #include <boost/iostreams/filtering_streambuf.hpp>
@@ -9,6 +10,8 @@
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
+
+#include <network/uri.hpp>
 
 #include "util/iterators/base32_from_binary.hpp"
 #include "util/iterators/binary_from_base32.hpp"
@@ -153,4 +156,17 @@ bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out
     }
 
     return size == out_size;
+}
+
+std::string ouinet::util::percent_decode(const boost::string_view in) {
+    if (in.empty()) return {};
+
+    std::string ret;
+    try {
+        network::uri::decode( in.cbegin(), in.cend()
+                            , std::back_inserter(ret));
+    } catch (const network::percent_decoding_error&) {
+        return {};
+    }
+    return ret;
 }
