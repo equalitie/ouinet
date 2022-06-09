@@ -313,8 +313,10 @@ set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
     auto split = SplitString(v.substr(0, 256), '+');
 
     ClientConfig::ExtraBtBsServers bsx;
-    for (const auto& bs : split) {
-        if (bs.empty()) continue;
+    for (const auto& bs_enc : split) {
+        if (bs_enc.empty()) continue;
+        auto bs = util::percent_decode(bs_enc);
+        if (bs.empty()) return false;
         auto bs_addr = bittorrent::bootstrap::parse_address(bs);
         if (!bs_addr) return false;
         bsx.insert(*bs_addr);
