@@ -600,10 +600,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
                 http::async_read(con, con_rbuf, req, y);
             });
 
-            if (!wd.is_running()) {
-                return or_throw(yield, asio::error::timed_out);
-            }
-
+            if (!wd.is_running()) ec = asio::error::timed_out;
             if (cancel) ec = asio::error::operation_aborted;
             if (ec) return or_throw(yield, ec);
         }
