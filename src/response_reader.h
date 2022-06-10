@@ -30,7 +30,7 @@ public:
         auto retval = async_read_part(c, y[ec]);
         fail_on_error_or_timeout(y, c, ec, wd, boost::none);
 
-        return std::move(retval);
+        return retval;
     }
 };
 
