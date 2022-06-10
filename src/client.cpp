@@ -1602,6 +1602,10 @@ public:
         }));
 
         yield[ec].tag("flush").run([&] (auto yy) {
+            // This short timeout will get reset with each successful send/recv operation,
+            // so an exchange with no traffic at all does not get stuck for too long.
+            auto op_wd = watch_dog( ctx, default_timeout::activity()
+                                  , [&] { cancel(); });
             session.flush_response(cancel, yy,
                 [&] ( Part&& part
                     , Cancel& cancel
@@ -1620,6 +1624,7 @@ public:
                         return or_throw(y, asio::error::broken_pipe);
                     if (do_cache) qst.push_back(part);
                     qag.push_back(std::move(part));
+                    op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
                 });
         });
 
