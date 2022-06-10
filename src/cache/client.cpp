@@ -266,13 +266,8 @@ struct Client::Impl {
 
         bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
 
-        Cancel timeout_cancel(cancel);
         yield[ec].tag("flush").run([&] (auto y) {
-            // This short timeout will get reset with each successful send/recv operation,
-            // so an exchange with no traffic at all does not get stuck for too long.
-            auto op_wd = watch_dog( s.get_executor(), default_timeout::activity()
-                                  , [&] { timeout_cancel(); });
-            s.flush_response(timeout_cancel, y, [&op_wd, &sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
+            s.flush_response(cancel, y, [&sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(sink, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
@@ -280,11 +275,8 @@ struct Client::Impl {
                     fwd_bytes += b->size();
                 else if (auto cb = part.as_chunk_body())
                     fwd_bytes += cb->size();
-                op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
-            });
+            }, default_timeout::activity());
         });
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
 
         return or_throw(yield, ec, keep_alive);
     }

@@ -2,6 +2,7 @@
 
 #include "generic_stream.h"
 #include "response_reader.h"
+#include "util/watch_dog.h"
 
 //#include "util/part_io.h"
 //#include <iostream>
@@ -45,6 +46,11 @@ public:
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
     template<class Handler>
     void flush_response(Cancel&, asio::yield_context, Handler&& h);
+    // The timeout will get reset with each successful send/recv operation,
+    // so that the exchange does not get stuck for too long.
+    template<class Handler, class TimeoutDuration>
+    void flush_response( Cancel&, asio::yield_context
+                       , Handler&& h, TimeoutDuration);
 
     bool is_done() const override {
         if (!_reader) return false;
@@ -179,6 +185,33 @@ Session::flush_response(Cancel& cancel,
         if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec);
     }
+}
+
+template<class Handler, class TimeoutDuration>
+inline
+void
+Session::flush_response(Cancel& cancel,
+                        asio::yield_context yield,
+                        Handler&& h,
+                        TimeoutDuration timeout)
+{
+    Cancel timeout_cancel(cancel);
+    auto op_wd = watch_dog( get_executor(), timeout
+                          , [&timeout_cancel] { timeout_cancel(); });
+
+    sys::error_code ec;
+    flush_response( timeout_cancel, yield[ec]
+                  , [&h, &op_wd, timeout] (auto&& part, auto& c, auto y) {
+        sys::error_code e;
+        h(std::move(part), c, y[e]);
+        return_or_throw_on_error(y, c, e);
+        op_wd.expires_after(timeout);  // the part was successfully forwarded
+    });
+
+    if (timeout_cancel) ec = asio::error::timed_out;
+    if (cancel) ec = asio::error::operation_aborted;
+
+    return or_throw(yield, ec);
 }
 
 template<class SinkStream>
