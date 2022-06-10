@@ -10,7 +10,6 @@
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
-#include "../util/watch_dog.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
 #include "../async_sleep.h"
