@@ -3,7 +3,11 @@
 #include <functional>
 #include <iostream>
 
+#include <boost/asio/error.hpp>
 #include <boost/intrusive/list.hpp>
+#include <boost/system/error_code.hpp>
+
+#include "../namespaces.h"
 
 #include "../or_throw.h"
 
@@ -130,6 +134,16 @@ private:
 // This is how we use it 99% (100%?) of the time.
 using Cancel = Signal<void()>;
 
+inline
+sys::error_code
+compute_error_code( const sys::error_code& ec
+                  , const Cancel& cancel)
+{
+    assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) return asio::error::operation_aborted;
+    return ec;
+}
+
 // Doing error checking is quite cumbersome. One has to check whether `cancel`
 // is true, make sure that if `cancel` is indeed true, that ec is set
 // appropriately and then return if any of the two is set. Instead of doing it
@@ -148,12 +162,8 @@ using Cancel = Signal<void()>;
 // }
 //
 #define return_or_throw_on_error(yield, cancel, ec, ...) { \
-    sys::error_code ec_ = ec; \
-    if (cancel || ec_) { \
-        assert(!cancel || ec_ == asio::error::operation_aborted); \
-        if (cancel) ec_ = asio::error::operation_aborted; \
-        return or_throw(yield, ec_, ##__VA_ARGS__); \
-    } \
+    sys::error_code ec_ = compute_error_code(ec, cancel); \
+    if (ec_) return or_throw(yield, ec_, ##__VA_ARGS__); \
 }
 
 } // ouinet namespace

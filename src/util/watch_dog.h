@@ -307,13 +307,10 @@ compute_error_code( const sys::error_code& ec
                   , const Cancel& cancel
                   , const WDog& watch_dog)
 {
-    sys::error_code ec_ = ec;
-
-    assert(!cancel || ec_ == asio::error::operation_aborted);
-    if (!watch_dog.is_running()) ec_ = asio::error::timed_out;
-    if (cancel) ec_ = asio::error::operation_aborted;
-
-    return ec_;
+    sys::error_code ec_ = compute_error_code(ec, cancel);
+    if (ec_ == asio::error::operation_aborted) return ec_;
+    if (!watch_dog.is_running()) return asio::error::timed_out;
+    return ec;
 }
 
 // This is similar to `return_or_throw_on_error`,
