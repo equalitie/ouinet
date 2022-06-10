@@ -46,18 +46,15 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                                   , ex = _ex
                                   ] (auto yield) mutable {
                     sys::error_code ec;
-                    bool timed_out = false;
 
                     auto wd = watch_dog( ex, 10s
                                        , [&] {
                                              tls_con->next_layer().close();
-                                             timed_out = true;
                                          });
 
                     tls_con->async_handshake( asio::ssl::stream_base::server
                                             , yield[ec]);
-
-                    if (ec || timed_out || cancel) return;
+                    fail_on_error_or_timeout(yield, cancel, ec, wd);
 
                     static const auto shutter = [](SslStream& s) {
                         // Just close the underlying connection

@@ -571,7 +571,7 @@ void serve( InjectorConfig& config
                 http::async_read(con, con_rbuf, req, y);
             });
 
-            if (!wd.is_running() || cancel || ec) break;
+            fail_on_error_or_timeout(yield, cancel, ec, wd);
         }
 
         yield.log("=== New request ===");

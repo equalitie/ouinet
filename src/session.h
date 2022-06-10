@@ -208,10 +208,7 @@ Session::flush_response(Cancel& cancel,
         op_wd.expires_after(timeout);  // the part was successfully forwarded
     });
 
-    if (timeout_cancel) ec = asio::error::timed_out;
-    if (cancel) ec = asio::error::operation_aborted;
-
-    return or_throw(yield, ec);
+    fail_on_error_or_timeout(yield, cancel, ec, op_wd);
 }
 
 template<class SinkStream>

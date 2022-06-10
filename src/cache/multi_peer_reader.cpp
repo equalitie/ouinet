@@ -133,11 +133,7 @@ public:
         auto wd = watch_dog(_exec, WRITE_REQUEST_TIMEOUT, [&] { tc(); });
 
         http::async_write(_reader->stream(), range_request(http::verb::get, block_id, _key), yield[ec]);
-
-        if (tc) ec = asio::error::timed_out;
-        if (c)  ec = asio::error::operation_aborted;
-
-        return or_throw(yield, ec);
+        fail_on_error_or_timeout(yield, c, ec, wd);
     }
 
     // May return boost::none and no error if the response has no body (e.g. redirect msg)

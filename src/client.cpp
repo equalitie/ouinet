@@ -600,9 +600,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
                 http::async_read(con, con_rbuf, req, y);
             });
 
-            if (!wd.is_running()) ec = asio::error::timed_out;
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) return or_throw(yield, ec);
+            fail_on_error_or_timeout(yield, cancel, ec, wd);
         }
 
         if (req.method() != http::verb::connect) {
@@ -1010,15 +1008,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
         con = std::move(*maybe_con);
     } else {
         auto stream = connect_to_origin(rq, meta, cancel, yield[ec]);
-
-        if (cancel) {
-            assert(ec == asio::error::operation_aborted);
-            ec = watch_dog.is_running()
-               ? ec = asio::error::operation_aborted
-               : ec = asio::error::timed_out;
-        }
-
-        if (ec) return or_throw<Session>(yield, ec);
+        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
         con = _origin_pools.wrap(rq, std::move(stream));
     }
@@ -1032,12 +1022,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
         auto con_close = cancel.connect([&] { con.close(); });
         http::async_write(con, rq_, y);
     });
-
-    if (cancel) {
-        ec = watch_dog.is_running() ? ec = asio::error::operation_aborted
-                                    : ec = asio::error::timed_out;
-    }
-    if (ec) return or_throw<Session>(yield, ec);
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     auto ret = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( std::move(con), rq.method() == http::verb::head

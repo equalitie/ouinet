@@ -28,11 +28,9 @@ public:
         sys::error_code ec;
 
         auto retval = async_read_part(c, y[ec]);
+        fail_on_error_or_timeout(y, c, ec, wd, boost::none);
 
-        if (tc && !c) ec = asio::error::timed_out;
-        assert(!c || ec == asio::error::operation_aborted);
-
-        return or_throw<boost::optional<Part>>(y, ec, std::move(retval));
+        return std::move(retval);
     }
 };
 

@@ -4,6 +4,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/spawn.hpp>
 #include "../defer.h"
+#include "../or_throw.h"
 #include "../util/handler_tracker.h"
 #include "../namespaces.h"
 
@@ -290,5 +291,21 @@ private:
     State* state = nullptr;
 };
 
+// This is similar to `return_or_throw_on_error`,
+// but it also yields a timeout
+// if the given watch dog expired
+// (unless the `cancel` signal did fire).
+//
+// Please note that you should not pass as `cancel`
+// a derived signal used to report the watch dog timeout,
+// but its parent instead,
+// so that timeouts can be distinguished from cancellations.
+#define fail_on_error_or_timeout(yield, cancel, ec, watch_dog, ...) { \
+    sys::error_code ec_ = ec; \
+    assert(!cancel || ec_ == asio::error::operation_aborted); \
+    if (!watch_dog.is_running()) ec_ = asio::error::timed_out; \
+    if (cancel) ec_ = asio::error::operation_aborted; \
+    if (ec_) return or_throw(yield, ec_, ##__VA_ARGS__); \
+}
 
 } // namespace
