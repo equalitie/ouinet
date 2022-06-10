@@ -364,10 +364,10 @@ private:
             auto fetch_wd = watch_dog(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
 
             auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
-            if (timeout_cancel) ec = asio::error::timed_out;
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) yield.log("Failed to get connection; ec=", ec);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+                yield.log("Failed to get connection; ec=", ec);
+                return or_throw(yield, ec);
+            }
 
             // Send HTTP request to origin.
             auto orig_rq = util::to_origin_request(cache_rq);
@@ -375,10 +375,10 @@ private:
             yield[ec].tag("request").run([&] (auto y) {
                 util::http_request(orig_con, orig_rq, timeout_cancel, y);
             });
-            if (timeout_cancel) ec = asio::error::timed_out;
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) yield.log("Failed to send request; ec=", ec);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+                yield.log("Failed to send request; ec=", ec);
+                return or_throw(yield, ec);
+            }
 
             Session::reader_uptr sig_reader;
             auto cache_rq_method = cache_rq.method();
@@ -397,10 +397,10 @@ private:
                 return Session::create( move(sig_reader), cache_rq_method == http::verb::head
                                       , timeout_cancel, y);
             });
-            if (timeout_cancel) ec = asio::error::timed_out;
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) yield.log("Failed to process response head; ec=", ec);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+                yield.log("Failed to process response head; ec=", ec);
+                return or_throw(yield, ec);
+            }
         }
 
         // Start a longer timeout for the main forwarding between origin and user,
@@ -428,10 +428,10 @@ private:
                     fwd_bytes += cb->size();
             }, default_timeout::activity());
         });
-        if (!overlong_wd.is_running()) ec = asio::error::connection_aborted;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to process response; ec=", ec);
-        return_or_throw_on_error(yield, cancel, ec);
+        if (ec = compute_error_code(ec, cancel, overlong_wd)) {
+            yield.log("Failed to process response; ec=", ec);
+            return or_throw(yield, ec);
+        }
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
     }

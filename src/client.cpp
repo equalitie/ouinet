@@ -1196,13 +1196,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
         auto c = yield[ec].tag("connect_to_injector2").run([&] (auto y) {
             return _injector->connect(y, cancel);
         });
-
-        assert(!cancel || ec == asio::error::operation_aborted);
-
-        if (ec) {
-            if (ec != asio::error::operation_aborted) {
-                _YWARN(yield, "Failed to connect to injector; ec=", ec);
-            }
+        if (ec = compute_error_code(ec, cancel, watch_dog)) {
+            _YWARN(yield, "Failed to connect to injector; ec=", ec);
             return or_throw<Session>(yield, ec);
         }
 
