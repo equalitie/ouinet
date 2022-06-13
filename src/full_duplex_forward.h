@@ -78,7 +78,7 @@ full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
 
     sys::error_code ec;
     wait_condition.wait(yield[ec]);  // leave cancellation handling to tasks
-    if (cancel) ec = asio::error::operation_aborted;
+    if (cancel) ec = asio::error::operation_aborted;  // not care about other errors
 
     return or_throw(yield, ec, std::make_pair(fwd_bytes_c1_c2, fwd_bytes_c2_c1));
 }
