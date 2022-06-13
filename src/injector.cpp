@@ -769,6 +769,7 @@ void listen( InjectorConfig& config
             if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield)) {
                 break;
             }
+            ec = {};
             continue;
         }
 
