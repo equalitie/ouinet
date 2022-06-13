@@ -1164,6 +1164,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
         , Cancel& cancel
         , Yield yield)
 {
+    auto watch_dog = ouinet::watch_dog( _ctx
+                                      , default_timeout::fetch_http()
+                                      , [&]{ cancel(); });
+
     sys::error_code ec;
 
     // Build the actual request to send to the injector (auth added below).
@@ -1190,7 +1194,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         return or_throw<Session>(yield, asio::error::try_again);
 
     wait_for_injector(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, Session{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
     assert(_injector);
 
     ConnectionPool<Endpoint>::Connection con;
@@ -1228,11 +1232,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         http::async_write(con, request, y);
     });
 
-    if (cancel_slot) {
-        ec = asio::error::operation_aborted;
-    }
-
-    if (ec) {
+    if (ec = compute_error_code(ec, cancel, watch_dog)) {
         _YWARN(yield, "Failed to send request to the injector; ec=", ec);
         return or_throw<Session>(yield, ec);
     }
@@ -1249,11 +1249,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     auto& hdr = session.response_header();
 
-    if (cancel)
-        ec = asio::error::operation_aborted;
-    else if ( !ec
-            && can_inject
-            && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
+    ec = compute_error_code(ec, cancel, watch_dog);
+    if ( !ec
+         && can_inject
+         && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
         // This is treated like the Injector mechanism being disabled.
         _YWARN(yield, "Injector is using an unacceptable protocol version: ", hdr);
         ec = asio::error::operation_not_supported;
