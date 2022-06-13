@@ -139,7 +139,10 @@ sys::error_code
 compute_error_code( const sys::error_code& ec
                   , const Cancel& cancel)
 {
-    assert(!cancel || ec == asio::error::operation_aborted);
+    // The point of having this function is to correct this behavior,
+    // so that it can be used after any async call
+    // regardless of whether it knows about signals or not.
+    //assert(!cancel || ec == asio::error::operation_aborted);
     if (cancel) return asio::error::operation_aborted;
     return ec;
 }
