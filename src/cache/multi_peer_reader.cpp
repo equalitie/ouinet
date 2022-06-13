@@ -82,8 +82,7 @@ GenericStream connect( asio::executor exec
     if (ec) return or_throw<GenericStream>(yield, ec);
     auto cancel_con = cancel.connect([&] { s.close(); });
     s.async_connect(ep, yield[ec]);
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<GenericStream>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
     return GenericStream(move(s));
 }
 
@@ -285,26 +284,17 @@ public:
         auto wd = watch_dog(_exec, chrono::seconds(10), [&] { timeout_cancel(); });
 
         auto con = connect(_exec, ep, lan_my_eps, timeout_cancel, yield[ec]);
-
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        fail_on_error_or_timeout(yield, cancel, ec, wd);
 
         auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
 
         http::async_write(con, request(http::verb::propfind, _key), yield[ec]);
-
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        fail_on_error_or_timeout(yield, cancel, ec, wd);
 
         auto reader = std::make_unique<http_response::Reader>(move(con));
 
         auto hash_list = HashList::load(*reader, _cache_pk, timeout_cancel, yield[ec]);
-
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        fail_on_error_or_timeout(yield, cancel, ec, wd);
 
         if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen))
             // The client expects an injection belonging to a supported protocol version,
@@ -801,9 +791,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 
     while (true /* do until successful block retrieval */) {
         auto block = fetch_block(_block_id, cancel, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) { return or_throw<OptPart>(yield, ec); }
+        return_or_throw_on_error(yield, cancel, ec, OptPart{});
 
         ++_block_id;
 

@@ -68,7 +68,7 @@ struct GarbageCollector {
                 http_store.for_each([&] (auto rr, auto y) {
                     sys::error_code e;
                     auto k = keep(std::move(rr), y[e]);
-                    if (cancel) ec = asio::error::operation_aborted;
+                    ec = compute_error_code(ec, cancel);
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
                 if (ec) _WARN("Collecting garbage: failed;"
@@ -589,14 +589,12 @@ struct Client::Impl {
         _groups = static_groups
             ? load_backed_dht_groups(groups_dir, move(static_groups), _ex, cancel, y[e])
             : load_dht_groups(groups_dir, _ex, cancel, y[e]);
-
-        if (cancel) e = asio::error::operation_aborted;
-        if (e) return or_throw(y, e);
+        return_or_throw_on_error(y, cancel, e);
 
         _http_store->for_each([&] (auto rr, auto yield) {
             return keep_cache_entry(std::move(rr), yield);
         }, cancel, y[e]);
-        if (e) return or_throw(y, e);
+        return_or_throw_on_error(y, cancel, e);
 
         // These checks are not bullet-proof, but they should catch some inconsistencies
         // between resource groups and the HTTP store.

@@ -78,9 +78,7 @@ client_handshake( Stream&& con
         auto slot = abort_signal.connect([&] { ssl_sock->next_layer().close(); });
         ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
     }
-
-    if (abort_signal) ec = boost::asio::error::operation_aborted;
-    if (ec) return or_throw<GenericStream>(yield, ec);
+    return_or_throw_on_error(yield, abort_signal, ec, GenericStream{});
 
     static const auto ssl_shutter = [](ssl::stream<Stream>& s) {
         // Just close the underlying connection

@@ -117,10 +117,7 @@ Session Session::create( std::unique_ptr<Reader>&& reader
 
     auto head_opt_part = reader->async_read_part(cancel, yield[ec]);
 
-    if (cancel) {
-        assert(ec == asio::error::operation_aborted);
-        ec = asio::error::operation_aborted;
-    }
+    ec = compute_error_code(ec, cancel);
 
     if (!ec && !head_opt_part) {
         // This is ok for the reader,
@@ -168,7 +165,6 @@ Session::flush_response(Cancel& cancel,
     _head_was_read = true;
 
     h(http_response::Part{_head}, cancel, yield[ec]);
-    if (cancel) ec = asio::error::operation_aborted;
     return_or_throw_on_error(yield, cancel, ec);
 
     if (_is_head_response) return;
@@ -182,7 +178,6 @@ Session::flush_response(Cancel& cancel,
         return_or_throw_on_error(yield, cancel, ec);
         if (!opt_part) break;
         h(std::move(*opt_part), cancel, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec);
     }
 }

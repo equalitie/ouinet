@@ -55,8 +55,7 @@ public:
 
         while (_queue.size() >= _max_size) {
             _tx_cv.wait(cancel, yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) return or_throw(yield, ec);
+            return_or_throw_on_error(yield, cancel, ec);
         }
 
         _queue.push_back({std::move(val), ec_});
@@ -97,8 +96,7 @@ public:
         while (i != end) {
             while (_queue.size() >= _max_size) {
                 _tx_cv.wait(cancel, yield[ec]);
-                if (cancel) ec = asio::error::operation_aborted;
-                if (ec) return or_throw(yield, ec);
+                return_or_throw_on_error(yield, cancel, ec);
             }
 
             while (_queue.size() < _max_size && i != end) {
@@ -116,8 +114,7 @@ public:
         auto slot = _destroy_signal.connect([&] { c(); });
         sys::error_code ec;
         _rx_cv.wait(c, yield[ec]);
-        if (c) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
+        return_or_throw_on_error(yield, c, ec);
     }
 
     T async_pop(Cancel cancel, asio::yield_context yield)
@@ -128,8 +125,7 @@ public:
 
         while (_queue.empty()) {
             _rx_cv.wait(cancel, yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) return or_throw<T>(yield, ec);
+            return_or_throw_on_error(yield, cancel, ec, T{});
         }
 
         assert(!_queue.empty());
@@ -152,8 +148,7 @@ public:
 
         while (_queue.empty()) {
             _rx_cv.wait(cancel, yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) return or_throw<size_t>(yield, ec, 0);
+            return_or_throw_on_error(yield, cancel, ec, 0);
         }
 
         assert(!_queue.empty());
@@ -171,8 +166,7 @@ public:
 
         _tx_cv.notify();
 
-        if (cancel) ec = asio::error::operation_aborted;
-
+        ec = compute_error_code(ec, cancel);
         return or_throw<size_t>(yield, ec, 0);
     }
 

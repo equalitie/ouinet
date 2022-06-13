@@ -28,8 +28,7 @@ namespace detail {
         auto cancelled = c.connect([&] { s.close(); });
         sys::error_code ec;
         p->async_write(s, y[ec]);
-        if (cancelled) ec = asio::error::operation_aborted;
-        return or_throw(y, ec);
+        return_or_throw_on_error(y, c, ec);
     }
 
     template<class P, class S, class Duration>

@@ -456,9 +456,8 @@ auto CacheControl::make_fetch_fresh_job( const Request& rq
             auto y = yield.detach(yield_);
             sys::error_code ec;
             auto r = fetch_fresh(rq, cached, cancel, y[ec]);
-            assert(!cancel || ec == asio::error::operation_aborted);
-            if (ec) return or_throw(y, ec, move(r));
-            return r;
+            ec = compute_error_code(ec, cancel);
+            return or_throw(y, ec, move(r));
         });
 
     return job;

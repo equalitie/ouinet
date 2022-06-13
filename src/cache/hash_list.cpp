@@ -102,13 +102,8 @@ HashList HashList::load(
 
     if (!ec && !part) {
         assert(0);
-        ec = c ? asio::error::operation_aborted
-               : sys::errc::make_error_code(sys::errc::bad_message);
+        ec = sys::errc::make_error_code(sys::errc::bad_message);
     }
-
-    if (c) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<HashList>(y, ec);
-
     return_or_throw_on_error(y, c, ec, HashList{});
 
     if (!part->is_head()) return or_throw<HashList>(y, bad_msg);

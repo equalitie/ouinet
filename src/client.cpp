@@ -385,7 +385,7 @@ private:
         yield[ec].tag("wait_for_" #WHAT).run([&] (auto y) { \
             _##WHAT##_starting->wait(cancel, y); \
         }); \
-        if (cancel) ec = asio::error::operation_aborted; \
+        ec = compute_error_code(ec, cancel); \
         if (ec && ec != asio::error::operation_aborted) \
             LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
         return or_throw(yield, ec); \
@@ -627,7 +627,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
                                         , false, ouiservice::Bep5Client::injectors);
         });
 
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         if (ec == asio::error::operation_aborted) return or_throw(cyield, ec);
         if (ec) {
             return handle_bad_request( con, req, "Failed to connect to injector"
@@ -654,9 +654,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         cyield[ec].tag("write_res").run([&] (auto y) {
             util::http_reply(con, res, y);
         });
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(cyield, ec);
+        return_or_throw_on_error(cyield, cancel, ec);
 
         // First queue unused but already read data back into the other client connnection.
         if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
@@ -778,15 +776,10 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         http::async_write(con, request, y);
     });
 
-    if (cancel_slot) {
-        ec = asio::error::operation_aborted;
-    }
-
-    if (ec) {
+    if (ec = compute_error_code(ec, cancel)) {
         _YERROR(yield, "Failed to send request to self; ec=", ec);
+        return or_throw<Session>(yield, ec);
     }
-
-    if (ec) return or_throw<Session>(yield, ec);
 
     return yield.tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), request.method() == http::verb::head
@@ -981,8 +974,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , yield[ec].tag("serve_frontend"));
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<Response>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, Response{});
 
     res.set( http_::response_source_hdr  // for agent
            , http_::response_source_hdr_front_end);
@@ -1433,7 +1425,7 @@ public:
     void front_end_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         sys::error_code ec;
         Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);;
         if (!ec) tnx.write_to_user_agent(res, cancel, static_cast<asio::yield_context>(yield[ec]));
         return or_throw(yield, ec);
     }

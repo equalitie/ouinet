@@ -186,8 +186,7 @@ struct Announcer::Loop {
                 sys::error_code ec;
                 _DEBUG("No entries to update, waiting...");
                 entries.async_wait_for_push(cancel, yield[ec]);
-                if (cancel) ec = asio::error::operation_aborted;
-                if (ec) return or_throw(yield, ec, end);
+                return_or_throw_on_error(yield, cancel, ec, end);
             }
 
             assert(!entries.empty());

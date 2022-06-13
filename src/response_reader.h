@@ -216,9 +216,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
     // -------------------------------------------------------
     if (!_parser.is_header_done()) {
         http::async_read_header(_in, _buffer, _parser, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<Part>(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec, boost::none);
 
         if (_parser.is_done() && !_is_done) {  // e.g. no body
             _is_done = true;
@@ -241,7 +239,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         assert(!_next_part);
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         assert(ec != http::error::end_of_stream);
         if (ec == http::error::end_of_chunk) ec = {};
         if (ec) return or_throw(yield, ec, boost::none);
@@ -265,7 +263,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
 
         http::async_read_some(_in, _buffer, _parser, yield[ec]);
 
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         assert(ec != http::error::end_of_stream);
         if (ec == http::error::need_buffer) ec = sys::error_code();
         if (ec) return or_throw(yield, ec, boost::none);

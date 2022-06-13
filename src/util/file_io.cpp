@@ -150,8 +150,7 @@ void read( posix::stream_descriptor& f
     auto cancel_slot = cancel.connect([&] { f.close(); });
     sys::error_code ec;
     asio::async_read(f, b, yield[ec]);
-    if (cancel) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec);
 }
 
 void write( posix::stream_descriptor& f
@@ -162,8 +161,7 @@ void write( posix::stream_descriptor& f
     auto cancel_slot = cancel.connect([&] { f.close(); });
     sys::error_code ec;
     asio::async_write(f, b, yield[ec]);
-    if (cancel) ec = asio::error::operation_aborted;
-    return or_throw(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec);
 }
 
 void remove_file(const fs::path& p)
