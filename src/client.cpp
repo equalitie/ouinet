@@ -679,10 +679,14 @@ Client::State::fetch_stored_in_dcache( const Request& request
                                      , Cancel& cancel
                                      , Yield yield)
 {
+    auto watch_dog = ouinet::watch_dog( _ctx
+                                      , default_timeout::fetch_http()
+                                      , [&]{ cancel(); });
+
     sys::error_code ec;
 
     wait_for_cache(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
 
     auto c = get_cache();
 
@@ -700,7 +704,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
     if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
     auto s = c->load( move(*key), dht_group, request.method() == http::verb::head
                     , cancel, yield[ec].tag("load"));
-    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
 
     s.debug();
     s.debug_prefix(yield.tag());
