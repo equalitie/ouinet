@@ -27,7 +27,7 @@ public:
         auto wd = watch_dog(get_executor(), d, [&] { tc(); });
         sys::error_code ec;
 
-        auto retval = async_read_part(c, y[ec]);
+        auto retval = async_read_part(tc, y[ec]);
         fail_on_error_or_timeout(y, c, ec, wd, boost::none);
 
         return retval;
