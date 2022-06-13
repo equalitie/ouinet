@@ -1024,7 +1024,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
         return Session::create( std::move(con), rq.method() == http::verb::head
                               , cancel, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session());
 
     // Prevent others from inserting ouinet headers.
     util::remove_ouinet_fields_ref(ret.response_header());
