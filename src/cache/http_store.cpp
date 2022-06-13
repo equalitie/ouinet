@@ -154,9 +154,9 @@ struct SigEntry {
     {
         sys::error_code ec;
         auto line_len = asio::async_read_until(in, asio::dynamic_buffer(buf), '\n', yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         if (ec == asio::error::eof) ec = {};
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        if (ec) return or_throw(yield, ec, boost::none);
 
         if (line_len == 0) return boost::none;
         assert(line_len <= buf.size());
@@ -210,7 +210,7 @@ private:
     create_file(const fs::path& fname, Cancel cancel, sys::error_code& ec)
     {
         auto f = util::file_io::open_or_create(ex, dirp / fname, ec);
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         return f;
     }
 
@@ -369,8 +369,7 @@ public:
 
         sys::error_code ec;
         http::async_read_header(is, *buffer, *parser, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<SignedHead>(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec, SignedHead{});
 
         if (!parser->is_header_done()) {
             return or_throw<SignedHead>(yield, sys::errc::make_error_code(sys::errc::no_message));
@@ -502,9 +501,9 @@ private:
 
         sys::error_code ec;
         auto len = asio::async_read(bodyf, asio::buffer(body_buffer), yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         if (ec == asio::error::eof) ec = {};
-        return_or_throw_on_error(yield, cancel, ec, empty_cb);
+        if (ec) return or_throw(yield, ec, empty_cb);
 
         assert(len <= body_buffer.size());
         return {std::vector<uint8_t>(body_buffer.cbegin(), body_buffer.cbegin() + len), 0};
@@ -942,17 +941,13 @@ http_store_load_hash_list( const fs::path& dir
     HashList hl;
 
     hl.signed_head = HttpStoreReader::read_signed_head(headf, cancel, yield[ec]);
-
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<HashList>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, HashList{});
 
     std::string sig_buffer;
 
     while(true) {
         auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw<HashList>(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec, HashList{});
 
         if (!opt_sig_entry) break;
 
@@ -1019,7 +1014,7 @@ public:
         // Do not use `for_each` since it can alter the store.
         sys::error_code ec;
         auto sz = recursive_dir_size(path, ec);
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         return or_throw(yield, ec, sz);
     }
 
@@ -1097,7 +1092,7 @@ public:
         auto sz = HttpReadStore::size(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, 0);
         sz += recursive_dir_size(content_path, ec);
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         return or_throw(yield, ec, sz);
     }
 
@@ -1263,7 +1258,7 @@ FullHttpStore::for_each( keep_func keep
             assert(rr);
 
             auto keep_entry = keep(std::move(rr), yield[ec]);
-            if (cancel) ec = asio::error::operation_aborted;
+            ec = compute_error_code(ec, cancel);
             if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {
                 _WARN("Failed to check cached response: ", p, "; ec=", ec);

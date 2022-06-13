@@ -72,7 +72,7 @@ public:
             self->_self = nullptr;
             self->_cancel_signal = nullptr;
 
-            if (cancel) ec = asio::error::operation_aborted;
+            ec = compute_error_code(ec, cancel);
 
             self->_result = Result{ ec, std::move(retval) };
 
@@ -129,8 +129,7 @@ public:
         auto con = c.connect([&] { cancel(); });
         sys::error_code ec;
         wait_for_finish(yield[ec]);
-        if (c) ec = asio::error::operation_aborted;
-        return or_throw(yield, ec);
+        return_or_throw_on_error(yield, c, ec);;
     }
 
     void cancel() {

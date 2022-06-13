@@ -28,8 +28,7 @@ namespace detail {
         auto cancelled = c.connect([&] { s.close(); });
         sys::error_code ec;
         p->async_write(s, y[ec]);
-        if (cancelled) ec = asio::error::operation_aborted;
-        return or_throw(y, ec);
+        return_or_throw_on_error(y, c, ec);
     }
 
     template<class P, class S, class Duration>
@@ -39,9 +38,7 @@ namespace detail {
         auto wd = watch_dog(s.get_executor(), d, [&] { tc(); });
         sys::error_code ec;
         async_write_c(p, s, tc, y[ec]);
-        if (tc && !c) ec = asio::error::timed_out;
-        assert(!c || ec == asio::error::operation_aborted);
-        return or_throw(y, ec);
+        fail_on_error_or_timeout(y, c, ec, wd);
     }
 }
 

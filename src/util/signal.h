@@ -3,7 +3,13 @@
 #include <functional>
 #include <iostream>
 
+#include <boost/asio/error.hpp>
 #include <boost/intrusive/list.hpp>
+#include <boost/system/error_code.hpp>
+
+#include "../namespaces.h"
+
+#include "../or_throw.h"
 
 namespace ouinet {
 
@@ -127,5 +133,40 @@ private:
 
 // This is how we use it 99% (100%?) of the time.
 using Cancel = Signal<void()>;
+
+inline
+sys::error_code
+compute_error_code( const sys::error_code& ec
+                  , const Cancel& cancel)
+{
+    // The point of having this function is to correct this behavior,
+    // so that it can be used after any async call
+    // regardless of whether it knows about signals or not.
+    //assert(!cancel || ec == asio::error::operation_aborted);
+    if (cancel) return asio::error::operation_aborted;
+    return ec;
+}
+
+// Doing error checking is quite cumbersome. One has to check whether `cancel`
+// is true, make sure that if `cancel` is indeed true, that ec is set
+// appropriately and then return if any of the two is set. Instead of doing it
+// after each async operation, this macro is ought to help with it.
+//
+// Usage:
+//
+// int foo(Cancel& cancel, yield_context yield) {
+//     sys::error_code ec;
+//     int ret = my_async_operation(cancel, yield[ec]);
+//     return_or_throw_on_error(yield, cancel, ec, int(0));
+//
+//     // ... other async operations
+//
+//     return ret;
+// }
+//
+#define return_or_throw_on_error(yield, cancel, ec, ...) { \
+    sys::error_code ec_ = compute_error_code(ec, cancel); \
+    if (ec_) return or_throw(yield, ec_, ##__VA_ARGS__); \
+}
 
 } // ouinet namespace

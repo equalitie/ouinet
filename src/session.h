@@ -2,6 +2,7 @@
 
 #include "generic_stream.h"
 #include "response_reader.h"
+#include "util/watch_dog.h"
 
 //#include "util/part_io.h"
 //#include <iostream>
@@ -45,6 +46,11 @@ public:
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
     template<class Handler>
     void flush_response(Cancel&, asio::yield_context, Handler&& h);
+    // The timeout will get reset with each successful send/recv operation,
+    // so that the exchange does not get stuck for too long.
+    template<class Handler, class TimeoutDuration>
+    void flush_response( Cancel&, asio::yield_context
+                       , Handler&& h, TimeoutDuration);
 
     bool is_done() const override {
         if (!_reader) return false;
@@ -111,10 +117,7 @@ Session Session::create( std::unique_ptr<Reader>&& reader
 
     auto head_opt_part = reader->async_read_part(cancel, yield[ec]);
 
-    if (cancel) {
-        assert(ec == asio::error::operation_aborted);
-        ec = asio::error::operation_aborted;
-    }
+    ec = compute_error_code(ec, cancel);
 
     if (!ec && !head_opt_part) {
         // This is ok for the reader,
@@ -162,7 +165,6 @@ Session::flush_response(Cancel& cancel,
     _head_was_read = true;
 
     h(http_response::Part{_head}, cancel, yield[ec]);
-    if (cancel) ec = asio::error::operation_aborted;
     return_or_throw_on_error(yield, cancel, ec);
 
     if (_is_head_response) return;
@@ -176,9 +178,32 @@ Session::flush_response(Cancel& cancel,
         return_or_throw_on_error(yield, cancel, ec);
         if (!opt_part) break;
         h(std::move(*opt_part), cancel, yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
         return_or_throw_on_error(yield, cancel, ec);
     }
+}
+
+template<class Handler, class TimeoutDuration>
+inline
+void
+Session::flush_response(Cancel& cancel,
+                        asio::yield_context yield,
+                        Handler&& h,
+                        TimeoutDuration timeout)
+{
+    Cancel timeout_cancel(cancel);
+    auto op_wd = watch_dog( get_executor(), timeout
+                          , [&timeout_cancel] { timeout_cancel(); });
+
+    sys::error_code ec;
+    flush_response( timeout_cancel, yield[ec]
+                  , [&h, &op_wd, timeout] (auto&& part, auto& c, auto y) {
+        sys::error_code e;
+        h(std::move(part), c, y[e]);
+        return_or_throw_on_error(y, c, e);
+        op_wd.expires_after(timeout);  // the part was successfully forwarded
+    });
+
+    fail_on_error_or_timeout(yield, cancel, ec, op_wd);
 }
 
 template<class SinkStream>

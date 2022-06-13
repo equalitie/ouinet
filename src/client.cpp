@@ -385,7 +385,7 @@ private:
         yield[ec].tag("wait_for_" #WHAT).run([&] (auto y) { \
             _##WHAT##_starting->wait(cancel, y); \
         }); \
-        if (cancel) ec = asio::error::operation_aborted; \
+        ec = compute_error_code(ec, cancel); \
         if (ec && ec != asio::error::operation_aborted) \
             LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
         return or_throw(yield, ec); \
@@ -600,12 +600,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
                 http::async_read(con, con_rbuf, req, y);
             });
 
-            if (!wd.is_running()) {
-                return or_throw(yield, asio::error::timed_out);
-            }
-
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) return or_throw(yield, ec);
+            fail_on_error_or_timeout(yield, cancel, ec, wd);
         }
 
         if (req.method() != http::verb::connect) {
@@ -632,7 +627,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
                                         , false, ouiservice::Bep5Client::injectors);
         });
 
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);
         if (ec == asio::error::operation_aborted) return or_throw(cyield, ec);
         if (ec) {
             return handle_bad_request( con, req, "Failed to connect to injector"
@@ -659,9 +654,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         cyield[ec].tag("write_res").run([&] (auto y) {
             util::http_reply(con, res, y);
         });
-
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(cyield, ec);
+        return_or_throw_on_error(cyield, cancel, ec);
 
         // First queue unused but already read data back into the other client connnection.
         if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
@@ -684,10 +677,14 @@ Client::State::fetch_stored_in_dcache( const Request& request
                                      , Cancel& cancel
                                      , Yield yield)
 {
+    auto watch_dog = ouinet::watch_dog( _ctx
+                                      , default_timeout::fetch_http()
+                                      , [&]{ cancel(); });
+
     sys::error_code ec;
 
     wait_for_cache(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
 
     auto c = get_cache();
 
@@ -705,7 +702,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
     if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
     auto s = c->load( move(*key), dht_group, request.method() == http::verb::head
                     , cancel, yield[ec].tag("load"));
-    return_or_throw_on_error(yield, cancel, ec, CacheEntry{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
 
     s.debug();
     s.debug_prefix(yield.tag());
@@ -779,15 +776,10 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         http::async_write(con, request, y);
     });
 
-    if (cancel_slot) {
-        ec = asio::error::operation_aborted;
-    }
-
-    if (ec) {
+    if (ec = compute_error_code(ec, cancel)) {
         _YERROR(yield, "Failed to send request to self; ec=", ec);
+        return or_throw<Session>(yield, ec);
     }
-
-    if (ec) return or_throw<Session>(yield, ec);
 
     return yield.tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), request.method() == http::verb::head
@@ -982,8 +974,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , yield[ec].tag("serve_frontend"));
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<Response>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, Response{});
 
     res.set( http_::response_source_hdr  // for agent
            , http_::response_source_hdr_front_end);
@@ -1013,15 +1004,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
         con = std::move(*maybe_con);
     } else {
         auto stream = connect_to_origin(rq, meta, cancel, yield[ec]);
-
-        if (cancel) {
-            assert(ec == asio::error::operation_aborted);
-            ec = watch_dog.is_running()
-               ? ec = asio::error::operation_aborted
-               : ec = asio::error::timed_out;
-        }
-
-        if (ec) return or_throw<Session>(yield, ec);
+        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
         con = _origin_pools.wrap(rq, std::move(stream));
     }
@@ -1035,18 +1018,13 @@ Session Client::State::fetch_fresh_from_origin( Request rq
         auto con_close = cancel.connect([&] { con.close(); });
         http::async_write(con, rq_, y);
     });
-
-    if (cancel) {
-        ec = watch_dog.is_running() ? ec = asio::error::operation_aborted
-                                    : ec = asio::error::timed_out;
-    }
-    if (ec) return or_throw<Session>(yield, ec);
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     auto ret = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( std::move(con), rq.method() == http::verb::head
                               , cancel, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session());
 
     // Prevent others from inserting ouinet headers.
     util::remove_ouinet_fields_ref(ret.response_header());
@@ -1082,13 +1060,13 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     sys::error_code ec;
 
     wait_for_injector(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, Session{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
     assert(_injector);
 
     auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
         return _injector->connect(y, cancel);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // Build the actual request to send to the proxy.
     Request connreq = { http::verb::connect
@@ -1107,7 +1085,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     yield[ec].tag("connreq").run([&] (auto y) {
         util::http_request(inj.connection, connreq, cancel, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // Only get the head of the CONNECT response
     // (otherwise we would get stuck waiting to read
@@ -1119,7 +1097,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         auto part = yield[ec].tag("read_hdr").run([&] (auto y) {
             return r->async_read_part(cancel, y);
         });
-        return_or_throw_on_error(yield, cancel, ec, Session());
+        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
         assert(part && part->is_head());
 
         if (http::to_status_class(part->as_head()->result()) != http::status_class::successful) {
@@ -1146,7 +1124,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     } else {
         con = move(inj.connection);
     }
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
@@ -1155,13 +1133,13 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         auto slot = cancel.connect([&con] { con.close(); });
         http::async_write(con, rq_, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), rq.method() == http::verb::head
                               , cancel, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // Prevent others from inserting ouinet headers.
     util::remove_ouinet_fields_ref(session.response_header());
@@ -1178,6 +1156,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
         , Cancel& cancel
         , Yield yield)
 {
+    auto watch_dog = ouinet::watch_dog( _ctx
+                                      , default_timeout::fetch_http()
+                                      , [&]{ cancel(); });
+
     sys::error_code ec;
 
     // Build the actual request to send to the injector (auth added below).
@@ -1204,7 +1186,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         return or_throw<Session>(yield, asio::error::try_again);
 
     wait_for_injector(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, Session{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
     assert(_injector);
 
     ConnectionPool<Endpoint>::Connection con;
@@ -1214,13 +1196,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
         auto c = yield[ec].tag("connect_to_injector2").run([&] (auto y) {
             return _injector->connect(y, cancel);
         });
-
-        assert(!cancel || ec == asio::error::operation_aborted);
-
-        if (ec) {
-            if (ec != asio::error::operation_aborted) {
-                _YWARN(yield, "Failed to connect to injector; ec=", ec);
-            }
+        if (ec = compute_error_code(ec, cancel, watch_dog)) {
+            _YWARN(yield, "Failed to connect to injector; ec=", ec);
             return or_throw<Session>(yield, ec);
         }
 
@@ -1247,11 +1224,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         http::async_write(con, request, y);
     });
 
-    if (cancel_slot) {
-        ec = asio::error::operation_aborted;
-    }
-
-    if (ec) {
+    if (ec = compute_error_code(ec, cancel, watch_dog)) {
         _YWARN(yield, "Failed to send request to the injector; ec=", ec);
         return or_throw<Session>(yield, ec);
     }
@@ -1268,11 +1241,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     auto& hdr = session.response_header();
 
-    if (cancel)
-        ec = asio::error::operation_aborted;
-    else if ( !ec
-            && can_inject
-            && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
+    ec = compute_error_code(ec, cancel, watch_dog);
+    if ( !ec
+         && can_inject
+         && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
         // This is treated like the Injector mechanism being disabled.
         _YWARN(yield, "Injector is using an unacceptable protocol version: ", hdr);
         ec = asio::error::operation_not_supported;
@@ -1453,7 +1425,7 @@ public:
     void front_end_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         sys::error_code ec;
         Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
+        ec = compute_error_code(ec, cancel);;
         if (!ec) tnx.write_to_user_agent(res, cancel, static_cast<asio::yield_context>(yield[ec]));
         return or_throw(yield, ec);
     }
@@ -1620,7 +1592,7 @@ public:
                         return or_throw(y, asio::error::broken_pipe);
                     if (do_cache) qst.push_back(part);
                     qag.push_back(std::move(part));
-                });
+                }, default_timeout::activity());
         });
 
         if (do_cache) qst.push_back(boost::none);

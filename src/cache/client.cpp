@@ -10,7 +10,6 @@
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
-#include "../util/watch_dog.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
 #include "../async_sleep.h"
@@ -69,7 +68,7 @@ struct GarbageCollector {
                 http_store.for_each([&] (auto rr, auto y) {
                     sys::error_code e;
                     auto k = keep(std::move(rr), y[e]);
-                    if (cancel) ec = asio::error::operation_aborted;
+                    ec = compute_error_code(ec, cancel);
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
                 if (ec) _WARN("Collecting garbage: failed;"
@@ -266,13 +265,8 @@ struct Client::Impl {
 
         bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
 
-        Cancel timeout_cancel(cancel);
         yield[ec].tag("flush").run([&] (auto y) {
-            // This short timeout will get reset with each successful send/recv operation,
-            // so an exchange with no traffic at all does not get stuck for too long.
-            auto op_wd = watch_dog( s.get_executor(), default_timeout::activity()
-                                  , [&] { timeout_cancel(); });
-            s.flush_response(timeout_cancel, y, [&op_wd, &sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
+            s.flush_response(cancel, y, [&sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(sink, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
@@ -280,11 +274,8 @@ struct Client::Impl {
                     fwd_bytes += b->size();
                 else if (auto cb = part.as_chunk_body())
                     fwd_bytes += cb->size();
-                op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
-            });
+            }, default_timeout::activity());
         });
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
 
         return or_throw(yield, ec, keep_alive);
     }
@@ -598,14 +589,12 @@ struct Client::Impl {
         _groups = static_groups
             ? load_backed_dht_groups(groups_dir, move(static_groups), _ex, cancel, y[e])
             : load_dht_groups(groups_dir, _ex, cancel, y[e]);
-
-        if (cancel) e = asio::error::operation_aborted;
-        if (e) return or_throw(y, e);
+        return_or_throw_on_error(y, cancel, e);
 
         _http_store->for_each([&] (auto rr, auto yield) {
             return keep_cache_entry(std::move(rr), yield);
         }, cancel, y[e]);
-        if (e) return or_throw(y, e);
+        return_or_throw_on_error(y, cancel, e);
 
         // These checks are not bullet-proof, but they should catch some inconsistencies
         // between resource groups and the HTTP store.

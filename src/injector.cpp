@@ -356,18 +356,18 @@ private:
             yield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
         });
 
-        Cancel timeout_cancel(cancel);
-
         Session orig_sess;
         {
+            Cancel timeout_cancel(cancel);
+
             // Start a short timeout for initial fetch.
             auto fetch_wd = watch_dog(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
 
             auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
-            if (timeout_cancel) ec = asio::error::timed_out;
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) yield.log("Failed to get connection; ec=", ec);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+                yield.log("Failed to get connection; ec=", ec);
+                return or_throw(yield, ec);
+            }
 
             // Send HTTP request to origin.
             auto orig_rq = util::to_origin_request(cache_rq);
@@ -375,10 +375,10 @@ private:
             yield[ec].tag("request").run([&] (auto y) {
                 util::http_request(orig_con, orig_rq, timeout_cancel, y);
             });
-            if (timeout_cancel) ec = asio::error::timed_out;
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) yield.log("Failed to send request; ec=", ec);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+                yield.log("Failed to send request; ec=", ec);
+                return or_throw(yield, ec);
+            }
 
             Session::reader_uptr sig_reader;
             auto cache_rq_method = cache_rq.method();
@@ -397,10 +397,10 @@ private:
                 return Session::create( move(sig_reader), cache_rq_method == http::verb::head
                                       , timeout_cancel, y);
             });
-            if (timeout_cancel) ec = asio::error::timed_out;
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) yield.log("Failed to process response head; ec=", ec);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+                yield.log("Failed to process response head; ec=", ec);
+                return or_throw(yield, ec);
+            }
         }
 
         // Start a longer timeout for the main forwarding between origin and user,
@@ -418,10 +418,7 @@ private:
         yield.log(orig_sess.response_header());
 
         yield.tag("flush")[ec].run([&] (auto y) {
-            // This short timeout will get reset with each successful send/recv operation,
-            // so an exchange with no traffic at all does not get stuck for too long.
-            auto op_wd = watch_dog(executor, default_timeout::activity(), [&] { timeout_cancel(); });
-            orig_sess.flush_response(timeout_cancel, y, [&op_wd, &con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
+            orig_sess.flush_response(cancel, y, [&con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(con, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
@@ -429,14 +426,12 @@ private:
                     fwd_bytes += b->size();
                 else if (auto cb = part.as_chunk_body())
                     fwd_bytes += cb->size();
-                op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
-            });
+            }, default_timeout::activity());
         });
-        if (!overlong_wd.is_running()) ec = asio::error::connection_aborted;
-        if (timeout_cancel) ec = asio::error::timed_out;
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) yield.log("Failed to process response; ec=", ec);
-        return_or_throw_on_error(yield, cancel, ec);
+        if (ec = compute_error_code(ec, cancel, overlong_wd)) {
+            yield.log("Failed to process response; ec=", ec);
+            return or_throw(yield, ec);
+        }
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
     }
@@ -576,9 +571,7 @@ void serve( InjectorConfig& config
                 http::async_read(con, con_rbuf, req, y);
             });
 
-            if (!wd.is_running()) break;
-
-            if (ec || cancel) break;
+            fail_on_error_or_timeout(yield, cancel, ec, wd);
         }
 
         yield.log("=== New request ===");
@@ -678,12 +671,8 @@ void serve( InjectorConfig& config
                     pyield.log("=== Sending back proxy response ===");
                     pyield.log(inh);
 
-                    Cancel timeout_cancel(cancel);
                     pyield[ec].tag("flush").run([&] (auto y) {
-                        // This short timeout will get reset with each successful send/recv operation,
-                        // so an exchange with no traffic at all does not get stuck for too long.
-                        auto op_wd = watch_dog(orig_sess.get_executor(), default_timeout::activity(), [&] { timeout_cancel(); });
-                        orig_sess.flush_response(timeout_cancel, y, [&] (auto&& part, auto& cc, auto yy) {
+                        orig_sess.flush_response(cancel, y, [&] (auto&& part, auto& cc, auto yy) {
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
                             client_was_written_to = true;  // even with error (possible partial write)
@@ -692,11 +681,8 @@ void serve( InjectorConfig& config
                                 fwd_bytes += b->size();
                             else if (auto cb = part.as_chunk_body())
                                 fwd_bytes += cb->size();
-                            op_wd.expires_after(default_timeout::activity());  // the part was successfully forwarded
-                        });
+                        }, default_timeout::activity());
                     });
-                    if (timeout_cancel) ec = asio::error::timed_out;
-                    if (cancel) ec = asio::error::operation_aborted;
                 }
                 rrp = orig_sess.release_reader();
                 if (rrp)

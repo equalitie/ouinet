@@ -94,23 +94,17 @@ http_request( StreamIn& in
             , asio::yield_context yield)
 {
     auto cancelled = cancel.connect([&] { in.close(); });
-    bool timed_out = false;
     sys::error_code ec;
 
     auto wdog = watch_dog( in.get_executor(), default_timeout::http_send_simple()
-                         , [&] { timed_out = true; in.close(); });
+                         , [&] { in.close(); });
     http::async_write(in, rq, yield[ec]);
 
     // Ignore `end_of_stream` error, there may still be data in
     // the receive buffer we can read.
     if (ec == http::error::end_of_stream)
         ec = sys::error_code();
-    if (timed_out)
-        ec = asio::error::timed_out;
-    if (cancelled)
-        ec = asio::error::operation_aborted;
-    if (ec)
-        return or_throw(yield, ec);
+    fail_on_error_or_timeout(yield, cancel, ec, wdog);
 }
 
 // Send the HTTP response `rs` over `out`,
