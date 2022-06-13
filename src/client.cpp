@@ -1064,13 +1064,13 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     sys::error_code ec;
 
     wait_for_injector(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, Session{});
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
     assert(_injector);
 
     auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
         return _injector->connect(y, cancel);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // Build the actual request to send to the proxy.
     Request connreq = { http::verb::connect
@@ -1089,7 +1089,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     yield[ec].tag("connreq").run([&] (auto y) {
         util::http_request(inj.connection, connreq, cancel, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // Only get the head of the CONNECT response
     // (otherwise we would get stuck waiting to read
@@ -1101,7 +1101,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         auto part = yield[ec].tag("read_hdr").run([&] (auto y) {
             return r->async_read_part(cancel, y);
         });
-        return_or_throw_on_error(yield, cancel, ec, Session());
+        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
         assert(part && part->is_head());
 
         if (http::to_status_class(part->as_head()->result()) != http::status_class::successful) {
@@ -1128,7 +1128,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     } else {
         con = move(inj.connection);
     }
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
@@ -1137,13 +1137,13 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         auto slot = cancel.connect([&con] { con.close(); });
         http::async_write(con, rq_, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), rq.method() == http::verb::head
                               , cancel, y);
     });
-    return_or_throw_on_error(yield, cancel, ec, Session());
+    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     // Prevent others from inserting ouinet headers.
     util::remove_ouinet_fields_ref(session.response_header());
