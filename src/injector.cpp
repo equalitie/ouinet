@@ -571,7 +571,8 @@ void serve( InjectorConfig& config
                 http::async_read(con, con_rbuf, req, y);
             });
 
-            fail_on_error_or_timeout(yield, cancel, ec, wd);
+            ec = compute_error_code(ec, cancel, wd);
+            if (ec) break;
         }
 
         yield.log("=== New request ===");
@@ -603,7 +604,7 @@ void serve( InjectorConfig& config
             }
             return handle_connect_request( move(con), move(con_rbuf)
                                          , req
-                                         , cancel
+                                         , cancel  // do not propagate error
                                          , yield[ec].tag("proxy/connect/handle_connect"));
         }
 
@@ -791,6 +792,7 @@ void listen( InjectorConfig& config
             connection_id,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
+            sys::error_code leaked_ec;
             serve( config
                  , connection_id
                  , std::move(connection)
@@ -798,7 +800,13 @@ void listen( InjectorConfig& config
                  , origin_pools
                  , genuuid
                  , cancel
-                 , yield);
+                 , yield[leaked_ec]);
+            if (leaked_ec) {
+                // The convention is that `serve` does not throw errors,
+                // so complain otherwise but avoid crashing in production.
+                LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
+                assert(0);
+            }
         }, attribs);
     }
 }
