@@ -2315,6 +2315,7 @@ void Client::State::serve_request( GenericStream&& con
             _YWARN(yield, "Request authentication failed, discarding");
             continue;
         }
+        assert(!ec); ec = {};
 
         _YDEBUG(yield, "=== New request ===");
         _YDEBUG(yield, req.base());
