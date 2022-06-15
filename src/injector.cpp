@@ -595,6 +595,7 @@ void serve( InjectorConfig& config
             if (ec || !req_keep_alive) break;
             continue;
         }
+        assert(!ec); ec = {};
 
         if (req.method() == http::verb::connect) {
             if (!config.is_proxy_enabled()) {
