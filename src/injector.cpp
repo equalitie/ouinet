@@ -791,6 +791,7 @@ void listen( InjectorConfig& config
             connection_id,
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context yield) mutable {
+            sys::error_code leaked_ec;
             serve( config
                  , connection_id
                  , std::move(connection)
@@ -798,7 +799,13 @@ void listen( InjectorConfig& config
                  , origin_pools
                  , genuuid
                  , cancel
-                 , yield);
+                 , yield[leaked_ec]);
+            if (leaked_ec) {
+                // The convention is that `serve` does not throw errors,
+                // so complain otherwise but avoid crashing in production.
+                LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
+                assert(0);
+            }
         }, attribs);
     }
 }
