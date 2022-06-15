@@ -571,7 +571,8 @@ void serve( InjectorConfig& config
                 http::async_read(con, con_rbuf, req, y);
             });
 
-            fail_on_error_or_timeout(yield, cancel, ec, wd);
+            ec = compute_error_code(ec, cancel, wd);
+            if (ec) break;
         }
 
         yield.log("=== New request ===");
@@ -603,7 +604,7 @@ void serve( InjectorConfig& config
             }
             return handle_connect_request( move(con), move(con_rbuf)
                                          , req
-                                         , cancel
+                                         , cancel  // do not propagate error
                                          , yield[ec].tag("proxy/connect/handle_connect"));
         }
 
