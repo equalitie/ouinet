@@ -54,7 +54,8 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
 
                     tls_con->async_handshake( asio::ssl::stream_base::server
                                             , yield[ec]);
-                    fail_on_error_or_timeout(yield, cancel, ec, wd);
+                    ec = compute_error_code(ec, cancel, wd);
+                    if (ec) return;  // do not propagate error
 
                     static const auto shutter = [](SslStream& s) {
                         // Just close the underlying connection
@@ -64,7 +65,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
 
                     q.async_push( GenericStream(move(tls_con), move(shutter))
                                 , cancel
-                                , yield[ec]);
+                                , yield[ec]);  // do not propagate error
                 }));
             }
         }));
