@@ -25,13 +25,13 @@
 
 // Logger macros which should be used for efficiency
 // (also see <https://pzemtsov.github.io/2014/05/05/do-macro.html> for statement protection)
-#define LOG_SILLY(...) do { if (logger.get_threshold() <= SILLY) logger.silly(util::str(__VA_ARGS__)); } while (false)
-#define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(util::str(__VA_ARGS__)); } while (false)
-#define LOG_VERBOSE(...) do { if (logger.get_threshold() <= VERBOSE) logger.verbose(util::str(__VA_ARGS__)); } while (false)
-#define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(util::str(__VA_ARGS__)); } while (false)
-#define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(util::str(__VA_ARGS__)); } while (false)
-#define LOG_ERROR(...) do { if (logger.get_threshold() <= ERROR) logger.error(util::str(__VA_ARGS__)); } while (false)
-#define LOG_ABORT(...) logger.abort(util::str(__VA_ARGS__)) 
+#define LOG_SILLY(...) do { if (logger.get_threshold() <= SILLY) logger.silly(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_VERBOSE(...) do { if (logger.get_threshold() <= VERBOSE) logger.verbose(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_ERROR(...) do { if (logger.get_threshold() <= ERROR) logger.error(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
 
 // Standard log levels, ascending order of specificity.
 enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT };
