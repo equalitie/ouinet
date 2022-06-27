@@ -49,3 +49,11 @@ set `SSL_CERT_FILE` like:
 
     $ env SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
           ouinet-local-build/PROGRAM ARGS...
+
+Or you can just point the program's `tls-ca-cert-store-path` (e.g. as a
+command-line option or in its configuration file) to the CA certificate bundle
+file.  If you want to make sure that it uses no other CA certificates, you may
+unset SSL variables like:
+
+    $ env -u SSL_CERT_DIR -u SSL_CERT_FILE \
+          ouinet-local-build/PROGRAM ARGS...
