@@ -591,8 +591,7 @@ struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
         job.start([=] (auto& cancel, auto yield) -> boost::none_t {
             sys::error_code ec;
             peer->send_block_request(block_id, cancel, yield[ec]);
-            if (ec) return or_throw(yield, asio::error::operation_aborted, boost::none);
-            return boost::none;
+            return or_throw(yield, ec, boost::none);
         });
     }
 
@@ -617,7 +616,7 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
         job.start([=] (auto& cancel, auto yield) -> OptBlock {
             sys::error_code ec;
             peer->send_block_request(block_id, cancel, yield[ec]);
-            if (ec) return or_throw<OptBlock>(yield, asio::error::operation_aborted);
+            if (ec) return or_throw<OptBlock>(yield, ec);
             return peer->read_block(block_id, cancel, yield);
         });
     }
