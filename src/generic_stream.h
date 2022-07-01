@@ -336,7 +336,7 @@ public:
             _impl->read_impl([h = move(handler), impl = _impl]
                              (const system::error_code& ec, size_t size) {
                                  if (impl->closed()) {
-                                    (*h)(asio::error::operation_aborted, 0);
+                                    (*h)(asio::error::shut_down, 0);
                                  } else {
                                     (*h)(ec, size);
                                  }
@@ -385,7 +385,7 @@ public:
             _impl->write_impl([h = move(handler), impl = _impl]
                               (const system::error_code& ec, size_t size) {
                                  if (impl->closed()) {
-                                    (*h)(asio::error::operation_aborted, 0);
+                                    (*h)(asio::error::shut_down, 0);
                                  } else {
                                     (*h)(ec, size);
                                  }
