@@ -37,7 +37,7 @@ Ouinet uses [[https://cmake.org/][CMake]] to build its source:
 
 Ouinet provides configuration files for different systems supporting isolated build environments, should you prefer not to pollute your main system with build dependencies:
 
-- [[https://docker.io/][Docker]]: Files are provided to create a client/injector container ([[file:../Dockerfile][Dockerfile]]), a container with dependencies to build the Android library ([[file:../Dockerfile.android][Dockerfile.android]]), and a container to run an Android emulator ([[file:../Dockerfile.android-emu][Dockerfile.android-emu]]). This is used for Docker Hub images. See [[file:../README.md][README.md]] for more information.
+- [[https://docker.io/][Docker]]: Files are provided to create a client/injector container image ([[file:../Dockerfile][Dockerfile]]), an image with dependencies to build the Android library ([[file:../Dockerfile.android][Dockerfile.android]]), and an image to run an Android emulator ([[file:../Dockerfile.android-emu][Dockerfile.android-emu]]). This is used for Docker Hub images. See [[file:../README.md][README.md]] for more information.
 - [[https://vagrantup.com/][Vagrant]]: The [[file:../Vagrantfile][Vagrantfile]] can be used to build the Ouinet client, injector and tests. May be outdated. See [[file:../README.md][README.md]] for more information.
 - [[https://guix.gnu.org/][GNU Guix]]: A Guix environment (either temporary or permanent) can be used to build the Ouinet client, injector and tests. See [[file:../guix/README.md][guix/README.md]] for more information.
 
@@ -49,7 +49,7 @@ The [[file:../scripts][scripts/]] directory contains scripts for assorted tasks:
   - [[file:../scripts/build-ouinet-local.sh][scripts/build-ouinet-local.sh]] and [[file:../scripts/build-ouinet-git.sh][scripts/build-ouinet-git.sh]] can be invoked to build Ouinet from a local source checkout or from the Git repo (respectively) to =ouinet-local-build/= in the current directory.
   - [[file:../scripts/git-version-string.sh][scripts/git-version-string.sh]] is used by CMake to get versioning information from the Git checkout.
 - Docker packaging:
-  - [[file:../scripts/add-licenses-dir.sh][scripts/add-licenses-dir.sh]] includes dependency licensing information from [[file:../scripts/licenses][src/licenses/]] in the client/injector Docker container.
+  - [[file:../scripts/add-licenses-dir.sh][scripts/add-licenses-dir.sh]] includes dependency licensing information from [[file:../scripts/licenses][src/licenses/]] in the client/injector Docker container image.
   - [[file:../scripts/ouinet-wrapper.sh][scripts/ouinet-wrapper.sh]] acts as the container's entry point.
 - Testing:
   - [[file:../scripts/run_integration_tests.sh][scripts/run_integration_tests.sh]] starts Ouinet's integration tests. Outdated, not working currently.
