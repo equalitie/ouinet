@@ -1,0 +1,16 @@
+#+title: Coding Ouinet
+
+* Introduction
+
+This document provides an overview of how the Ouinet source directory is structured, the main conventions and generic helper modules used in it, and the main Ouinet classes in the library and their roles.
+
+*Note:* This is work in progress and intended as a very rough introduction to Ouinet source code, so expect some divergences between this document and the source.  Please contact mailto:ouinet@equalit.ie if you find misguiding content in this document, thanks!
+
+
+# Local Variables:
+# mode: org
+# mode: visual-fill-column
+# mode: visual-line
+# mode: flyspell
+# ispell-local-dictionary: "american"
+# End:
