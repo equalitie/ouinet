@@ -10,6 +10,16 @@ This document provides an overview of how the Ouinet source directory is structu
 
 * Directory structure
 
+** Documentation
+
+The [[file:.][doc/]] directory contains assorted documents about Ouinet:
+
+- [[file:coding.org][doc/coding.org]]: this file
+- [[file:ouinet-network-whitepaper.md][doc/ouinet-network-whitepaper.md]]: a technical description of how Ouinet works and its associated protocols; any implementation should ideally stick to this reference
+- [[file:request-response-flow.svg][doc/request-response-flow.svg]]: a detailed diagram of how requests and responses travel over different Ouinet components (esp. within the client)
+- [[file:android-sdk-versions.md][doc/android-sdk-versions.md]]: some clarifications on the chosen versions of Android SDK and API levels
+- [[file:arch-drafts][doc/arch-drafts/]]: documents where particular parts of Ouinet specs are developed (they should but they might not match the white paper completely)
+
 ** Build system
 
 Ouinet uses [[https://cmake.org/][CMake]] to build its source:
