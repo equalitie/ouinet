@@ -56,6 +56,14 @@ The [[file:../scripts][scripts/]] directory contains scripts for assorted tasks:
   - [[file:../scripts/firefox-proxy.sh][scripts/firefox-proxy.sh]] runs Firefox with a temporary session which uses a local Ouinet client as its HTTP proxy. Outdated.
   - [[file:../scripts/ping-swarm][scripts/ping-swarm]] can be used to ping nodes announcing themselves in a Ouinet swarm on BitTorrent. See comments in the script for more information.
 
+** Android support
+
+The [[file:../android][android/]] directory contains files used to build the Ouinet library for Android (AAR):
+
+- [[file:../android/build.gradle][android/build.gradle]] and [[file:../android/settings.gradle][android/settings.gradle]] are the main configuration files for [[https://gradle.org/][Gradle]], with files under [[file:../android/build-scripts][android/build-scripts/]] being used for handling the publication to [[https://search.maven.org/][Maven Central]].
+- [[file:../android/i2pd][android/i2pd/]] contains support for the [[https://geti2p.net/][I2P]] transport. Probably outdated.
+- [[file:../android/ouinet][android/ouinet/]] contains the JNI wrapper source for the Ouinet native library, plus the high level =Config= and =Ouinet= Java classes for running a Ouinet client in Android.
+
 
 # Local Variables:
 # mode: org
