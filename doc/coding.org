@@ -8,6 +8,21 @@ This document provides an overview of how the Ouinet source directory is structu
 
 *Note:* This is work in progress and intended as a very rough introduction to Ouinet source code, so expect some divergences between this document and the source.  Please contact mailto:ouinet@equalit.ie if you find misguiding content in this document, thanks!
 
+* Directory structure
+
+** Build system
+
+Ouinet uses [[https://cmake.org/][CMake]] to build its source:
+
+- [[file:../CMakeLists.txt][CMakeLists.txt]] is the main entry point to the CMake build configuration:
+  - checks the version of CMake and some generic build flags
+  - builds the Ouinet library and project-developed dependencies (imported as submodules)
+  - builds the client & injector programs
+  - builds test programs and tools
+- [[file:../cmake][cmake/]] contains more specific CMake configuration snippets:
+  - [[file:../cmake/OuinetDependencies.cmake][cmake/OuinetDependencies.cmake]]: the build configuration of third-party dependencies (under the [[file:../cmake/dependencies][cmake/dependencies/]] subdirectory)
+  - [[file:../cmake/BuildVersion.cmake][cmake/BuildVersion.cmake]]: machinery to extract the release version (from [[file:../version.txt][version.txt]], which follows [[https://semver.org/][Semantic Versioning]]), compute a build identifier (=(Release|Debug) (HEAD|<branch name>) <Git commit>=), and make them available to source code
+
 
 # Local Variables:
 # mode: org
