@@ -33,6 +33,14 @@ Ouinet uses [[https://cmake.org/][CMake]] to build its source:
   - [[file:../cmake/OuinetDependencies.cmake][cmake/OuinetDependencies.cmake]]: the build configuration of third-party dependencies (under the [[file:../cmake/dependencies][cmake/dependencies/]] subdirectory)
   - [[file:../cmake/BuildVersion.cmake][cmake/BuildVersion.cmake]]: machinery to extract the release version (from [[file:../version.txt][version.txt]], which follows [[https://semver.org/][Semantic Versioning]]), compute a build identifier (=(Release|Debug) (HEAD|<branch name>) <Git commit>=), and make them available to source code
 
+** Isolated build environments
+
+Ouinet provides configuration files for different systems supporting isolated build environments, should you prefer not to pollute your main system with build dependencies:
+
+- [[https://docker.io/][Docker]]: Files are provided to create a client/injector container ([[file:../Dockerfile][Dockerfile]]), a container with dependencies to build the Android library ([[file:../Dockerfile.android][Dockerfile.android]]), and a container to run an Android emulator ([[file:../Dockerfile.android-emu][Dockerfile.android-emu]]). This is used for Docker Hub images. See [[file:../README.md][README.md]] for more information.
+- [[https://vagrantup.com/][Vagrant]]: The [[file:../Vagrantfile][Vagrantfile]] can be used to build the Ouinet client, injector and tests. May be outdated. See [[file:../README.md][README.md]] for more information.
+- [[https://guix.gnu.org/][GNU Guix]]: A Guix environment (either temporary or permanent) can be used to build the Ouinet client, injector and tests. See [[file:../guix/README.md][guix/README.md]] for more information.
+
 
 # Local Variables:
 # mode: org
