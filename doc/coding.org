@@ -4,6 +4,8 @@
 
 This document provides an overview of how the Ouinet source directory is structured, the main conventions and generic helper modules used in it, and the main Ouinet classes in the library and their roles.
 
+*Note:* Links to source files and directories are relative to this document, while their texts are relative to the source code root.
+
 *Note:* This is work in progress and intended as a very rough introduction to Ouinet source code, so expect some divergences between this document and the source.  Please contact mailto:ouinet@equalit.ie if you find misguiding content in this document, thanks!
 
 
