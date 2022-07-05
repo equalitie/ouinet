@@ -31,7 +31,7 @@ Ouinet uses [[https://cmake.org/][CMake]] to build its source:
   - builds test programs and tools
 - [[file:../cmake][cmake/]] contains more specific CMake configuration snippets:
   - [[file:../cmake/OuinetDependencies.cmake][cmake/OuinetDependencies.cmake]]: the build configuration of third-party dependencies (under the [[file:../cmake/dependencies][cmake/dependencies/]] subdirectory)
-  - [[file:../cmake/BuildVersion.cmake][cmake/BuildVersion.cmake]]: machinery to extract the release version (from [[file:../version.txt][version.txt]], which follows [[https://semver.org/][Semantic Versioning]]), compute a build identifier (=(Release|Debug) (HEAD|<branch name>) <Git commit>=), and make them available to source code
+  - [[file:../cmake/BuildVersion.cmake][cmake/BuildVersion.cmake]]: machinery to extract the release version (from [[file:../version.txt][version.txt]], see below), compute a build identifier (=(Release|Debug) (HEAD|<branch name>) <Git commit>=), and make them available to source code
 
 ** Isolated build environments
 
@@ -52,7 +52,7 @@ The [[file:../scripts][scripts/]] directory contains scripts for assorted tasks:
   - [[file:../scripts/add-licenses-dir.sh][scripts/add-licenses-dir.sh]] includes dependency licensing information from [[file:../scripts/licenses][src/licenses/]] in the client/injector Docker container image.
   - [[file:../scripts/ouinet-wrapper.sh][scripts/ouinet-wrapper.sh]] acts as the container's entry point.
 - Testing:
-  - [[file:../scripts/run_integration_tests.sh][scripts/run_integration_tests.sh]] starts Ouinet's integration tests. Outdated, not working currently.
+  - [[file:../scripts/run_integration_tests.sh][scripts/run_integration_tests.sh]] starts Ouinet's integration tests (see below). Outdated, not working currently.
   - [[file:../scripts/firefox-proxy.sh][scripts/firefox-proxy.sh]] runs Firefox with a temporary session which uses a local Ouinet client as its HTTP proxy. Outdated.
   - [[file:../scripts/ping-swarm][scripts/ping-swarm]] can be used to ping nodes announcing themselves in a Ouinet swarm on BitTorrent. See comments in the script for more information.
 
@@ -63,6 +63,16 @@ The [[file:../android][android/]] directory contains files used to build the Oui
 - [[file:../android/build.gradle][android/build.gradle]] and [[file:../android/settings.gradle][android/settings.gradle]] are the main configuration files for [[https://gradle.org/][Gradle]], with files under [[file:../android/build-scripts][android/build-scripts/]] being used for handling the publication to [[https://search.maven.org/][Maven Central]].
 - [[file:../android/i2pd][android/i2pd/]] contains support for the [[https://geti2p.net/][I2P]] transport. Probably outdated.
 - [[file:../android/ouinet][android/ouinet/]] contains the JNI wrapper source for the Ouinet native library, plus the high level =Config= and =Ouinet= Java classes for running a Ouinet client in Android.
+
+** Various source files and directories
+
+- [[file:../docker-compose.yml][docker-compose.yml]] allows to run a Ouinet container (esp. for an injector) which can be easily managed and updated thanks to [[https://docs.docker.com/compose/][Docker Compose]]. See comments in the file for more information.
+- [[file:../repos][repos/]] includes example configuration files for client and injector programs, used as their configuration templates by the Docker container image.
+- [[file:../requirements.txt][requirements.txt]] includes Python dependencies for integration tests (see below). Outdated.
+- [[file:../version.txt][version.txt]] contains the last stable version of Ouinet at or before the current Git commit. It follows [[https://semver.org/][Semantic Versioning]].
+- [[file:../lib][lib/]] contains C++ files to enable building Boost ASIO and Boost ASIO SSL as dynamic libraries.
+- [[file:../modules][modules/]] includes Git submodules for project-developed dependencies implementing Boost ASIO-compatible support for the [[https://en.wikipedia.org/wiki/Micro_Transport_Protocol][uTP]] and [[https://en.wikipedia.org/wiki/Universal_Plug_and_Play][UPnP]] protocols.
+- [[file:../test][test/]] contains the source for unit tests (=test/test*.cpp=), integration tests ([[file:../test/integration_test][test/integration_test/]], outdated) and test tools (=test/bt-bep*.cpp= and =test/ouiservice-*.cpp=). Unit tests and test tools can be run standalone. The =bt-bep5= test tool is used by the =ping-swarm= script (see above).
 
 
 # Local Variables:
