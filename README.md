@@ -764,8 +764,9 @@ and that `<PROJECT DIR>` is your app's project directory.
 #### Option A: Get Ouinet from Maven Central
 
 Select the Ouinet version according to your app's ABI (we officially support
-`ouinet-armeabi-v7a` and `ouinet-arm64-v8a`), and also add Relinker as a
-dependency in `<PROJECT DIR>/app/build.gradle`:
+`ouinet-armeabi-v7a`, `ouinet-arm64-v8a` and `omni` that includes all the
+supported ABIs plus `x86_64`), and also add Relinker as adependency in
+`<PROJECT DIR>/app/build.gradle`:
 
 ```groovy
 dependencies {
