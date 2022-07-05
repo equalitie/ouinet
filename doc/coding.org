@@ -98,16 +98,17 @@ The [[file:../src][src/]] directory contains the main source code of the Ouinet 
 namespace ouinet {
 namespace foo {
 
+template<class X>
 static
 int
-bar ( const X& x
-    , Something s)
+bar_stuff( const X& x
+         , Something s)
 {
     if (s.blah())
         return 42;
 
     if (s.unstable()) {
-        LOG_WARN("Got an unstable S: ", s);
+        LOG_WARN("Got an unstable something: ", s);
         return 23;
     }
 
