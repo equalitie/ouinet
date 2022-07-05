@@ -82,7 +82,7 @@ The [[file:../src][src/]] directory contains the main source code of the Ouinet 
 - [[file:../src/parse][src/parse/]]: code which parses strings and yields other native C++ instances not specific to Ouinet.
 - [[file:../src/ssl][src/ssl/]]: code to handle SSL/TLS connections (generic), certificate authorities, and end certificates (Ouinet-specific).
 - [[file:../src/bittorrent][src/bittorrent/]]: implementation of BitTorrent protocols and formats, not specific to Ouinet.
-- [[file:../src/ouiservice][src/ouiservice/]]: implementation of the different dynamic transports used for communication between Ouinet nodes.
+- [[file:../src/ouiservice][src/ouiservice/]]: implementation of the different dynamic transports used for communication between Ouinet nodes. [[https://i2pd.website/][i2pd]] is included as a submodule in [[file:../src/ouiservice/i2p/i2pd][src/ouiservice/i2p/i2pd/]] (for the I2P transport).
 - [[file:../src/cache][src/cache/]]: implementation of the protocols and formats specific to the Ouinet distributed cache.
 - [[file:../src][src/]]: other Ouinet-specific code that does not belong in a specific subsystem. However, some code is actually not so Ouinet-specific, so it may belong in =src/util/= instead.
 
