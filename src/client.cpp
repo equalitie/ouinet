@@ -990,9 +990,10 @@ Session Client::State::fetch_fresh_from_origin( Request rq
                                               , const UserAgentMetaData& meta
                                               , Cancel cancel, Yield yield)
 {
+    Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
                                       , default_timeout::fetch_http()
-                                      , [&] { cancel(); });
+                                      , [&] { timeout_cancel(); });
 
     assert(!rq[http::field::host].empty());  // origin pools require host
     util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
@@ -1004,7 +1005,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     if (maybe_con) {
         con = std::move(*maybe_con);
     } else {
-        auto stream = connect_to_origin(rq, meta, cancel, yield[ec]);
+        auto stream = connect_to_origin(rq, meta, timeout_cancel, yield[ec]);
         fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
         con = _origin_pools.wrap(rq, std::move(stream));
@@ -1016,14 +1017,14 @@ Session Client::State::fetch_fresh_from_origin( Request rq
 
     // Send request
     yield[ec].tag("write_origin_req").run([&] (auto y) {
-        auto con_close = cancel.connect([&] { con.close(); });
+        auto con_close = timeout_cancel.connect([&] { con.close(); });
         http::async_write(con, rq_, y);
     });
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     auto ret = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( std::move(con), rq.method() == http::verb::head
-                              , cancel, y);
+                              , timeout_cancel, y);
     });
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session());
 
