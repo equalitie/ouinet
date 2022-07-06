@@ -119,12 +119,11 @@ public:
         return _hash_list.blocks.size();
     }
 
-    void send_block_request(size_t block_id, Cancel& c_, asio::yield_context yield)
+    void send_block_request(size_t block_id, Cancel c, asio::yield_context yield)
     {
         if (!_reader) return or_throw(yield, asio::error::not_connected);
 
         sys::error_code ec;
-        Cancel c(c_);
 
         auto cl = _lifetime_cancel.connect([&] { c(); });
         auto cc = c.connect([&] { if (_reader) _reader->close(); });
@@ -137,14 +136,13 @@ public:
     }
 
     // May return boost::none and no error if the response has no body (e.g. redirect msg)
-    boost::optional<Block> read_block(size_t block_id, Cancel& c_, asio::yield_context yield)
+    boost::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
     {
         using OptBlock = boost::optional<Block>;
 
         if (!_reader) return or_throw<OptBlock>(yield, asio::error::not_connected);
 
         sys::error_code ec;
-        Cancel c(c_);
 
         auto cl = _lifetime_cancel.connect([&] { c(); });
         auto cc = c.connect([&] { if (_reader) _reader->close(); });
