@@ -442,7 +442,7 @@ public:
         sys::error_code ec;
 
         wait_for_some_peers_to_respond(c, yield[ec]);
-        if (ec) return or_throw<HashList>(yield, ec);
+        return_or_throw_on_error(yield, c, ec, HashList{});
 
         Peer* best_peer = nullptr;;
 
@@ -466,7 +466,7 @@ public:
         sys::error_code ec;
 
         wait_for_some_peers_to_respond(c, yield[ec]);
-        if (ec) return or_throw<Peer*>(yield, ec, nullptr);
+        return_or_throw_on_error(yield, c, ec, nullptr);
 
         std::vector<Peer*> peers;
 
@@ -591,6 +591,7 @@ struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
         job.start([=] (auto& cancel, auto yield) -> boost::none_t {
             sys::error_code ec;
             peer->send_block_request(block_id, cancel, yield[ec]);
+            ec = compute_error_code(ec, cancel);
             return or_throw(yield, ec, boost::none);
         });
     }
@@ -599,7 +600,7 @@ struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
         sys::error_code ec;
 
         job.wait_for_finish(cancel, yield[ec]);
-        if (ec) return or_throw<OptBlock>(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
         return peer->read_block(block_id, cancel, yield);
     }
@@ -616,7 +617,7 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
         job.start([=] (auto& cancel, auto yield) -> OptBlock {
             sys::error_code ec;
             peer->send_block_request(block_id, cancel, yield[ec]);
-            if (ec) return or_throw<OptBlock>(yield, ec);
+            return_or_throw_on_error(yield, cancel, ec, OptBlock{});
             return peer->read_block(block_id, cancel, yield);
         });
     }
@@ -625,7 +626,7 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
         sys::error_code ec;
 
         job.wait_for_finish(cancel, yield[ec]);
-        if (ec) return or_throw<OptBlock>(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
         Job::Result r = std::move(job.result());
 
@@ -656,7 +657,7 @@ MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Cancel& cancel,
     sys::error_code ec;
 
     Peer* next_peer = _peers->choose_peer_for_block(*_reference_hash_list, block_id, cancel, yield[ec]);
-    if (ec) return or_throw<R>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, R{});
 
     PreFetch* pre_fetch;
 
@@ -682,7 +683,7 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
 
     if (!_pre_fetch) {
         _pre_fetch = new_fetch_job(block_id, nullptr, cancel, yield[ec]);
-        if (ec) return or_throw<OptBlock>(yield, ec);
+        return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
         // new_fetch_job should always return non-null if block_id is valid.
         assert(_pre_fetch);
@@ -691,7 +692,7 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
     auto fetch = std::move(_pre_fetch);
 
     _pre_fetch = new_fetch_job(block_id + 1, fetch->peer, cancel, yield[ec]);
-    if (ec) return or_throw<OptBlock>(yield, ec);
+    return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
     while (true) {
         auto block = fetch->get_block(cancel, yield[ec]);
@@ -707,7 +708,7 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
             unmark_as_good(*fetch->peer);
 
             fetch = new_fetch_job(block_id, nullptr, cancel, yield[ec]);
-            if (ec) return or_throw<OptBlock>(yield, ec);
+            return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
             // new_fetch_job should always return non-null if block_id is valid.
             assert(fetch);
