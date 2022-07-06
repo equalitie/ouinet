@@ -1157,9 +1157,10 @@ Session Client::State::fetch_fresh_through_simple_proxy
         , Cancel& cancel
         , Yield yield)
 {
+    Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
                                       , default_timeout::fetch_http()
-                                      , [&]{ cancel(); });
+                                      , [&]{ timeout_cancel(); });
 
     sys::error_code ec;
 
@@ -1186,7 +1187,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         // (as it would probably block, indefinitely when missing connectivity).
         return or_throw<Session>(yield, asio::error::try_again);
 
-    wait_for_injector(cancel, yield[ec]);
+    wait_for_injector(timeout_cancel, yield[ec]);
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
     assert(_injector);
 
@@ -1195,7 +1196,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         _YDEBUG(yield, "Connecting to the injector");
 
         auto c = yield[ec].tag("connect_to_injector2").run([&] (auto y) {
-            return _injector->connect(y, cancel);
+            return _injector->connect(y, timeout_cancel);
         });
         if (ec = compute_error_code(ec, cancel, watch_dog)) {
             _YWARN(yield, "Failed to connect to injector; ec=", ec);
@@ -1212,7 +1213,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         con = _injector_connections.pop_front();
     }
 
-    auto cancel_slot = cancel.connect([&] {
+    auto cancel_slot = timeout_cancel.connect([&] {
         con.close();
     });
 
@@ -1237,7 +1238,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     // Receive response
     auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), request.method() == http::verb::head
-                              , cancel, y);
+                              , timeout_cancel, y);
     });
 
     auto& hdr = session.response_header();
