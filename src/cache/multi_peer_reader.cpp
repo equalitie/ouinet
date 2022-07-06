@@ -728,6 +728,8 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 
     sys::error_code ec;
 
+    auto lc = _lifetime_cancel.connect([&] { cancel(); });
+
     if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
     if (_state == State::closed) return or_throw<Ret>(yield, asio::error::bad_descriptor);
     if (_state == State::done) return boost::none;
@@ -750,8 +752,6 @@ boost::optional<Part>
 MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 {
     sys::error_code ec;
-
-    auto lc = _lifetime_cancel.connect([&] { cancel(); });
 
     if (!_reference_hash_list) {
         auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
