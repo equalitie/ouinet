@@ -46,9 +46,10 @@ public:
 
     void async_push( T val
                    , sys::error_code ec_
-                   , Cancel& cancel
+                   , Cancel& cancel_
                    , asio::yield_context yield)
     {
+        Cancel cancel(cancel_);
         auto slot = _destroy_signal.connect([&] { cancel(); });
 
         sys::error_code ec;
@@ -83,9 +84,10 @@ public:
 
     template<class Range>
     void async_push_many( const Range& range
-                        , Cancel& cancel
+                        , Cancel& cancel_
                         , asio::yield_context yield)
     {
+        Cancel cancel(cancel_);
         auto slot = _destroy_signal.connect([&] { cancel(); });
 
         sys::error_code ec;
@@ -139,9 +141,10 @@ public:
     }
 
     size_t async_flush( std::queue<T>& out
-                      , Cancel& cancel
+                      , Cancel& cancel_
                       , asio::yield_context yield)
     {
+        Cancel cancel(cancel_);
         auto slot = _destroy_signal.connect([&] { cancel(); });
 
         sys::error_code ec;
