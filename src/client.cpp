@@ -1038,17 +1038,17 @@ Session Client::State::fetch_fresh_from_origin( Request rq
 
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
-                                                        , Cancel& cancel_
+                                                        , Cancel& cancel
                                                         , Yield yield)
 {
     // TODO: We're not re-using connections here. It's because the
     // ConnectionPool as it is right now can only work with http requests
     // and responses and thus can't be used for full-dupplex forwarding.
 
-    Cancel cancel(cancel_);
+    Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
                                       , default_timeout::fetch_http()
-                                      , [&]{ cancel(); });
+                                      , [&]{ timeout_cancel(); });
 
     // Parse the URL to tell HTTP/HTTPS, host, port.
     util::url_match url;
@@ -1061,12 +1061,12 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // Connect to the injector/proxy.
     sys::error_code ec;
 
-    wait_for_injector(cancel, yield[ec]);
+    wait_for_injector(timeout_cancel, yield[ec]);
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
     assert(_injector);
 
     auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
-        return _injector->connect(y, cancel);
+        return _injector->connect(y, timeout_cancel);
     });
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
@@ -1085,7 +1085,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     // Open a tunnel to the origin
     // (to later perform the SSL handshake and send the request).
     yield[ec].tag("connreq").run([&] (auto y) {
-        util::http_request(inj.connection, connreq, cancel, y);
+        util::http_request(inj.connection, connreq, timeout_cancel, y);
     });
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
@@ -1097,7 +1097,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         auto r = std::make_unique<http_response::Reader>(std::move(inj.connection));
 
         auto part = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return r->async_read_part(cancel, y);
+            return r->async_read_part(timeout_cancel, y);
         });
         fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
         assert(part && part->is_head());
@@ -1121,7 +1121,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
         con = ssl::util::client_handshake( move(inj.connection)
                                          , ssl_ctx
                                          , url.host
-                                         , cancel
+                                         , timeout_cancel
                                          , static_cast<asio::yield_context>(yield[ec]));
     } else {
         con = move(inj.connection);
@@ -1132,14 +1132,14 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     yield[ec].tag("write_req").run([&] (auto y) {
-        auto slot = cancel.connect([&con] { con.close(); });
+        auto slot = timeout_cancel.connect([&con] { con.close(); });
         http::async_write(con, rq_, y);
     });
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
     auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( move(con), rq.method() == http::verb::head
-                              , cancel, y);
+                              , timeout_cancel, y);
     });
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
 
