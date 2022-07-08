@@ -90,7 +90,7 @@ The [[file:../src][src/]] directory contains the main source code of the Ouinet 
 
 - Ouinet follows the [[https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization][RAII]] principle when possible, making resource allocation and release significant. Use code blocks when necessary to control the scope and lifetime of objects.
 - Genericity and reuse are encouraged. Prefer the use of templates when possible instead of extensive subclassing.
-- Group names for related functionality under the same namespace, even if they are declared in different places.
+- Group names for related functionality under the same namespace under the ~ouinet~ namespace, even if they are declared in different places. Nesting of namespaces is ok if not too deep. If you need to have "non-public" declarations in a namespace defined in a header file, put them in a ~detail~ namespace under it.
 - Ouinet makes extensive use of [[https://boost.org/][Boost]] libraries, especially [[https://www.boost.org/doc/libs/release/libs/asio/][Asio]] (for asynchronous programming), [[https://www.boost.org/doc/libs/release/libs/beast/][Beast]] (for everything HTTP), [[https://www.boost.org/doc/libs/release/libs/optional/][Optional]] and [[https://www.boost.org/doc/libs/release/libs/filesystem/][Filesystem]].
 - Indentation style is not very strict nor consistent, but this snippet will give you a general idea:
 
