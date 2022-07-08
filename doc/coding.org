@@ -122,6 +122,10 @@ bar_stuff( const X& x
 } // namespace ouinet
 #+end_src
 
+** Boost namespaces
+
+Since the use of Boost types, values and functions is so pervasive in Ouinet, some Boost namespaces are given shorthands in the ~ouinet~ namespace. For instance, ~boost::filesystem~ is aliased to ~ouinet::fs~, so that ~fs::path~ can be used instead of ~boost::filesystem::path~ in Ouinet code. To use such shorthands, [[file:../src/namespaces.h][src/namespaces.h]] is included.
+
 
 # Local Variables:
 # mode: org
