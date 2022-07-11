@@ -126,13 +126,15 @@ bar_stuff( const X& x
 
 Since the use of Boost types, values and functions is so pervasive in Ouinet, some Boost namespaces are given shorthands in the ~ouinet~ namespace. For instance, ~boost::filesystem~ is aliased to ~ouinet::fs~, so that ~fs::path~ can be used instead of ~boost::filesystem::path~ in Ouinet code. To use such shorthands, [[file:../src/namespaces.h][src/namespaces.h]] is included.
 
-** Concurrency and error handling
+** Concurrency
 
 In Ouinet, with the exception of code run at the very beginning of programs, or trivial I/O (like with small state files), all operations which may wait for I/O or other events are implemented as concurrent _asynchronous functions_ or _coroutines_ using [[https://www.boost.org/doc/libs/release/libs/asio/][Boost Asio]].
 
 Coroutines can be recognized for having an argument of type ~boost::asio::yield_context~ (usually called ~yield~ or ~y~), which is first received from a ~boost::asio::spawn~ call; see [[file:../src/injector.cpp::listen(config, proxy_server, cancel, yield\[ec\]);][injector listen spawn]] and [[file:../src/injector.cpp::void listen(][injector listen op]] for an example. *Note:* Those show a common pattern where listening for incoming connections happens as a coroutine, while handling each such connection happens in its own coroutine; see [[file:../src/injector.cpp::serve( config][injector serve op]].
 
 The execution of coroutines begins when ~boost::asio::io_context~'s ~run()~ is invoked; see [[file:../src/client.cpp::ctx.run();][client main]] for an example.
+
+** Error handling
 
 Coroutines can signal an error either by throwing an ~std::runtime_error~ if they receive a plain ~yield_context~ (like ~yield~), or by changing a ~boost::system::error_code~ passed to the ~yield_context~ (like ~yield[ec]~). The preferred way to handle errors in Ouinet is to get them in an ~error_code~ to avoid unhandled exceptions (which also cause extra issues with address sanitizers and coroutines):
 
