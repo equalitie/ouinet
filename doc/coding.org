@@ -132,7 +132,7 @@ In Ouinet, with the exception of code run at the very beginning of programs, or 
 
 Coroutines can be recognized for having an argument of type ~boost::asio::yield_context~ (usually called ~yield~ or ~y~), which is first received from a ~boost::asio::spawn~ call; see [[file:../src/injector.cpp::listen(config, proxy_server, cancel, yield\[ec\]);][injector listen spawn]] and [[file:../src/injector.cpp::void listen(][injector listen op]] for an example. *Note:* Those show a common pattern where listening for incoming connections happens as a coroutine, while handling each such connection happens in its own coroutine; see [[file:../src/injector.cpp::serve( config][injector serve op]].
 
-The execution of coroutines begins when ~boost::asio::io_context~'s ~run()~ is invoked; see [[file:../src/client.cpp::ctx.run();][client main]] for an example.
+The execution of coroutines begins when ~boost::asio::io_context~'s ~run()~ is invoked; see [[file:../src/client.cpp::ctx.run();][client main]] for an example. A coroutine will run until it returns or throws an exception; the [[file:../src/util/handler_tracker.h::define TRACK_SPAWN(exec,][TRACK_SPAWN]] macro can be used instead of ~spawn~ to catch and report exceptions from the coroutine (avoiding a crash), and to report if it fails to stop on program exit (implemented in [[file:../src/util/handler_tracker.cpp::void stop() {][handler tracker stop]]); see [[file:../src/client.cpp::void Client::State::start()][client start]] for an example of tracking the concurrent start of several coroutines.
 
 ** Error handling
 
