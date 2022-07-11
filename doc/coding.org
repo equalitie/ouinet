@@ -142,6 +142,40 @@ do_something(arg1, arg2, yield[ec]);
 if (ec) { /* handle error */ }
 #+end_src
 
+To simplify the proper signaling of errors in Ouinet coroutines, they use the ~ouinet::or_throw~ functions in [[file:../src/or_throw.h][src/or_throw.h]], which take care of using the error behavior expected by the caller:
+
+#+begin_src c++
+#include "namespaces.h"
+#include "or_throw.h"
+
+namespace ouinet {
+
+int
+get_foo(asio::yield_context yield)
+{
+    // Do something.
+    if ( /* some error condition */ )
+        return or_throw(yield, asio::error::invalid_argument, 0);
+        // Or with default return value construction:
+        //return or_throw<int>(yield, asio::error::invalid_argument);
+    return 42;
+}
+
+}  // namespace ouinet
+#+end_src
+
+You may also use ~or_throw~ when there is no error:
+
+#+begin_src c++
+int
+get_bar(asio::yield_context yield) {
+    sys::error_code ec;
+    int ret = get_foo(yield[ec]);
+    // Pass return value and error (if any) upwards.
+    return or_throw(yield, ec, ret);
+}
+#+end_src
+
 
 # Local Variables:
 # mode: org
