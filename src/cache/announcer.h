@@ -15,8 +15,10 @@ public:
 
     Announcer(std::shared_ptr<bittorrent::MainlineDht>);
 
-    void add(Key key);
-    void remove(const Key&);
+    // Return true if the key was not being announced, false otherwise.
+    bool add(Key key);
+    // Return true if the key was being announced, false otherwise.
+    bool remove(const Key&);
 
     ~Announcer();
 

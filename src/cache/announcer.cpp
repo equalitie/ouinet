@@ -74,7 +74,7 @@ struct Announcer::Loop {
         return entries.end();
     }
 
-    void add(Key key) {
+    bool add(Key key) {
         auto entry_i = find_entry_by_key(key);
         bool already_has_key = (entry_i != entries.end());
 
@@ -85,7 +85,7 @@ struct Announcer::Loop {
             _DEBUG("Adding ", key);
         }
 
-        if (already_has_key) return;
+        if (already_has_key) return false;
 
         // To preserve the order in which entries are added and updated we put
         // this new entry _after_ all entries that have not yet been updated.
@@ -99,19 +99,21 @@ struct Announcer::Loop {
         entries.insert(i, Entry(move(key)));
         _timer_cancel();
         _timer_cancel = Cancel();
+        return true;
     }
 
-    void remove(const Key& key) {
+    bool remove(const Key& key) {
         Entries::iterator i = entries.begin();
 
         for (; i != entries.end(); ++i)
             if (i->first.key == key) break;  // found
-        if (i == entries.end()) return;  // not found
+        if (i == entries.end()) return false;  // not found
 
         _DEBUG("Marking ", key, " for removal");
         // The actual removal is not done here but in the main loop.
         i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.
+        return true;
     }
 
     Clock::duration next_update_after(const Entry& e) const
@@ -302,13 +304,13 @@ Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht)
     _loop->start();
 }
 
-void Announcer::add(Key key)
+bool Announcer::add(Key key)
 {
-    _loop->add(move(key));
+    return _loop->add(move(key));
 }
 
-void Announcer::remove(const Key& key) {
-    _loop->remove(key);
+bool Announcer::remove(const Key& key) {
+    return _loop->remove(key);
 }
 
 Announcer::~Announcer() {}
