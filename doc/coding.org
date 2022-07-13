@@ -182,6 +182,8 @@ get_bar(asio::yield_context yield) {
 
 Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][src/logger.h]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_<LEVEL>~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than ~<LEVEL>~ using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace (this may change in the future).
 
+Some implementation files define ~_<LEVEL>~ macros on top of ~_LOG_<LEVEL>~ ones to include a common, specific prefix (defined as ~_LOGPFX~) in every message logged from there (as in [[file:../src/bittorrent/dht.cpp::define _LOGPFX][BitTorrent DHT code]]).
+
 Logging macros convert their arbitrary arguments to ~std::string~ objects using ~ouinet::util::str~ (from [[file:../src/util/str.h][util/str.h]]), which works for any type which can be serialized to an ~std::ostream~ using ~operator<<~. Some frequently-logged values like ~boost::system::error_code~ and ~boost::beast::http::status~ are pretty-printed by ~str~.
 
 For example, to log an error result from an operation:
@@ -198,8 +200,6 @@ if (ec) {
 That may produce =[ERROR] Failed to foo; ec=\"Invalid argument\"=.
 
 Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cluttering the log with many messages of canceled operations when a program is terminated (as in [[file:../src/client.cpp::LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);][this example]]).
-
-Some implementation files define ~_<LEVEL>~ macros on top of ~_LOG_<LEVEL>~ ones to include a common, specific prefix (conventionally ~_LOGPFX~) in every message logged from there (as in [[file:../src/bittorrent/dht.cpp::define _LOGPFX][this example]]).
 
 
 # Local Variables:
