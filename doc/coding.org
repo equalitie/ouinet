@@ -199,7 +199,7 @@ if (ec) {
 
 That may produce =[ERROR] Failed to foo; ec=\"Invalid argument\"=.
 
-Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cluttering the log with many messages of canceled operations when a program is terminated (as in [[file:../src/client.cpp::LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);][this example]]).
+Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cluttering the log with many messages of canceled operations when a program is terminated (as when [[file:../src/client.cpp::LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);][setting up the client's BitTorrent DHT]]).
 
 
 # Local Variables:
