@@ -190,14 +190,21 @@ For example, to log an error result from an operation:
 
 #+begin_src c++
 sys::error_code ec;
-do_foo(yield[ec]);
+do_foo(bar, yield[ec]);
 if (ec) {
-    LOG_ERROR("Failed to foo; ec=", ec);
+    LOG_ERROR("Failed to foo: ", bar, "; ec=", ec);
     return or_throw(yield, ec);
 }
 #+end_src
 
-That may produce =[ERROR] Failed to foo; ec=\"Invalid argument\"=.
+That may produce =[ERROR] Failed to foo: SomeBar; ec=​"Invalid argument"=.
+
+In general, the format used for log messages is =Message[: object][(...|: status)][;( key=value)+]=, where:
+
+- =Message= is a capitalized sentence with no period, e.g. =Failed to foo=.
+- =object= is not quoted, e.g. =http://example.com/=.
+- =status= may be something like =failed= or =done=, to indicate the result of an operation whose start was logged previously with the same =Message= and an =...= ellipsis after it (as when [[file:../src/cache/client.cpp::_DEBUG("Collecting garbage...");][collecting garbage from the local cache]]).
+- =key= is short and without spaces (e.g. =ec= for an error code) and =value= is double-quoted if it contains spaces.
 
 Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cluttering the log with many messages of canceled operations when a program is terminated (as when [[file:../src/client.cpp::LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);][setting up the client's BitTorrent DHT]]).
 
