@@ -208,6 +208,24 @@ In general, the format used for log messages is =Message[: object][(...|: status
 
 Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cluttering the log with many messages of canceled operations when a program is terminated (as when [[file:../src/client.cpp::LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);][setting up the client's BitTorrent DHT]]).
 
+** Deferred actions
+
+Another example of RAII in action is provided by [[file:../src/defer.h][=src/defer.h=]]. Calling ~ouinet::defer~ with a function returns a ~Defer~ object which runs the function as soon as the object is deallocated. Besides for doing cleanup (as in [[file:../src/util/persistent_lru_cache.h::auto on_exit = defer][persistent LRU cache load]]), this is frequently used to report the result of a series of operations regardless of how they finish (as in [[file:../src/bittorrent/dht.cpp::auto report = defer][BitTorrent DHT contacts store]]); you just need to make sure that the data to be reported is always set, like the error code below:
+
+#+begin_src c++
+#include "logger.h"
+#include "namespaces.h"
+#include "util/defer.h"
+
+// ...
+LOG_DEBUG("Doing foo...");
+sys::error_code ec;
+auto log_result = defer([&ec] {
+    LOG_DEBUG("Doing foo: done; ec=", ec);
+});
+// Operations which set "ec"...
+#+end_src
+
 ** Cancellation signaling
 
 When a coroutine is spawned, the caller code loses track of it. However, it may want to send a signal to such coroutines for them to take some action, like canceling whatever operation they are carrying (e.g. because it is taking too long, or the user explicitly aborted it, or the program was told to terminate).
