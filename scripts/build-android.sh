@@ -26,6 +26,8 @@ elif [ "$ABI" = "x86" ]; then
     OUINET_MIN_API=16
 elif [ "$ABI" = "x86_64" ]; then
     OUINET_MIN_API=21
+elif [ "$ABI" = "omni" ]; then
+    OUINET_MIN_API=21
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1

@@ -39,14 +39,14 @@ public:
         _rx_cv.notify();
     }
 
-    void async_push(T val, Cancel& cancel, asio::yield_context yield)
+    void async_push(T val, Cancel cancel, asio::yield_context yield)
     {
-        async_push(std::move(val), sys::error_code(), cancel, yield);
+        async_push(std::move(val), sys::error_code(), std::move(cancel), yield);
     }
 
     void async_push( T val
                    , sys::error_code ec_
-                   , Cancel& cancel
+                   , Cancel cancel
                    , asio::yield_context yield)
     {
         auto slot = _destroy_signal.connect([&] { cancel(); });
@@ -83,7 +83,7 @@ public:
 
     template<class Range>
     void async_push_many( const Range& range
-                        , Cancel& cancel
+                        , Cancel cancel
                         , asio::yield_context yield)
     {
         auto slot = _destroy_signal.connect([&] { cancel(); });
@@ -108,13 +108,12 @@ public:
         }
     }
 
-    void async_wait_for_push(Cancel& cancel, asio::yield_context yield)
+    void async_wait_for_push(Cancel cancel, asio::yield_context yield)
     {
-        Cancel c(cancel);
-        auto slot = _destroy_signal.connect([&] { c(); });
+        auto slot = _destroy_signal.connect([&] { cancel(); });
         sys::error_code ec;
-        _rx_cv.wait(c, yield[ec]);
-        return_or_throw_on_error(yield, c, ec);
+        _rx_cv.wait(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec);
     }
 
     T async_pop(Cancel cancel, asio::yield_context yield)
@@ -139,7 +138,7 @@ public:
     }
 
     size_t async_flush( std::queue<T>& out
-                      , Cancel& cancel
+                      , Cancel cancel
                       , asio::yield_context yield)
     {
         auto slot = _destroy_signal.connect([&] { cancel(); });

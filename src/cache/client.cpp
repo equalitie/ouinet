@@ -21,6 +21,7 @@
 
 #define _LOGPFX "cache/client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _VERBOSE(...) LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
 #define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
 #define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
@@ -146,7 +147,8 @@ struct Client::Impl {
 
         // Announce all groups.
         for (auto& group_name : _groups->groups())
-            _announcer->add(compute_swarm_name(group_name));
+            if (_announcer->add(compute_swarm_name(group_name)))
+                _VERBOSE("Start announcing group: ", group_name);
 
         return true;
     }
@@ -481,7 +483,8 @@ struct Client::Impl {
         if (ec) return or_throw(yield, ec);
 
         if (!_announcer) return;
-        _announcer->add(compute_swarm_name(group));
+        if (_announcer->add(compute_swarm_name(group)))
+            _VERBOSE("Start announcing group: ", group);
     }
 
     http::response_header<>
@@ -523,7 +526,9 @@ struct Client::Impl {
         auto empty_groups = _groups->remove(key);
 
         if (!_announcer) return;
-        for (const auto& eg : empty_groups) _announcer->remove(compute_swarm_name(eg));
+        for (const auto& eg : empty_groups)
+            if (_announcer->remove(compute_swarm_name(eg)))
+                _VERBOSE("Stop announcing group: ", eg);;
     }
 
     // Return whether the entry should be kept in storage.

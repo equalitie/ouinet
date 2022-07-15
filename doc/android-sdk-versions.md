@@ -139,3 +139,8 @@ instead.
 Since support for 64-bit architectures was added in Android SDK/API 21, 64-bit
 builds raise the minimum SDK version to 21.  `build-android.sh` takes care of
 setting the appropriate value of `OUINET_MIN_API` in this case.
+
+The same will happen for builds with targets compiled for different
+architectures in the same AAR, like `omni` that includes `armeabi-v7a`,
+`arm64-v8a` and `x86_64`). In this case, `build-android.sh` will adjust
+`OUINET_MIN_API` to 21 in order to keep compatibility with 64-bit libs.

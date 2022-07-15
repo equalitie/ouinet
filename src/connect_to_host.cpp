@@ -26,8 +26,7 @@ ouinet::connect_to_host( const asio::executor& ex
     auto const lookup = util::tcp_async_resolve( host, port
                                                , ex, cancel_signal
                                                , yield[ec]);
-
-    if (ec) return or_throw(yield, ec, tcp::socket(ex));
+    return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
 
     return connect_to_host(lookup, ex, cancel_signal, yield);
 }
@@ -49,7 +48,7 @@ ouinet::connect_to_host( const TcpLookup& lookup
 
     // Make the connection on the IP address we get from a lookup
     asio::async_connect(socket, lookup, yield[ec]);
-    if (ec) return or_throw(yield, ec, tcp::socket(ex));
+    return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
 
     return socket;
 }
