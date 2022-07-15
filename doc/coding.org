@@ -95,6 +95,8 @@ The [[file:../src][=src/=]] directory contains the main source code of the Ouine
 - Indentation style is not very strict nor consistent, but this snippet will give you a general idea:
 
 #+begin_src c++
+#include "logger.h"
+
 namespace ouinet {
 namespace foo {
 
@@ -189,12 +191,16 @@ Logging macros convert their arbitrary arguments to ~std::string~ objects using 
 For example, to log an error result from an operation:
 
 #+begin_src c++
+#include "logger.h"
+
+// ...
 sys::error_code ec;
 do_foo(bar, yield[ec]);
 if (ec) {
     LOG_ERROR("Failed to foo: ", bar, "; ec=", ec);
     return or_throw(yield, ec);
 }
+// ...
 #+end_src
 
 That may produce =[ERROR] Failed to foo: SomeBar; ec=​"Invalid argument"=.
