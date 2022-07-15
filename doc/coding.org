@@ -12,79 +12,79 @@ This document provides an overview of how the Ouinet source directory is structu
 
 ** Documentation
 
-The [[file:.][doc/]] directory contains assorted documents about Ouinet:
+The [[file:.][=doc/=]] directory contains assorted documents about Ouinet:
 
-- [[file:coding.org][doc/coding.org]]: this file
-- [[file:ouinet-network-whitepaper.md][doc/ouinet-network-whitepaper.md]]: a technical description of how Ouinet works and its associated protocols; any implementation should ideally stick to this reference
-- [[file:request-response-flow.svg][doc/request-response-flow.svg]]: a detailed diagram of how requests and responses travel over different Ouinet components (esp. within the client)
-- [[file:android-sdk-versions.md][doc/android-sdk-versions.md]]: some clarifications on the chosen versions of Android SDK and API levels
-- [[file:arch-drafts][doc/arch-drafts/]]: documents where particular parts of Ouinet specs are developed (they should but they might not match the white paper completely)
+- [[file:coding.org][=doc/coding.org=]]: this file
+- [[file:ouinet-network-whitepaper.md][=doc/ouinet-network-whitepaper.md=]]: a technical description of how Ouinet works and its associated protocols; any implementation should ideally stick to this reference
+- [[file:request-response-flow.svg][=doc/request-response-flow.svg=]]: a detailed diagram of how requests and responses travel over different Ouinet components (esp. within the client)
+- [[file:android-sdk-versions.md][=doc/android-sdk-versions.md=]]: some clarifications on the chosen versions of Android SDK and API levels
+- [[file:arch-drafts][=doc/arch-drafts/=]]: documents where particular parts of Ouinet specs are developed (they should but they might not match the white paper completely)
 
 ** Build system
 
 Ouinet uses [[https://cmake.org/][CMake]] to build its source:
 
-- [[file:../CMakeLists.txt][CMakeLists.txt]] is the main entry point to the CMake build configuration:
+- [[file:../CMakeLists.txt][=CMakeLists.txt=]] is the main entry point to the CMake build configuration:
   - checks the version of CMake and some generic build flags
   - builds the Ouinet library and project-developed dependencies (included as submodules)
   - builds the client & injector programs
   - builds test programs and tools
-- [[file:../cmake][cmake/]] contains more specific CMake configuration snippets:
-  - [[file:../cmake/OuinetDependencies.cmake][cmake/OuinetDependencies.cmake]]: the build configuration of third-party dependencies (under the [[file:../cmake/dependencies][cmake/dependencies/]] subdirectory)
-  - [[file:../cmake/BuildVersion.cmake][cmake/BuildVersion.cmake]]: machinery to extract the release version (from [[file:../version.txt][version.txt]], see below), compute a build identifier (=(Release|Debug) (HEAD|<branch name>) <Git commit>=), and make them available to source code
+- [[file:../cmake][=cmake/=]] contains more specific CMake configuration snippets:
+  - [[file:../cmake/OuinetDependencies.cmake][=cmake/OuinetDependencies.cmake=]]: the build configuration of third-party dependencies (under the [[file:../cmake/dependencies][=cmake/dependencies/=]] subdirectory)
+  - [[file:../cmake/BuildVersion.cmake][=cmake/BuildVersion.cmake=]]: machinery to extract the release version (from [[file:../version.txt][=version.txt=]], see below), compute a build identifier (=(Release|Debug) (HEAD|<branch name>) <Git commit>=), and make them available to source code
 
 ** Isolated build environments
 
 Ouinet provides configuration files for different systems supporting isolated build environments, should you prefer not to pollute your main system with build dependencies:
 
-- [[https://docker.io/][Docker]]: Files are provided to create a client/injector container image ([[file:../Dockerfile][Dockerfile]]), an image with dependencies to build the Android library ([[file:../Dockerfile.android][Dockerfile.android]]), and an image to run an Android emulator ([[file:../Dockerfile.android-emu][Dockerfile.android-emu]]). This is used for Docker Hub images. See [[file:../README.md][README.md]] for more information.
-- [[https://vagrantup.com/][Vagrant]]: The [[file:../Vagrantfile][Vagrantfile]] can be used to build the Ouinet client, injector and tests. May be outdated. See [[file:../README.md][README.md]] for more information.
-- [[https://guix.gnu.org/][GNU Guix]]: A Guix environment (either temporary or permanent) can be used to build the Ouinet client, injector and tests. See [[file:../guix/README.md][guix/README.md]] for more information.
+- [[https://docker.io/][Docker]]: Files are provided to create a client/injector container image ([[file:../Dockerfile][=Dockerfile=]]), an image with dependencies to build the Android library ([[file:../Dockerfile.android][=Dockerfile.android=]]), and an image to run an Android emulator ([[file:../Dockerfile.android-emu][=Dockerfile.android-emu=]]). This is used for Docker Hub images. See [[file:../README.md][=README.md=]] for more information.
+- [[https://vagrantup.com/][Vagrant]]: The [[file:../Vagrantfile][=Vagrantfile=]] can be used to build the Ouinet client, injector and tests. May be outdated. See [[file:../README.md][=README.md=]] for more information.
+- [[https://guix.gnu.org/][GNU Guix]]: A Guix environment (either temporary or permanent) can be used to build the Ouinet client, injector and tests. See [[file:../guix/README.md][=guix/README.md=]] for more information.
 
 ** Scripts
 
-The [[file:../scripts][scripts/]] directory contains scripts for assorted tasks:
+The [[file:../scripts][=scripts/=]] directory contains scripts for assorted tasks:
 
 - Building:
-  - [[file:../scripts/build-ouinet-local.sh][scripts/build-ouinet-local.sh]] and [[file:../scripts/build-ouinet-git.sh][scripts/build-ouinet-git.sh]] can be invoked to build Ouinet from a local source checkout or from the Git repo (respectively) to =ouinet-local-build/= in the current directory.
-  - [[file:../scripts/git-version-string.sh][scripts/git-version-string.sh]] is used by CMake to get versioning information from the Git checkout.
+  - [[file:../scripts/build-ouinet-local.sh][=scripts/build-ouinet-local.sh=]] and [[file:../scripts/build-ouinet-git.sh][=scripts/build-ouinet-git.sh=]] can be invoked to build Ouinet from a local source checkout or from the Git repo (respectively) to =ouinet-local-build/= in the current directory.
+  - [[file:../scripts/git-version-string.sh][=scripts/git-version-string.sh=]] is used by CMake to get versioning information from the Git checkout.
 - Docker packaging:
-  - [[file:../scripts/add-licenses-dir.sh][scripts/add-licenses-dir.sh]] includes dependency licensing information from [[file:../scripts/licenses][src/licenses/]] in the client/injector Docker container image.
-  - [[file:../scripts/ouinet-wrapper.sh][scripts/ouinet-wrapper.sh]] acts as the container's entry point.
+  - [[file:../scripts/add-licenses-dir.sh][=scripts/add-licenses-dir.sh=]] includes dependency licensing information from [[file:../scripts/licenses][=src/licenses/=]] in the client/injector Docker container image.
+  - [[file:../scripts/ouinet-wrapper.sh][=scripts/ouinet-wrapper.sh=]] acts as the container's entry point.
 - Testing:
-  - [[file:../scripts/run_integration_tests.sh][scripts/run_integration_tests.sh]] starts Ouinet's integration tests (see below). Outdated, not working currently.
-  - [[file:../scripts/firefox-proxy.sh][scripts/firefox-proxy.sh]] runs Firefox with a temporary session which uses a local Ouinet client as its HTTP proxy. Outdated.
-  - [[file:../scripts/ping-swarm][scripts/ping-swarm]] can be used to ping nodes announcing themselves in a Ouinet swarm on BitTorrent. See comments in the script for more information.
+  - [[file:../scripts/run_integration_tests.sh][=scripts/run_integration_tests.sh=]] starts Ouinet's integration tests (see below). Outdated, not working currently.
+  - [[file:../scripts/firefox-proxy.sh][=scripts/firefox-proxy.sh=]] runs Firefox with a temporary session which uses a local Ouinet client as its HTTP proxy. Outdated.
+  - [[file:../scripts/ping-swarm][=scripts/ping-swarm=]] can be used to ping nodes announcing themselves in a Ouinet swarm on BitTorrent. See comments in the script for more information.
 
 ** Android support
 
-The [[file:../android][android/]] directory contains files used to build the Ouinet library for Android (AAR):
+The [[file:../android][=android/=]] directory contains files used to build the Ouinet library for Android (AAR):
 
-- [[file:../android/build.gradle][android/build.gradle]] and [[file:../android/settings.gradle][android/settings.gradle]] are the main configuration files for [[https://gradle.org/][Gradle]], with files under [[file:../android/build-scripts][android/build-scripts/]] being used for handling the publication to [[https://search.maven.org/][Maven Central]].
-- [[file:../android/i2pd][android/i2pd/]] contains support for the [[https://geti2p.net/][I2P]] transport. Probably outdated.
-- [[file:../android/ouinet][android/ouinet/]] contains the JNI wrapper source for the Ouinet native library, plus the high level =Config= and =Ouinet= Java classes for running a Ouinet client in Android.
+- [[file:../android/build.gradle][=android/build.gradle=]] and [[file:../android/settings.gradle][=android/settings.gradle=]] are the main configuration files for [[https://gradle.org/][Gradle]], with files under [[file:../android/build-scripts][=android/build-scripts/=]] being used for handling the publication to [[https://search.maven.org/][Maven Central]].
+- [[file:../android/i2pd][=android/i2pd/=]] contains support for the [[https://geti2p.net/][I2P]] transport. Probably outdated.
+- [[file:../android/ouinet][=android/ouinet/=]] contains the JNI wrapper source for the Ouinet native library, plus the high level =Config= and =Ouinet= Java classes for running a Ouinet client in Android.
 
 ** Various source files and directories
 
-- [[file:../docker-compose.yml][docker-compose.yml]] allows to run a Ouinet container (esp. for an injector) which can be easily managed and updated thanks to [[https://docs.docker.com/compose/][Docker Compose]]. See comments in the file for more information.
-- [[file:../repos][repos/]] includes example configuration files for client and injector programs, used as their configuration templates by the Docker container image.
-- [[file:../requirements.txt][requirements.txt]] includes Python dependencies for integration tests (see below). Outdated.
-- [[file:../version.txt][version.txt]] contains the last stable version of Ouinet at or before the current Git commit. It follows [[https://semver.org/][Semantic Versioning]].
-- [[file:../lib][lib/]] contains C++ files to enable building Boost ASIO and Boost ASIO SSL as dynamic libraries.
-- [[file:../modules][modules/]] includes Git submodules for project-developed dependencies implementing Boost ASIO-compatible support for the [[https://en.wikipedia.org/wiki/Micro_Transport_Protocol][uTP]] and [[https://en.wikipedia.org/wiki/Universal_Plug_and_Play][UPnP]] protocols.
-- [[file:../test][test/]] contains the source for unit tests (=test/test*.cpp=), integration tests ([[file:../test/integration_test][test/integration_test/]], outdated) and test tools (=test/bt-bep*.cpp= and =test/ouiservice-*.cpp=). Unit tests and test tools can be run standalone. The =bt-bep5= test tool is used by the =ping-swarm= script (see above).
+- [[file:../docker-compose.yml][=docker-compose.yml=]] allows to run a Ouinet container (esp. for an injector) which can be easily managed and updated thanks to [[https://docs.docker.com/compose/][Docker Compose]]. See comments in the file for more information.
+- [[file:../repos][=repos/=]] includes example configuration files for client and injector programs, used as their configuration templates by the Docker container image.
+- [[file:../requirements.txt][=requirements.txt=]] includes Python dependencies for integration tests (see below). Outdated.
+- [[file:../version.txt][=version.txt=]] contains the last stable version of Ouinet at or before the current Git commit. It follows [[https://semver.org/][Semantic Versioning]].
+- [[file:../lib][=lib/=]] contains C++ files to enable building Boost ASIO and Boost ASIO SSL as dynamic libraries.
+- [[file:../modules][=modules/=]] includes Git submodules for project-developed dependencies implementing Boost ASIO-compatible support for the [[https://en.wikipedia.org/wiki/Micro_Transport_Protocol][uTP]] and [[https://en.wikipedia.org/wiki/Universal_Plug_and_Play][UPnP]] protocols.
+- [[file:../test][=test/=]] contains the source for unit tests (=test/test*.cpp=), integration tests ([[file:../test/integration_test][=test/integration_test/=]], outdated) and test tools (=test/bt-bep*.cpp= and =test/ouiservice-*.cpp=). Unit tests and test tools can be run standalone. The =bt-bep5= test tool is used by the =ping-swarm= script (see above).
 
 ** Main source directory
 
-The [[file:../src][src/]] directory contains the main source code of the Ouinet library. Its files will be further discussed in following sections, though its overall structure is:
+The [[file:../src][=src/=]] directory contains the main source code of the Ouinet library. Its files will be further discussed in following sections, though its overall structure is:
 
-- [[file:../src/util][src/util/]]: generic, reusable code not specific to Ouinet protocols or formats.
-- [[file:../src/parse][src/parse/]]: code which parses strings and yields other native C++ instances not specific to Ouinet.
-- [[file:../src/ssl][src/ssl/]]: code to handle SSL/TLS connections (generic), certificate authorities, and end certificates (Ouinet-specific).
-- [[file:../src/bittorrent][src/bittorrent/]]: implementation of BitTorrent protocols and formats, not specific to Ouinet.
-- [[file:../src/ouiservice][src/ouiservice/]]: implementation of the different dynamic transports used for communication between Ouinet nodes. [[https://i2pd.website/][i2pd]] is included as a submodule in [[file:../src/ouiservice/i2p/i2pd][src/ouiservice/i2p/i2pd/]] (for the I2P transport).
-- [[file:../src/cache][src/cache/]]: implementation of the protocols and formats specific to the Ouinet distributed cache.
-- [[file:../src][src/]]: other Ouinet-specific code that does not belong in a specific subsystem. However, some code is actually not so Ouinet-specific, so it may belong in =src/util/= instead.
+- [[file:../src/util][=src/util/=]]: generic, reusable code not specific to Ouinet protocols or formats.
+- [[file:../src/parse][=src/parse/=]]: code which parses strings and yields other native C++ instances not specific to Ouinet.
+- [[file:../src/ssl][=src/ssl/=]]: code to handle SSL/TLS connections (generic), certificate authorities, and end certificates (Ouinet-specific).
+- [[file:../src/bittorrent][=src/bittorrent/=]]: implementation of BitTorrent protocols and formats, not specific to Ouinet.
+- [[file:../src/ouiservice][=src/ouiservice/=]]: implementation of the different dynamic transports used for communication between Ouinet nodes. [[https://i2pd.website/][i2pd]] is included as a submodule in [[file:../src/ouiservice/i2p/i2pd][=src/ouiservice/i2p/i2pd/=]] (for the I2P transport).
+- [[file:../src/cache][=src/cache/=]]: implementation of the protocols and formats specific to the Ouinet distributed cache.
+- [[file:../src][=src/=]]: other Ouinet-specific code that does not belong in a specific subsystem. However, some code is actually not so Ouinet-specific, so it may belong in =src/util/= instead.
 
 * Coding guidelines
 
@@ -124,7 +124,7 @@ bar_stuff( const X& x
 
 ** Boost namespaces
 
-Since the use of Boost types, values and functions is so pervasive in Ouinet, some Boost namespaces are given shorthands in the ~ouinet~ namespace. For instance, ~boost::filesystem~ is aliased to ~ouinet::fs~, so that ~fs::path~ can be used instead of ~boost::filesystem::path~ in Ouinet code. To use such shorthands, [[file:../src/namespaces.h][src/namespaces.h]] is included.
+Since the use of Boost types, values and functions is so pervasive in Ouinet, some Boost namespaces are given shorthands in the ~ouinet~ namespace. For instance, ~boost::filesystem~ is aliased to ~ouinet::fs~, so that ~fs::path~ can be used instead of ~boost::filesystem::path~ in Ouinet code. To use such shorthands, [[file:../src/namespaces.h][=src/namespaces.h=]] is included.
 
 ** Concurrency
 
@@ -132,7 +132,7 @@ In Ouinet, with the exception of code run at the very beginning of programs, or 
 
 Coroutines can be recognized for having an argument of type ~boost::asio::yield_context~ (usually called ~yield~ or ~y~), which is first received from a ~boost::asio::spawn~ call; see [[file:../src/injector.cpp::listen(config, proxy_server, cancel, yield\[ec\]);][injector listen spawn]] and [[file:../src/injector.cpp::void listen(][injector listen op]] for an example. *Note:* Those show a common pattern where listening for incoming connections happens as a coroutine, while handling each such connection happens in its own coroutine; see [[file:../src/injector.cpp::serve( config][injector serve op]].
 
-The execution of coroutines begins when ~boost::asio::io_context~'s ~run()~ is invoked; see [[file:../src/client.cpp::ctx.run();][client main]] for an example. A coroutine will run until it returns or throws an exception; the [[file:../src/util/handler_tracker.h::define TRACK_SPAWN(exec,][TRACK_SPAWN]] macro can be used instead of ~spawn~ to catch and report exceptions from the coroutine (avoiding a crash), and to report if it fails to stop on program exit (implemented in [[file:../src/util/handler_tracker.cpp::void stop() {][handler tracker stop]]); see [[file:../src/client.cpp::void Client::State::start()][client start]] for an example of tracking the concurrent start of several coroutines.
+The execution of coroutines begins when ~boost::asio::io_context~'s ~run()~ is invoked; see [[file:../src/client.cpp::ctx.run();][client main]] for an example. A coroutine will run until it returns or throws an exception; the [[file:../src/util/handler_tracker.h::define TRACK_SPAWN(exec,][~TRACK_SPAWN~]] macro can be used instead of ~spawn~ to catch and report exceptions from the coroutine (avoiding a crash), and to report if it fails to stop on program exit (implemented in [[file:../src/util/handler_tracker.cpp::void stop() {][handler tracker stop]]); see [[file:../src/client.cpp::void Client::State::start()][client start]] for an example of tracking the concurrent start of several coroutines.
 
 ** Error handling
 
@@ -144,7 +144,7 @@ do_something(arg1, arg2, yield[ec]);
 if (ec) { /* handle error */ }
 #+end_src
 
-To simplify the proper signaling of errors in Ouinet coroutines, they use the ~ouinet::or_throw~ functions in [[file:../src/or_throw.h][src/or_throw.h]], which take care of using the error behavior expected by the caller:
+To simplify the proper signaling of errors in Ouinet coroutines, they use the ~ouinet::or_throw~ functions in [[file:../src/or_throw.h][=src/or_throw.h=]], which take care of using the error behavior expected by the caller:
 
 #+begin_src c++
 #include "namespaces.h"
@@ -180,11 +180,11 @@ get_bar(asio::yield_context yield) {
 
 ** Logging and string conversion
 
-Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][src/logger.h]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_<LEVEL>~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than ~<LEVEL>~ using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace, with no prefixes either (this may change in the future). Log messages use color codes (except on Android) and can include time stamps (currently unused).
+Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][=src/logger.h=]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_<LEVEL>~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than ~<LEVEL>~ using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace, with no prefixes either (this may change in the future). Log messages use color codes (except on Android) and can include time stamps (currently unused).
 
 Some implementation files define ~_<LEVEL>~ macros on top of ~_LOG_<LEVEL>~ ones to include a common, specific prefix (defined as ~_LOGPFX~) in every message logged from there (as in [[file:../src/bittorrent/dht.cpp::define _LOGPFX][BitTorrent DHT code]]).
 
-Logging macros convert their arbitrary arguments to ~std::string~ objects using ~ouinet::util::str~ (from [[file:../src/util/str.h][util/str.h]]), which works for any type which can be serialized to an ~std::ostream~ using ~operator<<~. Some frequently-logged values like ~boost::system::error_code~ and ~boost::beast::http::status~ are pretty-printed by ~str~.
+Logging macros convert their arbitrary arguments to ~std::string~ objects using ~ouinet::util::str~ (from [[file:../src/util/str.h][=util/str.h=]]), which works for any type which can be serialized to an ~std::ostream~ using ~operator<<~. Some frequently-logged values like ~boost::system::error_code~ and ~boost::beast::http::status~ are pretty-printed by ~str~.
 
 For example, to log an error result from an operation:
 
@@ -212,7 +212,7 @@ Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cl
 
 When a coroutine is spawned, the caller code loses track of it. However, it may want to send a signal to such coroutines for them to take some action, like canceling whatever operation they are carrying (e.g. because it is taking too long, or the user explicitly aborted it, or the program was told to terminate).
 
-In [[file:../src/util/signal.h][src/util/signal.h]], Ouinet defines the [[file:../src/util/signal.h::class Signal][Signal]] class. Function objects can be _connected_ to the signal using ~connect~, and they are called when the signal is _triggered_ with ~operator()~. Arguments passed to the trigger call are forwarded to the connected functions. The connection between signal and function only lasts while the result of ~connect~ is kept alive. A signal evaluates to a ~true~ Boolean once triggered, otherwise to ~false~.
+In [[file:../src/util/signal.h][=src/util/signal.h=]], Ouinet defines the [[file:../src/util/signal.h::class Signal][~Signal~]] class. Function objects can be _connected_ to the signal using ~connect~, and they are called when the signal is _triggered_ with ~operator()~. Arguments passed to the trigger call are forwarded to the connected functions. The connection between signal and function only lasts while the result of ~connect~ is kept alive. A signal evaluates to a ~true~ Boolean once triggered, otherwise to ~false~.
 
 When a signal is initialized from another one (via copy constructor or ~operator=~), the former becomes a _child_ of the later _parent_ signal. Triggering the parent signal causes its children to be triggered too, while triggering a child signal does not trigger its parent. Thus, signals form inverted trees where triggering only flows recursively downwards.
 
@@ -242,7 +242,7 @@ cancel();
 // ...
 #+end_src
 
-If cancellation happens, ~boost::asio::error:operation_aborted~ is reported, no matter what the outcome from ~do_something~ is. This is a very frequent idiom in Ouinet; to avoid the boilerplate, =signal.h= provides the [[file:../src/util/signal.h::compute_error_code( const sys::error_code&][compute_error_code(ec, cancel)]] function and the [[file:../src/util/signal.h::define return_or_throw_on_error(][return_or_throw_on_error(yield, cancel, ec, ...)]] macro. Thus, the error handling code above may be replaced by:
+If cancellation happens, ~boost::asio::error:operation_aborted~ is reported, no matter what the outcome from ~do_something~ is. This is a very frequent idiom in Ouinet; to avoid the boilerplate, =signal.h= provides the [[file:../src/util/signal.h::compute_error_code( const sys::error_code&][~compute_error_code(ec, cancel)~]] function and the [[file:../src/util/signal.h::define return_or_throw_on_error(][~return_or_throw_on_error(yield, cancel, ec, ...)~]] macro. Thus, the error handling code above may be replaced by:
 
 #+begin_src c++
 do_something(foo, yield[ec]);
