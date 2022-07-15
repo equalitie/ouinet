@@ -128,7 +128,7 @@ Since the use of Boost types, values and functions is so pervasive in Ouinet, so
 
 ** Concurrency
 
-In Ouinet, with the exception of code run at the very beginning of programs, or trivial I/O (like with small state files), all operations which may wait for I/O or other events are implemented as concurrent _asynchronous functions_ or _coroutines_ using [[https://www.boost.org/doc/libs/release/libs/asio/][Boost Asio]].
+In Ouinet, with the exception of code run at the very beginning of programs, or trivial I/O (like with small state files), all operations which may wait for I/O or other events are implemented as concurrent /asynchronous functions/ or /coroutines/ using [[https://www.boost.org/doc/libs/release/libs/asio/][Boost Asio]].
 
 Coroutines can be recognized for having an argument of type ~boost::asio::yield_context~ (usually called ~yield~ or ~y~), which is first received from a ~boost::asio::spawn~ call; see [[file:../src/injector.cpp::listen(config, proxy_server, cancel, yield\[ec\]);][injector listen spawn]] and [[file:../src/injector.cpp::void listen(][injector listen op]] for an example. *Note:* Those show a common pattern where listening for incoming connections happens as a coroutine, while handling each such connection happens in its own coroutine; see [[file:../src/injector.cpp::serve( config][injector serve op]].
 
@@ -212,9 +212,9 @@ Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cl
 
 When a coroutine is spawned, the caller code loses track of it. However, it may want to send a signal to such coroutines for them to take some action, like canceling whatever operation they are carrying (e.g. because it is taking too long, or the user explicitly aborted it, or the program was told to terminate).
 
-In [[file:../src/util/signal.h][=src/util/signal.h=]], Ouinet defines the [[file:../src/util/signal.h::class Signal][~Signal~]] class. Function objects can be _connected_ to the signal using ~connect~, and they are called when the signal is _triggered_ with ~operator()~. Arguments passed to the trigger call are forwarded to the connected functions. The connection between signal and function only lasts while the result of ~connect~ is kept alive. A signal evaluates to a ~true~ Boolean once triggered, otherwise to ~false~.
+In [[file:../src/util/signal.h][=src/util/signal.h=]], Ouinet defines the [[file:../src/util/signal.h::class Signal][~Signal~]] class. Function objects can be /connected/ to the signal using ~connect~, and they are called when the signal is /triggered/ with ~operator()~. Arguments passed to the trigger call are forwarded to the connected functions. The connection between signal and function only lasts while the result of ~connect~ is kept alive. A signal evaluates to a ~true~ Boolean once triggered, otherwise to ~false~.
 
-When a signal is initialized from another one (via copy constructor or ~operator=~), the former becomes a _child_ of the later _parent_ signal. Triggering the parent signal causes its children to be triggered too, while triggering a child signal does not trigger its parent. Thus, signals form inverted trees where triggering only flows recursively downwards.
+When a signal is initialized from another one (via copy constructor or ~operator=~), the former becomes a /child/ of the later /parent/ signal. Triggering the parent signal causes its children to be triggered too, while triggering a child signal does not trigger its parent. Thus, signals form inverted trees where triggering only flows recursively downwards.
 
 A child signal can have its own connected functions, also called on signal trigger.
 
@@ -265,7 +265,7 @@ return_or_throw_on_error(yield, child_cancel, ec);
 
 If both caller and callee coroutines support cancellation, it is usual to pass the cancellation signal to the call. The callee will either get a child signal directly (with pass-by-value, as in [[file:../src/cache/http_store.cpp::auto sz = HttpReadStore::size(cancel, yield\[ec\]);][HTTP static store size computation]]), or create the child signal itself (with pass-by-reference, as in [[file:../src/bittorrent/dht.cpp::bool dht::DhtNode::query_find_node2(][BitTorrent DHT node find]]).
 
-Some classes sport a _lifetime cancellation signal_ triggered on instance destruction; instance methods which allow a cancellation signal parameter connect the former to the triggering the of later (as in [[file:../src/util/async_queue.h::void async_wait_for_push(][async queue wait for push]]). The result of this is that code owning the instance can force the cancellation of all its running operations simply by destroying it. The general pattern is:
+Some classes sport a /lifetime cancellation signal/ triggered on instance destruction; instance methods which allow a cancellation signal parameter connect the former to the triggering the of later (as in [[file:../src/util/async_queue.h::void async_wait_for_push(][async queue wait for push]]). The result of this is that code owning the instance can force the cancellation of all its running operations simply by destroying it. The general pattern is:
 
 #+begin_src c++
 #include "namespaces.h"
