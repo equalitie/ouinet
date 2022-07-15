@@ -180,7 +180,7 @@ get_bar(asio::yield_context yield) {
 
 ** Logging and string conversion
 
-Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][src/logger.h]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_<LEVEL>~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than ~<LEVEL>~ using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace (this may change in the future).
+Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][src/logger.h]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_<LEVEL>~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than ~<LEVEL>~ using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace, with no prefixes either (this may change in the future). Log messages use color codes (except on Android) and can include time stamps (currently unused).
 
 Some implementation files define ~_<LEVEL>~ macros on top of ~_LOG_<LEVEL>~ ones to include a common, specific prefix (defined as ~_LOGPFX~) in every message logged from there (as in [[file:../src/bittorrent/dht.cpp::define _LOGPFX][BitTorrent DHT code]]).
 
