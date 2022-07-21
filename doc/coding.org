@@ -4,6 +4,8 @@
 
 This document provides an overview of how the Ouinet source directory is structured, the main conventions and generic helper modules used in it, and the main Ouinet classes in the library and their roles.
 
+Examples use ={{something}}= where the value of =something= should be placed, =(X|Y)= for either =X= or =Y=, =(X)?= for an optional =X=, and =(X)+= for a non-empty repetition of =X=.
+
 *Note:* Links to source files and directories are relative to this document, while their texts are relative to the source code root.
 
 *Note:* This is work in progress and intended as a very rough introduction to Ouinet source code, so expect some divergences between this document and the source.  Please contact mailto:ouinet@equalit.ie if you find misguiding content in this document, thanks!
@@ -31,7 +33,7 @@ Ouinet uses [[https://cmake.org/][CMake]] to build its source:
   - builds test programs and tools
 - [[file:../cmake][=cmake/=]] contains more specific CMake configuration snippets:
   - [[file:../cmake/OuinetDependencies.cmake][=cmake/OuinetDependencies.cmake=]]: the build configuration of third-party dependencies (under the [[file:../cmake/dependencies][=cmake/dependencies/=]] subdirectory)
-  - [[file:../cmake/BuildVersion.cmake][=cmake/BuildVersion.cmake=]]: machinery to extract the release version (from [[file:../version.txt][=version.txt=]], see below), compute a build identifier (=(Release|Debug) (HEAD|<branch name>) <Git commit>=), and make them available to source code
+  - [[file:../cmake/BuildVersion.cmake][=cmake/BuildVersion.cmake=]]: machinery to extract the release version (from [[file:../version.txt][=version.txt=]], see below), compute a build identifier (=(Release|Debug) (HEAD|{{branch name}}) {{Git commit}}=), and make them available to source code
 
 ** Isolated build environments
 
@@ -182,9 +184,9 @@ get_bar(asio::yield_context yield) {
 
 ** Logging and string conversion
 
-Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][=src/logger.h=]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_<LEVEL>~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than ~<LEVEL>~ using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace, with no prefixes either (this may change in the future). Log messages use color codes (except on Android) and can include time stamps (currently unused).
+Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][=src/logger.h=]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_{{LEVEL}}~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than =LEVEL= using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace, with no prefixes either (this may change in the future). Log messages use color codes (except on Android) and can include time stamps (currently unused).
 
-Some implementation files define ~_<LEVEL>~ macros on top of ~_LOG_<LEVEL>~ ones to include a common, specific prefix (defined as ~_LOGPFX~) in every message logged from there (as in [[file:../src/bittorrent/dht.cpp::define _LOGPFX][BitTorrent DHT code]]).
+Some implementation files define ~_{{LEVEL}}~ macros on top of ~_LOG_{{LEVEL}}~ ones to include a common, specific prefix (defined as ~_LOGPFX~) in every message logged from there (as in [[file:../src/bittorrent/dht.cpp::define _LOGPFX][BitTorrent DHT code]]).
 
 Logging macros convert their arbitrary arguments to ~std::string~ objects using ~ouinet::util::str~ (from [[file:../src/util/str.h][=util/str.h=]]), which works for any type which can be serialized to an ~std::ostream~ using ~operator<<~. Some frequently-logged values like ~boost::system::error_code~ and ~boost::beast::http::status~ are pretty-printed by ~str~.
 
@@ -205,7 +207,7 @@ if (ec) {
 
 That may produce =[ERROR] Failed to foo: SomeBar; ec=​"Invalid argument"=.
 
-In general, the format used for log messages is =Message[: object][(...|: status)][;( key=value)+]=, where:
+In general, the format used for log messages is ={{Message}}(: {{object}})?((...|: {{status}}))?(;( {{key}}={{value}})+)?=, where:
 
 - =Message= is a capitalized sentence with no period, e.g. =Failed to foo=.
 - =object= is not quoted, e.g. =http://example.com/=.
@@ -319,14 +321,14 @@ private:
 Due to its heavy use of coroutines, Ouinet defines in [[file:../src/util/yield.h][=src/util/yield.h=]] the ~ouinet::Yield~ class, which mimics ~boost::asio::yield_context~ and its ~yield[error_code]~ semantics, while adding the following features:
 
 - Tracking of parent/child relationships established when creating a ~Yield~ instance from another one.
-- A textual tag like =[<optional prefix>/]R<unique id>= for top-level instances, with each child having an optional, custom tag which extends its parent's, like =<parent tag>/<child tag>/<grandchild tag>=.
+- A textual tag like =({{optional prefix}}/)?R{{unique id}}= for top-level instances, with each child having an optional, custom tag which extends its parent's, like ={{parent tag}}/{{child tag}}/{{grandchild tag}}=.
 - Automatic warnings (including the tag) every 30 seconds if the associated coroutine is still running.
-- A [[file:../src/util/yield.h::void log(log_level_t][~log~]] method which reports a message as =<tag>: <message>= (for a given log level).
+- A [[file:../src/util/yield.h::void log(log_level_t][~log~]] method which reports a message as ={{tag}}: {{message}}= (for a given log level).
 
 ~Yield~ instances can be created in several ways:
 
-- Top-level: with one of the [[file:../src/util/yield.h::Yield( asio::io_context&][constructors]] receiving just a ~yield_context~ (as in the [[file:../src/client.cpp::Yield yield(_ctx, yield_, "frontend");][client front-end acceptor]]). In Ouinet, it is common to associate each top-level instance with an HTTP request/response in a connection, using =C<connection id>= as a common prefix (as in [[file:../src/client.cpp::Yield yield(_ctx.get_executor(), yield_, connection_idstr);][client connection serve]] or [[file:../src/injector.cpp::Yield yield(con.get_executor(), yield_, util::str('C', connection_id));][injector connection serve]]).
-- Children: over an existing ~Yield~ instance, either using a [[file:../src/util/yield.h::Yield(Yield& parent)][copy constructor]] or [[file:../src/util/yield.h::Yield operator\[\]][~operator[]~]] (as in all functions getting a ~Yield~ parameter by value, and in [[file:../src/injector.cpp::auto stream = connect(rq_, cancel, yield\[ec\].tag("connect"));][injector get connection]], respectively; the child uses its parent's tag), or with the [[file:../src/util/yield.h::Yield tag(std::string t)][~tag("something")~]] method (as in [[file:../src/cache_control.cpp::auto ryield = yield.tag("force_reval");][cache control fetch]] and [[file:../src/injector.cpp::auto stream = connect(rq_, cancel, yield\[ec\].tag("connect"));][injector get connection]]; the child uses the tag =<parent tag>/something=).
+- Top-level: with one of the [[file:../src/util/yield.h::Yield( asio::io_context&][constructors]] receiving just a ~yield_context~ (as in the [[file:../src/client.cpp::Yield yield(_ctx, yield_, "frontend");][client front-end acceptor]]). In Ouinet, it is common to associate each top-level instance with an HTTP request/response in a connection, using =C{{connection id}}= as a common prefix (as in [[file:../src/client.cpp::Yield yield(_ctx.get_executor(), yield_, connection_idstr);][client connection serve]] or [[file:../src/injector.cpp::Yield yield(con.get_executor(), yield_, util::str('C', connection_id));][injector connection serve]]).
+- Children: over an existing ~Yield~ instance, either using a [[file:../src/util/yield.h::Yield(Yield& parent)][copy constructor]] or [[file:../src/util/yield.h::Yield operator\[\]][~operator[]~]] (as in all functions getting a ~Yield~ parameter by value, and in [[file:../src/injector.cpp::auto stream = connect(rq_, cancel, yield\[ec\].tag("connect"));][injector get connection]], respectively; the child uses its parent's tag), or with the [[file:../src/util/yield.h::Yield tag(std::string t)][~tag("something")~]] method (as in [[file:../src/cache_control.cpp::auto ryield = yield.tag("force_reval");][cache control fetch]] and [[file:../src/injector.cpp::auto stream = connect(rq_, cancel, yield\[ec\].tag("connect"));][injector get connection]]; the child uses the tag ={{parent tag}}/something=).
 - Detached children: from an existing ~Yield~ instance plus a new ~yield_context~, with the [[file:../src/util/yield.h::Yield detach(asio::yield_context yield)][~detach~]] method (e.g. when spawning a new coroutine from the current one, as in [[file:../src/client.cpp::yield.detach(yield_)\[ec\].run(\[&\] (auto y) {][client store to cache]]).
 
 To avoid the inadvertent loss of features like tags and tracking, ~Yield~ instances need to be explicitly converted to ~yield_context~ when only the later is allowed or desired, by using ~static_cast<asio::yield_context>~ (as when [[file:../src/client.cpp::async_sleep(exec, delay, c, static_cast<asio::yield_context>(yield));][making this pause]]). To ease tagging and tracking operations which do not support ~Yield~, those may be wrapped in a call to the [[file:../src/util/yield.h::run(F&& f)][~run~]] method, which keeps the ~Yield~ instance alive (as in the [[file:../src/client.cpp::Yield yield(_ctx, yield_, "frontend");][client front-end acceptor]]). In the following example ~y~ is a plain ~yield_context~ which is already setting ~ec~ (so there is no need to write ~y[ec]~):
@@ -353,7 +355,7 @@ do_bar(Yield yield)
 }  // namespace ouinet
 #+end_src
 
-Since the ~yield.log(LOG_<LEVEL>, ...)~ syntax can become verbose, some implementation files define ~_Y<LEVEL>(yield, ...)~ macros (as in [[file:../src/client.cpp::define _YDEBUG][client code]]).
+Since the ~yield.log(LOG_{{LEVEL}}, ...)~ syntax can become verbose, some implementation files define ~_Y{{LEVEL}}(yield, ...)~ macros (as in [[file:../src/client.cpp::define _YDEBUG][client code]]).
 
 
 # Local Variables:
