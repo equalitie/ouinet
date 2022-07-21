@@ -1,0 +1,407 @@
+#+title: Coding Ouinet
+
+* Introduction
+
+This document provides an overview of how the Ouinet source directory is structured, the main conventions and generic helper modules used in it, and the main Ouinet classes in the library and their roles.
+
+Examples use ={{something}}= where the value of =something= should be placed, =(X|Y)= for either =X= or =Y=, =(X)?= for an optional =X=, and =(X)+= for a non-empty repetition of =X=.
+
+*Note:* Links to source files and directories are relative to this document, while their texts are relative to the source code root.
+
+*Note:* This is work in progress and intended as a very rough introduction to Ouinet source code, so expect some divergences between this document and the source.  Please contact mailto:ouinet@equalit.ie if you find misguiding content in this document, thanks!
+
+* Directory structure
+
+** Documentation
+
+The [[file:.][=doc/=]] directory contains assorted documents about Ouinet:
+
+- [[file:coding.org][=doc/coding.org=]]: this file
+- [[file:ouinet-network-whitepaper.md][=doc/ouinet-network-whitepaper.md=]]: a technical description of how Ouinet works and its associated protocols; any implementation should ideally stick to this reference
+- [[file:request-response-flow.svg][=doc/request-response-flow.svg=]]: a detailed diagram of how requests and responses travel over different Ouinet components (esp. within the client)
+- [[file:android-sdk-versions.md][=doc/android-sdk-versions.md=]]: some clarifications on the chosen versions of Android SDK and API levels
+- [[file:arch-drafts][=doc/arch-drafts/=]]: documents where particular parts of Ouinet specs are developed (they should but they might not match the white paper completely)
+
+** Build system
+
+Ouinet uses [[https://cmake.org/][CMake]] to build its source:
+
+- [[file:../CMakeLists.txt][=CMakeLists.txt=]] is the main entry point to the CMake build configuration:
+  - checks the version of CMake and some generic build flags
+  - builds the Ouinet library and project-developed dependencies (included as submodules)
+  - builds the client & injector programs
+  - builds test programs and tools
+- [[file:../cmake][=cmake/=]] contains more specific CMake configuration snippets:
+  - [[file:../cmake/OuinetDependencies.cmake][=cmake/OuinetDependencies.cmake=]]: the build configuration of third-party dependencies (under the [[file:../cmake/dependencies][=cmake/dependencies/=]] subdirectory)
+  - [[file:../cmake/BuildVersion.cmake][=cmake/BuildVersion.cmake=]]: machinery to extract the release version (from [[file:../version.txt][=version.txt=]], see below), compute a build identifier (=(Release|Debug) (HEAD|{{branch name}}) {{Git commit}}=), and make them available to source code
+
+** Isolated build environments
+
+Ouinet provides configuration files for different systems supporting isolated build environments, should you prefer not to pollute your main system with build dependencies:
+
+- [[https://docker.io/][Docker]]: Files are provided to create a client/injector container image ([[file:../Dockerfile][=Dockerfile=]]), an image with dependencies to build the Android library ([[file:../Dockerfile.android][=Dockerfile.android=]]), and an image to run an Android emulator ([[file:../Dockerfile.android-emu][=Dockerfile.android-emu=]]). This is used for Docker Hub images. See [[file:../README.md][=README.md=]] for more information.
+- [[https://vagrantup.com/][Vagrant]]: The [[file:../Vagrantfile][=Vagrantfile=]] can be used to build the Ouinet client, injector and tests. May be outdated. See [[file:../README.md][=README.md=]] for more information.
+- [[https://guix.gnu.org/][GNU Guix]]: A Guix environment (either temporary or permanent) can be used to build the Ouinet client, injector and tests. See [[file:../guix/README.md][=guix/README.md=]] for more information.
+
+** Scripts
+
+The [[file:../scripts][=scripts/=]] directory contains scripts for assorted tasks:
+
+- Building:
+  - [[file:../scripts/build-ouinet-local.sh][=scripts/build-ouinet-local.sh=]] and [[file:../scripts/build-ouinet-git.sh][=scripts/build-ouinet-git.sh=]] can be invoked to build Ouinet from a local source checkout or from the Git repo (respectively) to =ouinet-local-build/= in the current directory.
+  - [[file:../scripts/git-version-string.sh][=scripts/git-version-string.sh=]] is used by CMake to get versioning information from the Git checkout.
+- Docker packaging:
+  - [[file:../scripts/add-licenses-dir.sh][=scripts/add-licenses-dir.sh=]] includes dependency licensing information from [[file:../scripts/licenses][=src/licenses/=]] in the client/injector Docker container image.
+  - [[file:../scripts/ouinet-wrapper.sh][=scripts/ouinet-wrapper.sh=]] acts as the container's entry point.
+- Testing:
+  - [[file:../scripts/run_integration_tests.sh][=scripts/run_integration_tests.sh=]] starts Ouinet's integration tests (see below). Outdated, not working currently.
+  - [[file:../scripts/firefox-proxy.sh][=scripts/firefox-proxy.sh=]] runs Firefox with a temporary session which uses a local Ouinet client as its HTTP proxy. Outdated.
+  - [[file:../scripts/ping-swarm][=scripts/ping-swarm=]] can be used to ping nodes announcing themselves in a Ouinet swarm on BitTorrent. See comments in the script for more information.
+
+** Android support
+
+The [[file:../android][=android/=]] directory contains files used to build the Ouinet library for Android (AAR):
+
+- [[file:../android/build.gradle][=android/build.gradle=]] and [[file:../android/settings.gradle][=android/settings.gradle=]] are the main configuration files for [[https://gradle.org/][Gradle]], with files under [[file:../android/build-scripts][=android/build-scripts/=]] being used for handling the publication to [[https://search.maven.org/][Maven Central]].
+- [[file:../android/i2pd][=android/i2pd/=]] contains support for the [[https://geti2p.net/][I2P]] transport. Probably outdated.
+- [[file:../android/ouinet][=android/ouinet/=]] contains the JNI wrapper source for the Ouinet native library, plus the high level =Config= and =Ouinet= Java classes for running a Ouinet client in Android.
+
+** Various source files and directories
+
+- [[file:../docker-compose.yml][=docker-compose.yml=]] allows to run a Ouinet container (esp. for an injector) which can be easily managed and updated thanks to [[https://docs.docker.com/compose/][Docker Compose]]. See comments in the file for more information.
+- [[file:../repos][=repos/=]] includes example configuration files for client and injector programs, used as their configuration templates by the Docker container image.
+- [[file:../requirements.txt][=requirements.txt=]] includes Python dependencies for integration tests (see below). Outdated.
+- [[file:../version.txt][=version.txt=]] contains the last stable version of Ouinet at or before the current Git commit. It follows [[https://semver.org/][Semantic Versioning]].
+- [[file:../lib][=lib/=]] contains C++ files to enable building Boost ASIO and Boost ASIO SSL as dynamic libraries.
+- [[file:../modules][=modules/=]] includes Git submodules for project-developed dependencies implementing Boost ASIO-compatible support for the [[https://en.wikipedia.org/wiki/Micro_Transport_Protocol][uTP]] and [[https://en.wikipedia.org/wiki/Universal_Plug_and_Play][UPnP]] protocols.
+- [[file:../test][=test/=]] contains the source for unit tests (=test/test*.cpp=), integration tests ([[file:../test/integration_test][=test/integration_test/=]], outdated) and test tools (=test/bt-bep*.cpp= and =test/ouiservice-*.cpp=). Unit tests and test tools can be run standalone. The =bt-bep5= test tool is used by the =ping-swarm= script (see above).
+
+** Main source directory
+
+The [[file:../src][=src/=]] directory contains the main source code of the Ouinet library. Its files will be further discussed in following sections, though its overall structure is:
+
+- [[file:../src/util][=src/util/=]]: generic, reusable code not specific to Ouinet protocols or formats.
+- [[file:../src/parse][=src/parse/=]]: code which parses strings and yields other native C++ instances not specific to Ouinet.
+- [[file:../src/ssl][=src/ssl/=]]: code to handle SSL/TLS connections (generic), certificate authorities, and end certificates (Ouinet-specific).
+- [[file:../src/bittorrent][=src/bittorrent/=]]: implementation of BitTorrent protocols and formats, not specific to Ouinet.
+- [[file:../src/ouiservice][=src/ouiservice/=]]: implementation of the different dynamic transports used for communication between Ouinet nodes. [[https://i2pd.website/][i2pd]] is included as a submodule in [[file:../src/ouiservice/i2p/i2pd][=src/ouiservice/i2p/i2pd/=]] (for the I2P transport).
+- [[file:../src/cache][=src/cache/=]]: implementation of the protocols and formats specific to the Ouinet distributed cache.
+- [[file:../src][=src/=]]: other Ouinet-specific code that does not belong in a specific subsystem. However, some code is actually not so Ouinet-specific, so it may belong in =src/util/= instead.
+
+* Coding guidelines
+
+- Ouinet follows the [[https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization][RAII]] principle when possible, making resource allocation and release significant. Use code blocks when necessary to control the scope and lifetime of objects.
+- Genericity and reuse are encouraged. Prefer the use of templates when possible instead of extensive subclassing.
+- Group names for related functionality under the same namespace under the ~ouinet~ namespace, even if they are declared in different places. Nesting of namespaces is ok if not too deep. If you need to have "non-public" declarations in a namespace defined in a header file, put them in a ~detail~ namespace under it.
+- Ouinet makes extensive use of [[https://boost.org/][Boost]] libraries, especially [[https://www.boost.org/doc/libs/release/libs/asio/][Asio]] (for asynchronous programming), [[https://www.boost.org/doc/libs/release/libs/beast/][Beast]] (for everything HTTP), [[https://www.boost.org/doc/libs/release/libs/optional/][Optional]] and [[https://www.boost.org/doc/libs/release/libs/filesystem/][Filesystem]].
+- Indentation style is not very strict nor consistent, but this snippet will give you a general idea:
+
+#+begin_src c++
+#include "logger.h"
+
+namespace ouinet {
+namespace foo {
+
+template<class X>
+static
+int
+bar_stuff( const X& x
+         , Something s)
+{
+    if (s.blah())
+        return 42;
+
+    if (s.unstable()) {
+        LOG_WARN("Got an unstable something: ", s);
+        return 23;
+    }
+
+    return std::frobnicate( x.to_frobnicate()
+                          , s.can_frobnicate()
+                            ? s.to_frobnicate()
+                            : 123);
+}
+
+} // namespace foo
+} // namespace ouinet
+#+end_src
+
+** Boost namespaces
+
+Since the use of Boost types, values and functions is so pervasive in Ouinet, some Boost namespaces are given shorthands in the ~ouinet~ namespace. For instance, ~boost::filesystem~ is aliased to ~ouinet::fs~, so that ~fs::path~ can be used instead of ~boost::filesystem::path~ in Ouinet code. To use such shorthands, [[file:../src/namespaces.h][=src/namespaces.h=]] is included.
+
+** Concurrency
+
+In Ouinet, with the exception of code run at the very beginning of programs, or trivial I/O (like with small state files), all operations which may wait for I/O or other events are implemented as concurrent /asynchronous functions/ or /coroutines/ using [[https://www.boost.org/doc/libs/release/libs/asio/][Boost Asio]].
+
+Coroutines can be recognized for having an argument of type ~boost::asio::yield_context~ (usually called ~yield~ or ~y~), which is first received from a ~boost::asio::spawn~ call; see [[file:../src/injector.cpp::listen(config, proxy_server, cancel, yield][injector listen spawn]] and [[file:../src/injector.cpp::void listen(][injector listen op]] for an example. *Note:* Those show a common pattern where listening for incoming connections happens as a coroutine, while handling each such connection happens in its own coroutine; see [[file:../src/injector.cpp::serve( config][injector serve op]].
+
+The execution of coroutines begins when ~boost::asio::io_context~'s ~run()~ is invoked; see [[file:../src/client.cpp::ctx.run();][client main]] for an example. A coroutine will run until it returns or throws an exception; the [[file:../src/util/handler_tracker.h::define TRACK_SPAWN(exec,][~TRACK_SPAWN~]] macro can be used instead of ~spawn~ to catch and report exceptions from the coroutine (avoiding a crash), and to report if it fails to stop on program exit (implemented in [[file:../src/util/handler_tracker.cpp::void stop() {][handler tracker stop]]); see [[file:../src/client.cpp::void Client::State::start()][client start]] for an example of tracking the concurrent start of several coroutines.
+
+** Error handling
+
+Coroutines can signal an error either by throwing an ~std::runtime_error~ if they receive a plain ~yield_context~ (like ~yield~), or by changing a ~boost::system::error_code~ passed to the ~yield_context~ (like ~yield[ec]~). The preferred way to handle errors in Ouinet is to get them in an ~error_code~ to avoid unhandled exceptions (which also cause extra issues with address sanitizers and coroutines):
+
+#+begin_src c++
+sys::error_code ec;
+do_something(arg1, arg2, yield[ec]);
+if (ec) { /* handle error */ }
+#+end_src
+
+To simplify the proper signaling of errors in Ouinet coroutines, they use the ~ouinet::or_throw~ functions in [[file:../src/or_throw.h][=src/or_throw.h=]], which take care of using the error behavior expected by the caller:
+
+#+begin_src c++
+#include "namespaces.h"
+#include "or_throw.h"
+
+namespace ouinet {
+
+int
+get_foo(asio::yield_context yield)
+{
+    // Do something.
+    if ( /* some error condition */ )
+        return or_throw(yield, asio::error::invalid_argument, 0);
+        // Or with default return value construction:
+        //return or_throw<int>(yield, asio::error::invalid_argument);
+    return 42;
+}
+
+}  // namespace ouinet
+#+end_src
+
+You may also use ~or_throw~ when there is no error:
+
+#+begin_src c++
+int
+get_bar(asio::yield_context yield) {
+    sys::error_code ec;
+    int ret = get_foo(yield[ec]);
+    // Pass return value and error (if any) upwards.
+    return or_throw(yield, ec, ret);
+}
+#+end_src
+
+** Logging and string conversion
+
+Ouinet uses a very simple logging infrastructure available in [[file:../src/logger.h][=src/logger.h=]]. It provides [[file:../src/logger.h::enum log_level_t][log level constants]] (the lower, the more verbose), a global ~logger~ singleton instance mostly used to get or set the log level, and some ~LOG_{{LEVEL}}~ [[file:../src/logger.h::define LOG_SILLY][macros]] to log at levels equal or lower than =LEVEL= using ~logger~. In contrast with the rest of the Ouinet library, these declarations live in the root namespace, with no prefixes either (this may change in the future). Log messages use color codes (except on Android) and can include time stamps (currently unused).
+
+Some implementation files define ~_{{LEVEL}}~ macros on top of ~_LOG_{{LEVEL}}~ ones to include a common, specific prefix (defined as ~_LOGPFX~) in every message logged from there (as in [[file:../src/bittorrent/dht.cpp::define _LOGPFX][BitTorrent DHT code]]).
+
+Logging macros convert their arbitrary arguments to ~std::string~ objects using ~ouinet::util::str~ (from [[file:../src/util/str.h][=util/str.h=]]), which works for any type which can be serialized to an ~std::ostream~ using ~operator<<~. Some frequently-logged values like ~boost::system::error_code~ and ~boost::beast::http::status~ are pretty-printed by ~str~.
+
+For example, to log an error result from an operation:
+
+#+begin_src c++
+#include "logger.h"
+
+// ...
+sys::error_code ec;
+do_foo(bar, yield[ec]);
+if (ec) {
+    LOG_ERROR("Failed to foo: ", bar, "; ec=", ec);
+    return or_throw(yield, ec);
+}
+// ...
+#+end_src
+
+That may produce =[ERROR] Failed to foo: SomeBar; ec=​"Invalid argument"=.
+
+In general, the format used for log messages is ={{Message}}(: {{object}})?((...|: {{status}}))?(;( {{key}}={{value}})+)?=, where:
+
+- =Message= is a capitalized sentence with no period, e.g. =Failed to foo=.
+- =object= is not quoted, e.g. =http://example.com/=.
+- =status= may be something like =failed= or =done=, to indicate the result of an operation whose start was logged previously with the same =Message= and an =...= ellipsis after it (as when [[file:../src/cache/client.cpp::_DEBUG("Collecting garbage...");][collecting garbage from the local cache]]).
+- =key= is short and without spaces (e.g. =ec= for an error code) and =value= is double-quoted if it contains spaces.
+
+Some ~boost::asio::error::operation_aborted~ errors are not reported to avoid cluttering the log with many messages of canceled operations when a program is terminated (as when [[file:../src/client.cpp::LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);][setting up the client's BitTorrent DHT]]).
+
+** Deferred actions
+
+Another example of RAII in action is provided by [[file:../src/defer.h][=src/defer.h=]]. Calling ~ouinet::defer~ with a function returns a ~Defer~ object which runs the function as soon as the object is deallocated. Besides for doing cleanup (as in [[file:../src/util/persistent_lru_cache.h::auto on_exit = defer][persistent LRU cache load]]), this is frequently used to report the result of a series of operations regardless of how they finish (as in [[file:../src/bittorrent/dht.cpp::auto report = defer][BitTorrent DHT contacts store]]); you just need to make sure that the data to be reported is always set, like the error code below:
+
+#+begin_src c++
+#include "logger.h"
+#include "namespaces.h"
+#include "util/defer.h"
+
+// ...
+LOG_DEBUG("Doing foo...");
+sys::error_code ec;
+auto log_result = defer([&ec] {
+    LOG_DEBUG("Doing foo: done; ec=", ec);
+});
+// Operations which set "ec"...
+#+end_src
+
+** Cancellation signaling
+
+When a coroutine is spawned, the caller code loses track of it. However, it may want to send a signal to such coroutines for them to take some action, like canceling whatever operation they are carrying (e.g. because it is taking too long, or the user explicitly aborted it, or the program was told to terminate).
+
+In [[file:../src/util/signal.h][=src/util/signal.h=]], Ouinet defines the [[file:../src/util/signal.h::class Signal][~Signal~]] class. Function objects can be /connected/ to the signal using ~connect~, and they are called when the signal is /triggered/ with ~operator()~. Arguments passed to the trigger call are forwarded to the connected functions. The connection between signal and function only lasts while the result of ~connect~ is kept alive. A signal evaluates to a ~true~ Boolean once triggered, otherwise to ~false~.
+
+When a signal is initialized from another one (via copy constructor or ~operator=~), the former becomes a /child/ of the later /parent/ signal. Triggering the parent signal causes its children to be triggered too, while triggering a child signal does not trigger its parent. Thus, signals form inverted trees where triggering only flows recursively downwards.
+
+A child signal can have its own connected functions, also called on signal trigger.
+
+~Cancel~ is just a signal with no trigger arguments, conventionally used to indicate that the current operation must be aborted. The following code spawns a coroutine which eventually gets a cancellation signal, closing the ~foo~ object and causing ~do_something~ to terminate. ~mutable~ is needed here because the ~child_cancel~ captured variable is changed in the function.
+
+#+begin_src c++
+#include "namespaces.h"
+#include "or_throw.h"
+#include "signal.h"
+
+// ...
+Cancel cancel;
+TRACK_SPAWN( executor  // the macro catches and reports errors
+           , [child_cancel = cancel] (asio::yield_context yield) mutable {
+    Foo foo;
+    auto close_slot = child_cancel.connect({ foo.close(); });  // keep alive
+    sys::error_code ec;
+    do_something(foo, yield[ec]);
+    if (child_cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw(yield, ec);
+    // Non-error stuff...
+});
+// ...
+cancel();
+// ...
+#+end_src
+
+If cancellation happens, ~boost::asio::error:operation_aborted~ is reported, no matter what the outcome from ~do_something~ is. This is a very frequent idiom in Ouinet; to avoid the boilerplate, =signal.h= provides the [[file:../src/util/signal.h::compute_error_code( const sys::error_code&][~compute_error_code(ec, cancel)~]] function and the [[file:../src/util/signal.h::define return_or_throw_on_error(][~return_or_throw_on_error(yield, cancel, ec, ...)~]] macro. Thus, the error handling code above may be replaced by:
+
+#+begin_src c++
+do_something(foo, yield[ec]);
+ec = compute_error_code(ec, child_cancel);
+if (ec) {
+    if (ec != asio::error::operation_aborted)  // avoid noise on program termination
+        LOG_ERROR("Failed to do something; ec=", ec);
+    return or_throw(yield, ec);
+}
+// Non-error stuff...
+#+end_src
+
+or, without the logging, just:
+
+#+begin_src c++
+do_something(foo, yield[ec]);
+return_or_throw_on_error(yield, child_cancel, ec);
+// Non-error stuff...
+#+end_src
+
+If both caller and callee coroutines support cancellation, it is usual to pass the cancellation signal to the call. The callee will either get a child signal directly (with pass-by-value, as in [[file:../src/cache/http_store.cpp::auto sz = HttpReadStore::size(cancel, yield][HTTP static store size computation]]), or create the child signal itself (with pass-by-reference, as in [[file:../src/bittorrent/dht.cpp::bool dht::DhtNode::query_find_node2(][BitTorrent DHT node find]]).
+
+Some classes sport a /lifetime cancellation signal/ triggered on instance destruction; instance methods which allow a cancellation signal parameter connect the former to the triggering the of later (as in [[file:../src/util/async_queue.h::void async_wait_for_push(][async queue wait for push]]). The result of this is that code owning the instance can force the cancellation of all its running operations simply by destroying it. The general pattern is:
+
+#+begin_src c++
+#include "namespaces.h"
+#include "signal.h"
+
+class Foo {
+public:
+    // ...
+    void
+    do_stuff(Cancel cancel, asio::yield_context yield) {
+        auto slot = _lifetime_cancel.connect([&] { cancel(); });
+        // ...
+    }
+
+    ~Foo() {
+        _lifetime_cancel();
+    }
+
+private:
+    // ...
+    Cancel _lifetime_cancel;
+};
+#+end_src
+
+** Extended yield contexts
+
+Due to its heavy use of coroutines, Ouinet defines in [[file:../src/util/yield.h][=src/util/yield.h=]] the ~ouinet::Yield~ class, which mimics ~boost::asio::yield_context~ and its ~yield[error_code]~ semantics, while adding the following features:
+
+- Tracking of parent/child relationships established when creating a ~Yield~ instance from another one.
+- A textual tag like =({{optional prefix}}/)?R{{unique id}}= for top-level instances, with each child having an optional, custom tag which extends its parent's, like ={{parent tag}}/{{child tag}}/{{grandchild tag}}=.
+- Automatic warnings (including the tag) every 30 seconds if the associated coroutine is still running.
+- A [[file:../src/util/yield.h::void log(log_level_t][~log~]] method which reports a message as ={{tag}}: {{message}}= (for a given log level).
+
+~Yield~ instances can be created in several ways:
+
+- Top-level: with one of the [[file:../src/util/yield.h::Yield( asio::io_context&][constructors]] receiving just a ~yield_context~ (as in the [[file:../src/client.cpp::Yield yield(_ctx, yield_, "frontend");][client front-end acceptor]]). In Ouinet, it is common to associate each top-level instance with an HTTP request/response in a connection, using =C{{connection id}}= as a common prefix (as in [[file:../src/client.cpp::Yield yield(_ctx.get_executor(), yield_, connection_idstr);][client connection serve]] or [[file:../src/injector.cpp::Yield yield(con.get_executor(), yield_, util::str('C', connection_id));][injector connection serve]]).
+- Children: over an existing ~Yield~ instance, either using a [[file:../src/util/yield.h::Yield(Yield& parent)][copy constructor]] or [[file:../src/util/yield.h::Yield operator\[\]][~operator[]~]] (as in all functions getting a ~Yield~ parameter by value, and in [[file:../src/injector.cpp::auto stream = connect(rq_, cancel, yield\[ec\].tag("connect"));][injector get connection]], respectively; the child uses its parent's tag), or with the [[file:../src/util/yield.h::Yield tag(std::string t)][~tag("something")~]] method (as in [[file:../src/cache_control.cpp::auto ryield = yield.tag("force_reval");][cache control fetch]] and [[file:../src/injector.cpp::auto stream = connect(rq_, cancel, yield\[ec\].tag("connect"));][injector get connection]]; the child uses the tag ={{parent tag}}/something=).
+- Detached children: from an existing ~Yield~ instance plus a new ~yield_context~, with the [[file:../src/util/yield.h::Yield detach(asio::yield_context yield)][~detach~]] method (e.g. when spawning a new coroutine from the current one, as in [[file:../src/client.cpp::yield.detach(yield_)\[ec\].run(\[&\] (auto y) {][client store to cache]]).
+
+To avoid the inadvertent loss of features like tags and tracking, ~Yield~ instances need to be explicitly converted to ~yield_context~ when only the later is allowed or desired, by using ~static_cast<asio::yield_context>~ (as when [[file:../src/client.cpp::async_sleep(exec, delay, c, static_cast<asio::yield_context>(yield));][making this pause]]). To ease tagging and tracking operations which do not support ~Yield~, those may be wrapped in a call to the [[file:../src/util/yield.h::run(F&& f)][~run~]] method, which keeps the ~Yield~ instance alive (as in the [[file:../src/client.cpp::Yield yield(_ctx, yield_, "frontend");][client front-end acceptor]]). In the following example ~y~ is a plain ~yield_context~ which is already setting ~ec~ (so there is no need to write ~y[ec]~):
+
+#+begin_src c++
+#include "namespaces.h"
+#include "util/yield.h"
+
+namespace ouinet {
+
+int do_foo(asio::yield_context);
+
+int
+do_bar(Yield yield)
+{
+    sys::error_code ec;
+    int x = yield[ec].tag("foo").run([] (auto y) {
+        return do_foo(y);
+    });
+    yield.log(LOG_DEBUG, "Did foo; ec=", ec);
+    return or_throw(yield, ec, x);
+}
+
+}  // namespace ouinet
+#+end_src
+
+Since the ~yield.log(LOG_{{LEVEL}}, ...)~ syntax can become verbose, some implementation files define ~_Y{{LEVEL}}(yield, ...)~ macros (as in [[file:../src/client.cpp::define _YDEBUG][client code]]).
+
+* Generic support code
+
+TODO
+
+** Synchronization mechanisms
+
+TODO
+
+** Connections and streams
+
+TODO
+
+** File operations
+
+TODO
+
+** HTTP response handling
+
+TODO
+
+** Cache control
+
+TODO
+
+** SSL/TLS and certificates
+
+TODO
+
+** BitTorrent
+
+TODO
+
+* Ouinet protocols
+
+TODO
+
+* Client and injector
+
+TODO
+
+
+# Local Variables:
+# mode: org
+# mode: visual-fill-column
+# mode: visual-line
+# mode: flyspell
+# ispell-local-dictionary: "american"
+# End:
