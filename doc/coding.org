@@ -321,7 +321,7 @@ Due to its heavy use of coroutines, Ouinet defines in [[file:../src/util/yield.h
 - Tracking of parent/child relationships established when creating a ~Yield~ instance from another one.
 - A textual tag like =[<optional prefix>/]R<unique id>= for top-level instances, with each child having an optional, custom tag which extends its parent's, like =<parent tag>/<child tag>/<grandchild tag>=.
 - Automatic warnings (including the tag) every 30 seconds if the associated coroutine is still running.
-- A ~log~ method which logs a message as =<tag>: <message>= (for a given log level).
+- A [[file:../src/util/yield.h::void log(log_level_t][~log~]] method which reports a message as =<tag>: <message>= (for a given log level).
 
 ~Yield~ instances can be created in several ways:
 
