@@ -357,6 +357,46 @@ do_bar(Yield yield)
 
 Since the ~yield.log(LOG_{{LEVEL}}, ...)~ syntax can become verbose, some implementation files define ~_Y{{LEVEL}}(yield, ...)~ macros (as in [[file:../src/client.cpp::define _YDEBUG][client code]]).
 
+* Generic support code
+
+TODO
+
+** Synchronization mechanisms
+
+TODO
+
+** Connections and streams
+
+TODO
+
+** File operations
+
+TODO
+
+** HTTP response handling
+
+TODO
+
+** Cache control
+
+TODO
+
+** SSL/TLS and certificates
+
+TODO
+
+** BitTorrent
+
+TODO
+
+* Ouinet protocols
+
+TODO
+
+* Client and injector
+
+TODO
+
 
 # Local Variables:
 # mode: org
