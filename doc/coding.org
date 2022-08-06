@@ -365,7 +365,7 @@ TODO
 
 As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code which spawns a coroutine loses track of it, so special mechanism are needed to interact with such coroutines. The main mechanisms provided by Ouinet are:
 
-- *Watchdogs:* Available from [[file:~/vc/git/ouinet/src/util/watch_dog.h][=src/watch_dog.h=]], [[file:~/vc/git/ouinet/src/util/watch_dog.h::watch_dog(const asio::][~ouinet::watch_dog~]] creates an object with a given associated timeout duration and function. If the watchdog is still alive after the duration, the function is called and the watchdog's ~is_running~ method starts returning ~false~.
+- *Watchdogs:* Available from [[file:../src/util/watch_dog.h][=src/util/watch_dog.h=]], [[file:../src/util/watch_dog.h::watch_dog(const asio::][~ouinet::watch_dog~]] creates an object with a given associated timeout duration and function. If the watchdog is still alive after the duration, the function is called and the watchdog's ~is_running~ method starts returning ~false~.
 
   A watchdog can be disabled with its ~stop~ method and enabled again with a new timeout and function with the ~start~ method (then ~is_running~ returns ~true~ again).
 
@@ -386,7 +386,7 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
   consume(stream, yield[ec]);
   #+end_src
 
-  Ouinet follows the convention of reporting ~boost::asio::error::timed_out~ when an operation was canceled because of a watch dog triggering on timeout, unless some parent cancellation was triggered too. Again, to avoid the boilerplate of figuring out the proper error, =watch_dog.h= provides an extended [[file:~/vc/git/ouinet/src/util/watch_dog.h::compute_error_code( const sys::error_code][~compute_error_code(ec, cancel, watchdog)~]] function and a [[file:~/vc/git/ouinet/src/util/watch_dog.h::define fail_on_error_or_timeout][~fail_on_error_or_timeout(yield, cancel, ec, watchdog, ...)~]] macro.  See [[file:~/vc/git/ouinet/src/injector.cpp::if (ec = compute_error_code(ec, cancel, fetch_wd)) {][injector signed fetch]] and [[file:~/vc/git/ouinet/src/client.cpp::fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});][client cache fetch]] for respective examples of both; please note how the parent cancellation signal is checked to consider upstream cancellation instead of the child signal, which would cause timeouts to be reported as cancellations.
+  Ouinet follows the convention of reporting ~boost::asio::error::timed_out~ when an operation was canceled because of a watch dog triggering on timeout, unless some parent cancellation was triggered too. Again, to avoid the boilerplate of figuring out the proper error, =watch_dog.h= provides an extended [[file:../src/util/watch_dog.h::compute_error_code( const sys::error_code][~compute_error_code(ec, cancel, watchdog)~]] function and a [[file:../src/util/watch_dog.h::define fail_on_error_or_timeout][~fail_on_error_or_timeout(yield, cancel, ec, watchdog, ...)~]] macro.  See [[file:../src/injector.cpp::if (ec = compute_error_code(ec, cancel, fetch_wd)) {][injector signed fetch]] and [[file:../src/client.cpp::fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});][client cache fetch]] for respective examples of both; please note how the parent cancellation signal is checked to consider upstream cancellation instead of the child signal, which would cause timeouts to be reported as cancellations.
 
 TODO
 
