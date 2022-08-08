@@ -390,7 +390,17 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
 
 - *Wait Condition:* Defined in [[file:../src/util/wait_condition.h::class WaitCondition][=src/util/wait_condition.h=]], [[file:../src/util/wait_condition.h::WaitCondition::WaitCondition][~ouinet::WaitCondition~]] implements a mechanism to wait for all the members of a group of coroutines to finish a task. To achieve this, the WaitCondition keeps a counter of the locks that are held by the coroutines and when the coroutines are done they could do an explicit call to release or to have the lock released when the destructor of the lock is automatically invoked. When the [[file:../src/util/wait_condition.h::return _wait_state->remaining_locks;][~remaining_locks~]] counter reaches zero, the [[file:../src/util/wait_condition.h::struct WaitState][~WaitState~]] is changed and the WaitCondition is over.
 
-There's an example of WaitCondition in [[file:../src/client.cpp::WaitCondition wait_condition(_ctx);][~client.cpp~]] where the wait_condition lock is useful [[file:../src/client.cpp::wait_condition.wait(yield)][to wait]]: for the active sockets to finish before terminating the incoming TCP connection.
+  A ~WaitCondition~ object should be initialized with an executor. After that, the ~wait_condition.lock~ can be passed as a parameter of the method used to spawn the coroutines. Finally, the ~wait_condtion.wait~ method should be invoked to wait for all the tasks to finish, e.g.
+
+  #+begin_src c++
+  WaitCondition wait_condition(executor);
+  spawn(executor, [lock = wait_condition.lock()](auto yield) {
+      do_something(yield);
+  }
+  wait_condition.wait(yield);
+  #+end_src
+
+  There's an example of WaitCondition in [[file:../src/client.cpp::WaitCondition wait_condition(_ctx);][~client.cpp~]] where the wait_condition lock is useful [[file:../src/client.cpp::wait_condition.wait(yield)][to wait]]: for the active sockets to finish before terminating the incoming TCP connection.
 
 TODO
 
