@@ -400,7 +400,7 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
   wait_condition.wait(yield);
   #+end_src
 
-  There is an example of ~WaitCondition~ in [[file:../src/client.cpp::WaitCondition wait_condition(_ctx);][~src/client.cpp~]] where ~wait_condition.lock~ and ~wait_condition.wait~ are used [[file:../src/client.cpp::wait_condition.wait(yield)][to wait]] for the active sockets to finish before terminating the incoming TCP connection.
+  There is an example of ~WaitCondition~ in [[file:../src/client.cpp::WaitCondition wait_condition(_ctx);][=src/client.cpp=]] where ~wait_condition.lock~ and ~wait_condition.wait~ are used [[file:../src/client.cpp::wait_condition.wait(yield)][to wait]] for the active sockets to finish before terminating the incoming TCP connection.
 
 - *Success Conditions:* Available from [[file:../src/util/success_condition.h::class SuccessCondition][=src/util/success_condition.h=]], this mechanism is similar to ~WaitCondition~ with two main differences; the first one is that ~SuccessCondition~ waits until one of the coroutines finishes with a task [[file:../src/util/success_condition.h::if (success) {][successfully]] or when all of them finish [[file:../src/util/success_condition.h::Lock::~Lock][unsuccessfully]], the second difference is that the mechanism implements a [[file:../src/util/success_condition.h::void SuccessCondition::cancel()][~cancel method~]].
 
