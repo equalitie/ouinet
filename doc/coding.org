@@ -427,6 +427,10 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
 
 TODO
 
+** Asynchronous jobs
+
+TODO
+
 ** Connections and streams
 
 TODO
@@ -470,6 +474,10 @@ TODO
 TODO
 
 * Ouinet protocols
+
+TODO
+
+* Local storage
 
 TODO
 
