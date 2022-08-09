@@ -441,7 +441,25 @@ TODO
 
 ** Cache control
 
-TODO
+The Ouinet distributed cache tries to work as much as possible as a standard HTTP cache. To decouple HTTP caching algorithms from dynamic transports and distributed storage, [[file:../src/cache_control.h][=src/cache_control.h=]] provides the ~ouinet::CacheControl~ class with all the machinery to decide when to use fresh or cached resources, while making fresh and cached retrieval operations customizable. It implements the HTTP Caching RFCs [[https://www.rfc-editor.org/rfc/rfc7234.html][7234]], [[https://www.rfc-editor.org/rfc/rfc5861.html][5861]] and [[https://www.rfc-editor.org/rfc/rfc8246.html][8246]], with the following peculiarities:
+
+- Fetching from the cache requires a *group* to be provided (i.e. the value used to announce and look up the resource in the BitTorrent DHT, see [[file:ouinet-network-whitepaper.md::Resource groups][Resource groups]]). The group is opaque to cache control code and only passed down to custom operations.
+- Cache retrieval is not assumed to always be faster than fresh retrieval, thus a cache retrieval can start a parallel fresh retrieval for the same resource (this decision can be customized).
+- Responses declared private or resulting from an authorized request can be considered cacheable if explicitly told so. This enables the =cache-private= option at the client.
+
+~CacheControl~ relies on ~ouinet::CacheEntry~ as defined in [[file:../src/cache/cache_entry.h][=src/cache/cache_entry.h=]], a simple structure representing a resource already in the cache, with a time stamp and a ~Session~ object. The header file also defines functions to derive a *local cache key* from the URL in an HTTP request, and the URL back from a key. The key is the canonical version of the URL according to [[file:../src/util.h::std::string canonical_url][~ouinet::util::canonical_url~]].
+
+Once a ~CacheControl~ instance is created (with an executor), the following fields may be assigned custom operations:
+
+- ~fetch_stored(request, group, cancel, yield) -> CacheEntry~ to try to fetch the cached resource in the ~request~ by looking it up under the given ~group~.
+- ~fetch_fresh(request, cache_entry_ptr, cancel, yield) -> Session~ to try to fetch a fresh version of the resource in the ~request~, which may already have a cached version (if ~cache_entry_ptr~ is not null, e.g. in the case of a revalidation).
+- ~parallel_fresh(request, group_opt) -> bool~ to decide whether to start a parallel fresh retrieval for the resource in the ~request~ (under the optional group ~group_opt~) while retrieving it from the cache.
+
+After that, the [[file:../src/cache_control.h::Session fetch(const][~fetch(request, group_opt, fresh_ec, cache_ec, cancel, yield) -> Session~]] method can be called to fetch the resource in the ~request~ (under the optional group ~group_opt~) using the previous custom operations. When a stale cached response which is older than [[file:../src/cache_control.h::boost::posix_time::time_duration max_cached_age()][~max_cached_age~]] needs to be used (e.g. because a fresh one failed to be retrieved), a 110 =Warning= header is added to the response reminding about its staleness.
+
+The client [[file:../src/client.cpp::cc(client_state.get_executor()][creates and configures a cache control instance]], then uses it to [[file:../src/client.cpp::cc.fetch(][fetch content from the injector or the cache]] as if it was just asking a caching HTTP proxy for it.
+
+~CacheControl~ also provides the [[file:../src/cache_control.h::static bool ok_to_cache( const http::request_header<>& request][~ok_to_cache(request, response, cache_private, reason_ptr)~]] helper function to know if it is acceptable to cache the given ~response~ to the ~request~ according to RFCs (with the aforementioned exceptions when ~cache_private~ is true), while getting the reason for the answer in ~reason_ptr~. This is used by the client to decide [[file:../src/client.cpp::&& CacheControl::ok_to_cache(][when to store a fetched response]] in its local cache.
 
 ** SSL/TLS and certificates
 
