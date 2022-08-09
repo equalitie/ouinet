@@ -407,9 +407,9 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
   ~SuccessCondition~ objects are also initialized with an executor and its locks are also attached to each spawned coroutine, with the difference that reaching a destructor implies unsuccessful completion:
 
   #+begin_src c++
-  SuccessCondition success_condition(ios);
+  SuccessCondition success_condition(executor);
 
-  spawn(ios, [lock = success_condition.lock()](auto yield) {
+  spawn(executor, [lock = success_condition.lock()](auto yield) {
       if (!do_something(yield)) {
           // Lock destructor implies unsuccessful completion.
           return;
