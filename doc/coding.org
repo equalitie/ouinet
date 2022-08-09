@@ -402,6 +402,30 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
 
   There's an example of WaitCondition in [[file:../src/client.cpp::WaitCondition wait_condition(_ctx);][~client.cpp~]] where the wait_condition lock is useful [[file:../src/client.cpp::wait_condition.wait(yield)][to wait]]: for the active sockets to finish before terminating the incoming TCP connection.
 
+- *Success Conditions:* Available from [[file:../src/util/success_condition.h::class SuccessCondition][=src/util/success_condition.h=]], this mechanism is similar to ~WaitCondition~ with two main differences; the first one is that ~SuccessCondition~ waits until one of the coroutines finishes with a task [[file:../src/util/success_condition.h::if (success) {][successfully]] or when all of them finish [[file:../src/util/success_condition.h::Lock::~Lock][unsuccessfully]], the second difference is that the mechanism implements a [[file:../src/util/success_condition.h::void SuccessCondition::cancel()][~cancel method~]].
+
+  ~SuccessCondition~ objects are also initialized with an executor and its lock is also passed as a parameter to the spawn methods, with the difference that reaching a destructor implies unsuccessful completion, e.g.
+
+  #+begin_src c++
+    SuccessCondition success_condition(ios);
+
+    spawn(ios, [lock = success_condition.lock()](auto yield) {
+        if (!do_something(yield)) {
+            // lock destructor implies unsuccessful completion
+            return;
+        }
+        // operation finished successfully
+        lock.release(true);
+    });
+
+    // Returns when one of the two coroutines has called release(true),
+    // OR all of them have failed.
+    success_condition.wait_for_success(yield);
+  #+end_src
+
+  There's and example of usage in [[file:../src/ouiservice.cpp::SuccessCondition success_condition(_ex);][=src/ouiservice.cpp=]] where the ~SuccessCondition~ is waiting for at least one successful start of any of the possible implementations supported by the ~OuiServiceServer~.
+
+
 TODO
 
 ** Connections and streams
