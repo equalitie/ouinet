@@ -407,20 +407,20 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
   ~SuccessCondition~ objects are also initialized with an executor and its locks are also attached to each spawned coroutine, with the difference that reaching a destructor implies unsuccessful completion:
 
   #+begin_src c++
-    SuccessCondition success_condition(ios);
+  SuccessCondition success_condition(ios);
 
-    spawn(ios, [lock = success_condition.lock()](auto yield) {
-        if (!do_something(yield)) {
-            // Lock destructor implies unsuccessful completion.
-            return;
-        }
-        // Operation finished successfully.
-        lock.release(true);
-    });
+  spawn(ios, [lock = success_condition.lock()](auto yield) {
+      if (!do_something(yield)) {
+          // Lock destructor implies unsuccessful completion.
+          return;
+      }
+      // Operation finished successfully.
+      lock.release(true);
+  });
 
-    // Returns when one of the two coroutines has called release(true),
-    // OR all of them have failed.
-    success_condition.wait_for_success(yield);
+  // Returns when one of the two coroutines has called release(true),
+  // OR all of them have failed.
+  success_condition.wait_for_success(yield);
   #+end_src
 
   There is an example of usage in [[file:../src/ouiservice.cpp::SuccessCondition success_condition(_ex);][=src/ouiservice.cpp=]] where the ~SuccessCondition~ is waiting for at least one successful start of any of the possible implementations supported by the ~OuiServiceServer~.
