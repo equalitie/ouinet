@@ -1,5 +1,8 @@
 package ie.equalit.ouinet_examples.android_kotlin
 
+import ie.equalit.ouinet.Config
+import ie.equalit.ouinet.Ouinet
+
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 
@@ -20,5 +23,29 @@ class ExampleInstrumentedTest {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("ie.equalit.ouinet_examples.android_kotlin", appContext.packageName)
+    }
+
+    @Test
+    fun testStartStop() {
+        val appContext = InstrumentationRegistry.getInstrumentation().targetContext
+        var config = Config.ConfigBuilder(appContext)
+            .setCacheType("bep5-http")
+            .setCacheHttpPubKey(BuildConfig.CACHE_PUB_KEY)
+            .build()
+
+        var ouinet = Ouinet(appContext, config)
+
+        for (i in 1..5) {
+            ouinet.start()
+            ouinet.start()
+            Thread.sleep(1000);
+            assertEquals("Starting", ouinet.state.toString());
+
+            ouinet.stop()
+            ouinet.stop()
+            assertEquals("Stopped", ouinet.state.toString());
+        }
+
+        ouinet.stop()
     }
 }
