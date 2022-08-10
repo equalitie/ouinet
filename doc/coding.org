@@ -425,9 +425,29 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
 
   There is an example of usage in [[file:../src/ouiservice.cpp::SuccessCondition success_condition(_ex);][=src/ouiservice.cpp=]] where the ~SuccessCondition~ is waiting for at least one successful start of any of the possible implementations supported by the ~OuiServiceServer~.
 
-TODO
+- *Asynchronous jobs:* The [[file:../src/util/async_job.h][=src/util/async_job.h=]] header defines the ~AsyncJob~ class, which wraps the spawning of a cancellable coroutine returning a result (~start~ method), and allows the caller to wait for or react to its completion (~wait_for_finish~ and ~on_finish_sig~ methods), retrieve its result (~result~ methods), and cancel it explicitly (~cancel~ method) or implicitly on deallocation.
 
-** Asynchronous jobs
+  #+begin_src c++
+  AsyncJob<SomeResult> job(executor);
+  job.start([] (Cancel& c, asio::yield_context y) -> SomeResult {
+      sys::error_code ec;
+      SomeResult result = do_something(c, y[ec]);
+      ec = compute_error_code(ec, c);
+      return or_throw(y, ec, std::move(result));
+  });
+
+  if (some_condition())
+      return;  // cancels the job automatically
+
+  sys::error_code ec;
+  job.wait_for_finish(yield[ec]);
+  if (!ec && job.has_result()) {
+      SomeResult result = job.result();
+      do_something_with_result(result);
+  }
+  #+end_src
+
+  You can see examples of waiting for job completion in [[file:../src/cache/multi_peer_reader.cpp::struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {][multi-peer reader parallel block fetching]] (~get_block~ method), and reacting to job completion in [[file:../src/client.cpp::jc = origin.on_finish_sig(\[&c\] { c(); });][client request job start]] (where a cancellation signal is triggered to abort a sleep operation started further down).
 
 TODO
 
