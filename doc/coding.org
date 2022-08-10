@@ -493,11 +493,11 @@ TODO
 
 TODO
 
-* Ouinet protocols
+* Resource signing and verification
 
 TODO
 
-* Local storage
+* Local and distributed storage
 
 TODO
 
