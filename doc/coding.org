@@ -505,7 +505,10 @@ The main entry points are the reader classes:
   Please note that responses coming straight from an injector do not need verification (as the connection is trusted). Also note that, for efficiency reasons, the fetching and verification of resources coming concurrently from several network peers is done by the multi-peer reader described in the next section.
 - [[file:../src/cache/http_sign.h::class KeepSignedReader : public ouinet::http_response::AbstractReader {][~ouinet::cache::KeepSignedReader~]] is used by the client to clean from unsigned items a response already trusted (from an injector) or verified (from other peers), [[file:../src/cache/client.cpp::cache::KeepSignedReader fr(r);][right before storing it]] in its local cache, from where it can read it later without further verification.
 
-TODO
+These readers make use of ~ouinet::util::apply~ to handle the different parts that they encounter ([[file:../src/cache/http_sign.cpp::SigningReader::async_read_part][~SigningReader::async_read_part~]], [[file:../src/cache/http_sign.cpp::VerifyingReader::async_read_part][~VerifyingReader::async_read_part~]]). They also make use of the following helper classes:
+
+- [[file:../src/cache/signed_head.h::class SignedHead][~ouinet::cache::SignedHead~]]: a subclass of ~ouinet::http_response::Head~ with functions and methods to create ([[file:../src/cache/http_sign.cpp::inh = cache::SignedHead( _rqh, std::move(inh)][usage example]]), access and verify ([[file:../src/cache/http_sign.cpp::auto head_o = cache::SignedHead::verify_and_create(std::move(inh), _pk);][usage example]]) signed HTTP heads. Also used in other modules for low-level operations.
+- [[file:../src/cache/chain_hasher.h::class ChainHasher {][~ouinet::cache::ChainHasher~]]: a class which implements the computation, signing ([[file:../src/cache/http_sign.cpp::auto chain_hash = _chain_hasher.calculate_block(][usage example]]) and verification ([[file:../src/cache/http_sign.cpp::if (!chain_hash.verify(_head.public_key(), _head.injection_id()))][usage example]]) of chained hashes and signatures (see [[file:ouinet-network-whitepaper.md::Stream signatures][Stream signatures]]).
 
 * Local and distributed storage
 
