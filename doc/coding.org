@@ -495,6 +495,16 @@ TODO
 
 * Resource signing and verification
 
+The [[file:../src/cache/http_sign.h][=src/cache/http_sign.h=]] header provides classes and functions to support Ouinet's resource signing as defined in [[file:ouinet-network-whitepaper.md::Signatures][Signatures]], including some low-level functions (used mainly for implementing signing itself but also available to other modules), high-level reader classes for easy signing and verification of HTTP responses, and low-level functions related with the generic implementation of [[https://tools.ietf.org/html/draft-cavage-http-signatures-12][HTTP Signatures]] (which serve as a base for Ouinet signatures).
+
+The main entry points are the reader classes:
+
+- [[file:../src/cache/http_sign.h::class SigningReader][~ouinet::cache::SigningReader~]] is used [[file:../src/injector.cpp::sig_reader = make_unique<cache::SigningReader>][by the injector]] when a client requests a signed resource from it for caching (i.e. when using the Injector request mechanism). The injector provides the connection to the origin server (as plaintext in the case of HTTPS), the request, the injection id & time stamp, and the private key used to perform the signing. The parts produced by the reader already carry signatures when appropriate (in the head, chunk headers, and trailer), and chunks have the size of data blocks.
+- [[file:../src/cache/http_sign.h::class VerifyingReader][~ouinet::cache::VerifyingReader~]] is used by the client when fetching content from an untrusted source like [[file:../src/cache/http_store.cpp::return std::make_unique<VerifyingReader>][the client's static cache]]. The client provides a reader and the public key used to perform the verification of signatures. The reader produces the same parts as read, minus unsigned items (in head, chunk headers, and trailer). If the verification of some part fails, the read operation reports either ~sys::errc::no_message~ (when at the head) or ~sys::errc::bad_message~ (later on).
+
+  Please note that responses coming straight from an injector do not need verification (as the connection is trusted). Also note that, for efficiency reasons, the fetching and verification of resources coming concurrently from several network peers is done by the multi-peer reader described in the next section.
+- [[file:../src/cache/http_sign.h::class KeepSignedReader : public ouinet::http_response::AbstractReader {][~ouinet::cache::KeepSignedReader~]] is used by the client to clean from unsigned items a response already trusted (from an injector) or verified (from other peers), [[file:../src/cache/client.cpp::cache::KeepSignedReader fr(r);][right before storing it]] in its local cache, from where it can read it later without further verification.
+
 TODO
 
 * Local and distributed storage
