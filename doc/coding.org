@@ -405,7 +405,7 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
 
   An example of its usage can be found in [[file:../src/cache_control.cpp::ConditionVariable cv(_ex);][=src/cache_control.cpp=]] where the ~WaitCondition~ is used to wait for the completion of fetch tasks.
 
-  ~ConditionVariable~ is also used by [[file:../src/util/wait_condition.h::ConditionVariable][~WaitCondition~]] and [[file:../src/util/success_condition.h::ConditionVariable][~SuccessCondition~]] as part of its ~WaitState~ struct.
+  ~ConditionVariable~ is also used by [[file:../src/util/wait_condition.h::ConditionVariable][~WaitCondition~]] and [[file:../src/util/success_condition.h::ConditionVariable][~SuccessCondition~]] (described below) as part of their ~WaitState~ struct.
 
 - *Wait conditions:* Defined in [[file:../src/util/wait_condition.h::class WaitCondition][=src/util/wait_condition.h=]], [[file:../src/util/wait_condition.h::class WaitCondition][~ouinet::WaitCondition~]] implements a mechanism to wait for all the members of a group of coroutines to finish a task. To achieve this, the ~WaitCondition~ keeps a counter of the locks that are held by the coroutines, and when the coroutines are done they may either release the lock explicitly, or automatically when the lock is destroyed. When the [[file:../src/util/wait_condition.h::return _wait_state->remaining_locks;][~remaining_locks~]] counter reaches zero, the [[file:../src/util/wait_condition.h::struct WaitState][~WaitState~]] is changed and the ~WaitCondition~ is over.
 
