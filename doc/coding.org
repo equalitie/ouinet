@@ -571,7 +571,7 @@ The directory for the particular resource contains the following files:
 
 More detailed information about the format of each file can be found in the documentation of the [[file:../src/cache/http_store.h::void http_store( http_response::AbstractReader&][~ouinet::cache::http_store~]] function.
 
-TODO
+For loading resources from the client cache, the cache client implements a private [[file:../src/cache/client.cpp::Session load_from_local(][~load_from_local~]] function which makes use of the HTTP store's [[file:../src/cache/http_store.h::reader(const std::string&][~reader~]] and [[file:../src/cache/http_store.h::reader_and_size(const std::string&][~reader_and_size~]] methods, which end up calling the private [[file:../src/cache/http_store.cpp::_http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp][~_http_store_reader~]] function. The later opens the needed storage files and builds an [[file:../src/cache/http_store.cpp::class HttpStoreReader][~HttpStoreReader~]], which takes care of reassembling the HTTP response in a way which can be consumed by a user agent, but also preserves all signatures for further sharing.
 
 ** Peer-to-peer content sharing
 
