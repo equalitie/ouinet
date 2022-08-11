@@ -531,6 +531,12 @@ These readers make use of ~ouinet::util::apply~ to handle the different parts th
 
 * Local and distributed storage
 
+** Local and static caches
+
+TODO
+
+** Peer-to-peer content sharing
+
 TODO
 
 * Client and injector
