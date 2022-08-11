@@ -388,6 +388,25 @@ As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code
 
   Ouinet follows the convention of reporting ~boost::asio::error::timed_out~ when an operation was canceled because of a watch dog triggering on timeout, unless some parent cancellation was triggered too. Again, to avoid the boilerplate of figuring out the proper error, =watch_dog.h= provides an extended [[file:../src/util/watch_dog.h::compute_error_code( const sys::error_code][~compute_error_code(ec, cancel, watchdog)~]] function and a [[file:../src/util/watch_dog.h::define fail_on_error_or_timeout][~fail_on_error_or_timeout(yield, cancel, ec, watchdog, ...)~]] macro.  See [[file:../src/injector.cpp::if (ec = compute_error_code(ec, cancel, fetch_wd)) {][injector signed fetch]] and [[file:../src/client.cpp::fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});][client cache fetch]] for respective examples of both; please note how the parent cancellation signal is checked to consider upstream cancellation instead of the child signal, which would cause timeouts to be reported as cancellations.
 
+- *Condition variables:* Defined in [[file:../src/util/condition_variable.h::class ConditionVariable][=src/util/condition_variable.h=]]: this mechanism waits for a coroutine until it reports that its operation has finished. Internally, ~ConditionVariable~ is an intrusive list of [[file:../src/util/condition_variable.h::struct WaitEntry][~WaitEntry~]] structs and some control methods like [[file:../src/util/condition_variable.h::void ConditionVariable::notify][~notify~]] and [[file:../src/util/condition_variable.h::void ConditionVariable::wait][~wait~]].
+
+  The main constructor of ~ConditionVariable~ receives an executor as a parameter. After its initialization, it can be put into standby using ~wait~ until ~notify~ is invoked by a finished task.
+
+  #+begin_src c++
+  ConditionVariable cv(executor);
+
+  spawn(executor, [&](auto yield) {
+      do_something(yield);
+      cv.notify();
+  });
+
+  cv.wait(yield);
+  #+end_src
+
+  An example of its usage can be found in [[file:../src/cache_control.cpp::ConditionVariable cv(_ex);][=src/cache_control.cpp=]] where the ~WaitCondition~ is used to wait for the completion of fetch tasks.
+
+  ~ConditionVariable~ is also used by [[file:../src/util/wait_condition.h::ConditionVariable][~WaitCondition~]] and [[file:../src/util/success_condition.h::ConditionVariable][~SuccessCondition~]] as part of its ~WaitState~ struct.
+
 - *Wait conditions:* Defined in [[file:../src/util/wait_condition.h::class WaitCondition][=src/util/wait_condition.h=]], [[file:../src/util/wait_condition.h::class WaitCondition][~ouinet::WaitCondition~]] implements a mechanism to wait for all the members of a group of coroutines to finish a task. To achieve this, the ~WaitCondition~ keeps a counter of the locks that are held by the coroutines, and when the coroutines are done they may either release the lock explicitly, or automatically when the lock is destroyed. When the [[file:../src/util/wait_condition.h::return _wait_state->remaining_locks;][~remaining_locks~]] counter reaches zero, the [[file:../src/util/wait_condition.h::struct WaitState][~WaitState~]] is changed and the ~WaitCondition~ is over.
 
   A ~WaitCondition~ object should be initialized with an executor. After that, the result of ~wait_condition.lock~ can be attached to each spawned coroutine (e.g. via a lambda capture). Finally, the ~wait_condtion.wait~ method should be invoked to wait for all the tasks to finish:
