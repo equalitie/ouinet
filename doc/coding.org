@@ -575,6 +575,14 @@ For loading resources from the client cache, the cache client implements a priva
 
 ** Peer-to-peer content sharing
 
+TODO The cache client provides the [[file:../src/cache/client.h::Session load(][~load~]] method which looks up the client cache and the DHT, using [[file:../src/cache/multi_peer_reader.h::class MultiPeerReader][~ouinet::cache::MultiPeerReader~]].
+
+TODO General operation of ~MultiPeerReader~: lookup group of resource in DHT, request resource head from peers using =PROPFIND= (which yields block signatures and hashes as its body, see [[file:../src/cache/hash_list.h::struct HashList {][~ouinet::cache::HashList~]]), choose the most recently injected version, request body blocks from peers having them using HTTP range requests.
+
+TODO Each group under the =dht_groups= in the cache directory (local or static) is [[file:../src/cache/announcer.h::class Announcer][announced]] to the BitTorrent DHT (with keys constructed as per [[file:ouinet-network-whitepaper.md::Resource groups][Resource groups]]). See documentation for ~REPO_DIR_INFO~ in https://github.com/equalitie/ouinet-inject/blob/master/ouinet/inject.py.
+
+TODO For serving cached content to other clients, the cache client provides the [[file:../src/cache/client.h::bool serve_local(][~serve_local~]] method, which handles =PROPFIND= (using [[file:../src/cache/http_store.h::load_hash_list(const std::string&][~HttpStore::load_hash_list~]]), =HEAD= and =GET= requests (with or without ranges).
+
 TODO
 
 * Client and injector
