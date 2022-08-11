@@ -363,6 +363,111 @@ TODO
 
 ** Synchronization mechanisms
 
+As mentioned in [[*Cancellation signaling][Cancellation signaling]], parent code which spawns a coroutine loses track of it, so special mechanism are needed to interact with such coroutines. The main mechanisms provided by Ouinet are:
+
+- *Watchdogs:* Available from [[file:../src/util/watch_dog.h][=src/util/watch_dog.h=]], [[file:../src/util/watch_dog.h::watch_dog(const asio::][~ouinet::watch_dog~]] creates an object with a given associated timeout duration and function. If the watchdog is still alive after the duration, the function is called and the watchdog's ~is_running~ method starts returning ~false~.
+
+  A watchdog can be disabled with its ~stop~ method and enabled again with a new timeout and function with the ~start~ method (then ~is_running~ returns ~true~ again).
+
+  Watchdogs are used to cancel operations which do not finish within a given time, either by triggering a child cancellation signal:
+
+  #+begin_src c++
+  Cancel timeout_cancel(cancel);
+  auto wd = watch_dog( executor, timeout
+                     , [&timeout_cancel] { timeout_cancel(); });
+  do_something(timeout_cancel, yield[ec]);
+  #+end_src
+
+  or by altering some object in a way that causes operations on it to stop working immediately:
+
+  #+begin_src c++
+  auto wd = watch_dog( executor, timeout
+                     , [&stream] { stream.close(); });
+  consume(stream, yield[ec]);
+  #+end_src
+
+  Ouinet follows the convention of reporting ~boost::asio::error::timed_out~ when an operation was canceled because of a watch dog triggering on timeout, unless some parent cancellation was triggered too. Again, to avoid the boilerplate of figuring out the proper error, =watch_dog.h= provides an extended [[file:../src/util/watch_dog.h::compute_error_code( const sys::error_code][~compute_error_code(ec, cancel, watchdog)~]] function and a [[file:../src/util/watch_dog.h::define fail_on_error_or_timeout][~fail_on_error_or_timeout(yield, cancel, ec, watchdog, ...)~]] macro.  See [[file:../src/injector.cpp::if (ec = compute_error_code(ec, cancel, fetch_wd)) {][injector signed fetch]] and [[file:../src/client.cpp::fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});][client cache fetch]] for respective examples of both; please note how the parent cancellation signal is checked to consider upstream cancellation instead of the child signal, which would cause timeouts to be reported as cancellations.
+
+- *Condition variables:* Defined in [[file:../src/util/condition_variable.h::class ConditionVariable][=src/util/condition_variable.h=]]: this mechanism waits for a coroutine until it reports that its operation has finished. Internally, ~ConditionVariable~ is an intrusive list of [[file:../src/util/condition_variable.h::struct WaitEntry][~WaitEntry~]] structs and some control methods like [[file:../src/util/condition_variable.h::void ConditionVariable::notify][~notify~]] and [[file:../src/util/condition_variable.h::void ConditionVariable::wait][~wait~]].
+
+  The main constructor of ~ConditionVariable~ receives an executor as a parameter. After its initialization, it can be put into standby using ~wait~ until ~notify~ is invoked by a finished task.
+
+  #+begin_src c++
+  ConditionVariable cv(executor);
+
+  spawn(executor, [&cv] (auto yield) {
+      do_something(yield);
+      cv.notify();
+  });
+
+  cv.wait(yield);
+  #+end_src
+
+  An example of its usage can be found in [[file:../src/cache_control.cpp::ConditionVariable cv(_ex);][=src/cache_control.cpp=]] where the ~WaitCondition~ is used to wait for the completion of fetch tasks.
+
+  ~ConditionVariable~ is also used by [[file:../src/util/wait_condition.h::ConditionVariable][~WaitCondition~]] and [[file:../src/util/success_condition.h::ConditionVariable][~SuccessCondition~]] (described below) as part of their ~WaitState~ struct.
+
+- *Wait conditions:* Defined in [[file:../src/util/wait_condition.h::class WaitCondition][=src/util/wait_condition.h=]], [[file:../src/util/wait_condition.h::class WaitCondition][~ouinet::WaitCondition~]] implements a mechanism to wait for all the members of a group of coroutines to finish a task. To achieve this, the ~WaitCondition~ keeps a counter of the locks that are held by the coroutines, and when the coroutines are done they may either release the lock explicitly, or automatically when the lock is destroyed. When the [[file:../src/util/wait_condition.h::return _wait_state->remaining_locks;][~remaining_locks~]] counter reaches zero, the [[file:../src/util/wait_condition.h::struct WaitState][~WaitState~]] is changed and the ~WaitCondition~ is over.
+
+  A ~WaitCondition~ object should be initialized with an executor. After that, the result of ~wait_condition.lock~ can be attached to each spawned coroutine (e.g. via a lambda capture). Finally, the ~wait_condtion.wait~ method should be invoked to wait for all the tasks to finish:
+
+  #+begin_src c++
+  WaitCondition wait_condition(executor);
+  spawn(executor, [lock = wait_condition.lock()] (auto yield) {
+      do_something(yield);
+  }
+  wait_condition.wait(yield);
+  #+end_src
+
+  There is an example of ~WaitCondition~ in [[file:../src/client.cpp::WaitCondition wait_condition(_ctx);][=src/client.cpp=]] where ~wait_condition.lock~ and ~wait_condition.wait~ are used [[file:../src/client.cpp::wait_condition.wait(yield)][to wait]] for the active sockets to finish before terminating the incoming TCP connection.
+
+- *Success conditions:* Available from [[file:../src/util/success_condition.h::class SuccessCondition][=src/util/success_condition.h=]], this mechanism is similar to ~WaitCondition~ with two main differences; the first one is that ~SuccessCondition~ waits until one of the coroutines finishes with a task [[file:../src/util/success_condition.h::if (success) {][successfully]] or when all of them finish [[file:../src/util/success_condition.h::Lock::~Lock][unsuccessfully]], the second difference is that the mechanism implements a [[file:../src/util/success_condition.h::void SuccessCondition::cancel()][~cancel method~]].
+
+  ~SuccessCondition~ objects are also initialized with an executor and its locks are also attached to each spawned coroutine, with the difference that reaching a destructor implies unsuccessful completion:
+
+  #+begin_src c++
+  SuccessCondition success_condition(executor);
+
+  spawn(executor, [lock = success_condition.lock()] (auto yield) {
+      if (!do_something(yield)) {
+          // Lock destructor implies unsuccessful completion.
+          return;
+      }
+      // Operation finished successfully.
+      lock.release(true);
+  });
+
+  // Returns when one of the two coroutines has called release(true),
+  // OR all of them have failed.
+  success_condition.wait_for_success(yield);
+  #+end_src
+
+  There is an example of usage in [[file:../src/ouiservice.cpp::SuccessCondition success_condition(_ex);][=src/ouiservice.cpp=]] where the ~SuccessCondition~ is waiting for at least one successful start of any of the possible implementations supported by the ~OuiServiceServer~.
+
+- *Asynchronous jobs:* The [[file:../src/util/async_job.h][=src/util/async_job.h=]] header defines the ~AsyncJob~ class, which wraps the spawning of a cancellable coroutine returning a result (~start~ method), and allows the caller to wait for or react to its completion (~wait_for_finish~ and ~on_finish_sig~ methods), retrieve its result (~result~ methods), and cancel it explicitly (~cancel~ method) or implicitly on deallocation.
+
+  #+begin_src c++
+  AsyncJob<SomeResult> job(executor);
+  job.start([] (Cancel& c, asio::yield_context y) -> SomeResult {
+      sys::error_code ec;
+      SomeResult result = do_something(c, y[ec]);
+      ec = compute_error_code(ec, c);
+      return or_throw(y, ec, std::move(result));
+  });
+
+  if (some_condition())
+      return;  // cancels the job automatically
+
+  sys::error_code ec;
+  job.wait_for_finish(yield[ec]);
+  if (!ec && job.has_result()) {
+      SomeResult result = job.result();
+      do_something_with_result(result);
+  }
+  #+end_src
+
+  You can see examples of waiting for job completion in [[file:../src/cache/multi_peer_reader.cpp::struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {][multi-peer reader parallel block fetching]] (~get_block~ method), and reacting to job completion in [[file:../src/client.cpp::jc = origin.on_finish_sig(\[&c\] { c(); });][client request job start]] (where a cancellation signal is triggered to abort a sleep operation started further down).
+
 TODO
 
 ** Connections and streams
@@ -379,7 +484,25 @@ TODO
 
 ** Cache control
 
-TODO
+The Ouinet distributed cache tries to work as much as possible as a standard HTTP cache. To decouple HTTP caching algorithms from dynamic transports and distributed storage, [[file:../src/cache_control.h][=src/cache_control.h=]] provides the ~ouinet::CacheControl~ class with all the machinery to decide when to use fresh or cached resources, while making fresh and cached retrieval operations customizable. It implements the HTTP Caching RFCs [[https://www.rfc-editor.org/rfc/rfc7234.html][7234]], [[https://www.rfc-editor.org/rfc/rfc5861.html][5861]] and [[https://www.rfc-editor.org/rfc/rfc8246.html][8246]], with the following peculiarities:
+
+- Fetching from the cache requires a *group* to be provided (i.e. the value used to announce and look up the resource in the BitTorrent DHT, see [[file:ouinet-network-whitepaper.md::Resource groups][Resource groups]]). The group is opaque to cache control code and only passed down to custom operations.
+- Cache retrieval is not assumed to always be faster than fresh retrieval, thus a cache retrieval can start a parallel fresh retrieval for the same resource (this decision can be customized).
+- Responses declared private or resulting from an authorized request can be considered cacheable if explicitly told so. This enables the =cache-private= option at the client.
+
+~CacheControl~ relies on ~ouinet::CacheEntry~ as defined in [[file:../src/cache/cache_entry.h][=src/cache/cache_entry.h=]], a simple structure representing a resource already in the cache, with a time stamp and a ~Session~ object. The header file also defines functions to derive a *local cache key* from the URL in an HTTP request, and the URL back from a key. The key is the canonical version of the URL according to [[file:../src/util.h::std::string canonical_url][~ouinet::util::canonical_url~]].
+
+Once a ~CacheControl~ instance is created (with an executor), the following fields may be assigned custom operations:
+
+- ~fetch_stored(request, group, cancel, yield) -> CacheEntry~ to try to fetch the cached resource in the ~request~ by looking it up under the given ~group~.
+- ~fetch_fresh(request, cache_entry_ptr, cancel, yield) -> Session~ to try to fetch a fresh version of the resource in the ~request~, which may already have a cached version (if ~cache_entry_ptr~ is not null, e.g. in the case of a revalidation).
+- ~parallel_fresh(request, group_opt) -> bool~ to decide whether to start a parallel fresh retrieval for the resource in the ~request~ (under the optional group ~group_opt~) while retrieving it from the cache.
+
+After that, the [[file:../src/cache_control.h::Session fetch(const][~fetch(request, group_opt, fresh_ec, cache_ec, cancel, yield) -> Session~]] method can be called to fetch the resource in the ~request~ (under the optional group ~group_opt~) using the previous custom operations. When a stale cached response which is older than [[file:../src/cache_control.h::boost::posix_time::time_duration max_cached_age()][~max_cached_age~]] needs to be used (e.g. because a fresh one failed to be retrieved), a 110 =Warning= header is added to the response reminding about its staleness. ~fetch~ calls the private [[file:../src/cache_control.cpp::CacheControl::do_fetch(][~do_fetch~]] method, which implements all the HTTP Caching decisions and calls [[file:../src/cache_control.cpp::CacheControl::do_fetch_fresh(][~do_fetch_fresh~]] or [[file:../src/cache_control.cpp::CacheControl::do_fetch_stored(][~do_fetch_stored~]], which end up calling the custom operations above (the later taking care of the parallel fresh fetch if adequate); the running fetch fresh and stored operations are managed as ~AsyncJob~ instances held in a [[file:../src/cache_control.cpp::struct CacheControl::FetchState][~FetchState~]] structure.
+
+The client [[file:../src/client.cpp::cc(client_state.get_executor()][creates and configures a cache control instance]], then uses it to [[file:../src/client.cpp::cc.fetch(][fetch content from the injector or the cache]] as if it was just asking a caching HTTP proxy for it.
+
+~CacheControl~ also provides the [[file:../src/cache_control.h::static bool ok_to_cache( const http::request_header<>& request][~ok_to_cache(request, response, cache_private, reason_ptr)~]] helper function to know if it is acceptable to cache the given ~response~ to the ~request~ according to RFCs (with the aforementioned exceptions when ~cache_private~ is true), while getting the reason for the answer in ~reason_ptr~. This is used by the client to decide [[file:../src/client.cpp::&& CacheControl::ok_to_cache(][when to store a fetched response]] in its local cache.
 
 ** SSL/TLS and certificates
 
@@ -389,7 +512,68 @@ TODO
 
 TODO
 
-* Ouinet protocols
+* Resource signing and verification
+
+The [[file:../src/cache/http_sign.h][=src/cache/http_sign.h=]] header provides classes and functions to support Ouinet's resource signing as defined in [[file:ouinet-network-whitepaper.md::Signatures][Signatures]], including some low-level functions (used mainly for implementing signing itself but also available to other modules), high-level reader classes for easy signing and verification of HTTP responses, and low-level functions related with the generic implementation of [[https://tools.ietf.org/html/draft-cavage-http-signatures-12][HTTP Signatures]] (which serve as a base for Ouinet signatures).
+
+The main entry points are the reader classes:
+
+- [[file:../src/cache/http_sign.h::class SigningReader][~ouinet::cache::SigningReader~]] is used [[file:../src/injector.cpp::sig_reader = make_unique<cache::SigningReader>][by the injector]] when a client requests a signed resource from it for caching (i.e. when using the Injector request mechanism). The injector provides the connection to the origin server (as plaintext in the case of HTTPS), the request, the injection id & time stamp, and the private key used to perform the signing. The parts produced by the reader already carry signatures when appropriate (in the head, chunk headers, and trailer), and chunks have the size of data blocks.
+- [[file:../src/cache/http_sign.h::class VerifyingReader][~ouinet::cache::VerifyingReader~]] is used by the client when fetching content from an untrusted source like [[file:../src/cache/http_store.cpp::return std::make_unique<VerifyingReader>][the client's static cache]]. The client provides a reader and the public key used to perform the verification of signatures. The reader produces the same parts as read, minus unsigned items (in head, chunk headers, and trailer). If the verification of some part fails, the read operation reports either ~sys::errc::no_message~ (when at the head) or ~sys::errc::bad_message~ (later on).
+
+  Please note that responses coming straight from an injector do not need verification (as the connection is trusted). Also note that, for efficiency reasons, the fetching and verification of resources coming concurrently from several network peers is done by the multi-peer reader described in the next section.
+- [[file:../src/cache/http_sign.h::class KeepSignedReader : public ouinet::http_response::AbstractReader {][~ouinet::cache::KeepSignedReader~]] is used by the client to clean from unsigned items a response already trusted (from an injector) or verified (from other peers), [[file:../src/cache/client.cpp::cache::KeepSignedReader fr(r);][right before storing it]] in its local cache, from where it can read it later without further verification.
+
+These readers make use of ~ouinet::util::apply~ to handle the different parts that they encounter ([[file:../src/cache/http_sign.cpp::SigningReader::async_read_part][~SigningReader::async_read_part~]], [[file:../src/cache/http_sign.cpp::VerifyingReader::async_read_part][~VerifyingReader::async_read_part~]]). They also make use of the following helper classes:
+
+- [[file:../src/cache/signed_head.h::class SignedHead][~ouinet::cache::SignedHead~]]: a subclass of ~ouinet::http_response::Head~ with functions and methods to create ([[file:../src/cache/http_sign.cpp::inh = cache::SignedHead( _rqh, std::move(inh)][usage example]]), access and verify ([[file:../src/cache/http_sign.cpp::auto head_o = cache::SignedHead::verify_and_create(std::move(inh), _pk);][usage example]]) signed HTTP heads. Also used in other modules for low-level operations.
+- [[file:../src/cache/chain_hasher.h::class ChainHasher {][~ouinet::cache::ChainHasher~]]: a class which implements the computation, signing ([[file:../src/cache/http_sign.cpp::auto chain_hash = _chain_hasher.calculate_block(][usage example]]) and verification ([[file:../src/cache/http_sign.cpp::if (!chain_hash.verify(_head.public_key(), _head.injection_id()))][usage example]]) of chained hashes and signatures (see [[file:ouinet-network-whitepaper.md::Stream signatures][Stream signatures]]).
+
+* Local and distributed storage
+
+Ouinet's distributed cache (dcache) is implemented by clients, since injectors sign content but they do not cache it themselves. The header file [[file:../src/cache/client.h][=src/cache/client.h=]] provides the ~ouinet::cache::Client~ class, which implements all functionality for the local storage of content at the client and for sharing it with others. The [[file:../src/cache/client.h::return build(][~build~]] factory functions allow creating a cache client instance from this information:
+
+- An executor.
+- A set of UDP endpoints to listen for requests from other Ouinet clients.
+- A public key to announce and lookup content in the dcache, and to verify injector signatures.
+- A directory for local cache storage (see below).
+- A maximum age for local cache entries (older ones will be removed automatically).
+- Optional directories for a static cache and its content files (see below).
+- An ~asio::yield_context~, as the build operation may take some time and spawn new coroutines.
+
+These factory functions are used by Ouinet client code to [[file:../src/client.cpp::cache::Client::build][create its cache client]] when setting up the dcache (with or without a static cache).
+
+Such a cache client will be able to serve content stored on-device to the Ouinet client, as well as exchange content with other clients in the same LAN. To enable exchanging content with other Ouinet clients on the Internet, the [[file:../src/cache/client.h::bool enable_dht(std::shared_ptr<bittorrent::MainlineDht>);][~enable_dht~]] method must be called with a shared pointer to an existing ~bittorrent::MainlineDht~ instance (see above). Ouinet client code also calls this method on dcache setup, [[file:../src/client.cpp::_cache->enable_dht(dht)][once the BitTorrent DHT is ready]].
+
+** Local and static caches
+
+The Ouinet client has a read-write *local cache* where it stores signed content coming from the injector or other clients (if it can be cached). That operation is implemented by the [[file:../src/cache/client.h::void store(][~store~]] method of ~cache::Client~, and used by Ouinet client code [[file:../src/client.cpp::cache->store(][after fetching content via a cache control instance]].
+
+Cache client operations related with content storage are implemented by the [[file:../src/cache/http_store.h::class HttpStore][~ouinet::cache::HttpStore~]] class provided by the [[file:../src/cache/http_store.h][=src/cache/http_store.h=]] header. Besides some low-level functions, the header provides the [[file:../src/cache/http_store.h::make_http_store(fs::path][~make_http_store~]] and [[file:../src/cache/http_store.h::make_backed_http_store( fs::path][~make_backed_http_store~]] functions (invoked [[file:../src/cache/client.cpp::: make_http_store(][on cache client creation]]), which respectively return an ~HttpStore~ instance relying either on just a local cache, or on a local cache plus a static cache. They both create a new local cache if missing in the given path.
+
+The *static cache* is read-only. If used, the (so-called "backed") HTTP store tries to read content from the local cache first, and failing that from the static cache. Store operations are always sent to the local cache only. The [[file:../src/cache/http_store.h::make_static_http_store( fs::path][~make_static_http_store~]] function (also invoked [[file:../src/cache/client.cpp::static_http_store = make_static_http_store(][on cache client creation]]) returns an instance of such store, which lacks write operations.
+
+The cache client provides the [[file:../src/cache/client.h::std::size_t local_size(][~local_size~]] method to compute the combined size of the client cache (local + static), and the [[file:../src/cache/client.h::void local_purge( Cancel][~local_purge~]] method to empty the local cache completely (using the [[file:../src/cache/http_store.h::for_each(keep_func][~HttpStore::for_each~]] method); both are used by the client front-end (see further below). Finally, the cache client also runs a [[file:../src/cache/client.cpp::struct GarbageCollector][garbage collector]] which iterates periodically over all local cache entries (again using ~HttpStore::for_each~) and invokes a [[file:../src/cache/client.cpp::bool keep_cache_entry(][function]] to determine whether the entry should be kept or removed (e.g. if invalid or past its maximum age).
+
+*** HTTP store format
+
+Both local and static caches share the same on-disk format for storing signed HTTP content. The HTTP store sits in a =data-v<N>= subdirectory of the cache directory (in the ~cache::Client::build~ call, the ~cache_dir~ argument for local and ~static_cache_dir~ for static cache; in ~make*_http_store~, the ~path~ argument), where =N= is the version number of the store format. In the case of the static cache, some HTTP store entries may not contain the actual content data, and they may instead point to files under a *static cache content root* (in ~cache::Client::build~, ~static_cache_content_dir~; in ~make_static_http_store~, ~content_path~), which may have an arbitrary location.
+
+For version 3 of the HTTP store, each resource with a given cache =KEY= (being the canonical version of its URL as indicated in [[*Cache control][Cache control]]) having =lowercase_hex(sha1(<KEY>)) = xyzzzz…=, is saved as a set of files under the subdirectory =xy/zzzz…=, to avoid having too many entries in the same store directory.
+
+For storing resources coming from the injector or other clients into the local cache, this is implemented by the [[file:../src/cache/http_store.cpp::FullHttpStore::store(][~FullHttpStore::store~]] method from a reader and a key, using the (private) [[file:../src/cache/http_store.cpp::path_from_key(fs::path dir, const std::string& key)][~path_from_key~]] function to compute the storage subdirectory, and the [[file:../src/cache/http_store.cpp::http_store( http_response::AbstractReader&][~ouinet::cache::http_store~]] function to save the response to it; the later uses the [[file:../src/cache/http_store.cpp::class SplittedWriter][~SplittedWriter~]] class to process the different parts of the response and save them appropriate files to the directory.
+
+The directory for the particular resource contains the following files:
+
+- =head=: the raw, signed HTTP head. The head of an incomplete response (e.g. from an aborted exchange with an injector) usually has an ~X-Ouinet-Sig0~ header and no ~X-Ouinet-Data-Size~ or ~Digest~ headers; when the response is complete, ~SplittedWriter~ merges the relevant trailer fields (if any) into the head, replacing ~X-Ouinet-Sig0~ with ~X-Ouinet-Sig1~ and adding the ~X-Ouinet-Data-Size~ and ~Digest~ headers.
+- =body=: the plain data in the response body (without chunk delimiters). This may be missing if the resource has an empty or missing body. In the case of a static cache, this file may be replaced by a =body-path= file containing the path of the body data file, relative to the static cache content root.
+- =sigs=: the block signatures and chained hashes for each block of data in the response body, one line per block.
+
+More detailed information about the format of each file can be found in the documentation of the [[file:../src/cache/http_store.h::void http_store( http_response::AbstractReader&][~ouinet::cache::http_store~]] function.
+
+For loading resources from the client cache, the cache client implements a private [[file:../src/cache/client.cpp::Session load_from_local(][~load_from_local~]] function which makes use of the HTTP store's [[file:../src/cache/http_store.h::reader(const std::string&][~reader~]] and [[file:../src/cache/http_store.h::reader_and_size(const std::string&][~reader_and_size~]] methods, which end up calling the private [[file:../src/cache/http_store.cpp::_http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp][~_http_store_reader~]] function. The later opens the needed storage files and builds an [[file:../src/cache/http_store.cpp::class HttpStoreReader][~HttpStoreReader~]], which takes care of reassembling the HTTP response in a way which can be consumed by a user agent, but also preserves all signatures for further sharing.
+
+** Peer-to-peer content sharing
 
 TODO
 
