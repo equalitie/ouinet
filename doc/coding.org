@@ -541,7 +541,9 @@ Ouinet's distributed cache (dcache) is implemented by clients, since injectors s
 - Optional directories for a static cache and its content (see below).
 - An ~asio::yield_context~, as the build operation may take some time and spawn new coroutines.
 
-Such a cache client will be able to serve content stored on-device to the Ouinet client, as well as exchange content with other clients in the same LAN. To enable exchanging content with other Ouinet clients on the Internet, the [[file:../src/cache/client.h::bool enable_dht(std::shared_ptr<bittorrent::MainlineDht>);][~enable_dht~]] method must be called with a shared pointer to an existing ~bittorrent::MainlineDht~ instance (see above).
+These factory functions are used by Ouinet client code to [[file:../src/client.cpp::cache::Client::build][create its cache client]] when setting up the dcache (with or without a static cache).
+
+Such a cache client will be able to serve content stored on-device to the Ouinet client, as well as exchange content with other clients in the same LAN. To enable exchanging content with other Ouinet clients on the Internet, the [[file:../src/cache/client.h::bool enable_dht(std::shared_ptr<bittorrent::MainlineDht>);][~enable_dht~]] method must be called with a shared pointer to an existing ~bittorrent::MainlineDht~ instance (see above). Ouinet client code also calls this method on dcache setup, [[file:../src/client.cpp::_cache->enable_dht(dht)][once the BitTorrent DHT is ready]].
 
 ** Local and static caches
 
