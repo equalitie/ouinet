@@ -531,6 +531,18 @@ These readers make use of ~ouinet::util::apply~ to handle the different parts th
 
 * Local and distributed storage
 
+Ouinet's distributed cache (dcache) is implemented by clients, since injectors sign content but they do not cache it themselves. The header file [[file:../src/cache/client.h][=src/cache/client.h=]] provides the ~ouinet::cache::Client~ class, which implements all functionality for the local storage of content at the client and for sharing it with others. The [[file:../src/cache/client.h::return build(][~build~]] factory functions allow creating a cache client instance from this information:
+
+- An executor.
+- A set of UDP endpoints to listen for requests from other Ouinet clients.
+- A public key to announce and lookup content in the dcache, and to verify injector signatures.
+- A directory for local cache storage (see below).
+- A maximum age for local cache entries (older ones will be removed automatically).
+- Optional directories for a static cache and its content (see below).
+- An ~asio::yield_context~, as the build operation may take some time and spawn new coroutines.
+
+Such a cache client will be able to serve content stored on-device to the Ouinet client, as well as exchange content with other clients in the same LAN. To enable exchanging content with other Ouinet clients on the Internet, the [[file:../src/cache/client.h::bool enable_dht(std::shared_ptr<bittorrent::MainlineDht>);][~enable_dht~]] method must be called with a shared pointer to an existing ~bittorrent::MainlineDht~ instance (see above).
+
 ** Local and static caches
 
 TODO
