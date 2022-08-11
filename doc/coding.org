@@ -536,7 +536,7 @@ Ouinet's distributed cache (dcache) is implemented by clients, since injectors s
 - An executor.
 - A set of UDP endpoints to listen for requests from other Ouinet clients.
 - A public key to announce and lookup content in the dcache, and to verify injector signatures.
-- A directory for cache storage (see below).
+- A directory for local cache storage (see below).
 - A maximum age for local cache entries (older ones will be removed automatically).
 - Optional directories for a static cache and its content files (see below).
 - An ~asio::yield_context~, as the build operation may take some time and spawn new coroutines.
