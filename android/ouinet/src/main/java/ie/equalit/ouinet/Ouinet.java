@@ -196,7 +196,7 @@ public class Ouinet {
     // no later than in Activity.onDestroy()
     public synchronized void stop() {
         nStopClient();
-        if (lock != null) {
+        if (lock != null && lock.isHeld()) {
             lock.release();
         }
         if (wifiChangeReceiver != null) {
