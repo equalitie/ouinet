@@ -195,6 +195,8 @@ public class Ouinet {
     // ouinet/client will have all of it's resources freed. It should be called
     // no later than in Activity.onDestroy()
     public synchronized void stop() {
+        if (getState() == RunningState.Stopped) return;
+
         nStopClient();
         if (lock != null && lock.isHeld()) {
             lock.release();
