@@ -175,9 +175,15 @@ Java_ie_equalit_ouinet_Ouinet_nStopClient(
         JNIEnv *env,
         jobject /* this */)
 {
-    g_ios.post([] { if (g_client) g_client->stop(); });
-    g_client_thread.join();
-    g_client_thread = thread();
+    try {
+      g_ios.post([] { if (g_client) g_client->stop(); });
+      g_client_thread.join();
+      g_client_thread = thread();
+    } catch (const std::exception &e) {
+      debug("Failed to stop Ouinet client:");
+      debug("%s", e.what());
+      return;
+    }
 }
 
 extern "C"
