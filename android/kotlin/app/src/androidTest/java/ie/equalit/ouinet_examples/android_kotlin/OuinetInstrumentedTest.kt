@@ -17,7 +17,7 @@ import org.junit.Assert.*
  * See [testing documentation](http://d.android.com/tools/testing).
  */
 @RunWith(AndroidJUnit4::class)
-class ExampleInstrumentedTest {
+class OuinetInstrumentedTest {
     @Test
     fun useAppContext() {
         // Context of the app under test.
@@ -37,15 +37,23 @@ class ExampleInstrumentedTest {
 
         for (i in 1..5) {
             ouinet.start()
-            ouinet.start()
             Thread.sleep(1000);
-            assertEquals("Starting", ouinet.state.toString());
+            assertTrue(ouinet.state.toString().startsWith("Start"))
 
-            ouinet.stop()
             ouinet.stop()
             assertEquals("Stopped", ouinet.state.toString());
         }
 
+        for (i in 1..3) {
+            Thread.sleep(100);
+            ouinet.stop()
+            assertEquals("Stopped", ouinet.state.toString());
+        }
+
+        ouinet.start()
+        Thread.sleep(1000);
+        assertTrue(ouinet.state.toString().startsWith("Start"))
         ouinet.stop()
+        assertEquals("Stopped", ouinet.state.toString());
     }
 }
