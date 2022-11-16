@@ -247,6 +247,7 @@ function build_ouinet_aar {
     OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
+    cp -r "${ROOT}"/android/gradle "${GRADLE_BUILDDIR}"/.
     ( cd "${GRADLE_BUILDDIR}";
       gradle $GRADLE_TASKS \
         -Pandroid_abi=${ABI} \
