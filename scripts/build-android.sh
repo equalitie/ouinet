@@ -46,6 +46,7 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 # Tasks to be run by Gradle when building the AAR.
 # The explicit tasks are needed since there are no `build{Release,Debug}` tasks.
 GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
+PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 SDK_MANAGER="${SDK_DIR}/tools/bin/sdkmanager"
@@ -269,9 +270,7 @@ function publish_ouinet_aar {
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${GRADLE_BUILDDIR}";
-      gradle \
-        publishToSonatype \
-        closeSonatypeStagingRepository \
+      gradle $PUBLISH_TASKS \
         -Pandroid_abi=${ABI} \
         -PversionName="${OUINET_VERSION_NAME}" \
         -PbuildId="${OUINET_BUILD_ID}" \

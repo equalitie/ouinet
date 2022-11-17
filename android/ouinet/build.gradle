@@ -74,4 +74,8 @@ ext {
     PUBLISH_ARTIFACT_ID = "ouinet-${android_abi}"
 }
 
+tasks.withType(Sign) {
+    onlyIf { project.gradle.startParameter.taskNames.contains("Sonatype") }
+}
+
 apply from: "${rootProject.projectDir}/build-scripts/publish-module.gradle"
