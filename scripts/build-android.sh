@@ -49,7 +49,7 @@ GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} te
 PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
-SDK_MANAGER="${SDK_DIR}/tools/bin/sdkmanager"
+SDK_MANAGER="${SDK_DIR}/cmdline-tools/bin/sdkmanager"
 
 # Until we upgrade Gradle to a version which
 # does not need an NDK with the `platforms` directory,
@@ -105,7 +105,7 @@ function check_mode {
 
 ######################################################################
 function maybe_install_sdk {
-    local toolsfile=sdk-tools-linux-4333796.zip
+    local toolsfile=commandlinetools-linux-6858069_latest.zip
 
     # Reuse downloaded SDK stuff from old versions of this script.
     if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
@@ -115,9 +115,9 @@ function maybe_install_sdk {
     if [ ! -f "$SDK_MANAGER" ]; then
         echo "cannot find SDK manager: $SDK_MANAGER"
         echo "downlodaing SDK..."
-        [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
+        [ -d "$SDK_DIR/cmdline-tools" ] || rm -rf "$SDK_DIR/cmdline-tools"
         if [ ! -f "$toolsfile" ]; then
-            # https://developer.android.com/studio/index.html#command-tools
+            # https://developer.android.com/studio/command-line/
             wget -nv "https://dl.google.com/android/repository/$toolsfile"
         fi
         unzip -q "$toolsfile" -d "$SDK_DIR"
@@ -158,12 +158,12 @@ emulator
     if [ "$sdk_pkgs_install" ]; then
         # This produces progress bars that are very frequently updated
         # and clutter build logs.
-        yes y | "$SDK_MANAGER" $sdk_pkgs_install > /dev/null
+        yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR $sdk_pkgs_install > /dev/null
     fi
     # Accept licenses from stuff installed by Gradle on previous runs.
     # Not very clean, but if Gradle complains about licenses not being accepted,
     # at least a second run would succeed.
-    yes y | "$SDK_MANAGER" --licenses > /dev/null
+    yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR --licenses > /dev/null
 
     # Prefer locally installed platform tools to those in the system.
     export PATH="$SDK_DIR/platform-tools:$PATH"
