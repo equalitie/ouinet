@@ -30,22 +30,22 @@ import static org.mockito.Mockito.when;
 @PrepareForTest({Ouinet.class})
 @SuppressStaticInitializationFor("ie.equalit.ouinet.Ouinet")
 public class ConfigTest {
-    private static Set<String> BT_BOOTSTRAP_EXTRAS = new HashSet<>();
-    private static String CACHE_HTTP_PUB_KEY = "cachehttppubkey1234567890";
-    private static String INJECTOR_ENDPOINT = "injectorendpoint789123";
-    private static String INJECTOR_CREDENTIALS = "injectorcredentials29384293847928498492849284";
-    private static String INJECTOR_TLS_CERT = "injectortlscert123123123123123";
-    private static String TLS_CA_CERT_PATH = "file:///android_asset/tls-ca-cert.pem";
-    private static String TLS_CA_CERT = "tlscacertcontent";
-    private static String OBFS_PROXY_CONTENT = "obfs4assetcontent";
-    private static String CACHE_TYPE = "bep5-http";
-    private static String CACHE_STATIC_PATH = "static-cache";
-    private static String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
-    private static String LISTEN_ON_TCP = "0.0.0.0:8077";
-    private static String FRONT_END_EP = "0.0.0.0:8078";
-    private static String MAX_CACHED_AGE = "120";
-    private static String LOCAL_DOMAIN = "local.domain";
-    private static String ORIGIN_DOH_BASE = "0.0.0.0:8079";
+    private static final Set<String> BT_BOOTSTRAP_EXTRAS = new HashSet<>();
+    private static final String CACHE_HTTP_PUB_KEY = "cachehttppubkey1234567890";
+    private static final String INJECTOR_ENDPOINT = "injectorendpoint789123";
+    private static final String INJECTOR_CREDENTIALS = "injectorcredentials29384293847928498492849284";
+    private static final String INJECTOR_TLS_CERT = "injectortlscert123123123123123";
+    private static final String TLS_CA_CERT_PATH = "file:///android_asset/tls-ca-cert.pem";
+    private static final String TLS_CA_CERT = "tlscacertcontent";
+    private static final String OBFS_PROXY_CONTENT = "obfs4assetcontent";
+    private static final String CACHE_TYPE = "bep5-http";
+    private static final String CACHE_STATIC_PATH = "static-cache";
+    private static final String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
+    private static final String LISTEN_ON_TCP = "0.0.0.0:8077";
+    private static final String FRONT_END_EP = "0.0.0.0:8078";
+    private static final String MAX_CACHED_AGE = "120";
+    private static final String LOCAL_DOMAIN = "local.domain";
+    private static final String ORIGIN_DOH_BASE = "0.0.0.0:8079";
 
     static {
         BT_BOOTSTRAP_EXTRAS.add("192.0.2.1");
