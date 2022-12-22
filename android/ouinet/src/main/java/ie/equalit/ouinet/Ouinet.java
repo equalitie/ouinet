@@ -195,12 +195,25 @@ public class Ouinet {
     // ouinet/client will have all of it's resources freed. It should be called
     // no later than in Activity.onDestroy()
     public synchronized void stop() {
-        if (getState() == RunningState.Stopped) return;
+        if (Build.VERSION.SDK_INT >= 31) {
+            if (getState() == RunningState.Stopped) return;
+        }
 
         nStopClient();
-        if (lock != null && lock.isHeld()) {
-            lock.release();
+
+        // Earlier versions of Android might not set lock isHeld,
+        // Avoid memory leak caused by failing to unregister the receivers
+        if (Build.VERSION.SDK_INT >= 31) {
+            if (lock != null && lock.isHeld()) {
+                lock.release();
+            }
         }
+        else {
+            if (lock != null) {
+                lock.release();
+            }
+        }
+
         if (wifiChangeReceiver != null) {
             context.unregisterReceiver(wifiChangeReceiver);
             wifiChangeReceiver = null;
