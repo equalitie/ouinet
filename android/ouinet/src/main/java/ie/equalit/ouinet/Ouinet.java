@@ -167,7 +167,8 @@ public class Ouinet {
 
         nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));
 
-        registerBroadcastReceivers();
+        // Remove receivers, they were unused and causing memory leaks
+        //registerBroadcastReceivers();
     }
 
     // If this succeeds, we should be able to do UDP multicasts
@@ -198,9 +199,14 @@ public class Ouinet {
         if (getState() == RunningState.Stopped) return;
 
         nStopClient();
+
         if (lock != null && lock.isHeld()) {
             lock.release();
         }
+
+        /*
+        // Remove receivers, they were unused and causing memory leaks,
+        // changes in network connectivity or charging status should be handled by the application
         if (wifiChangeReceiver != null) {
             context.unregisterReceiver(wifiChangeReceiver);
             wifiChangeReceiver = null;
@@ -209,6 +215,7 @@ public class Ouinet {
             context.unregisterReceiver(chargingChangeReceiver);
             chargingChangeReceiver = null;
         }
+        */
     }
 
     private void registerBroadcastReceivers() {
