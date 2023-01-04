@@ -176,6 +176,7 @@ Java_ie_equalit_ouinet_Ouinet_nStopClient(
         jobject /* this */)
 {
     try {
+      if (g_client_thread.get_id() == thread::id()) return;
       g_ios.post([] { if (g_client) g_client->stop(); });
       g_client_thread.join();
       g_client_thread = thread();
