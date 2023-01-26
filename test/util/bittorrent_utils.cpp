@@ -1,0 +1,68 @@
+#include <boost/asio/spawn.hpp>
+
+#include "bittorrent/dht.h"
+#include "create_udp_multiplexer.h"
+
+using namespace std;
+using namespace ouinet;
+
+namespace bt = ouinet::bittorrent;
+
+class BtUtils {
+public:
+    BtUtils(asio::io_context &ctx)
+            : _ctx(ctx)
+            , _bt_dht_wc(_ctx)
+    {
+    }
+
+    std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield)
+    {
+        if (_bt_dht) return _bt_dht;
+
+        // Ensure that only one coroutine is modifying the instance at a time.
+        sys::error_code ec;
+        return_or_throw_on_error(yield, _shutdown_signal, ec, _bt_dht);
+        if (_bt_dht) return _bt_dht;
+        auto lock = _bt_dht_wc.lock();
+
+        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor());
+        auto& mpl = common_udp_multiplexer();
+
+        asio_utp::udp_multiplexer m(_ctx);
+
+        m.bind(mpl, ec);
+        if (ec) return or_throw(yield, ec, _bt_dht);
+
+        auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
+
+        _bt_dht = std::move(bt_dht);
+        return _bt_dht;
+    }
+
+    const asio_utp::udp_multiplexer& common_udp_multiplexer()
+    {
+        if (_udp_multiplexer) return *_udp_multiplexer;
+
+        _udp_multiplexer
+                = create_udp_multiplexer( _ctx
+                , "/tmp/last_used_udp_port");
+
+        /*
+        _udp_reachability
+                = make_unique<util::UdpServerReachabilityAnalysis>();
+        _udp_reachability->start(get_executor(), *_udp_multiplexer);
+        */
+        return *_udp_multiplexer;
+    }
+
+private:
+    asio::io_context& _ctx;
+    Signal<void()> _shutdown_signal;
+
+    shared_ptr<bt::MainlineDht> _bt_dht;
+    WaitCondition _bt_dht_wc;
+
+    boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
+
+};
