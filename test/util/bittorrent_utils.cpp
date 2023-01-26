@@ -16,7 +16,8 @@ public:
     {
     }
 
-    std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield)
+    std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield,
+                                                    vector<asio::ip::address> ifaddrs)
     {
         if (_bt_dht) return _bt_dht;
 
@@ -35,6 +36,13 @@ public:
         if (ec) return or_throw(yield, ec, _bt_dht);
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
+
+        set<asio::ip::udp::endpoint> endpoints;
+        for (auto addr : ifaddrs) {
+            std::cout << "Spawning DHT node on " << addr << std::endl;
+            endpoints.insert({addr, 0});
+        }
+        bt_dht->set_endpoints(endpoints);
 
         _bt_dht = std::move(bt_dht);
         return _bt_dht;
