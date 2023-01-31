@@ -1,19 +1,28 @@
+#include <iostream>
+#include <chrono>
+#include <boost/asio/steady_timer.hpp>
+
 #include "../test/util/bittorrent_utils.cpp"
 
-#include "util/handler_tracker.h"
-#include "cache/announcer.h"
+#define private public
+#include "cache/announcer.cpp"
 
-using namespace std;
+using namespace chrono;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
 using namespace ouinet::bittorrent::dht;
 using namespace ouinet::cache;
 using namespace ouinet::util;
+using namespace std;
 
-const size_t N_GROUPS=10;
+using Clock = chrono::steady_clock;
+
+const size_t N_GROUPS=3;
 
 shared_ptr<MainlineDht> btdht;
 std::unique_ptr<Announcer> announcer;
+Clock::time_point start;
+Clock::time_point now;
 
 void start_btdht(asio::io_context& ctx) {
     asio::spawn(ctx, [&] (asio::yield_context yield) {
@@ -27,8 +36,33 @@ void start_announcer_loop(asio::io_context& ctx) {
     asio::spawn(ctx, [&] (asio::yield_context yield) {
         announcer = std::make_unique<Announcer>(btdht);
 
+        start = Clock::now();
         for (size_t n = 0; n < N_GROUPS; n++) {
             announcer->add("group-" + std::to_string(n));
+        }
+    });
+}
+
+void monitor_announcements(asio::io_context& ctx) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
+        using namespace std::chrono;
+        sys::error_code ec;
+        asio::steady_timer timer(ctx);
+        size_t announcing_attempts{0};
+
+        while (announcing_attempts < N_GROUPS) {
+            announcing_attempts = 0;
+            for (auto iter = announcer->_loop->entries.begin(); iter != announcer->_loop->entries.end(); ++iter)
+                if (iter->first.attempted_update())
+                    ++announcing_attempts;
+
+            timer.expires_from_now(chrono::seconds(1));
+            timer.async_wait(yield[ec]);
+            now = Clock::now();
+            auto elapsed = duration_cast<seconds>(now - start).count();
+            std::cout << announcing_attempts << " of " << N_GROUPS << " entries announced after " \
+                      << elapsed << " seconds" << std::endl;
+            // TODO: Trigger the cancel signal when the monitoring is done
         }
     });
 }
@@ -39,7 +73,7 @@ int main(int argc, const char** argv)
 
     start_btdht(ctx);
     start_announcer_loop(ctx);
-    // TODO: Monitor the status of the announcements
-    // TODO: Trigger the cancel signal when the monitoring is done
+    monitor_announcements(ctx);
+
     ctx.run();
 }
