@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/signal_set.hpp>
 
 #include "../test/util/bittorrent_utils.cpp"
 
@@ -15,9 +16,10 @@ using namespace ouinet::cache;
 using namespace ouinet::util;
 using namespace std;
 
+using Timer = boost::asio::steady_timer;
 using Clock = chrono::steady_clock;
 
-const size_t N_GROUPS=3;
+const size_t N_GROUPS = 10;
 
 shared_ptr<MainlineDht> btdht;
 std::unique_ptr<Announcer> announcer;
@@ -62,8 +64,9 @@ void monitor_announcements(asio::io_context& ctx) {
             auto elapsed = duration_cast<seconds>(now - start).count();
             std::cout << announcing_attempts << " of " << N_GROUPS << " entries announced after " \
                       << elapsed << " seconds" << std::endl;
-            // TODO: Trigger the cancel signal when the monitoring is done
         }
+        // TODO: Trigger the cancel signal instead of SIGINT when the monitoring is done
+        raise(SIGINT);
     });
 }
 
@@ -74,6 +77,12 @@ int main(int argc, const char** argv)
     start_btdht(ctx);
     start_announcer_loop(ctx);
     monitor_announcements(ctx);
+
+    boost::asio::signal_set signals(ctx, SIGINT);
+    signals.async_wait([&](const boost::system::error_code& error , int signal_number) {
+        btdht.reset();
+        ctx.stop();
+    });
 
     ctx.run();
 }
