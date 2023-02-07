@@ -234,8 +234,12 @@ struct Announcer::Loop {
             _DEBUG("Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
+        ConditionVariable cv(dht->get_executor());
+
         while (!cancel) {
             sys::error_code ec;
+
+
             _DEBUG("Picking entry to update");
             auto ei = pick_entry(cancel, yield[ec]);
 
@@ -253,6 +257,10 @@ struct Announcer::Loop {
             bool success = false;
 
             TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
+            auto on_exit = defer([&] {
+                cv.notify();
+            });
+
             for (int i = 0; i != 3; ++i) {
                 // XXX: Temporary handler tracking as this coroutine sometimes
                 // fails to exit.
@@ -279,6 +287,8 @@ struct Announcer::Loop {
             if (!e.to_remove) entries.push_back(move(e));
 
             if (debug()) { print_entries(); }
+
+            cv.wait(cancel, yield[ec]);
         }
 
         return or_throw(yield, asio::error::operation_aborted);
