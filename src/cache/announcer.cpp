@@ -251,6 +251,8 @@ struct Announcer::Loop {
 
             // Try inserting three times before moving to the next entry
             bool success = false;
+
+            TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
             for (int i = 0; i != 3; ++i) {
                 // XXX: Temporary handler tracking as this coroutine sometimes
                 // fails to exit.
@@ -269,6 +271,8 @@ struct Announcer::Loop {
             } else  {
                 ei->first.failed_update     = Clock::now();
             }
+
+            }));
 
             Entry e = move(ei->first);
             entries.erase(ei);
