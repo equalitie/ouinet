@@ -235,7 +235,7 @@ struct Announcer::Loop {
         });
 
         ConditionVariable cv(dht->get_executor());
-        size_t slice_size = 10;
+        size_t slice_size = 16;
 
         while (!cancel) {
             sys::error_code ec;
