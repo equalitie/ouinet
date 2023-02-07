@@ -259,28 +259,28 @@ struct Announcer::Loop {
             bool success = false;
 
             TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
-            auto on_exit = defer([&] {
-                cv.notify();
-            });
+                auto on_exit = defer([&] {
+                    cv.notify();
+                });
 
-            for (int i = 0; i != 3; ++i) {
-                // XXX: Temporary handler tracking as this coroutine sometimes
-                // fails to exit.
-                TRACK_HANDLER();
-                announce(ei->first, cancel, yield[ec]);
-                if (cancel) return;
-                if (!ec) { success = true; break; }
-                async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
-                if (cancel) return;
-                ec = {};
-            }
+                for (int i = 0; i != 3; ++i) {
+                    // XXX: Temporary handler tracking as this coroutine sometimes
+                    // fails to exit.
+                    TRACK_HANDLER();
+                    announce(ei->first, cancel, yield[ec]);
+                    if (cancel) return;
+                    if (!ec) { success = true; break; }
+                    async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
+                    if (cancel) return;
+                    ec = {};
+                }
 
-            if (success) {
-                ei->first.failed_update     = {};
-                ei->first.successful_update = Clock::now();
-            } else  {
-                ei->first.failed_update     = Clock::now();
-            }
+                if (success) {
+                    ei->first.failed_update     = {};
+                    ei->first.successful_update = Clock::now();
+                } else  {
+                    ei->first.failed_update     = Clock::now();
+                }
 
             }));
 
