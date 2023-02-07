@@ -235,10 +235,12 @@ struct Announcer::Loop {
         });
 
         ConditionVariable cv(dht->get_executor());
+        size_t slice_size = 10;
 
         while (!cancel) {
             sys::error_code ec;
 
+            for (size_t n = 0; n < slice_size; ++n) {
 
             _DEBUG("Picking entry to update");
             auto ei = pick_entry(cancel, yield[ec]);
@@ -287,6 +289,7 @@ struct Announcer::Loop {
             if (!e.to_remove) entries.push_back(move(e));
 
             if (debug()) { print_entries(); }
+            }
 
             cv.wait(cancel, yield[ec]);
         }
