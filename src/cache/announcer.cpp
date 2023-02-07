@@ -263,11 +263,12 @@ struct Announcer::Loop {
                         cv.notify();
                     });
 
+                    Entry e = move(ei->first);
                     for (int i = 0; i != 3; ++i) {
                         // XXX: Temporary handler tracking as this coroutine sometimes
                         // fails to exit.
                         TRACK_HANDLER();
-                        announce(ei->first, cancel, yield[ec]);
+                        announce(e, cancel, yield[ec]);
                         if (cancel) return;
                         if (!ec) { success = true; break; }
                         async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
@@ -276,19 +277,17 @@ struct Announcer::Loop {
                     }
 
                     if (success) {
-                        ei->first.failed_update     = {};
-                        ei->first.successful_update = Clock::now();
+                        e.failed_update     = {};
+                        e.successful_update = Clock::now();
                     } else  {
-                        ei->first.failed_update     = Clock::now();
+                        e.failed_update     = Clock::now();
                     }
 
+                    if (!e.to_remove) entries.push_back(move(e));
+                    if (debug()) { print_entries(); }
                 }));
 
-                Entry e = move(ei->first);
                 entries.erase(ei);
-                if (!e.to_remove) entries.push_back(move(e));
-
-                if (debug()) { print_entries(); }
             }
 
             cv.wait(cancel, yield[ec]);
