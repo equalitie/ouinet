@@ -242,53 +242,53 @@ struct Announcer::Loop {
 
             for (size_t n = 0; n < slice_size; ++n) {
 
-            _DEBUG("Picking entry to update");
-            auto ei = pick_entry(cancel, yield[ec]);
+                _DEBUG("Picking entry to update");
+                auto ei = pick_entry(cancel, yield[ec]);
 
-            if (cancel) return;
-            assert(!ec);
-            ec = {};
+                if (cancel) return;
+                assert(!ec);
+                ec = {};
 
-            if (ei->first.to_remove) {
-                // Marked for removal, drop the entry and get another one.
+                if (ei->first.to_remove) {
+                    // Marked for removal, drop the entry and get another one.
+                    entries.erase(ei);
+                    continue;
+                }
+
+                // Try inserting three times before moving to the next entry
+                bool success = false;
+
+                TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
+                    auto on_exit = defer([&] {
+                        cv.notify();
+                    });
+
+                    for (int i = 0; i != 3; ++i) {
+                        // XXX: Temporary handler tracking as this coroutine sometimes
+                        // fails to exit.
+                        TRACK_HANDLER();
+                        announce(ei->first, cancel, yield[ec]);
+                        if (cancel) return;
+                        if (!ec) { success = true; break; }
+                        async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
+                        if (cancel) return;
+                        ec = {};
+                    }
+
+                    if (success) {
+                        ei->first.failed_update     = {};
+                        ei->first.successful_update = Clock::now();
+                    } else  {
+                        ei->first.failed_update     = Clock::now();
+                    }
+
+                }));
+
+                Entry e = move(ei->first);
                 entries.erase(ei);
-                continue;
-            }
+                if (!e.to_remove) entries.push_back(move(e));
 
-            // Try inserting three times before moving to the next entry
-            bool success = false;
-
-            TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
-                auto on_exit = defer([&] {
-                    cv.notify();
-                });
-
-                for (int i = 0; i != 3; ++i) {
-                    // XXX: Temporary handler tracking as this coroutine sometimes
-                    // fails to exit.
-                    TRACK_HANDLER();
-                    announce(ei->first, cancel, yield[ec]);
-                    if (cancel) return;
-                    if (!ec) { success = true; break; }
-                    async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
-                    if (cancel) return;
-                    ec = {};
-                }
-
-                if (success) {
-                    ei->first.failed_update     = {};
-                    ei->first.successful_update = Clock::now();
-                } else  {
-                    ei->first.failed_update     = Clock::now();
-                }
-
-            }));
-
-            Entry e = move(ei->first);
-            entries.erase(ei);
-            if (!e.to_remove) entries.push_back(move(e));
-
-            if (debug()) { print_entries(); }
+                if (debug()) { print_entries(); }
             }
 
             cv.wait(cancel, yield[ec]);
