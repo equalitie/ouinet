@@ -256,13 +256,13 @@ struct Announcer::Loop {
                     continue;
                 }
 
-                // Try inserting three times before moving to the next entry
-                bool success = false;
-
                 TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
                     auto on_exit = defer([&] {
                         cv.notify();
                     });
+
+                    // Try inserting three times before moving to the next entry
+                    bool success = false;
 
                     Entry e = move(ei->first);
                     for (int i = 0; i != 3; ++i) {
