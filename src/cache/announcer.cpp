@@ -242,6 +242,7 @@ struct Announcer::Loop {
 
             for (size_t n = 0; n < slice_size; ++n) {
 
+                ec = {};
                 _DEBUG("Picking entry to update");
                 auto ei = pick_entry(cancel, yield[ec]);
 
