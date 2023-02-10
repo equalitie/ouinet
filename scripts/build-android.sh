@@ -201,8 +201,9 @@ function maybe_install_ndk {
 function maybe_install_gradle {
     check_mode build || return 0
 
-    GRADLE_REQUIRED_MAJOR_VERSION=6
+    GRADLE_REQUIRED_MAJOR_VERSION=7
     GRADLE_REQUIRED_MINOR_VERSION=0
+    GRADLE_REQUIRED_PATCH_VERSION=2
 
     NEED_GRADLE=false
 
@@ -212,13 +213,16 @@ function maybe_install_gradle {
         GRADLE_VERSION=`gradle -v | grep Gradle | cut -d ' ' -f 2`
         GRADLE_MAJOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f1`
         GRADLE_MINOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f2`
+        GRADLE_PATCH_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f3`
 
         if [ $GRADLE_REQUIRED_MAJOR_VERSION -gt $GRADLE_MAJOR_VERSION ]; then
             NEED_GRADLE=true
         else
             if [ $GRADLE_REQUIRED_MAJOR_VERSION -eq $GRADLE_MAJOR_VERSION ]; then
                  if [ $GRADLE_REQUIRED_MINOR_VERSION -gt $GRADLE_MINOR_VERSION ]; then
-                     NEED_GRADLE=true
+                    if [ $GRADLE_REQUIRED_PATCH_VERSION -gt $GRADLE_PATCH_VERSION ]; then
+                        NEED_GRADLE=true
+                    fi
                  fi
              fi
         fi
@@ -227,7 +231,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-6.0
+        local GRADLE=gradle-7.0.2
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
