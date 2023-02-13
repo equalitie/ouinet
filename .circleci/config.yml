@@ -27,6 +27,7 @@ jobs:
                 libssl-dev \
                 libtool \
                 ninja-build \
+                openjdk-11-jdk-headless \
                 pkg-config \
                 python-twisted \
                 rsync \
@@ -34,8 +35,6 @@ jobs:
                 unzip \
                 wget \
                 zlib1g-dev
-            wget 'https://dl.google.com/dl/android/studio/ide-zips/2022.1.1.20/android-studio-2022.1.1.20-linux.tar.gz' -O - | tar -axz -C /opt android-studio/jre
-            echo 'export PATH=/opt/android-studio/jre/bin:$PATH' >> ~/.bashrc
 
       - checkout
 
