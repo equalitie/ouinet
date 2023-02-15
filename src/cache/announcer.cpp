@@ -11,6 +11,13 @@
 #define _LOGPFX "Announcer: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
 
+// Announcements are processed one at a time in Android to avoid increasing battery usage
+#ifdef __ANDROID__
+const size_t SIMULTANEOUS_ANNOUNCEMENTS=1;
+#else
+const size_t SIMULTANEOUS_ANNOUNCEMENTS=16;
+#endif
+
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::cache;
@@ -235,7 +242,7 @@ struct Announcer::Loop {
         });
 
         ConditionVariable cv(dht->get_executor());
-        size_t slice_size = 16;
+        size_t slice_size = SIMULTANEOUS_ANNOUNCEMENTS;
 
         while (!cancel) {
             sys::error_code ec_cv;
