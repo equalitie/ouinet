@@ -16,7 +16,6 @@ using namespace ouinet::cache;
 using namespace ouinet::util;
 using namespace std;
 
-using Timer = boost::asio::steady_timer;
 using Clock = chrono::steady_clock;
 
 const size_t N_GROUPS = 10;
@@ -26,9 +25,8 @@ std::unique_ptr<Announcer> announcer;
 Clock::time_point start;
 Clock::time_point now;
 
-void start_btdht(asio::io_context& ctx) {
+void start_btdht(asio::io_context& ctx, BtUtils& btu) {
     asio::spawn(ctx, [&] (asio::yield_context yield) {
-        BtUtils btu{ctx};
         vector<asio::ip::address> ifaddrs{asio::ip::make_address("0.0.0.0")};
         btdht = std::move(btu.bittorrent_dht(yield, ifaddrs));
     });
@@ -45,7 +43,7 @@ void start_announcer_loop(asio::io_context& ctx) {
     });
 }
 
-void monitor_announcements(asio::io_context& ctx) {
+void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
     asio::spawn(ctx, [&] (asio::yield_context yield) {
         using namespace std::chrono;
         sys::error_code ec;
@@ -65,7 +63,8 @@ void monitor_announcements(asio::io_context& ctx) {
             std::cout << announcing_attempts << " of " << N_GROUPS << " entries announced after " \
                       << elapsed << " seconds" << std::endl;
         }
-        // TODO: Trigger the cancel signal instead of SIGINT when the monitoring is done
+
+        btu.stop();
         raise(SIGINT);
     });
 }
@@ -73,14 +72,14 @@ void monitor_announcements(asio::io_context& ctx) {
 int main(int argc, const char** argv)
 {
     asio::io_context ctx;
+    BtUtils btu{ctx};
 
-    start_btdht(ctx);
+    start_btdht(ctx, btu);
     start_announcer_loop(ctx);
-    monitor_announcements(ctx);
+    monitor_announcements(ctx, btu);
 
     boost::asio::signal_set signals(ctx, SIGINT);
     signals.async_wait([&](const boost::system::error_code& error , int signal_number) {
-        btdht.reset();
         ctx.stop();
     });
 
