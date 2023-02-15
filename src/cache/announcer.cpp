@@ -238,11 +238,10 @@ struct Announcer::Loop {
         size_t slice_size = 16;
 
         while (!cancel) {
-            sys::error_code ec;
+            sys::error_code ec_cv;
 
             for (size_t n = 0; n < slice_size; ++n) {
-
-                ec = {};
+                sys::error_code ec;
                 _DEBUG("Picking entry to update");
                 auto ei = pick_entry(cancel, yield[ec]);
 
@@ -257,6 +256,7 @@ struct Announcer::Loop {
                 }
 
                 TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
+                    sys::error_code ec_coro;
                     auto on_exit = defer([&] {
                         cv.notify();
                     });
@@ -269,12 +269,12 @@ struct Announcer::Loop {
                         // XXX: Temporary handler tracking as this coroutine sometimes
                         // fails to exit.
                         TRACK_HANDLER();
-                        announce(e, cancel, yield[ec]);
+                        announce(e, cancel, yield[ec_coro]);
                         if (cancel) return;
-                        if (!ec) { success = true; break; }
-                        async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
+                        if (!ec_coro) { success = true; break; }
+                        async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec_coro]);
                         if (cancel) return;
-                        ec = {};
+                        ec_coro = {};
                     }
 
                     if (success) {
@@ -291,7 +291,7 @@ struct Announcer::Loop {
                 entries.erase(ei);
             }
 
-            cv.wait(cancel, yield[ec]);
+            cv.wait(cancel, yield[ec_cv]);
         }
 
         return or_throw(yield, asio::error::operation_aborted);
