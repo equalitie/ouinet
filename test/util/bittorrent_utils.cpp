@@ -64,6 +64,14 @@ public:
         return *_udp_multiplexer;
     }
 
+    void stop() {
+        _shutdown_signal();
+        if (_bt_dht) {
+            _bt_dht->stop();
+            _bt_dht = nullptr;
+        }
+    }
+
 private:
     asio::io_context& _ctx;
     Signal<void()> _shutdown_signal;
