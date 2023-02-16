@@ -1,7 +1,9 @@
 apply plugin: 'com.android.library'
 
-def ouinetVersionName = "$versionName"
-def ouinetBuildId = "$buildId"
+apply from: "${rootProject.projectDir}/build-scripts/git-version-string.gradle"
+
+def ouinetVersionName = file('../../version.txt').text.trim()
+def ouinetBuildId = gitVersionString
 
 android {
     // Please read `doc/android-sdk-versions.md` and keep in sync with it.
@@ -70,7 +72,7 @@ dependencies {
 
 ext {
     PUBLISH_GROUP_ID = 'ie.equalit.ouinet'
-    PUBLISH_VERSION = file('../../version.txt').text.trim()
+    PUBLISH_VERSION = "${ouinetVersionName}"
     PUBLISH_ARTIFACT_ID = "ouinet-${android_abi}"
 }
 
