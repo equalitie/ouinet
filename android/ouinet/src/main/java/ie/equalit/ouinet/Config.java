@@ -11,6 +11,7 @@ import android.util.Log;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -22,7 +23,7 @@ import java.util.Set;
  * app to avoid race conditions.
  */
 public class Config implements Parcelable {
-    public static enum LogLevel {
+    public enum LogLevel {
         SILLY,
         DEBUG,
         VERBOSE,
@@ -494,8 +495,7 @@ public class Config implements Parcelable {
             btBootstrapExtras = null;
         else {
             btBootstrapExtras = new HashSet<>();
-            for (String x : btBootstrapExtrasArray)
-                btBootstrapExtras.add(x);
+            Collections.addAll(btBootstrapExtras, btBootstrapExtrasArray);
         }
 
         cacheHttpPubKey = in.readString();

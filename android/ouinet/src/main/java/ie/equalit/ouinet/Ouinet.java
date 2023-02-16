@@ -9,7 +9,6 @@ import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.support.annotation.Nullable;
-import android.support.annotation.VisibleForTesting;
 import android.util.Log;
 
 import com.getkeepsafe.relinker.ReLinker;
@@ -18,7 +17,6 @@ import com.getkeepsafe.relinker.ReLinkerInstance;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -87,13 +85,13 @@ public class Ouinet {
     public RunningState getState() {
         // TODO: Avoid needing to keep this in sync by hand.
         switch (nGetClientState()) {
-        case 0: return RunningState.Created;
-        case 1: return RunningState.Failed;
-        case 2: return RunningState.Starting;
-        case 3: return RunningState.Degraded;
-        case 4: return RunningState.Started;
-        case 5: return RunningState.Stopping;
-        case 6: return RunningState.Stopped;
+            case 0: return RunningState.Created;
+            case 1: return RunningState.Failed;
+            case 2: return RunningState.Starting;
+            case 3: return RunningState.Degraded;
+            case 4: return RunningState.Started;
+            case 5: return RunningState.Stopping;
+            case 6: return RunningState.Stopped;
         }
         return RunningState.Failed;
     }
@@ -111,7 +109,7 @@ public class Ouinet {
             Log.d(TAG, "Failed to acquire multicast lock");
         }
 
-        List<String> args = new ArrayList<String>();
+        List<String> args = new ArrayList<>();
         args.add("ouinet-client"); // App name
         args.add("--repo=" + config.getOuinetDirectory());
 
@@ -163,7 +161,7 @@ public class Ouinet {
             }
         }
 
-        List<String> path = new ArrayList<String>();
+        List<String> path = new ArrayList<>();
         if (config.getObfs4ProxyPath() != null) {
             path.add(config.getObfs4ProxyPath());
         }
