@@ -43,6 +43,9 @@ public class ConfigTest {
     private static String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
     private static String LISTEN_ON_TCP = "0.0.0.0:8077";
     private static String FRONT_END_EP = "0.0.0.0:8078";
+    private static String MAX_CACHED_AGE = "120";
+    private static String LOCAL_DOMAIN = "local.domain";
+    private static String ORIGIN_DOH_BASE = "0.0.0.0:8079";
 
     static {
         BT_BOOTSTRAP_EXTRAS.add("192.0.2.1");
@@ -94,6 +97,9 @@ public class ConfigTest {
                 .setCacheStaticContentPath(cacheStaticContentPath)
                 .setListenOnTcp(LISTEN_ON_TCP)
                 .setFrontEndEp(FRONT_END_EP)
+                .setMaxCachedAge(MAX_CACHED_AGE)
+                .setLocalDomain(LOCAL_DOMAIN)
+                .setOriginDohBase(ORIGIN_DOH_BASE)
                 .build();
 
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
@@ -107,6 +113,9 @@ public class ConfigTest {
 
         assertThat(config.getListenOnTcp(), is(LISTEN_ON_TCP));
         assertThat(config.getFrontEndEp(), is(FRONT_END_EP));
+        assertThat(config.getMaxCachedAge(), is(MAX_CACHED_AGE));
+        assertThat(config.getLocalDomain(), is(LOCAL_DOMAIN));
+        assertThat(config.getOriginDohBase(), is(ORIGIN_DOH_BASE));
 
         assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));
         assertThat(contentOf(new File(config.getTlsCaCertStorePath())), is(TLS_CA_CERT));

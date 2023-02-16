@@ -120,6 +120,9 @@ public class Ouinet {
         // and change `http(s).proxyPort` to match.
         maybeAdd(args, "--listen-on-tcp",          config.getListenOnTcp());
         maybeAdd(args, "--front-end-ep",           config.getFrontEndEp());
+        maybeAdd(args, "--max-cached-age",         config.getMaxCachedAge());
+        maybeAdd(args, "--local-domain",           config.getLocalDomain());
+        maybeAdd(args, "--origin-doh-base",        config.getOriginDohBase());
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
