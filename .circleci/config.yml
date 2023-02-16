@@ -27,6 +27,7 @@ jobs:
                 libssl-dev \
                 libtool \
                 ninja-build \
+                openjdk-11-jdk-headless \
                 pkg-config \
                 python-twisted \
                 rsync \
@@ -34,8 +35,6 @@ jobs:
                 unzip \
                 wget \
                 zlib1g-dev
-            wget 'https://dl.google.com/dl/android/studio/ide-zips/3.4.2.0/android-studio-ide-183.5692245-linux.tar.gz' -O - | tar -axz -C /opt android-studio/jre
-            echo 'export PATH=/opt/android-studio/jre/bin:$PATH' >> ~/.bashrc
 
       - checkout
 
@@ -67,4 +66,4 @@ jobs:
             mkdir -p build.android
             cd build.android
             ../scripts/build-android.sh
-          no_output_timeout: 30m
+          no_output_timeout: 60m

@@ -46,9 +46,10 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 # Tasks to be run by Gradle when building the AAR.
 # The explicit tasks are needed since there are no `build{Release,Debug}` tasks.
 GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
+PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
 
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
-SDK_MANAGER="${SDK_DIR}/tools/bin/sdkmanager"
+SDK_MANAGER="${SDK_DIR}/cmdline-tools/bin/sdkmanager"
 
 # Until we upgrade Gradle to a version which
 # does not need an NDK with the `platforms` directory,
@@ -104,7 +105,7 @@ function check_mode {
 
 ######################################################################
 function maybe_install_sdk {
-    local toolsfile=sdk-tools-linux-4333796.zip
+    local toolsfile=commandlinetools-linux-6858069_latest.zip
 
     # Reuse downloaded SDK stuff from old versions of this script.
     if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
@@ -114,9 +115,9 @@ function maybe_install_sdk {
     if [ ! -f "$SDK_MANAGER" ]; then
         echo "cannot find SDK manager: $SDK_MANAGER"
         echo "downlodaing SDK..."
-        [ -d "$SDK_DIR/tools" ] || rm -rf "$SDK_DIR/tools"
+        [ -d "$SDK_DIR/cmdline-tools" ] || rm -rf "$SDK_DIR/cmdline-tools"
         if [ ! -f "$toolsfile" ]; then
-            # https://developer.android.com/studio/index.html#command-tools
+            # https://developer.android.com/studio/command-line/
             wget -nv "https://dl.google.com/android/repository/$toolsfile"
         fi
         unzip -q "$toolsfile" -d "$SDK_DIR"
@@ -157,12 +158,12 @@ emulator
     if [ "$sdk_pkgs_install" ]; then
         # This produces progress bars that are very frequently updated
         # and clutter build logs.
-        yes y | "$SDK_MANAGER" $sdk_pkgs_install > /dev/null
+        yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR $sdk_pkgs_install > /dev/null
     fi
     # Accept licenses from stuff installed by Gradle on previous runs.
     # Not very clean, but if Gradle complains about licenses not being accepted,
     # at least a second run would succeed.
-    yes y | "$SDK_MANAGER" --licenses > /dev/null
+    yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR --licenses > /dev/null
 
     # Prefer locally installed platform tools to those in the system.
     export PATH="$SDK_DIR/platform-tools:$PATH"
@@ -200,8 +201,9 @@ function maybe_install_ndk {
 function maybe_install_gradle {
     check_mode build || return 0
 
-    GRADLE_REQUIRED_MAJOR_VERSION=6
+    GRADLE_REQUIRED_MAJOR_VERSION=7
     GRADLE_REQUIRED_MINOR_VERSION=0
+    GRADLE_REQUIRED_PATCH_VERSION=2
 
     NEED_GRADLE=false
 
@@ -211,13 +213,16 @@ function maybe_install_gradle {
         GRADLE_VERSION=`gradle -v | grep Gradle | cut -d ' ' -f 2`
         GRADLE_MAJOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f1`
         GRADLE_MINOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f2`
+        GRADLE_PATCH_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f3`
 
         if [ $GRADLE_REQUIRED_MAJOR_VERSION -gt $GRADLE_MAJOR_VERSION ]; then
             NEED_GRADLE=true
         else
             if [ $GRADLE_REQUIRED_MAJOR_VERSION -eq $GRADLE_MAJOR_VERSION ]; then
                  if [ $GRADLE_REQUIRED_MINOR_VERSION -gt $GRADLE_MINOR_VERSION ]; then
-                     NEED_GRADLE=true
+                    if [ $GRADLE_REQUIRED_PATCH_VERSION -gt $GRADLE_PATCH_VERSION ]; then
+                        NEED_GRADLE=true
+                    fi
                  fi
              fi
         fi
@@ -226,7 +231,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-6.0
+        local GRADLE=gradle-7.0.2
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
@@ -247,6 +252,7 @@ function build_ouinet_aar {
     OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
+    cp -r "${ROOT}"/android/gradle "${GRADLE_BUILDDIR}"/.
     ( cd "${GRADLE_BUILDDIR}";
       gradle $GRADLE_TASKS \
         -Pandroid_abi=${ABI} \
@@ -268,9 +274,7 @@ function publish_ouinet_aar {
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
     mkdir -p "${GRADLE_BUILDDIR}"
     ( cd "${GRADLE_BUILDDIR}";
-      gradle \
-        publishToSonatype \
-        closeSonatypeStagingRepository \
+      gradle $PUBLISH_TASKS \
         -Pandroid_abi=${ABI} \
         -PversionName="${OUINET_VERSION_NAME}" \
         -PbuildId="${OUINET_BUILD_ID}" \
