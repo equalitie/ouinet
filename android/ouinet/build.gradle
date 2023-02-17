@@ -1,4 +1,5 @@
 apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
 
 apply from: "${rootProject.projectDir}/build-scripts/git-version-string.gradle"
 
@@ -57,7 +58,7 @@ android {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     // Please read `doc/android-sdk-versions.md` and keep in sync with it.
-    implementation 'com.android.support:support-annotations:26.1.0'
+    implementation 'androidx.appcompat:appcompat:1.4.1'
     implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
     testImplementation "junit:junit:4.12"
     testImplementation 'org.mockito:mockito-core:2.23.0'

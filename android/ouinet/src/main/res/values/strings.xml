@@ -1,0 +1,8 @@
+<resources>
+    <string name="ouinet_notif_channel">Ouinet Notification Channel</string>
+    <string name="ouinet_notif_title">Ouinet Service</string>
+    <string name="ouinet_notif_detail">Tap to stop</string>
+    <string name="ouinet_notif_home">Home</string>
+    <string name="ouinet_notif_clear">Erase&#9888;</string>
+    <string name="ouinet_notif_confirm">Yes</string>
+</resources>
