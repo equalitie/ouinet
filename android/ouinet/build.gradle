@@ -75,7 +75,7 @@ ext {
 }
 
 tasks.withType(Sign) {
-    onlyIf { project.gradle.startParameter.taskNames.contains("Sonatype") }
+    onlyIf { rootProject.gradle.startParameter.taskNames.contains('publishToSonatype') }
 }
 
 apply from: "${rootProject.projectDir}/build-scripts/publish-module.gradle"
