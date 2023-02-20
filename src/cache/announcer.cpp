@@ -1,11 +1,11 @@
 #include <list>
 #include <sstream>
 #include "announcer.h"
-#include "../../util/async_queue.h"
-#include "../../logger.h"
-#include "../../async_sleep.h"
-#include "../../bittorrent/node_id.h"
-#include "../../util/handler_tracker.h"
+#include "util/async_queue.h"
+#include "logger.h"
+#include "async_sleep.h"
+#include "bittorrent/node_id.h"
+#include "util/handler_tracker.h"
 #include <boost/utility/string_view.hpp>
 
 #define _LOGPFX "Announcer: "

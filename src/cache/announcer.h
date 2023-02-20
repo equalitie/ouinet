@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../bittorrent/bep5_announcer.h"
-#include "../../util/hash.h"
+#include "bittorrent/bep5_announcer.h"
+#include "util/hash.h"
 #include <memory>
 
 namespace ouinet { namespace cache {
