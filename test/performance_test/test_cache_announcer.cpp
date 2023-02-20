@@ -19,6 +19,7 @@ using namespace std;
 using Clock = chrono::steady_clock;
 
 const size_t N_GROUPS = 10;
+const size_t TEST_SIMULTANEOUS_ANNOUNCEMENTS = 16;
 
 shared_ptr<MainlineDht> btdht;
 std::unique_ptr<Announcer> announcer;
@@ -34,7 +35,7 @@ void start_btdht(asio::io_context& ctx, BtUtils& btu) {
 
 void start_announcer_loop(asio::io_context& ctx) {
     asio::spawn(ctx, [&] (asio::yield_context yield) {
-        announcer = std::make_unique<Announcer>(btdht);
+        announcer = std::make_unique<Announcer>(btdht, TEST_SIMULTANEOUS_ANNOUNCEMENTS);
 
         start = Clock::now();
         for (size_t n = 0; n < N_GROUPS; n++) {
