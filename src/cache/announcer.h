@@ -13,7 +13,7 @@ private:
 public:
     using Key = std::string;
 
-    Announcer(std::shared_ptr<bittorrent::MainlineDht>);
+    Announcer(std::shared_ptr<bittorrent::MainlineDht>, size_t);
 
     // Return true if the key was not being announced, false otherwise.
     bool add(Key key);

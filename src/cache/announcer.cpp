@@ -53,16 +53,18 @@ struct Announcer::Loop {
     asio::executor ex;
     shared_ptr<bt::MainlineDht> dht;
     Entries entries;
+    size_t _simultaneous_announcements;
     Cancel _cancel;
     Cancel _timer_cancel;
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(shared_ptr<bt::MainlineDht> dht)
+    Loop(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_announcements)
         : ex(dht->get_executor())
         , dht(move(dht))
         , entries(ex)
+        , _simultaneous_announcements(simultaneous_announcements)
     { }
 
     inline static bool debug() { return logger.get_threshold() <= DEBUG; }
@@ -235,12 +237,11 @@ struct Announcer::Loop {
         });
 
         ConditionVariable cv(dht->get_executor());
-        size_t slice_size = SIMULTANEOUS_ANNOUNCEMENTS;
 
         while (!cancel) {
             sys::error_code ec_cv;
 
-            for (size_t n = 0; n < slice_size; ++n) {
+            for (size_t n = 0; n < _simultaneous_announcements; ++n) {
                 sys::error_code ec;
                 _DEBUG("Picking entry to update");
                 auto ei = pick_entry(cancel, yield[ec]);
@@ -315,8 +316,8 @@ struct Announcer::Loop {
 
 //--------------------------------------------------------------------
 // Announcer
-Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht)
-    : _loop(new Loop(std::move(dht)))
+Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht, size_t simultaneous_announcements)
+    : _loop(new Loop(std::move(dht), simultaneous_announcements))
 {
     _loop->start();
 }
