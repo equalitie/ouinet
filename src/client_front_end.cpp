@@ -571,6 +571,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             ss << "<br>\n";
         }
 
+        ss << ( boost::format("BEP5 Announcements are sent to the DHT in batches of %s. <br>\n")
+                % config.max_simultaneous_announcements());
+        ss << "<br>\n";
+
         auto max_age = config.max_cached_age();
         ss << ( boost::format("Content cached locally if newer than %d seconds"
                               " (i.e. not older than %s).<br>\n")
