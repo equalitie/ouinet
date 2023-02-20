@@ -69,6 +69,10 @@ public:
         return _max_cached_age;
     }
 
+    size_t max_simultaneous_announcements() const {
+        return _max_simultaneous_announcements;
+    }
+
     bool do_cache_private() const {
         return _cache_private;
     }
@@ -187,6 +191,10 @@ private:
             , po::value<int>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
+           ("max-simultaneous-announcements"
+            , po::value<int>()->default_value(_max_simultaneous_announcements)
+            , "Defines the number of simultaneous BEP5 announcements "
+              "performed by the announcer loop to the DHT.")
           ("cache-private"
            , po::bool_switch(&_cache_private)->default_value(false)
            , "Store responses regardless of being private or "
@@ -363,6 +371,8 @@ private:
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
+    size_t _max_simultaneous_announcements
+        = default_max_simultaneous_announcements;
     bool _cache_private = false;
 
     std::string _client_credentials;
@@ -470,6 +480,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     if (vm.count("max-cached-age")) {
         _max_cached_age = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
+    }
+
+    if (vm.count("max-simultaneous-announcements")) {
+        _max_simultaneous_announcements = vm["max-simultaneous-announcements"].as<int>();
     }
 
     assert(vm.count("listen-on-tcp"));

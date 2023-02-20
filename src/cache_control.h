@@ -13,6 +13,13 @@ namespace ouinet {
 static const boost::posix_time::time_duration default_max_cached_age
     = boost::posix_time::hours(7 * 24);  // one week
 
+// Announcements are processed one at a time in Android to avoid increasing battery usage
+#ifdef __ANDROID__
+    const size_t default_max_simultaneous_announcements = 1;
+#else
+    const size_t default_max_simultaneous_announcements = 16;
+#endif
+
 class GenericStream;
 
 class CacheControl {
