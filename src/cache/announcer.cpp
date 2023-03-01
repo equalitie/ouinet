@@ -236,10 +236,10 @@ struct Announcer::Loop {
             _DEBUG("Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
-        ConditionVariable cv(dht->get_executor());
+        WaitCondition wcon(dht->get_executor());
 
         while (!cancel) {
-            sys::error_code ec_cv;
+            sys::error_code ec_wcon;
 
             for (size_t n = 0; n < _simultaneous_announcements; ++n) {
                 sys::error_code ec;
@@ -256,11 +256,8 @@ struct Announcer::Loop {
                     continue;
                 }
 
-                TRACK_SPAWN(dht->get_executor(), ([&] (asio::yield_context yield) {
+                TRACK_SPAWN(dht->get_executor(), ([&, lock = wcon.lock()] (asio::yield_context yield) {
                     sys::error_code ec_coro;
-                    auto on_exit = defer([&] {
-                        cv.notify();
-                    });
 
                     // Try inserting three times before moving to the next entry
                     bool success = false;
@@ -292,7 +289,7 @@ struct Announcer::Loop {
                 entries.erase(ei);
             }
 
-            cv.wait(cancel, yield[ec_cv]);
+            wcon.wait(cancel, yield[ec_wcon]);
         }
 
         return or_throw(yield, asio::error::operation_aborted);
