@@ -18,8 +18,8 @@ using namespace std;
 
 using Clock = chrono::steady_clock;
 
-const size_t N_GROUPS = 10;
-const size_t TEST_SIMULTANEOUS_ANNOUNCEMENTS = 16;
+const size_t N_GROUPS = 128;
+const size_t TEST_SIMULTANEOUS_ANNOUNCEMENTS = 64;
 
 shared_ptr<MainlineDht> btdht;
 std::unique_ptr<Announcer> announcer;
