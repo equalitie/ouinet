@@ -98,7 +98,7 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
                 .addAction(config.clearIcon, config.confirmText, confirmPIntent)
             handler.postDelayed(
                 showConfirmCallback,
-                3000 /* ms */
+                3 * MILLISECOND
             )
         }
         return notificationBuilder.build()
@@ -110,13 +110,14 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
 
     companion object {
         private const val TAG = "OuinetNotification"
+        private const val MILLISECOND : Long = 1000
         const val CONFIG_EXTRA = "notification-config"
         const val STATE_EXTRA = "state-extra"
         const val CODE_EXTRA = "code-extra"
         const val FROM_NOTIFICATION_EXTRA = "from-notification"
         private const val CHANNEL_ID = "ouinet-notification-channel"
         const val DEFAULT_STATE = "Stopped"
-        const val DEFAULT_INTERVAL = 5000
+        const val DEFAULT_INTERVAL = 5 * MILLISECOND
         const val STOP_CODE = 0
         const val CONFIRM_CODE = 1
         private const val HOME_CODE = 2

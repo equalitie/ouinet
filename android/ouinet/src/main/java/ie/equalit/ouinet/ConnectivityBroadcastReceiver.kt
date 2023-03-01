@@ -17,26 +17,23 @@ class ConnectivityBroadcastReceiver (
         this.background = background
     }
 
-    override fun onReceive(context: Context?, intent: Intent) {
+    override fun onReceive (context: Context?, intent: Intent) {
         val info = intent.getParcelableExtra<NetworkInfo>(ConnectivityManager.EXTRA_NETWORK_INFO)
             ?: return
+        restartOnConnectivityChange(info.state)
+    }
 
-        // Restart the Ouinet client whenever connectivity has changed and become stable.
-        val state = info.state
+    private fun restartOnConnectivityChange (state : NetworkInfo.State) {
         if (state == NetworkInfo.State.CONNECTED || state == NetworkInfo.State.DISCONNECTED) {
-            if (context != null) {
-                //logger.debug("Network state changed to ${state}")
-                Log.d(TAG, "Stopping OuinetService on connectivity change")
-                //OuinetService.stopOuinetService(context)
-                background?.stop()
-                // TODO: Insert a pause / check client state.
-                try {
-                    Log.d(TAG, "Starting OuinetService on connectivity change")
-                    background?.start()
-                } catch (ex: Exception) {
-                    // TODO: if the start fails, we should try restarting the service later
-                    Log.w(TAG, "startOuinetService failed with exception: $ex")
-                }
+            Log.d(TAG, "Stopping OuinetService on connectivity change")
+            background?.stop()
+            // TODO: Insert a pause / check client state.
+            try {
+                Log.d(TAG, "Starting OuinetService on connectivity change")
+                background?.start()
+            } catch (ex: Exception) {
+                // TODO: if the start fails, we should try restarting the service later
+                Log.w(TAG, "startOuinetService failed with exception: $ex")
             }
         }
     }

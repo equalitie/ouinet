@@ -25,7 +25,7 @@ class NotificationConfig : Parcelable {
         private var homeText : String
         private var clearText : String
         private var confirmText : String
-        private var updateInterval : Int
+        private var updateInterval : Long
         private var disableStatus : Boolean
 
         init {
@@ -94,7 +94,7 @@ class NotificationConfig : Parcelable {
          * Defaults to 5s
          */
         fun setUpdateInterval(
-            updateInterval : Int
+            updateInterval : Long
         ) : Builder {
             this.updateInterval = updateInterval
             return this
@@ -143,7 +143,7 @@ class NotificationConfig : Parcelable {
         private set
     var confirmText: String?
         private set
-    var updateInterval: Int
+    var updateInterval: Long
         private set
     var disableStatus: Boolean
         private set
@@ -159,7 +159,7 @@ class NotificationConfig : Parcelable {
         homeText: String?,
         clearText: String?,
         confirmText: String?,
-        updateInterval: Int,
+        updateInterval: Long,
         disableStatus: Boolean
     ) {
         this.activityName = activityName
@@ -191,7 +191,7 @@ class NotificationConfig : Parcelable {
         out.writeString(homeText)
         out.writeString(clearText)
         out.writeString(confirmText)
-        out.writeInt(updateInterval)
+        out.writeLong(updateInterval)
         val disable = if (disableStatus) 1 else 0
         out.writeInt(disable)
     }
@@ -207,7 +207,7 @@ class NotificationConfig : Parcelable {
         homeText = `in`.readString()
         clearText = `in`.readString()
         confirmText = `in`.readString()
-        updateInterval = `in`.readInt()
+        updateInterval = `in`.readLong()
         val disable = `in`.readInt()
         disableStatus = (disable == 1)
     }
