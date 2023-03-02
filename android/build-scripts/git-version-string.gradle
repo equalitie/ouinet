@@ -1,0 +1,22 @@
+def gitBranch() {
+    def branch = "unknown-branch"
+    def proc = "git -C ${rootProject.projectDir} rev-parse --abbrev-ref HEAD".execute()
+    proc.in.eachLine { line -> branch = line }
+    proc.err.eachLine { line -> println line }
+    proc.waitFor()
+    branch
+}
+
+def gitId() {
+    def id = "unknown-id"
+    def proc = "git -C ${rootProject.projectDir} rev-parse HEAD".execute()
+    proc.in.eachLine { line -> id = line }
+    proc.err.eachLine { line -> println line }
+    proc.waitFor()
+    id
+}
+
+ext.gitVersionString = { ->
+    def versionString = gitBranch() + " " + gitId()
+    return versionString
+}

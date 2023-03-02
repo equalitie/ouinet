@@ -125,5 +125,19 @@ public class ConfigTest {
 
         assertThat(config.getObfs4ProxyPath(), is(ouinetDir));
         assertThat(contentOf(new File(obfsFilePath)), is(OBFS_PROXY_CONTENT));
+
+        /*
+        // TODO: building the notification fails in testing because it needs real context
+        //       to get default strings, need to determine best way to test new features.
+        NotificationConfig notificationConfig = new NotificationConfig.Builder(mockContext)
+            .setHomeActivity("$packageName.$localClassName")
+            .setNotificationIcons(R.drawable.ouinet_globe_pm)
+            .build();
+
+        OuinetBackground ouinetBackground = new OuinetBackground.Builder(mockContext)
+            .setOuinetConfig(config)
+            .setNotificationConfig(notificationConfig)
+            .build();
+        */
     }
 }
