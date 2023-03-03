@@ -289,7 +289,7 @@ struct Announcer::Loop {
                 entries.erase(ei);
             }
 
-            wcon.wait(cancel, yield[ec_wcon]);
+            wcon.wait(yield[ec_wcon]);
         }
 
         return or_throw(yield, asio::error::operation_aborted);
