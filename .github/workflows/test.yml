@@ -1,0 +1,57 @@
+name: Ouinet Test
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    # Debian buster is used as the base image of this worker,
+    # the following dependencies are installed:
+    #
+    # - autoconf
+    # - automake
+    # - autopoint
+    # - build-essential
+    # - cmake
+    # - gettext
+    # - git
+    # - libssl-dev
+    # - libtool
+    # - ninja-build
+    # - pkg-config
+    # - python-twisted
+    # - rsync
+    # - texinfo
+    # - unzip
+    # - wget
+    # - zlib1g-dev
+
+    runs-on: self-hosted
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: |
+        export LD_LIBRARY_PATH=${{github.workspace}}/build:/usr/local/lib
+        for test in ${{github.workspace}}/build/test/test-*; do
+            "$test" --log_level=test_suite
+        done
+        export OUINET_BUILD_DIR=${{github.workspace}}/build
+        export OUINET_REPO_DIR=${{github.workspace}}
+        ${{github.workspace}}/scripts/run_integration_tests.sh
