@@ -139,11 +139,11 @@ struct Client::Impl {
                 group);
     }
 
-    bool enable_dht(shared_ptr<bt::MainlineDht> dht) {
+    bool enable_dht(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_announcements) {
         if (_dht || _announcer) return false;
 
         _dht = move(dht);
-        _announcer = std::make_unique<Announcer>(_dht);
+        _announcer = std::make_unique<Announcer>(_dht, simultaneous_announcements);
 
         // Announce all groups.
         for (auto& group_name : _groups->groups())
@@ -721,8 +721,9 @@ Client::Client(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
 
-bool Client::enable_dht(shared_ptr<bt::MainlineDht> dht) {
-    return _impl->enable_dht(move(dht));
+bool Client::enable_dht(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_announcements) {
+    return _impl->enable_dht(move(dht),
+                             simultaneous_announcements);
 }
 
 Session Client::load( const std::string& key

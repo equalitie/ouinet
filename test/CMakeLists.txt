@@ -167,3 +167,10 @@ add_executable(test-atomic-temp
     "../src/util/temp_dir.cpp"
     "../src/util/temp_file.cpp"
 )
+
+######################################################################
+add_executable(test-cache-announcer
+    "performance_test/test_cache_announcer.cpp"
+    ${bt_cpp_files}
+    "../test/util/bittorrent_utils.cpp")
+target_link_libraries(test-cache-announcer lib::asio_utp lib::gcrypt lib::uri)

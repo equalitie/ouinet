@@ -1,11 +1,11 @@
 #include <list>
 #include <sstream>
 #include "announcer.h"
-#include "../../util/async_queue.h"
-#include "../../logger.h"
-#include "../../async_sleep.h"
-#include "../../bittorrent/node_id.h"
-#include "../../util/handler_tracker.h"
+#include "util/async_queue.h"
+#include "logger.h"
+#include "async_sleep.h"
+#include "bittorrent/node_id.h"
+#include "util/handler_tracker.h"
 #include <boost/utility/string_view.hpp>
 
 #define _LOGPFX "Announcer: "
@@ -53,16 +53,18 @@ struct Announcer::Loop {
     asio::executor ex;
     shared_ptr<bt::MainlineDht> dht;
     Entries entries;
+    size_t _simultaneous_announcements;
     Cancel _cancel;
     Cancel _timer_cancel;
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(shared_ptr<bt::MainlineDht> dht)
+    Loop(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_announcements)
         : ex(dht->get_executor())
         , dht(move(dht))
         , entries(ex)
+        , _simultaneous_announcements(simultaneous_announcements)
     { }
 
     inline static bool debug() { return logger.get_threshold() <= DEBUG; }
@@ -234,47 +236,60 @@ struct Announcer::Loop {
             _DEBUG("Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
+        WaitCondition wcon(dht->get_executor());
+
         while (!cancel) {
-            sys::error_code ec;
-            _DEBUG("Picking entry to update");
-            auto ei = pick_entry(cancel, yield[ec]);
+            sys::error_code ec_wcon;
 
-            if (cancel) return;
-            assert(!ec);
-            ec = {};
+            for (size_t n = 0; n < _simultaneous_announcements; ++n) {
+                sys::error_code ec;
+                _DEBUG("Picking entry to update");
+                auto ei = pick_entry(cancel, yield[ec]);
 
-            if (ei->first.to_remove) {
-                // Marked for removal, drop the entry and get another one.
-                entries.erase(ei);
-                continue;
-            }
-
-            // Try inserting three times before moving to the next entry
-            bool success = false;
-            for (int i = 0; i != 3; ++i) {
-                // XXX: Temporary handler tracking as this coroutine sometimes
-                // fails to exit.
-                TRACK_HANDLER();
-                announce(ei->first, cancel, yield[ec]);
                 if (cancel) return;
-                if (!ec) { success = true; break; }
-                async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec]);
-                if (cancel) return;
+                assert(!ec);
                 ec = {};
+
+                if (ei->first.to_remove) {
+                    // Marked for removal, drop the entry and get another one.
+                    entries.erase(ei);
+                    continue;
+                }
+
+                TRACK_SPAWN(dht->get_executor(), ([&, lock = wcon.lock()] (asio::yield_context yield) {
+                    sys::error_code ec_coro;
+
+                    // Try inserting three times before moving to the next entry
+                    bool success = false;
+
+                    Entry e = move(ei->first);
+                    for (int i = 0; i != 3; ++i) {
+                        // XXX: Temporary handler tracking as this coroutine sometimes
+                        // fails to exit.
+                        TRACK_HANDLER();
+                        announce(e, cancel, yield[ec_coro]);
+                        if (cancel) return;
+                        if (!ec_coro) { success = true; break; }
+                        async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec_coro]);
+                        if (cancel) return;
+                        ec_coro = {};
+                    }
+
+                    if (success) {
+                        e.failed_update     = {};
+                        e.successful_update = Clock::now();
+                    } else  {
+                        e.failed_update     = Clock::now();
+                    }
+
+                    if (!e.to_remove) entries.push_back(move(e));
+                    if (debug()) { print_entries(); }
+                }));
+
+                entries.erase(ei);
             }
 
-            if (success) {
-                ei->first.failed_update     = {};
-                ei->first.successful_update = Clock::now();
-            } else  {
-                ei->first.failed_update     = Clock::now();
-            }
-
-            Entry e = move(ei->first);
-            entries.erase(ei);
-            if (!e.to_remove) entries.push_back(move(e));
-
-            if (debug()) { print_entries(); }
+            wcon.wait(yield[ec_wcon]);
         }
 
         return or_throw(yield, asio::error::operation_aborted);
@@ -298,8 +313,8 @@ struct Announcer::Loop {
 
 //--------------------------------------------------------------------
 // Announcer
-Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht)
-    : _loop(new Loop(std::move(dht)))
+Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht, size_t simultaneous_announcements)
+    : _loop(new Loop(std::move(dht), simultaneous_announcements))
 {
     _loop->start();
 }
