@@ -4,3 +4,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       unzip \
     && rm -rf /var/lib/apt/lists/*
 ENV UNZIPOPT=-q
+WORKDIR /usr/local/src
+ENTRYPOINT ["/bin/bash"]
