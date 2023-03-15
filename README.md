@@ -1,4 +1,4 @@
-[![Ouinet Test](https://github.com/equalitie/ouinet/actions/workflows/test.yml/badge.svg)](https://github.com/equalitie/ouinet/actions/workflows/test.yml) [![pipeline status](https://gitlab.com/equalitie/ouinet/badges/master/pipeline.svg)](https://gitlab.com/equalitie/ouinet/commits/master)
+[![pipeline status](https://gitlab.com/equalitie/ouinet/badges/master/pipeline.svg)](https://gitlab.com/equalitie/ouinet/commits/master)
 
 
 # Ouinet
