@@ -59,11 +59,11 @@ packages for Ouinet on the desktop.
 
 Ouinet uses Git submodules, thus to properly clone it, use:
 
-    $ git clone --recursive https://github.com/equalitie/ouinet.git
+    $ git clone --recursive https://gitlab.com/equalitie/ouinet.git
 
 You can also clone and update the modules separately:
 
-    $ git clone https://github.com/equalitie/ouinet.git
+    $ git clone https://gitlab.com/equalitie/ouinet.git
     $ cd ouinet
     $ git submodule update --init --recursive
 
@@ -242,7 +242,7 @@ After a while you will get the `equalitie/ouinet:latest` image.  Then you may
 want to run `sudo docker prune` to free up the space taken by temporary
 builder images (which may amount to a couple of GiB).
 
-[Dockerfile]: https://raw.githubusercontent.com/equalitie/ouinet/master/Dockerfile
+[Dockerfile]: https://gitlab.com/equalitie/ouinet/-/raw/master/Dockerfile
 
 #### Debugging-enabled image
 
@@ -308,7 +308,7 @@ follow the instructions in `docker-compose.yml`.
 
 Finally, restart the client container.
 
-[docker-compose.yml]: https://raw.githubusercontent.com/equalitie/ouinet/master/docker-compose.yml
+[docker-compose.yml]: https://gitlab.com/equalitie/ouinet/-/raw/master/docker-compose.yml
 
 ### Using the shell container
 
@@ -575,7 +575,7 @@ choose the `manifest.json` file in the Extension's source tree.  Back to the
 *Add-ons* page, remember to click on *CENO Extension* and allow *Run in
 Private Windows* under *Details*.
 
-[CENO Extension]: https://github.com/censorship-no/ceno-ext-settings/
+[CENO Extension]: https://gitlab.com/censorship-no/ceno-ext-settings/
 
 After visiting a page with the Origin mechanism disabled and Injector
 mechanism enabled, and waiting for a short while, you should be able to
@@ -618,7 +618,7 @@ If you are a content provider in possession of your own signing key, please
 check the [ouinet-inject][] tool, which allows you to create a static cache
 from a variety of sources.
 
-[ouinet-inject]: https://github.com/equalitie/ouinet-inject
+[ouinet-inject]: https://gitlab.com/equalitie/ouinet-inject
 
 ## Android library and demo client
 
@@ -879,4 +879,4 @@ permission (Ouinet will not attempt to write to that directory).
 
 You can find additional information and samples of Android applications using
 Ouinet in the following repository:
-[equalitie/ouinet-examples](https://github.com/equalitie/ouinet-examples).
+[equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).

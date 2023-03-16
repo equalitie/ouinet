@@ -15,7 +15,7 @@ BUILDDIR="${DIR}"/ouinet-git-build
 
 if [[ ! -e ${SOURCEDIR}/CMakeLists.txt ]]; then
 	rm -rf "${SOURCEDIR}"
-	git clone https://github.com/equalitie/ouinet.git "${SOURCEDIR}"
+	git clone https://gitlab.com/equalitie/ouinet.git "${SOURCEDIR}"
 	cd "${SOURCEDIR}"
 	git checkout "${BRANCH}"
 else

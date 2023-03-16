@@ -32,11 +32,11 @@ afterEvaluate {
                 pom {
                     name = PUBLISH_ARTIFACT_ID
                     description = 'Library to enable decentralized web requests'
-                    url = 'https://github.com/equalitie/ouinet'
+                    url = 'https://gitlab.com/equalitie/ouinet'
                     licenses {
                         license {
                             name = 'MIT License'
-                            url = 'https://github.com/equalitie/ouinet/blob/master/LICENSE'
+                            url = 'https://gitlab.com/equalitie/ouinet/blob/master/LICENSE'
                         }
                     }
                     developers {
@@ -47,9 +47,9 @@ afterEvaluate {
                     }
 
                     scm {
-                        connection = 'scm:git:github.com/equalitie/ouinet.git'
-                        developerConnection = 'scm:git:ssh://github.com/equalitie/ouinet.git'
-                        url = 'https://github.com/equalitie/ouinet/tree/master'
+                        connection = 'scm:git:gitlab.com/equalitie/ouinet.git'
+                        developerConnection = 'scm:git:ssh://gitlab.com/equalitie/ouinet.git'
+                        url = 'https://gitlab.com/equalitie/ouinet/tree/master'
                     }
                 }
             }

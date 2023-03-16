@@ -32,7 +32,7 @@ FROM base as builder
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
 ARG OUINET_VERSION=v0.21.8
-RUN git clone --recursive -b "$OUINET_VERSION" https://github.com/equalitie/ouinet.git
+RUN git clone --recursive -b "$OUINET_VERSION" https://gitlab.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 # The C.UTF-8 locale (which is always available in Debian)
 # is needed to allow CMake to extract files in the Go language binary distribution
