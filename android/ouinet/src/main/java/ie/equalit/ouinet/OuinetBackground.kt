@@ -102,7 +102,6 @@ class OuinetBackground() : NotificationListener {
         onConfirmTapped: (() -> Unit)?
     ) : this() {
         this.context = context
-        this.activity = context as AppCompatActivity
         this.ouinetConfig = ouinetConfig
         this.connectivityReceiverEnabled = connectivityReceiverEnabled
         this.notificationConfig = notificationConfig
@@ -225,7 +224,6 @@ class OuinetBackground() : NotificationListener {
     }
 
     fun shutdown(doClear : Boolean) {
-        activity.moveTaskToBack(true)
         if (!notificationConfig.disableStatus)
             stopUpdatingState()
         unregister()
