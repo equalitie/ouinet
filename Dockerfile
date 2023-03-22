@@ -1,4 +1,4 @@
-FROM debian:buster AS base
+FROM debian:bullseye AS base
 ENV LANG=C.UTF-8
 # To get the list of build dependency packages from the Vagrantfile, run:
 #
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     libtool \
     ninja-build \
     pkg-config \
-    python-twisted \
+    python3-twisted \
     rsync \
     texinfo \
     unzip \
@@ -58,7 +58,7 @@ RUN cd /usr/local/src/ouinet \
 # Populate the licenses directory (avoid version numbers in source paths).
 RUN /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
-FROM debian:buster
+FROM debian:bullseye
 # To get the list of system library packages to install,
 # enter the build directory and execute:
 #
@@ -84,7 +84,7 @@ RUN apt-get update && apt-get install -y \
     wget \
  && rm -rf /var/lib/apt/lists/*
 # Fetch and install i2pd.
-ARG I2PD_VERSION=2.23.0
+ARG I2PD_VERSION=2.36.0
 RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_VERSION}/i2pd_${I2PD_VERSION}-1$(lsb_release -sc)1_$(dpkg --print-architecture).deb" \
  && apt-get update && apt-get install -y \
     cron \
