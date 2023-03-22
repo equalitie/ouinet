@@ -114,6 +114,7 @@ class OuinetBackground() : NotificationListener {
 
     private var mOuinet: Ouinet? = null
     private val mHandler = Handler(Looper.myLooper()!!)
+    private var mCurrentState : String = OuinetNotification.DEFAULT_STATE
 
     private fun startOuinet() {
         mOuinet = Ouinet(context, ouinetConfig)
@@ -164,14 +165,18 @@ class OuinetBackground() : NotificationListener {
             context,
             OuinetNotification.UPDATE_CODE,
             notificationConfig,
-            getState()
+            mCurrentState
         ).send()
     }
 
     private var updateOuinetState: Runnable = object : Runnable {
         override fun run() {
             try {
-                sendOuinetStatePendingIntent()
+                val newState = getState()
+                if (newState != mCurrentState) {
+                    mCurrentState = newState
+                    sendOuinetStatePendingIntent()
+                }
             } finally {
                 mHandler.postDelayed(
                     this,
