@@ -58,7 +58,7 @@ class OuinetBackground() : NotificationListener {
         }
 
         fun setOnConfirmTappedListener(
-            onConfirmTapped: (() -> Unit)
+            onConfirmTapped: () -> Unit
         ) : Builder {
             this.onConfirmTapped = onConfirmTapped
             return this
@@ -123,15 +123,16 @@ class OuinetBackground() : NotificationListener {
         }).start()
     }
 
-    private fun stopOuinet() {
-        val thread = Thread(Runnable {
+    private fun stopOuinet(
+        callback : (() -> Unit )? = null
+    ) {
+        Thread(Runnable {
             if (mOuinet == null) return@Runnable
             val ouinet: Ouinet = mOuinet as Ouinet
             mOuinet = null
             ouinet.stop()
-        })
-        thread.start()
-        thread.join(10000 /* ms */) // average stop takes 5 seconds
+            callback?.invoke()
+        }).start()
     }
 
     private fun register() {
@@ -145,11 +146,9 @@ class OuinetBackground() : NotificationListener {
         }
         val notificationIntentFilter = IntentFilter()
         notificationIntentFilter.addAction(NotificationBroadcastReceiver.NOTIFICATION_ACTION)
-        //val notificationReceiverFlags = ContextCompat.RECEIVER_NOT_EXPORTED
         context.registerReceiver(
             notificationReceiver,
             notificationIntentFilter)
-            //notificationReceiverFlags)
     }
 
     private fun unregister() {
@@ -202,11 +201,13 @@ class OuinetBackground() : NotificationListener {
     }
 
     @Synchronized
-    fun stop() {
+    fun stop(
+        callback : (() -> Unit)? = null
+    ) {
         Intent(context, OuinetService::class.java).also {
             context.stopService(it)
         }
-        stopOuinet()
+        stopOuinet(callback)
     }
 
     fun startup() {
@@ -223,16 +224,19 @@ class OuinetBackground() : NotificationListener {
             OuinetNotification.DEFAULT_STATE
     }
 
-    fun shutdown(doClear : Boolean) {
+    fun shutdown(
+        doClear : Boolean
+    ) {
         if (!notificationConfig.disableStatus)
             stopUpdatingState()
         unregister()
-        stop()
-        if (doClear) {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            am.clearApplicationUserData()
+        stop {
+            if (doClear) {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                am.clearApplicationUserData()
+            }
+            exitProcess(0)
         }
-        exitProcess(0)
     }
 
     override fun onNotificationTapped() {

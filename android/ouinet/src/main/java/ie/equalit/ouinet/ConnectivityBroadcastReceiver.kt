@@ -26,14 +26,15 @@ class ConnectivityBroadcastReceiver (
     private fun restartOnConnectivityChange (state : NetworkInfo.State) {
         if (state == NetworkInfo.State.CONNECTED || state == NetworkInfo.State.DISCONNECTED) {
             Log.d(TAG, "Stopping OuinetService on connectivity change")
-            background?.stop()
-            // TODO: Insert a pause / check client state.
-            try {
-                Log.d(TAG, "Starting OuinetService on connectivity change")
-                background?.start()
-            } catch (ex: Exception) {
-                // TODO: if the start fails, we should try restarting the service later
-                Log.w(TAG, "startOuinetService failed with exception: $ex")
+            background?.stop {
+                // TODO: Insert a pause / check client state.
+                try {
+                    Log.d(TAG, "Starting OuinetService on connectivity change")
+                    background?.start()
+                } catch (ex: Exception) {
+                    // TODO: if the start fails, we should try restarting the service later
+                    Log.w(TAG, "startOuinetService failed with exception: $ex")
+                }
             }
         }
     }
