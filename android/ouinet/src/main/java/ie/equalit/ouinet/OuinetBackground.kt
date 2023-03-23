@@ -115,24 +115,31 @@ class OuinetBackground() : NotificationListener {
     private val mHandler = Handler(Looper.myLooper()!!)
     private var mCurrentState : String = OuinetNotification.DEFAULT_STATE
 
-    private fun startOuinet() {
+    private fun startOuinet(
+        callback : (() -> Unit )? = null
+    ) : Thread {
         mOuinet = Ouinet(context, ouinetConfig)
-        Thread(Runnable {
+        val thread = Thread(Runnable {
             if (mOuinet == null) return@Runnable
             mOuinet!!.start()
-        }).start()
+            callback?.invoke()
+        })
+        thread.start()
+        return thread
     }
 
     private fun stopOuinet(
         callback : (() -> Unit )? = null
-    ) {
-        Thread(Runnable {
+    ) : Thread {
+        val thread = Thread(Runnable {
             if (mOuinet == null) return@Runnable
             val ouinet: Ouinet = mOuinet as Ouinet
             mOuinet = null
             ouinet.stop()
             callback?.invoke()
-        }).start()
+        })
+        thread.start()
+        return thread
     }
 
     private fun register() {
@@ -192,50 +199,60 @@ class OuinetBackground() : NotificationListener {
     }
 
     @Synchronized
-    fun start() {
-        startOuinet()
+    fun start(
+        callback : (() -> Unit)? = null
+    ) : Thread {
         Intent(context, OuinetService::class.java).also {
             it.putExtra(OuinetNotification.CONFIG_EXTRA, notificationConfig)
             context.startService(it)
         }
+        return startOuinet(callback)
     }
 
     @Synchronized
     fun stop(
         callback : (() -> Unit)? = null
-    ) {
+    ) : Thread {
         Intent(context, OuinetService::class.java).also {
             context.stopService(it)
         }
-        stopOuinet(callback)
+        return stopOuinet(callback)
     }
 
-    fun startup() {
+    fun startup(
+        callback : (() -> Unit)? = null
+    ) : Thread {
         register()
         if (!notificationConfig.disableStatus)
             startUpdatingState()
-        start()
+        return start(callback)
     }
 
     fun getState() : String {
         return if (mOuinet != null)
-            mOuinet!!.state.toString()
+            mOuinet!!.getState().toString()
         else
             OuinetNotification.DEFAULT_STATE
     }
 
     fun shutdown(
-        doClear : Boolean
-    ) {
+        doClear : Boolean,
+        callback : (() -> Unit)? = null
+    ) : Thread {
         if (!notificationConfig.disableStatus)
             stopUpdatingState()
         unregister()
-        stop {
-            if (doClear) {
-                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                am.clearApplicationUserData()
+        return stop {
+            if (callback != null) {
+                callback.invoke()
             }
-            exitProcess(0)
+            else {
+                if (doClear) {
+                    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    am.clearApplicationUserData()
+                }
+                exitProcess(0)
+            }
         }
     }
 
