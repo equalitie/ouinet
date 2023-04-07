@@ -168,7 +168,7 @@ public class Ouinet {
 
         nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));
 
-        registerBroadcastReceivers();
+        //registerBroadcastReceivers();
     }
 
     // If this succeeds, we should be able to do UDP multicasts
@@ -200,6 +200,7 @@ public class Ouinet {
         if (lock != null && lock.isHeld()) {
             lock.release();
         }
+        /*
         if (wifiChangeReceiver != null) {
             context.unregisterReceiver(wifiChangeReceiver);
             wifiChangeReceiver = null;
@@ -208,6 +209,7 @@ public class Ouinet {
             context.unregisterReceiver(chargingChangeReceiver);
             chargingChangeReceiver = null;
         }
+        */
     }
 
     private void registerBroadcastReceivers() {

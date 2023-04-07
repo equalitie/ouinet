@@ -222,10 +222,11 @@ class OuinetBackground() : NotificationListener {
     fun startup(
         callback : (() -> Unit)? = null
     ) : Thread {
+        val thread = start(callback)
         register()
         if (!notificationConfig.disableStatus)
             startUpdatingState()
-        return start(callback)
+        return thread
     }
 
     fun getState() : String {
