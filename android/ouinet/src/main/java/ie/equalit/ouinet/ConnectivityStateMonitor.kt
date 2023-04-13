@@ -22,6 +22,7 @@ class ConnectivityStateMonitor (
     private val mHandler = Handler(Looper.myLooper()!!)
     private var isStarted : Boolean = false
     private var startupTimeout : Int = 0
+    private var availableNetworks : MutableList<Network> = mutableListOf()
     val networkRequest: NetworkRequest
 
     init {
@@ -69,6 +70,8 @@ class ConnectivityStateMonitor (
     }
 
     override fun onAvailable(network: Network) {
+        availableNetworks.add(network)
+        Log.d(TAG,"Network available: $network, currently available networks: $availableNetworks");
         if (isStarted) {
             Log.d(TAG, "Network state changed, restart ouinet")
             background.restartOuinet()
@@ -76,6 +79,15 @@ class ConnectivityStateMonitor (
         else {
             Log.d(TAG, "Network available for first time, setting isStarted flag")
             isStarted = true
+        }
+    }
+
+    override fun onLost(network: Network) {
+        availableNetworks.remove(network)
+        Log.d(TAG,"Network lost: $network, remaining available networks: $availableNetworks");
+        if (availableNetworks.isEmpty()) {
+            Log.d(TAG,"No networks available, stop ouinet")
+            background.stopOuinet()
         }
     }
 

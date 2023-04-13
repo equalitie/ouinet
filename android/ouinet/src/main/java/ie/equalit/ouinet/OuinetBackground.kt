@@ -115,15 +115,19 @@ class OuinetBackground() : NotificationListener {
     private var mOuinet: Ouinet? = null
     private val mHandler = Handler(Looper.myLooper()!!)
     private var mCurrentState : String = OuinetNotification.DEFAULT_STATE
+    private var stopThread : Thread? = null
+    var isStopped : Boolean = false
 
     @Synchronized
-    private fun startOuinet(
+    fun startOuinet(
         callback : (() -> Unit )? = null
     ) : Thread {
         mOuinet = Ouinet(context, ouinetConfig)
         val thread = Thread(Runnable {
             if (mOuinet == null) return@Runnable
             mOuinet!!.start()
+            isStopped = false
+            stopThread = null
             callback?.invoke()
         })
         thread.start()
@@ -131,36 +135,40 @@ class OuinetBackground() : NotificationListener {
     }
 
     @Synchronized
-    private fun stopOuinet(
+    fun stopOuinet(
         callback : (() -> Unit )? = null
     ) : Thread {
-        val thread = Thread(Runnable {
-            if (mOuinet == null) return@Runnable
-            val ouinet: Ouinet = mOuinet as Ouinet
-            mOuinet = null
-            ouinet.stop()
-            callback?.invoke()
-        })
-        thread.start()
+        var thread = Thread()
+        if (stopThread == null) {
+            thread = Thread(Runnable {
+                if (mOuinet == null) return@Runnable
+                val ouinet: Ouinet = mOuinet as Ouinet
+                mOuinet = null
+                ouinet.stop()
+                isStopped = true
+                callback?.invoke()
+            })
+            stopThread = thread
+            thread.start()
+        }
         return thread
     }
 
     fun restartOuinet() : Thread {
-        val thread = Thread(Runnable {
-            try {
-                Log.d(TAG, "Stopping Ouinet for restart")
+        val thread = Thread( Runnable {
+            Log.d(TAG, "Stopping Ouinet for restart")
+            if (stopThread != null) {
+                if (!isStopped) {
+                    Log.d(TAG,"Ouinet stop already called, join thread until finishes or times out")
+                    stopThread!!.join(10 * MILLISECOND)
+                }
+            }
+            else {
+                Log.d(TAG,"Call Ouinet stop and then restart")
                 stopOuinet().join(10 * MILLISECOND)
-            } catch (ex: Exception) {
-                Log.w(TAG, "stopOuinet failed with exception: $ex")
             }
-            // TODO: Insert a pause / check client state.
-            try {
-                Log.d(TAG, "Starting Ouinet for restart")
-                startOuinet()
-            } catch (ex: Exception) {
-                // TODO: if the start fails, we should try restarting the service later
-                Log.w(TAG, "startOuinet failed with exception: $ex")
-            }
+            Log.d(TAG, "Starting Ouinet for restart")
+            startOuinet()
         })
         thread.start()
         return thread
