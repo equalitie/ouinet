@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import ie.equalit.ouinet.Config
 import ie.equalit.ouinet.Ouinet
+import ie.equalit.ouinet.OuinetNotification.Companion.MILLISECOND
 import kotlin.system.exitProcess
 
 class OuinetBackground() : NotificationListener {
@@ -23,7 +24,7 @@ class OuinetBackground() : NotificationListener {
         private lateinit var notificationConfig: NotificationConfig
         private var onNotificationTapped : (() -> Unit)? = null
         private var onConfirmTapped : (() -> Unit)? = null
-        private var connectivityReceiverEnabled : Boolean = true
+        private var connectivityMonitorEnabled : Boolean = true
 
         init {
             this.context = context
@@ -46,7 +47,7 @@ class OuinetBackground() : NotificationListener {
         fun restartOnConnectivityChange(
             enabled : Boolean
         ) : Builder {
-            this.connectivityReceiverEnabled = enabled
+            this.connectivityMonitorEnabled = enabled
             return this
         }
 
@@ -67,7 +68,7 @@ class OuinetBackground() : NotificationListener {
         fun build() = OuinetBackground(
             context,
             ouinetConfig,
-            connectivityReceiverEnabled,
+            connectivityMonitorEnabled,
             notificationConfig,
             onNotificationTapped,
             onConfirmTapped,
@@ -82,13 +83,13 @@ class OuinetBackground() : NotificationListener {
         private set
     lateinit var notificationConfig: NotificationConfig
         private set
-    var connectivityReceiverEnabled: Boolean = true
+    var connectivityMonitorEnabled: Boolean = true
         private set
     var onNotificationTapped: (() -> Unit)? = null
         private set
     var onConfirmTapped: (() -> Unit)? = null
         private set
-    lateinit var connectivityReceiver: ConnectivityBroadcastReceiver
+    lateinit var connectivityMonitor: ConnectivityStateMonitor
         private set
     lateinit var notificationReceiver: NotificationBroadcastReceiver
         private set
@@ -96,61 +97,86 @@ class OuinetBackground() : NotificationListener {
     private constructor(
         context: Context,
         ouinetConfig : Config,
-        connectivityReceiverEnabled : Boolean,
+        connectivityMonitorEnabled : Boolean,
         notificationConfig: NotificationConfig,
         onNotificationTapped: (() -> Unit)?,
         onConfirmTapped: (() -> Unit)?
     ) : this() {
         this.context = context
         this.ouinetConfig = ouinetConfig
-        this.connectivityReceiverEnabled = connectivityReceiverEnabled
+        this.connectivityMonitorEnabled = connectivityMonitorEnabled
         this.notificationConfig = notificationConfig
         this.onNotificationTapped = onNotificationTapped
         this.onConfirmTapped = onConfirmTapped
-        this.connectivityReceiver = ConnectivityBroadcastReceiver(this)
+        this.connectivityMonitor = ConnectivityStateMonitor(context, this)
         this.notificationReceiver = NotificationBroadcastReceiver(this)
     }
 
     private var mOuinet: Ouinet? = null
     private val mHandler = Handler(Looper.myLooper()!!)
     private var mCurrentState : String = OuinetNotification.DEFAULT_STATE
+    private var stopThread : Thread? = null
+    var isStopped : Boolean = false
 
-    private fun startOuinet(
+    @Synchronized
+    fun startOuinet(
         callback : (() -> Unit )? = null
     ) : Thread {
         mOuinet = Ouinet(context, ouinetConfig)
         val thread = Thread(Runnable {
             if (mOuinet == null) return@Runnable
             mOuinet!!.start()
+            isStopped = false
+            stopThread = null
             callback?.invoke()
         })
         thread.start()
         return thread
     }
 
-    private fun stopOuinet(
+    @Synchronized
+    fun stopOuinet(
         callback : (() -> Unit )? = null
     ) : Thread {
-        val thread = Thread(Runnable {
-            if (mOuinet == null) return@Runnable
-            val ouinet: Ouinet = mOuinet as Ouinet
-            mOuinet = null
-            ouinet.stop()
-            callback?.invoke()
+        var thread = Thread()
+        if (stopThread == null) {
+            thread = Thread(Runnable {
+                if (mOuinet == null) return@Runnable
+                val ouinet: Ouinet = mOuinet as Ouinet
+                mOuinet = null
+                ouinet.stop()
+                isStopped = true
+                callback?.invoke()
+            })
+            stopThread = thread
+            thread.start()
+        }
+        return thread
+    }
+
+    fun restartOuinet() : Thread {
+        val thread = Thread( Runnable {
+            Log.d(TAG, "Stopping Ouinet for restart")
+            if (stopThread != null) {
+                if (!isStopped) {
+                    Log.d(TAG,"Ouinet stop already called, join thread until finishes or times out")
+                    stopThread!!.join(10 * MILLISECOND)
+                }
+            }
+            else {
+                Log.d(TAG,"Call Ouinet stop and then restart")
+                stopOuinet().join(10 * MILLISECOND)
+            }
+            Log.d(TAG, "Starting Ouinet for restart")
+            startOuinet()
         })
         thread.start()
         return thread
     }
 
     private fun register() {
-        if (connectivityReceiverEnabled) {
-            val connectivityIntentFilter = IntentFilter()
-            connectivityIntentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION)
-            context.registerReceiver(
-                connectivityReceiver,
-                connectivityIntentFilter
-            )
-        }
+        if (connectivityMonitorEnabled)
+            connectivityMonitor.enable()
         val notificationIntentFilter = IntentFilter()
         notificationIntentFilter.addAction(NotificationBroadcastReceiver.NOTIFICATION_ACTION)
         context.registerReceiver(
@@ -159,9 +185,8 @@ class OuinetBackground() : NotificationListener {
     }
 
     private fun unregister() {
-        if (connectivityReceiverEnabled) {
-            context.unregisterReceiver(connectivityReceiver)
-        }
+        if (connectivityMonitorEnabled)
+            connectivityMonitor.disable()
         context.unregisterReceiver(notificationReceiver)
     }
 
@@ -222,10 +247,11 @@ class OuinetBackground() : NotificationListener {
     fun startup(
         callback : (() -> Unit)? = null
     ) : Thread {
+        val thread = start(callback)
         register()
         if (!notificationConfig.disableStatus)
             startUpdatingState()
-        return start(callback)
+        return thread
     }
 
     fun getState() : String {

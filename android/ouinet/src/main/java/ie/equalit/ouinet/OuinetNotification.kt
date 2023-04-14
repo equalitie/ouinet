@@ -110,7 +110,7 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
 
     companion object {
         private const val TAG = "OuinetNotification"
-        private const val MILLISECOND : Long = 1000
+        const val MILLISECOND : Long = 1000
         const val CONFIG_EXTRA = "notification-config"
         const val STATE_EXTRA = "state-extra"
         const val CODE_EXTRA = "code-extra"
