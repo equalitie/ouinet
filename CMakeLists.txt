@@ -28,6 +28,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 endif()
 add_compile_options("-Wall")
 
+add_compile_options("-O1")
+#add_compile_options("-Wa,-mbig-obj")
+
 
 ################################################################################
 project(ouinet)
