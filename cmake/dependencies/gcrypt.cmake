@@ -66,6 +66,13 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     # value is right for android systems.
     set(UNDERSCORE_CONFIG "ac_cv_sys_symbol_underscore=no")
     set(VERSIONED_LIBRARIES 0)
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    # TODO: Should probably support non-android cross compilation here.
+    set(GCRYPT_CC ${CMAKE_C_COMPILER})
+    set(PATCH_COMMAND "true")
+    set(HOST_CONFIG "")
+    set(UNDERSCORE_CONFIG "")
+    set(VERSIONED_LIBRARIES 0)
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
