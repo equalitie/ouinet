@@ -1,9 +1,18 @@
 include(ExternalProject)
 
 set(GOROOT "${CMAKE_BINARY_DIR}/golang")
+
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+    set(GO_VERSION "1.20.5.darwin-arm64")
+    set(GO_MD5SUM "5d9b81ef1df799c5ed3a6e7c4eb30307")
+else()
+    set(GO_VERSION "1.12.3.linux-amd64")
+    set(GO_MD5SUM "eac797050ce084d444a49e8d68ad13b7")
+endif()
+
 externalproject_add(golang
-    URL https://dl.google.com/go/go1.12.3.linux-amd64.tar.gz
-    URL_MD5 eac797050ce084d444a49e8d68ad13b7
+    URL https://dl.google.com/go/go${GO_VERSION}.tar.gz
+    URL_MD5 ${GO_M5DSUM}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND ""
@@ -26,6 +35,10 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     endif()
     set(GO_CC ${COMPILER_DIR}/${COMPILER_HOSTTRIPLE}${ANDROID_PLATFORM_LEVEL}-clang)
     set(GO_CXX ${COMPILER_DIR}/${COMPILER_HOSTTRIPLE}${ANDROID_PLATFORM_LEVEL}-clang++)
+elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+    set(GOOS "darwin")
+    set(GO_CC ${CMAKE_C_COMPILER})
+    set(GO_CXX ${CMAKE_CXX_COMPILER})
 else()
     message(FATAL_ERROR "unsupported system name ${CMAKE_SYSTEM_NAME}")
 endif()
@@ -40,6 +53,8 @@ elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
 elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
     set(GOARCH "arm")
     set(GOARM "7")
+elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "arm64")
+    set(GOARCH "arm64")
 else()
     message(FATAL_ERROR "unsupported system processor ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
