@@ -3,6 +3,7 @@
 #include <boost/optional.hpp>
 #include <boost/utility/string_view.hpp>
 #include <array>
+#include <stdint.h>
 
 /*
  * Forward declarations for opaque libgcrypt data structures.
