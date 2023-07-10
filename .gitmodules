@@ -1,7 +1,6 @@
 [submodule "src/ouiservice/i2p/i2pd"]
 	path = src/ouiservice/i2p/i2pd
 	url = https://gitlab.com/equalitie/i2pd.git
-	branch = openssl
 [submodule "modules/asio-utp"]
 	path = modules/asio-utp
 	url = https://gitlab.com/equalitie/asio-utp.git
