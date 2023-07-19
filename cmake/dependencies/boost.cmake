@@ -15,6 +15,7 @@ string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
 set(BOOST_PATCHES
     ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
+    ${CMAKE_CURRENT_LIST_DIR}/inline-boost/thread-pthread-stack-min-def-${BOOST_VERSION_FILENAME}.patch
 )
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
