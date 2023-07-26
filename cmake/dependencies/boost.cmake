@@ -17,6 +17,23 @@ set(BOOST_PATCHES
     ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
 )
 
+
+set(ZLIBROOT "${CMAKE_BINARY_DIR}/zlib/src")
+
+set(ZLIB_BUILD_DIRECTORY
+    ${CMAKE_CURRENT_BINARY_DIR}/zlib/out
+)
+
+externalproject_add(zlib
+    URL https://github.com/madler/zlib/archive/refs/tags/v1.2.11.tar.gz
+    URL_MD5 0095d2d2d1f3442ce1318336637b695f
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    PREFIX zlib
+)
+
+set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
@@ -56,6 +73,31 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++14")
+    set(BOOST_ARCH_CONFIGURATION
+        cxxflags=${BOOST_CXXFLAGS}
+    )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-ios-${BOOST_VERSION_FILENAME}.patch)
+    set(CONFIG_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++14")
+    set(BOOST_ENVIRONMENT
+        export
+            ZLIB_SOURCE=${ZLIBROOT}/zlib
+        &&
+    )
+    set(BOOST_ARCH_CONFIGURATION
+        --stagedir=iphone-build/stage
+        --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-ios.jam
+        toolset=darwin-ios
+        cxxflags=${BOOST_CXXFLAGS}
+        architecture=arm
+        abi=aapcs
+        target-os=iphone
+        address-model=64
+        macosx-version=iphone-16.4
+    )
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
@@ -92,13 +134,12 @@ foreach (patch ${BOOST_PATCHES})
 endforeach()
 
 externalproject_add(built_boost
+    DEPENDS zlib
     URL "https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee
     PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
-    CONFIGURE_COMMAND
-           cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-        && ./bootstrap.sh
+    CONFIGURE_COMMAND ${CONFIG_COMMAND}
     BUILD_COMMAND
            cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
         && ${BOOST_ENVIRONMENT} ./b2
