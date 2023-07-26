@@ -60,6 +60,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(PATCH_COMMAND
         cp ${GPG_ERROR_CONFIG} ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.linux-android.h
     )
+    set(GCRYPT_PATCH_COMMAND "false")
     set(HOST_CONFIG "--host=${COMPILER_HOSTTRIPLE}")
     # For cross builds, gcrypt guesses an important toolchain characteristic
     # that it can't test for. Unfortunately, this guess is often wrong. This
@@ -67,16 +68,38 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(UNDERSCORE_CONFIG "ac_cv_sys_symbol_underscore=no")
     set(VERSIONED_LIBRARIES 0)
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
     set(PATCH_COMMAND "true")
+    set(GCRYPT_PATCH_COMMAND "false")
     set(HOST_CONFIG "")
+    set(UNDERSCORE_CONFIG "")
+    set(VERSIONED_LIBRARIES 0)
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    set(GCRYPT_CC ${CMAKE_C_COMPILER})
+    set(PATCH_COMMAND "true")
+    # These patches force build-time executables to be copied from $MACOS_BUILD_ROOT
+    set(GPG_ERROR_PATCHES ${GPG_ERROR_PATCHES}
+        ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-ios-1_32.patch
+    )
+    set(GCRYPT_PATCH_COMMAND "true")
+    set(GCRYPT_PATCHES ${GCRYPT_PATCHES}
+        ${CMAKE_CURRENT_LIST_DIR}/inline-gcrypt/libgcrypt-ios-1_9_3.patch
+    )
+    set(CONFIG_ENVIRONMENT
+        export MACOS_BUILD_ROOT=${MACOS_BUILD_ROOT}
+        &&
+    )
+    set(HOST_CONFIG
+        --host=arm-apple-darwin
+        ac_cv_func_getentropy=no
+    )
     set(UNDERSCORE_CONFIG "")
     set(VERSIONED_LIBRARIES 0)
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
     set(PATCH_COMMAND "true")
+    set(GCRYPT_PATCH_COMMAND "false")
     set(HOST_CONFIG "")
     set(UNDERSCORE_CONFIG "")
     set(VERSIONED_LIBRARIES 1)
@@ -89,6 +112,12 @@ foreach (patch ${GPG_ERROR_PATCHES})
     set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
 endforeach()
 
+set(GCRYPT_PATCH_COMMAND
+    ${GCRYPT_PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt
+)
+foreach (patch ${GCRYPT_PATCHES})
+    set(GCRYPT_PATCH_COMMAND ${GCRYPT_PATCH_COMMAND} && patch -p1 -i ${patch})
+endforeach()
 
 
 if (CMAKE_LIBRARY_OUTPUT_DIRECTORY)
@@ -161,6 +190,7 @@ externalproject_add(gpg_error
     PATCH_COMMAND
         "${PATCH_COMMAND}"
     CONFIGURE_COMMAND
+        ${CONFIG_ENVIRONMENT}
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
@@ -175,9 +205,12 @@ externalproject_add(gpg_error
 
 externalproject_add(gcrypt
     DEPENDS gpg_error
-    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
-    URL_MD5 3139c2402e844985a67fb288a930534d
+    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.9.3.tar.bz2
+    URL_MD5 3fcb490b9b7347344708eeb7b4a95464
+    PATCH_COMMAND
+        "${GCRYPT_PATCH_COMMAND}"
     CONFIGURE_COMMAND
+        ${CONFIG_ENVIRONMENT}
         CC=${GCRYPT_CC}
         ${UNDERSCORE_CONFIG}
             ./configure ${HOST_CONFIG}

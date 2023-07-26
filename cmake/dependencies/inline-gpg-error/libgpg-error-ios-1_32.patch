@@ -1,0 +1,126 @@
+diff -Nur libgpg-error-1.32.orig/Makefile.in libgpg-error-1.32/Makefile.in
+--- libgpg-error-1.32.orig/Makefile.in	2023-07-14 12:16:54
++++ libgpg-error-1.32/Makefile.in	2023-07-14 14:52:59
+@@ -302,6 +302,7 @@
+ LTLIBMULTITHREAD = @LTLIBMULTITHREAD@
+ LTLIBOBJS = @LTLIBOBJS@
+ LTLIBTHREAD = @LTLIBTHREAD@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+diff -Nur libgpg-error-1.32.orig/configure libgpg-error-1.32/configure
+--- libgpg-error-1.32.orig/configure	2023-07-14 12:16:54
++++ libgpg-error-1.32/configure	2023-07-14 13:45:55
+@@ -694,6 +694,7 @@
+ USE_NLS
+ EXEEXT_FOR_BUILD
+ CC_FOR_BUILD
++MACOS_BUILD_ROOT
+ RC
+ OTOOL64
+ OTOOL
+@@ -12940,7 +12941,9 @@
+ CC=$lt_save_CC
+ CFLAGS=$lt_save_CFLAGS
+ 
+-
++#if test -z "$MACOS_BUILD_ROOT"; then
++MACOS_BUILD_ROOT=$MACOS_BUILD_ROOT
++#fi
+ 
+ # We need to compile and run a program on the build machine.
+ # Put a plausible default for CC_FOR_BUILD in Makefile.
+diff -Nur libgpg-error-1.32.orig/configure.ac libgpg-error-1.32/configure.ac
+--- libgpg-error-1.32.orig/configure.ac	2023-07-14 12:16:54
++++ libgpg-error-1.32/configure.ac	2023-07-14 13:42:12
+@@ -127,6 +127,7 @@
+ 
+ # We need to compile and run a program on the build machine.
+ AX_CC_FOR_BUILD
++AX_MACOS_BUILD_ROOT
+ 
+ AH_BOTTOM([
+ /* Force using of NLS for W32 even if no libintl has been found.  This is
+diff -Nur libgpg-error-1.32.orig/doc/Makefile.am libgpg-error-1.32/doc/Makefile.am
+--- libgpg-error-1.32.orig/doc/Makefile.am	2023-07-14 12:16:54
++++ libgpg-error-1.32/doc/Makefile.am	2023-07-14 14:59:04
+@@ -43,7 +43,7 @@
+ CLEANFILES += yat2m-for-build$(EXEEXT_FOR_BUILD)
+ 
+ yat2m-for-build$(EXEEXT_FOR_BUILD): yat2m.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) -o $@ $(srcdir)/yat2m.c
++	@cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/doc/yat2m-for-build $(srcdir)/yat2m-for-build
+ else
+ YAT2M_CMD = ./yat2m$(EXEEXT)
+ YAT2M_DEP = yat2m$(EXEEXT)
+diff -Nur libgpg-error-1.32.orig/doc/Makefile.in libgpg-error-1.32/doc/Makefile.in
+--- libgpg-error-1.32.orig/doc/Makefile.in	2023-07-14 12:16:54
++++ libgpg-error-1.32/doc/Makefile.in	2023-07-14 15:05:22
+@@ -338,6 +338,7 @@
+ LTLIBMULTITHREAD = @LTLIBMULTITHREAD@
+ LTLIBOBJS = @LTLIBOBJS@
+ LTLIBTHREAD = @LTLIBTHREAD@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+@@ -1095,7 +1096,7 @@
+ 
+ 
+ @CROSS_COMPILING_TRUE@yat2m-for-build$(EXEEXT_FOR_BUILD): yat2m.c
+-@CROSS_COMPILING_TRUE@	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) -o $@ $(srcdir)/yat2m.c
++@CROSS_COMPILING_TRUE@	@cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/doc/yat2m $(srcdir)/yat2m-for-build
+ 
+ yat2m-stamp: $(myman_sources) $(srcdir)/version.texi
+ 	@rm -f yat2m-stamp.tmp
+diff -Nur libgpg-error-1.32.orig/src/Makefile.am libgpg-error-1.32/src/Makefile.am
+--- libgpg-error-1.32.orig/src/Makefile.am	2023-07-14 12:16:54
++++ libgpg-error-1.32/src/Makefile.am	2023-07-14 13:51:16
+@@ -267,7 +267,7 @@
+ # It is correct to use $(CC_FOR_BUILD) here.  We want to run the
+ # program at build time.
+ mkerrcodes: mkerrcodes.c mkerrcodes.h Makefile
+-	$(CC_FOR_BUILD) -I. -I$(srcdir) -o $@ $(srcdir)/mkerrcodes.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkerrcodes $(srcdir)/mkerrcodes
+ 
+ if HAVE_W32CE_SYSTEM
+ # It is correct to use $(CC_FOR_BUILD) here.  We want to run the
+@@ -286,7 +286,7 @@
+ 
+ 
+ mkheader: mkheader.c Makefile
+-	$(CC_FOR_BUILD) -g -O0 -I. -I$(srcdir) -o $@ $(srcdir)/mkheader.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkheader $(srcdir)/mkheader
+ 
+ parts_of_gpg_error_h = 	 	\
+ 	gpg-error.h.in  	\
+diff -Nur libgpg-error-1.32.orig/src/Makefile.in libgpg-error-1.32/src/Makefile.in
+--- libgpg-error-1.32.orig/src/Makefile.in	2023-07-14 12:16:54
++++ libgpg-error-1.32/src/Makefile.in	2023-07-14 14:49:29
+@@ -361,6 +361,7 @@
+ LTLIBMULTITHREAD = @LTLIBMULTITHREAD@
+ LTLIBOBJS = @LTLIBOBJS@
+ LTLIBTHREAD = @LTLIBTHREAD@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+@@ -1437,7 +1438,7 @@
+ # It is correct to use $(CC_FOR_BUILD) here.  We want to run the
+ # program at build time.
+ mkerrcodes: mkerrcodes.c mkerrcodes.h Makefile
+-	$(CC_FOR_BUILD) -I. -I$(srcdir) -o $@ $(srcdir)/mkerrcodes.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkerrcodes $(srcdir)/mkerrcodes
+ 
+ # It is correct to use $(CC_FOR_BUILD) here.  We want to run the
+ # program at build time.
+@@ -1453,7 +1454,7 @@
+ 		$(srcdir)/errnos.in >$@
+ 
+ mkheader: mkheader.c Makefile
+-	$(CC_FOR_BUILD) -g -O0 -I. -I$(srcdir) -o $@ $(srcdir)/mkheader.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkheader $(srcdir)/mkheader
+ 
+ @FORCE_USE_SYSCFG_FALSE@./lock-obj-pub.native.h: Makefile gen-posix-lock-obj$(EXEEXT) posix-lock-obj.h
+ @FORCE_USE_SYSCFG_FALSE@	./gen-posix-lock-obj >$@
