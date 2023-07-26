@@ -67,17 +67,10 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
 
-    # TODO: Do we need to support arm7 iOS targets?
-    #if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7")
-    #    set(OPENSSL_TARGET "ios-cross")
-    #elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
-    set(OPENSSL_TARGET "ios64-cross")
-    #else()
-    #    message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
-    #endif()
+    set(OPENSSL_TARGET "ios64-xcrun")
 
     set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
-    set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/installrosslude)
+    set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
     set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
 
@@ -93,10 +86,8 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
                 ${OPENSSL_TARGET}
                 no-shared -no-dso -no-hw -no-engine
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
-                #-D__ANDROID_API__=${OPENSSL_ANDROID_VERSION}
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            #&& export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make depend
             && make build_libs
