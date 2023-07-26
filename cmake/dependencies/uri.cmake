@@ -6,9 +6,17 @@ include(ExternalProject)
 # TODO: Perhaps do a check for Boost and gcc version before adding this flag?
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses -Wno-error=nonnull -Wno-error=deprecated-declarations")
 
-set(URI_FILENAME
-    "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
-)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    # TODO: Set file directory based on selected build config and target
+    set(URI_FILENAME
+        "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+    set(IOS_PLATFORM ${PLATFORM})
+else()
+    set(URI_FILENAME
+        "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+endif()
 
 externalproject_add(uri
     GIT_REPOSITORY https://github.com/cpp-netlib/uri
@@ -24,6 +32,7 @@ externalproject_add(uri
         -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
         -DANDROID_ABI=${ANDROID_ABI}
         -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+        -DPLATFORM=${IOS_PLATFORM}
     BUILD_BYPRODUCTS ${URI_FILENAME}
     PREFIX "uri"
 )
