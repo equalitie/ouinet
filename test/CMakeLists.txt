@@ -174,3 +174,7 @@ add_executable(test-cache-announcer
     ${bt_cpp_files}
     "../test/util/bittorrent_utils.cpp")
 target_link_libraries(test-cache-announcer lib::asio_utp lib::gcrypt lib::uri)
+
+add_executable(test-bencoding
+        "test_bencoding.cpp"
+        "../src/bittorrent/bencoding.cpp")
