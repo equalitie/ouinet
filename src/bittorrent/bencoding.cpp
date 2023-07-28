@@ -161,25 +161,25 @@ std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
         }
 
         void operator()(const std::string& value) {
-            os << "\"" << util::bytes::to_printable(value) << "\"";
+            os << std::string("\"") << util::bytes::to_printable(value) << std::string("\"");
         }
 
         void operator()(const BencodedList& value) {
-            os << "[";
+            os << std::string("[");
             for (auto i = value.begin(); i != value.end(); ++i) {
                 os << *i;
                 if (std::next(i) != value.end()) os << ", ";
             }
-            os << "]";
+            os << std::string("]");
         }
 
         void operator()(const BencodedMap& value) {
-            os << "{";
+            os << std::string("{");
             for (auto i = value.begin(); i != value.end(); ++i) {
-                os << i->first << ":" << i->second;
+                os << i->first << std::string(":") << i->second;
                 if (std::next(i) != value.end()) os << ", ";
             }
-            os << "}";
+            os << std::string("}");
         }
     };
 
