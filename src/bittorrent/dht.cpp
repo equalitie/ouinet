@@ -1784,7 +1784,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
             WaitCondition wc(_exec);
 
             size_t k = 0;
-            for (const auto bs : bootstraps) {
+            for (const auto &bs : bootstraps) {
                 TRACK_SPAWN(_exec , ([
                     &,
                     lock = wc.lock(),
