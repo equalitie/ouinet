@@ -1,0 +1,4 @@
+using darwin : iossim64 : /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -arch x86_64 -fembed-bitcode-marker -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -mios-simulator-version-min=11.0 -Wno-error=implicit-function-declaration
+: <striper> <root>/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer 
+: <architecture>x86 <target-os>iphone 
+;
