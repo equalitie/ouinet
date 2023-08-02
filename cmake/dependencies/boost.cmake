@@ -108,16 +108,43 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
             ZLIB_SOURCE=${ZLIBROOT}/zlib
         &&
     )
+    if (${PLATFORM} STREQUAL "OS64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-ios64.jam
+            toolset=darwin-ios64
+            macosx-version="iphone-16.4"
+            architecture=arm
+            abi=aapcs
+        )
+    elseif (${PLATFORM} STREQUAL "SIMULATOR64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossim64.jam
+            toolset=darwin-iossim64
+            macosx-version="iphonesim-16.4"
+            architecture=x86
+            abi=sysv
+        )
+    elseif (${PLATFORM} STREQUAL "SIMULATORARM64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossimarm64.jam
+            toolset=darwin-iossimarm64
+            macosx-version="iphonesim-16.4"
+            architecture=arm
+            abi=aapcs
+        )
+    endif()
+
     set(BOOST_ARCH_CONFIGURATION
+        ${BOOST_ARCH_CONFIGURATION}
         --stagedir=iphone-build/stage
-        --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-ios.jam
-        toolset=darwin-ios
         cxxflags=${BOOST_CXXFLAGS}
-        architecture=arm
-        abi=aapcs
+        binary-format=mach-o
+        define=_LITTLE_ENDIAN
         target-os=iphone
+        release
         address-model=64
-        macosx-version=iphone-16.4
+        runtime-link=shared
+        define=BOOST_SPIRIT_THREADSAFE
     )
 else()
     set(BOOST_ENVIRONMENT )
