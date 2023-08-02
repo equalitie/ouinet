@@ -89,8 +89,13 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         export MACOS_BUILD_ROOT=${MACOS_BUILD_ROOT}
         &&
     )
+    if (${PLATFORM} STREQUAL "SIMULATOR64")
+        set(COMPILER_HOSTTRIPLE x86_64-apple-darwin)
+    else()
+        set(COMPILER_HOSTTRIPLE arm-apple-darwin)
+    endif()
     set(HOST_CONFIG
-        --host=arm-apple-darwin
+        --host=${COMPILER_HOSTTRIPLE}
         ac_cv_func_getentropy=no
     )
     set(UNDERSCORE_CONFIG "")
