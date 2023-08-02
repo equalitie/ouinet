@@ -67,7 +67,13 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
 
-    set(OPENSSL_TARGET "ios64-xcrun")
+    if (${PLATFORM} STREQUAL "OS64")
+        set(OPENSSL_TARGET "ios64-xcrun")
+    elseif (${PLATFORM} STREQUAL "SIMULATOR64")
+        set(OPENSSL_TARGET "darwin64-x86_64-cc")
+    elseif (${PLATFORM} STREQUAL "SIMULATORARM64")
+        set(OPENSSL_TARGET "iossimulator-xcrun")
+    endif()
 
     set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
     set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
@@ -84,7 +90,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
-                no-shared -no-dso -no-hw -no-engine
+                no-shared -no-dso -no-hw -no-engine -fembed-bitcode
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
