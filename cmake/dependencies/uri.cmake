@@ -8,9 +8,15 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses -Wno-error=nonnull -Wno
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     # TODO: Set file directory based on selected build config and target
-    set(URI_FILENAME
-        "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
-    )
+    if (${PLATFORM} STREQUAL "OS64")
+        set(URI_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+    else()
+        set(URI_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release-iphonesimulator/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+    endif()
     set(IOS_PLATFORM ${PLATFORM})
 else()
     set(URI_FILENAME
