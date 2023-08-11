@@ -34,6 +34,7 @@ externalproject_add(zlib
 )
 
 set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
+set(BOOST_BUILD_SHARED ON)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
@@ -79,6 +80,8 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
         cxxflags=${BOOST_CXXFLAGS}
     )
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    # iOS libraries must to be built as static libs that are linked into a single dynamic lib
+    set(BOOST_BUILD_SHARED OFF)
     set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-ios-${BOOST_VERSION_FILENAME}.patch)
     set(CONFIG_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
     set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++14")
@@ -122,7 +125,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         target-os=iphone
         release
         address-model=64
-        runtime-link=shared
+        runtime-link=static
         define=BOOST_SPIRIT_THREADSAFE
     )
 else()
@@ -214,7 +217,11 @@ set_target_properties(Boost::boost PROPERTIES
 # boundary, both the library and the program must link asio as a shared library
 # instead. Boost does not ship this library, so we need to create it.
 
-add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+if (${BOOST_BUILD_SHARED})
+    add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+else()
+    add_library(boost_asio STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+endif()
 add_library(Boost::asio ALIAS boost_asio)
 target_link_libraries(boost_asio
     PUBLIC
@@ -235,7 +242,11 @@ target_compile_options(boost_asio
     PUBLIC -std=c++14
 )
 
-add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+if (${BOOST_BUILD_SHARED})
+    add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+else()
+    add_library(boost_asio_ssl STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+endif()
 add_library(Boost::asio_ssl ALIAS boost_asio_ssl)
 target_link_libraries(boost_asio_ssl
     PUBLIC
