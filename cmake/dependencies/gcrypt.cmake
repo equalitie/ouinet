@@ -1,11 +1,27 @@
 include(ExternalProject)
 
-set(GPGERROR_LIBRARY_BASE_FILENAME
-    ${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
-)
-set(GCRYPT_LIBRARY_BASE_FILENAME
-    ${CMAKE_SHARED_LIBRARY_PREFIX}gcrypt${CMAKE_SHARED_LIBRARY_SUFFIX}
-)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    # iOS libraries must to be built as static libs that are linked into a single dynamic lib
+    set(GCRYPT_BUILD_SHARED OFF)
+else()
+    set(GCRYPT_BUILD_SHARED ON)
+endif()
+
+if (${GCRYPT_BUILD_SHARED})
+    set(GPGERROR_LIBRARY_BASE_FILENAME
+        ${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
+    )
+    set(GCRYPT_LIBRARY_BASE_FILENAME
+        ${CMAKE_SHARED_LIBRARY_PREFIX}gcrypt${CMAKE_SHARED_LIBRARY_SUFFIX}
+    )
+else()
+    set(GPGERROR_LIBRARY_BASE_FILENAME
+        ${CMAKE_STATIC_LIBRARY_PREFIX}gpg-error${CMAKE_STATIC_LIBRARY_SUFFIX}
+    )
+    set(GCRYPT_LIBRARY_BASE_FILENAME
+        ${CMAKE_STATIC_LIBRARY_PREFIX}gcrypt${CMAKE_STATIC_LIBRARY_SUFFIX}
+    )
+endif()
 
 # The order of these lists is important.
 # The first entry is a regular file, the remainder are symlinks.
@@ -96,6 +112,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     endif()
     set(HOST_CONFIG
         --host=${COMPILER_HOSTTRIPLE}
+        --disable-shared
         ac_cv_func_getentropy=no
     )
     set(UNDERSCORE_CONFIG "")
@@ -116,6 +133,15 @@ set(PATCH_COMMAND
 foreach (patch ${GPG_ERROR_PATCHES})
     set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
 endforeach()
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS" AND ${PLATFORM} STREQUAL "OS64")
+    # TODO: this copy/replace prevents runtime error with posix lock on arm64 iOS, inspired by https://github.com/xbmc/xbmc/pull/14683
+    # May not be needed in later versions of libgpg-error, or there may be a better solution
+    set(PATCH_COMMAND
+        ${PATCH_COMMAND} &&
+        cp ./src/syscfg/lock-obj-pub.aarch64-apple-darwin.h ./src/syscfg/lock-obj-pub.arm-apple-darwin.h
+    )
+endif()
 
 set(GCRYPT_PATCH_COMMAND
     ${GCRYPT_PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt
@@ -179,12 +205,18 @@ else()
     set(GPGERROR_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${GPGERROR_LIBRARY_BASE_FILENAME})
     set(GCRYPT_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME})
 
-    set(GPGERROR_INSTALL
-        ${CMAKE_COMMAND} -E copy ${GPGERROR_BUILD_DIRECTORY}/lib/${GPGERROR_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
-    )
-    set(GCRYPT_INSTALL
-        ${CMAKE_COMMAND} -E copy ${GCRYPT_BUILD_DIRECTORY}/lib/${GCRYPT_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
-    )
+    if (${GCRYPT_BUILD_SHARED})
+        set(GPGERROR_INSTALL
+            ${CMAKE_COMMAND} -E copy ${GPGERROR_BUILD_DIRECTORY}/lib/${GPGERROR_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+        )
+        set(GCRYPT_INSTALL
+            ${CMAKE_COMMAND} -E copy ${GCRYPT_BUILD_DIRECTORY}/lib/${GCRYPT_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+        )
+    else()
+        # Avoid unneeded copy as static libs cannot not be moved from their build directory
+        set(GPGERROR_INSTALL "true")
+        set(GCRYPT_INSTALL "true")
+    endif()
 endif()
 
 
@@ -239,6 +271,14 @@ target_include_directories(lib_gcrypt
         ${GPGERROR_BUILD_DIRECTORY}/include
         ${GCRYPT_BUILD_DIRECTORY}/include
 )
-target_link_libraries(lib_gcrypt
-    INTERFACE ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME}
-)
+
+if (${GCRYPT_BUILD_SHARED})
+    target_link_libraries(lib_gcrypt
+        INTERFACE ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME}
+    )
+else()
+    target_link_libraries(lib_gcrypt
+        INTERFACE ${GPGERROR_BUILD_DIRECTORY}/lib/${GPGERROR_LIBRARY_BASE_FILENAME}
+        ${GCRYPT_BUILD_DIRECTORY}/lib/${GCRYPT_LIBRARY_BASE_FILENAME}
+    )
+endif()
