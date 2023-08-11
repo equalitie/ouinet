@@ -151,8 +151,16 @@ boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded)
     return destructive_parse_value(encoded_s);
 }
 
-std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
+
+} // bittorrent namespace
+} // ouinet namespace
+
+namespace std{
+
+ostream& operator<<(std::ostream& os, const BencodedValue& value)
 {
+    using ouinet::util::bytes::to_printable;
+
     struct Visitor {
         std::ostream& os;
 
@@ -161,7 +169,7 @@ std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
         }
 
         void operator()(const std::string& value) {
-            os << "\"" << util::bytes::to_printable(value) << "\"";
+            os << "\"" << to_printable(value) << "\"";
         }
 
         void operator()(const BencodedList& value) {
@@ -187,6 +195,4 @@ std::ostream& operator<<(std::ostream& os, const BencodedValue& value)
     boost::apply_visitor(visitor, value);
     return os;
 }
-
-} // bittorrent namespace
-} // ouinet namespace
+} // namespace std

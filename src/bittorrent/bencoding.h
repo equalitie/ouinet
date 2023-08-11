@@ -99,7 +99,14 @@ class BencodedValue : public detail::value {
 std::string bencoding_encode(const BencodedValue& value);
 boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded);
 
-std::ostream& operator<<(std::ostream&, const BencodedValue&);
 
 } // bittorrent namespace
 } // ouinet namespace
+
+using ouinet::bittorrent::BencodedMap;
+using ouinet::bittorrent::BencodedList;
+using ouinet::bittorrent::BencodedValue;
+
+namespace std{
+    ostream& operator<<(std::ostream&, const BencodedValue&);
+}
