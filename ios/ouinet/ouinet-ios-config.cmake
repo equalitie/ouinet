@@ -77,21 +77,18 @@ target_link_libraries(ouinet-ios
       ${FOUNDATION_LIBRARY}
 )
 target_compile_definitions(ouinet-ios PUBLIC IS_BUILDING_SHARED)
-message(STATUS "Building shared version...")
-#else()
-#  add_library (ouinet-ios STATIC ${SOURCES} ${HEADERS})
-  #target_link_libraries(ouinet-ios ${FOUNDATION_LIBRARY})
-#  target_link_libraries(ouinet-ios
-#    PRIVATE
-#        ouinet::client
-#        ${FOUNDATION_LIBRARY}
-#  )
-#  message(STATUS "Building static version...")
-#endif()
-
-#if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-#  set(CMAKE_INSTALL_PREFIX ${ouinet-ios_DIR}/lib CACHE PATH "Install path" FORCE)
-#endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+message(STATUS "Building iOS framework bundle...")
+set_target_properties(ouinet-ios PROPERTIES
+  FRAMEWORK TRUE
+  FRAMEWORK_VERSION C
+  MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.ouinet-ios
+  # "current version" in semantic format in Mach-O binary file
+  VERSION 16.4.0
+  # "compatibility version" in semantic format in Mach-O binary file
+  SOVERSION 1.0.0
+  PUBLIC_HEADER Ouinet.h
+  XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+)
 
 # Executable
 if(PLATFORM MATCHES "MAC.*")
@@ -133,6 +130,7 @@ if(PLATFORM MATCHES "MAC.*")
 else()
   install(TARGETS ouinet-ios
           LIBRARY DESTINATION lib
-          ARCHIVE DESTINATION lib/static)
+          ARCHIVE DESTINATION lib/static
+          FRAMEWORK DESTINATION framework)
 endif()
 install (FILES ${HEADERS} DESTINATION include)
