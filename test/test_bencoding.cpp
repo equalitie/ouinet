@@ -40,29 +40,20 @@ BOOST_AUTO_TEST_CASE(test_decoding)
 {
     auto decoded_value_1 = bencoding_decode("3:abc");
     BOOST_REQUIRE_EQUAL("abc", *(decoded_value_1->as_string()));
+    // Sending the decoded values to cout validates that the overloaded insertion operator is properly implemented
+    std::cout << *decoded_value_1;
 
     auto decoded_value_2 = bencoding_decode("d3:onei1e3:twoi2ee");
     auto decoded_map = decoded_value_2->as_map();
     BOOST_REQUIRE_EQUAL(1, *(decoded_map->at("one").as_int()));
     BOOST_REQUIRE_EQUAL(2, *(decoded_map->at("two").as_int()));
+    std::cout << *decoded_value_2;
 
     auto decoded_value_3 = bencoding_decode("l4:abcd4:wxyze");
     auto decoded_list = decoded_value_3->as_list();
     BOOST_REQUIRE_EQUAL("abcd", decoded_list->at(0));
     BOOST_REQUIRE_EQUAL("wxyz", decoded_list->at(1));
-}
-
-BOOST_AUTO_TEST_CASE(test_insertion_operator)
-{
-    auto decoded_value = bencoding_decode("d3:onei1e3:twoi2ee");
-
-    // Check that the value was properly decoded before testing the insertion operator.
-    auto decoded_map = decoded_value->as_map();
-    BOOST_REQUIRE_EQUAL(1, *(decoded_map->at("one").as_int()));
-    BOOST_REQUIRE_EQUAL(2, *(decoded_map->at("two").as_int()));
-
-    // This line causes a segfault if the overload of `<<` is not properly implemented.
-    std::cout << *decoded_value;
+    std::cout << *decoded_value_3;
 }
 
 BOOST_AUTO_TEST_SUITE_END()
