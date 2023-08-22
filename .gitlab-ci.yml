@@ -1,6 +1,7 @@
 image: registry.gitlab.com/equalitie/ouinet:latest
 
 stages:
+  - prepare
   - build
   - test
   - release

@@ -1,3 +1,14 @@
+# TODO: Create a new Dockerfile for the dev Android image
+android / build-dev-image:
+  stage: prepare
+  tags:
+    - shell
+  needs: ['linux / build-dev-image']
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
+    - docker push $CI_REGISTRY_IMAGE:android
+
 android / build:
   stage: build
   tags:
@@ -13,6 +24,7 @@ android / build:
       - build.android/build-android-*/ouinet/outputs/apk/*.apk
     expire_in: 6h
 
+# TODO: Remove this job when the build-dev-image one is stable
 android / build-prod-image:
   stage: release
   tags:
