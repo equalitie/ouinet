@@ -1,15 +1,14 @@
 image: registry.gitlab.com/equalitie/ouinet:latest
 
 stages:
-  - build-image
   - build
   - test
+  - release
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
 
 include:
-  - .gitlab-ci/common.yml
   - .gitlab-ci/android.yml
   - .gitlab-ci/linux.yml
 

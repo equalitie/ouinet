@@ -1,7 +1,17 @@
+android / build-prod-image:
+  stage: release
+  tags:
+    - shell
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
+    - docker push $CI_REGISTRY_IMAGE:android
+
 android / build:
   stage: build
   tags:
     - docker
+  needs: ['linux / build-prod-image']
   image: registry.gitlab.com/equalitie/ouinet:android
   script:
     - mkdir -p build.android
