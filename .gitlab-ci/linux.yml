@@ -1,0 +1,40 @@
+build:
+  stage: build
+  tags:
+    - docker
+  artifacts:
+    paths:
+      - build/client
+      - build/injector
+      - build/lib*.so
+      - build/lib*.so.*
+      - build/test/test-*
+    expire_in: 6h
+  cache:
+    key: single
+    paths:
+      - build/modules/*/go-workspace
+      - build/src/ouiservice/lampshade/go-workspace
+  script:
+    - mkdir -p build
+    - cd build
+    - cmake ..
+    - make -j `nproc`
+
+unit-test:
+  stage: test
+  tags:
+    - docker
+    - ptrace
+  script:
+    - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
+    - for test in ./build/test/test-*; do "$test" --log_level=test_suite; done
+
+integration-test:
+  stage: test
+  tags:
+    - docker
+  script:
+    - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
+    - export OUINET_BUILD_DIR=$PWD/build
+    - ./scripts/run_integration_tests.sh
