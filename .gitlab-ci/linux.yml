@@ -1,4 +1,4 @@
-build:
+linux / build:
   stage: build
   tags:
     - docker
@@ -21,7 +21,7 @@ build:
     - cmake ..
     - make -j `nproc`
 
-unit-test:
+linux / unit-test:
   stage: test
   tags:
     - docker
@@ -30,7 +30,7 @@ unit-test:
     - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
     - for test in ./build/test/test-*; do "$test" --log_level=test_suite; done
 
-integration-test:
+linux / integration-test:
   stage: test
   tags:
     - docker

@@ -1,4 +1,4 @@
-build-android:
+android / build:
   stage: build
   tags:
     - docker
