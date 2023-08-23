@@ -1,5 +1,5 @@
-include: .gitlab-ci/templates/prepare-builder-image.yml
-include: .gitlab-ci/templates/linux.yml
+include: .gitlab-ci/jobs/prepare-builder-image.yml
+include: .gitlab-ci/jobs/linux.yml
 
 variables:
   PIPELINE_NAME: "linux-builder" 
