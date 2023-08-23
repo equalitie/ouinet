@@ -18,26 +18,16 @@ linux / build:
   image: registry.gitlab.com/equalitie/ouinet:linux-builder
 
 linux / unit-test:
-  stage: test
-  tags:
-    - docker
-    - ptrace
+  extends:
+    .linux-unit-test
   needs: ['linux / build']
   image: registry.gitlab.com/equalitie/ouinet:linux-builder
-  script:
-    - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
-    - for test in ./build/test/test-*; do "$test" --log_level=test_suite; done
 
 linux / integration-test:
-  stage: test
-  tags:
-    - docker
+  extends:
+    .linux-integration-test
   needs: ['linux / build']
   image: registry.gitlab.com/equalitie/ouinet:linux-builder
-  script:
-    - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
-    - export OUINET_BUILD_DIR=$PWD/build
-    - ./scripts/run_integration_tests.sh
 
 linux / build-prod-image:
   stage: release
