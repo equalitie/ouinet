@@ -1,0 +1,23 @@
+.linux-$BUILD_PATH:
+  stage: $BUILD_PATH
+  tags:
+    - docker
+  artifacts:
+    paths:
+      - $BUILD_PATH/client
+      - $BUILD_PATH/injector
+      - $BUILD_PATH/lib*.so
+      - $BUILD_PATH/lib*.so.*
+      - $BUILD_PATH/test/test-*
+    expire_in: 6h
+  cache:
+    key: single
+    paths:
+      - $BUILD_PATH/modules/*/go-workspace
+      - $BUILD_PATH/src/ouiservice/lampshade/go-workspace
+  script:
+    - mkdir -p $BUILD_PATH
+    - cd $BUILD_PATH
+    - cmake ..
+    - make -j `nproc`
+

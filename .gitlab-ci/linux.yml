@@ -1,4 +1,9 @@
 include: .gitlab-ci/templates/prepare-builder-image.yml
+include: .gitlab-ci/templates/linux.yml
+
+variables:
+  PIPELINE_NAME: "linux-builder" 
+  BUILD_PATH: "build/linux-builder"
 
 linux / prepare-builder-image:
   extends:
@@ -7,29 +12,10 @@ linux / prepare-builder-image:
     CI_REGISTRY_IMAGE_TAG: "linux-builder"
 
 linux / build:
-  stage: build
-  tags:
-    - docker
+  extends:
+    .linux-build
   needs: ['linux / prepare-builder-image']
   image: registry.gitlab.com/equalitie/ouinet:linux-builder
-  artifacts:
-    paths:
-      - build/client
-      - build/injector
-      - build/lib*.so
-      - build/lib*.so.*
-      - build/test/test-*
-    expire_in: 6h
-  cache:
-    key: single
-    paths:
-      - build/modules/*/go-workspace
-      - build/src/ouiservice/lampshade/go-workspace
-  script:
-    - mkdir -p build
-    - cd build
-    - cmake ..
-    - make -j `nproc`
 
 linux / unit-test:
   stage: test
