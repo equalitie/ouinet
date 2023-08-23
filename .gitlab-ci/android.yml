@@ -1,9 +1,11 @@
+
 # TODO: Create a new Dockerfile for the dev Android image
 android / prepare-builder-image:
   stage: prepare
   tags:
     - shell
   needs: ['linux / prepare-builder-image']
+  image: registry.gitlab.com/equalitie/ouinet:latest
   variables:
     CI_REGISTRY_IMAGE_TAG: "android-builder"
   script:
@@ -33,6 +35,7 @@ android / build-prod-image:
   tags:
     - shell
   needs: ['linux / build-prod-image', 'android / build']
+  image: registry.gitlab.com/equalitie/ouinet:latest
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
