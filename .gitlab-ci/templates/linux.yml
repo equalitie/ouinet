@@ -1,5 +1,5 @@
-.linux-$BUILD_PATH:
-  stage: $BUILD_PATH
+.linux-build:
+  stage: build
   tags:
     - docker
   artifacts:
