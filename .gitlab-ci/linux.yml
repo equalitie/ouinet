@@ -3,7 +3,6 @@ linux / prepare-builder-image:
   stage: prepare
   tags:
     - shell
-  image: registry.gitlab.com/equalitie/ouinet:latest
   variables:
     CI_REGISTRY_IMAGE_TAG: "linux-builder"
   script:
@@ -63,7 +62,6 @@ linux / build-prod-image:
   tags:
     - shell
   needs: ['linux / unit-test', 'linux / integration-test']
-  image: registry.gitlab.com/equalitie/ouinet:latest
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
