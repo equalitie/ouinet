@@ -8,7 +8,7 @@ android / prepare-builder-image:
     CI_REGISTRY_IMAGE_TAG: "android-builder"
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG - < Dockerfile.android
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG - < docker/Dockerfile.$CI_REGISTRY_IMAGE_TAG
     - docker push $CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG
 
 android / build:
