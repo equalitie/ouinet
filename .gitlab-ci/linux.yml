@@ -14,6 +14,7 @@ linux / build:
   stage: build
   tags:
     - docker
+  needs: ['linux / prepare-builder-image']
   artifacts:
     paths:
       - build/client
@@ -38,6 +39,7 @@ linux / unit-test:
   tags:
     - docker
     - ptrace
+  needs: ['linux / build']
   script:
     - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
     - for test in ./build/test/test-*; do "$test" --log_level=test_suite; done
@@ -46,6 +48,7 @@ linux / integration-test:
   stage: test
   tags:
     - docker
+  needs: ['linux / build']
   script:
     - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
     - export OUINET_BUILD_DIR=$PWD/build
@@ -55,6 +58,7 @@ linux / build-prod-image:
   stage: release
   tags:
     - shell
+  needs: ['linux / unit-test', 'linux / integration-test']
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
