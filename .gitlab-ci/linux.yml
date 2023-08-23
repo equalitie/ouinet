@@ -16,7 +16,7 @@ linux / build:
   tags:
     - docker
   needs: ['linux / prepare-builder-image']
-  image: registry.gitlab.com/equalitie/ouinet:latest
+  image: registry.gitlab.com/equalitie/ouinet:linux-builder
   artifacts:
     paths:
       - build/client
@@ -42,7 +42,7 @@ linux / unit-test:
     - docker
     - ptrace
   needs: ['linux / build']
-  image: registry.gitlab.com/equalitie/ouinet:latest
+  image: registry.gitlab.com/equalitie/ouinet:linux-builder
   script:
     - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
     - for test in ./build/test/test-*; do "$test" --log_level=test_suite; done
@@ -52,7 +52,7 @@ linux / integration-test:
   tags:
     - docker
   needs: ['linux / build']
-  image: registry.gitlab.com/equalitie/ouinet:latest
+  image: registry.gitlab.com/equalitie/ouinet:linux-builder
   script:
     - export LD_LIBRARY_PATH=$PWD/build:/usr/local/lib
     - export OUINET_BUILD_DIR=$PWD/build

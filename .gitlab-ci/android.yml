@@ -18,7 +18,7 @@ android / build:
   tags:
     - docker
   needs: ['android / prepare-builder-image']
-  image: registry.gitlab.com/equalitie/ouinet:android
+  image: registry.gitlab.com/equalitie/ouinet:android-builder
   script:
     - mkdir -p build.android
     - cd build.android
