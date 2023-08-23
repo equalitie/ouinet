@@ -1,5 +1,5 @@
 variables:
-  BUILDER_IMAGE_TAG: '"$TARGET_PLATFORM"-builder'
+  BUILDER_IMAGE_TAG: '$TARGET_PLATFORM-builder'
 
 .prepare-builder-image:
   stage: prepare
