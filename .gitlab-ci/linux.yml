@@ -1,4 +1,4 @@
-include: templates/prepare-builder-image.yml
+include: .gitlab-ci/templates/prepare-builder-image.yml
 
 linux / prepare-builder-image:
   extends:
