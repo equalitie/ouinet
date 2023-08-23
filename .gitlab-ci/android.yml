@@ -14,7 +14,7 @@ android / build:
   stage: build
   tags:
     - docker
-  needs: ['android / prepare-builder-image', 'linux / unit-test']
+  needs: ['android / prepare-builder-image', 'linux / build']
   image: registry.gitlab.com/equalitie/ouinet:android-builder
   script:
     - mkdir -p build.android
