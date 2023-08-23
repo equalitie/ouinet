@@ -8,6 +8,6 @@ variables:
   GIT_SUBMODULE_STRATEGY: recursive
 
 include:
-  - .gitlab-ci/android.yml
-  - .gitlab-ci/linux.yml
+  - .gitlab-ci/pipelines/android.yml
+  - .gitlab-ci/pipelines/linux.yml
 
