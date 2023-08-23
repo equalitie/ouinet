@@ -4,11 +4,11 @@ linux / prepare-builder-image:
   tags:
     - shell
   variables:
-    CI_REGISTRY_IMAGE: "ouinet-builder"
+    CI_REGISTRY_IMAGE_TAG: "linux-builder"
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build --pull --target base -t $CI_REGISTRY_IMAGE:linux - < Dockerfile
-    - docker push $CI_REGISTRY_IMAGE:linux
+    - docker build --pull --target base -t $CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG - < Dockerfile
+    - docker push $CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG
 
 linux / build:
   stage: build
