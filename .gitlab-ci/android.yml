@@ -1,9 +1,11 @@
 # TODO: Create a new Dockerfile for the dev Android image
-android / build-dev-image:
+android / prepare-builder-image:
   stage: prepare
   tags:
     - shell
-  needs: ['linux / build-dev-image']
+  needs: ['linux / prepare-builder-image']
+  variables:
+    CI_REGISTRY_IMAGE: "ouinet-builder"
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
