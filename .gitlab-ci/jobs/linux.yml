@@ -1,7 +1,12 @@
+variables:
+  BUILD_PATH: 'build/"$TARGET_PLATFORM"'
+  BUILDER_IMAGE: '"$CI_REGISTRY_IMAGE":"$TARGET_PLATFORM"-builder'
+
 .linux-build:
   stage: build
   tags:
     - docker
+  image: $BUILDER_IMAGE
   artifacts:
     paths:
       - $BUILD_PATH/client
@@ -26,6 +31,7 @@
   tags:
     - docker
     - ptrace
+  image: $BUILDER_IMAGE
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
     - for test in ./$BUILD_PATH/test/test-*; do "$test" --log_level=test_suite; done
@@ -34,6 +40,7 @@
   stage: test
   tags:
     - docker
+  image: $BUILDER_IMAGE
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
     - export OUINET_BUILD_DIR=$CI_PROJECT_DIR/$BUILD_PATH

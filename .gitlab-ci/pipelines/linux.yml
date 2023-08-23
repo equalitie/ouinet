@@ -2,32 +2,29 @@ include: .gitlab-ci/jobs/prepare-builder-image.yml
 include: .gitlab-ci/jobs/linux.yml
 
 variables:
-  PIPELINE_NAME: "linux-builder" 
-  BUILD_PATH: "build/linux-builder"
+  TARGET_PLATFORM: 'linux'
 
 linux / prepare-builder-image:
   extends:
     .prepare-builder-image
-  variables:
-    CI_REGISTRY_IMAGE_TAG: "linux-builder"
 
 linux / build:
   extends:
     .linux-build
-  needs: ['linux / prepare-builder-image']
-  image: registry.gitlab.com/equalitie/ouinet:linux-builder
+  needs:
+    ['linux / prepare-builder-image']
 
 linux / unit-test:
   extends:
     .linux-unit-test
-  needs: ['linux / build']
-  image: registry.gitlab.com/equalitie/ouinet:linux-builder
+  needs:
+    ['linux / build']
 
 linux / integration-test:
   extends:
     .linux-integration-test
-  needs: ['linux / build']
-  image: registry.gitlab.com/equalitie/ouinet:linux-builder
+  needs:
+    ['linux / build']
 
 linux / build-prod-image:
   stage: release
