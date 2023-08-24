@@ -2,7 +2,7 @@ include: .gitlab-ci/jobs/prepare-builder-image.yml
 
 variables:
   TARGET_PLATFORM: 'android'
-  BUILDER_IMAGE: '"$CI_REGISTRY_IMAGE":"$TARGET_PLATFORM"-builder'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 android / prepare-builder-image:
   extends:
