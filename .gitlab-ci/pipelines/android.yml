@@ -8,7 +8,7 @@ android / prepare-builder-image:
   extends:
     .prepare-builder-image
   needs:
-    ['linux / prepare-builder-image']
+    ['debian-10 / prepare-builder-image']
 
 android / build:
   variables:
@@ -17,7 +17,7 @@ android / build:
   tags:
     - docker
   needs:
-    ['android / prepare-builder-image', 'linux / build']
+    ['android / prepare-builder-image', 'debian-10 / build']
   image: $BUILDER_IMAGE
   script:
     - mkdir -p build.android
@@ -35,7 +35,7 @@ android / build-prod-image:
   tags:
     - shell
   needs:
-    ['linux / build-prod-image', 'android / build']
+    ['debian-10 / build-prod-image', 'android / build']
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
