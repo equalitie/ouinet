@@ -1,26 +1,31 @@
 include: .gitlab-ci/jobs/common/prepare-builder-image.yml
 include: .gitlab-ci/jobs/linux.yml
 
-variables:
-  TARGET_PLATFORM: 'debian-10'
-
 debian-10 / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'debian-10'
   extends:
     .prepare-builder-image
 
 debian-10 / build:
+  variables:
+    TARGET_PLATFORM: 'debian-10'
   extends:
     .linux-build
   needs:
     ['debian-10 / prepare-builder-image']
 
 debian-10 / unit-test:
+  variables:
+    TARGET_PLATFORM: 'debian-10'
   extends:
     .linux-unit-test
   needs:
     ['debian-10 / build']
 
 debian-10 / integration-test:
+  variables:
+    TARGET_PLATFORM: 'debian-10'
   extends:
     .linux-integration-test
   needs:
