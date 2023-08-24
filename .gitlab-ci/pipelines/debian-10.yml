@@ -2,35 +2,35 @@ include: .gitlab-ci/jobs/common/prepare-builder-image.yml
 include: .gitlab-ci/jobs/linux.yml
 
 variables:
-  TARGET_PLATFORM: 'linux'
+  TARGET_PLATFORM: 'debian-10'
 
-linux / prepare-builder-image:
+debian-10 / prepare-builder-image:
   extends:
     .prepare-builder-image
 
-linux / build:
+debian-10 / build:
   extends:
     .linux-build
   needs:
-    ['linux / prepare-builder-image']
+    ['debian-10 / prepare-builder-image']
 
-linux / unit-test:
+debian-10 / unit-test:
   extends:
     .linux-unit-test
   needs:
-    ['linux / build']
+    ['debian-10 / build']
 
-linux / integration-test:
+debian-10 / integration-test:
   extends:
     .linux-integration-test
   needs:
-    ['linux / build']
+    ['debian-10 / build']
 
-linux / build-prod-image:
+debian-10 / build-prod-image:
   stage: release
   tags:
     - shell
-  needs: ['linux / unit-test', 'linux / integration-test']
+  needs: ['debian-10 / unit-test', 'debian-10 / integration-test']
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
