@@ -31,6 +31,14 @@ variables:
   tags:
     - docker
     - ptrace
+  artifacts:
+    paths:
+      - $BUILD_PATH/client
+      - $BUILD_PATH/injector
+      - $BUILD_PATH/lib*.so
+      - $BUILD_PATH/lib*.so.*
+      - $BUILD_PATH/test/test-*
+    expire_in: 6h
   image: $BUILDER_IMAGE
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
