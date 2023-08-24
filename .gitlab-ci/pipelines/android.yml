@@ -1,4 +1,4 @@
-include: .gitlab-ci/jobs/prepare-builder-image.yml
+include: .gitlab-ci/jobs/common/prepare-builder-image.yml
 
 variables:
   TARGET_PLATFORM: 'android'
