@@ -13,7 +13,6 @@ android / prepare-builder-image:
 android / build:
   variables:
     TARGET_PLATFORM: 'android'
-    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   stage: build
   tags:
     - docker
