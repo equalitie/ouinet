@@ -30,3 +30,5 @@ debian-12 / integration-test:
     .linux-integration-test
   needs:
     ['debian-12 / build']
+  before_script:
+    - ln -s /usr/bin/python3 /usr/bin/python
