@@ -40,4 +40,5 @@ android / build-prod-image:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
     - docker push $CI_REGISTRY_IMAGE:android
+    - docker logout
 
