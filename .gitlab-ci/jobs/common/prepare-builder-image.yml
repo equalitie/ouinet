@@ -9,5 +9,5 @@ variables:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build --pull -t $CI_REGISTRY_IMAGE:$BUILDER_IMAGE_TAG - < docker/Dockerfile.$BUILDER_IMAGE_TAG
     - docker push $CI_REGISTRY_IMAGE:$BUILDER_IMAGE_TAG
-    - docker logout
+    - docker logout $CI_REGISTRY
 
