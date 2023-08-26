@@ -38,7 +38,9 @@ android / build-prod-image:
   tags:
     - shell
   needs:
-    ['debian-10 / build-prod-image', 'android / build']
+    - job: 'debian-10 / build-prod-image'
+      optional: true
+    - job: 'android / build'
   script:
     - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
