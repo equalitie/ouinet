@@ -42,4 +42,8 @@ debian-10 / build-prod-image:
     - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
     - docker push $CI_REGISTRY_IMAGE:latest
     - docker logout $CI_REGISTRY
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
 
