@@ -13,6 +13,6 @@ variables:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web"
       changes:
-        - docker/Dockerfile.$BUILDER_IMAGE_TAG
+        - docker/Dockerfile.*-builder
       when: manual
 
