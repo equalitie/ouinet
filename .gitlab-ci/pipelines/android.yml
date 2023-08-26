@@ -46,4 +46,8 @@ android / build-prod-image:
     - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
     - docker push $CI_REGISTRY_IMAGE:android
     - docker logout $CI_REGISTRY
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
 
