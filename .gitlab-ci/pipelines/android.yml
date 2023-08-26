@@ -37,7 +37,7 @@ android / build-prod-image:
   needs:
     ['debian-10 / build-prod-image', 'android / build']
   script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
     - docker push $CI_REGISTRY_IMAGE:android
     - docker logout $CI_REGISTRY
