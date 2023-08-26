@@ -8,7 +8,8 @@ android / prepare-builder-image:
   extends:
     .prepare-builder-image
   needs:
-    ['debian-10 / prepare-builder-image']
+    - job: 'debian-10 / prepare-builder-image'
+      optional: true
 
 android / build:
   variables:
@@ -17,7 +18,9 @@ android / build:
   tags:
     - docker
   needs:
-    ['android / prepare-builder-image', 'debian-10 / build']
+    - job: 'android / prepare-builder-image'
+      optional: true
+    - job: 'debian-10 / build'
   image: $BUILDER_IMAGE
   script:
     - mkdir -p build.android

@@ -13,7 +13,8 @@ debian-12 / build:
   extends:
     .linux-build
   needs:
-    ['debian-12 / prepare-builder-image']
+    - job: 'debian-12 / prepare-builder-image'
+      optional: true
 
 debian-12 / unit-test:
   variables:

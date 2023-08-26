@@ -13,7 +13,8 @@ debian-10 / build:
   extends:
     .linux-build
   needs:
-    ['debian-10 / prepare-builder-image']
+    - job: 'debian-10 / prepare-builder-image'
+      optional: true
 
 debian-10 / unit-test:
   variables:
