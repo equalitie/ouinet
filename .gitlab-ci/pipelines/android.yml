@@ -32,7 +32,8 @@ android / build:
       - build.android/build-android-*/ouinet/outputs/apk/*.apk
     expire_in: 6h
 
-# TODO: Remove this job when the build-dev-image one is stable
+# TODO: Remove this job when the builder image created by prepare-builder-image
+#       is stable enough to build a production Ouinet AAR.
 android / build-prod-image:
   stage: release
   tags:
