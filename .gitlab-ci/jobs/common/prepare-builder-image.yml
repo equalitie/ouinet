@@ -1,0 +1,18 @@
+variables:
+  BUILDER_IMAGE_TAG: '$TARGET_PLATFORM-builder'
+
+.prepare-builder-image:
+  stage: prepare
+  tags:
+    - shell
+  script:
+    - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
+    - docker build --pull -t $CI_REGISTRY_IMAGE:$BUILDER_IMAGE_TAG - < docker/Dockerfile.$BUILDER_IMAGE_TAG
+    - docker push $CI_REGISTRY_IMAGE:$BUILDER_IMAGE_TAG
+    - docker logout $CI_REGISTRY
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web"
+      changes:
+        - docker/Dockerfile.*-builder
+      when: manual
+
