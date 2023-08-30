@@ -10,7 +10,7 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Tunnel::Tunnel(const boost::asio::executor& exec, std::shared_ptr<i2p::client::I2PService> i2p_tunnel, uint32_t timeout)
+Tunnel::Tunnel(const AsioExecutor& exec, std::shared_ptr<i2p::client::I2PService> i2p_tunnel, uint32_t timeout)
   : _exec(exec), _i2p_tunnel(std::move(i2p_tunnel)),
     _was_destroyed(make_shared<bool>(false))
 {

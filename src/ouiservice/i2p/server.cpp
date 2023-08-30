@@ -15,7 +15,7 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Server::Server(std::shared_ptr<Service> service, const string& private_key_filename, uint32_t timeout, const asio::executor& exec)
+Server::Server(std::shared_ptr<Service> service, const string& private_key_filename, uint32_t timeout, const AsioExecutor& exec)
     : _service(service)
     , _exec(exec)
     , _timeout(timeout)

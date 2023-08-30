@@ -9,7 +9,7 @@ namespace ouinet {
 namespace ouiservice {
 
 LampshadeOuiServiceServer::LampshadeOuiServiceServer(
-    const asio::executor& ex,
+    const AsioExecutor& ex,
     asio::ip::tcp::endpoint endpoint,
     boost::filesystem::path state_directory
 ):
@@ -70,7 +70,7 @@ LampshadeOuiServiceServer::LampshadeOuiServiceServer(
 }
 
 LampshadeOuiServiceServer::LampshadeOuiServiceServer(
-    const asio::executor& ex,
+    const AsioExecutor& ex,
     asio::ip::tcp::endpoint endpoint,
     std::string private_key_der,
     std::string public_key_der
@@ -145,7 +145,7 @@ static void parse_endpoint(
 }
 
 LampshadeOuiServiceClient::LampshadeOuiServiceClient(
-    const asio::executor& ex,
+    const AsioExecutor& ex,
     std::string endpoint_string
 ):
     _ex(ex)

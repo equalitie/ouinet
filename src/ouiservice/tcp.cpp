@@ -6,7 +6,7 @@
 namespace ouinet {
 namespace ouiservice {
 
-TcpOuiServiceServer::TcpOuiServiceServer(const asio::executor& ex, asio::ip::tcp::endpoint endpoint):
+TcpOuiServiceServer::TcpOuiServiceServer(const AsioExecutor& ex, asio::ip::tcp::endpoint endpoint):
     _ex(ex),
     _acceptor(ex),
     _endpoint(endpoint)
@@ -88,7 +88,7 @@ static boost::optional<asio::ip::tcp::endpoint> parse_endpoint(std::string endpo
     return asio::ip::tcp::endpoint(address, port);
 }
 
-TcpOuiServiceClient::TcpOuiServiceClient(const asio::executor& ex, std::string endpoint):
+TcpOuiServiceClient::TcpOuiServiceClient(const AsioExecutor& ex, std::string endpoint):
     _ex(ex),
     _endpoint(parse_endpoint(endpoint))
 {}

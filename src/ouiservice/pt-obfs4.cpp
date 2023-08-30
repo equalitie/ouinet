@@ -134,7 +134,7 @@ std::unique_ptr<pt::ClientProcess> Obfs4OuiServiceClient::start_client_process(
 }
 
 asio::ip::tcp::socket Obfs4OuiServiceClient::connect_through_transport(
-    const asio::executor& ex,
+    const AsioExecutor& ex,
     asio::ip::tcp::endpoint transport_endpoint,
     std::string& remote_endpoint_string,
     asio::yield_context yield,

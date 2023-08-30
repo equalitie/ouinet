@@ -173,7 +173,7 @@ public:
             return or_throw(yield, asio::error::operation_aborted);
     }
 
-    asio::executor get_executor() { return _dht->get_executor(); }
+    AsioExecutor get_executor() { return _dht->get_executor(); }
 
 private:
     void loop(Cancel& cancel, asio::yield_context yield) {
@@ -394,7 +394,7 @@ private:
         return injectors;
     }
 
-    asio::executor get_executor() { return _injector_swarm->get_executor(); }
+    AsioExecutor get_executor() { return _injector_swarm->get_executor(); }
 
 private:
     static const bool _debug = false;  // for development testing only
@@ -693,7 +693,7 @@ Bep5Client::~Bep5Client()
     stop();
 }
 
-asio::executor Bep5Client::get_executor()
+AsioExecutor Bep5Client::get_executor()
 {
     return _dht->get_executor();
 }

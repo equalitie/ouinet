@@ -20,7 +20,7 @@ using namespace std::chrono_literals;
 
 struct MultiUtpServer::State
 {
-    State( asio::executor ex, unique_ptr<AbstractServer> srv)
+    State( AsioExecutor ex, unique_ptr<AbstractServer> srv)
         : ex(move(ex))
         , server(move(srv))
     {
@@ -58,11 +58,11 @@ struct MultiUtpServer::State
         }));
     }
 
-    asio::executor ex;
+    AsioExecutor ex;
     std::unique_ptr<AbstractServer> server;
 };
 
-MultiUtpServer::MultiUtpServer( asio::executor ex
+MultiUtpServer::MultiUtpServer( AsioExecutor ex
                               , std::set<asio::ip::udp::endpoint> endpoints
                               , boost::asio::ssl::context* ssl_context)
     : _accept_queue(ex)

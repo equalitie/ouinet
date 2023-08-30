@@ -14,7 +14,7 @@ namespace ouiservice {
 class UtpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    UtpOuiServiceServer(const asio::executor&, asio::ip::udp::endpoint endpoint);
+    UtpOuiServiceServer(const AsioExecutor&, asio::ip::udp::endpoint endpoint);
 
     void start_listen(asio::yield_context) override;
     void stop_listen() override;
@@ -29,7 +29,7 @@ class UtpOuiServiceServer : public OuiServiceImplementationServer
     }
 
     private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     asio::ip::udp::endpoint _endpoint;
     Cancel _cancel;
     std::unique_ptr<asio_utp::udp_multiplexer> _udp_multiplexer;
@@ -39,7 +39,7 @@ class UtpOuiServiceServer : public OuiServiceImplementationServer
 class UtpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
-    UtpOuiServiceClient( const asio::executor&
+    UtpOuiServiceClient( const AsioExecutor&
                        , asio_utp::udp_multiplexer
                        , std::string remote_endpoint);
 
@@ -55,7 +55,7 @@ class UtpOuiServiceClient : public OuiServiceImplementationClient
     bool verify_remote_endpoint() const { return bool(_remote_endpoint); }
 
     private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     boost::optional<asio::ip::udp::endpoint> _remote_endpoint;
     asio_utp::udp_multiplexer _udp_multiplexer;
 };

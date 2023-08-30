@@ -51,7 +51,7 @@ class Obfs2OuiServiceClient : public pt::PtOuiServiceClient
         Signal<void()>& cancel_signal
     ) override;
     asio::ip::tcp::socket connect_through_transport(
-        const asio::executor&,
+        const AsioExecutor&,
         asio::ip::tcp::endpoint transport_endpoint,
         std::string& remote_endpoint_string,
         asio::yield_context yield,

@@ -56,7 +56,7 @@ public:
 
     ~Bep5Client();
 
-    asio::executor get_executor();
+    AsioExecutor get_executor();
 
 private:
     void status_loop(asio::yield_context);
