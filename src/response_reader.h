@@ -12,12 +12,14 @@
 
 namespace ouinet { namespace http_response {
 
+using ouinet::util::AsioExecutor;
+
 class AbstractReader {
 public:
     virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
     virtual bool is_done() const = 0;
     virtual void close()   = 0;
-    virtual asio::executor get_executor() = 0;
+    virtual AsioExecutor get_executor() = 0;
     virtual ~AbstractReader() = default;
 
     template<class Duration>
@@ -123,7 +125,7 @@ public:
 
     void close() override { if (_in.is_open()) _in.close(); }
 
-    asio::executor get_executor() override { return _in.get_executor(); }
+    AsioExecutor get_executor() override { return _in.get_executor(); }
 
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)

@@ -8,7 +8,7 @@
 namespace ouinet {
 
 inline
-bool async_sleep( const asio::executor& exec
+bool async_sleep( const AsioExecutor& exec
                 , asio::steady_timer::duration duration
                 , Signal<void()>& cancel
                 , asio::yield_context yield)

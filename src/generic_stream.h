@@ -53,7 +53,9 @@ namespace generic_stream_detail {
 
 class GenericStream {
 public:
-#if BOOST_VERSION >= 107100
+#if BOOST_VERSION >= 107400
+     using executor_type = boost::asio::any_io_executor;
+#elif BOOST_VERSION >= 107100
     using executor_type = boost::asio::executor;
 #elif BOOST_VERSION >= 106700
     using executor_type = asio::io_context::executor_type;
@@ -402,7 +404,9 @@ public:
     const std::string& remote_endpoint() const { return _remote_endpoint; }
 
 private:
-#if BOOST_VERSION >= 107100
+#if BOOST_VERSION >= 107400
+    asio::any_io_executor _executor;
+#elif BOOST_VERSION >= 107100
     asio::executor _executor;
 #elif BOOST_VERSION >= 106700
     asio::io_service* _ios = nullptr;

@@ -46,7 +46,7 @@ class IdleConnection {
     IdleConnection(IdleConnection&&) = default;
     IdleConnection& operator=(IdleConnection&&) = default;
 
-    boost::asio::executor get_executor()
+    AsioExecutor get_executor()
     {
         return _data->connection.get_executor();
     }

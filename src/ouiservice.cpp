@@ -16,7 +16,7 @@ using namespace ouinet;
 // OuiServiceServer
 //--------------------------------------------------------------------
 
-OuiServiceServer::OuiServiceServer(const asio::executor& ex):
+OuiServiceServer::OuiServiceServer(const AsioExecutor & ex):
     _ex(ex),
     _connection_available(ex)
 {}
@@ -116,7 +116,7 @@ void OuiServiceServer::cancel_accept()
 // OuiServiceClient
 //--------------------------------------------------------------------
 
-OuiServiceClient::OuiServiceClient(const asio::executor& ex):
+OuiServiceClient::OuiServiceClient(const AsioExecutor& ex):
     _started(false),
     _started_condition(ex)
 {}

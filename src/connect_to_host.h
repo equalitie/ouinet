@@ -3,6 +3,7 @@
 #include "namespaces.h"
 #include "generic_stream.h"
 #include "or_throw.h"
+#include "util/executor.h"
 #include "util/signal.h"
 
 #include <chrono>
@@ -13,8 +14,10 @@
 
 namespace ouinet {
 
+using ouinet::util::AsioExecutor;
+
 asio::ip::tcp::socket
-connect_to_host( const asio::executor&
+connect_to_host( const AsioExecutor&
                , const std::string& host
                , const std::string& port
                , Signal<void()>& cancel_signal
@@ -22,13 +25,13 @@ connect_to_host( const asio::executor&
 
 asio::ip::tcp::socket
 connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
-               , const asio::executor&
+               , const AsioExecutor&
                , Signal<void()>& cancel_signal
                , asio::yield_context yield);
 
 asio::ip::tcp::socket
 connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
-               , const asio::executor&
+               , const AsioExecutor&
                , std::chrono::steady_clock::duration timeout
                , Signal<void()>& cancel_signal
                , asio::yield_context yield);

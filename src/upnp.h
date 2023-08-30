@@ -16,12 +16,14 @@
 
 namespace ouinet {
 
+using ouinet::util::AsioExecutor;
+
 class UPnPUpdater {
 public:
     using UdpEndpoint = asio::ip::udp::endpoint;
     using UdpEndpoints = std::vector<UdpEndpoint>;
 public:
-    UPnPUpdater( asio::executor exec
+    UPnPUpdater( AsioExecutor exec
                , uint16_t external_port
                , uint16_t internal_port)
         : _external_port(external_port)
@@ -64,7 +66,7 @@ public:
     }
 
 private:
-    void loop( asio::executor exec
+    void loop( AsioExecutor exec
              , Cancel& cancel
              , asio::yield_context yield)
     {

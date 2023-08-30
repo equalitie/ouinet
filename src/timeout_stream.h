@@ -19,9 +19,12 @@ namespace ouinet {
  *     // will finish with the asio::error::timed_out error.
  *     t.async_read_some(my_buffer, yield[ec]);
  */
+
+using ouinet::util::AsioExecutor;
+
 template<class InnerStream> class TimeoutStream {
 public:
-    using executor_type = boost::asio::executor;
+    using executor_type = AsioExecutor;
     using next_layer_type = InnerStream;
     using endpoint_type = typename InnerStream::endpoint_type;
 
@@ -36,7 +39,7 @@ private:
     class Deadline : public std::enable_shared_from_this<Deadline> {
         using Parent = std::enable_shared_from_this<Deadline>;
     public:
-        Deadline(asio::executor& exec)
+        Deadline(AsioExecutor& exec)
             : _timer(exec)
         {}
 
