@@ -9,6 +9,8 @@
 
 namespace ouinet {
 
+using ouinet::util::AsioExecutor;
+
 class ConditionVariable {
     using Sig = void(boost::system::error_code);
 
