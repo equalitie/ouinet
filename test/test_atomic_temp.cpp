@@ -20,7 +20,7 @@ using namespace ouinet;
 static
 void
 populate_directory( const fs::path& dir
-                  , const asio::executor& ex, sys::error_code& ec) {
+                  , const AsioExecutor& ex, sys::error_code& ec) {
     util::file_io::open_or_create(ex, dir / "testfile", ec);
     if (!ec) fs::create_directory(dir / "testdir", ec);
     if (!ec) util::file_io::open_or_create(ex, dir / "testdir" / "testfile", ec);
