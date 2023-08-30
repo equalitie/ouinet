@@ -201,7 +201,7 @@ static bool read_nodes( bool is_v4
     return true;
 }
 
-dht::DhtNode::DhtNode( const asio::executor& exec
+dht::DhtNode::DhtNode( const AsioExecutor& exec
                      , fs::path storage_dir
                      , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
@@ -259,7 +259,7 @@ fs::path dht::DhtNode::stored_contacts_path() const
 
 static
 std::set<dht::NodeContact>
-read_stored_contacts( const asio::executor& exec
+read_stored_contacts( const AsioExecutor& exec
                     , const fs::path& path
                     , Cancel cancel
                     , asio::yield_context yield)
@@ -308,7 +308,7 @@ read_stored_contacts( const asio::executor& exec
 }
 
 static
-void write_stored_contacts( const asio::executor& exec
+void write_stored_contacts( const AsioExecutor& exec
                           , std::set<NodeContact> contacts
                           , const fs::path& path
                           , Cancel cancel
@@ -1574,7 +1574,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
 }
 
 asio::ip::udp::endpoint resolve(
-    const asio::executor& exec,
+    const AsioExecutor& exec,
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
@@ -2533,7 +2533,7 @@ void dht::DhtNode::tracker_do_search_peers(
 }
 
 
-MainlineDht::MainlineDht( const asio::executor& exec
+MainlineDht::MainlineDht( const AsioExecutor& exec
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)

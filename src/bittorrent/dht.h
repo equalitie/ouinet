@@ -32,7 +32,7 @@ namespace bittorrent {
 class UdpMultiplexer;
 
 asio::ip::udp::endpoint resolve(
-    const asio::executor&,
+    const AsioExecutor&,
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
@@ -75,7 +75,7 @@ class DhtNode {
     const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 
     public:
-    DhtNode( const asio::executor&
+    DhtNode( const AsioExecutor&
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {});
 
@@ -223,7 +223,7 @@ class DhtNode {
 
     ~DhtNode();
 
-    asio::executor get_executor() { return _exec; }
+    AsioExecutor get_executor() { return _exec; }
 
     NodeID node_id() const { return _node_id; }
 
@@ -350,7 +350,7 @@ class DhtNode {
     void store_contacts() const;
 
     private:
-    asio::executor _exec;
+    AsioExecutor _exec;
     ip::udp::endpoint _local_endpoint;
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
@@ -383,7 +383,7 @@ class DhtNode {
 
 class MainlineDht {
     public:
-    MainlineDht( const asio::executor&
+    MainlineDht( const AsioExecutor&
                , boost::filesystem::path storage_dir = {}
                , std::set<bootstrap::Address> extra_bs = {});
 
@@ -458,7 +458,7 @@ class MainlineDht {
     )
     { Cancel cancel; return mutable_get(public_key, salt, cancel, yield); }
 
-    asio::executor get_executor() { return _exec; }
+    AsioExecutor get_executor() { return _exec; }
 
     bool all_ready() const {
         for (const auto& n : _nodes) {
@@ -473,7 +473,7 @@ class MainlineDht {
     }
 
     private:
-    asio::executor _exec;
+    AsioExecutor _exec;
     std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;
     Cancel _cancel;
     boost::filesystem::path _storage_dir;

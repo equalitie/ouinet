@@ -43,7 +43,7 @@ private:
 public:
     UdpMultiplexer(asio_utp::udp_multiplexer&&);
 
-    asio::executor get_executor();
+    AsioExecutor get_executor();
 
     void send(std::string&& message, const udp::endpoint& to, Cancel&, asio::yield_context);
     void send(std::string&& message, const udp::endpoint& to);
@@ -304,7 +304,7 @@ UdpMultiplexer::receive(udp::endpoint& from, Cancel& cancel, asio::yield_context
 }
 
 inline
-asio::executor UdpMultiplexer::get_executor()
+AsioExecutor UdpMultiplexer::get_executor()
 {
     return _socket.get_executor();
 }

@@ -60,7 +60,7 @@ struct detail::Bep5AnnouncerImpl
         }
     }
 
-    void loop(asio::executor& exec, asio::yield_context yield)
+    void loop(AsioExecutor& exec, asio::yield_context yield)
     {
         using namespace std::chrono_literals;
 
