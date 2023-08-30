@@ -47,7 +47,7 @@ private:
             return remaining_locks > 0 && !success;
         }
 
-        WaitState(const boost::asio::executor&);
+        WaitState(const AsioExecutor&);
     };
 
 public:
@@ -68,7 +68,7 @@ public:
     };
 
 public:
-    SuccessCondition(const boost::asio::executor&);
+    SuccessCondition(const AsioExecutor&);
     SuccessCondition(const SuccessCondition&) = delete;
     SuccessCondition& operator=(const SuccessCondition&) = delete;
 
@@ -82,7 +82,7 @@ public:
     }
 
 private:
-    boost::asio::executor _exec;
+    AsioExecutor _exec;
     std::shared_ptr<WaitState> _wait_state;
     Signal<void()> _cancel_signal;
     bool _cancelled;
@@ -91,7 +91,7 @@ private:
 
 
 inline
-SuccessCondition::WaitState::WaitState(const boost::asio::executor& exec):
+SuccessCondition::WaitState::WaitState(const AsioExecutor& exec):
     condition(exec),
     remaining_locks(0),
     success(false)
@@ -143,7 +143,7 @@ void SuccessCondition::Lock::release(bool success) const
 }
 
 inline
-SuccessCondition::SuccessCondition(const boost::asio::executor& exec):
+SuccessCondition::SuccessCondition(const AsioExecutor& exec):
     _exec(exec),
     _cancelled(false)
 {}

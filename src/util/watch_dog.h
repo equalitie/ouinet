@@ -74,7 +74,7 @@ public:
     }
 
     template<class Duration>
-    NewWatchDog(const asio::executor& ex, Duration d, OnTimeout&& on_timeout)
+    NewWatchDog(const AsioExecutor& ex, Duration d, OnTimeout&& on_timeout)
         : _timer(asio::steady_timer(ex))
         , _deadline(Clock::now() + d)
         , _on_timeout(std::move(on_timeout))
@@ -132,7 +132,7 @@ private:
 template<class Duration, class OnTimeout>
 inline
 NewWatchDog<OnTimeout>
-watch_dog(const asio::executor& ex, Duration d, OnTimeout&& on_timeout)
+watch_dog(const AsioExecutor& ex, Duration d, OnTimeout&& on_timeout)
 {
     return NewWatchDog<OnTimeout>(ex, d, std::move(on_timeout));
 }
@@ -157,7 +157,7 @@ private:
         Clock::time_point  deadline;
         asio::steady_timer timer;
 
-        State(WatchDog* self, Clock::time_point d, const asio::executor& ex)
+        State(WatchDog* self, Clock::time_point d, const AsioExecutor& ex)
             : self(self)
             , deadline(d)
             , timer(ex)
@@ -187,7 +187,7 @@ public:
     }
 
     template<class Duration, class OnTimeout>
-    WatchDog(const asio::executor& ex, Duration d, OnTimeout on_timeout)
+    WatchDog(const AsioExecutor& ex, Duration d, OnTimeout on_timeout)
     {
         start(ex, d, std::move(on_timeout));
     }
@@ -235,7 +235,7 @@ public:
     }
 
     template<class Duration, class OnTimeout>
-    void start(const asio::executor& ex, Duration d, OnTimeout on_timeout) {
+    void start(const AsioExecutor& ex, Duration d, OnTimeout on_timeout) {
         stop();
 
         asio::spawn(ex, [self_ = this, ex, d, on_timeout = std::move(on_timeout)]

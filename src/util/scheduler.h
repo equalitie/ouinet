@@ -45,7 +45,7 @@ private:
     using List = boost::intrusive::list<T>;
 
     struct Waiter : public ListHook {
-        Waiter(const asio::executor& exec) : cv(exec) {}
+        Waiter(const AsioExecutor& exec) : cv(exec) {}
         ConditionVariable cv;
     };
 
@@ -85,7 +85,7 @@ public:
     };
 
 public:
-    Scheduler(const asio::executor&, size_t max_running_jobs = 1);
+    Scheduler(const AsioExecutor&, size_t max_running_jobs = 1);
     Scheduler(asio::io_context&, size_t max_running_jobs = 1);
 
     Slot wait_for_slot(asio::yield_context yield);
@@ -107,14 +107,14 @@ private:
     void release_slot(Slot&);
 
 private:
-    asio::executor _exec;
+    AsioExecutor _exec;
     size_t _max_running_jobs;
     List<Slot> _slots;
     List<Waiter> _waiters;
 };
 
 inline
-Scheduler::Scheduler(const asio::executor& exec, size_t max_running_jobs)
+Scheduler::Scheduler(const AsioExecutor& exec, size_t max_running_jobs)
     : _exec(exec)
     , _max_running_jobs(max_running_jobs)
 {}

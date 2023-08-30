@@ -2,6 +2,7 @@
 
 #include <sstream>
 #include "../namespaces.h"
+#include "../util/executor.h"
 #include "../util/str.h"
 #include "../logger.h"
 #include "../or_throw.h"
@@ -12,6 +13,8 @@
 #include <boost/optional.hpp>
 
 namespace ouinet {
+
+using ouinet::util::AsioExecutor;
 
 class Yield : public boost::intrusive::list_base_hook
               < boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
@@ -25,7 +28,7 @@ class Yield : public boost::intrusive::list_base_hook
         Yield* self;
         asio::steady_timer timer;
 
-        TimeoutState(const asio::executor& ex, Yield* self)
+        TimeoutState(const AsioExecutor& ex, Yield* self)
             : self(self)
             , timer(ex)
         {}
@@ -43,7 +46,7 @@ public:
         : Yield(ctx.get_executor(), asio_yield, std::move(con_id))
     {}
 
-    Yield(const asio::executor& ex
+    Yield(const AsioExecutor& ex
          , asio::yield_context asio_yield
          , std::string con_id = "")
         : _ex(ex)
@@ -208,7 +211,7 @@ private:
     }
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     asio::yield_context _asio_yield;
     std::shared_ptr<sys::error_code> _ignored_error;
     std::string _tag;

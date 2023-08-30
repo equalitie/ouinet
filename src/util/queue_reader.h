@@ -10,11 +10,11 @@ public:
     using Part = http_response::Part;
     using Queue = std::queue<boost::optional<Part>>;
 
-    QueueReader(asio::executor ex)
+    QueueReader(AsioExecutor ex)
         : _ex(ex)
     {}
 
-    QueueReader(asio::executor ex, Queue q)
+    QueueReader(AsioExecutor ex, Queue q)
         : _ex(ex), _queue(std::move(q))
     {}
 
@@ -43,13 +43,13 @@ public:
         _queue.push(boost::none);
     }
 
-    asio::executor get_executor() override
+    AsioExecutor get_executor() override
     {
         return _ex;
     }
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     Queue _queue;
     bool _is_done = false;
 };
