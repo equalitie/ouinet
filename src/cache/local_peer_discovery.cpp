@@ -57,13 +57,13 @@ struct LocalPeerDiscovery::Impl {
         set<udp::endpoint> advertised_eps;
     };
 
-    asio::executor _ex;
+    AsioExecutor _ex;
     udp::socket _socket;
     PeerId _id;
     set<udp::endpoint> _advertised_eps;
     map<PeerId, Peer> _peers;
 
-    Impl( const asio::executor& ex
+    Impl( const AsioExecutor& ex
         , uint64_t id
         , set<udp::endpoint> advertised_eps
         , Cancel& cancel)
@@ -261,7 +261,7 @@ set<udp::endpoint> LocalPeerDiscovery::found_peers() const
     return ret;
 }
 
-LocalPeerDiscovery::LocalPeerDiscovery( const asio::executor& ex
+LocalPeerDiscovery::LocalPeerDiscovery( const AsioExecutor& ex
                                       , set<udp::endpoint> advertised_eps)
     : _ex(ex)
 {

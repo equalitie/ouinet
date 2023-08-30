@@ -30,11 +30,11 @@ public:
     ~DhtGroupsImpl();
 
     static std::unique_ptr<DhtGroupsImpl>
-    load_trusted(fs::path root_dir, asio::executor ex, Cancel& c, asio::yield_context y)
+    load_trusted(fs::path root_dir, AsioExecutor ex, Cancel& c, asio::yield_context y)
     { return load(std::move(root_dir), true, std::move(ex), c, std::move(y)); }
 
     static std::unique_ptr<DhtGroupsImpl>
-    load_untrusted(fs::path root_dir, asio::executor ex, Cancel& c, asio::yield_context y)
+    load_untrusted(fs::path root_dir, AsioExecutor ex, Cancel& c, asio::yield_context y)
     { return load(std::move(root_dir), false, std::move(ex), c, std::move(y)); }
 
     std::set<GroupName> groups() const;
@@ -50,31 +50,31 @@ private:
     using Group  = std::pair<GroupName, std::set<ItemName>>;
     using Groups = std::map<GroupName, std::set<ItemName>>;
 
-    DhtGroupsImpl(asio::executor, fs::path root_dir, Groups);
+    DhtGroupsImpl(AsioExecutor, fs::path root_dir, Groups);
 
     DhtGroupsImpl(const DhtGroupsImpl&) = delete;
     DhtGroupsImpl(DhtGroupsImpl&&)      = delete;
 
     static
     std::unique_ptr<DhtGroupsImpl>
-    load(fs::path root_dir, bool trusted, asio::executor, Cancel&, asio::yield_context);
+    load(fs::path root_dir, bool trusted, AsioExecutor, Cancel&, asio::yield_context);
 
     static
     Group load_group( const fs::path dir, bool trusted
-                    , asio::executor, Cancel&, asio::yield_context);
+                    , AsioExecutor, Cancel&, asio::yield_context);
 
     fs::path group_path(const GroupName&);
     fs::path items_path(const GroupName&);
     fs::path item_path(const GroupName&, const ItemName&);
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     fs::path _root_dir;
     Groups _groups;
     Cancel _lifetime_cancel;
 };
 
-DhtGroupsImpl::DhtGroupsImpl(asio::executor ex, fs::path root_dir, Groups groups)
+DhtGroupsImpl::DhtGroupsImpl(AsioExecutor ex, fs::path root_dir, Groups groups)
     : _ex(ex)
     , _root_dir(std::move(root_dir))
     , _groups(std::move(groups))
@@ -92,7 +92,7 @@ try_remove(const fs::path& path)
     // The parent directory may be left empty.
 }
 
-static std::string read_file(fs::path p, asio::executor ex, Cancel& c, yield_context y)
+static std::string read_file(fs::path p, AsioExecutor ex, Cancel& c, yield_context y)
 {
     sys::error_code ec;
 
@@ -124,7 +124,7 @@ std::string sha1_hex_digest(const std::string& s) {
 DhtGroupsImpl::Group
 DhtGroupsImpl::load_group( const fs::path dir
                          , bool trusted
-                         , asio::executor ex
+                         , AsioExecutor ex
                          , Cancel& cancel
                          , yield_context yield)
 {
@@ -204,7 +204,7 @@ std::set<DhtGroups::ItemName> DhtGroupsImpl::items(const GroupName& gn) const
 std::unique_ptr<DhtGroupsImpl>
 DhtGroupsImpl::load( fs::path root_dir
                    , bool trusted
-                   , asio::executor ex
+                   , AsioExecutor ex
                    , Cancel& cancel
                    , yield_context yield)
 {
@@ -424,7 +424,7 @@ private:
 
 std::unique_ptr<BaseDhtGroups>
 ouinet::load_static_dht_groups( fs::path root_dir
-                              , asio::executor ex
+                              , AsioExecutor ex
                               , Cancel& cancel
                               , asio::yield_context yield)
 {
@@ -462,7 +462,7 @@ private:
 
 std::unique_ptr<DhtGroups>
 ouinet::load_dht_groups( fs::path root_dir
-                       , asio::executor ex
+                       , AsioExecutor ex
                        , Cancel& cancel
                        , yield_context yield)
 {
@@ -527,7 +527,7 @@ private:
 std::unique_ptr<DhtGroups>
 ouinet::load_backed_dht_groups( fs::path root_dir
                               , std::unique_ptr<BaseDhtGroups> fallback_groups
-                              , asio::executor ex
+                              , AsioExecutor ex
                               , Cancel& cancel
                               , yield_context yield)
 {

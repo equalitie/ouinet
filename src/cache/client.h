@@ -31,7 +31,7 @@ private:
     using opt_path = boost::optional<fs::path>;
 
     static std::unique_ptr<Client>
-    build( asio::executor ex
+    build( AsioExecutor ex
          , std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
@@ -45,7 +45,7 @@ public:
 
 public:
     static std::unique_ptr<Client>
-    build( asio::executor ex
+    build( AsioExecutor ex
          , std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
@@ -59,7 +59,7 @@ public:
     }
 
     static std::unique_ptr<Client>
-    build( asio::executor ex
+    build( AsioExecutor ex
          , std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir

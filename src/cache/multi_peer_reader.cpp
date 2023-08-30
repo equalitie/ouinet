@@ -51,7 +51,7 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 
 static
 boost::optional<asio_utp::udp_multiplexer>
-choose_multiplexer_for( asio::executor exec, const udp::endpoint& ep
+choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
                       , const set<udp::endpoint>& lan_my_eps)
 {
     for (auto& e : lan_my_eps) {
@@ -68,7 +68,7 @@ choose_multiplexer_for( asio::executor exec, const udp::endpoint& ep
 }
 
 static
-GenericStream connect( asio::executor exec
+GenericStream connect( AsioExecutor exec
                      , udp::endpoint ep
                      , const set<udp::endpoint>& lan_my_eps
                      , Cancel cancel
@@ -91,14 +91,14 @@ public:
     util::intrusive::list_hook _candidate_hook;
     util::intrusive::list_hook _good_peer_hook;
 
-    asio::executor _exec;
+    AsioExecutor _exec;
     string _key;
     const util::Ed25519PublicKey _cache_pk;
     std::unique_ptr<http_response::Reader> _reader;
     HashList _hash_list;
     Cancel _lifetime_cancel;
 
-    Peer(asio::executor exec, const string& key, util::Ed25519PublicKey cache_pk) :
+    Peer(AsioExecutor exec, const string& key, util::Ed25519PublicKey cache_pk) :
         _exec(exec),
         _key(key),
         _cache_pk(cache_pk)
@@ -310,7 +310,7 @@ public:
 
 class MultiPeerReader::Peers {
 public:
-    Peers(asio::executor exec
+    Peers(AsioExecutor exec
          , set<udp::endpoint> lan_my_eps
          , set<udp::endpoint> wan_my_eps
          , set<udp::endpoint> lan_peer_eps
@@ -362,7 +362,7 @@ public:
         });
     }
 
-    Peers(asio::executor exec
+    Peers(AsioExecutor exec
          , set<udp::endpoint> lan_my_eps
          , set<udp::endpoint> lan_peer_eps
          , util::Ed25519PublicKey cache_pk
@@ -505,7 +505,7 @@ private:
     util::intrusive::list<Peer, &Peer::_candidate_hook> _candidate_peers;
     util::intrusive::list<Peer, &Peer::_good_peer_hook> _good_peers;
 
-    asio::executor _exec;
+    AsioExecutor _exec;
     ConditionVariable _cv;
 
     util::Ed25519PublicKey _cache_pk;
@@ -523,7 +523,7 @@ private:
     std::mt19937 _random_generator;
 };
 
-MultiPeerReader::MultiPeerReader( asio::executor ex
+MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::string key
                                 , util::Ed25519PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
@@ -542,7 +542,7 @@ MultiPeerReader::MultiPeerReader( asio::executor ex
                                , dbg_tag);
 }
 
-MultiPeerReader::MultiPeerReader( asio::executor ex
+MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::string key
                                 , util::Ed25519PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
@@ -584,7 +584,7 @@ struct MultiPeerReader::PreFetch {
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
     AsyncJob<boost::none_t> job;
 
-    PreFetchSequential(size_t block_id, Peer* peer, asio::executor ex)
+    PreFetchSequential(size_t block_id, Peer* peer, AsioExecutor ex)
         : PreFetch(block_id, peer)
         , job(ex)
     {
@@ -610,7 +610,7 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
     using Job = AsyncJob<OptBlock>;
     Job job;
 
-    PreFetchParallel(size_t block_id, Peer* peer, asio::executor ex)
+    PreFetchParallel(size_t block_id, Peer* peer, AsioExecutor ex)
         : PreFetch(block_id, peer)
         , job(ex)
     {
