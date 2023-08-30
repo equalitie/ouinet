@@ -3,9 +3,12 @@
 #include <boost/asio/steady_timer.hpp>
 #include "namespaces.h"
 
+#include "util/executor.h"
 #include "util/signal.h"
 
 namespace ouinet {
+
+using ouinet::util::AsioExecutor;
 
 inline
 bool async_sleep( const AsioExecutor& exec
