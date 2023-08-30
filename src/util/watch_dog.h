@@ -5,6 +5,7 @@
 #include <boost/asio/spawn.hpp>
 #include "../defer.h"
 #include "../or_throw.h"
+#include "../util/executor.h"
 #include "../util/signal.h"
 #include "../util/handler_tracker.h"
 #include "../namespaces.h"
@@ -12,6 +13,8 @@
 namespace ouinet {
 
 #include <boost/asio/yield.hpp>
+
+using ouinet::util::AsioExecutor;
 
 template<class OnTimeout>
 class NewWatchDog {

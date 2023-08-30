@@ -6,6 +6,7 @@
 #include "namespaces.h"
 #include "or_throw.h"
 #include "response_part.h"
+#include "util/executor.h"
 #include "util/signal.h"
 #include "util/watch_dog.h"
 #include <boost/beast.hpp>

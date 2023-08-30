@@ -6,6 +6,7 @@
 
 #include <defer.h>
 #include <util/atomic_dir.h>
+#include <util/executor.h>
 #include <util/file_io.h>
 #include <util/temp_dir.h>
 
@@ -16,6 +17,8 @@ BOOST_AUTO_TEST_SUITE(ouinet_atomic_temp)
 
 using namespace std;
 using namespace ouinet;
+
+using ouinet::util::AsioExecutor;
 
 static
 void
