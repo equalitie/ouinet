@@ -316,7 +316,7 @@ static void remove_ouinet_nonerrors_ref(http::response_header<Body>& message)
     if (!boost::regex_match(proto_err, http_::response_error_rx))
         return;
 
-    message.set(http_::protocol_version_hdr, http_::protocol_version_current);
+    message.set(http_::protocol_version_hdr, std::to_string(http_::protocol_version_current));
     message.set(http_::response_error_hdr, proto_err);
 }
 

@@ -45,7 +45,7 @@ http_injection_trailer( const http::response_header<>& rsh
 {
     using namespace ouinet::http_;
     // Pending trailer headers to support the signature.
-    rst.set(response_data_size_hdr, content_length);
+    rst.set(response_data_size_hdr, std::to_string(content_length));
     rst.set(http::field::digest, "SHA-256=" + util::base64_encode(content_digest));
 
     // Put together the head to be signed:
@@ -397,8 +397,8 @@ http_signature( const http::response_header<>& rsh
     boost::format fmt(fmt_);
 
     http::response_header<> sig_head;
-    sig_head.set("(response-status)", rsh.result_int());
-    sig_head.set("(created)", ts);
+    sig_head.set("(response-status)", std::to_string(rsh.result_int()));
+    sig_head.set("(created)", std::to_string(ts));
     prep_sig_head(rsh, sig_head);  // unique fields, lowercase names, trimmed values
 
     std::string sig_string, headers;
@@ -802,7 +802,7 @@ struct VerifyingReader::Impl {
         if (orig_status_o) {
             out_head.reason("");
             out_head.result(resp_status);
-            out_head.set(http_::response_original_http_status, *orig_status_o);
+            out_head.set(http_::response_original_http_status, (const char *) *orig_status_o);
             // Restore `Content-Range` if `206 Partial Content`.
             if (resp_status == http::status::partial_content && !resp_range.empty())
                 out_head.set(http::field::content_range, resp_range);

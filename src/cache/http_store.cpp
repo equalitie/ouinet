@@ -417,7 +417,7 @@ public:
             auto orig_status = head.result_int();
             head.reason("");
             head.result(http::status::partial_content);
-            head.set(http_::response_original_http_status, orig_status);
+            head.set(http_::response_original_http_status, std::to_string(orig_status));
 
             // Align ranges to data blocks.
             assert(block_size);
@@ -433,8 +433,9 @@ public:
             if (range->end > ds) range->end = ds;
 
             // Report resulting range.
-            head.set( http::field::content_range
-                    , util::HttpResponseByteRange{range->begin, range->end - 1, data_size});
+            std::stringstream content_range_ss;
+            content_range_ss << util::HttpResponseByteRange{range->begin, range->end - 1, data_size};
+            head.set( http::field::content_range, content_range_ss.str());
         }
 
         // The stored head should not have framing headers,
