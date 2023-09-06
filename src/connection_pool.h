@@ -294,6 +294,7 @@ class ConnectionPool {
         public:
 
         using IdleConnection<GenericStream>::IdleConnection;
+        using executor_type = ouinet::util::AsioExecutor;
 
         Connection() = default;
         Connection(Connection&&) = default;
