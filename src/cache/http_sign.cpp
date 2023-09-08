@@ -802,7 +802,9 @@ struct VerifyingReader::Impl {
         if (orig_status_o) {
             out_head.reason("");
             out_head.result(resp_status);
-            out_head.set(http_::response_original_http_status, (const char *) *orig_status_o);
+            std::stringstream orig_status;
+            orig_status << *orig_status_o;
+            out_head.set(http_::response_original_http_status, orig_status.str());
             // Restore `Content-Range` if `206 Partial Content`.
             if (resp_status == http::status::partial_content && !resp_range.empty())
                 out_head.set(http::field::content_range, resp_range);
