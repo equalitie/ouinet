@@ -4,6 +4,7 @@ include: .gitlab-ci/jobs/linux.yml
 debian-12-boost-1.74 / build:
   variables:
     BOOST_VERSION: "1.74.0"
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-12-builder' # Reusing debian-12 image
     TARGET_PLATFORM: 'debian-12-boost-1.74'
   extends:
     .linux-build

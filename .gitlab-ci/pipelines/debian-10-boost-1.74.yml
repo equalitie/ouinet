@@ -4,11 +4,12 @@ include: .gitlab-ci/jobs/linux.yml
 debian-10-boost-1.74 / build:
   variables:
     BOOST_VERSION: "1.74.0"
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-10-builder' # Reusing debian-10 image
     TARGET_PLATFORM: 'debian-10-boost-1.74'
   extends:
     .linux-build
   needs:
-    - job: 'debian-10 / prepare-builder-image'
+    - job: 'debian-10 / prepare-builder-image' # Reusing debian-10 image
       optional: true
 
 debian-10-boost-1.74 / unit-test:
