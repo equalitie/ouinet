@@ -9,6 +9,7 @@ debian-12 / prepare-builder-image:
 
 debian-12 / build:
   variables:
+    BOOST_VERSION: "1.71.0"
     TARGET_PLATFORM: 'debian-12'
   extends:
     .linux-build

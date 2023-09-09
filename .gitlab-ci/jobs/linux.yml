@@ -23,7 +23,7 @@ variables:
   script:
     - mkdir -p $BUILD_PATH
     - cd $BUILD_PATH
-    - cmake $CI_PROJECT_DIR
+    - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
     - make -j `nproc`
 
 .linux-unit-test:
