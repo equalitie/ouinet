@@ -1,4 +1,13 @@
-set(BOOST_VERSION 1.74.0)
+if(NOT BOOST_VERSION)
+    set(BOOST_VERSION 1.71.0)
+endif ()
+
+if (${BOOST_VERSION} EQUAL 1.71.0)
+    set(BOOST_VERSION_HASH d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee)
+elseif (${BOOST_VERSION} EQUAL 1.74.0)
+    set(BOOST_VERSION_HASH 83bfc1507731a0906e387fc28b7ef5417d591429e51e788417fe9ff025e116b1)
+endif ()
+
 set(BOOST_COMPONENTS
     context
     coroutine
@@ -96,7 +105,7 @@ endforeach()
 
 externalproject_add(built_boost
     URL "https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
-    URL_HASH SHA256=83bfc1507731a0906e387fc28b7ef5417d591429e51e788417fe9ff025e116b1
+    URL_HASH SHA256=${BOOST_VERSION_HASH}
     PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
     CONFIGURE_COMMAND
