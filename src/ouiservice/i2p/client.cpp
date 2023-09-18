@@ -12,7 +12,7 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const asio::executor& exec)
+Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const AsioExecutor& exec)
     : _service(service)
     , _exec(exec)
     , _target_id(target_id)

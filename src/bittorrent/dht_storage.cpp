@@ -121,7 +121,7 @@ void detail::Swarm::expire()
 
 
 
-Tracker::Tracker(const asio::executor& exec):
+Tracker::Tracker(const AsioExecutor& exec):
     _exec(exec)
 {
     /*
@@ -173,7 +173,7 @@ std::vector<tcp::endpoint> Tracker::list_peers(NodeID swarm, unsigned int count)
 
 
 
-DataStore::DataStore(const asio::executor& exec):
+DataStore::DataStore(const AsioExecutor& exec):
     _exec(exec)
 {
     /*

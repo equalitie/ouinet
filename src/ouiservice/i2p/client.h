@@ -21,12 +21,12 @@ private:
     Client( std::shared_ptr<Service> service
           , const std::string& target_id
           , uint32_t timeout
-          , const asio::executor&);
+          , const AsioExecutor&);
 
 public:
     ~Client();
 
-    asio::executor get_executor() { return _exec; }
+    AsioExecutor get_executor() { return _exec; }
 
     void start(asio::yield_context yield) override;
     void stop() override;
@@ -36,7 +36,7 @@ public:
 
 private:
     std::shared_ptr<Service> _service;
-    asio::executor _exec;
+    AsioExecutor _exec;
     std::string _target_id;
     uint32_t _timeout;
 

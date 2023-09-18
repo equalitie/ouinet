@@ -188,12 +188,12 @@ struct SigEntry {
 
 class SplittedWriter {
 public:
-    SplittedWriter(const fs::path& dirp, const asio::executor& ex)
+    SplittedWriter(const fs::path& dirp, const AsioExecutor& ex)
         : dirp(dirp), ex(ex) {}
 
 private:
     const fs::path& dirp;
-    const asio::executor& ex;
+    const AsioExecutor& ex;
 
     std::string uri;  // for warnings, should use `Yield::log` instead
     http_response::Head head;  // for merging in the trailer later on
@@ -329,7 +329,7 @@ public:
 
 void
 http_store( http_response::AbstractReader& reader, const fs::path& dirp
-          , const asio::executor& ex, Cancel cancel, asio::yield_context yield)
+          , const AsioExecutor& ex, Cancel cancel, asio::yield_context yield)
 {
     SplittedWriter writer(dirp, ex);
 
@@ -417,7 +417,7 @@ public:
             auto orig_status = head.result_int();
             head.reason("");
             head.result(http::status::partial_content);
-            head.set(http_::response_original_http_status, orig_status);
+            head.set(http_::response_original_http_status, std::to_string(orig_status));
 
             // Align ranges to data blocks.
             assert(block_size);
@@ -433,8 +433,9 @@ public:
             if (range->end > ds) range->end = ds;
 
             // Report resulting range.
-            head.set( http::field::content_range
-                    , util::HttpResponseByteRange{range->begin, range->end - 1, data_size});
+            std::stringstream content_range_ss;
+            content_range_ss << util::HttpResponseByteRange{range->begin, range->end - 1, data_size};
+            head.set( http::field::content_range, content_range_ss.str());
         }
 
         // The stored head should not have framing headers,
@@ -610,7 +611,7 @@ public:
         return _is_done;
     }
 
-    asio::executor get_executor() override
+    AsioExecutor get_executor() override
     {
         return headf.get_executor();
     }
@@ -734,7 +735,7 @@ body_path_external( const fs::path& dirp
 
 static
 asio::posix::stream_descriptor
-open_body_external( const asio::executor& ex
+open_body_external( const AsioExecutor& ex
                   , const fs::path& dirp
                   , const fs::path& cdirp
                   , sys::error_code& ec)
@@ -761,7 +762,7 @@ template<class Reader>
 static
 reader_uptr
 _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
-                  , asio::executor ex
+                  , AsioExecutor ex
                   , boost::optional<std::size_t> range_first
                   , boost::optional<std::size_t> range_last
                   , sys::error_code& ec)
@@ -831,7 +832,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
 }
 
 reader_uptr
-http_store_reader( const fs::path& dirp, asio::executor ex
+http_store_reader( const fs::path& dirp, AsioExecutor ex
                  , sys::error_code& ec)
 {
     return _http_store_reader<HttpStoreReader>
@@ -839,7 +840,7 @@ http_store_reader( const fs::path& dirp, asio::executor ex
 }
 
 reader_uptr
-http_store_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+http_store_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor ex
                  , sys::error_code& ec)
 {
     return _http_store_reader<HttpStoreReader>
@@ -847,7 +848,7 @@ http_store_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor e
 }
 
 reader_uptr
-http_store_range_reader( const fs::path& dirp, asio::executor ex
+http_store_range_reader( const fs::path& dirp, AsioExecutor ex
                        , std::size_t first, std::size_t last
                        , sys::error_code& ec)
 {
@@ -856,7 +857,7 @@ http_store_range_reader( const fs::path& dirp, asio::executor ex
 }
 
 reader_uptr
-http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor ex
                        , std::size_t first, std::size_t last
                        , sys::error_code& ec)
 {
@@ -866,7 +867,7 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
 
 std::size_t
 _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cdirp
-                     , asio::executor ex
+                     , AsioExecutor ex
                      , sys::error_code& ec)
 {
     namespace errc = sys::errc;
@@ -897,14 +898,14 @@ _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cd
 }
 
 std::size_t
-http_store_body_size( const fs::path& dirp, asio::executor ex
+http_store_body_size( const fs::path& dirp, AsioExecutor ex
                     , sys::error_code& ec)
 {
     return _http_store_body_size(dirp, boost::none, std::move(ex), ec);
 }
 
 std::size_t
-http_store_body_size( const fs::path& dirp, const fs::path& cdirp, asio::executor ex
+http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor ex
                     , sys::error_code& ec)
 {
     return _http_store_body_size(dirp, cdirp, std::move(ex), ec);
@@ -923,7 +924,7 @@ path_from_key(fs::path dir, const std::string& key)
 
 HashList
 http_store_load_hash_list( const fs::path& dir
-                         , asio::executor exec
+                         , AsioExecutor exec
                          , Cancel& cancel
                          , asio::yield_context yield)
 {
@@ -971,7 +972,7 @@ http_store_load_hash_list( const fs::path& dir
 
 class HttpReadStore : public BaseHttpStore {
 public:
-    HttpReadStore(fs::path p, asio::executor ex)
+    HttpReadStore(fs::path p, AsioExecutor ex)
         : path(std::move(p)), executor(ex)
     {}
 
@@ -1027,12 +1028,12 @@ public:
 
 protected:
     fs::path path;
-    asio::executor executor;
+    AsioExecutor executor;
 };
 
 class StaticHttpStore : public HttpReadStore {
 public:
-    StaticHttpStore(fs::path p, fs::path cp, util::Ed25519PublicKey pk, asio::executor ex)
+    StaticHttpStore(fs::path p, fs::path cp, util::Ed25519PublicKey pk, AsioExecutor ex)
         : HttpReadStore(std::move(p), std::move(ex))
         , content_path(std::move(cp)), verif_pubk(std::move(pk))
     {}
@@ -1103,7 +1104,7 @@ private:
 
 std::unique_ptr<BaseHttpStore>
 make_static_http_store( fs::path path, fs::path content_path
-                      , util::Ed25519PublicKey pk, asio::executor ex)
+                      , util::Ed25519PublicKey pk, AsioExecutor ex)
 {
     using namespace std;
     return make_unique<StaticHttpStore>(move(path), move(content_path), move(pk), move(ex));
@@ -1164,7 +1165,7 @@ name_matches_model(const fs::path& name, const fs::path& model)
 
 class FullHttpStore : public HttpStore {
 public:
-    FullHttpStore( fs::path p, asio::executor ex
+    FullHttpStore( fs::path p, AsioExecutor ex
                  , std::unique_ptr<BaseHttpStore> rs)
         : path(std::move(p)), executor(std::move(ex))
         , read_store(std::move(rs))
@@ -1205,7 +1206,7 @@ public:
 
 protected:
     fs::path path;
-    asio::executor executor;
+    AsioExecutor executor;
     std::unique_ptr<BaseHttpStore> read_store;
 };
 
@@ -1298,7 +1299,7 @@ FullHttpStore::store( const std::string& key, http_response::AbstractReader& r
 }
 
 std::unique_ptr<HttpStore>
-make_http_store(fs::path path, asio::executor ex)
+make_http_store(fs::path path, AsioExecutor ex)
 {
     using namespace std;
     auto read_store = make_unique<HttpReadStore>(path, ex);
@@ -1307,7 +1308,7 @@ make_http_store(fs::path path, asio::executor ex)
 
 class BackedHttpStore : public FullHttpStore {
 public:
-    BackedHttpStore( fs::path p, asio::executor ex
+    BackedHttpStore( fs::path p, AsioExecutor ex
                    , std::unique_ptr<BaseHttpStore> rs, std::unique_ptr<BaseHttpStore> fs)
         : FullHttpStore(std::move(p), std::move(ex), std::move(rs))
         , fallback_store(std::move(fs))
@@ -1379,7 +1380,7 @@ private:
 
 std::unique_ptr<HttpStore>
 make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
-                      , asio::executor ex)
+                      , AsioExecutor ex)
 {
     using namespace std;
     auto read_store = make_unique<HttpReadStore>(path, ex);

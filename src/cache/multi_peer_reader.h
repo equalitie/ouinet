@@ -27,7 +27,7 @@ public:
 
 public:
     // Use this for local cache and LAN retrieval only.
-    MultiPeerReader( asio::executor ex
+    MultiPeerReader( AsioExecutor ex
                    , std::string key
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
@@ -36,7 +36,7 @@ public:
                    , const std::string& dbg_tag);
 
     // Use this to include peers on the Internet.
-    MultiPeerReader( asio::executor ex
+    MultiPeerReader( AsioExecutor ex
                    , std::string key
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
@@ -60,7 +60,7 @@ public:
 
     ~MultiPeerReader();
 
-    asio::executor get_executor() override
+    AsioExecutor get_executor() override
     {
         return _executor;
     }
@@ -76,7 +76,7 @@ private:
     new_fetch_job(size_t block_id, Peer* last_peer, Cancel&, asio::yield_context);
 
 private:
-    asio::executor _executor;
+    AsioExecutor _executor;
     Cancel _lifetime_cancel;
 
     boost::optional<HashList> _reference_hash_list;

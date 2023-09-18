@@ -6,6 +6,7 @@
 
 #include <defer.h>
 #include <util/atomic_dir.h>
+#include <util/executor.h>
 #include <util/file_io.h>
 #include <util/temp_dir.h>
 
@@ -17,10 +18,12 @@ BOOST_AUTO_TEST_SUITE(ouinet_atomic_temp)
 using namespace std;
 using namespace ouinet;
 
+using ouinet::util::AsioExecutor;
+
 static
 void
 populate_directory( const fs::path& dir
-                  , const asio::executor& ex, sys::error_code& ec) {
+                  , const AsioExecutor& ex, sys::error_code& ec) {
     util::file_io::open_or_create(ex, dir / "testfile", ec);
     if (!ec) fs::create_directory(dir / "testdir", ec);
     if (!ec) util::file_io::open_or_create(ex, dir / "testdir" / "testfile", ec);

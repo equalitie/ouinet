@@ -29,6 +29,8 @@ namespace ouinet {
  * wait_condition.wait(yield);
  */
 
+using ouinet::util::AsioExecutor;
+
 class WaitCondition {
 private:
     struct WaitState {
@@ -39,7 +41,7 @@ private:
             return remaining_locks > 0;
         }
 
-        WaitState(const boost::asio::executor&);
+        WaitState(const AsioExecutor&);
     };
 
 public:
@@ -60,7 +62,7 @@ public:
     };
 
 public:
-    WaitCondition(const boost::asio::executor&);
+    WaitCondition(const AsioExecutor&);
     WaitCondition(boost::asio::io_context&);
     WaitCondition(const WaitCondition&) = delete;
     WaitCondition& operator=(const WaitCondition&) = delete;
@@ -79,14 +81,14 @@ private:
     void do_wait(Cancel*, boost::asio::yield_context yield);
 
 private:
-    boost::asio::executor _exec;
+    AsioExecutor _exec;
     std::shared_ptr<WaitState> _wait_state;
 };
 
 
 
 inline
-WaitCondition::WaitState::WaitState(const boost::asio::executor& exec):
+WaitCondition::WaitState::WaitState(const AsioExecutor& exec):
     condition(exec),
     remaining_locks(0)
 {}
@@ -141,7 +143,7 @@ void WaitCondition::Lock::release() const
 }
 
 inline
-WaitCondition::WaitCondition(const boost::asio::executor& exec):
+WaitCondition::WaitCondition(const AsioExecutor& exec):
     _exec(exec)
 {}
 

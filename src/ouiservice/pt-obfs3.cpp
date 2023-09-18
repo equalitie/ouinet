@@ -113,7 +113,7 @@ std::unique_ptr<pt::ClientProcess> Obfs3OuiServiceClient::start_client_process(
 }
 
 asio::ip::tcp::socket Obfs3OuiServiceClient::connect_through_transport(
-    const asio::executor& ex,
+    const AsioExecutor& ex,
     asio::ip::tcp::endpoint transport_endpoint,
     std::string& remote_endpoint_string,
     asio::yield_context yield,

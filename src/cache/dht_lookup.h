@@ -148,7 +148,7 @@ private:
 private:
     std::string _swarm_name;
     NodeID _infohash;
-    asio::executor _exec;
+    AsioExecutor _exec;
     std::weak_ptr<bittorrent::MainlineDht> _dht_w;
     std::unique_ptr<Job> _job;
     ConditionVariable _cv;

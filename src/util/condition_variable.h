@@ -5,8 +5,11 @@
 #include <boost/asio/post.hpp>
 #include <boost/intrusive/list.hpp>
 #include "signal.h"
+#include "executor.h"
 
 namespace ouinet {
+
+using ouinet::util::AsioExecutor;
 
 class ConditionVariable {
     using Sig = void(boost::system::error_code);
@@ -31,14 +34,14 @@ class ConditionVariable {
         <WaitEntry, boost::intrusive::constant_time_size<false>>;
 
 public:
-    ConditionVariable(const boost::asio::executor&);
+    ConditionVariable(const AsioExecutor&);
 
     ConditionVariable(const ConditionVariable&) = delete;
     ConditionVariable& operator=(const ConditionVariable&) = delete;
 
     ~ConditionVariable();
 
-    asio::executor get_executor() { return _exec; }
+    AsioExecutor get_executor() { return _exec; }
 
     void notify(const boost::system::error_code& ec
                     = boost::system::error_code());
@@ -47,12 +50,12 @@ public:
     void wait(boost::asio::yield_context yield);
 
 private:
-    asio::executor _exec;
+    AsioExecutor _exec;
     IntrusiveList _on_notify;
 };
 
 inline
-ConditionVariable::ConditionVariable(const boost::asio::executor& exec)
+ConditionVariable::ConditionVariable(const AsioExecutor& exec)
     : _exec(exec)
 {
 }

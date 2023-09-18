@@ -93,7 +93,7 @@ boost::optional<asio::ip::address> get_local_ipv6_address();
 inline
 auto tcp_async_resolve( const std::string& host
                       , const std::string& port
-                      , asio::executor exec
+                      , AsioExecutor exec
                       , Cancel& cancel
                       , asio::yield_context yield)
 {

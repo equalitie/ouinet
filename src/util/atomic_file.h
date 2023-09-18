@@ -18,13 +18,13 @@ public:
     // If no commit is done or it fails,
     // the temporary file is automatically removed.
     static
-    boost::optional<atomic_file> make( const asio::executor&
+    boost::optional<atomic_file> make( const AsioExecutor&
                                      , fs::path
                                      , const fs::path& temp_model
                                      , sys::error_code&);
 
     static
-    boost::optional<atomic_file> make( const asio::executor& ex
+    boost::optional<atomic_file> make( const AsioExecutor& ex
                                      , fs::path path
                                      , sys::error_code& ec) {
         return make(ex, std::move(path), default_temp_model, ec);

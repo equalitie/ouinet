@@ -50,7 +50,7 @@ struct Entry {
 struct Announcer::Loop {
     using Entries = util::AsyncQueue<Entry, std::list>;
 
-    asio::executor ex;
+    AsioExecutor ex;
     shared_ptr<bt::MainlineDht> dht;
     Entries entries;
     size_t _simultaneous_announcements;

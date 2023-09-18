@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             rh.result(http::status::ok);
             rh.set(http::field::date, "Mon, 27 Jul 2019 12:30:20 GMT");
             rh.set(http::field::content_type, "text/html");
-            rh.set(http::field::content_length, rb.size());
+            rh.set(http::field::content_length, std::to_string(rb.size()));
 
             GenericStream con = stream(outs, outwc, ios, y);
             HR::Part part;
@@ -306,7 +306,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             rh1.result(http::status::ok);
             rh1.set(http::field::date, "Mon, 27 Jul 2019 12:30:20 GMT");
             rh1.set(http::field::content_type, "text/html");
-            rh1.set(http::field::content_length, rb1.size());
+            rh1.set(http::field::content_length, std::to_string(rb1.size()));
 
             const string rb2("abcde");
 
@@ -315,7 +315,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             rh2.result(http::status::ok);
             rh2.set(http::field::date, "Mon, 27 Jul 2019 12:30:21 GMT");
             rh2.set(http::field::content_type, "text/html");
-            rh2.set(http::field::content_length, rb2.size());
+            rh2.set(http::field::content_length, std::to_string(rb2.size()));
 
             GenericStream con = stream(outs, outwc, ios, y);
             HR::Part part;
@@ -377,7 +377,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             rh2.result(http::status::ok);
             rh2.set(http::field::date, "Mon, 27 Jul 2019 12:30:21 GMT");
             rh2.set(http::field::content_type, "text/html");
-            rh2.set(http::field::content_length, rb2.size());
+            rh2.set(http::field::content_length, std::to_string(rb2.size()));
 
             GenericStream con = stream(outs, outwc, ios, y);
             HR::Part part;

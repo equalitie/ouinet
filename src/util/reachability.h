@@ -4,6 +4,7 @@
 #include <asio_utp.hpp>
 #include "../namespaces.h"
 #include "signal.h"
+#include "util/executor.h"
 
 namespace ouinet { namespace util {
 
@@ -67,7 +68,7 @@ public:
     UdpServerReachabilityAnalysis();
     ~UdpServerReachabilityAnalysis();
 
-    void start(const asio::executor& executor, const asio_utp::udp_multiplexer& udp_socket);
+    void start(const AsioExecutor& executor, const asio_utp::udp_multiplexer& udp_socket);
     void stop();
 
     Reachability judgement() const;

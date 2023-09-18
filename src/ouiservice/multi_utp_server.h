@@ -16,7 +16,7 @@ private:
     struct State;
 
 public:
-    MultiUtpServer( asio::executor
+    MultiUtpServer( AsioExecutor
                   , std::set<asio::ip::udp::endpoint>
                   , boost::asio::ssl::context* ssl_context);
 

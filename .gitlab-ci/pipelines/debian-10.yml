@@ -9,6 +9,7 @@ debian-10 / prepare-builder-image:
 
 debian-10 / build:
   variables:
+    BOOST_VERSION: "1.71.0"
     TARGET_PLATFORM: 'debian-10'
   extends:
     .linux-build

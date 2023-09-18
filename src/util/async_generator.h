@@ -49,7 +49,7 @@ public:
     {}
 
     template<class Generator /* void(Queue&, Cancel, Yield) */>
-    AsyncGenerator(const asio::executor& ex, Generator&& gen)
+    AsyncGenerator(const AsioExecutor& ex, Generator&& gen)
         : _queue(ex)
         , _shutdown_cancel(_lifetime_cancel)
         , _wc(ex)

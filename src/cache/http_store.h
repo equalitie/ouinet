@@ -17,6 +17,8 @@
 
 namespace ouinet { namespace cache {
 
+using ouinet::util::AsioExecutor;
+
 // When a client gets a `HEAD` request for a URL,
 // this response header indicates the data range that it can send back
 // (either for a full or range request).
@@ -69,7 +71,7 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 // and without a final new line.
 // Such responses need to be stored using external tools.
 void http_store( http_response::AbstractReader&, const fs::path&
-               , const asio::executor&, Cancel, asio::yield_context);
+               , const AsioExecutor&, Cancel, asio::yield_context);
 // TODO: This format is both inefficient for multi-peer downloads (Base64 decoding needed)
 // and inadequate for partial responses (`ouipsig` is in previous `sigs` file line, maybe missing).
 // A format with binary records or just SIG/DHASH/CHASH of the *current* block might be more convenient
@@ -89,7 +91,7 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // when no more body data is available.
 // To detect such cases beforehand, use `http_store_body_size`.
 reader_uptr
-http_store_reader(const fs::path& dirp, asio::executor, sys::error_code&);
+http_store_reader(const fs::path& dirp, AsioExecutor, sys::error_code&);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -102,7 +104,7 @@ http_store_reader(const fs::path& dirp, asio::executor, sys::error_code&);
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 reader_uptr
 http_store_reader( const fs::path& dirp, const fs::path& cdirp
-                 , asio::executor, sys::error_code&);
+                 , AsioExecutor, sys::error_code&);
 
 // Same as above, but allow specifying a contiguous range of data to read
 // instead of the whole response.
@@ -120,7 +122,7 @@ http_store_reader( const fs::path& dirp, const fs::path& cdirp
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
-http_store_range_reader( const fs::path& dirp, asio::executor
+http_store_range_reader( const fs::path& dirp, AsioExecutor
                        , std::size_t first, std::size_t last
                        , sys::error_code&);
 
@@ -134,7 +136,7 @@ http_store_range_reader( const fs::path& dirp, asio::executor
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 reader_uptr
-http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::executor
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
                        , std::size_t first, std::size_t last
                        , sys::error_code&);
 
@@ -147,7 +149,7 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, asio::exec
 // If the response exists, but it is missing body data,
 // an `asio::error::no_data` error is reported.
 std::size_t
-http_store_body_size( const fs::path& dirp, asio::executor
+http_store_body_size( const fs::path& dirp, AsioExecutor
                     , sys::error_code&);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
@@ -160,11 +162,11 @@ http_store_body_size( const fs::path& dirp, asio::executor
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 std::size_t
-http_store_body_size( const fs::path& dirp, const fs::path& cdirp, asio::executor
+http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
                     , sys::error_code&);
 
 HashList
-http_store_load_hash_list(const fs::path&, asio::executor, Cancel&, asio::yield_context);
+http_store_load_hash_list(const fs::path&, AsioExecutor, Cancel&, asio::yield_context);
 
 //// High-level classes for HTTP response storage
 
@@ -222,7 +224,7 @@ public:
 std::unique_ptr<BaseHttpStore>
 make_static_http_store( fs::path path, fs::path content_path
                       , util::Ed25519PublicKey
-                      , asio::executor);
+                      , AsioExecutor);
 
 class HttpStore : public BaseHttpStore {
 public:
@@ -241,10 +243,10 @@ public:
 };
 
 std::unique_ptr<HttpStore>
-make_http_store(fs::path path, asio::executor);
+make_http_store(fs::path path, AsioExecutor);
 
 std::unique_ptr<HttpStore>
 make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
-                      , asio::executor);
+                      , AsioExecutor);
 
 }} // namespaces

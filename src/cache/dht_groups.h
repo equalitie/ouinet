@@ -3,10 +3,13 @@
 #include <set>
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem.hpp>
+#include "../util/executor.h"
 #include "../util/signal.h"
 #include "../namespaces.h"
 
 namespace ouinet {
+
+using ouinet::util::AsioExecutor;
 
 class BaseDhtGroups {
 public:
@@ -23,7 +26,7 @@ public:
 
 // This is considered read-only and unsafe (so extra checks are performed).
 std::unique_ptr<BaseDhtGroups>
-load_static_dht_groups(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
+load_static_dht_groups(fs::path root_dir, AsioExecutor, Cancel&, asio::yield_context);
 
 class DhtGroups : public BaseDhtGroups {
 public:
@@ -41,7 +44,7 @@ public:
 
 // This is considered read-write and safe.
 std::unique_ptr<DhtGroups>
-load_dht_groups(fs::path root_dir, asio::executor, Cancel&, asio::yield_context);
+load_dht_groups(fs::path root_dir, AsioExecutor, Cancel&, asio::yield_context);
 
 // This is considered read-write and safe.
 // When iterating over groups, fallback groups are merged into read-write groups.
@@ -49,6 +52,6 @@ load_dht_groups(fs::path root_dir, asio::executor, Cancel&, asio::yield_context)
 // Removal of items does not return groups which remain in fallback groups.
 std::unique_ptr<DhtGroups>
 load_backed_dht_groups( fs::path root_dir, std::unique_ptr<BaseDhtGroups> fallback_groups
-                      , asio::executor, Cancel&, asio::yield_context);
+                      , AsioExecutor, Cancel&, asio::yield_context);
 
 } // namespace ouinet

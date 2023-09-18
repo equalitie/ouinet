@@ -13,7 +13,7 @@ void atomic_file::commit(sys::error_code& ec) {
 }
 
 boost::optional<atomic_file>
-atomic_file::make( const asio::executor& ex
+atomic_file::make( const AsioExecutor& ex
                  , fs::path path
                  , const fs::path& temp_model
                  , sys::error_code& ec)

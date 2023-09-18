@@ -13,7 +13,7 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Service::Service(const string& datadir, const boost::asio::executor& exec)
+Service::Service(const string& datadir, const AsioExecutor& exec)
     : _exec(exec)
     , _data_dir(datadir)
 {

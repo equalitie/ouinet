@@ -10,7 +10,7 @@ namespace ouinet { namespace bittorrent {
 template<class CandidateSet, class Evaluate>
 void collect(
     DebugCtx dbg,
-    asio::executor& exec,
+    AsioExecutor& exec,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
     Cancel& cancel_signal_,

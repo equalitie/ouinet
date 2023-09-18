@@ -176,7 +176,7 @@ UdpServerReachabilityAnalysis::~UdpServerReachabilityAnalysis()
     stop();
 }
 
-void UdpServerReachabilityAnalysis::start(const asio::executor& executor, const asio_utp::udp_multiplexer& udp_socket)
+void UdpServerReachabilityAnalysis::start(const AsioExecutor& executor, const asio_utp::udp_multiplexer& udp_socket)
 {
     if (_state) {
         stop();

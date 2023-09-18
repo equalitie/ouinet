@@ -15,7 +15,7 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
 
-    TlsOuiServiceServer( const asio::executor& ex
+    TlsOuiServiceServer( const AsioExecutor& ex
                        , BaseServicePtr base
                        , asio::ssl::context& context)
         : _ex(ex)
@@ -32,7 +32,7 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     ~TlsOuiServiceServer();
 
     private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     BaseServicePtr _base;
     asio::ssl::context& _ssl_context;
     Cancel _cancel;

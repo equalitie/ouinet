@@ -66,7 +66,7 @@ class PtOuiServiceClient : public OuiServiceImplementationClient
         Signal<void()>& cancel_signal
     ) = 0;
     virtual asio::ip::tcp::socket connect_through_transport(
-        const asio::executor&,
+        const AsioExecutor&,
         asio::ip::tcp::endpoint transport_endpoint,
         std::string& remote_endpoint_string,
         asio::yield_context yield,

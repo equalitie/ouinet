@@ -5,7 +5,7 @@
 namespace ouinet {
 
 struct Progress {
-    Progress(const asio::executor& ex, std::string message)
+    Progress(const AsioExecutor& ex, std::string message)
         : _message(move(message))
     {
         using namespace std;

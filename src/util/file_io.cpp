@@ -67,7 +67,7 @@ size_t file_remaining_size(posix::stream_descriptor& f, sys::error_code& ec)
 
 static
 posix::stream_descriptor open( int file
-                             , const asio::executor& exec
+                             , const AsioExecutor& exec
                              , sys::error_code& ec)
 {
     if (file == -1) {
@@ -82,7 +82,7 @@ posix::stream_descriptor open( int file
     return f;
 }
 
-posix::stream_descriptor open_or_create( const asio::executor& exec
+posix::stream_descriptor open_or_create( const AsioExecutor& exec
                                        , const fs::path& p
                                        , sys::error_code& ec)
 {
@@ -90,7 +90,7 @@ posix::stream_descriptor open_or_create( const asio::executor& exec
     return open(file, exec, ec);
 }
 
-posix::stream_descriptor open_readonly( const asio::executor& exec
+posix::stream_descriptor open_readonly( const AsioExecutor& exec
                                       , const fs::path& p
                                       , sys::error_code& ec)
 {

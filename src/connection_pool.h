@@ -2,9 +2,12 @@
 
 #include <boost/asio/post.hpp>
 #include "generic_stream.h"
+#include "util/executor.h"
 #include "util/unique_function.h"
 
 namespace ouinet {
+
+using ouinet::util::AsioExecutor;
 
 /*
  * An IdleConnection wraps a GenericStream, and can be put in  "idle mode".
@@ -46,7 +49,7 @@ class IdleConnection {
     IdleConnection(IdleConnection&&) = default;
     IdleConnection& operator=(IdleConnection&&) = default;
 
-    boost::asio::executor get_executor()
+    AsioExecutor get_executor()
     {
         return _data->connection.get_executor();
     }
@@ -291,6 +294,7 @@ class ConnectionPool {
         public:
 
         using IdleConnection<GenericStream>::IdleConnection;
+        using executor_type = ouinet::util::AsioExecutor;
 
         Connection() = default;
         Connection(Connection&&) = default;

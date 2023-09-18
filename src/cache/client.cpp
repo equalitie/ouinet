@@ -40,12 +40,12 @@ struct GarbageCollector {
     cache::HttpStore& http_store;  // for looping over entries
     cache::HttpStore::keep_func keep;  // caller-provided checks
 
-    asio::executor _executor;
+    AsioExecutor _executor;
     Cancel _cancel;
 
     GarbageCollector( cache::HttpStore& http_store
                     , cache::HttpStore::keep_func keep
-                    , asio::executor ex)
+                    , AsioExecutor ex)
         : http_store(http_store)
         , keep(move(keep))
         , _executor(ex)
@@ -91,7 +91,7 @@ struct Client::Impl {
     // (i.e. from injector-signed cached content).
     std::shared_ptr<unsigned> _newest_proto_seen;
 
-    asio::executor _ex;
+    AsioExecutor _ex;
     std::set<udp::endpoint> _lan_my_endpoints;
     shared_ptr<bt::MainlineDht> _dht;
     string _uri_swarm_prefix;
@@ -109,7 +109,7 @@ struct Client::Impl {
     std::unique_ptr<Groups> _groups;
 
 
-    Impl( asio::executor ex
+    Impl( AsioExecutor ex
         , std::set<udp::endpoint> lan_my_eps
         , util::Ed25519PublicKey& cache_pk
         , fs::path cache_dir
@@ -644,7 +644,7 @@ struct Client::Impl {
 
 /* static */
 std::unique_ptr<Client>
-Client::build( asio::executor ex
+Client::build( AsioExecutor ex
              , std::set<udp::endpoint> lan_my_eps
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir

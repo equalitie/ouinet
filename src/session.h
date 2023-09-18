@@ -75,7 +75,7 @@ public:
         return _head.keep_alive();
     }
 
-    asio::executor get_executor() override {
+    AsioExecutor get_executor() override {
         assert(_reader);
         return _reader->get_executor();
     }

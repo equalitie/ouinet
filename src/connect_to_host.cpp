@@ -15,7 +15,7 @@ using TcpLookup = asio::ip::tcp::resolver::results_type;
 
 
 tcp::socket
-ouinet::connect_to_host( const asio::executor& ex
+ouinet::connect_to_host( const AsioExecutor& ex
                        , const string& host
                        , const string& port
                        , Signal<void()>& cancel_signal
@@ -33,7 +33,7 @@ ouinet::connect_to_host( const asio::executor& ex
 
 tcp::socket
 ouinet::connect_to_host( const TcpLookup& lookup
-                       , const asio::executor& ex
+                       , const AsioExecutor& ex
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)
 {
@@ -55,7 +55,7 @@ ouinet::connect_to_host( const TcpLookup& lookup
 
 tcp::socket
 ouinet::connect_to_host( const TcpLookup& lookup
-                       , const asio::executor& ex
+                       , const AsioExecutor& ex
                        , std::chrono::steady_clock::duration timeout
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)

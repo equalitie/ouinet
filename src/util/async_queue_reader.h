@@ -45,7 +45,7 @@ public:
         _cancel();
     }
 
-    asio::executor get_executor() override
+    AsioExecutor get_executor() override
     {
         return _queue.get_executor();
     }
