@@ -78,3 +78,6 @@ class TestFixtures:
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
+
+    OUINET_INJECTOR = {"port": "7070"}
+    OUINET_CLIENT = {"name": "ouinet", "port": "8077"}
