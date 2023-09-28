@@ -6,13 +6,17 @@ from test_fixtures import TestFixtures
 
 class OuinetBasicSanityTest(unittest.TestCase):
     def test_run_client(self):
+        config_file_content = "\n".join((
+            "enable-log-file = true",
+            "cache-type = none",
+            "listen-on-tcp = 0.0.0.0:9077",
+            "front-end-ep = 0.0.0.0:9078",
+        ))
         ouinet_client_process = OuinetClient(
             TestFixtures.OUINET_CLIENT["name"],
-            "",
+            "ouinet-basic",
             "ouinet-client.conf",
-            ("--listen-on-tcp", "127.0.0.1:" + TestFixtures.OUINET_CLIENT["port"],
-             "--injector-ep", "127.0.0.1:" + str(TestFixtures.OUINET_INJECTOR["port"]),
-             "http://localhost/"),
+            config_file_content,
             30)
 
     def test_run_injector(self):

@@ -66,7 +66,7 @@ class OuinetProcess:
         if not os.path.exists(TestFixtures.REPO_FOLDER_NAME + "/" + self.app_name):
             os.makedirs(TestFixtures.REPO_FOLDER_NAME + "/" + self.app_name)
 
-        self.config_folder = TestFixtures.REPO_FOLDER_NAME + "/" + self.app_name
+        self.config_folder = os.path.abspath(TestFixtures.REPO_FOLDER_NAME + "/" + self.app_name)
         
     def start(self, argv, process_protocol = None):
         """
@@ -126,7 +126,7 @@ class OuinetClient(OuinetProcess):
     def __init__(self, client_name, app_name, config_file_name, config_file_content, timeout, i2p_ready=None):
         super().__init__(client_name,
                          config_file_name,
-                         TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT,
+                         config_file_content,
                          timeout)
 
         argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "client"),
