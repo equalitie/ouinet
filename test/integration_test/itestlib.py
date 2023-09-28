@@ -42,9 +42,9 @@ class OuinetProcess:
         """
         self.timeout = timeout
         self.app_name = app_name #used for naming the app config folder
-        self.setup_config(config_file_name):
+        self.setup_config(config_file_name, config_file_content)
 
-    def setup_config(config_file_name):
+    def setup_config(self, config_file_name, config_file_content):
         """
         setups various configs, write a fresh config file and make 
         the process protocol object
@@ -56,8 +56,8 @@ class OuinetProcess:
         #we overwrite any existing config file to make
         #the test canonical (also trial delete its temp
         #folder each time
-        with open(self.config_folder + "/" + TestFixtures.CONFIG_FILE_NAME, "w") as conf_file:
-            conf_file.write(config_file_content)
+        with open(self.config_folder + "/" + config_file_name, "w") as conf_file:
+            conf_file.write(config_file_content )
 
     def make_config_folder(self):
         if not os.path.exists(TestFixtures.REPO_FOLDER_NAME):
@@ -83,7 +83,7 @@ class OuinetProcess:
         if hasattr(self, '_has_started') and self._has_started:
             return
 
-        if not process_potocol:
+        if not process_protocol:
             self._proc_protocol = OuinetProcessProtocol()
             
         self._proc = reactor.spawnProcess(self._proc_protocol, argv[0], argv, env=ouinet_env)
@@ -117,7 +117,7 @@ class OuinetProcessProtocol(protocol.ProcessProtocol):
         listen for the debugger output reacto to fatal errors and other clues
         """
         if re.match(r'\[ABORT\]', data):
-            raise Exception, "Fatal error"
+            raise Exception("Fatal error")
             
     def processExited(self, reason):
         self.onExit.callback(self)
@@ -153,7 +153,7 @@ class OuinetInjector(OuinetProcess):
         self.start(argv)
 
 
-class OuinetI2PInjector(OuineInjector):
+class OuinetI2PInjector(OuinetInjector):
     """
     It is a child of OuinetInjector with i2p ouiservice 
 
