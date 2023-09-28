@@ -123,11 +123,16 @@ class OuinetProcessProtocol(protocol.ProcessProtocol):
         self.onExit.callback(self)
 
 class OuinetClient(OuinetProcess):
-    def __init__(self, client_name, i2p_ready = None):
-        super(OuinetClient(client_name, "ouinet-client.conf", TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT, timeout)
+    def __init__(self, client_name, app_name, config_file_name, config_file_content, timeout, i2p_ready=None):
+        super().__init__(client_name,
+                         config_file_name,
+                         TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT,
+                         timeout)
 
-        argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "client"), "--repo", self.config_folder]
-        argv.extend(args)
+        argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "client"),
+                "--repo",
+                self.config_folder]
+        #argv.extend(args)
 
         self.start(argv)
 
