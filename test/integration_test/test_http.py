@@ -30,7 +30,7 @@ from ouinet_process_controler import (
 from ouinet_process_controler import (
     OuinetClient, OuinetIPFSClient, OuinetBEP44Client)
 from test_fixtures import TestFixtures
-from test_http_server import TestHttpServer
+from test_http_server import test_http_server
 
 import sys
 import logging
@@ -145,7 +145,7 @@ class OuinetTests(TestCase):
         return client
 
     def run_http_server(self, port):
-        return TestHttpServer(port)
+        return test_http_server(port)
 
     def request_echo(self, port, content):
         """
