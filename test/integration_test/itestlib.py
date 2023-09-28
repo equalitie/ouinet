@@ -88,6 +88,9 @@ class OuinetProcess:
             
         self._proc = reactor.spawnProcess(self._proc_protocol, argv[0], argv, env=ouinet_env)
 
+        if self._proc.status < 0:
+           raise Exception("Process status: " + str(self._proc.status))
+
         self._has_started = True
 
         #we add a twisted timer to kill the process after timeout
