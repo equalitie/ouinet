@@ -30,11 +30,14 @@ class OuinetConfig(object):
     to make it easier to send the config to different
     process
     """
-    def __init__(self, app_name = "generic ouinet app",
-                 timeout = TestFixtures.DEFAULT_PROCESS_TIMEOUT, argv = [],
-                 config_file_name = "ouinet.conf",
-                 benchmark_regexes = [],
-                 config_file_content = ""):
+    def __init__(
+            self,
+            app_name="generic ouinet app",
+            timeout=TestFixtures.DEFAULT_PROCESS_TIMEOUT,
+            argv=None,
+            config_file_name="ouinet.conf",
+            benchmark_regexes=None,
+            config_file_content=""):
         """
         Initials a config object which is used to properly run a ouinet process
         Args
@@ -53,8 +56,8 @@ class OuinetConfig(object):
         self.config_file_name = config_file_name
         self.config_file_content = config_file_content
         self.timeout = timeout
-        self.argv = argv
-        self.benchmark_regexes = benchmark_regexes
+        self.argv = argv if argv is not None else []
+        self.benchmark_regexes = benchmark_regexes if benchmark_regexes is not None else []
 
 class OuinetProcess(object):
     def __init__(self, ouinet_config, deferred_events):
@@ -70,7 +73,10 @@ class OuinetProcess(object):
         process_ready_deferred   a deferred object which get called back when the process is ready
         """
         self.config = ouinet_config
-        self._proc_protocol = OuinetProcessProtocol(proc_config = self.config, ready_benchmark_regex = ouinet_config.benchmark_regexes[TestFixtures.READY_REGEX_INDEX], ready_deferred=deferred_events[TestFixtures.READY_REGEX_INDEX]) # default protocol
+        self._proc_protocol = OuinetProcessProtocol(
+            proc_config=self.config,
+            ready_benchmark_regex=ouinet_config.benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
+            ready_deferred=deferred_events[TestFixtures.READY_REGEX_INDEX])  # default protocol
         # in case the communication process protocol is not explicitly set 
         # starts a default process protocol to check on Fatal errors
         self._has_started = False
@@ -165,6 +171,7 @@ class OuinetProcess(object):
             # information that gets printed between now and when the app
             # actually exits.
             #self._proc_protocol.transport.loseConnection()
+
 
 class OuinetClient(OuinetProcess):
     def __init__(self, client_config, deferred_events):
