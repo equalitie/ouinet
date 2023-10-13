@@ -41,6 +41,7 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin"
     set(GOOS "darwin")
     set(GO_CC ${CMAKE_C_COMPILER})
     set(GO_CXX ${CMAKE_CXX_COMPILER})
+    set(CMAKE_SYSTEM_PROCESSOR "arm64")
 else()
     message(FATAL_ERROR "unsupported system name ${CMAKE_SYSTEM_NAME}")
 endif()

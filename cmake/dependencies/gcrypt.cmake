@@ -84,9 +84,9 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(UNDERSCORE_CONFIG "ac_cv_sys_symbol_underscore=no")
     set(VERSIONED_LIBRARIES 0)
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    set(GCRYPT_CC ${CMAKE_C_COMPILER})
+    set(GCRYPT_CC /usr/bin/gcc)
     set(PATCH_COMMAND "true")
-    set(GCRYPT_PATCH_COMMAND "false")
+    set(GCRYPT_PATCH_COMMAND "true")
     set(HOST_CONFIG "")
     set(UNDERSCORE_CONFIG "")
     set(VERSIONED_LIBRARIES 0)
@@ -134,13 +134,15 @@ foreach (patch ${GPG_ERROR_PATCHES})
     set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
 endforeach()
 
-if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS" AND ${PLATFORM} STREQUAL "OS64")
-    # TODO: this copy/replace prevents runtime error with posix lock on arm64 iOS, inspired by https://github.com/xbmc/xbmc/pull/14683
-    # May not be needed in later versions of libgpg-error, or there may be a better solution
-    set(PATCH_COMMAND
-        ${PATCH_COMMAND} &&
-        cp ./src/syscfg/lock-obj-pub.aarch64-apple-darwin.h ./src/syscfg/lock-obj-pub.arm-apple-darwin.h
-    )
+if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    if (${PLATFORM} STREQUAL "OS64")
+        # TODO: this copy/replace prevents runtime error with posix lock on arm64 iOS, inspired by https://github.com/xbmc/xbmc/pull/14683
+        # May not be needed in later versions of libgpg-error, or there may be a better solution
+        set(PATCH_COMMAND
+            ${PATCH_COMMAND} &&
+            cp ./src/syscfg/lock-obj-pub.aarch64-apple-darwin.h ./src/syscfg/lock-obj-pub.arm-apple-darwin.h
+        )
+    endif()
 endif()
 
 set(GCRYPT_PATCH_COMMAND
