@@ -49,6 +49,12 @@ NativeLib _n;
   if ([config getDisableOriginAccess]) {
     args.push_back("--disable-origin-access");
   }
+  if ([config getDisableProxyAccess]) {
+    args.push_back("--disable-proxy-access");
+  }
+  if ([config getDisableInjectorAccess]) {
+    args.push_back("--disable-injector-access");
+  }
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
   if (error)
     NSLog(@"Error reading file: %@", error.localizedDescription);

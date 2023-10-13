@@ -16,6 +16,8 @@
   NSString* listenOnTcp;
   NSString* frontEndEp;
   BOOL disableOriginAccess;
+  BOOL disableProxyAccess;
+  BOOL disableInjectorAccess;
 }
 
 - (Config*)init
@@ -84,6 +86,18 @@
   return self;
 }
 
+- (Config*)setDisableProxyAccess:(BOOL)value;
+{
+  disableProxyAccess = value;
+  return self;
+}
+
+- (Config*)setDisableInjectorAccess:(BOOL)value;
+{
+  disableInjectorAccess = value;
+  return self;
+}
+
 - (NSString*)getOuinetDirectory
 {
   return ouinetDirectory;
@@ -127,6 +141,16 @@
 - (BOOL)getDisableOriginAccess
 {
   return disableOriginAccess;
+}
+
+- (BOOL)getDisableProxyAccess
+{
+  return disableProxyAccess;
+}
+
+- (BOOL)getDisableInjectorAccess
+{
+  return disableInjectorAccess;
 }
 
 /**
