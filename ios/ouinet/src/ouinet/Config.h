@@ -18,6 +18,10 @@
 
 - (Config*)setDisableOriginAccess:(BOOL)value;
 
+- (Config*)setDisableProxyAccess:(BOOL)value;
+
+- (Config*)setDisableInjectorAccess:(BOOL)value;
+
 - (NSString*)getOuinetDirectory;
 
 - (NSString*)getCacheHttpPubKey;
@@ -35,5 +39,9 @@
 - (NSString*)getFrontEndEp;
 
 - (BOOL)getDisableOriginAccess;
+
+- (BOOL)getDisableProxyAccess;
+
+- (BOOL)getDisableInjectorAccess;
 
 @end
