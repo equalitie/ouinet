@@ -100,7 +100,7 @@ BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
     // A long-enough expiration for the certificate (sort of everlasting).
     // Please note that certificates emitted by this as a CA may not be more than 39 months old:
     // [Validity Period, 9.4.1](https://cabforum.org/wp-content/uploads/BRv1.2.3.pdf).
-    X509_gmtime_adj(X509_get_notAfter(_x), 15*ssl::util::ONE_YEAR);
+    X509_gmtime_adj(X509_get_notAfter(_x), 2*ssl::util::ONE_YEAR);
     X509_set_pubkey(_x, _pk);
     
     X509_NAME* name = X509_get_subject_name(_x);
@@ -121,6 +121,8 @@ BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
     if (is_ca) {
         ssl::util::x509_add_ext(_x, NID_basic_constraints, "critical,CA:TRUE");
         ssl::util::x509_add_ext(_x, NID_key_usage, "critical,keyCertSign,cRLSign");
+        ssl::util::x509_add_ext(_x, NID_ext_key_usage, "serverAuth,clientAuth");
+        ssl::util::x509_add_ext(_x, NID_subject_alt_name, "IP:127.0.0.1");
     }
     ssl::util::x509_add_ext(_x, NID_subject_key_identifier, "hash");
     
