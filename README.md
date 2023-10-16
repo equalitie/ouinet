@@ -1,4 +1,4 @@
-[![pipeline status](https://gitlab.com/equalitie/ouinet/badges/master/pipeline.svg)](https://gitlab.com/equalitie/ouinet/commits/master)
+[![pipeline status](https://gitlab.com/equalitie/ouinet/badges/main/pipeline.svg)](https://gitlab.com/equalitie/ouinet/commits/main)
 
 
 # Ouinet
