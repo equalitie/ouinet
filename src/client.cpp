@@ -106,6 +106,19 @@ struct UserAgentMetaData {
     boost::optional<bool> is_private;
     boost::optional<std::string> dht_group;
 
+    static std::string get_dht_group(std::string url) {
+        auto dhtgroup = std::move(url);
+
+        boost::regex scheme("^[a-z][-+.0-9a-z]*://");
+        dhtgroup = boost::regex_replace(dhtgroup, scheme, "");
+        boost::regex trailing_slashes("/+$");
+        dhtgroup = boost::regex_replace(dhtgroup, trailing_slashes, "");
+        boost::regex leading_www("^www.");
+        dhtgroup = boost::regex_replace(dhtgroup, leading_www, "");
+
+        return dhtgroup;
+    }
+
     static UserAgentMetaData extract(Request& rq) {
         UserAgentMetaData ret;
 
@@ -114,6 +127,8 @@ struct UserAgentMetaData {
             if (i != rq.end()) {
                 ret.dht_group = i->value().to_string();
                 rq.erase(i);
+            } else {
+                ret.dht_group = get_dht_group(rq.target().to_string());
             }
         }
         {
