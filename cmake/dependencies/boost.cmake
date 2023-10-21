@@ -77,6 +77,11 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set(BOOST_ARCH_CONFIGURATION
+        address-model=64
+        variant=debug
+    )
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
