@@ -82,6 +82,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
         address-model=64
         variant=debug
     )
+    link_libraries(ws2_32 mswsock)
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
