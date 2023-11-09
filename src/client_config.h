@@ -91,6 +91,10 @@ public:
                                               , http_::protocol_version_current);
     }
 
+    bool is_bridge_announcement_enabled() const {
+        return !_disable_bridge_announcement;
+    }
+
     boost::optional<std::string>
     credentials_for(const Endpoint& injector) const {
         auto i = _injector_credentials.find(injector);
@@ -162,6 +166,10 @@ private:
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ("disable-bridge-announcement"
+            , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
+            , "Disable announcements of this client "
+              "to the Bridges list in the DHT")
            ;
 
         po::options_description injector("Injector options");
@@ -368,6 +376,7 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    bool _disable_bridge_announcement = false;
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
@@ -517,6 +526,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error("Failed to parse '--front-end-ep' argument");
         }
         _front_end_endpoint = *opt_fe_ep;
+    }
+
+    if (vm.count("disable-bridge-announcement")) {
+        _disable_bridge_announcement = vm["disable-bridge-announcement"].as<bool>();
     }
 
     if (vm.count("client-credentials")) {
