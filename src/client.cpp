@@ -2787,6 +2787,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             ( dht
             , injector_ep->endpoint_string
             , *bridge_swarm_name
+            , _config.is_bridge_announcement_enabled()
             , &inj_ctx);
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
