@@ -541,6 +541,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "</ul>\n";
     }
 
+    ss << "BEP5 announcements of this client as a bridge are ";
+    if (config.is_bridge_announcement_enabled())
+        ss << "enabled.<br>\n";
+    else
+        ss << "disabled.<br>\n";
+    ss << "<br>\n";
+
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
     if (auto doh_ep = config.origin_doh_endpoint()) {
         ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
