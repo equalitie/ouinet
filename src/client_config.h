@@ -168,8 +168,8 @@ private:
             , "Front-end's endpoint (in <IP>:<PORT> format)")
            ("disable-bridge-announcement"
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
-            , "Disable announcements of this client "
-              "to the Bridges list in the DHT")
+            , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
+              "Previous announcements could take up to an hour to expire.")
            ;
 
         po::options_description injector("Injector options");
