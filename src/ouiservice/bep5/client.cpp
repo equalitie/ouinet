@@ -318,25 +318,34 @@ private:
             _DEBUG("Waiting to ping injectors: done");
 
             bool got_reply = _injector_was_seen;
-            if (got_reply && _helper_announcement_enabled)
+            if (got_reply) {
                 // A succesful direct connection during the pause is taken as a sign of reachability.
-                _DEBUG("Made connection to injector, announcing as helper (bridge)");
-            else {
+                if (_helper_announcement_enabled)
+                    _DEBUG("Made connection to injector, announcing as helper (bridge)");
+                else
+                    _DEBUG("Made connection to injector, announcements as helper (bridge) are disabled");
+            } else {
                 got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
                 if (!cancel && ec)
                     _ERROR("Failed to ping injectors; ec=", ec);
                 return_or_throw_on_error(yield, cancel, ec);
-                if (got_reply && _helper_announcement_enabled)
-                    _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+                if (got_reply){
+                    if (_helper_announcement_enabled)
+                        _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+                    else
+                        _DEBUG("Got pong from injectors, announcements as helper (bridge) are disabled");
+                }
             }
 
             _last_ping_time = Clock::now();
 
-            if (got_reply && _helper_announcement_enabled)
-                _helper_announcer->update();
-            else
+            if (got_reply) {
+                if (_helper_announcement_enabled)
+                    _helper_announcer->update();
+            } else {
                 _VERBOSE("Did not get pong from injectors,"
                          " the network may be down or they may be blocked");
+            }
         }
     }
 
