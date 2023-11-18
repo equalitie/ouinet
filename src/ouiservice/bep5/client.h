@@ -45,6 +45,7 @@ public:
     Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
               , std::string injector_swarm_name
               , std::string helpers_swarm_name
+              , bool helper_announcement_enabled
               , asio::ssl::context*
               , Target targets = helpers | injectors);
 
@@ -69,6 +70,7 @@ private:
 
     std::string _injector_swarm_name;
     std::string _helpers_swarm_name;
+    bool _helper_announcement_enabled;
 
     std::shared_ptr<Swarm> _injector_swarm;
     std::unique_ptr<Swarm> _helpers_swarm;

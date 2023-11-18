@@ -541,6 +541,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "</ul>\n";
     }
 
+    ss << "BEP5 announcements of this client as a bridge are ";
+    if (config.is_bridge_announcement_enabled())
+        ss << "enabled.<br>\n";
+    else
+        ss << "disabled.<br>\n";
+    ss << "<br>\n";
+
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
     if (auto doh_ep = config.origin_doh_endpoint()) {
         ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
@@ -639,7 +646,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"ouinet_build_id", Version::BUILD_ID},
         {"ouinet_protocol", http_::protocol_version_current},
         {"state", client_state(cstate)},
-        {"logfile", config.is_log_file_enabled()}
+        {"logfile", config.is_log_file_enabled()},
+        {"bridge_announcement", config.is_bridge_announcement_enabled()}
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);

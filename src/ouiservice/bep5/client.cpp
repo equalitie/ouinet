@@ -273,12 +273,14 @@ class Bep5Client::InjectorPinger {
 public:
     InjectorPinger( shared_ptr<Bep5Client::Swarm> injector_swarm
                   , string helper_swarm_name
+                  , bool helper_announcement_enabled
                   , shared_ptr<bt::MainlineDht> dht
                   , Cancel& cancel)
         : _lifetime_cancel(cancel)
         , _injector_swarm(move(injector_swarm))
         , _random_generator(std::random_device()())
         , _helper_announcer(new bt::Bep5ManualAnnouncer(util::sha1_digest(helper_swarm_name), dht))
+        , _helper_announcement_enabled(helper_announcement_enabled)
     {
         TRACK_SPAWN(_injector_swarm->get_executor(),
                     [=] (asio::yield_context yield) {
@@ -316,25 +318,34 @@ private:
             _DEBUG("Waiting to ping injectors: done");
 
             bool got_reply = _injector_was_seen;
-            if (got_reply)
+            if (got_reply) {
                 // A succesful direct connection during the pause is taken as a sign of reachability.
-                _DEBUG("Made connection to injector, announcing as helper (bridge)");
-            else {
+                if (_helper_announcement_enabled)
+                    _DEBUG("Made connection to injector, announcing as helper (bridge)");
+                else
+                    _DEBUG("Made connection to injector, announcements as helper (bridge) are disabled");
+            } else {
                 got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
                 if (!cancel && ec)
                     _ERROR("Failed to ping injectors; ec=", ec);
                 return_or_throw_on_error(yield, cancel, ec);
-                if (got_reply)
-                    _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+                if (got_reply){
+                    if (_helper_announcement_enabled)
+                        _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+                    else
+                        _DEBUG("Got pong from injectors, announcements as helper (bridge) are disabled");
+                }
             }
 
             _last_ping_time = Clock::now();
 
-            if (got_reply)
-                _helper_announcer->update();
-            else
+            if (got_reply) {
+                if (_helper_announcement_enabled)
+                    _helper_announcer->update();
+            } else {
                 _VERBOSE("Did not get pong from injectors,"
                          " the network may be down or they may be blocked");
+            }
         }
     }
 
@@ -404,6 +415,7 @@ private:
     const Clock::duration _ping_frequency = (_debug ? injector_ping_period_debug : injector_ping_period);
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
+    bool _helper_announcement_enabled = true;
 };
 
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
@@ -424,11 +436,13 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
 Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
                       , string injector_swarm_name
                       , string helpers_swarm_name
+                      , bool helper_announcement_enabled
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
     , _helpers_swarm_name(move(helpers_swarm_name))
+    , _helper_announcement_enabled(helper_announcement_enabled)
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
     , _default_targets(targets)
@@ -459,7 +473,11 @@ void Bep5Client::start(asio::yield_context)
         _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, _cancel, true));
         _helpers_swarm->start();
 
-        _injector_pinger.reset(new InjectorPinger(_injector_swarm, _helpers_swarm_name, _dht, _cancel));
+        _injector_pinger.reset(new InjectorPinger(  _injector_swarm
+                                                  , _helpers_swarm_name
+                                                  , _helper_announcement_enabled
+                                                  , _dht
+                                                  , _cancel));
     }
 
     TRACK_SPAWN(get_executor(),

@@ -52,6 +52,7 @@ public class Config implements Parcelable {
         private String cacheStaticContentPath;
         private String listenOnTcp;
         private String frontEndEp;
+        private boolean disableBridgeAnnouncement = false;
         private String maxCachedAge;
         private String localDomain;
         private String originDohBase;
@@ -126,6 +127,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setFrontEndEp(String frontEndEp){
             this.frontEndEp = frontEndEp;
+            return this;
+        }
+        public ConfigBuilder setDisableBridgeAnnouncement(boolean disableBridgeAnnouncement){
+            this.disableBridgeAnnouncement = disableBridgeAnnouncement;
             return this;
         }
         public ConfigBuilder setMaxCachedAge(String maxCachedAge){
@@ -299,6 +304,7 @@ public class Config implements Parcelable {
                     cacheStaticContentPath,
                     listenOnTcp,
                     frontEndEp,
+                    disableBridgeAnnouncement,
                     maxCachedAge,
                     localDomain,
                     originDohBase,
@@ -324,6 +330,7 @@ public class Config implements Parcelable {
     private String cacheStaticContentPath;
     private String listenOnTcp;
     private String frontEndEp;
+    private boolean disableBridgeAnnouncement;
     private String maxCachedAge;
     private String localDomain;
     private String originDohBase;
@@ -347,6 +354,7 @@ public class Config implements Parcelable {
                   String cacheStaticContentPath,
                   String listenOnTcp,
                   String frontEndEp,
+                  boolean disableBridgeAnnouncement,
                   String maxCachedAge,
                   String localDomain,
                   String originDohBase,
@@ -369,6 +377,7 @@ public class Config implements Parcelable {
         this.cacheStaticContentPath = cacheStaticContentPath;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
+        this.disableBridgeAnnouncement = disableBridgeAnnouncement;
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
         this.originDohBase = originDohBase;
@@ -419,6 +428,9 @@ public class Config implements Parcelable {
     }
     public String getFrontEndEp() {
         return frontEndEp;
+    }
+    public boolean getDisableBridgeAnnouncement() {
+        return disableBridgeAnnouncement;
     }
     public String getMaxCachedAge() {
         return maxCachedAge;
@@ -477,6 +489,7 @@ public class Config implements Parcelable {
         out.writeString(cacheStaticContentPath);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
+        out.writeInt(disableBridgeAnnouncement ? 1 : 0);
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
         out.writeString(originDohBase);
@@ -510,6 +523,7 @@ public class Config implements Parcelable {
         cacheStaticContentPath = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
+        disableBridgeAnnouncement = in.readInt() != 0;
         maxCachedAge = in.readString();
         localDomain = in.readString();
         originDohBase = in.readString();
