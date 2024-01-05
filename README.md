@@ -17,11 +17,15 @@ is not available, it could also contact a trusted *injector* server over a
 peer-to-peer routing system (like the [BitTorrent DHT][] or [I2P][]) and ask
 to fetch the page and store it in the distributed cache.
 
-See our [lightning talk at the Decentralized Web Summit 2018](http://archive.org/details/dweb-8_2_18_Lightning_Talks_New_Discoveries_5?start=547)
-for an overview of Ouinet's architecture or check the [Ouinet white paper](https://gitlab.com/equalitie/ouinet/-/blob/main/doc/ouinet-network-whitepaper.md?ref_type=heads)
-for a detailed explanation of Injectors, Clients and the processes followed
-to add content into the distributed cache.
+See our [lightning talk at the Decentralized Web Summit 2018][] for an
+overview of Ouinet's architecture or check the [documentation website][].
 
+For a detailed technical explanation of processes and protocols you can refer
+to [Ouinet's white paper][].
+
+[lightning talk at the Decentralized Web Summit 2018]: http://archive.org/details/dweb-8_2_18_Lightning_Talks_New_Discoveries_5?start=547
+[documentation website]: https://ouinet.work/docs/how/index.html
+[Ouinet's white paper]: https://gitlab.com/equalitie/ouinet/-/blob/main/doc/ouinet-network-whitepaper.md?ref_type=heads
 [BitTorrent DHT]: http://bittorrent.org/beps/bep_0005.html
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
 
