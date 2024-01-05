@@ -53,7 +53,7 @@ networking libraries to the Android applications written in Java or Kotlin.
 ## Building Ouinet from source
 
 The following instructions were tested in Debian 12 with the following
-packages installed; `build-essential`, `cmake`, `git` and `libssl-dev`,
+packages installed; `build-essential`, `cmake`, `git`, `libssl-dev` and
 `zlib1g-dev`, but in general to build Ouinet natively on your GNU/Linux
 system you just need *CMake 3.5+* and *g++* capable of C++14.
 
@@ -70,6 +70,6 @@ where all (even temporary) build files will go, you can build Ouinet with:
     $ cmake <SOURCE DIR>
     $ make
 
-When the build process finishes you will find in `<BUILD DIR>` the binaries for
-`client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
+When the build process finishes you will find in `<BUILD DIR>` the binaries
+for `client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
 `libcpp_upnp.a`, etc.
