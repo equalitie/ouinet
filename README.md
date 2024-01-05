@@ -50,26 +50,16 @@ shared peer-to-peer.
 networking libraries to the Android applications written in Java or Kotlin.
 
 
-## Cloning the source tree
+## Building Ouinet from source
+
+The following instructions were tested in Debian 12 with the following
+packages installed; `build-essential`, `cmake`, `git` and `libssl-dev`,
+`zlib1g-dev`, but in general to build Ouinet natively on your GNU/Linux
+system you just need *CMake 3.5+* and *g++* capable of C++14.
 
 Ouinet uses Git submodules, thus to properly clone it, use:
 
     $ git clone --recursive https://gitlab.com/equalitie/ouinet.git
-
-You can also clone and update the modules separately:
-
-    $ git clone https://gitlab.com/equalitie/ouinet.git
-    $ cd ouinet
-    $ git submodule update --init --recursive
-
-## Build requirements (desktop)
-
-To build Ouinet natively on your system, you will need the following software
-to be already available:
-
-* CMake 3.5+
-* `g++` capable of C++14
-* The [Boost library](http://www.boost.org/) 1.71+
 
 Assuming that `<SOURCE DIR>` points to the directory where the
 `CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
@@ -80,3 +70,6 @@ where all (even temporary) build files will go, you can build Ouinet with:
     $ cmake <SOURCE DIR>
     $ make
 
+When the build process finishes you will find in `<BUILD DIR>` the binaries for
+`client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
+`libcpp_upnp.a`, etc.
