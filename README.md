@@ -30,7 +30,7 @@ to [Ouinet's white paper][].
 [BitTorrent DHT]: http://bittorrent.org/beps/bep_0005.html
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
 
-![Ouinet request/response flow](./doc/request-response-flow.svg)
+![Ouinet request/response flow](./doc/diagrams/simple-request-flow.svg)
 
 **Warning:** Ouinet is **not an anonymity tool**, information about your
 browsing might be seen by other participants in the network, as well as the
