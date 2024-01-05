@@ -68,7 +68,7 @@ where all (even temporary) build files will go, you can build Ouinet with:
     $ mkdir -p <BUILD DIR>
     $ cd <BUILD DIR>
     $ cmake <SOURCE DIR>
-    $ make
+    $ cmake --build <BUILD DIR>
 
 When the build process finishes you will find in `<BUILD DIR>` the binaries
 for `client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
