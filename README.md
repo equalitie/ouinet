@@ -69,7 +69,7 @@ to be already available:
 
 * CMake 3.5+
 * `g++` capable of C++14
-* The [Boost library](http://www.boost.org/) 1.67+
+* The [Boost library](http://www.boost.org/) 1.71+
 
 Assuming that `<SOURCE DIR>` points to the directory where the
 `CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
