@@ -79,22 +79,6 @@ where all (even temporary) build files will go, you can build Ouinet with:
     $ cmake <SOURCE DIR>
     $ make
 
-However, we encourage you to use a Vagrant environment for development, or
-Docker containers for deploying a Ouinet client or an injector.  These have a
-different set of requirements.  See the corresponding sections below for
-further instructions on Vagrant and Docker.
-
-## Running integration tests
-
-The Ouinet source comes with a set of integration tests.  To run them you will
-need the [Twisted](https://twistedmatrix.com/) Python framework.
-
-If you already built Ouinet from `<SOURCE DIR>` into `<BUILD DIR>` (see
-above), you can run the tests as follows:
-
-    $ export OUINET_REPO_DIR=<SOURCE DIR>
-    $ export OUINET_BUILD_DIR=<BUILD DIR>
-    $ ./scripts/run_integration_tests.sh
 
 ## Using a Vagrant environment
 
