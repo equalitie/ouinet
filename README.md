@@ -46,6 +46,22 @@ and other security or privacy-affecting issues might exist.  Please keep this
 in mind when using this software and only assume reasonable risks.
 
 
+## Request mechanisms to retrieve content
+
+These mechanisms are attempted as parallel coroutines showing the results of
+the first responding method.
+
+- *Origin*: The client contacts the origin server directly via HTTP(S).
+- *Proxy*: The client contacts the origin server through an HTTP proxy
+  (currently the configured injector) and retrieves the content without
+  signing it.
+- *Injector*: The client asks the injector to fetch and sign the content
+  from the origin server, then it starts seeding the signed content to
+  the distributed cache.
+- *Distributed Cache*: The client attempts to retrieve the content from
+  the distributed cache.
+
+
 ## Software Artifacts
 
 * **Client**: Command line application that serves as a proxy to the Ouinet
