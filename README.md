@@ -16,7 +16,7 @@ A typical [client][] node setup consists of a web browser or other application
 using the special HTTP proxy provided by Ouinet. When the Ouinet proxy gets a
 request for content, it attempts to retrieve the resource using several
 mechanisms. For example, it could try to fetch a page from the [distributed cache][]
-by looking up the content in the [BitTorrent DHT][] and if the content is not
+by looking up the content in the BitTorrent DHT and if the content is not
 available, it could also contact a trusted [injector][] server over a
 peer-to-peer routing system (like the [BitTorrent DHT][] or [I2P][]) and ask to
 fetch the page and store it in the distributed cache.
