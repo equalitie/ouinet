@@ -29,7 +29,7 @@ to [Ouinet's white paper][].
 
 [lightning talk at the Decentralized Web Summit 2018]: http://archive.org/details/dweb-8_2_18_Lightning_Talks_New_Discoveries_5?start=547
 [documentation website]: https://ouinet.work/docs/how/index.html
-[Ouinet's white paper]: https://gitlab.com/equalitie/ouinet/-/blob/main/doc/ouinet-network-whitepaper.md?ref_type=heads
+[Ouinet's white paper]: doc/ouinet-network-whitepaper.md
 [BitTorrent DHT]: http://bittorrent.org/beps/bep_0005.html
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
 [client]: https://ouinet.work/docs/how/client.html
