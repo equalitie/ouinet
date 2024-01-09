@@ -9,6 +9,7 @@ infrastructure that provide access to web resources when access to the
 unrestricted internet is unreliable or unavailable, tailored for scenarios of
 limited Internet connectivity and selective network traffic filtering.
 
+
 ## How it works?
 
 A typical *client* node setup consists of a web browser or other application
@@ -41,7 +42,8 @@ components (like injector code) may turn your computer into an open web proxy,
 and other security or privacy-affecting issues might exist.  Please keep this
 in mind when using this software and only assume reasonable risks.
 
-## Components
+
+## Software Artifacts
 
 * **Client**: Command line application that serves as a proxy to the Ouinet
 network.
