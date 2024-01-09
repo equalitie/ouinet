@@ -135,3 +135,8 @@ When the config file is ready you can start the client as follows:
     $ ./client --repo /path/to/your/repo
 
 For more details about configuration options please run `./client --help`.
+
+Once done, you can visit `localhost:8078` in your browser and it should show
+you the client front-end with assorted information from the client and
+configuration tools. The client's HTTP proxy endpoint should be available to
+the host at `localhost:8077`.
