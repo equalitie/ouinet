@@ -108,3 +108,30 @@ needed to [sign content](https://ouinet.work/docs/how/cache.html#signatures)
 (`ed25519-*` files) and the certificates used to establish a TLS connection
 when contacting the injector via uTP protocol. Please keep an eye on these
 files as some of them will be needed to configure your Ouinet clients.
+
+
+## Running a Client
+
+Create a repo directory, e.g. `repos/client` and add the configuration file
+for the new client:
+
+    # repos/client/ouinet-client.conf
+
+    cache-type = bep5-http
+    cache-http-public-key = abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno
+    injector-tls-cert-file = /path/to/your/repo/client/tls-cert.pem
+    injector-credentials = test_user_change_me:test_password_change_me
+
+The value of `cache-http-public-key` can be obtained from the injector file
+named `ed25519-public-key` or from the injector log entry that starts with
+`[INFO] Injector swarm: sha1('ed25519:abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno/v6/injectors`.
+
+`injector-tls-cert-file` is the path to the `tls-cert.pem` copied from the
+injector and `injector-credentials` should be set to the same value defined
+as `credentials` in `ouinet-injector.conf`.
+
+When the config file is ready you can start the client as follows:
+
+    $ ./client --repo /path/to/your/repo
+
+For more details about configuration options please run `./client --help`.
