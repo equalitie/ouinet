@@ -77,3 +77,31 @@ where all (even temporary) build files will go, you can build Ouinet with:
 When the build process finishes you will find in `<BUILD DIR>` the binaries
 for `client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
 `libcpp_upnp.a`, etc.
+
+
+## Running the Injector
+
+It's recommended to create a directory named `repos/injector` where the
+configuration file, the ed25519 keys and the TLS certificates will be stored.
+
+The minimum configuration to start the Injector is shown below:
+
+    # repos/injector/ouinet-injector.conf
+
+    listen-on-utp-tls = 0.0.0.0:7085
+    credentials = test_user_change_me:test_password_change_me
+
+You could also find more details of the available options in this
+[config example](repos/injector/ouinet-injector.conf) or invoking
+`injector --help`.
+
+When your `repo` dir and the configuration file are ready you can start
+the injector as follows:
+
+    ./injector --repo /path/to/your/repo
+
+During its first start the injector will generate the private and public keys
+needed to sign content (`ed25519-*` files) and the certificates used to
+establish a TLS connection when contacting the injector via uTP protocol.
+Please keep an eye on these files as some of them will be needed to configure
+your Ouinet clients.
