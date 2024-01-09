@@ -101,7 +101,7 @@ You could also find more details of the available options in this
 When your `repo` dir and the configuration file are ready you can start
 the injector as follows:
 
-    ./injector --repo /path/to/your/repo
+    $ ./injector --repo /path/to/your/repo
 
 During its first start the injector will generate the private and public keys
 needed to [sign content](https://ouinet.work/docs/how/cache.html#signatures)
