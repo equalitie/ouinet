@@ -12,14 +12,14 @@ limited Internet connectivity and selective network traffic filtering.
 
 ## How it works?
 
-A typical *client* node setup consists of a web browser or other application
-using the special HTTP proxy provided by Ouinet. When the Ouinet proxy gets
-a request for content, it attempts to retrieve the resource using several
-mechanisms. For example, it could try to fetch a page from the *distributed
-cache* by looking up the content in the [BitTorrent DHT][] and if the content
-is not available, it could also contact a trusted *injector* server over a
-peer-to-peer routing system (like the [BitTorrent DHT][] or [I2P][]) and ask
-to fetch the page and store it in the distributed cache.
+A typical [client][] node setup consists of a web browser or other application
+using the special HTTP proxy provided by Ouinet. When the Ouinet proxy gets a
+request for content, it attempts to retrieve the resource using several
+mechanisms. For example, it could try to fetch a page from the [distributed cache][]
+by looking up the content in the [BitTorrent DHT][] and if the content is not
+available, it could also contact a trusted [injector][] server over a
+peer-to-peer routing system (like the [BitTorrent DHT][] or [I2P][]) and ask to
+fetch the page and store it in the distributed cache.
 
 See our [lightning talk at the Decentralized Web Summit 2018][] for an
 overview of Ouinet's architecture or check the [documentation website][].
@@ -32,6 +32,9 @@ to [Ouinet's white paper][].
 [Ouinet's white paper]: https://gitlab.com/equalitie/ouinet/-/blob/main/doc/ouinet-network-whitepaper.md?ref_type=heads
 [BitTorrent DHT]: http://bittorrent.org/beps/bep_0005.html
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
+[client]: https://ouinet.work/docs/how/client.html
+[injector]: https://ouinet.work/docs/how/injectors.html
+[distributed cache]: https://ouinet.work/docs/how/cache.html
 
 ![Ouinet request/response flow](./doc/diagrams/simple-request-flow.svg)
 
@@ -101,7 +104,7 @@ the injector as follows:
     ./injector --repo /path/to/your/repo
 
 During its first start the injector will generate the private and public keys
-needed to sign content (`ed25519-*` files) and the certificates used to
-establish a TLS connection when contacting the injector via uTP protocol.
-Please keep an eye on these files as some of them will be needed to configure
-your Ouinet clients.
+needed to [sign content](https://ouinet.work/docs/how/cache.html#signatures)
+(`ed25519-*` files) and the certificates used to establish a TLS connection
+when contacting the injector via uTP protocol. Please keep an eye on these
+files as some of them will be needed to configure your Ouinet clients.
