@@ -101,6 +101,10 @@ When the build process finishes you will find in `<BUILD DIR>` the binaries
 for `client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
 `libcpp_upnp.a`, etc.
 
+Please refer to Ouinet docs for instructions to build artifacts using a
+[Docker](https://ouinet.work/docs/build/docker.html) or
+[Vagrant](https://ouinet.work/docs/build/vagrant.html) dev environments.
+
 
 ## Running the Injector
 
@@ -133,6 +137,8 @@ needed to [sign content](https://ouinet.work/docs/how/cache.html#signatures)
 when contacting the injector via uTP protocol. Please keep an eye on these
 files as some of them will be needed to configure your Ouinet clients.
 
+For a production environment you may want to deploy the Injector using
+[Docker Compose](https://ouinet.work/docs/build/docker.html#docker-deployment).
 
 ## Running a Client
 
@@ -168,6 +174,9 @@ Once done, you can visit `localhost:8078` in your browser and it should show
 you the client front-end with assorted information from the client and
 configuration tools. The client's HTTP proxy endpoint should be available to
 the host at `localhost:8077`.
+
+As well as Injectors, the Ouinet Clients can be deployed in production using
+[Docker Compose](https://ouinet.work/docs/build/docker.html#deploying-a-client).
 
 
 ## Testing the Client with cURL
