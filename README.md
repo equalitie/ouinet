@@ -46,10 +46,10 @@ and other security or privacy-affecting issues might exist.  Please keep this
 in mind when using this software and only assume reasonable risks.
 
 
-## Request mechanisms to retrieve content
+## Request mechanisms
 
-These mechanisms are attempted as parallel coroutines showing the results of
-the first responding method.
+These mechanisms to retrieve content are attempted as parallel coroutines
+showing the results of the first responding method.
 
 - *Origin*: The client contacts the origin server directly via HTTP(S).
 - *Proxy*: The client contacts the origin server through an HTTP proxy
