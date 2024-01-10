@@ -278,3 +278,14 @@ permission (Ouinet will not attempt to write to that directory).
 
 You can find additional information and samples of Android applications using
 Ouinet in [equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).
+
+
+## References
+
+- [Ouinet's Website](https://ouinet.work/)
+- [Documentation](https://ouinet.work/docs/)
+- [Whitepaper](https://gitlab.com/equalitie/ouinet/-/blob/readme-reorg/doc/ouinet-network-whitepaper.md)
+- [Matrix channel](https://matrix.to/#/#ouinet:matrix.org)
+- [Integration Examples](https://gitlab.com/equalitie/ouinet-examples)
+- [Ceno Browser](https://gitlab.com/censorship-no/ceno-browser/)
+- [Ceno Docker Client](https://github.com/censorship-no/ceno-docker-client)
