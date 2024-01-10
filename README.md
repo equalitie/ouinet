@@ -39,7 +39,7 @@ to [Ouinet's white paper][].
 ![Ouinet request/response flow](./doc/diagrams/simple-request-flow.svg)
 
 **Warning:** Ouinet is **not an anonymity tool**, information about your
-browsing might be seen by other participants in the network, as well as the
+browsing can be seen by other participants in the network, as well as the
 fact that your application is seeding particular content.  Running some
 components (like injector code) may turn your computer into an open web proxy,
 and other security or privacy-affecting issues might exist.  Please keep this
