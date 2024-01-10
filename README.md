@@ -269,8 +269,9 @@ ouinet.start();
 
 From now on, all of the app's HTTP communication will be handled by Ouinet.
 
-Please note that if you plan to use a directory for Ouinet's static cache in
-your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
+Please note that if you plan to use a directory for Ouinet's
+[static cache](https://ouinet.work/docs/build/testing.html#using-an-external-static-cache)
+in your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
 `setCacheStaticContentPath()`), then besides the permissions declared by the
 library in its manifest, your app will need the `READ_EXTERNAL_STORAGE`
 permission (Ouinet will not attempt to write to that directory).
