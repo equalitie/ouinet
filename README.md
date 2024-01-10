@@ -156,3 +156,33 @@ Once done, you can visit `localhost:8078` in your browser and it should show
 you the client front-end with assorted information from the client and
 configuration tools. The client's HTTP proxy endpoint should be available to
 the host at `localhost:8077`.
+
+
+## Testing the Client with cURL
+
+Now that the Ouinet services are running we will test a simple scenario where
+a Client requests a URL from the Injector.
+
+It's important to disable `Origin` and `Proxy` mechanisms to force Ouinet to
+fetch the content from the Injector. To do this, you can press the `disable`
+button in Ouinet's front-end (that's running by default at `localhost:8078`)
+or to set the values `disable-origin-access` and `disable-proxy-access` to
+`true` in Ouinet's config and restart the service.
+
+The following example requests `https://ouinet.work` from Ouinet's proxy
+running on port `8077` and receives an HTTP response with `x-ouinet-source`
+header set to `["injector"]`. SSL verification is skipped with `--insecure`
+just to keep the example as simple as possible but for production applications
+the Ouinet TLS certificate should be installed and validated.
+
+
+    $ curl https://ouinet.work \
+        --header 'X-Ouinet-Group: ouinet.work' \
+        --proxy 127.0.0.1:8077 \
+        --insecure \
+        --silent \
+        --output /dev/null \
+        --write-out '%{http_code},%{header_json}' | \
+      grep x-ouinet-source
+
+    "x-ouinet-source":["injector"]
