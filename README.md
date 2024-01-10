@@ -82,16 +82,20 @@ system you just need *CMake 3.5+* and *g++* capable of C++14.
 
 Ouinet uses Git submodules, thus to properly clone it, use:
 
-    $ git clone --recursive https://gitlab.com/equalitie/ouinet.git
+```shell
+$ git clone --recursive https://gitlab.com/equalitie/ouinet.git
+```
 
 Assuming that `<SOURCE DIR>` points to the directory where the
 `CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
 where all (even temporary) build files will go, you can build Ouinet with:
 
-    $ mkdir -p <BUILD DIR>
-    $ cd <BUILD DIR>
-    $ cmake <SOURCE DIR>
-    $ cmake --build <BUILD DIR>
+```shell
+$ mkdir -p <BUILD DIR>
+$ cd <BUILD DIR>
+$ cmake <SOURCE DIR>
+$ cmake --build <BUILD DIR>
+```
 
 When the build process finishes you will find in `<BUILD DIR>` the binaries
 for `client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
@@ -105,10 +109,12 @@ configuration file, the ed25519 keys and the TLS certificates will be stored.
 
 The minimum configuration to start the Injector is shown below:
 
-    # repos/injector/ouinet-injector.conf
+```conf
+# repos/injector/ouinet-injector.conf
 
-    listen-on-utp-tls = 0.0.0.0:7085
-    credentials = test_user_change_me:test_password_change_me
+listen-on-utp-tls = 0.0.0.0:7085
+credentials = test_user_change_me:test_password_change_me
+```
 
 You could also find more details of the available options in this
 [config example](repos/injector/ouinet-injector.conf) or invoking
@@ -117,7 +123,9 @@ You could also find more details of the available options in this
 When your `repo` dir and the configuration file are ready you can start
 the injector as follows:
 
-    $ ./injector --repo /path/to/your/repo
+```shell
+$ ./injector --repo /path/to/your/repo
+```
 
 During its first start the injector will generate the private and public keys
 needed to [sign content](https://ouinet.work/docs/how/cache.html#signatures)
@@ -131,12 +139,14 @@ files as some of them will be needed to configure your Ouinet clients.
 Create a repo directory, e.g. `repos/client` and add the configuration file
 for the new client:
 
-    # repos/client/ouinet-client.conf
+```conf
+# repos/client/ouinet-client.conf
 
-    cache-type = bep5-http
-    cache-http-public-key = abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno
-    injector-tls-cert-file = /path/to/your/repo/client/tls-cert.pem
-    injector-credentials = test_user_change_me:test_password_change_me
+cache-type = bep5-http
+cache-http-public-key = abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno
+injector-tls-cert-file = /path/to/your/repo/client/tls-cert.pem
+injector-credentials = test_user_change_me:test_password_change_me
+```
 
 The value of `cache-http-public-key` can be obtained from the injector file
 named `ed25519-public-key` or from the injector log entry that starts with
@@ -148,7 +158,9 @@ as `credentials` in `ouinet-injector.conf`.
 
 When the config file is ready you can start the client as follows:
 
-    $ ./client --repo /path/to/your/repo
+```shell
+$ ./client --repo /path/to/your/repo
+```
 
 For more details about configuration options please run `./client --help`.
 
@@ -175,16 +187,18 @@ header set to `["injector"]`. SSL verification is skipped with `--insecure`
 just to keep the example as simple as possible but for production applications
 the Ouinet TLS certificate should be installed and validated.
 
-    $ curl https://ouinet.work \
-        --header 'X-Ouinet-Group: ouinet.work' \
-        --proxy 127.0.0.1:8077 \
-        --insecure \
-        --silent \
-        --output /dev/null \
-        --write-out '%{http_code},%{header_json}' | \
-      grep x-ouinet-source
+```shell
+$ curl https://ouinet.work \
+    --header 'X-Ouinet-Group: ouinet.work' \
+    --proxy 127.0.0.1:8077 \
+    --insecure \
+    --silent \
+    --output /dev/null \
+    --write-out '%{http_code},%{header_json}' | \
+  grep x-ouinet-source
 
-    "x-ouinet-source":["injector"]
+"x-ouinet-source":["injector"]
+```
 
 If you're interested on a script that automatically generates `X-Ouinet-Group`
 following the same rules used by Ceno browser please check [ouinet-curl](https://gitlab.com/equalitie/ouinet-examples/-/tree/main/shell/ouinet-curl)
