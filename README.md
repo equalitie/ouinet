@@ -175,7 +175,6 @@ header set to `["injector"]`. SSL verification is skipped with `--insecure`
 just to keep the example as simple as possible but for production applications
 the Ouinet TLS certificate should be installed and validated.
 
-
     $ curl https://ouinet.work \
         --header 'X-Ouinet-Group: ouinet.work' \
         --proxy 127.0.0.1:8077 \
@@ -186,3 +185,7 @@ the Ouinet TLS certificate should be installed and validated.
       grep x-ouinet-source
 
     "x-ouinet-source":["injector"]
+
+If you're interested on a script that automatically generates `X-Ouinet-Group`
+following the same rules used by Ceno browser please check [ouinet-curl](https://gitlab.com/equalitie/ouinet-examples/-/tree/main/shell/ouinet-curl)
+in the [ouinet-examples](https://gitlab.com/equalitie/ouinet-examples/) repo.
