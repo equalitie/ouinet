@@ -189,3 +189,68 @@ the Ouinet TLS certificate should be installed and validated.
 If you're interested on a script that automatically generates `X-Ouinet-Group`
 following the same rules used by Ceno browser please check [ouinet-curl](https://gitlab.com/equalitie/ouinet-examples/-/tree/main/shell/ouinet-curl)
 in the [ouinet-examples](https://gitlab.com/equalitie/ouinet-examples/) repo.
+
+
+## Integrating Ouinet into your Android application
+
+Add Ouinet and Relinker as dependencies in `<PROJECT DIR>/app/build.gradle`:
+
+```gradle
+dependencies {
+    //...
+    implementation 'ie.equalit.ouinet:ouinet-omni:0.23.0'
+    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
+}
+```
+
+Check that Maven Central is added to the list of repositories used by Gradle:
+
+```gradle
+allprojects {
+    repositories {
+        // ...
+        mavenCentral()
+    }
+}
+```
+
+At this stage your project should compile with no errors.  Now to tell Ouinet
+to take over the app's HTTP communications, in the `MainActivity.java` of your
+app import Ouinet:
+
+```java
+import ie.equalit.ouinet.Ouinet;
+```
+
+Then add a private member to your `MainActivity` class:
+
+```java
+private Ouinet ouinet;
+```
+
+And in its `OnCreate` method initiate the Ouinet object (using the BEP5/HTTP
+cache):
+
+```java
+Config config = new Config.ConfigBuilder(this)
+            .setCacheType("bep5-http")
+            .setCacheHttpPubKey(<CACHE_PUB_KEY>)
+            .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
+            .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
+            .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
+            .build()
+
+ouinet = new Ouinet(this, config);
+ouinet.start();
+```
+
+From now on, all of the app's HTTP communication will be handled by Ouinet.
+
+Please note that if you plan to use a directory for Ouinet's static cache in
+your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
+`setCacheStaticContentPath()`), then besides the permissions declared by the
+library in its manifest, your app will need the `READ_EXTERNAL_STORAGE`
+permission (Ouinet will not attempt to write to that directory).
+
+You can find additional information and samples of Android applications using
+Ouinet in [equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).
