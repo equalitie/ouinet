@@ -64,12 +64,12 @@ showing the results of the first responding method.
 
 ## Software Artifacts
 
-* **Client**: Command line application that serves as a proxy to the Ouinet
+* *Client*: Command line application that serves as a proxy to the Ouinet
 network.
-* **Injector**: Command line application that retrieves content from origin
+* *Injector*: Command line application that retrieves content from origin
 websites and injects the signed content to the Ouinet network so it can be
 shared peer-to-peer.
-* **Android libraries**: Java Native Interface used to expose the C++ Ouinet
+* *Android libraries*: Java Native Interface used to expose the C++ Ouinet
 networking libraries to the Android applications written in Java or Kotlin.
 
 
