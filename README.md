@@ -217,58 +217,63 @@ in the [ouinet-examples](https://gitlab.com/equalitie/ouinet-examples/) repo.
 
 ## Integrating Ouinet into your Android application
 
-Add Ouinet and Relinker as dependencies in `<PROJECT DIR>/app/build.gradle`:
+First add Ouinet and Relinker as dependencies in app's `build.gradle.kts`:
 
 ```gradle
 dependencies {
     //...
-    implementation 'ie.equalit.ouinet:ouinet-omni:0.23.0'
-    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
+    implementation("ie.equalit.ouinet:ouinet-omni:0.23.0")
+    implementation("com.getkeepsafe.relinker:relinker:1.4.4")
 }
 ```
 
-Check that Maven Central is added to the list of repositories used by Gradle:
+In the `MainActivity.kt` of your app import Ouinet classes:
 
-```gradle
-allprojects {
-    repositories {
-        // ...
-        mavenCentral()
-    }
-}
-```
-
-At this stage your project should compile with no errors.  Now to tell Ouinet
-to take over the app's HTTP communications, in the `MainActivity.java` of your
-app import Ouinet:
-
-```java
+```kotlin
 import ie.equalit.ouinet.Ouinet;
+import ie.equalit.ouinet.Config
 ```
 
-Then add a private member to your `MainActivity` class:
+Add a private member to your `MainActivity` class:
 
-```java
-private Ouinet ouinet;
+```kotlin
+private lateinit var ouinet: Ouinet
 ```
 
-And in its `OnCreate` method initiate the Ouinet object (using the BEP5/HTTP
-cache):
+Initiate the Ouinet object in its `onCreate` method using the BEP5/HTTP
+cache settings:
 
-```java
-Config config = new Config.ConfigBuilder(this)
-            .setCacheType("bep5-http")
-            .setCacheHttpPubKey(<CACHE_PUB_KEY>)
-            .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
-            .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
-            .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
-            .build()
+```kotlin
+var config = Config.ConfigBuilder(this)
+    .setCacheType("bep5-http")
+    .setCacheHttpPubKey("abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno")
+    .setInjectorCredentials("test_user_change_me:test_password_change_me")
+    .setInjectorTlsCert("-----BEGIN CERTIFICATE-----\nMIICyTCCAbGgAwIBAgIGAWwvE3jIMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0xOTA3MjQxNjE4MjFaFw0zNDA3MjIxNjE4MjFaMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOQ6tX1fh1JQJGMEpgEaqFdVpl2Jz39s+3pFJAHRQMxvQa1a4pGwlc4smrhh8Y2ZKli8zhIzFPATZ3ipdBwnLBBUnDqpZWEqsKdBGGJghM+8EitXJwtSWjR2qqZcz3Xz60MKt2S2IeL6L3/HtHM1bN93Xo3hQK/WYDQ6BEeLd6JSsns1mwwccTStu/kc3Y2EIXPh1otQ624QXb9szIdwQw7vzi0saXONdaFFbpRyoa6KKCEC7iHHfUbEhCSRpL8YMrl5z9mKqA8y+5tl3jzTHRtYE4SVG60pmd9nMQ33ue8m5ADq5Bd8Jg2qOmmg0KNFV1RHB3pljMGco6eP9zmb3jsCAwEAAaMhMB8wHQYDVR0OBBYEFMCGT2KEmo4kM08CE/rv/BbnmVfnMA0GCSqGSIb3DQEBCwUAA4IBAQBWxR7x1vADpkpVRzNxicLgd0CYitmhEWtRQp9kE33O5BjRlHQ5TTA0WBp8Nc3c5ZZ1qAnQx3tXVZ7W1QY2XjiQpsPEhFcPsAtFLP+kpDEFPi39iFv4gunR4M1zReCDTGTJ48bLtqONZ9XgJ7obW8r+TjuJyI/i11NWUwKldg0NevF1Bkddbhpt7PJHUpSSbwr3GJOKHfRw9ZaX6P86MVcJd0TaAzZPXqk+2eab43GbbD6keXRGIufMThKGyrRX+9aIaV3tx3uWAOfWVmlzf9w3gV3DlmjPSOXmUsOLk0PFwoy7O7n9zJKNrUy1N2O+j0tH5HVXOnSjpS8aNrMtpfHS\n-----END CERTIFICATE-----")
+    .build()
 
-ouinet = new Ouinet(this, config);
-ouinet.start();
+ouinet = Ouinet(this, config)
+ouinet.start()
+```
+
+Please refer to [this example](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#pass-config-values-to-ouinet-during-the-build-process) if you want to pass the config values during build process.
+
+Now create a Proxy object pointing to Ouinet's service `127.0.0.1:8077`
+
+```kotlin
+val ouinetService = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", 8077))
+```
+
+And pass the Proxy object to your HTTP client (we're using `OKHTTPClient` in
+this example):
+
+```kotlin
+OkHttpClient.Builder().proxy(ouinetService).build()
 ```
 
 From now on, all of the app's HTTP communication will be handled by Ouinet.
+You can check on this
+[example](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#validate-ouinets-tls-cert)
+how to deal with Ouinet's TLS certificate.
 
 Please note that if you plan to use a directory for Ouinet's
 [static cache](https://ouinet.work/docs/build/testing.html#using-an-external-static-cache)
@@ -277,8 +282,10 @@ in your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
 library in its manifest, your app will need the `READ_EXTERNAL_STORAGE`
 permission (Ouinet will not attempt to write to that directory).
 
-You can find additional information and samples of Android applications using
-Ouinet in [equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).
+You can find additional information to control the
+[access mechanisms](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#test-ouinet-access-mechanisms)
+and samples of other Android applications in
+[equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).
 
 
 ## References
