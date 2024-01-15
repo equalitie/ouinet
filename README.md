@@ -4,10 +4,24 @@
 [![release](https://gitlab.com/equalitie/ouinet/-/badges/release.svg)](https://gitlab.com/equalitie/ouinet/-/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](./LICENSE)
 
-Ouinet is a Free/Open Source collection of software tools and support
-infrastructure that provide access to web resources when access to the
-unrestricted internet is unreliable or unavailable, tailored for scenarios of
-limited Internet connectivity and selective network traffic filtering.
+Ouinet is a collection of open source software libraries that create a
+decentralized network of cooperating peers for sharing and propagating web
+content. A Ouinet deployment requires supporting infrastructure - run by a
+trusted network operator - and the integration of its client libraries into
+third-party applications for requesting and receiving desired content.
+Ouinet clients collectively form a distributed cache that is global in nature,
+but also functional on a local or national network. Peer-to-peer transports
+are used for communications.
+
+Ouinet's primary integration and its initial _raison d'etre_ is to power the
+[Ceno Browser](https://censorship.no) - utilized for accessing web content
+behind national firewalls. Supporting infrastructure on this project is
+provided by [eQualitie](https://equalit.ie), offering injection and
+authentication of web content into a decentralized p2p network, using the
+BitTorrent DHT for addressing and routing. Coupled with sneakernet technology
+operated by eQualitie, Ceno users can access
+[cached website replicas](https://schedule.ceno.life), from heavily limited
+or entirely isolated network environments.
 
 
 ## How it works?
