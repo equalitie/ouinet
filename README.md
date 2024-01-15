@@ -49,8 +49,8 @@ These mechanisms to retrieve content are attempted as parallel coroutines
 showing the results of the first responding method.
 
 - *Origin*: The client contacts the origin server directly via HTTP(S).
-- *Proxy*: The client contacts the origin server through an HTTP proxy
-  (currently the configured injector) and retrieves the content without
+- *Proxy*: The client contacts the origin server through an HTTPS proxy
+  (any available injector) and retrieves the content without
   signing it.
 - *Injector*: The client asks the injector to fetch and sign the content
   from the origin server, then it starts seeding the signed content to
