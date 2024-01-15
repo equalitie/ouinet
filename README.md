@@ -151,9 +151,10 @@ files as some of them will be needed to configure your Ouinet clients.
 For a production environment you may want to deploy the Injector using
 [Docker Compose](https://ouinet.work/docs/build/docker.html#docker-deployment).
 
-**Warning:**  Running an Injector turns the host into an open web proxy
-which could implicate security or privacy-affecting issues depending on your
-context. Please keep this in mind and only assume reasonable risks.
+**Warning:** Running an Injector turns the host into a web proxy for Clients
+with the correct credentials, which could pose a security or privacy risk
+depending on your context. Please keep this in mind and only assume
+reasonable risks.
 
 ## Running a Client
 
