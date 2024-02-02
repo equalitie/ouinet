@@ -93,7 +93,7 @@ A detailed explanation of Bridges can be found in Ouinet's
 [docs](https://ouinet.work/docs/how/injectors.html?highlight=peer#peer-to-peer-tunnels).
 
 
-## Software Artifacts
+## Software artifacts included in this repo
 
 * *Client*: Command line application that serves as a proxy to the Ouinet
 network.
