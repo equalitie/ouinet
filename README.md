@@ -73,7 +73,7 @@ showing the results of the first responding method.
   the distributed cache.
 
 
-# Bridge nodes
+## Bridge nodes
 
 When a client establishes a connection to an injector and verifies that the
 connection is genuine, it may then choose to function as an intermediary,
