@@ -73,6 +73,26 @@ showing the results of the first responding method.
   the distributed cache.
 
 
+# Bridge nodes
+
+When a client establishes a connection to an injector and verifies that the
+connection is genuine, it may then choose to function as an intermediary,
+allowing less fortunate clients to reach the injector through them. A client
+functioning as an intermediary in this way is referred to as a bridge node.
+
+If a client chooses to function as a bridge node, it will accept connections
+using the [uTP protocol](http://www.bittorrent.org/beps/bep_0029.html), and
+announce its address details to the BitTorrent distributed hash table. Whenever
+the client accepts a connection in this way, it will create a connection to an
+injector and forward all traffic received over the incoming connection to the
+connection with the injector, and vice versa. This lets the client function as
+an intermediary between an injector, and a different client that is unable to
+connect to the injectors directly.
+
+A detailed explanation of Bridges can be found in Ouinet's
+[docs](https://ouinet.work/docs/how/injectors.html?highlight=peer#peer-to-peer-tunnels).
+
+
 ## Software Artifacts
 
 * *Client*: Command line application that serves as a proxy to the Ouinet
