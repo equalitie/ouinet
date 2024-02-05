@@ -1,10 +1,10 @@
 #import "Ouinet.h"
 
-@interface Config()
+@interface OuinetConfig()
 - (NSString*)setupInjectorTlsCert:(NSString*)ouinetDirectory;
 @end
 
-@implementation Config
+@implementation OuinetConfig
 {
   NSString* ouinetDirectory;
   NSString* cacheHttpPubKey;
@@ -20,7 +20,7 @@
   BOOL disableInjectorAccess;
 }
 
-- (Config*)init
+- (OuinetConfig*)init
 {
   if (!(self = [super init]))
     return nil;
@@ -42,57 +42,57 @@
   return self;
 }
 
-- (Config*)setCacheHttpPubKey:(NSString*)key
+- (OuinetConfig*)setCacheHttpPubKey:(NSString*)key
 {
   cacheHttpPubKey=key;
   return self;
 }
 
-- (Config*)setInjectorCredentials:(NSString*)credentials
+- (OuinetConfig*)setInjectorCredentials:(NSString*)credentials
 {
   injectorCredentials=credentials;
   return self;
 }
 
-- (Config*)setInjectorTlsCert:(NSString*)cert
+- (OuinetConfig*)setInjectorTlsCert:(NSString*)cert
 {
   injectorTlsCert = cert;
   injectorTlsCertPath = [self setupInjectorTlsCert:ouinetDirectory]; 
   return self;
 }
 
-- (Config*)setCacheType:(NSString*)type
+- (OuinetConfig*)setCacheType:(NSString*)type
 {
   cacheType=type;
   return self;
 }
 
 
-- (Config*)setListenOnTcp:(NSString*)address
+- (OuinetConfig*)setListenOnTcp:(NSString*)address
 {
   listenOnTcp = address;
   return self;
 }
 
-- (Config*)setFrontEndEp:(NSString*)address
+- (OuinetConfig*)setFrontEndEp:(NSString*)address
 {
   frontEndEp = address;
   return self;
 }
 
-- (Config*)setDisableOriginAccess:(BOOL)value
+- (OuinetConfig*)setDisableOriginAccess:(BOOL)value
 {
   disableOriginAccess = value;
   return self;
 }
 
-- (Config*)setDisableProxyAccess:(BOOL)value;
+- (OuinetConfig*)setDisableProxyAccess:(BOOL)value;
 {
   disableProxyAccess = value;
   return self;
 }
 
-- (Config*)setDisableInjectorAccess:(BOOL)value;
+- (OuinetConfig*)setDisableInjectorAccess:(BOOL)value;
 {
   disableInjectorAccess = value;
   return self;

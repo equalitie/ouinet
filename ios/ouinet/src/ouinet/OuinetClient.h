@@ -1,8 +1,8 @@
 #import <Foundation/Foundation.h>
 
-@interface Client : NSObject
+@interface OuinetClient : NSObject
 
-- (id)initWithConfig:(Config*)conf;
+- (id)initWithConfig:(OuinetConfig*)conf;
 
 - (NSNumber*)getClientState;
 

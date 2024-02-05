@@ -1,3 +1,3 @@
 #import <Foundation/Foundation.h>
-#import "ouinet/Config.h"
-#import "ouinet/Client.h"
+#import "ouinet/OuinetConfig.h"
+#import "ouinet/OuinetClient.h"
