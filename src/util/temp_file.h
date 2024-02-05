@@ -6,6 +6,7 @@
 #include <boost/system/error_code.hpp>
 
 #include "../namespaces.h"
+#include "../util/executor.h"
 
 namespace ouinet { namespace util {
 
@@ -19,14 +20,14 @@ public:
     // If `keep_on_close(false)`, remove the file on close.
     static
     boost::optional<temp_file>
-    make( const asio::executor&
+    make( const AsioExecutor&
         , const fs::path& dir
         , const fs::path& model
         , sys::error_code&);
 
     static
     boost::optional<temp_file>
-    make( const asio::executor& ex
+    make( const AsioExecutor& ex
         , const fs::path& dir
         , sys::error_code& ec) {
         return make(ex, dir, default_temp_model, ec);
@@ -34,7 +35,7 @@ public:
 
     static
     boost::optional<temp_file>
-    make( const asio::executor& ex
+    make( const AsioExecutor& ex
         , sys::error_code& ec) {
         return make(ex, ".", default_temp_model, ec);
     }

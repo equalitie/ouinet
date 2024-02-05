@@ -18,7 +18,7 @@ public:
     };
 
 public:
-    AsyncJob(const asio::executor& ex)
+    AsyncJob(const AsioExecutor& ex)
         : _ex(ex)
     {}
 
@@ -140,7 +140,7 @@ public:
     }
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     boost::optional<Result> _result;
     Signal<void()>* _cancel_signal = nullptr;
     AsyncJob** _self = nullptr;

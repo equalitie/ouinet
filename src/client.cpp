@@ -75,6 +75,7 @@
 #include "util/async_job.h"
 #include "upnp.h"
 #include "util/handler_tracker.h"
+#include "util/executor.h"
 
 #include "logger.h"
 
@@ -93,6 +94,7 @@ using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
 using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
+using ouinet::util::AsioExecutor;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -414,7 +416,7 @@ private:
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
 
     asio::io_context& get_io_context() { return _ctx; }
-    asio::executor get_executor() { return _ctx.get_executor(); }
+    AsioExecutor get_executor() { return _ctx.get_executor(); }
 
     Signal<void()>& get_shutdown_signal() { return _shutdown_signal; }
 
@@ -1640,7 +1642,7 @@ public:
         using Job = AsyncJob<Retval>;
         using BoolFunc = std::function<bool(void)>;
 
-        Jobs(asio::executor exec, BoolFunc is_injector_starting)
+        Jobs(AsioExecutor exec, BoolFunc is_injector_starting)
             : exec(exec)
             , front_end(exec)
             , origin(exec)
@@ -1650,7 +1652,7 @@ public:
             , is_injector_starting{std::move(is_injector_starting)}
         {}
 
-        asio::executor exec;
+        AsioExecutor exec;
 
         Job front_end;
         Job origin;
@@ -2800,6 +2802,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             ( dht
             , injector_ep->endpoint_string
             , *bridge_swarm_name
+            , _config.is_bridge_announcement_enabled()
             , &inj_ctx);
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);

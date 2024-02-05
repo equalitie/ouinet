@@ -12,6 +12,7 @@
 #include "node_id.h"
 
 #include "../util/crypto.h"
+#include "../util/executor.h"
 #include "../util/signal.h"
 
 namespace ouinet {
@@ -20,8 +21,10 @@ namespace dht {
 
 namespace ip = asio::ip;
 using ip::tcp;
+using ouinet::util::AsioExecutor;
 
 namespace detail {
+
 
 class DhtWriteTokenStorage {
     public:
@@ -74,7 +77,7 @@ class Swarm {
 
 class Tracker {
     public:
-    Tracker(const asio::executor&);
+    Tracker(const AsioExecutor&);
     ~Tracker();
 
     std::string generate_token(asio::ip::address address, NodeID id)
@@ -91,7 +94,7 @@ class Tracker {
     std::vector<tcp::endpoint> list_peers(NodeID swarm, unsigned int count);
 
     private:
-    asio::executor _exec;
+    AsioExecutor _exec;
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, std::unique_ptr<detail::Swarm>> _swarms;
     Signal<void()> _terminate_signal;
@@ -106,7 +109,7 @@ class DataStore {
     const int PUT_VALIDITY_SECONDS = 3600 * 2;
 
     public:
-    DataStore(const asio::executor&);
+    DataStore(const AsioExecutor&);
     ~DataStore();
 
     std::string generate_token(asio::ip::address address, NodeID id)
@@ -137,7 +140,7 @@ class DataStore {
         std::chrono::steady_clock::time_point last_seen;
     };
 
-    asio::executor _exec;
+    AsioExecutor _exec;
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, ImmutableStoredItem> _immutable_data;
     std::map<NodeID, MutableStoredItem> _mutable_data;

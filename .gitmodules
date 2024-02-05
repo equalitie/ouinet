@@ -1,10 +1,10 @@
 [submodule "src/ouiservice/i2p/i2pd"]
 	path = src/ouiservice/i2p/i2pd
-	url = https://github.com/equalitie/i2pd.git
+	url = https://gitlab.com/equalitie/i2pd.git
 	branch = macos-client
 [submodule "modules/asio-utp"]
 	path = modules/asio-utp
-	url = https://github.com/equalitie/asio-utp.git
+	url = https://gitlab.com/equalitie/asio-utp.git
 [submodule "modules/cpp-upnp"]
 	path = modules/cpp-upnp
-	url = https://github.com/equalitie/cpp-upnp
+	url = https://gitlab.com/equalitie/cpp-upnp.git

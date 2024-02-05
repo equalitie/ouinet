@@ -316,7 +316,7 @@ static void remove_ouinet_nonerrors_ref(http::response_header<Body>& message)
     if (!boost::regex_match(proto_err, http_::response_error_rx))
         return;
 
-    message.set(http_::protocol_version_hdr, http_::protocol_version_current);
+    message.set(http_::protocol_version_hdr, std::to_string(http_::protocol_version_current));
     message.set(http_::response_error_hdr, proto_err);
 }
 
@@ -403,7 +403,7 @@ to_canonical_request(Request rq, const Fields&... keep_fields) {
     rq.set("DNT", "1");
     rq.set("Upgrade-Insecure-Requests", "1");
     rq.set( http::field::user_agent
-          , "Mozilla/5.0 (Windows NT 10.0; rv:68.0) Gecko/20100101 Firefox/68.0");
+          , "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0");
 
     // Basically only keep headers which are absolutely necessary,
     // do not break privacy and can not break browsing for others.

@@ -11,14 +11,14 @@ class Timeout {
         Signal<void()> local_abort_signal;
         bool finished = false;
 
-        State(const asio::executor& ex)
+        State(const AsioExecutor& ex)
             : timer(ex)
         {}
     };
 
 public:
     template<class Duration>
-    Timeout( const asio::executor& ex
+    Timeout( const AsioExecutor& ex
            , Signal<void()>& signal
            , Duration duration)
         : _state(std::make_shared<State>(ex))
@@ -68,7 +68,7 @@ private:
 };
 
 template<class Duration, class F, class Yield>
-auto with_timeout( const asio::executor& ex
+auto with_timeout( const AsioExecutor& ex
                  , Signal<void()>& abort_signal
                  , Duration duration
                  , const F& f

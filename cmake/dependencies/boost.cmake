@@ -1,4 +1,15 @@
-set(BOOST_VERSION 1.71.0)
+if(NOT BOOST_VERSION)
+    set(BOOST_VERSION 1.71.0)
+endif ()
+
+if (${BOOST_VERSION} EQUAL 1.71.0)
+    set(BOOST_VERSION_HASH d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee)
+elseif (${BOOST_VERSION} EQUAL 1.74.0)
+    set(BOOST_VERSION_HASH 83bfc1507731a0906e387fc28b7ef5417d591429e51e788417fe9ff025e116b1)
+elseif (${BOOST_VERSION} EQUAL 1.77.0)
+    set(BOOST_VERSION_HASH fc9f85fc030e233142908241af7a846e60630aa7388de9a5fafb1f3a26840854)
+endif ()
+
 set(BOOST_COMPONENTS
     context
     coroutine
@@ -13,9 +24,12 @@ set(BOOST_COMPONENTS
 
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
-set(BOOST_PATCHES
-    ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
-)
+if(BOOST_VERSION LESS_EQUAL 1.72.0)
+    set(BOOST_PATCHES
+        ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
+        ${CMAKE_CURRENT_LIST_DIR}/inline-boost/thread-pthread-stack-min-def-${BOOST_VERSION_FILENAME}.patch
+    )
+endif()
 
 
 set(ZLIBROOT "${CMAKE_BINARY_DIR}/zlib/src")
@@ -166,7 +180,7 @@ endforeach()
 externalproject_add(built_boost
     DEPENDS zlib
     URL "https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
-    URL_HASH SHA256=d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee
+    URL_HASH SHA256=${BOOST_VERSION_HASH}
     PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
     CONFIGURE_COMMAND ${CONFIG_COMMAND}

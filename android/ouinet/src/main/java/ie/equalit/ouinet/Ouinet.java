@@ -154,6 +154,10 @@ public class Ouinet {
             args.add("--cache-private");
         }
 
+        if (config.getDisableBridgeAnnouncement()) {
+            args.add("--disable-bridge-announcement");
+        }
+
         Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
         if (btBootstrapExtras != null) {
             for (String x : btBootstrapExtras) {

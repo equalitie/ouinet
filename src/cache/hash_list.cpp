@@ -225,7 +225,7 @@ void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
 
     h.set(ORIGINAL_STATUS, util::str(h.result_int()));
     h.result(http::status::ok);
-    h.set(http::field::content_length, content_length);
+    h.set(http::field::content_length, to_string(content_length));
 
     std::vector<asio::const_buffer> bufs;
     bufs.reserve(2 /* 2 = MAGIC + "\n" */ + blocks.size() * 2 /* 2 = signature + digest */);

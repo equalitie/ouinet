@@ -74,7 +74,7 @@ public:
 
 private:
     /* private, use the static `load` function */
-    PersistentLruCache( const asio::executor&
+    PersistentLruCache( const AsioExecutor&
                       , boost::filesystem::path dir
                       , size_t max_size);
 
@@ -83,7 +83,7 @@ public:
     PersistentLruCache(PersistentLruCache&&) = delete;
 
     static
-    std::unique_ptr<PersistentLruCache> load( const asio::executor&
+    std::unique_ptr<PersistentLruCache> load( const AsioExecutor&
                                             , boost::filesystem::path dir
                                             , size_t max_size
                                             , Cancel&
@@ -139,7 +139,7 @@ private:
     fs::path path_from_key(const std::string&);
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     boost::filesystem::path _dir;
     List _list;
     Map _map;
@@ -150,7 +150,7 @@ template<class Value>
 class PersistentLruCache<Value>::Element {
 public:
     static
-    std::shared_ptr<Element> read( const asio::executor& ex
+    std::shared_ptr<Element> read( const AsioExecutor& ex
                                  , fs::path path
                                  , uint64_t* ts_out
                                  , Cancel& cancel
@@ -233,7 +233,7 @@ public:
         }
     }
 
-    Element( const asio::executor& ex
+    Element( const AsioExecutor& ex
            , std::string key
            , fs::path path
            , Value value)
@@ -263,7 +263,7 @@ private:
     }
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     Scheduler _scheduler;
     std::string _key;
     fs::path _path;
@@ -290,7 +290,7 @@ PersistentLruCache<Value>::load( asio::io_context& ctx
 template<class Value>
 inline
 std::unique_ptr<PersistentLruCache<Value>>
-PersistentLruCache<Value>::load( const asio::executor& ex
+PersistentLruCache<Value>::load( const AsioExecutor& ex
                                , boost::filesystem::path dir
                                , size_t max_size
                                , Cancel& cancel
@@ -358,7 +358,7 @@ PersistentLruCache<Value>::load( const asio::executor& ex
 
 template<class Value>
 inline
-PersistentLruCache<Value>::PersistentLruCache( const asio::executor& ex
+PersistentLruCache<Value>::PersistentLruCache( const AsioExecutor& ex
                                              , boost::filesystem::path dir
                                              , size_t max_size)
     : _ex(ex)

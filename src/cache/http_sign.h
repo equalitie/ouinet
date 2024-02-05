@@ -15,6 +15,7 @@
 #include "../response_reader.h"
 #include "../util/crypto.h"
 #include "../util/hash.h"
+#include "../util/executor.h"
 
 #include "../namespaces.h"
 
@@ -57,6 +58,8 @@ namespace ouinet { namespace http_ {
 }}
 
 namespace ouinet { namespace cache {
+
+using ouinet::util::AsioExecutor;
 
 // Get an extended version of the given response trailer
 // with added headers completing the signature of the message.
@@ -188,7 +191,7 @@ public:
 
     bool is_done() const override { return _reader->is_done(); }
     void close() override { _reader->close(); }
-    asio::executor get_executor() override { return _reader->get_executor(); }
+    AsioExecutor get_executor() override { return _reader->get_executor(); }
 
 private:
     struct Impl;
@@ -224,7 +227,7 @@ public:
     bool is_done() const override { return _reader.is_done(); }
     void close() override { _reader.close(); }
 
-    asio::executor get_executor() override
+    AsioExecutor get_executor() override
     {
         return _reader.get_executor();
     }

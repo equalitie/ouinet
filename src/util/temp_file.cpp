@@ -14,7 +14,7 @@ void temp_file::close() {
 }
 
 boost::optional<temp_file>
-temp_file::make( const asio::executor& ex
+temp_file::make( const AsioExecutor& ex
                , const fs::path& dir, const fs::path& model
                , sys::error_code& ec)
 {

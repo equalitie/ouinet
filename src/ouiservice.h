@@ -13,6 +13,8 @@
 
 namespace ouinet {
 
+using ouinet::util::AsioExecutor;
+
 class OuiServiceImplementationServer
 {
     public:
@@ -27,9 +29,9 @@ class OuiServiceImplementationServer
 class OuiServiceServer
 {
     public:
-    OuiServiceServer(const asio::executor&);
+    OuiServiceServer(const AsioExecutor&);
 
-    asio::executor get_executor() { return _ex; }
+    AsioExecutor get_executor() { return _ex; }
 
     void add(std::unique_ptr<OuiServiceImplementationServer> implementation);
 
@@ -44,7 +46,7 @@ class OuiServiceServer
     void cancel_accept();
 
     private:
-    asio::executor _ex;
+    AsioExecutor _ex;
 
     std::vector<std::unique_ptr<OuiServiceImplementationServer>> _implementations;
 
@@ -78,7 +80,7 @@ class OuiServiceClient
     };
 
     public:
-    OuiServiceClient(const asio::executor&);
+    OuiServiceClient(const AsioExecutor&);
 
     void add(Endpoint, std::unique_ptr<OuiServiceImplementationClient>);
 

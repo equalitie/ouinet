@@ -13,7 +13,7 @@ namespace ouiservice {
 using udp = asio::ip::udp;
 using namespace std;
 
-UtpOuiServiceServer::UtpOuiServiceServer( const asio::executor& ex
+UtpOuiServiceServer::UtpOuiServiceServer( const AsioExecutor& ex
                                         , udp::endpoint local_endpoint):
     _ex(ex),
     _udp_multiplexer(new asio_utp::udp_multiplexer(_ex)),
@@ -89,7 +89,7 @@ static boost::optional<asio::ip::udp::endpoint> parse_endpoint(std::string endpo
     return ep;
 }
 
-UtpOuiServiceClient::UtpOuiServiceClient( const asio::executor& ex
+UtpOuiServiceClient::UtpOuiServiceClient( const AsioExecutor& ex
                                         , asio_utp::udp_multiplexer m
                                         , std::string endpoint):
     _ex(ex),

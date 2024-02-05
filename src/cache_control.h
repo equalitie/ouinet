@@ -9,6 +9,7 @@
 #include "namespaces.h"
 
 namespace ouinet {
+using ouinet::util::AsioExecutor;
 
 static const boost::posix_time::time_duration default_max_cached_age
     = boost::posix_time::hours(7 * 24);  // one week
@@ -40,7 +41,7 @@ public:
     using ParallelFresh = std::function<bool(const Request&, const boost::optional<DhtGroup>&)>;
 
 public:
-    CacheControl(const asio::executor& ex, std::string server_name)
+    CacheControl(const AsioExecutor& ex, std::string server_name)
         : _ex(ex)
         , _server_name(std::move(server_name))
     {}
@@ -105,7 +106,7 @@ private:
     bool has_temporary_result(const Session&) const;
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     std::string _server_name;
 
     boost::posix_time::time_duration _max_cached_age

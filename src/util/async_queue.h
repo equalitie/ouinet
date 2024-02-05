@@ -19,7 +19,7 @@ public:
         : AsyncQueue(ctx.get_executor(), max_size)
     {}
 
-    AsyncQueue(const asio::executor& ex, size_t max_size = -1)
+    AsyncQueue(const AsioExecutor& ex, size_t max_size = -1)
         : _ex(ex)
         , _max_size(max_size)
         , _rx_cv(_ex)
@@ -206,13 +206,13 @@ public:
     const_iterator begin() const { return _queue.begin(); }
     const_iterator end()   const { return _queue.end();   }
 
-    asio::executor get_executor()
+    AsioExecutor get_executor()
     {
         return _ex;
     }
 
 private:
-    asio::executor _ex;
+    AsioExecutor _ex;
     size_t _max_size;
     Queue _queue;
     ConditionVariable _rx_cv;

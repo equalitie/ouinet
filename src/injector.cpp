@@ -74,6 +74,7 @@ using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
 using ResponseWithFileBody = http::response<http::basic_file_body<
     util::file_posix_with_offset>>;
+using ouinet::util::AsioExecutor;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
@@ -134,7 +135,7 @@ void handle_no_proxy( GenericStream& con
 static
 TcpLookup
 resolve_target( const Request& req
-              , asio::executor exec
+              , AsioExecutor exec
               , Cancel& cancel
               , Yield yield)
 {
@@ -186,7 +187,7 @@ void handle_connect_request( GenericStream client_c
 {
     sys::error_code ec;
 
-    asio::executor exec = client_c.get_executor();
+    AsioExecutor exec = client_c.get_executor();
 
     auto disconnect_client_slot = cancel.connect([&client_c] {
         client_c.close();
@@ -326,7 +327,7 @@ class InjectorCacheControl {
 public:
     // TODO: Replace this with cancellation support in which fetch_ operations
     // get a signal parameter
-    InjectorCacheControl( asio::executor executor
+    InjectorCacheControl( AsioExecutor executor
                         , asio::ssl::context& ssl_ctx
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
@@ -484,7 +485,7 @@ public:
     }
 
 private:
-    asio::executor executor;
+    AsioExecutor executor;
     asio::ssl::context& ssl_ctx;
     const InjectorConfig& config;
     uuid_generator& genuuid;
@@ -742,7 +743,7 @@ void listen( InjectorConfig& config
         proxy_server.stop_listen();
     });
 
-    asio::executor exec = proxy_server.get_executor();
+    AsioExecutor exec = proxy_server.get_executor();
 
     sys::error_code ec;
     proxy_server.start_listen(yield[ec]);
@@ -846,7 +847,7 @@ int main(int argc, const char* argv[])
 
     // The io_context is required for all I/O
     asio::io_context ioc;
-    asio::executor ex = ioc.get_executor();
+    AsioExecutor ex = ioc.get_executor();
 
     shared_ptr<bt::MainlineDht> bt_dht_ptr;
 
