@@ -3,16 +3,16 @@
 
 NativeLib _n;
 
-@interface Client()
+@interface OuinetClient()
 - (std::vector<std::string>)maybeAdd:(std::vector<std::string>)args stringOfKey:(NSString*)key stringOfValue:(NSString*)value;
 @end
 
-@implementation Client
+@implementation OuinetClient
 {
-    Config* config;
+    OuinetConfig* config;
 }
 
-- (id)initWithConfig:(Config*)conf
+- (id)initWithConfig:(OuinetConfig*)conf
 {
     if (!(self = [super init]))
         return nil;

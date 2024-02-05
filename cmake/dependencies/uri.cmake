@@ -18,6 +18,10 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         )
     endif()
     set(IOS_PLATFORM ${PLATFORM})
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    set(URI_FILENAME
+        "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
 else()
     set(URI_FILENAME
         "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"

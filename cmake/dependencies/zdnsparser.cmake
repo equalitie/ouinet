@@ -6,6 +6,11 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/Release/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
     set(IOS_PLATFORM ${PLATFORM})
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    # TODO: Set file directory based on selected build config and target
+    set(ZDNSPARSER_FILENAME
+        "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/Release/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
 else()
     set(ZDNSPARSER_FILENAME
         "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"

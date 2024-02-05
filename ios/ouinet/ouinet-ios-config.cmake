@@ -58,16 +58,16 @@ check_type_size(time_t SIZEOF_TIME_T)
 # Source files
 set(SOURCES
   ${OUINET_IOS_SOURCE}/native-lib.cpp
-  ${OUINET_IOS_SOURCE}/ouinet/Client.mm
-  ${OUINET_IOS_SOURCE}/ouinet/Config.mm
+  ${OUINET_IOS_SOURCE}/ouinet/OuinetClient.mm
+  ${OUINET_IOS_SOURCE}/ouinet/OuinetConfig.mm
 )
 
 # Headers
 set(HEADERS
   ${OUINET_IOS_SOURCE}/native-lib.hpp
   ${OUINET_IOS_SOURCE}/Ouinet.h
-  ${OUINET_IOS_SOURCE}/ouinet/Client.h
-  ${OUINET_IOS_SOURCE}/ouinet/Config.h
+  ${OUINET_IOS_SOURCE}/ouinet/OuinetClient.h
+  ${OUINET_IOS_SOURCE}/ouinet/OuinetConfig.h
 )
 
 # Library
