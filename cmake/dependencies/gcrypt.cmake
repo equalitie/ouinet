@@ -26,6 +26,9 @@ set(GPG_ERROR_PATCHES
     ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat.patch
     # This avoids having to run `aclocal` and `automake` again.
     ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat-in.patch
+    # * src/gpgrt-int.h (_gpgrt_functions_w32_pollable): Declare with extern so
+    # that strict toolchains don't get confused. see <https://dev.gnupg.org/T4356>
+    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-extern-struct-gpgrt-functions-w32-pollable.patch
 )
 
 
