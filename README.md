@@ -1,882 +1,334 @@
+<img src="https://ouinet.work/img/ouinet-logo.png" width=250px alt="Ouinet">
+
 [![pipeline status](https://gitlab.com/equalitie/ouinet/badges/main/pipeline.svg)](https://gitlab.com/equalitie/ouinet/commits/main)
+[![release](https://gitlab.com/equalitie/ouinet/-/badges/release.svg)](https://gitlab.com/equalitie/ouinet/-/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](./LICENSE)
+
+Ouinet is a collection of open source software libraries that create a
+decentralized network of cooperating peers for sharing and propagating web
+content. A Ouinet deployment requires supporting infrastructure - run by a
+trusted network operator - and the integration of its client libraries into
+third-party applications for requesting and receiving desired content.
+Ouinet clients collectively form a distributed cache that is global in nature,
+but also functional on a local or national network. Peer-to-peer transports
+are used for communications.
+
+Ouinet's primary integration and its initial _raison d'etre_ is to power the
+[Ceno Browser](https://censorship.no) - utilized for accessing web content
+behind national firewalls. Supporting infrastructure on this project is
+provided by [eQualitie](https://equalit.ie), offering injection and
+authentication of web content into a decentralized p2p network, using the
+BitTorrent DHT for addressing and routing. Coupled with sneakernet technology
+operated by eQualitie, Ceno users can access
+[cached website replicas](https://schedule.ceno.life), from heavily limited
+or entirely isolated network environments.
 
 
-# Ouinet
+## How it works?
 
-See [lightning talk at the Decentralized Web Summit 2018](http://archive.org/details/dweb-8_2_18_Lightning_Talks_New_Discoveries_5?start=547).
+A typical [client][] node setup consists of a web browser or other application
+using the special HTTP proxy provided by Ouinet. When the Ouinet proxy gets a
+request for content, it attempts to retrieve the resource using several
+mechanisms. For example, it could try to fetch a page from the [distributed cache][]
+by looking up the content in the BitTorrent DHT and if the content is not
+available, it could also contact a trusted [injector][] server over a
+peer-to-peer routing system (like the [BitTorrent DHT][] or [I2P][]) and ask to
+fetch the page and store it in the distributed cache.
 
-**Ouinet** is a Free/Open Source technology which allows web content to be
-served with the help of an entire network of cooperating nodes using
-peer-to-peer routing and distributed caching of responses.  This helps
-mitigate the Web's characteristic single point of failure due to a client
-application not being able to connect to a particular server.
+See our [lightning talk at the Decentralized Web Summit 2018][] for an
+overview of Ouinet's architecture or check the [documentation website][].
 
-The typical Ouinet *client* node setup consists of a web browser or other
-application using a special HTTP proxy or API provided by a dedicated program
-or library on the local machine.  When the client gets a request for content,
-it attempts to retrieve the resource using several mechanisms.  It tries to
-fetch the page from a *distributed cache* by looking up the content in a
-*distributed cache index* (like the [BitTorrent][] DHT), and if not available,
-it contacts a trusted *injector* server over a peer-to-peer routing system
-(like [I2P][]) and asks it to fetch the page and store it in the distributed
-cache.
+For a detailed technical explanation of processes and protocols you can refer
+to [Ouinet's white paper][].
 
-[BitTorrent]: https://www.bittorrent.org/
+[lightning talk at the Decentralized Web Summit 2018]: http://archive.org/details/dweb-8_2_18_Lightning_Talks_New_Discoveries_5?start=547
+[documentation website]: https://ouinet.work/docs/how/index.html
+[Ouinet's white paper]: doc/ouinet-network-whitepaper.md
+[BitTorrent DHT]: http://bittorrent.org/beps/bep_0005.html
 [I2P]: https://geti2p.net/ "Invisible Internet Project"
+[client]: https://ouinet.work/docs/how/client.html
+[injector]: https://ouinet.work/docs/how/injectors.html
+[distributed cache]: https://ouinet.work/docs/how/cache.html
 
-![Ouinet request/response flow](./doc/request-response-flow.svg)
+![Ouinet request/response flow](./doc/diagrams/simple-request-flow.svg)
 
-Future access by client nodes to popular content inserted in distributed
-storage shall benefit from increased redundancy and locality, which
-translates to: increased availability in the face of connectivity problems;
-increased transfer speeds in case of poor upstream links; and reduced
-bandwidth costs when internet access providers charge more for external or
-international traffic.  Content injection is also designed to
-allow for content re-introduction and seeding in extreme cases of total
-connectivity loss (e.g. natural disasters).
+**Warning:** Ouinet is **not an anonymity tool**, information about your
+browsing can be seen by other participants in the network, as well as the
+fact that your application is seeding particular content.
 
-The Ouinet library is a core technology that can be used by any application to
-benefit from these advantages.  Ouinet integration provides any content
-creator the opportunity to use cooperative networking and storage for the
-delivery of their content to users around the world.
 
-**Warning:** Ouinet is still **highly experimental**.  Some features (like
-peer-to-peer routing) may or may not not work smoothly depending on the
-different back-end technologies, and random unexpected crashes may occur.
-Also, Ouinet is **not an anonymity tool**: information about your browsing
-might be leaked to other participants in the network, as well as the fact that
-your application is seeding particular content.  Running some components (like
-injector code) may turn your computer into an open web proxy, and other
-security or privacy-affecting issues might exist.  Please keep this in mind
-when using this software and only assume reasonable risks.
+## Request mechanisms
 
-**Note:** The steps described below have only been tested to work on GNU/Linux
-on AMD64 platforms.  Building and testing Ouinet on your computer requires
-familiarity with the command line.  At the moment there are no user-friendly
-packages for Ouinet on the desktop.
+These mechanisms to retrieve content are attempted as parallel coroutines
+showing the results of the first responding method.
 
-## Cloning the source tree
+- *Origin*: The client contacts the origin server directly via HTTP(S).
+- *Proxy*: The client contacts the origin server through an HTTPS proxy
+  (any available injector) and retrieves the content without
+  signing it.
+- *Injector*: The client asks the injector to fetch and sign the content
+  from the origin server, then it starts seeding the signed content to
+  the distributed cache.
+- *Distributed Cache*: The client attempts to retrieve the content from
+  the distributed cache.
+
+
+## Bridge nodes
+
+When a client establishes a connection to an injector and verifies that the
+connection is genuine, it may then choose to function as an intermediary,
+allowing less fortunate clients to reach the injector through them. A client
+functioning as an intermediary in this way is referred to as a bridge node.
+
+If a client chooses to function as a bridge node, it will accept connections
+using the [uTP protocol](http://www.bittorrent.org/beps/bep_0029.html), and
+announce its address details to the BitTorrent distributed hash table. Whenever
+the client accepts a connection in this way, it will create a connection to an
+injector and forward all traffic received over the incoming connection to the
+connection with the injector, and vice versa. This lets the client function as
+an intermediary between an injector, and a different client that is unable to
+connect to the injectors directly.
+
+A detailed explanation of Bridges can be found in Ouinet's
+[docs](https://ouinet.work/docs/how/injectors.html?highlight=peer#peer-to-peer-tunnels).
+
+
+## Software artifacts included in this repo
+
+* *Client*: Command line application that serves as a proxy to the Ouinet
+network.
+* *Injector*: Command line application that retrieves content from origin
+websites and injects the signed content to the Ouinet network so it can be
+shared peer-to-peer.
+* *Android libraries*: Java Native Interface used to expose the C++ Ouinet
+networking libraries to the Android applications written in Java or Kotlin.
+
+
+## Building from source
+
+The following instructions were tested in Debian 12 with the following
+packages installed; `build-essential`, `cmake`, `git`, `libssl-dev` and
+`zlib1g-dev`, but in general to build Ouinet natively on your GNU/Linux
+system you just need *CMake 3.5+* and *g++* capable of C++14.
 
 Ouinet uses Git submodules, thus to properly clone it, use:
 
-    $ git clone --recursive https://gitlab.com/equalitie/ouinet.git
-
-You can also clone and update the modules separately:
-
-    $ git clone https://gitlab.com/equalitie/ouinet.git
-    $ cd ouinet
-    $ git submodule update --init --recursive
-
-## Build requirements (desktop)
-
-To build Ouinet natively on your system, you will need the following software
-to be already available:
-
-* CMake 3.5+
-* `g++` capable of C++14
-* The [Boost library](http://www.boost.org/) 1.67+
+```shell
+$ git clone --recursive https://gitlab.com/equalitie/ouinet.git
+```
 
 Assuming that `<SOURCE DIR>` points to the directory where the
 `CMakeLists.txt` file is, and `<BUILD DIR>` is a directory of your choice
 where all (even temporary) build files will go, you can build Ouinet with:
 
-    $ mkdir -p <BUILD DIR>
-    $ cd <BUILD DIR>
-    $ cmake <SOURCE DIR>
-    $ make
-
-However, we encourage you to use a Vagrant environment for development, or
-Docker containers for deploying a Ouinet client or an injector.  These have a
-different set of requirements.  See the corresponding sections below for
-further instructions on Vagrant and Docker.
-
-## Running integration tests
-
-The Ouinet source comes with a set of integration tests.  To run them you will
-need the [Twisted](https://twistedmatrix.com/) Python framework.
-
-If you already built Ouinet from `<SOURCE DIR>` into `<BUILD DIR>` (see
-above), you can run the tests as follows:
-
-    $ export OUINET_REPO_DIR=<SOURCE DIR>
-    $ export OUINET_BUILD_DIR=<BUILD DIR>
-    $ ./scripts/run_integration_tests.sh
-
-## Using a Vagrant environment
-
-One of the easiest ways to build Ouinet from source code (e.g. for development
-or testing changes and fixes to code) is using a [Vagrant][] development
-environment.
-
-[Vagrant]: https://www.vagrantup.com/
-
-To install Vagrant on a Debian system, run:
-
-    $ sudo apt-get install vagrant
-
-Ouinet's source tree contains a `Vagrantfile` which allows you to start a
-Vagrant environment ready to build and run Ouinet by entering the source
-directory and executing:
-
-    $ vagrant up
-
-If your Vagrant installation uses VirtualBox by default and you find problems,
-you may need to force it to use libvirt instead:
-
-    $ sudo apt-get install libvirt-bin libvirt-dev
-    $ vagrant plugin install vagrant-libvirt
-    $ vagrant up --provider=libvirt
-
-### Building Ouinet in Vagrant
-
-Enter the Vagrant environment with `vagrant ssh`.  There you will find:
-
-  - Your local Ouinet source tree mounted read-only under `/vagrant`
-    (`<SOURCE DIR>` above).
-
-  - Your local Ouinet source tree mounted read-write under `/vagrant-rw`.  You
-    can use it as a bridge to your host.
-
-  - `~vagrant/build-ouinet-git.sh`: Running this script will clone the Ouinet
-    Git repository and all submodules into `$PWD/ouinet-git-source` and build
-    Ouinet into `$PWD/ouinet-git-build` (`<BUILD DIR>` above).  Changes to
-    source outside of the Vagrant environment will not affect this build.
-
-  - `~vagrant/build-ouinet-local.sh`: Running this script will use your local
-    Ouinet source tree (mounted under `/vagrant`) to build Ouinet into
-    `$PWD/ouinet-local-build` (`<BUILD DIR>` above).  Thus you can edit source
-    files on your computer and have them built in a consistent environment.
-
-    Please note that this requires that you keep submodules in your checkout
-    up to date as indicated above.
-
-### Accessing Ouinet services from your computer
-
-The Vagrant environment is by default isolated, but you can configure it to
-redirect ports from the host to the environment.
-
-For instance, if you want to run a Ouinet client (with its default
-configuration) in Vagrant and use it as a proxy in a browser on your computer,
-you may uncomment the following line in `Vagrantfile`:
-
-    #vm.vm.network "forwarded_port", guest: 8077, host: 8077, guest_ip: "127.0.0.1"
-
-And restart the environment:
-
-    $ vagrant halt
-    $ vagrant up
-
-Then you can configure your browser to use `localhost` port 8077 to contact
-the HTTP proxy (see the section further below).
-
-## Docker development environment
-
-We provide a *bootstrap* Docker image which is automatically updated with each
-commit and provides all prerequisites for building the latest Oiunet desktop
-binaries and Android libraries.
-
-To exchange with the container data like Ouinet's source code and cached
-downloads and build files, we will bind mount the following directories to
-`/usr/local/src/` in the container (some we'll create first):
-
-  - source (assumed to be at the current directory),
-  - build (in `../ouinet.build/`),
-  - and the container's `$HOME` (in `../ouinet.home/`), where `.gradle`,
-    `.cargo`, etc. will reside.
-
-Note that with the following incantations you will not be able to use `sudo`
-in the container (`--user`), and that all the changes besides those in bind
-mounts will be lost after you exit (`--rm`).
-
-```sh
-mkdir -p ../ouinet.build/ ../ouinet.home/
-sudo docker run \
-  --rm -it \
-  --user $(id -u):$(id -g) \
-  --mount type=bind,source="$(pwd)",target=/usr/local/src/ouinet \
-  --mount type=bind,source="$(pwd)/../ouinet.build",target=/usr/local/src/ouinet.build \
-  --mount type=bind,source="$(pwd)/../ouinet.home",target=/mnt/home \
-  -e HOME=/mnt/home \
-  registry.gitlab.com/equalitie/ouinet:android
+```shell
+$ mkdir -p <BUILD DIR>
+$ cd <BUILD DIR>
+$ cmake <SOURCE DIR>
+$ cmake --build <BUILD DIR>
 ```
 
-If you only need to build Ouinet desktop binaries, you may replace the image
-name at the end of the command with `registry.gitlab.com/equalitie/ouinet`,
-which is much lighter.
+When the build process finishes you will find in `<BUILD DIR>` the binaries
+for `client`, `injector` and their shared libraries, e.g. `libboost_asio.so`,
+`libcpp_upnp.a`, etc.
 
-After running the command, you should find yourself in a new terminal, ready
-to accept the build instructions described elsewhere in the document.
+Please refer to Ouinet docs for instructions to build artifacts using a
+[Docker](https://ouinet.work/docs/build/docker.html) or
+[Vagrant](https://ouinet.work/docs/build/vagrant.html) dev environments.
 
-Please consult the GitLab CI scripts to see how to build your own bootstrap
-images locally.
 
-## Docker deployment
+## Running the Injector
 
-Ouinet injectors and clients can be run as Docker containers.  An application
-configuration file for Docker Compose is included for easily deploying all
-needed volumes and containers.
+It's recommended to create a directory named `repos/injector` where the
+configuration file, the ed25519 keys and the TLS certificates will be stored.
 
-To run a Ouinet node container only a couple hundred MiB are needed, plus the
-space devoted to the data volume (which may grow considerably larger in the
-case of the injector).
+The minimum configuration to start the Injector is shown below:
 
-A `Dockerfile` is also included that can be used to create a Docker image
-which contains the Ouinet injector, client and necessary software dependencies
-running on top of a Debian base system.
+```conf
+# repos/injector/ouinet-injector.conf
 
-### Building the image
+listen-on-utp-tls = 0.0.0.0:7085
+credentials = test_user_change_me:test_password_change_me
+```
 
-Ouinet Docker images should be available from the Docker Hub.  Follow the
-instructions in this section if you still want to build the image yourself.
-You will need around 3 GiB of disk space.
+You could also find more details of the available options in this
+[config example](repos/injector/ouinet-injector.conf) or invoking
+`injector --help`.
 
-You may use the `Dockerfile` as included in Ouinet's source code, or you
-can just [download it][Dockerfile].  Then build the image by running:
+When your `repo` dir and the configuration file are ready you can start
+the injector as follows:
 
-    $ sudo docker build -t equalitie/ouinet:latest - < Dockerfile
+```shell
+$ ./injector --repo /path/to/your/repo
+```
 
-That command will build a default recommended version, which you can override
-with `--build-arg OUINET_VERSION=<VERSION>`.
+During its first start the injector will generate the private and public keys
+needed to [sign content](https://ouinet.work/docs/how/cache.html#signatures)
+(`ed25519-*` files) and the certificates used to establish a TLS connection
+when contacting the injector via uTP protocol. Please keep an eye on these
+files as some of them will be needed to configure your Ouinet clients.
 
-After a while you will get the `equalitie/ouinet:latest` image.  Then you may
-want to run `sudo docker prune` to free up the space taken by temporary
-builder images (which may amount to a couple of GiB).
+For a production environment you may want to deploy the Injector using
+[Docker Compose](https://ouinet.work/docs/build/docker.html#docker-deployment).
 
-[Dockerfile]: https://gitlab.com/equalitie/ouinet/-/raw/master/Dockerfile
+**Warning:** Running an Injector turns the host into a web proxy for Clients
+with the correct credentials, which could pose a security or privacy risk
+depending on your context. Please keep this in mind and only assume
+reasonable risks.
 
-#### Debugging-enabled image
+## Running a Client
 
-You can also build an alternative version of the image where programs contain
-debugging symbols and they are run under `gdb`, which shows a backtrace in
-case of a crash.  Just add `--build-arg OUINET_DEBUG=yes` to the build
-command.  We recommend that you use a different tag for these images
-(e.g. `equalitie/ouinet:<VERSION>-debug`).
+Create a repo directory, e.g. `repos/client` and add the configuration file
+for the new client:
 
-Depending on your Docker setup, you may need to change the container's
-security profile and give it tracing capabilities.  For more information, see
-[this thread](https://stackoverflow.com/q/35860527).
+```conf
+# repos/client/ouinet-client.conf
 
-### Deploying a client
+cache-type = bep5-http
+cache-http-public-key = abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno
+injector-tls-cert-file = /path/to/your/repo/client/tls-cert.pem
+injector-credentials = test_user_change_me:test_password_change_me
+```
 
-You may use [Docker Compose](https://docs.docker.com/compose/) with the
-`docker-compose.yml` file included in Ouinet's source code (or you can just
-[download it][docker-compose.yml]).  Whenever you run `docker-compose`
-commands using that configuration file, you must be in the directory where the
-file resides.
+The value of `cache-http-public-key` can be obtained from the injector file
+named `ed25519-public-key` or from the injector log entry that starts with
+`[INFO] Injector swarm: sha1('ed25519:abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno/v6/injectors`.
 
-If you want to create a client that seeds a static cache root (see below) from
-a directory in the host, check the instructions in `docker-compose.yml`.
+`injector-tls-cert-file` is the path to the `tls-cert.pem` copied from the
+injector and `injector-credentials` should be set to the same value defined
+as `credentials` in `ouinet-injector.conf`.
 
-If you just plan to **run a single client** with the latest code on your
-computer, you should be fine with running the following command:
+When the config file is ready you can start the client as follows:
 
-    $ sudo docker-compose up
+```shell
+$ ./client --repo /path/to/your/repo
+```
 
-That command will create a *data volume*, a main *node container* for running
-the Ouinet client or injector (using the host's network directly), and a
-convenience *shell container* (see below) to allow you to modify files in the
-data volume.  It will then run the containers (the shell container will exit
-immediately; this is normal).
-
-To **stop the node**, hit Ctrl+C or run `sudo docker-compose stop`.  Please
-note that with the default configuration in `docker-compose.yml`, the node
-will be automatically restarted whenever it crashes or the host is rebooted,
-until explicitly stopped.
-
-A new client node which starts with no configuration will get a default one
-from templates included in Ouinet's source code and it will be missing some
-important parameters, so you may want to stop it (see above) and use the
-**shell container** (see below) to edit `client/ouinet-client.conf`:
-
-  - If using a local test injector, set its endpoint in option `injector-ep`.
-  - Set the injector's credentials in option `injector-credentials`.
-  - Unless using a local test injector, set option `injector-tls-cert-file` to
-    `/var/opt/ouinet/client/ssl-inj-cert.pem` and copy the injector's TLS
-    certificate to that file.
-  - Set the public key used by the injector for HTTP signatures in option
-    `cache-http-public-key`.
-  - To enable the distributed cache, set option `cache-type`.  The only value
-    currently supported is `bep5-http`.
-
-After you have set up your client's configuration, you can **restart it**.
-The client's HTTP proxy endpoint should be available to the host at
-`localhost` port 8077.
-
-If you get a "connection refused" error when using the client's proxy, your
-Docker setup may not support host networking.  To enable port forwarding,
-follow the instructions in `docker-compose.yml`.
-
-Finally, restart the client container.
-
-[docker-compose.yml]: https://gitlab.com/equalitie/ouinet/-/raw/master/docker-compose.yml
-
-### Using the shell container
-
-You may use the convenience *shell container* to access Ouinet node files
-directly:
-
-    $ sudo docker-compose run --rm shell
-
-This will create a throwaway container with a shell at the `/var/opt/ouinet`
-directory in the data volume.
-
-If you want to *transfer an existing repository* to `/var/opt/ouinet`, you
-first need to move away or remove the existing one using the shell container:
-
-    # mv REPO REPO.old  # REPO is either 'injector' or 'client'
-
-Then you may copy it in from the host using:
-
-    $ sudo docker cp /path/to/REPO SHELL_CONTAINER:/var/opt/ouinet/REPO
-
-### Other deployments
-
-If you plan on running several nodes on the same host you will need to use
-different explicit Docker Compose project names for them.  To make the node an
-injector instead of a client you need to set `OUINET_ROLE=injector`.  To make
-the container use a particular image version instead of `latest`, set
-`OUINET_VERSION`.  To limit the amount of memory that the container may use,
-set `OUINET_MEM_LIMIT`, but you will need to pass the `--compatibility` option
-to `docker-compose`.
-
-An easy way to set all these parameters is to copy or link the
-`docker-compose.yml` file to a directory with the desired project name and
-populate its default environment file:
-
-    $ mkdir -p /path/to/ouinet-injector  # ouinet-injector is the project name
-    $ cd /path/to/ouinet-injector
-    $ cp /path/to/docker-compose.yml .
-    $ echo OUINET_ROLE=injector >> .env
-    $ echo OUINET_VERSION=v0.1.0 >> .env
-    $ echo OUINET_MEM_LIMIT=6g >> .env
-    $ sudo docker-compose --compatibility up
-
-### Injector container
-
-After an injector has finished starting, you may want to use the shell
-container to inspect and note down the contents of `injector/endpoint-*`
-(injector endpoints) and `injector/ed25519-public-key` (public key for HTTP
-signatures) to be used by clients.  The injector will also generate a
-`tls-cert.pem` file which you should distribute to clients for TLS access.
-Other configuration information like credentials can be found in
-`injector/ouinet-injector.conf`.
-
-Remember that the injector will be available as an HTTP proxy for anyone
-having its credentials; if you want to disable this feature, set
-`disable-proxy = true`.  You can also restrict the URLs injected to those
-matching a regular expression with the `restricted` option.
-
-To start the injector in headless mode, you can run:
-
-    $ sudo docker-compose up -d
-
-You will need to use `sudo docker-compose stop` to stop the container.
-
-To be able to follow its logs, you can run:
-
-    $ sudo docker-compose logs --tail=100 -ft
-
-## Testing (desktop)
-
-### Running a test injector
-
-If you want to run your own injector for testing and you have a local build,
-create a copy of the `repos/injector` repository template directory included
-in Ouinet's source tree:
-
-    $ cp -r <SOURCE DIR>/repos/injector /path/to/injector-repo
-
-When using a Docker-based injector as described above, just run and stop it so
-that it creates a default configuration for you.
-
-You should now edit `ouinet-injector.conf` in the injector repository (for
-Docker, use the shell container to edit `injector/ouinet-injector.conf`):
-
- 1. Enable listening on loopback addresses:
-
-        listen-tcp = ::1:7070
-
-    For clients you may then use `127.0.0.1:7070` as the *injector endpoint*
-    (IPv6 is not yet supported).
-
- 2. Change the credentials to use the injector (use your own ones):
-
-        credentials = injector_user:injector_password
-
-    For clients you may use these as *injector credentials*.
-
-All the steps above only need to be done once.
-
-Finally, start the injector.  For the local build you will need to explicitly
-point it to the repository created above:
-
-    $ <BUILD DIR>/injector --repo /path/to/injector-repo
-    ...
-    [INFO] HTTP signing public key (Ed25519): <CACHE_PUB_KEY>
-    ...
-
-Note down the `<CACHE_PUB_KEY>` string in the above output since clients will
-need it as the *public key for HTTP signatures*.  You may also find that value
-in the `ed25519-public-key` file in the injector repository.
-
-When you are done testing the Ouinet injector, you may shut it down by hitting
-Ctrl+C.
-
-### Running a test client
-
-To perform some tests using a Ouinet client and an existing test injector, you
-first need to know the *injector endpoint* and *credentials*, its *TLS
-certificate*, and its *public key for HTTP signatures*.  These use to be
-respectively a `tcp:<IP>:<PORT>` string, a `<USER>:<PASSWORD>` string, a path
-to a PEM file, and an Ed25519 public key (hexadecimal or Base32).
-
-You need to configure the Ouinet client to use the aforementioned parameters.
-If you have a local build, create a copy of the `repos/client` repository
-template directory included in Ouinet's source tree:
-
-    $ cp -r <SOURCE DIR>/repos/client /path/to/client-repo
-
-When using a Docker-based client as described above, just run and stop it so
-that it creates a default configuration for you.
-
-Now edit `ouinet-client.conf` in the client repository (for Docker, use the
-shell container to edit `client/ouinet-client.conf`) and add options for the
-injector endpoint (if testing), credentials and public key.  Remember to
-replace the values with your own:
-
-    injector-ep = tcp:127.0.0.1:7070
-    injector-credentials = injector_user:injector_password
-    cache-http-public-key = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
-    cache-type = bep5-http
-
-All the steps above only need to be done once.
-
-Finally, start the client.  For the local build you will need to explicitly
-point it to the repository created above:
-
-    $ <BUILD DIR>/client --repo /path/to/client-repo
-
-The client opens a web proxy on local port 8077 by default (see option
-`listen-on-tcp` in its configuration file).  When you access the web using
-this proxy (see the following section), your requests will go through your
-local Ouinet client, which will attempt several mechanisms supported by Ouinet
-to retrieve the resource.
-
-When you are done testing the Ouinet client, you may shut it down by hitting
-Ctrl+C.
-
-#### A note on persistent options
-
-Please note that a few selected options (like the log level and which request
-mechanisms are enabled) are saved when changed, either from the command line
-or the client front-end (see below).
-
-On client start, the values of saved options take precedence over those in the
-configuration file, but not over those in the command line.  You can use the
-`--drop-saved-opts` option to drop the values of saved options altogether.
-
-Please run the client with `--help` to see which options are persistent.
-
-### Testing the client with a browser
-
-Once your local Ouinet client is running (see above), if you have Firefox
-installed, you can create a new profile (stored under the `ff-profile`
-directory in the example below) which uses the Ouinet client as an HTTP proxy
-(listening on `localhost:8077` here) by executing the following commands on
-another shell:
-
-    mkdir -p ff-profile
-    env http_proxy=http://localhost:8077 https_proxy=http://localhost:8077 \
-        firefox --no-remote --profile ff-profile
-
-Otherwise you may manually [modify your browser's settings][Firefox proxy] to
-make the client (listening on host `localhost` and port 8077 here) its HTTP
-and HTTPS/SSL proxy.
-
-[Firefox proxy]: http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox
-    "How to Enter Proxy Settings in Firefox"
-
-Please note that you do not need to change proxy settings at all when using
-CENO Extension >= v1.4.0 (see below), as long as your client is listening on
-the default address shown above.
-
-To reduce noise in the client log, you may want to disable Firefox's data
-collection by unchecking all options from "Preferences / Privacy & Security /
-Firefox Data Collection and Use", and maybe entering `about:config` in the
-location bar and clearing the value of `toolkit.telemetry.server`.  You can
-also avoid some more noise by disabling Firefox's automatic captive portal
-detection by changing `network.captive-portal-service.enabled` to `false` in
-`about:config`.
-
-If security does not worry you for testing, you can avoid even more noise by
-disabling Safe Browsing under "Preferences / Privacy & Security / Deceptive
-Content and Dangerous Software Protection" and add-on hotfixes at "Preferences
-/ Add-ons / (gear icon) / Update Add-ons Automatically".
-
-Also, if you want to avoid wasting Ouinet network resources and disk space on
-ads and similar undesired content, you can install an ad blocker like
-[uBlock Origin](https://github.com/gorhill/uBlock).
+For more details about configuration options please run `./client --help`.
 
 Once done, you can visit `localhost:8078` in your browser and it should show
-you the *client front-end* with assorted information from the client and
-configuration tools:
+you the client front-end with assorted information from the client and
+configuration tools. The client's HTTP proxy endpoint should be available to
+the host at `localhost:8077`.
 
-  - To be able to browse HTTPS sites, you must first install the
-    *client-specific CA certificate* linked from the top of the front-end page
-    and authorize it to identify web sites.  Depending on your browser
-    version, you may need to save it to disk first, then import it from
-    *Preferences / Privacy & Security / Certificates / View Certificates…*
-    into the *Authorities* list.
+As well as Injectors, the Ouinet Clients can be deployed in production using
+[Docker Compose](https://ouinet.work/docs/build/docker.html#deploying-a-client).
 
-    The Ouinet client acts as a *man in the middle* to enable it to process
-    HTTPS requests, but it (or a trusted injector when appropriate) still
-    performs all standard certificate validations.  This CA certificate is
-    unique to your device.
 
-  - Several buttons near the top of the page look something like this:
+## Testing the Client with cURL
 
-        Injector access: enabled [ disable ]
+Now that the Ouinet services are running we will test a simple scenario where
+a Client requests a URL from the Injector.
 
-    They allow you to enable or disable different *request mechanisms* to
-    retrieve content:
+It's important to disable `Origin` and `Proxy` mechanisms to force Ouinet to
+fetch the content from the Injector. To do this, you can press the `disable`
+button in Ouinet's front-end (that's running by default at `localhost:8078`)
+or to set the values `disable-origin-access` and `disable-proxy-access` to
+`true` in Ouinet's config and restart the service.
 
-      - *Origin*: The client contacts the origin server directly via HTTP(S).
-      - *Proxy*: The client contacts the origin server through an HTTP proxy
-        (currently the configured injector).
-      - *Injector*: The client asks the injector to fetch and sign the content
-        from the origin server, then it starts seeding the signed content to
-        the distributed cache.
-      - *Distributed Cache*: The client attempts to retrieve the content from
-        the distributed cache.
+The following example requests `https://ouinet.work` from Ouinet's proxy
+running on port `8077` and receives an HTTP response with `x-ouinet-source`
+header set to `["injector"]`. SSL verification is skipped with `--insecure`
+just to keep the example as simple as possible but for production applications
+the Ouinet TLS certificate should be installed and validated.
 
-    Content retrieved via the Origin and Proxy mechanisms is considered
-    *private and not seeded* to the distributed cache.  Content retrieved via
-    the Injector and Cache mechanisms is considered *public and seeded* to the
-    distributed cache.
+```shell
+$ curl https://ouinet.work \
+    --header 'X-Ouinet-Group: ouinet.work' \
+    --proxy 127.0.0.1:8077 \
+    --insecure \
+    --silent \
+    --output /dev/null \
+    --write-out '%{http_code},%{header_json}' | \
+  grep x-ouinet-source
 
-    These mechanisms are attempted in order according to a (currently
-    hard-wired, customizable in the future) *request router configuration*.
-    For instance, if one points the browser to a web page which is not yet
-    in the distributed cache, then the client shall forward the request to the
-    injector.  On success, (A) the injector will fetch, sign and send the
-    content back to the client and (B) the client will seed the content to the
-    cache.
+"x-ouinet-source":["injector"]
+```
 
-  - Other information about the cache index is shown next.
+If you're interested on a script that automatically generates `X-Ouinet-Group`
+following the same rules used by Ceno browser please check [ouinet-curl](https://gitlab.com/equalitie/ouinet-examples/-/tree/main/shell/ouinet-curl)
+in the [ouinet-examples](https://gitlab.com/equalitie/ouinet-examples/) repo.
 
-**Note:** For a response to be injected, its request currently needs to carry
-an `X-Ouinet-Group` header.  The [CENO Extension][] takes care of that
-whenever browsing in normal mode, and it does not when browsing in private
-mode.  Unfortunately, the Extension is not yet packaged independently and the
-only way to use it is to clone its repository locally and load it every time
-you start the browser; to do that, open Firefox's *Add-ons* window, then click
-on the gears icon, then *Debug Add-ons*, then *Load Temporary Add-on…* and
-choose the `manifest.json` file in the Extension's source tree.  Back to the
-*Add-ons* page, remember to click on *CENO Extension* and allow *Run in
-Private Windows* under *Details*.
 
-[CENO Extension]: https://gitlab.com/censorship-no/ceno-ext-settings/
+## Integrating Ouinet into your Android application
 
-After visiting a page with the Origin mechanism disabled and Injector
-mechanism enabled, and waiting for a short while, you should be able to
-disable all request mechanisms except for the Cache, clear the browser's
-cached data, point the browser back to the same page and still get its
-contents from the distributed cache even when the origin server is completely
-unreachable.
+First add Ouinet and Relinker as dependencies in app's `build.gradle.kts`:
 
-### Using an external static cache
-
-Ouinet supports circulating cached Web content offline as file storage and
-using a client to seed it back into the distributed cache.  Such content is
-placed in a *static cache*, which is read-only and consists of two
-directories:
-
-  - A *static cache root* or content directory where data files are stored in
-    a hierarchy which may make sense for user browsing.
-
-  - A *static cache repository* where Ouinet-specific metadata and signatures
-    for the previous content are kept.
-
-To give your client access to a static cache, use the `cache-static-root` and
-`cache-static-repo` options to point to the appropriate directories.  If the
-later is not specified, the `.ouinet` subdirectory under the static cache root
-is assumed.
-
-Please note that all content in the static cache is permanently announced by
-the client, and that purging the client's local cache has no effect on the
-static cache.  When cached content is requested from a client, the client
-first looks up the content in its local cache, with the static cache being
-used as a fallback.
-
-Any user can create such a static cache as a capture of a browsing session by
-copying the `bep5_http` directory of the client's repository as a static cache
-repository (with an empty static cache root).  We recommend that you purge
-your local cache before starting the browsing session to avoid leaking your
-previous browsing to other users.
-
-If you are a content provider in possession of your own signing key, please
-check the [ouinet-inject][] tool, which allows you to create a static cache
-from a variety of sources.
-
-[ouinet-inject]: https://gitlab.com/equalitie/ouinet-inject
-
-## Android library and demo client
-
-Ouinet can also be built as an Android Archive library (AAR) to use in your
-Android apps.
-
-### Build requirements
-
-A lot of free space (something less than 15 GiB).  Everything else shall be
-downloaded by the `build-android.sh` script.
-
-The instructions below use Vagrant for bulding, but the `build-android.sh`
-script should work on any reasonably up-to-date Debian based system.
-
-In the following instructions, we will use `<ANDROID>` to represent the
-absolute path to your build directory.  That is, the directory from which you
-will run the `build-android.sh` script (e.g. `~/ouinet.android.build`).
-
-### Building
-
-The following instructions will build a Ouinet AAR library and demo client
-APK package for the `armeabi-v7a` [Android ABI][]:
-
-    host    $ vagrant up --provider=libvirt
-    host    $ vagrant ssh
-    vagrant $ mkdir <ANDROID>
-    vagrant $ cd <ANDROID>
-    vagrant $ git clone --recursive /vagrant
-    vagrant $ ./vagrant/scripts/build-android.sh
-
-Note that we cloned a fresh copy of the Ouinet repository at `/vagrant`.  This
-is not strictly necessary since the build environment supports out-of-source
-builds, however it spares you from having to keep your source directory clean
-and submodules up to date at the host.  If you fullfill these requirements,
-you can just skip the cloning and run `/vagrant/scripts/build-android.sh`
-instead.
-
-If you want a build for a different ABI, do set the `ABI` environment
-variable:
-
-    vagrant $ env ABI=x86_64 /path/to/build-android.sh
-
-In any case, when the build script finishes successfully, it will leave the
-Ouinet AAR library at `build.ouinet/build-android-$ABI/builddir/ouinet/build-android/outputs/aar/ouinet-debug.aar`.
-
-[Android ABI]: https://developer.android.com/ndk/guides/abis.html
-
-#### Using existing Android SDK/NDK and Boost
-
-By default the `build-android.sh` script downloads all dependencies required
-to build the Ouinet Android library, including the Android SDK and NDK.  If
-you already have these installed on your system you can tune the script to use
-them:
-
-    $ export SDK_DIR=/opt/android-sdk
-    $ export NDK_DIR=/opt/android-sdk/ndk-bundle
-    $ export ABI=armeabi-v7a
-    $ /path/to/build-android.sh
-
-### Testing with Android emulator
-
-You may also use the `build-android.sh` script to fire up an Android emulator
-session with a compatible system image; just run:
-
-    host $ /path/to/build-android.sh emu
-
-It will download the necessary files to the current directory (or reuse files
-downloaded by the build process, if available) and start the emulator.  Please
-note that downloading the system image may take a few minutes, and booting the
-emulator for the first time may take more than 10 minutes.  In subsequent
-runs, the emulator will just recover the snapshot saved on last quit, which is
-much faster.
-
-The `ABI` environment variable described above also works for selecting the
-emulator architecture:
-
-    host $ env ABI=x86_64 /path/to/build-android.sh emu
-
-You may also set `EMULATOR_API` to start a version of Android different from
-the minimum one supported by Ouinet:
-
-    host $ env EMULATOR_API=30 /path/to/build-android.sh emu  # Android 11
-
-You may pass options to the emulator at the script's command line, after a
-`--` (double dash) argument.  For instance:
-
-    host $ /path/to/build-android.sh emu -- -no-snapshot-save
-
-Some useful options include `-no-snapshot`, `-no-snapshot-load` and
-`-no-snapshot-save`.  See [emulator startup options][] for more information.
-
-[emulator startup options]: https://developer.android.com/studio/run/emulator-commandline.html#startup-options
-
-While the emulator is running, you may interact with it using ADB, e.g. to
-install the APK built previously.  See the script's output for particular
-instructions and paths.
-
-#### Running the Android emulator under Docker
-
-The `Dockerfile.android-emu` file can be used to setup a Docker container able
-to run the Android emulator.  First create the emulator image with:
-
-    $ sudo docker build -t ouinet:android-emu - < Dockerfile.android-emu
-
-Then, if `$SDK_PARENT_DIR` is the directory where you want Ouinet's build
-script to place Android SDK downloads (so that you can reuse them between
-container runs or from an existing Ouinet build), you may start a temporary
-emulator container like this:
-
-    $ sudo docker run --rm -it \
-          --device /dev/kvm \
-          --mount type=bind,source="$(realpath "$SDK_PARENT_DIR")",target=/mnt \
-          --mount type=bind,source=$PWD,target=/usr/local/src,ro \
-          --mount type=bind,source=/tmp/.X11-unix/X0,target=/tmp/.X11-unix/X0 \
-          --mount type=bind,source=$HOME/.Xauthority,target=/root/.Xauthority,ro \
-          -h "$(uname -n)" -e DISPLAY ouinet:android-emu
-
-The `--device` option is only needed to emulate an `x86_64` device.
-
-Please note how the Ouinet source directory as well as the X11 socket and
-authentication cookie database are mounted into the container to allow showing
-the emulator's screen on your display (without giving access to it to everyone
-via `xhost` -- this is also why the container has the same host name as the
-Docker host).
-
-Once in the container, you may run the emulator like this:
-
-    $ cd /mnt
-    $ /usr/local/src/scripts/build-android.sh bootstrap emu &
-
-You can use `adb` inside of the container to install packages into the
-emulated device.
-
-### Integrating the Ouinet library into your app
-
-In order for your Android app to access the resources it needs using the HTTP
-protocol over Ouinet, thus taking advantage of its caching and distributed
-request handling, you need to take few simple steps.
-
-Here we assume that the app is developed in the Android Studio environment,
-and that `<PROJECT DIR>` is your app's project directory.
-
-#### Option A: Get Ouinet from Maven Central
-
-Select the Ouinet version according to your app's ABI (we officially support
-`ouinet-armeabi-v7a`, `ouinet-arm64-v8a` and `omni` that includes all the
-supported ABIs plus `x86_64`), and also add Relinker as adependency in
-`<PROJECT DIR>/app/build.gradle`:
-
-```groovy
+```gradle
 dependencies {
     //...
-    implementation 'ie.equalit.ouinet:ouinet-armeabi-v7a:0.20.0'
-    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
+    implementation("ie.equalit.ouinet:ouinet-omni:0.23.0")
+    implementation("com.getkeepsafe.relinker:relinker:1.4.4")
 }
 ```
 
-Check that Maven Central is added to the list of repositories used by
-Gradle:
+In the `MainActivity.kt` of your app import Ouinet classes:
 
-```groovy
-allprojects {
-    repositories {
-        // ...
-        mavenCentral()
-    }
-}
-```
-
-Now the Ouinet library will be automatically fetched by Gradle when your app is built.
-
-#### Option B: Use your own compiled version of Ouinet
-
-First, you need to compile the Ouinet library for the ABI environment you are
-aiming at (e.g. `armeabi-v7a` or `x86_64`) as described above.  After the
-`build_android.sh` script finishes successfully, you can copy the
-`ouinet-debug.aar` file to your app libs folder:
-
-```sh
-$ cp /path/to/ouinet-debug.aar <PROJECT DIR>/app/libs/
-```
-
-Then look for the following section of your `<PROJECT DIR>/build.gradle`:
-
-```groovy
-allprojects {
-  repositories {
-    // ...
-  }
-}
-```
-
-And add this:
-
-```groovy
-flatDir {
-  dirs 'libs'
-}
-mavenCentral()  // for ReLinker
-```
-
-Then look for the following section of your `<PROJECT DIR>/app/build.gradle`:
-
-```groovy
-dependencies {
-  // ...
-}
-```
-
-And add these:
-
-```groovy
-implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
-implementation(name:'ouinet-debug', ext:'aar')
-```
-
-#### Initialize Ouinet
-
-At this stage your project should compile with no errors.  Now to tell Ouinet
-to take over the app's HTTP communications, in the `MainActivity.java` of your
-app import Ouinet:
-
-```java
+```kotlin
 import ie.equalit.ouinet.Ouinet;
+import ie.equalit.ouinet.Config
 ```
 
-Then add a private member to your `MainActivity` class:
+Add a private member to your `MainActivity` class:
 
-```java
-private Ouinet ouinet;
+```kotlin
+private lateinit var ouinet: Ouinet
 ```
 
-And in its `OnCreate` method initiate the Ouinet object (using the BEP5/HTTP
-cache):
+Initiate the Ouinet object in its `onCreate` method using the BEP5/HTTP
+cache settings:
 
-```java
-Config config = new Config.ConfigBuilder(this)
-            .setCacheType("bep5-http")
-            .setCacheHttpPubKey(<CACHE_PUB_KEY>)
-            .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
-            .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
-            .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
-            .build()
+```kotlin
+var config = Config.ConfigBuilder(this)
+    .setCacheType("bep5-http")
+    .setCacheHttpPubKey("abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno")
+    .setInjectorCredentials("test_user_change_me:test_password_change_me")
+    .setInjectorTlsCert("-----BEGIN CERTIFICATE-----\nMIICyTCCAbGgAwIBAgIGAWwvE3jIMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0xOTA3MjQxNjE4MjFaFw0zNDA3MjIxNjE4MjFaMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOQ6tX1fh1JQJGMEpgEaqFdVpl2Jz39s+3pFJAHRQMxvQa1a4pGwlc4smrhh8Y2ZKli8zhIzFPATZ3ipdBwnLBBUnDqpZWEqsKdBGGJghM+8EitXJwtSWjR2qqZcz3Xz60MKt2S2IeL6L3/HtHM1bN93Xo3hQK/WYDQ6BEeLd6JSsns1mwwccTStu/kc3Y2EIXPh1otQ624QXb9szIdwQw7vzi0saXONdaFFbpRyoa6KKCEC7iHHfUbEhCSRpL8YMrl5z9mKqA8y+5tl3jzTHRtYE4SVG60pmd9nMQ33ue8m5ADq5Bd8Jg2qOmmg0KNFV1RHB3pljMGco6eP9zmb3jsCAwEAAaMhMB8wHQYDVR0OBBYEFMCGT2KEmo4kM08CE/rv/BbnmVfnMA0GCSqGSIb3DQEBCwUAA4IBAQBWxR7x1vADpkpVRzNxicLgd0CYitmhEWtRQp9kE33O5BjRlHQ5TTA0WBp8Nc3c5ZZ1qAnQx3tXVZ7W1QY2XjiQpsPEhFcPsAtFLP+kpDEFPi39iFv4gunR4M1zReCDTGTJ48bLtqONZ9XgJ7obW8r+TjuJyI/i11NWUwKldg0NevF1Bkddbhpt7PJHUpSSbwr3GJOKHfRw9ZaX6P86MVcJd0TaAzZPXqk+2eab43GbbD6keXRGIufMThKGyrRX+9aIaV3tx3uWAOfWVmlzf9w3gV3DlmjPSOXmUsOLk0PFwoy7O7n9zJKNrUy1N2O+j0tH5HVXOnSjpS8aNrMtpfHS\n-----END CERTIFICATE-----")
+    .build()
 
-ouinet = new Ouinet(this, config);
-ouinet.start();
+ouinet = Ouinet(this, config)
+ouinet.start()
+```
+
+Please refer to [this example](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#pass-config-values-to-ouinet-during-the-build-process) if you want to pass the config values during build process.
+
+Now create a Proxy object pointing to Ouinet's service `127.0.0.1:8077`
+
+```kotlin
+val ouinetService = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", 8077))
+```
+
+And pass the Proxy object to your HTTP client (we're using `OKHTTPClient` in
+this example):
+
+```kotlin
+OkHttpClient.Builder().proxy(ouinetService).build()
 ```
 
 From now on, all of the app's HTTP communication will be handled by Ouinet.
+You can check on this
+[example](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#validate-ouinets-tls-cert)
+how to deal with Ouinet's TLS certificate.
 
-Please note that if you plan to use a directory for Ouinet's static cache in
-your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
+Please note that if you plan to use a directory for Ouinet's
+[static cache](https://ouinet.work/docs/build/testing.html#using-an-external-static-cache)
+in your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
 `setCacheStaticContentPath()`), then besides the permissions declared by the
 library in its manifest, your app will need the `READ_EXTERNAL_STORAGE`
 permission (Ouinet will not attempt to write to that directory).
 
-#### Integration Examples
-
-You can find additional information and samples of Android applications using
-Ouinet in the following repository:
+You can find additional information to control the
+[access mechanisms](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#test-ouinet-access-mechanisms)
+and samples of other Android applications in
 [equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).
+
+
+## References
+
+- [Ouinet's Website](https://ouinet.work/)
+- [Documentation](https://ouinet.work/docs/)
+- [Whitepaper](doc/ouinet-network-whitepaper.md)
+- [Matrix channel](https://matrix.to/#/#ouinet:matrix.org)
+- [Integration Examples](https://gitlab.com/equalitie/ouinet-examples)
+- [Ceno Browser](https://gitlab.com/censorship-no/ceno-browser/)
+- [Ceno Docker Client](https://github.com/censorship-no/ceno-docker-client)
