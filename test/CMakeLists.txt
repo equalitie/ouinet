@@ -180,7 +180,7 @@ add_executable(test-bencoding
         "../src/bittorrent/bencoding.cpp")
 
 ######################################################################
-add_executable(test_file_io
+add_executable(test-file-io
         "test_file_io.cpp"
         "util/base_fixture.hpp"
         "../src/util/file_io.cpp"
