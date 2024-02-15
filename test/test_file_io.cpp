@@ -263,11 +263,14 @@ BOOST_AUTO_TEST_CASE(test_read_and_write_numbers)
                 ctx.get_executor(),
                 temp_file.get_name(),
                 ec);
-        file_io::write_number(aio_file, expected_number, cancel, yield);
+        file_io::write_number<size_t>(aio_file, expected_number, cancel, yield[ec]);
+        BOOST_REQUIRE(!ec);
         asio::steady_timer timer{ctx};
         timer.expires_from_now(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
-        size_t actual_number = file_io::read_number<size_t>(aio_file, cancel, yield);
+        file_io::fseek(aio_file, 0, ec);
+        auto actual_number = file_io::read_number<size_t>(aio_file, cancel, yield[ec]);
+        BOOST_REQUIRE(!ec);
         BOOST_CHECK(expected_number == actual_number);
     });
     ctx.run();
