@@ -155,10 +155,18 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
                 ctx.get_executor(),
                 temp_file.get_name(),
                 ec);
-        file_io::write(aio_file_ro, boost::asio::const_buffer("DEF456uvw", 9), cancel, yield);
+        BOOST_CHECK(!ec);
+        file_io::write(aio_file_ro, boost::asio::const_buffer("DEF456uvw", 9), cancel, yield[ec]);
+        BOOST_CHECK(ec.value() == 9); // Expected errno 9, Bad file descriptor
+        ec.clear();
         timer.expires_from_now(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
-        file_io::read(aio_file_ro, asio::buffer(data_in), cancel, yield);
+        aio_file_ro = file_io::open_readonly(
+                ctx.get_executor(),
+                temp_file.get_name(),
+                ec);
+        file_io::read(aio_file_ro, asio::buffer(data_in), cancel, yield[ec]);
+        BOOST_CHECK(!ec);
         BOOST_TEST(expected_string == data_in); // Checking with expected_string as the file should be unmodified
         aio_file_ro.close();
     });
