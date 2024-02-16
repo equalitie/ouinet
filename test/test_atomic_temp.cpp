@@ -6,6 +6,7 @@
 
 #include <defer.h>
 #include <util/atomic_dir.h>
+#include <util/atomic_file.h>
 #include <util/executor.h>
 #include <util/file_io.h>
 #include <util/temp_dir.h>
@@ -140,6 +141,31 @@ BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), 
     }
 
     check_directory(ad_path);
+}
+
+BOOST_DATA_TEST_CASE(test_atomic_file, boost::unit_test::data::make(true_false), commit){
+    asio::io_context ctx;
+
+    fs::path af_temp_path, af_path = fs::unique_path();
+    auto remove_af = defer([&] {
+        if (fs::exists(af_path)) fs::remove_all(af_path);
+        if (fs::exists(af_temp_path)) fs::remove_all(af_temp_path);
+    });
+    {
+        sys::error_code ec;
+
+        auto af = util::atomic_file::make(ctx.get_executor(), af_path, ec);
+        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+
+        BOOST_CHECK_EQUAL(af->path(), af_path);
+        BOOST_REQUIRE(!fs::exists(af_path));
+
+    }
+
+    if (!commit) {
+        BOOST_CHECK(!fs::exists(af_path));
+        return;
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
