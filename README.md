@@ -20,11 +20,11 @@ provided by [eQualitie](https://equalit.ie), offering injection and
 authentication of web content into a decentralized p2p network, using the
 BitTorrent DHT for addressing and routing. Coupled with sneakernet technology
 operated by eQualitie, Ceno users can access
-[cached website replicas](https://schedule.ceno.life), from heavily limited
+[cached website replicas](https://schedule.ceno.life) from heavily limited
 or entirely isolated network environments.
 
 
-## How it works?
+## How does it work?
 
 A typical [client][] node setup consists of a web browser or other application
 using the special HTTP proxy provided by Ouinet. When the Ouinet proxy gets a
@@ -59,7 +59,7 @@ fact that your application is seeding particular content.
 
 ## Request mechanisms
 
-These mechanisms to retrieve content are attempted as parallel coroutines
+The following mechanisms to retrieve content are attempted as parallel coroutines
 showing the results of the first responding method.
 
 - *Origin*: The client contacts the origin server directly via HTTP(S).
@@ -86,7 +86,7 @@ announce its address details to the BitTorrent distributed hash table. Whenever
 the client accepts a connection in this way, it will create a connection to an
 injector and forward all traffic received over the incoming connection to the
 connection with the injector, and vice versa. This lets the client function as
-an intermediary between an injector, and a different client that is unable to
+an intermediary between an injector and a different client that is unable to
 connect to the injectors directly.
 
 A detailed explanation of Bridges can be found in Ouinet's
@@ -151,8 +151,8 @@ listen-on-utp-tls = 0.0.0.0:7085
 credentials = test_user_change_me:test_password_change_me
 ```
 
-You could also find more details of the available options in this
-[config example](repos/injector/ouinet-injector.conf) or invoking
+You can find more details of the available options in this
+[config example](repos/injector/ouinet-injector.conf) or by invoking
 `injector --help`.
 
 When your `repo` dir and the configuration file are ready you can start
@@ -165,7 +165,7 @@ $ ./injector --repo /path/to/your/repo
 During its first start the injector will generate the private and public keys
 needed to [sign content](https://ouinet.work/docs/how/cache.html#signatures)
 (`ed25519-*` files) and the certificates used to establish a TLS connection
-when contacting the injector via uTP protocol. Please keep an eye on these
+when contacting the injector via the uTP protocol. Please keep an eye on these
 files as some of them will be needed to configure your Ouinet clients.
 
 For a production environment you may want to deploy the Injector using
@@ -222,14 +222,14 @@ a Client requests a URL from the Injector.
 
 It's important to disable `Origin` and `Proxy` mechanisms to force Ouinet to
 fetch the content from the Injector. To do this, you can press the `disable`
-button in Ouinet's front-end (that's running by default at `localhost:8078`)
+button in Ouinet's front-end (running by default at `localhost:8078`)
 or to set the values `disable-origin-access` and `disable-proxy-access` to
 `true` in Ouinet's config and restart the service.
 
 The following example requests `https://ouinet.work` from Ouinet's proxy
 running on port `8077` and receives an HTTP response with `x-ouinet-source`
 header set to `["injector"]`. SSL verification is skipped with `--insecure`
-just to keep the example as simple as possible but for production applications
+just to keep the example as simple as possible, but for production applications
 the Ouinet TLS certificate should be installed and validated.
 
 ```shell
@@ -245,14 +245,14 @@ $ curl https://ouinet.work \
 "x-ouinet-source":["injector"]
 ```
 
-If you're interested on a script that automatically generates `X-Ouinet-Group`
-following the same rules used by Ceno browser please check [ouinet-curl](https://gitlab.com/equalitie/ouinet-examples/-/tree/main/shell/ouinet-curl)
+If you're interested in a script that automatically generates `X-Ouinet-Group`
+following the same rules used by Ceno Browser, please check [ouinet-curl](https://gitlab.com/equalitie/ouinet-examples/-/tree/main/shell/ouinet-curl)
 in the [ouinet-examples](https://gitlab.com/equalitie/ouinet-examples/) repo.
 
 
 ## Integrating Ouinet into your Android application
 
-First add Ouinet and Relinker as dependencies in app's `build.gradle.kts`:
+First add Ouinet and Relinker as dependencies in your app's `build.gradle.kts`:
 
 ```gradle
 dependencies {
@@ -262,7 +262,7 @@ dependencies {
 }
 ```
 
-In the `MainActivity.kt` of your app import Ouinet classes:
+In the `MainActivity.kt` of your app, import the Ouinet classes:
 
 ```kotlin
 import ie.equalit.ouinet.Ouinet;
@@ -290,9 +290,9 @@ ouinet = Ouinet(this, config)
 ouinet.start()
 ```
 
-Please refer to [this example](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#pass-config-values-to-ouinet-during-the-build-process) if you want to pass the config values during build process.
+Please refer to [this example](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#pass-config-values-to-ouinet-during-the-build-process) if you want to pass the config values during the build process.
 
-Now create a Proxy object pointing to Ouinet's service `127.0.0.1:8077`
+Now create a Proxy object pointing to Ouinet's service `127.0.0.1:8077`:
 
 ```kotlin
 val ouinetService = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", 8077))
@@ -306,20 +306,19 @@ OkHttpClient.Builder().proxy(ouinetService).build()
 ```
 
 From now on, all of the app's HTTP communication will be handled by Ouinet.
-You can check on this
+You can check this
 [example](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#validate-ouinets-tls-cert)
-how to deal with Ouinet's TLS certificate.
+for how to deal with Ouinet's TLS certificate.
 
 Please note that if you plan to use a directory for Ouinet's
 [static cache](https://ouinet.work/docs/build/testing.html#using-an-external-static-cache)
 in your application (by using `ConfigBuilder`'s `setCacheStaticPath()` and
 `setCacheStaticContentPath()`), then besides the permissions declared by the
-library in its manifest, your app will need the `READ_EXTERNAL_STORAGE`
+library in its manifest, your app will also need the `READ_EXTERNAL_STORAGE`
 permission (Ouinet will not attempt to write to that directory).
 
 You can find additional information to control the
-[access mechanisms](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#test-ouinet-access-mechanisms)
-and samples of other Android applications in
+[access mechanisms](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#test-ouinet-access-mechanisms) as well as examples of other Android applications in
 [equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).
 
 
