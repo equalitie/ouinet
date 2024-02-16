@@ -9,38 +9,43 @@
 #include "../or_throw.h"
 #include "../util/executor.h"
 
+using async_file_handle = boost::asio::posix::stream_descriptor;
+using native_handle_t = int;
+
 namespace ouinet { namespace util { namespace file_io {
 
-asio::posix::stream_descriptor
+async_file_handle
 open_or_create(const AsioExecutor&, const fs::path&, sys::error_code&);
 
-asio::posix::stream_descriptor
+async_file_handle
 open_readonly(const AsioExecutor&, const fs::path&, sys::error_code&);
 
 // Duplicate the descriptor, see dup(2).
 // The descriptor shares offset and flags with that of the original file,
 // but it stays open regardless of the original one getting closed,
 // so it must be closed separately.
-int dup_fd(asio::posix::stream_descriptor&, sys::error_code&);
+native_handle_t dup_fd(async_file_handle&, sys::error_code&);
 
-void fseek(asio::posix::stream_descriptor&, size_t pos, sys::error_code&);
+void fseek(async_file_handle&, size_t pos, sys::error_code&);
 
-size_t current_position(asio::posix::stream_descriptor&, sys::error_code&);
+size_t current_position(async_file_handle&, sys::error_code&);
 
-size_t file_size(asio::posix::stream_descriptor&, sys::error_code&);
+size_t end_position(async_file_handle& f, sys::error_code& ec);
 
-size_t file_remaining_size(asio::posix::stream_descriptor&, sys::error_code&);
+size_t file_size(async_file_handle&, sys::error_code&);
 
-void truncate( asio::posix::stream_descriptor&
+size_t file_remaining_size(async_file_handle&, sys::error_code&);
+
+void truncate( async_file_handle&
              , size_t new_length
              , sys::error_code&);
 
-void read( asio::posix::stream_descriptor&
+void read( async_file_handle&
          , asio::mutable_buffer
          , Cancel&
          , asio::yield_context);
 
-void write( asio::posix::stream_descriptor&
+void write( async_file_handle&
           , asio::const_buffer
           , Cancel&
           , asio::yield_context);
@@ -51,7 +56,7 @@ void write( asio::posix::stream_descriptor&
 bool check_or_create_directory(const fs::path&, sys::error_code&);
 
 template<typename T>
-T read_number( asio::posix::stream_descriptor& f
+T read_number( async_file_handle& f
              , Cancel& cancel
              , asio::yield_context yield)
 {
@@ -63,7 +68,7 @@ T read_number( asio::posix::stream_descriptor& f
 }
 
 template<typename T>
-void write_number( asio::posix::stream_descriptor& f
+void write_number( async_file_handle& f
                  , T num
                  , Cancel& cancel
                  , asio::yield_context yield)
