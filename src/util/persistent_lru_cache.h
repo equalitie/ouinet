@@ -69,7 +69,7 @@ public:
         const Value& value() const;
         const Key& key() const;
 
-        asio::posix::stream_descriptor open(sys::error_code&) const;
+        async_file_handle open(sys::error_code&) const;
     };
 
 private:
@@ -220,7 +220,7 @@ public:
     }
 
     // Read-only byte-oriented access to on-disk data.
-    asio::posix::stream_descriptor open_value(sys::error_code& ec) const {
+    async_file_handle open_value(sys::error_code& ec) const {
         auto f = file_io::open_readonly(_ex, _path, ec);
         if (!ec) file_io::fseek(f, content_start(), ec);
         return f;
@@ -452,7 +452,7 @@ PersistentLruCache<Value>::iterator::key() const
 
 template<class Value>
 inline
-asio::posix::stream_descriptor
+async_file_handle
 PersistentLruCache<Value>::iterator::open(sys::error_code& ec) const
 {
     return i->second->second->open_value(ec);
