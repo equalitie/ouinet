@@ -9,6 +9,7 @@
 #include <util/executor.h>
 #include <util/file_io.h>
 #include <util/temp_dir.h>
+#include <util/temp_file.h>
 
 #include <namespaces.h>
 
@@ -75,6 +76,30 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
     }
 
     check_directory(td_path);
+}
+
+BOOST_DATA_TEST_CASE(test_tmp_file, boost::unit_test::data::make(true_false), keep) {
+    asio::io_context ctx;
+
+    fs::path tf_path;
+    auto remove_td = defer([&] {
+        if (fs::exists(tf_path)) fs::remove_all(tf_path);
+    });
+    {
+        sys::error_code ec;
+
+        auto tf = util::temp_file::make(ctx.get_executor(), ec);
+        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+
+        BOOST_CHECK(tf->keep_on_close());
+        tf->keep_on_close(keep);
+        BOOST_CHECK_EQUAL(tf->keep_on_close(), keep);
+
+        tf_path = tf->path();
+        BOOST_REQUIRE(fs::exists(tf_path));
+        BOOST_REQUIRE(fs::is_regular_file(tf_path));
+    }
+
 }
 
 BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), commit) {
