@@ -14,6 +14,7 @@
 #include "../src/util/wait_condition.h"
 #include "../src/util/str.h"
 #include "../src/util/hash.h"
+#include "../src/util/io/async_file_handle.h"
 
 
 using namespace ouinet;
@@ -203,8 +204,8 @@ int main(int argc, const char** argv)
 
         steady_clock::time_point start = steady_clock::now();
 
-        boost::asio::posix::stream_descriptor input (ios, ::dup(STDIN_FILENO));
-        boost::asio::posix::stream_descriptor output (ios, ::dup(STDOUT_FILENO));
+        async_file_handle input (ios, ::dup(STDIN_FILENO));
+        async_file_handle output (ios, ::dup(STDOUT_FILENO));
 
         boost::asio::streambuf buffer;
         while (true) {
