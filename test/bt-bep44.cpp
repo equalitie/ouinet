@@ -14,7 +14,7 @@
 #include "../src/util/wait_condition.h"
 #include "../src/util/str.h"
 #include "../src/util/hash.h"
-#include "../src/util/io/async_file_handle.h"
+#include "../src/util/file_io/async_file_handle.h"
 
 
 using namespace ouinet;
