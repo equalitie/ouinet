@@ -15,7 +15,9 @@
 #include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"
+#ifndef __WIN32
 #include "increase_open_file_limit.h"
+#endif
 #include "endpoint.h"
 #include "logger.h"
 #include "constants.h"
@@ -153,9 +155,11 @@ private:
               "to start the DHT (can be used several times). "
               "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
               "This option is persistent.")
+#ifndef __WIN32
            ("open-file-limit"
             , po::value<unsigned int>()
             , "To increase the maximum number of open files")
+#endif
            ;
 
         po::options_description services("Service options");
@@ -498,9 +502,11 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
+#ifndef __WIN32
     if (vm.count("open-file-limit")) {
         increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
     }
+#endif
 
     if (vm.count("max-cached-age")) {
         _max_cached_age = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
