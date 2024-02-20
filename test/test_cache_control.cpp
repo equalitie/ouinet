@@ -6,7 +6,7 @@
 #include <cache_control.h>
 #include <http_util.h>
 #include <util.h>
-#include <util/io/async_file_handle.h>
+#include <util/file_io/async_file_handle.h>
 #include <or_throw.h>
 #include <session.h>
 #include <iostream>

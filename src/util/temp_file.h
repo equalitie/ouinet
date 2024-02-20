@@ -5,7 +5,7 @@
 #include <boost/system/error_code.hpp>
 
 #include "../namespaces.h"
-#include "../util/io/async_file_handle.h"
+#include "../util/file_io/async_file_handle.h"
 #include "../util/executor.h"
 
 namespace ouinet { namespace util {
