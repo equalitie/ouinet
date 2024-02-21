@@ -8,8 +8,14 @@
 using namespace std;
 using boost::string_view;
 
-#if !BOOST_ASIO_HAS_POSIX_STREAM_DESCRIPTOR
-#error "OS does not have a support for POSIX stream descriptors"
+#ifdef _WIN32
+#   if !BOOST_ASIO_HAS_WINDOWS_RANDOM_ACCESS_HANDLE
+#       error "OS does not have a support for Windows random access handles"
+#   endif
+#else
+#   if !BOOST_ASIO_HAS_POSIX_STREAM_DESCRIPTOR
+#       error "OS does not have a support for POSIX stream descriptors"
+#   endif
 #endif
 
 namespace ouinet {
