@@ -688,7 +688,7 @@ canonical_from_content_relpath( const fs::path& body_path_p
         return boost::none;
     }
     for (const auto& c : body_rp)
-        if (c.empty() || !c.compare(".") || !c.compare("..")) {
+        if (c.empty() || !c.compare(std::string(".")) || !c.compare(std::string(".."))) {
             _ERROR("Invalid components in path of static cache content file,"
                    " possibly malicious file: ", body_path_p);
             return boost::none;
