@@ -1,19 +1,20 @@
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
 
-#include <util/file_io.h>
 
 namespace ouinet { namespace util { namespace file_io {
 
 namespace errc = boost::system::errc;
 
 static
-sys::error_code last_error()
+sys::error_code
+last_error()
 {
     return make_error_code(static_cast<errc::errc_t>(errno));
 }
 
-void fseek(async_file_handle& f, size_t pos, sys::error_code& ec)
+void
+fseek(async_file_handle& f, size_t pos, sys::error_code& ec)
 {
     if (lseek(f.native_handle(), pos, SEEK_SET) == -1) {
         ec = last_error();
@@ -21,7 +22,8 @@ void fseek(async_file_handle& f, size_t pos, sys::error_code& ec)
     }
 }
 
-size_t current_position(async_file_handle& f, sys::error_code& ec)
+size_t
+current_position(async_file_handle& f, sys::error_code& ec)
 {
     off_t offset = lseek(f.native_handle(), 0, SEEK_CUR);
 
@@ -34,7 +36,8 @@ size_t current_position(async_file_handle& f, sys::error_code& ec)
     return offset;
 }
 
-size_t file_size(async_file_handle& f, sys::error_code& ec)
+size_t
+file_size(async_file_handle& f, sys::error_code& ec)
 {
     auto start_pos = current_position(f, ec);
     if (ec) return size_t(-1);
@@ -53,7 +56,8 @@ size_t file_size(async_file_handle& f, sys::error_code& ec)
     return end;
 }
 
-size_t file_remaining_size(async_file_handle& f, sys::error_code& ec)
+size_t
+file_remaining_size(async_file_handle& f, sys::error_code& ec)
 {
     auto size = file_size(f, ec);
     if (ec) return 0;
@@ -65,9 +69,10 @@ size_t file_remaining_size(async_file_handle& f, sys::error_code& ec)
 }
 
 static
-async_file_handle open( int file
-                             , const AsioExecutor& exec
-                             , sys::error_code& ec)
+async_file_handle
+open( int file
+    , const AsioExecutor& exec
+    , sys::error_code& ec)
 {
     if (file == -1) {
         ec = last_error();
@@ -81,23 +86,26 @@ async_file_handle open( int file
     return f;
 }
 
-async_file_handle open_or_create( const AsioExecutor& exec
-                                       , const fs::path& p
-                                       , sys::error_code& ec)
+async_file_handle
+open_or_create( const AsioExecutor& exec
+              , const fs::path& p
+              , sys::error_code& ec)
 {
     int file = ::open(p.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
     return open(file, exec, ec);
 }
 
-async_file_handle open_readonly( const AsioExecutor& exec
-                                      , const fs::path& p
-                                      , sys::error_code& ec)
+async_file_handle
+open_readonly( const AsioExecutor& exec
+             , const fs::path& p
+             , sys::error_code& ec)
 {
     int file = ::open(p.c_str(), O_RDONLY);
     return open(file, exec, ec);
 }
 
-int dup_fd(async_file_handle& f, sys::error_code& ec)
+int
+dup_fd(async_file_handle& f, sys::error_code& ec)
 {
     int file = ::dup(f.native_handle());
     if (file == -1) {
@@ -107,9 +115,10 @@ int dup_fd(async_file_handle& f, sys::error_code& ec)
     return file;
 }
 
-void truncate( async_file_handle& f
-             , size_t new_length
-             , sys::error_code& ec)
+void
+truncate( async_file_handle& f
+        , size_t new_length
+        , sys::error_code& ec)
 {
     if (ftruncate(f.native_handle(), new_length) != 0) {
         ec = last_error();
@@ -117,7 +126,8 @@ void truncate( async_file_handle& f
     }
 }
 
-bool check_or_create_directory(const fs::path& dir, sys::error_code& ec)
+bool
+check_or_create_directory(const fs::path& dir, sys::error_code& ec)
 {
     // https://www.boost.org/doc/libs/1_69_0/libs/system/doc/html/system.html#ref_boostsystemerror_code_hpp
 
@@ -141,10 +151,11 @@ bool check_or_create_directory(const fs::path& dir, sys::error_code& ec)
     }
 }
 
-void read( async_file_handle& f
-         , asio::mutable_buffer b
-         , Cancel& cancel
-         , asio::yield_context yield)
+void
+read( async_file_handle& f
+    , asio::mutable_buffer b
+    , Cancel& cancel
+    , asio::yield_context yield)
 {
     auto cancel_slot = cancel.connect([&] { f.close(); });
     sys::error_code ec;
@@ -152,10 +163,11 @@ void read( async_file_handle& f
     return_or_throw_on_error(yield, cancel, ec);
 }
 
-void write( async_file_handle& f
-          , asio::const_buffer b
-          , Cancel& cancel
-          , asio::yield_context yield)
+void
+write( async_file_handle& f
+     , asio::const_buffer b
+     , Cancel& cancel
+     , asio::yield_context yield)
 {
     auto cancel_slot = cancel.connect([&] { f.close(); });
     sys::error_code ec;
@@ -163,7 +175,8 @@ void write( async_file_handle& f
     return_or_throw_on_error(yield, cancel, ec);
 }
 
-void remove_file(const fs::path& p)
+void
+remove_file(const fs::path& p)
 {
     if (!exists(p)) return;
     assert(is_regular_file(p));
