@@ -29,6 +29,7 @@ endif()
 add_compile_options("-Wall")
 
 add_compile_options("-O1")
+add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
 #add_compile_options("-Wa,-mbig-obj")
 
 
