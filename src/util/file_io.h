@@ -9,7 +9,6 @@
 #include "../util/executor.h"
 #include "../util/file_io/async_file_handle.h"
 
-using native_handle_t = int;
 
 namespace ouinet { namespace util { namespace file_io {
 
