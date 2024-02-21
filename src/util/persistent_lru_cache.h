@@ -317,7 +317,7 @@ PersistentLruCache<Value>::load( const AsioExecutor& ex
     std::map<Id, std::shared_ptr<Element>> elements;
 
     {
-        DIR* directory = opendir(dir.c_str());
+        DIR* directory = opendir(dir.string().c_str());
         auto close_dir = defer([&] { if (directory != nullptr) closedir(directory); });
 
         uint64_t i = 0;
