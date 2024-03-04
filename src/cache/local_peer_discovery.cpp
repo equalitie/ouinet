@@ -1,12 +1,12 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ip/multicast.hpp>
 #include "local_peer_discovery.h"
-#include "../../util/random.h"
-#include "../../util/handler_tracker.h"
-#include "../../parse/number.h"
-#include "../../parse/endpoint.h"
-#include "../../logger.h"
-#include "../../async_sleep.h"
+#include <util/random.h>
+#include <util/handler_tracker.h>
+#include <parse/number.h>
+#include <parse/endpoint.h>
+#include <logger.h>
+#include <async_sleep.h>
 
 using namespace ouinet;
 using namespace std;
