@@ -185,3 +185,16 @@ add_executable(test-file-io
         "util/base_fixture.hpp"
         "../src/util/file_io.cpp"
 )
+
+add_executable(test-multi-peer-reader
+        "test-multi-peer-reader.cpp"
+        ${bt_cpp_files}
+        "../src/bep5_swarms.cpp"
+        "../src/http_util.cpp"
+        "../src/cache/hash_list.cpp"
+        "../src/cache/http_sign.cpp"
+        "../src/cache/local_peer_discovery.cpp"
+        "../src/cache/multi_peer_reader.cpp"
+        "../src/cache/multi_peer_reader_error.cpp"
+        "util/bittorrent_utils.cpp")
+target_link_libraries(test-multi-peer-reader lib::asio_utp lib::gcrypt lib::uri)
