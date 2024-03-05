@@ -18,7 +18,8 @@ using namespace ouinet::util;
 const std::string test_group = "ouinet.work";
 const std::string dht_endpoint = "0.0.0.0";
 const std::string debug_tag = "test-multi-peer-reader";
-const std::string swarm_name = "ed25519:zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq/v6/uri/" + test_group;
+const std::string public_key = "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq";
+const std::string swarm_name = "ed25519:" + public_key + "/v6/uri/" + test_group;
 
 using PeerLookup = ouinet::cache::DhtLookup;
 using MultiPeerReader = ouinet::cache::MultiPeerReader;
@@ -36,6 +37,13 @@ struct DhtFixture {
         });
     }
     ~DhtFixture() = default;
+
+    static util::Ed25519PublicKey pubkey(const std::string& pkey) {
+        auto pk_s = util::base32_decode(pkey);
+        assert(pk_s.size() == util::Ed25519PublicKey::key_size);
+        auto pk_a = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(pk_s);
+        return {pk_a};
+    }
 };
 
 shared_ptr<PeerLookup> do_peer_lookup() {
@@ -55,7 +63,6 @@ BOOST_AUTO_TEST_SUITE(s, * boost::unit_test::fixture<DhtFixture>())
 
 BOOST_AUTO_TEST_CASE(test_multi_peer_reader)
 {
-    util::Ed25519PublicKey _cache_pk;
     std::set<udp::endpoint> _lan_my_endpoints;
     LocalPeerDiscovery _local_peer_discovery(tsuite_ctx.get_executor(), _lan_my_endpoints);
     std::shared_ptr<unsigned> newest_proto_seen;
@@ -67,7 +74,7 @@ BOOST_AUTO_TEST_CASE(test_multi_peer_reader)
         auto reader = std::make_unique<MultiPeerReader>(
                 tsuite_ctx.get_executor(),
                 test_group, // is key different from group in this context
-                _cache_pk, // init
+                DhtFixture::pubkey(public_key),
                 _local_peer_discovery.found_peers(),
                 btdht->local_endpoints(),
                 btdht->wan_endpoints(),
