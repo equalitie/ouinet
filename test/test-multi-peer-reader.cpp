@@ -29,14 +29,15 @@ BtUtils btu{tsuite_ctx};
 std::shared_ptr<MainlineDht> btdht;
 util::LruCache<std::string, shared_ptr<PeerLookup>> peer_lookups(256);
 
-struct DhtFixture {
-    DhtFixture() {
+struct MultiPeerReaderFixture {
+    MultiPeerReaderFixture() {
         asio::spawn(tsuite_ctx, [&](asio::yield_context yield) {
             vector<asio::ip::address> ifaddrs{asio::ip::make_address(dht_endpoint)};
             btdht = std::move(btu.bittorrent_dht(std::move(yield), ifaddrs));
         });
     }
-    ~DhtFixture() = default;
+
+    ~MultiPeerReaderFixture() = default;
 
     static util::Ed25519PublicKey pubkey(const std::string& pkey) {
         auto pk_s = util::base32_decode(pkey);
@@ -59,7 +60,7 @@ shared_ptr<PeerLookup> do_peer_lookup() {
     return *lookup;
 }
 
-BOOST_AUTO_TEST_SUITE(s, * boost::unit_test::fixture<DhtFixture>())
+BOOST_AUTO_TEST_SUITE(s, * boost::unit_test::fixture<MultiPeerReaderFixture>())
 
 BOOST_AUTO_TEST_CASE(test_multi_peer_reader)
 {
@@ -74,7 +75,7 @@ BOOST_AUTO_TEST_CASE(test_multi_peer_reader)
         auto reader = std::make_unique<MultiPeerReader>(
                 tsuite_ctx.get_executor(),
                 test_group, // is key different from group in this context
-                DhtFixture::pubkey(public_key),
+                MultiPeerReaderFixture::pubkey(public_key),
                 _local_peer_discovery.found_peers(),
                 btdht->local_endpoints(),
                 btdht->wan_endpoints(),
