@@ -8,6 +8,7 @@
 #include <cache/local_peer_discovery.h>
 #include <cache/dht_lookup.h>
 #include <util/lru_cache.h>
+#include <util/yield.h>
 #include "util/bittorrent_utils.cpp"
 #include <bep5_swarms.h>
 
@@ -69,6 +70,9 @@ BOOST_AUTO_TEST_CASE(test_multi_peer_reader)
     std::shared_ptr<unsigned> newest_proto_seen;
 
     asio::spawn(tsuite_ctx, [&](const asio::yield_context& yield) {
+        Yield yield_(tsuite_ctx, yield);
+        Cancel cancel;
+
         sys::error_code ec;
         asio::steady_timer timer(tsuite_ctx);
         auto peer_lookup = do_peer_lookup();
@@ -83,9 +87,14 @@ BOOST_AUTO_TEST_CASE(test_multi_peer_reader)
                 newest_proto_seen, // init?
                 debug_tag
             );
+
+        auto is_head_request = true;
+        auto s = yield_[ec].tag("read_hdr").run([&] (auto y) {
+            return Session::create(std::move(reader), is_head_request, cancel, y);
+        });
+
         BOOST_TEST(1);
-        timer.expires_from_now(chrono::seconds(5));
-        timer.async_wait(yield[ec]);
+
         raise(SIGINT);
     });
 
