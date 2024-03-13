@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../ouiservice.h"
-#include "../../util/async_queue.h"
+#include <ouiservice.h>
+#include <util/async_queue.h>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <set>
