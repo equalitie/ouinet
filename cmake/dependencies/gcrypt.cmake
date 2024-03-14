@@ -131,7 +131,7 @@ set(PATCH_COMMAND
     ${PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error
 )
 foreach (patch ${GPG_ERROR_PATCHES})
-    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
@@ -149,7 +149,7 @@ set(GCRYPT_PATCH_COMMAND
     ${GCRYPT_PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt
 )
 foreach (patch ${GCRYPT_PATCHES})
-    set(GCRYPT_PATCH_COMMAND ${GCRYPT_PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(GCRYPT_PATCH_COMMAND ${GCRYPT_PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 
