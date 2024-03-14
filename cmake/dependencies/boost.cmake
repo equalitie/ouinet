@@ -99,6 +99,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-ios-${BOOST_VERSION_FILENAME}.patch)
     set(CONFIG_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
     set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++14")
+    string(TOLOWER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
     set(BOOST_ENVIRONMENT
         export
             ZLIB_SOURCE=${ZLIBROOT}/zlib
@@ -137,7 +138,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         binary-format=mach-o
         define=_LITTLE_ENDIAN
         target-os=iphone
-        release
+        ${BUILD_TYPE}
         address-model=64
         runtime-link=static
         define=BOOST_SPIRIT_THREADSAFE
@@ -174,7 +175,7 @@ set(BOOST_PATCH_COMMAND
     cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
 )
 foreach (patch ${BOOST_PATCHES})
-    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 externalproject_add(built_boost

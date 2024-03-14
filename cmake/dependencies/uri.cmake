@@ -10,17 +10,17 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     # TODO: Set file directory based on selected build config and target
     if (${PLATFORM} STREQUAL "OS64")
         set(URI_FILENAME
-            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_BUILD_TYPE}-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
         )
     else()
         set(URI_FILENAME
-            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release-iphonesimulator/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_BUILD_TYPE}-iphonesimulator/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
         )
     endif()
     set(IOS_PLATFORM ${PLATFORM})
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     set(URI_FILENAME
-        "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/Release/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
 else()
     set(URI_FILENAME

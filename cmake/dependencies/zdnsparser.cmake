@@ -3,13 +3,13 @@ include(ExternalProject)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     # TODO: Set file directory based on selected build config and target
     set(ZDNSPARSER_FILENAME
-        "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/Release/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
     set(IOS_PLATFORM ${PLATFORM})
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     # TODO: Set file directory based on selected build config and target
     set(ZDNSPARSER_FILENAME
-        "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/Release/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
 else()
     set(ZDNSPARSER_FILENAME
@@ -26,7 +26,7 @@ set(PATCH_COMMAND
     cd ${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser
 )
 foreach (patch ${PATCHES})
-    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 externalproject_add(zdnsparser
