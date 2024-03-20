@@ -64,6 +64,13 @@ target_link_libraries(ouinet_base
         # generic_stream.h needs openssl headers, but not the library.
         OpenSSL::headers
 )
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.72.0)
+    # explicitly link with bcrypt after Boost::filesystem
+    target_link_libraries(ouinet_base
+        INTERFACE
+          bcrypt
+    )
+endif()
 if (WITH_ASAN)
     # NOTE: https://stackoverflow.com/a/50163972
     target_link_libraries(ouinet_base
