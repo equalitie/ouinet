@@ -10,20 +10,20 @@ using native_handle_t = HANDLE;
 
 class random_access_handle_extended : public boost::asio::windows::random_access_handle {
 public:
-    explicit random_access_handle_extended(const executor_type &ex) : basic_random_access_handle(ex) {}
+    explicit random_access_handle_extended(const executor_type &ex) : boost::asio::windows::random_access_handle(ex) {}
 
     template <typename MutableBufferSequence, typename ReadHandler>
     void async_read_some(const MutableBufferSequence& buffer, ReadHandler handler) {
         boost::system::error_code ec;
         auto offset = current_position(ec);
-        this->async_read_some_at(offset, buffer, handler);
+        this->async_read_some_at(offset, buffer, std::move(handler));
     }
 
     template <typename ConstBufferSequence, typename WriteHandler>
     void async_write_some(const ConstBufferSequence& buffer, WriteHandler handler) {
         boost::system::error_code ec;
         auto offset = end_position(ec);
-        this->async_write_some_at(offset, buffer, handler);
+        this->async_write_some_at(offset, buffer, std::move(handler));
     }
 
     static
