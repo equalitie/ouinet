@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 
 #include "../util/hash.h"
 #include "../util/crypto.h"
