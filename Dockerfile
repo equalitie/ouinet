@@ -70,7 +70,7 @@ RUN apt-get update && apt-get install -y \
     wget \
  && rm -rf /var/lib/apt/lists/*
 # Fetch and install i2pd.
-ARG I2PD_VERSION=2.23.0
+ARG I2PD_VERSION=2.44.0
 RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_VERSION}/i2pd_${I2PD_VERSION}-1$(lsb_release -sc)1_$(dpkg --print-architecture).deb" \
  && apt-get update && apt-get install -y \
     cron \
