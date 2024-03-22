@@ -1,5 +1,5 @@
 if(NOT BOOST_VERSION)
-    set(BOOST_VERSION 1.71.0)
+    set(BOOST_VERSION 1.77.0)
 endif ()
 
 if (${BOOST_VERSION} EQUAL 1.71.0)
