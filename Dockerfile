@@ -1,28 +1,14 @@
 FROM debian:bookworm AS base
 ENV LANG=C.UTF-8
-# To get the list of build dependency packages from the Vagrantfile, run:
-#
-#     sed '/# Install toolchain/,/^$/!d' Vagrantfile \
-#         | sed -En 's/^\s+(\S+)\s*\\?$/\1/p' | sort
-#
-RUN apt-get update && apt-get install -y \
-    autoconf \
-    automake \
-    autopoint \
-    build-essential \
-    cmake \
-    gettext \
-    git \
-    libssl-dev \
-    libtool \
-    ninja-build \
-    pkg-config \
-    python-twisted \
-    rsync \
-    texinfo \
-    unzip \
-    wget \
-    zlib1g-dev
+
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -y \
+      build-essential \
+      cmake \
+      git \
+      libssl-dev \
+      python3-twisted \
+      zlib1g-dev
 # quieten wget and unzip
 RUN echo 'quiet = on' >> /etc/wgetrc
 WORKDIR /usr/local/src
