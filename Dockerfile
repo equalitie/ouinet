@@ -58,7 +58,7 @@ ENV OUINET_DEBUG=$OUINET_DEBUG
 RUN apt-get update && apt-get install -y \
     libc6 \
     libgcc1 \
-    libssl1.1 \
+    libssl3 \
     libstdc++6 \
     zlib1g \
     \
