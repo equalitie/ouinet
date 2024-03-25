@@ -8,3 +8,6 @@
 [submodule "modules/cpp-upnp"]
 	path = modules/cpp-upnp
 	url = https://gitlab.com/equalitie/cpp-upnp.git
+[submodule "ios/ouinet/toolchain"]
+	path = ios/ouinet/toolchain
+	url = https://github.com/leetal/ios-cmake
