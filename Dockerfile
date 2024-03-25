@@ -24,7 +24,7 @@ WORKDIR /opt/ouinet
 # is needed to allow CMake to extract files in the Go language binary distribution
 # with UTF-8-encoded Unicode names.
 RUN cmake /usr/local/src/ouinet \
- && make
+ && make -j $(nproc)
 RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
 RUN \
