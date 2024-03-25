@@ -85,9 +85,6 @@ COPY --from=builder /opt/ouinet/lib*.so /usr/local/lib/
 # Update the dynamic linker cache after all non-system libraries have been copied.
 # This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig
-# GNUnet support has been temporarily removed.
-#COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
-#COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/src/ouiservice/obfs4proxy/obfs4proxy ./
 COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
