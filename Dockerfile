@@ -81,7 +81,8 @@ RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/ouinet
 # Copy locally built libraries (all placed along binaries).
-COPY --from=builder /opt/ouinet/lib*.so /usr/local/lib/
+RUN mkdir /opt/ouinet/lib
+COPY --from=builder /opt/ouinet/lib*.so /opt/ouinet/lib
 # Update the dynamic linker cache after all non-system libraries have been copied.
 # This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig
