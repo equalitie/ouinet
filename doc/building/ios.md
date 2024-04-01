@@ -47,29 +47,32 @@ mkdir build-macos
 cd build-macos
 ```
 
-Next, configure cmake for macOS target,
+We depend on leetal's [ios.toolchain.cmake](https://github.com/leetal/ios-cmake) 
+file to correctly compile both the macOS and iOS frameworks. The repo containing 
+this is included as a submodule of the ouinet repo and should be checked out in 
+the directory shown in the following command.
+
+To configure cmake for macOS target,
 ```
-cmake .. -GXcode -DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3 -DCMAKE_BUILD_TYPE=Release
+cmake .. -GXcode -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$(realpath ../ios/ouinet/toolchain/ios.toolchain.cmake) -DPLATFORM=MAC_ARM64
 ```
 
-Then start the build
+Then start the build,
 ```
 cmake --build . --config Release -- PRODUCT_BUNDLE_IDENTIFIER=org.equalitie.ouinet-macos DEVELOPMENT_TEAM=5SR9R72Z83
 ```
 
 After the build finishes, exit the `build-macos` directory and create a directory 
-for the iOS build and enter that directory
+for the iOS build and enter that directory,
 ```
 cd ..
 mkdir build-ios
 cd build-ios
 ```
-Currently, we depend on leetal's [ios.toolchain.cmake](https://github.com/leetal/ios-cmake) 
-file to correctly compile everything for iOS. The repo containing this is included 
-as a submodule of the ouinet repo and should be checked out in the directory shown 
-in the following command,
+
+Now configure cmake for iOS target,
 ```
-cmake .. -GXcode -DCMAKE_TOOLCHAIN_FILE=../ios/ouinet/toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DMACOS_BUILD_ROOT=$(realpath ../build-macos) -DCMAKE_BUILD_TYPE=Release
+cmake .. -GXcode -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$(realpath ../ios/ouinet/toolchain/ios.toolchain.cmake) -DPLATFORM=OS64 -DMACOS_BUILD_ROOT=$(realpath ../build-macos)
 ```
 Note the MACOS_BUILT_ROOT argument, this is where you must point to the completed 
 macOS build of ouinet.  
