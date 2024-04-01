@@ -5,7 +5,6 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     set(ZDNSPARSER_FILENAME
         "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
-    set(IOS_PLATFORM ${PLATFORM})
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     # TODO: Set file directory based on selected build config and target
     set(ZDNSPARSER_FILENAME
@@ -44,7 +43,7 @@ externalproject_add(zdnsparser
         -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
         -DANDROID_ABI=${ANDROID_ABI}
         -DANDROID_PLATFORM=${ANDROID_PLATFORM}
-        -DPLATFORM=${IOS_PLATFORM}
+        -DPLATFORM=${PLATFORM}
     BUILD_BYPRODUCTS ${ZDNSPARSER_FILENAME}
     PREFIX "zdnsparser"
 )
