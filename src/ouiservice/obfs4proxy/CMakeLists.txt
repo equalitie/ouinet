@@ -1,5 +1,9 @@
 cmake_minimum_required (VERSION 3.5)
 
+# Set cmake policies to avoid warnings in newer versions of cmake
+cmake_policy(SET CMP0114 NEW)
+cmake_policy(SET CMP0135 NEW)
+
 include(ExternalProject)
 
 set(GOPATH "${CMAKE_CURRENT_BINARY_DIR}/go-workspace")
