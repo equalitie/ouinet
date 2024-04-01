@@ -6,6 +6,10 @@ else()
     cmake_minimum_required (VERSION 3.5)
 endif()
 
+# Set cmake policies to avoid warnings in newer versions of cmake
+cmake_policy(SET CMP0114 NEW)
+cmake_policy(SET CMP0135 NEW)
+
 ################################################################################
 # Configurable options
 option(WITH_INJECTOR "Compile injector" ON)
