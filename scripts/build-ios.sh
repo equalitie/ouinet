@@ -21,6 +21,7 @@ DEVELOPMENT_TEAM=5SR9R72Z83
 
 MACOS_BUILD_ROOT=${ROOT}/build-macos
 IOS_BUILD_ROOT=${ROOT}/build-ios
+SIM_BUILD_ROOT=${ROOT}/build-sim
 
 MACOS_BUNDLE_ID=org.equalitie.ouinet-macos
 IOS_BUNDLE_ID=org.equalitie.ouinet-ios
@@ -56,6 +57,10 @@ function clean_ios {
     rm -rf "$IOS_BUILD_ROOT"
 }
 
+function clean_sim {
+    rm -rf "$SIM_BUILD_ROOT"
+}
+
 function config_macos {
     mkdir -p "$MACOS_BUILD_ROOT"
     pushd "$MACOS_BUILD_ROOT"
@@ -80,6 +85,20 @@ function build_ios {
     pushd "$IOS_BUILD_ROOT"
     xcodebuild -project ouinet-iOS.xcodeproj build ${IOS_XCODE_BUILD_ARGS}
     echo "Build output: ${IOS_BUILD_ROOT}/${BUILD_TYPE}-iphoneos/ouinet-ios.framework"
+    popd
+}
+
+function config_sim {
+    mkdir -p "$SIM_BUILD_ROOT"
+    pushd "$SIM_BUILD_ROOT"
+    cmake .. -GXcode -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_TOOLCHAIN_FILE="$IOS_TOOLCHAIN_PATH" -DPLATFORM=SIMULATORARM64 -DMACOS_BUILD_ROOT="$MACOS_BUILD_ROOT"
+    popd
+}
+
+function build_sim {
+    pushd "$SIM_BUILD_ROOT"
+    xcodebuild -project ouinet-iOS.xcodeproj build ${IOS_XCODE_BUILD_ARGS}
+    echo "Build output: ${SIM_BUILD_ROOT}/${BUILD_TYPE}-iphonesimulator/ouinet-ios.framework"
     popd
 }
 
@@ -123,6 +142,9 @@ if check_mode clean; then
     if check_mode ios; then
         clean_ios
     fi
+    if check_mode sim; then
+        clean_sim
+    fi
 fi
 
 if check_mode build; then
@@ -139,5 +161,9 @@ if check_mode build; then
     if check_mode ios; then
         config_ios
         build_ios
+    fi
+    if check_mode sim; then
+        config_sim
+        build_sim
     fi
 fi
