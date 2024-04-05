@@ -9,7 +9,7 @@ local DEVDIR = [ MATCH "([^
 ECHO "DEVDIR = $(DEVDIR)" ;
 
 using darwin : iossimarm64
-: $(CLANG) -arch arm64 -fembed-bitcode-marker -isysroot $(DEVDIR)/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -mios-simulator-version-min=11.0 -Wno-error=implicit-function-declaration
+: $(CLANGXX) -arch arm64 -fembed-bitcode-marker -isysroot $(DEVDIR)/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -mios-simulator-version-min=11.0 -Wno-error=implicit-function-declaration
 : <striper> <root>$(DEVDIR)/Platforms/iPhoneSimulator.platform/Developer
 : <architecture>arm <target-os>iphone 
 ;

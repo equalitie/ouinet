@@ -135,14 +135,12 @@ foreach (patch ${GPG_ERROR_PATCHES})
 endforeach()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
-    if (${PLATFORM} STREQUAL "OS64")
-        # TODO: this copy/replace prevents runtime error with posix lock on arm64 iOS, inspired by https://github.com/xbmc/xbmc/pull/14683
-        # May not be needed in later versions of libgpg-error, or there may be a better solution
-        set(PATCH_COMMAND
-            ${PATCH_COMMAND} &&
-            cp ./src/syscfg/lock-obj-pub.aarch64-apple-darwin.h ./src/syscfg/lock-obj-pub.arm-apple-darwin.h
-        )
-    endif()
+    # TODO: this copy/replace prevents runtime error with posix lock on arm64 iOS, inspired by https://github.com/xbmc/xbmc/pull/14683
+    # May not be needed in later versions of libgpg-error, or there may be a better solution
+    set(PATCH_COMMAND
+        ${PATCH_COMMAND} &&
+        cp ./src/syscfg/lock-obj-pub.aarch64-apple-darwin.h ./src/syscfg/lock-obj-pub.arm-apple-darwin.h
+    )
 endif()
 
 set(GCRYPT_PATCH_COMMAND
