@@ -202,7 +202,7 @@ function maybe_install_gradle {
     check_mode build || return 0
 
     GRADLE_REQUIRED_MAJOR_VERSION=8
-    GRADLE_REQUIRED_MINOR_VERSION=3
+    GRADLE_REQUIRED_MINOR_VERSION=7
     GRADLE_REQUIRED_PATCH_VERSION=0
 
     NEED_GRADLE=false
@@ -231,7 +231,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-8.3
+        local GRADLE=gradle-8.7
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
