@@ -29,6 +29,7 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
         Intent().also { intent ->
             intent.action = NotificationBroadcastReceiver.NOTIFICATION_ACTION
             intent.putExtra(NotificationBroadcastReceiver.CODE_EXTRA, requestCode)
+            intent.setPackage(context.packageName)
             return PendingIntent.getBroadcast(
                 context,
                 requestCode,

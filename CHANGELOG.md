@@ -20,11 +20,16 @@ platforms.
 
 - README file revamping, including the update of code examples, references and
 diagrams.
+- Sets the target SDK for the Ouinet AAR build to API 34.
+
 
 ### Fixed
 
 - Fix include directives in `src/cache` and `ouiservice/multi_utp_server` that
 were using relative routes.
+- Fix `OuinetService` foreground notification to work correctly on Android 14.
+    - Add `RECEIVER_NOT_EXPORTED` flag when registering notification receiver.
+    - Set package name on intent for notification receiver.
 
 
 ## [v0.23.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.23.0) - 2023-11-24

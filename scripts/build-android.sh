@@ -17,7 +17,7 @@ done
 shift $((OPTIND -1))
 
 # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-OUINET_TARGET_API=31
+OUINET_TARGET_API=34
 if [ "$ABI" = "armeabi-v7a" ]; then
     OUINET_MIN_API=21
 elif [ "$ABI" = "arm64-v8a" ]; then

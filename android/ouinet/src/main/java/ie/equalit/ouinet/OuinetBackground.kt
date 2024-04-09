@@ -179,9 +179,12 @@ class OuinetBackground() : NotificationListener {
             connectivityMonitor.enable()
         val notificationIntentFilter = IntentFilter()
         notificationIntentFilter.addAction(NotificationBroadcastReceiver.NOTIFICATION_ACTION)
-        context.registerReceiver(
-            notificationReceiver,
-            notificationIntentFilter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(notificationReceiver, notificationIntentFilter, Context.RECEIVER_NOT_EXPORTED)
+        }
+        else {
+            context.registerReceiver(notificationReceiver, notificationIntentFilter)
+        }
     }
 
     private fun unregister() {
