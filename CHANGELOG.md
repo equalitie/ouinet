@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v0.24.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.24.0) - 2024-04-09
+
 ### Added
 
 - Plan for Ouinet [programming language interoperability](doc/arch-drafts/programming-language-interoperability.md).
