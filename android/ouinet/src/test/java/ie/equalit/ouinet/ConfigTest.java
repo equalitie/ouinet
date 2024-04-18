@@ -8,10 +8,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.core.classloader.annotations.SuppressStaticInitializationFor;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.mockito.runners.MockitoJUnitRunner;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -26,9 +23,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.Mockito.when;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest({Ouinet.class})
-@SuppressStaticInitializationFor("ie.equalit.ouinet.Ouinet")
+@RunWith(MockitoJUnitRunner.class)
 public class ConfigTest {
     private static final Set<String> BT_BOOTSTRAP_EXTRAS = new HashSet<>();
     private static final String CACHE_HTTP_PUB_KEY = "cachehttppubkey1234567890";
