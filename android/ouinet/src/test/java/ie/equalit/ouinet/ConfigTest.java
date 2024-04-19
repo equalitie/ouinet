@@ -3,18 +3,20 @@ package ie.equalit.ouinet;
 import android.content.Context;
 import android.content.res.AssetManager;
 
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -23,7 +25,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.Mockito.when;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class ConfigTest {
     private static final Set<String> BT_BOOTSTRAP_EXTRAS = new HashSet<>();
     private static final String CACHE_HTTP_PUB_KEY = "cachehttppubkey1234567890";
@@ -56,12 +58,15 @@ public class ConfigTest {
     private Context mockContext;
     @Mock
     private AssetManager mockAssetManager;
-    @Rule
-    public TemporaryFolder tmpDir = new TemporaryFolder();
+    @TempDir
+    public Path tmpDir;
 
     @Test
     public void test_build() throws IOException {
-        File filesDir = tmpDir.newFolder("files/");
+        Path filesDirPath = Files.createDirectories(tmpDir.resolve("files").toAbsolutePath());
+        File filesDir = filesDirPath.toFile();
+
+
         String ouinetDir = filesDir.getPath() + "/ouinet";
         String caRootCertPath = ouinetDir + "/ssl-ca-cert.pem";
         String injectorTlsCertPath = ouinetDir + "/injector-tls-cert.pem";
