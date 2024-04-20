@@ -8,6 +8,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.ByteArrayInputStream;
@@ -63,6 +65,7 @@ public class ConfigTest {
 
     @Test
     public void test_build() throws IOException {
+      try (MockedStatic<Ouinet> ouinetMock = Mockito.mockStatic(Ouinet.class)) {
         Path filesDirPath = Files.createDirectories(tmpDir.resolve("files").toAbsolutePath());
         File filesDir = filesDirPath.toFile();
 
@@ -84,7 +87,6 @@ public class ConfigTest {
                 new ByteArrayInputStream(TLS_CA_CERT.getBytes(StandardCharsets.UTF_8));
         when(mockAssetManager.open("tls-ca-cert.pem")).thenReturn(tlsCaCertIs);
 
-        PowerMockito.mockStatic(Ouinet.class);
         when(Ouinet.getCARootCert(ouinetDir)).thenReturn(caRootCertPath);
 
         Config config = new Config.ConfigBuilder(mockContext)
@@ -141,5 +143,6 @@ public class ConfigTest {
             .setNotificationConfig(notificationConfig)
             .build();
         */
+      }
     }
 }
