@@ -6,7 +6,7 @@ set -x
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
-ABI=${ABI:-armeabi-v7a}
+ABI=${ABI:-omni}
 
 RELEASE_BUILD=0
 while getopts r option; do
