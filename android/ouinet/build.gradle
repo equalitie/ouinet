@@ -63,6 +63,7 @@ android {
     }
     lintOptions {
         disable 'UnsafeNativeCodeLocation' // Disable warning about obfsproxy executable in assets
+        disable 'UnspecifiedRegisterReceiverFlag' // Omit error in OuinetBackground.getNotificationReceiver:186
     }
 }
 
