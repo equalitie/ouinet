@@ -15,3 +15,8 @@ android/local.properties
 
 #python byte codes
 *.pyc
+
+.DS_Store
+build-ios/
+build-macos/
+build-sim/
