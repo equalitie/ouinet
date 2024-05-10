@@ -59,6 +59,7 @@ public:
 
     AsioExecutor get_executor();
 
+    bool _debug = false;
 private:
     void status_loop(asio::yield_context);
     std::vector<Candidate> get_peers(Target);

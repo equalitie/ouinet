@@ -143,6 +143,9 @@ private:
 
     void setup_parser();
 
+public:
+    bool _debug = false;
+
 private:
     GenericStream _in;
     Cancel _lifetime_cancel;
@@ -205,7 +208,9 @@ boost::optional<Part>
 Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
     assert(!cancel);
 
+    //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << "\n";
     if (_is_done) {
+        //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " done\n";
         return boost::none;
     }
 
@@ -225,14 +230,18 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
             _is_done = true;
         }
 
-        return Part(Head(_parser.get().base()));
+        auto ret = Part(Head(_parser.get().base()));
+        //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " " << ret << "\n";
+        return ret;
     }
 
     if (_parser.chunked()) {
         if (_parser.is_done() && !_is_done) {
             _is_done = true;
             auto hdr = _parser.release().base();
-            return Part(Trailer{filter_trailer_fields(hdr)});
+            auto ret = Part(Trailer{filter_trailer_fields(hdr)});
+            //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " " << ret << "\n";
+            return ret;
         }
 
         // Setting eager to false ensures that the callbacks shall be run only
@@ -251,11 +260,14 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         Part ret = std::move(*_next_part);
         _next_part = boost::none;
 
+        //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " " << ret << "\n";
         return ret;
     }
     else {
+        //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " un-chunked\n";
         if (_parser.is_done() && !_is_done) {
             _is_done = true;
+            //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " none\n";
             return boost::none;
         }
 
@@ -275,10 +287,13 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
 
         if (s == 0 && _parser.is_done()) {
             _is_done = true;
+            //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " none\n";
             return boost::none;
         }
 
-        return Part(Body(std::vector<uint8_t>(buf, buf + s)));
+        auto ret = Part(Body(std::vector<uint8_t>(buf, buf + s)));
+        //std::cout << ":::::::: Reader::async_read_part L" << __LINE__ << " " << ret << "\n";
+        return ret;
     }
 }
 

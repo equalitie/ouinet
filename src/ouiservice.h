@@ -80,7 +80,7 @@ class OuiServiceClient
     };
 
     public:
-    OuiServiceClient(const AsioExecutor&);
+    OuiServiceClient(const AsioExecutor&, bool debug = false);
 
     void add(Endpoint, std::unique_ptr<OuiServiceImplementationClient>);
 
@@ -95,6 +95,7 @@ class OuiServiceClient
     std::shared_ptr<OuiServiceImplementationClient> _implementation;
     bool _started;
     ConditionVariable _started_condition;
+    bool _debug;
 };
 
 } // ouinet namespace

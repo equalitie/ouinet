@@ -2802,6 +2802,8 @@ void Client::State::setup_injector(asio::yield_context yield)
             , _config.is_bridge_announcement_enabled()
             , &inj_ctx);
 
+        _bep5_client->_debug = true;
+
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 
         idempotent_start_accepting_on_utp(yield[ec]);
@@ -2842,7 +2844,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = std::move(obfs4_client);
     }
 
-    _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
+    _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor(), true);
     _injector->add(*injector_ep, std::move(client));
     _injector->start(yield[ec]);
     return or_throw(yield, ec);

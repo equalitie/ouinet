@@ -116,9 +116,10 @@ void OuiServiceServer::cancel_accept()
 // OuiServiceClient
 //--------------------------------------------------------------------
 
-OuiServiceClient::OuiServiceClient(const AsioExecutor& ex):
+OuiServiceClient::OuiServiceClient(const AsioExecutor& ex, bool debug):
     _started(false),
-    _started_condition(ex)
+    _started_condition(ex),
+    _debug(debug)
 {}
 
 void OuiServiceClient::add( Endpoint endpoint
@@ -169,12 +170,18 @@ void OuiServiceClient::stop()
 OuiServiceClient::ConnectInfo
 OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
 {
+    if (_debug) {
+        std::cout << ">>>>>>>>>> " << " " << __FUNCTION__ << ":" << __LINE__ << "\n";
+    }
     namespace err = asio::error;
 
     if (!_implementation) {
         return or_throw<ConnectInfo>(yield, err::operation_not_supported);
     }
 
+    if (_debug) {
+        std::cout << ">>>>>>>>>> " << " " << __FUNCTION__ << ":" << __LINE__ << "\n";
+    }
     if (!_started) {
         _started_condition.wait(yield);
         if (!_started) {
@@ -182,16 +189,31 @@ OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         }
     }
 
+    if (_debug) {
+        std::cout << ">>>>>>>>>> " << " " << __FUNCTION__ << ":" << __LINE__ << "\n";
+    }
     GenericStream con;
     sys::error_code ec;
     decltype(_implementation) impl;
 
+    if (_debug) {
+        std::cout << ">>>>>>>>>> " << " " << __FUNCTION__ << ":" << __LINE__ << "\n";
+    }
     do {
         ec = sys::error_code();
         impl = _implementation;
+        if (_debug) {
+            std::cout << ">>>>>>>>>> " << " " << __FUNCTION__ << ":" << __LINE__ << "\n";
+        }
         con = _implementation->connect(yield[ec], cancel);
+        if (_debug) {
+            std::cout << ">>>>>>>>>> " << " " << __FUNCTION__ << ":" << __LINE__ << "\n";
+        }
     }
     while (_implementation && impl != _implementation);
+    if (_debug) {
+        std::cout << ">>>>>>>>>> " << " " << __FUNCTION__ << ":" << __LINE__ << "\n";
+    }
 
     return or_throw<ConnectInfo>(yield, ec, {move(con), _endpoint});
 }

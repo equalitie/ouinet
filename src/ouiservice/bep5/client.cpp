@@ -640,6 +640,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             }
 
             auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
+            if (_debug) std::cout << ">>>>>>>>>>>>>>>>>>> Bep5Client::" << __FUNCTION__ << ":" << __LINE__ << " " << peer.endpoint << " " << ec.message() << "\n";
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;
             ret_target = peer.target;
@@ -649,7 +650,9 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         }));
     }
 
+    if (_debug) std::cout << ">>>>>>>>>>>>>>>>>>> Bep5Client::" << __FUNCTION__ << ":" << __LINE__ << "\n";
     wc.wait(yield[ec]);
+    if (_debug) std::cout << ">>>>>>>>>>>>>>>>>>> Bep5Client::" << __FUNCTION__ << ":" << __LINE__ << "\n";
 
     if (cancel) {
         ec = asio::error::operation_aborted;
@@ -662,6 +665,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
         ec = {};
     }
 
+    if (_debug) std::cout << ">>>>>>>>>>>>>>>>>>> Bep5Client::" << __FUNCTION__ << ":" << __LINE__ << "\n";
     if (ec) {
         _last_working_ep = boost::none;
         _DEBUG( "Did not connect to any peer;"
@@ -679,6 +683,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             assert(0 && "Invalid peer type");
     }
 
+    if (_debug) std::cout << ">>>>>>>>>>>>>>>>>>> Bep5Client::" << __FUNCTION__ << ":" << __LINE__ << "\n";
     return or_throw(yield, ec, move(ret_con));
 }
 
