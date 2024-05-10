@@ -1315,7 +1315,10 @@ public:
         sys::error_code ec;
 
         _ua_was_written_to = true;
-        session.flush_response(_ua_con, cancel, yield[ec]);
+
+        // Using PartModifier::RemoveChunkHeaderExtension because the WebKit on
+        // iOS can't handle the extension string in chunk headers.
+        session.flush_response(_ua_con, cancel, yield[ec], PartModifier::RemoveChunkHeaderExtension);
 
         bool keep_alive = !ec && _request.keep_alive() && session.keep_alive();
 
