@@ -4,10 +4,13 @@
 #include "response_reader.h"
 #include "util/watch_dog.h"
 
-//#include "util/part_io.h"
-//#include <iostream>
-
 namespace ouinet {
+
+enum PartModifier {
+    DoNothing,
+    // WebKit on iOS doesn't like chunk header extensions.
+    RemoveChunkHeaderExtension,
+};
 
 class Session : public http_response::AbstractReader {
 public:
@@ -43,7 +46,12 @@ public:
     async_read_part(Cancel, asio::yield_context) override;
 
     template<class SinkStream>
-    void flush_response(SinkStream&, Cancel&, asio::yield_context);
+    void flush_response(
+            SinkStream&,
+            Cancel&,
+            asio::yield_context,
+            PartModifier part_modifier = PartModifier::DoNothing);
+
     template<class Handler>
     void flush_response(Cancel&, asio::yield_context, Handler&& h);
     // The timeout will get reset with each successful send/recv operation,
@@ -211,10 +219,23 @@ inline
 void
 Session::flush_response(SinkStream& sink,
                         Cancel& cancel,
-                        asio::yield_context yield)
+                        asio::yield_context yield,
+                        PartModifier part_modifier)
 {
-    return flush_response(cancel, yield, [&sink] (auto&& part, auto& c, auto y) {
-        part.async_write(sink, c, y);
+    return flush_response(cancel, yield, [&sink, part_modifier] (auto&& part, auto& c, auto y) {
+        switch (part_modifier) {
+            case PartModifier::DoNothing:
+                part.async_write(sink, c, y);
+                break;
+            case PartModifier::RemoveChunkHeaderExtension:
+                if (auto chunk_hdr = part.as_chunk_hdr()) {
+                    chunk_hdr->exts.clear();
+                    http_response::Part(std::move(*chunk_hdr)).async_write(sink, c, y);
+                } else {
+                    part.async_write(sink, c, y);
+                }
+                break;
+        }
     });
 }
 
