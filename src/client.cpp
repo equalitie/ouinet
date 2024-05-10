@@ -2580,12 +2580,6 @@ void Client::State::listen_tcp
 
             GenericStream connection(move(socket) , move(tcp_shutter));
 
-            // Increase the size of the coroutine stack.
-            // Some interesing info:
-            // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
-            boost::coroutines::attributes attribs;
-            attribs.size *= 2;
-
             TRACK_SPAWN( _ctx, ([
                 this,
                 self = shared_from_this(),
@@ -2595,7 +2589,7 @@ void Client::State::listen_tcp
             ](asio::yield_context yield) mutable {
                 if (was_stopped()) return;
                 handler(move(c), yield);
-            }), attribs);
+            }));
         }
     }
 
