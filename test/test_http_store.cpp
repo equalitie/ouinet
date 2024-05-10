@@ -23,17 +23,7 @@
 
 #include <namespaces.h>
 #include "connected_pair.h"
-
-// For checks to be able to report errors.
-namespace ouinet { namespace http_response {
-    std::ostream& operator<<(std::ostream& os, const ChunkHdr& hdr) {
-        return os << "ChunkHdr(" << hdr.size << ", \"" << hdr.exts << "\")";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const Trailer& trailer) {
-        return os << static_cast<Trailer::Base>(trailer);
-    }
-}} // namespace ouinet::http_response
+#include "../src/util/part_io.h"
 
 using first_last = std::pair<unsigned, unsigned>;
 // <https://stackoverflow.com/a/33965517>
