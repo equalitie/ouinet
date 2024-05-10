@@ -23,33 +23,13 @@
 
 #include <namespaces.h>
 #include "connected_pair.h"
+#include "../src/util/part_io.h"
 
 #ifdef _WIN32
 constexpr auto connection_aborted = WSAECONNABORTED;
 #else
 constexpr auto connection_aborted = boost::system::errc::connection_aborted;
 #endif
-
-// For checks to be able to report errors.
-namespace ouinet { namespace http_response {
-    std::ostream& operator<<(std::ostream& os, const ChunkHdr& hdr) {
-        return os << "ChunkHdr(" << hdr.size << ", \"" << hdr.exts << "\")";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const Trailer& trailer) {
-        os << "Trailer{";
-        bool is_first = true;
-        for (auto& field : trailer) {
-            if (is_first) {
-                is_first = false;
-            } else {
-                os << ", ";
-            }
-            os << field.name() << ":" << field.value();
-        }
-        return os << "}";
-    }
-}} // namespace ouinet::http_response
 
 using first_last = std::pair<unsigned, unsigned>;
 // <https://stackoverflow.com/a/33965517>
