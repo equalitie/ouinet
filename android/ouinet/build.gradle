@@ -7,6 +7,7 @@ def ouinetVersionName = file('../../version.txt').text.trim()
 def ouinetBuildId = gitVersionString
 
 android {
+    namespace "ie.equalit.ouinet"
     // Please read `doc/android-sdk-versions.md` and keep in sync with it.
     compileSdkVersion System.getenv('OUINET_TARGET_API').toInteger()
     defaultConfig {
@@ -30,6 +31,9 @@ android {
           }
         }
     }
+    buildFeatures {
+        buildConfig true
+    }
     buildTypes {
         release {
             minifyEnabled false
@@ -42,10 +46,17 @@ android {
     }
     externalNativeBuild {
         cmake {
-            version "3.12.0+"
+            version "3.18.0+"
             path "CMakeLists.txt"
             buildStagingDirectory (new File(project.buildDir, "../build-cmake"))
         }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
     }
     testOptions {
         unitTests.returnDefaultValues = true
@@ -60,11 +71,11 @@ dependencies {
     // Please read `doc/android-sdk-versions.md` and keep in sync with it.
     implementation 'androidx.appcompat:appcompat:1.4.1'
     implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
-    testImplementation "junit:junit:4.12"
-    testImplementation 'org.mockito:mockito-core:2.23.0'
-    testImplementation 'org.powermock:powermock-core:2.0.2'
-    testImplementation 'org.powermock:powermock-module-junit4:2.0.2'
-    testImplementation 'org.powermock:powermock-api-mockito2:2.0.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+    testImplementation 'org.mockito:mockito-core:4.3.0'
+    testImplementation 'org.mockito:mockito-inline:4.3.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:4.3.0'
     testImplementation 'com.android.support.test:rules:1.0.2'
     testImplementation 'com.android.support:support-annotations:28.0.0'
     testImplementation 'com.android.support.test:runner:1.0.2'

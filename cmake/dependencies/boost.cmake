@@ -1,5 +1,5 @@
 if(NOT BOOST_VERSION)
-    set(BOOST_VERSION 1.71.0)
+    set(BOOST_VERSION 1.77.0)
 endif ()
 
 if (${BOOST_VERSION} EQUAL 1.71.0)
@@ -55,12 +55,16 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
 
-    set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
+    if(BOOST_VERSION LESS_EQUAL 1.72.0)
+      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
+    endif()
+
     set(BOOST_ENVIRONMENT
         export
             PATH=${COMPILER_DIR}:$ENV{PATH}
             BOOSTARCH=${BOOST_ARCH}
-            BINUTILS_PREFIX=${COMPILER_DIR}/${COMPILER_HOSTTRIPLE}-
+            # Before using Gradle 8 BINUTILS_PREFIX was set to "${COMPILER_DIR}/${COMPILER_HOSTTRIPLE}-"
+            BINUTILS_PREFIX="${COMPILER_DIR}/llvm-"
             COMPILER_FULL_PATH=${COMPILER_DIR}/${COMPILER_CC_PREFIX}${ANDROID_PLATFORM_LEVEL}-clang++
         &&
     )

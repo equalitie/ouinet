@@ -6,7 +6,7 @@ set -x
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
-ABI=${ABI:-armeabi-v7a}
+ABI=${ABI:-omni}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -201,9 +201,9 @@ function maybe_install_ndk {
 function maybe_install_gradle {
     check_mode build || return 0
 
-    GRADLE_REQUIRED_MAJOR_VERSION=7
-    GRADLE_REQUIRED_MINOR_VERSION=0
-    GRADLE_REQUIRED_PATCH_VERSION=2
+    GRADLE_REQUIRED_MAJOR_VERSION=8
+    GRADLE_REQUIRED_MINOR_VERSION=7
+    GRADLE_REQUIRED_PATCH_VERSION=0
 
     NEED_GRADLE=false
 
@@ -231,7 +231,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-7.0.2
+        local GRADLE=gradle-8.7
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then
@@ -262,6 +262,7 @@ function build_ouinet_aar {
         --project-dir="${ROOT}"/android \
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
+        --console plain \
         --no-daemon
     )
 }
@@ -282,6 +283,7 @@ function publish_ouinet_aar {
         --project-dir="${ROOT}"/android \
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
+        --console plain \
         --no-daemon
     )
 }

@@ -1,5 +1,6 @@
 package ie.equalit.ouinet
 
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.PendingIntent
 import android.content.Context
@@ -174,6 +175,7 @@ class OuinetBackground() : NotificationListener {
         return thread
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private fun register() {
         if (connectivityMonitorEnabled)
             connectivityMonitor.enable()

@@ -47,6 +47,7 @@ INST="$(dirname -- "$(readlink -f -- "$0")")"
 PROG=$1
 
 CONF=/var/opt/ouinet/$PROG/ouinet-$PROG.conf
+LIBS=/opt/ouinet/lib
 REPO=$(dirname $CONF)
 
 repo_arg=$(get_repo_from_args "$@")
@@ -242,12 +243,14 @@ fi
 
 if [ "$OUINET_DEBUG" = yes ]; then
     run() {
+        LD_LIBRARY_PATH="$LIBS" \
         exec gdb -return-child-result -batch \
                  -ex='handle SIGPIPE nostop noprint pass' -ex=r -ex=bt \
                  --args "$INST/$PROG" "$@"
     }
 else
     run() {
+        LD_LIBRARY_PATH="$LIBS" \
         exec "$INST/$PROG" "$@"
     }
 fi

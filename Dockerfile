@@ -1,28 +1,14 @@
-FROM debian:buster AS base
+FROM debian:bookworm AS base
 ENV LANG=C.UTF-8
-# To get the list of build dependency packages from the Vagrantfile, run:
-#
-#     sed '/# Install toolchain/,/^$/!d' Vagrantfile \
-#         | sed -En 's/^\s+(\S+)\s*\\?$/\1/p' | sort
-#
-RUN apt-get update && apt-get install -y \
-    autoconf \
-    automake \
-    autopoint \
-    build-essential \
-    cmake \
-    gettext \
-    git \
-    libssl-dev \
-    libtool \
-    ninja-build \
-    pkg-config \
-    python-twisted \
-    rsync \
-    texinfo \
-    unzip \
-    wget \
-    zlib1g-dev
+
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -y \
+      build-essential \
+      cmake \
+      git \
+      libssl-dev \
+      python3-twisted \
+      zlib1g-dev
 # quieten wget and unzip
 RUN echo 'quiet = on' >> /etc/wgetrc
 WORKDIR /usr/local/src
@@ -38,7 +24,7 @@ WORKDIR /opt/ouinet
 # is needed to allow CMake to extract files in the Go language binary distribution
 # with UTF-8-encoded Unicode names.
 RUN cmake /usr/local/src/ouinet \
- && make
+ && make -j $(nproc)
 RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
 RUN \
@@ -58,7 +44,7 @@ RUN cd /usr/local/src/ouinet \
 # Populate the licenses directory (avoid version numbers in source paths).
 RUN /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
-FROM debian:buster
+FROM debian:bookworm
 # To get the list of system library packages to install,
 # enter the build directory and execute:
 #
@@ -72,7 +58,7 @@ ENV OUINET_DEBUG=$OUINET_DEBUG
 RUN apt-get update && apt-get install -y \
     libc6 \
     libgcc1 \
-    libssl1.1 \
+    libssl3 \
     libstdc++6 \
     zlib1g \
     \
@@ -84,7 +70,7 @@ RUN apt-get update && apt-get install -y \
     wget \
  && rm -rf /var/lib/apt/lists/*
 # Fetch and install i2pd.
-ARG I2PD_VERSION=2.23.0
+ARG I2PD_VERSION=2.44.0
 RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_VERSION}/i2pd_${I2PD_VERSION}-1$(lsb_release -sc)1_$(dpkg --print-architecture).deb" \
  && apt-get update && apt-get install -y \
     cron \
@@ -95,13 +81,11 @@ RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/ouinet
 # Copy locally built libraries (all placed along binaries).
-COPY --from=builder /opt/ouinet/lib*.so /usr/local/lib/
+RUN mkdir /opt/ouinet/lib
+COPY --from=builder /opt/ouinet/lib*.so /opt/ouinet/lib
 # Update the dynamic linker cache after all non-system libraries have been copied.
 # This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig
-# GNUnet support has been temporarily removed.
-#COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/share/gnunet/ modules/gnunet-channels/gnunet-bin/share/gnunet/
-#COPY --from=builder /opt/ouinet/modules/gnunet-channels/gnunet-bin/lib/ modules/gnunet-channels/gnunet-bin/lib/
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/src/ouiservice/obfs4proxy/obfs4proxy ./
 COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
