@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- The default Boost version used by Ouinet is now 1.77.0.
+- All the Docker images including Ouinet builders and production clients
+will use Debian 12 as its base operating system.
+- Targets depending on libssl libraries are now using OpenSSL v3.
+- The build environment uses now Gradle 8.7, AGP 8.3 and Kotlin 1.9.23.
+- Unit tests dependencies of the JNI implementation for Android were
+refactored to use JUnit 5, Mockito 4.3.
+
+### Fixed
+
+- Issues when installing `git.torproject.org/pluggable-transports/goptlib`
+were fixed by upgrading Go to version 1.22.
+
+### Removed
+
+- PowerMock is not used anymore by Android tests.
+
+### Deprecated
+
+- Support for Ouinet builds using Boost 1.71.0 and 1.74.0 are now deprecated
+and its CI pipelines will be removed in the next release.
+- Use of Docker images with Debian 10 will be also removed in the next release.
+
 
 ## [v0.24.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.24.0) - 2024-04-09
 
@@ -24,7 +49,6 @@ platforms.
 - README file revamping, including the update of code examples, references and
 diagrams.
 - Sets the target SDK for the Ouinet AAR build to API 34.
-
 
 ### Fixed
 
