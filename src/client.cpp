@@ -54,11 +54,13 @@
 #endif // ifndef __ANDROID__
 
 #include "ouiservice.h"
-#include "ouiservice/i2p.h"
-#include "ouiservice/lampshade.h"
-#include "ouiservice/pt-obfs2.h"
-#include "ouiservice/pt-obfs3.h"
-#include "ouiservice/pt-obfs4.h"
+#ifdef __EXPERIMENTAL__
+#  include "ouiservice/i2p.h"
+#  include "ouiservice/lampshade.h"
+#  include "ouiservice/pt-obfs2.h"
+#  include "ouiservice/pt-obfs3.h"
+#  include "ouiservice/pt-obfs4.h"
+#endif // ifdef __EXPERIMENTAL__
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -2737,6 +2739,7 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     std::unique_ptr<OuiServiceImplementationClient> client;
 
+#ifdef __EXPERIMENTAL__
     if (injector_ep->type == Endpoint::I2pEndpoint) {
         auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
         auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
@@ -2747,7 +2750,9 @@ void Client::State::setup_injector(asio::yield_context yield)
         }
         */
         client = std::move(i2p_client);
-    } else if (injector_ep->type == Endpoint::TcpEndpoint) {
+    } else
+#endif // ifdef __EXPERIMENTAL__
+    if (injector_ep->type == Endpoint::TcpEndpoint) {
         auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), injector_ep->endpoint_string);
 
         if (!tcp_client->verify_endpoint()) {
@@ -2784,11 +2789,8 @@ void Client::State::setup_injector(asio::yield_context yield)
         }
 
         _bep5_client = make_shared<ouiservice::Bep5Client>
-            ( dht
-            , injector_ep->endpoint_string
-            , *bridge_swarm_name
-            , _config.is_bridge_announcement_enabled()
-            , &inj_ctx);
+                (dht, injector_ep->endpoint_string, *bridge_swarm_name, _config.is_bridge_announcement_enabled(),
+                 &inj_ctx);
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 
@@ -2798,16 +2800,19 @@ void Client::State::setup_injector(asio::yield_context yield)
             LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
             ec = {};
         }
+    }
+#ifdef __EXPERIMENTAL__
 /*
-    } else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
+    else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
 
         if (!lampshade_client->verify_endpoint()) {
             return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = std::move(lampshade_client);
+    }
 */
-    } else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
+    else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
         auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
 
         if (!obfs2_client->verify_endpoint()) {
@@ -2829,6 +2834,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         }
         client = std::move(obfs4_client);
     }
+#endif // ifdef __EXPERIMENTAL__
 
     _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
     _injector->add(*injector_ep, std::move(client));

@@ -34,4 +34,6 @@ add_custom_command(
 add_custom_target(libcpp_shared ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so)
 
 add_dependencies(native-lib libcpp_shared)
-add_dependencies(native-lib obfs4proxy)
+if(__EXPERIMENTAL__)
+    add_dependencies(native-lib obfs4proxy)
+endif()
