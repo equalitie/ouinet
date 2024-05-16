@@ -11,8 +11,10 @@ include(${CMAKE_CURRENT_LIST_DIR}/dependencies/zdnsparser.cmake)
 # For crypto, hash and random utilities.
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/gcrypt.cmake)
 
-# For Pluggable Transport modules (obfs4 and lampshade).
-include(${CMAKE_CURRENT_LIST_DIR}/dependencies/golang.cmake)
+if(WITH_EXPERIMENTAL)
+    # For Pluggable Transport modules (obfs4 and lampshade).
+    include(${CMAKE_CURRENT_LIST_DIR}/dependencies/golang.cmake)
+endif()
 
 # For client front-end status API.
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/json.cmake)
