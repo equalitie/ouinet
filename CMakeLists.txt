@@ -16,6 +16,7 @@ option(WITH_INJECTOR "Compile injector" ON)
 #       https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
+option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 
 ################################################################################
 # Global build flags
@@ -79,9 +80,25 @@ set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
 ###########################################################
 
-add_subdirectory(./src/ouiservice/i2p)
-#add_subdirectory(./src/ouiservice/lampshade)
-add_subdirectory(./src/ouiservice/obfs4proxy)
+if(WITH_EXPERIMENTAL)
+    target_compile_definitions(ouinet_base
+            INTERFACE -D__EXPERIMENTAL__
+    )
+    add_subdirectory(./src/ouiservice/i2p)
+    #add_subdirectory(./src/ouiservice/lampshade)
+    add_subdirectory(./src/ouiservice/obfs4proxy)
+    set(EXPERIMENTAL_SOURCES
+            #    "./src/ouiservice/lampshade.cpp"
+            "./src/ouiservice/pt-obfs2.cpp"
+            "./src/ouiservice/pt-obfs3.cpp"
+            "./src/ouiservice/pt-obfs4.cpp"
+            "./src/ouiservice/pluggable-transports/*.cpp"
+    )
+    set(EXPERIMENTAL_LIBRARIES
+            #    ouinet::lampshade-asio
+            ouinet::ouiservice-i2p
+    )
+endif()
 
 ################################################################################
 file(GLOB client_sources
@@ -96,17 +113,12 @@ file(GLOB client_sources
     "./src/bep5_swarms.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/ssl/dummy_certificate.cpp"
-#    "./src/ouiservice/lampshade.cpp"
-    "./src/ouiservice/pt-obfs2.cpp"
-    "./src/ouiservice/pt-obfs3.cpp"
-    "./src/ouiservice/pt-obfs4.cpp"
     "./src/ouiservice/tcp.cpp"
     "./src/ouiservice/utp.cpp"
     "./src/ouiservice/tls.cpp"
     "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/multi_utp_server.cpp"
     "./src/ouiservice/connect_proxy.cpp"
-    "./src/ouiservice/pluggable-transports/*.cpp"
     "./src/logger.cpp"
     "./src/cache/*.cpp"
     "./src/bittorrent/*.cpp"
@@ -124,6 +136,7 @@ file(GLOB client_sources
     "./src/util/handler_tracker.cpp"
     "./src/doh.cpp"
     "./src/http_util.cpp"
+    ${EXPERIMENTAL_SOURCES}
     ${VERSION_CPP}
 )
 
@@ -147,8 +160,7 @@ target_link_libraries(client
         lib::json
         lib::uri
         OpenSSL::Crypto
-#        ouinet::lampshade-asio
-        ouinet::ouiservice-i2p
+        ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
         ouinet::base
 )
@@ -161,16 +173,11 @@ if (WITH_INJECTOR)
         "./src/ouiservice.cpp"
         "./src/response_part.cpp"
         "./src/bep5_swarms.cpp"
-#        "./src/ouiservice/lampshade.cpp"
-        "./src/ouiservice/pt-obfs2.cpp"
-        "./src/ouiservice/pt-obfs3.cpp"
-        "./src/ouiservice/pt-obfs4.cpp"
         "./src/ouiservice/tcp.cpp"
         "./src/ouiservice/utp.cpp"
         "./src/ouiservice/tls.cpp"
         "./src/ouiservice/bep5/server.cpp"
         "./src/ouiservice/multi_utp_server.cpp"
-        "./src/ouiservice/pluggable-transports/*.cpp"
         "./src/ssl/ca_certificate.cpp"
         "./src/logger.cpp"
         "./src/endpoint.cpp"
@@ -186,6 +193,7 @@ if (WITH_INJECTOR)
         "./src/util/handler_tracker.cpp"
         "./src/util.cpp"
         "./src/http_util.cpp"
+        ${EXPERIMENTAL_SOURCES}
     )
 
     add_executable(injector ${injector_sources})
@@ -199,8 +207,7 @@ if (WITH_INJECTOR)
         lib::uri
         OpenSSL::Crypto
         ouinet::base
-#        ouinet::lampshade-asio
-        ouinet::ouiservice-i2p
+        ${EXPERIMENTAL_LIBRARIES}
     )
 endif() # if WITH_INJECTOR
 
