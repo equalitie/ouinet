@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Crashes in Android 9 and 10 devices that were caused by `boost::filesystem`
+when attempting to use `statx` instructions.
+
 
 ## [v0.25.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.25.0) - 2024-05-15
 
