@@ -1,11 +1,11 @@
 include: .gitlab-ci/jobs/common/prepare-builder-image.yml
 include: .gitlab-ci/jobs/linux.yml
 
-debian-10-boost-1.74 / build:
+debian-10-boost-1.71 / build:
   variables:
-    BOOST_VERSION: "1.74.0"
+    BOOST_VERSION: "1.71.0"
     BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-10-builder' # Reusing debian-10 image
-    TARGET_PLATFORM: 'debian-10-boost-1.74'
+    TARGET_PLATFORM: 'debian-10-boost-1.71'
   extends:
     .linux-build
   needs:
@@ -14,22 +14,22 @@ debian-10-boost-1.74 / build:
   when: manual
   allow_failure: true
 
-debian-10-boost-1.74 / unit-test:
+debian-10-boost-1.71 / unit-test:
   variables:
     BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-10-builder' # Reusing debian-10 image
-    TARGET_PLATFORM: 'debian-10-boost-1.74'
+    TARGET_PLATFORM: 'debian-10-boost-1.71'
   extends:
     .linux-unit-test
   needs:
-    ['debian-10-boost-1.74 / build']
+    ['debian-10-boost-1.71 / build']
   allow_failure: true
 
-debian-10-boost-1.74 / integration-test:
+debian-10-boost-1.71 / integration-test:
   variables:
     BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-10-builder' # Reusing debian-10 image
-    TARGET_PLATFORM: 'debian-10-boost-1.74'
+    TARGET_PLATFORM: 'debian-10-boost-1.71'
   extends:
     .linux-integration-test
   needs:
-    ['debian-10-boost-1.74 / unit-test']
+    ['debian-10-boost-1.71 / unit-test']
   allow_failure: true
