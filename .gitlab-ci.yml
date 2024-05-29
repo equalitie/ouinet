@@ -10,9 +10,11 @@ variables:
 include:
   - .gitlab-ci/pipelines/android.yml
   - .gitlab-ci/pipelines/debian-10.yml
+  - .gitlab-ci/pipelines/debian-10-boost-1.71.yml
   - .gitlab-ci/pipelines/debian-10-boost-1.74.yml
   - .gitlab-ci/pipelines/debian-10-boost-1.77.yml
   - .gitlab-ci/pipelines/debian-12.yml
+  - .gitlab-ci/pipelines/debian-12-boost-1.71.yml
   - .gitlab-ci/pipelines/debian-12-boost-1.74.yml
   - .gitlab-ci/pipelines/debian-12-boost-1.77.yml
 
