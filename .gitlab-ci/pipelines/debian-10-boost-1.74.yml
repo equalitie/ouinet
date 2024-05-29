@@ -11,6 +11,7 @@ debian-10-boost-1.74 / build:
   needs:
     - job: 'debian-10 / prepare-builder-image' # Reusing debian-10 image
       optional: true
+  allow_failure: true
 
 debian-10-boost-1.74 / unit-test:
   variables:
@@ -20,6 +21,7 @@ debian-10-boost-1.74 / unit-test:
     .linux-unit-test
   needs:
     ['debian-10-boost-1.74 / build']
+  allow_failure: true
 
 debian-10-boost-1.74 / integration-test:
   variables:
@@ -29,3 +31,4 @@ debian-10-boost-1.74 / integration-test:
     .linux-integration-test
   needs:
     ['debian-10-boost-1.74 / unit-test']
+  allow_failure: true

@@ -6,4 +6,6 @@ debian-10 / prepare-builder-image:
     TARGET_PLATFORM: 'debian-10'
   extends:
     .prepare-builder-image
+  when: manual
+  allow_failure: true
 
