@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Crashes in Android 9 and 10 devices that were caused by `boost::filesystem`
 when attempting to use `statx` instructions.
+- Dependencies of the CI jobs were changed as they were still using names
+related to the deprecated Debian 10 pipelines.
+
+### Deprecated
+
+- Configured Debian 12 pipelines using Boost 1.71 and Boost 1.74 to run only
+when are manually triggered.
+- All the Debian 10 pipelines were also marked only for manual execution.
 
 
 ## [v0.25.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.25.0) - 2024-05-15
