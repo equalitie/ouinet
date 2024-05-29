@@ -20,7 +20,7 @@ android / build:
   needs:
     - job: 'android / prepare-builder-image'
       optional: true
-    - job: 'debian-12 / build'
+    - job: 'debian-12-boost-1.77 / build'
   image: $BUILDER_IMAGE
   script:
     - mkdir -p build.android
