@@ -7,32 +7,6 @@ debian-10 / prepare-builder-image:
   extends:
     .prepare-builder-image
 
-debian-10 / build:
-  variables:
-    BOOST_VERSION: "1.71.0"
-    TARGET_PLATFORM: 'debian-10'
-  extends:
-    .linux-build
-  needs:
-    - job: 'debian-10 / prepare-builder-image'
-      optional: true
-
-debian-10 / unit-test:
-  variables:
-    TARGET_PLATFORM: 'debian-10'
-  extends:
-    .linux-unit-test
-  needs:
-    ['debian-10 / build']
-
-debian-10 / integration-test:
-  variables:
-    TARGET_PLATFORM: 'debian-10'
-  extends:
-    .linux-integration-test
-  needs:
-    ['debian-10 / unit-test']
-
 debian-10 / build-prod-image:
   stage: release
   tags:
