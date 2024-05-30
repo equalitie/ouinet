@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v0.25.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.25.1) - 2024-05-30
+
 ### Fixed
 
 - Crashes in Android 9 and 10 devices that were caused by `boost::filesystem`
