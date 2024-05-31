@@ -99,6 +99,7 @@ using ouinet::util::AsioExecutor;
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
+static const fs::path OUINET_ERROR_PAGE = "error-page/index.html";
 
 // Flags for normal, case-insensitive regular expression.
 static const auto rx_icase = boost::regex::normal | boost::regex::icase;
@@ -399,6 +400,7 @@ private:
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
+    fs::path error_page_path()   const { return _config.repo_root() / OUINET_ERROR_PAGE;   }
 
     asio::io_context& get_io_context() { return _ctx; }
     AsioExecutor get_executor() { return _ctx.get_executor(); }
@@ -2048,11 +2050,12 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 http::response<http::string_body>
 Client::State::retrieval_failure_response(const Request& req)
 {
-    auto res = util::http_error
+    auto res = util::http_error_
         ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
         , http_::response_error_hdr_retrieval_failed
-        , "Failed to retrieve the resource "
-          "(after attempting all configured mechanisms)");
+        , error_page_path().string());
+        //"Failed to retrieve the resource "
+        //  "(after attempting all configured mechanisms)");
     maybe_add_proto_version_warning(res);
     return res;
 }

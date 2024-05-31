@@ -46,6 +46,7 @@ public class Config implements Parcelable {
         private String injectorCredentials;
         private String injectorTlsCert;
         private String tlsCaCertStorePath;
+        private String errorPagePath;
         private String cacheType;
         private boolean cachePrivate = false;
         private String cacheStaticPath;
@@ -103,6 +104,13 @@ public class Config implements Parcelable {
          */
         public ConfigBuilder setTlsCaCertStorePath(@Nullable String tlsCaCertStorePath){
             this.tlsCaCertStorePath = tlsCaCertStorePath;
+            return this;
+        }
+        /**
+         * Path to a html + css webpage to be displayed on 500 error.
+         */
+        public ConfigBuilder setErrorPagePath(@Nullable String errorPagePath){
+            this.errorPagePath = errorPagePath;
             return this;
         }
         public ConfigBuilder setCacheType(String cacheType){
@@ -207,6 +215,22 @@ public class Config implements Parcelable {
         }
 
         /**
+         * Copies the error page to the filesystem if necessary and returns the path
+         */
+        private @Nullable String setupErrorPage(String ouinetDirectory) {
+            if (errorPagePath == null || !errorPagePath.startsWith(ASSET_PATH)) {
+                // Nothing to be done.
+                return errorPagePath;
+            }
+            String filename = errorPagePath.substring(ASSET_PATH.length());
+            String dest = ouinetDirectory + "/assets/" + filename;
+            if (copyAssetFolder(errorPagePath, dest)) {
+                return dest;
+            }
+            return null;
+        }
+
+        /**
          * Generates the CA root certificate if it does not exist.
          * @param ouinetDirectory
          * @return The path to the certificate.
@@ -231,6 +255,25 @@ public class Config implements Parcelable {
             }
             Log.d(TAG, "obfs4proxy not copied");
             return null;
+        }
+
+        private boolean copyAssetFolder(String assetFolder, String dest) {
+            boolean res = true;
+            if (!assetFolder.startsWith(ASSET_PATH)) {
+                throw new IllegalArgumentException("Invalid asset path: " + assetFolder);
+            }
+            String assetPath = assetFolder.substring(ASSET_PATH.length());
+            try {
+                String[] srcFiles = context.getAssets().list(assetPath);
+                for (String file : srcFiles) {
+                    // TODO: assume no subdirectories for now
+                    res &= copyAssetToFile(assetFolder + "/" + file, dest + "/" + file);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+            return res;
         }
 
         private boolean copyAssetToFile(String asset, String dest){
@@ -296,6 +339,7 @@ public class Config implements Parcelable {
                     injectorCredentials,
                     setupInjectorTlsCert(ouinetDirectory),
                     setupTlsCaCertStore(ouinetDirectory),
+                    setupErrorPage(ouinetDirectory),
                     setupCaRootCert(ouinetDirectory),
                     setupObfs4ProxyExecutable(ouinetDirectory),
                     cacheType,
@@ -322,6 +366,7 @@ public class Config implements Parcelable {
     private String injectorCredentials;
     private String injectorTlsCertPath;
     private String tlsCaCertStorePath;
+    private String errorPagePath;
     private String caRootCertPath;
     private String obfs4ProxyPath;
     private String cacheType;
@@ -346,6 +391,7 @@ public class Config implements Parcelable {
                   String injectorCredentials,
                   String injectorTlsCertPath,
                   String tlsCaCertStorePath,
+                  String errorPagePath,
                   String caRootCertPath,
                   String obfs4ProxyPath,
                   String cacheType,
@@ -369,6 +415,7 @@ public class Config implements Parcelable {
         this.injectorCredentials = injectorCredentials;
         this.injectorTlsCertPath = injectorTlsCertPath;
         this.tlsCaCertStorePath = tlsCaCertStorePath;
+        this.errorPagePath = errorPagePath;
         this.caRootCertPath = caRootCertPath;
         this.obfs4ProxyPath = obfs4ProxyPath;
         this.cacheType = cacheType;
@@ -404,6 +451,9 @@ public class Config implements Parcelable {
     }
     public String getTlsCaCertStorePath() {
         return tlsCaCertStorePath;
+    }
+    public String getErrorPagePath() {
+        return errorPagePath;
     }
     public String getCaRootCertPath() {
         return caRootCertPath;
@@ -481,6 +531,7 @@ public class Config implements Parcelable {
         out.writeString(injectorCredentials);
         out.writeString(injectorTlsCertPath);
         out.writeString(tlsCaCertStorePath);
+        out.writeString(errorPagePath);
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
         out.writeString(cacheType);
@@ -515,6 +566,7 @@ public class Config implements Parcelable {
         injectorCredentials = in.readString();
         injectorTlsCertPath = in.readString();
         tlsCaCertStorePath = in.readString();
+        errorPagePath = in.readString();
         caRootCertPath = in.readString();
         obfs4ProxyPath = in.readString();
         cacheType = in.readString();
