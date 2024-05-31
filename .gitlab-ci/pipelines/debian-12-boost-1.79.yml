@@ -1,0 +1,37 @@
+include: .gitlab-ci/jobs/common/prepare-builder-image.yml
+include: .gitlab-ci/jobs/linux.yml
+
+debian-12-boost-1.79 / build:
+  variables:
+    BOOST_VERSION: "1.79.0"
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-12-builder' # Reusing debian-12 image
+    TARGET_PLATFORM: 'debian-12-boost-1.79'
+  extends:
+    .linux-build
+  needs:
+    - job: 'debian-12 / prepare-builder-image' # Reusing debian-12 image
+      optional: true
+  when: manual
+  allow_failure: true
+
+debian-12-boost-1.79 / unit-test:
+  variables:
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-12-builder' # Reusing debian-12 image
+    TARGET_PLATFORM: 'debian-12-boost-1.79'
+  extends:
+    .linux-unit-test
+  needs:
+    ['debian-12-boost-1.79 / build']
+  allow_failure: true
+
+debian-12-boost-1.79 / integration-test:
+  variables:
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:debian-12-builder' # Reusing debian-12 image
+    TARGET_PLATFORM: 'debian-12-boost-1.79'
+  extends:
+    .linux-integration-test
+  needs:
+    ['debian-12-boost-1.79 / unit-test']
+  before_script:
+    - ln -s /usr/bin/python3 /usr/bin/python
+  allow_failure: true
