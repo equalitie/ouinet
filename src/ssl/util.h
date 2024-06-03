@@ -7,6 +7,7 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/nowide/fstream.hpp>
 
 #include "../generic_stream.h"
 #include "../or_throw.h"
@@ -144,7 +145,7 @@ void load_tls_ca_certificates( asio::ssl::context& ctx
     }
 
     ostringstream ss;
-    ss << fs::ifstream(path).rdbuf();
+    ss << boost::nowide::ifstream(path).rdbuf();
     ctx.add_certificate_authority(asio::buffer(ss.str()));
 }
 
