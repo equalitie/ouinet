@@ -207,6 +207,35 @@ http_error( const Request& rq
     return rs;
 }
 
+// Create an HTTP error response for the given request `rq`
+// with the given `status`, `server` header and `message` body (text/html).
+// If `proto_error` is not empty,
+// make this a Ouinet protocol message with that error.
+template<class Request>
+inline
+http::response<http::string_body>
+http_error_html( const Request& rq
+        , http::status status
+        , const char* server
+        , const std::string& proto_error
+        , const std::string& message = "")
+{
+    http::response<http::string_body> rs{status, rq.version()};
+
+    if (!proto_error.empty()) {
+        assert(boost::regex_match(proto_error, http_::response_error_rx));
+        rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+        rs.set(http_::response_error_hdr, proto_error);
+    }
+    rs.set(http::field::server, server);
+    rs.set(http::field::content_type, "text/html");
+    rs.keep_alive(rq.keep_alive());
+    rs.body() = message;
+    rs.prepare_payload();
+
+    return rs;
+}
+
 inline
 http::response_header<>
 without_framing(const http::response_header<>& rsh)
