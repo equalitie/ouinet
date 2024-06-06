@@ -73,8 +73,8 @@ add_executable(bt-bep44 "bt-bep44.cpp" ${bt_cpp_files})
 target_link_libraries(bt-bep44 lib::asio_utp lib::gcrypt lib::uri)
 
 ################################################################################
-add_executable(test-routing-table "test-routing-table.cpp" ${bt_cpp_files})
-target_link_libraries(test-routing-table lib::asio_utp lib::gcrypt lib::uri)
+#add_executable(test-routing-table "test-routing-table.cpp" ${bt_cpp_files})
+#target_link_libraries(test-routing-table lib::asio_utp lib::gcrypt lib::uri)
 
 ################################################################################
 add_executable(bt-bep5 "bt-bep5.cpp" ${bt_cpp_files})
