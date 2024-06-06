@@ -1,5 +1,6 @@
 #define BOOST_TEST_MODULE routing_table
 #include <boost/test/included/unit_test.hpp>
+#include <boost/asio.hpp>
 #include <set>
 
 // Dirty trick to allow us inspect members of the RoutingTable class
