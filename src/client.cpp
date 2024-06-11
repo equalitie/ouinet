@@ -99,7 +99,7 @@ using ouinet::util::AsioExecutor;
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
-static const fs::path OUINET_ERROR_PAGE_FILE = "assets/error-page.html";
+static const fs::path OUINET_ERROR_PAGE_FILE = "error-page.html";
 
 // Flags for normal, case-insensitive regular expression.
 static const auto rx_icase = boost::regex::normal | boost::regex::icase;

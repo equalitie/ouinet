@@ -9,6 +9,7 @@ import androidx.annotation.VisibleForTesting;
 import android.util.Log;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collections;
@@ -35,7 +36,8 @@ public class Config implements Parcelable {
 
     private static final String TAG = "OuinetConfig";
 
-    private static final String ASSET_PATH = "file:///android_asset/";
+    private static final String FILE_PROTO = "file://";
+    private static final String ASSET_PATH = FILE_PROTO + "/android_asset/";
     @VisibleForTesting static final String OBFS4_PROXY = "obfs4proxy";
     private static final String OUINET_DIR = "/ouinet";
     private static final String ERROR_PAGE_FILE = "error-page.html";
@@ -219,12 +221,11 @@ public class Config implements Parcelable {
          * Copies the error page to the filesystem if necessary and returns the path
          */
         private @Nullable String setupErrorPage(String ouinetDirectory) {
-            if (errorPagePath == null || !errorPagePath.startsWith(ASSET_PATH)) {
+            if (errorPagePath == null) {
                 // Nothing to be done.
                 return errorPagePath;
             }
-            String filename = errorPagePath.substring(ASSET_PATH.length());
-            String dest = ouinetDirectory + "/assets/" + ERROR_PAGE_FILE;
+            String dest = ouinetDirectory + "/" + ERROR_PAGE_FILE;
             if (copyAssetToFile(errorPagePath, dest)) {
                 return dest;
             }
@@ -259,23 +260,40 @@ public class Config implements Parcelable {
         }
 
         private boolean copyAssetToFile(String asset, String dest){
-            if (!asset.startsWith(ASSET_PATH)) {
-                throw new IllegalArgumentException("Invalid asset path: " + asset);
+            String dataPath = context.getApplicationInfo().dataDir;
+            String dataFilePath = FILE_PROTO + dataPath;
+            if (asset.startsWith(dataFilePath)) {
+                String dataFile = asset.substring(dataFilePath.length());
+                File file = new File(dataPath , dataFile);
+                try {
+                    streamToFile(new FileInputStream(file), dest);
+                } catch (IOException e) {
+                    Log.d(TAG, "Failed to write data \"" + asset + "\" to file \"" + dest + "\"", e);
+                    return false;
+                }
             }
-            String assetPath = asset.substring(ASSET_PATH.length());
-            try {
-                java.io.InputStream stream = context.getAssets().open(assetPath);
-                int size = stream.available();
-                byte[] buffer = new byte[size];
-                stream.read(buffer);
-                stream.close();
-                writeToFile(dest, buffer);
-            } catch (IOException e) {
-                Log.d(TAG, "Failed to write asset \"" + asset + "\" to file \"" + dest + "\"", e);
-                return false;
+            else if (asset.startsWith(ASSET_PATH)) {
+                String assetPath = asset.substring(ASSET_PATH.length());
+                try {
+                    streamToFile(context.getAssets().open(assetPath), dest);
+                } catch (IOException e) {
+                    Log.d(TAG, "Failed to write asset \"" + asset + "\" to file \"" + dest + "\"", e);
+                    return false;
+                }
+            }
+            else {
+                throw new IllegalArgumentException("Invalid asset path: " + asset);
             }
 
             return true;
+        }
+
+        private void streamToFile(java.io.InputStream stream, String dest) throws IOException {
+            int size = stream.available();
+            byte[] buffer = new byte[size];
+            stream.read(buffer);
+            stream.close();
+            writeToFile(dest, buffer);
         }
 
         private void writeToFile(String path, byte[] bytes) throws IOException {
