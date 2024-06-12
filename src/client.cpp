@@ -2047,46 +2047,31 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 }
 
 static
-string fileToString(std::string fname)
+string file_to_string(std::string fname)
 {
     using std::ios;
 
-    std::string filename;
-    boost::optional<std::fstream> file_stream;
+    std::fstream *file_stream = new std::fstream();
     ostringstream out_ss;
 
     if (fname.empty()) {
-        if (!filename.empty()) {
-            ouinet::sys::error_code ignored_ec;
-            ouinet::fs::remove(filename, ignored_ec);
-        }
-        file_stream = boost::none;
         return out_ss.str();
     }
 
-    if (filename != fname || !file_stream) {
-        filename = fname;
+    if (ouinet::fs::exists(fname)) {
+        file_stream->open(fname, ios::in | ios::out | ios::ate);
+    } else {
+        // File doesn't exist return empty string
+        return out_ss.str();
+    }
 
-        file_stream = std::fstream();
-
-        if (ouinet::fs::exists(filename)) {
-            file_stream->open(filename, ios::in | ios::out | ios::ate);
-        } else {
-            // File doesn't exist return empty string
-            return out_ss.str();
-        }
-
-        if (!file_stream->is_open()) {
-            std::cerr << "Failed to open file " << fname  << "\n";
-            filename = "";
-            file_stream = boost::none;
-        } else {
-            file_stream->flush();
-            file_stream->seekg(0);
-            std::copy( istreambuf_iterator<char>(*file_stream)
-                        , istreambuf_iterator<char>()
-                        , ostreambuf_iterator<char>(out_ss));
-        }
+    if (!file_stream->is_open()) {
+        std::cerr << "Failed to open file " << fname  << "\n";
+    } else {
+        file_stream->seekg(0);
+        std::copy( istreambuf_iterator<char>(*file_stream)
+                    , istreambuf_iterator<char>()
+                    , ostreambuf_iterator<char>(out_ss));
     }
     return out_ss.str();
 }
@@ -2096,19 +2081,19 @@ http::response<http::string_body>
 Client::State::retrieval_failure_response(const Request& req)
 {
     http::response<http::string_body> res;
-    std::string content = fileToString(error_page_path().string());
-    if (content != "") {
-        res = util::http_error_html
-            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
-              , http_::response_error_hdr_retrieval_failed
-              , content);
-    }
-    else {
+    std::string content = file_to_string(error_page_path().string());
+    if (content.empty()) {
         res = util::http_error
             ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
               , http_::response_error_hdr_retrieval_failed
               , "Failed to retrieve the resource "
-                  "(after attempting all configured mechanisms)");
+              "(after attempting all configured mechanisms)");
+    }
+    else {
+        res = util::http_error_html
+            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
+              , http_::response_error_hdr_retrieval_failed
+              , content);
     }
     maybe_add_proto_version_warning(res);
     return res;
