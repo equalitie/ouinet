@@ -18,6 +18,7 @@ set(BOOST_COMPONENTS
     date_time
     filesystem
     iostreams
+    nowide
     program_options
     regex
     system
