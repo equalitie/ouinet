@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- The default Boost version used by Ouinet is now 1.79.0.
+- References to `ifstream` and `ofstream` of `boost::filesystem` were replaced
+with `boost::nowide::fstream`.
+
+### Deprecated
+
+- Configured Debian 12 pipelines using Boost 1.77 to run only when are
+manually triggered.
 
 ## [v0.25.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.25.1) - 2024-05-30
 
