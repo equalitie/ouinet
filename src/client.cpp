@@ -2051,7 +2051,7 @@ string file_to_string(std::string fname)
 {
     using std::ios;
 
-    std::fstream file_stream = std::fstream();
+    std::fstream file_stream;
     ostringstream out_ss;
 
     if (fname.empty()) {
@@ -2059,7 +2059,7 @@ string file_to_string(std::string fname)
     }
 
     if (ouinet::fs::exists(fname)) {
-        file_stream.open(fname, ios::in | ios::out | ios::ate);
+        file_stream.open(fname, ios::in);
     } else {
         // File doesn't exist return empty string
         return out_ss.str();
@@ -2068,7 +2068,6 @@ string file_to_string(std::string fname)
     if (!file_stream.is_open()) {
         std::cerr << "Failed to open file " << fname  << "\n";
     } else {
-        file_stream.seekg(0);
         std::copy( istreambuf_iterator<char>(file_stream)
                     , istreambuf_iterator<char>()
                     , ostreambuf_iterator<char>(out_ss));
