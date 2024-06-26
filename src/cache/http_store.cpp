@@ -11,6 +11,7 @@
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/read.hpp>
 #include <boost/format.hpp>
+#include <boost/nowide/fstream.hpp>
 #include <boost/optional.hpp>
 #include <boost/regex.hpp>
 
@@ -671,7 +672,7 @@ canonical_from_content_relpath( const fs::path& body_path_p
     fs::path body_rp;
     {  // TODO: supposedly small, so limit size of read data
         std::string body_rp_s;
-        fs::ifstream ifs(body_path_p);
+        boost::nowide::ifstream ifs(body_path_p);
         std::getline(ifs, body_rp_s);
         if (!ifs.fail()) body_rp = body_rp_s;
     }

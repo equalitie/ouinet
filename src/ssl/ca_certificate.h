@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 
+#include <boost/nowide/fstream.hpp>
 #include <openssl/x509v3.h>
 
 #include "detail/ca_certificate.h"
@@ -92,7 +93,7 @@ get_or_gen_tls_cert( const std::string& cn
         d::log_load(tls_certificate);
         auto read_pem = [](auto path) {
             std::ostringstream ss;
-            ss << fs::ifstream(path).rdbuf();
+            ss << boost::nowide::ifstream(path).rdbuf();
             return ss.str();
         };
         auto cert = read_pem(tls_cert_path);
@@ -112,9 +113,9 @@ get_or_gen_tls_cert( const std::string& cn
             d::log_gen_fail(tls_certificate, tls_cert_path, tls_key_path, tls_dh_path, e);
             throw;
         }
-        fs::ofstream(tls_cert_path) << tls_certificate->pem_certificate();
-        fs::ofstream(tls_key_path) << tls_certificate->pem_private_key();
-        fs::ofstream(tls_dh_path) << tls_certificate->pem_dh_param();
+        boost::nowide::ofstream(tls_cert_path) << tls_certificate->pem_certificate();
+        boost::nowide::ofstream(tls_key_path) << tls_certificate->pem_private_key();
+        boost::nowide::ofstream(tls_dh_path) << tls_certificate->pem_dh_param();
     }
 
     return tls_certificate;

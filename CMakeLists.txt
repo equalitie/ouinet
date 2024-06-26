@@ -52,6 +52,7 @@ target_link_libraries(ouinet_base
         Boost::boost
         Boost::date_time
         Boost::filesystem
+        Boost::nowide
         Boost::program_options
         Boost::regex
         Boost::system

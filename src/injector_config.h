@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <boost/asio/ip/udp.hpp>
+#include <boost/nowide/fstream.hpp>
 #include <boost/regex.hpp>
 
 #include "logger.h"
@@ -345,21 +346,21 @@ inline void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
 
     if (hex.empty()) {
         if (fs::exists(priv_config)) {
-            fs::ifstream(priv_config) >> _ed25519_private_key;
-            fs::ofstream(pub_config)  << _ed25519_private_key.public_key();
+            boost::nowide::ifstream(priv_config) >> _ed25519_private_key;
+            boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
             return;
         }
 
         _ed25519_private_key = util::Ed25519PrivateKey::generate();
 
-        fs::ofstream(priv_config) << _ed25519_private_key;
-        fs::ofstream(pub_config)  << _ed25519_private_key.public_key();
+        boost::nowide::ofstream(priv_config) << _ed25519_private_key;
+        boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
         return;
     }
 
     _ed25519_private_key = *util::Ed25519PrivateKey::from_hex(hex);
-    fs::ofstream(priv_config) << _ed25519_private_key;
-    fs::ofstream(pub_config)  << _ed25519_private_key.public_key();
+    boost::nowide::ofstream(priv_config) << _ed25519_private_key;
+    boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
 }
 
 } // ouinet namespace

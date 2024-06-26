@@ -1,5 +1,5 @@
 if(NOT BOOST_VERSION)
-    set(BOOST_VERSION 1.77.0)
+    set(BOOST_VERSION 1.79.0)
 endif ()
 
 if (${BOOST_VERSION} EQUAL 1.71.0)
@@ -8,6 +8,8 @@ elseif (${BOOST_VERSION} EQUAL 1.74.0)
     set(BOOST_VERSION_HASH 83bfc1507731a0906e387fc28b7ef5417d591429e51e788417fe9ff025e116b1)
 elseif (${BOOST_VERSION} EQUAL 1.77.0)
     set(BOOST_VERSION_HASH fc9f85fc030e233142908241af7a846e60630aa7388de9a5fafb1f3a26840854)
+elseif (${BOOST_VERSION} EQUAL 1.79.0)
+    set(BOOST_VERSION_HASH 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
 endif ()
 
 set(BOOST_COMPONENTS
@@ -16,6 +18,7 @@ set(BOOST_COMPONENTS
     date_time
     filesystem
     iostreams
+    nowide
     program_options
     regex
     system
