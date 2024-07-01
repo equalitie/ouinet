@@ -392,7 +392,7 @@ static const bool true_false[] = {true, false};
 
 BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_false), complete) {
     auto tmpdir = fs::unique_path();
-    auto rmdir = defer([&tmpdir] {
+    auto rmdir = ouinet::defer([&tmpdir] {
         sys::error_code ec;
         fs::remove_all(tmpdir, ec);
     });
@@ -480,7 +480,7 @@ static const http_response::Trailer rrs_trailer{};
 
 BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false), complete) {
     auto tmpdir = fs::unique_path();
-    auto rmdir = defer([&tmpdir] {
+    auto rmdir = ouinet::defer([&tmpdir] {
         sys::error_code ec;
         fs::remove_all(tmpdir, ec);
     });
@@ -591,7 +591,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 BOOST_AUTO_TEST_CASE(test_read_response_external) {
     auto tmpdir = fs::unique_path();
     auto tmpcdir = fs::unique_path();
-    auto rmdirs = defer([&tmpdir, &tmpcdir] {
+    auto rmdirs = ouinet::defer([&tmpdir, &tmpcdir] {
         sys::error_code ec;
         fs::remove_all(tmpdir, ec = {});
         fs::remove_all(tmpcdir, ec = {});
@@ -706,7 +706,7 @@ static const string errs_last_chunk_ext = ers_last_chunk_ext;  // no `ouihash` h
 
 BOOST_AUTO_TEST_CASE(test_read_empty_response) {
     auto tmpdir = fs::unique_path();
-    auto rmdir = defer([&tmpdir] {
+    auto rmdir = ouinet::defer([&tmpdir] {
         sys::error_code ec;
         fs::remove_all(tmpdir, ec);
     });
@@ -806,7 +806,7 @@ static const first_last block_ranges[] = {
 BOOST_DATA_TEST_CASE( test_read_response_partial
                     , boost::unit_test::data::make(block_ranges), firstb_lastb) {
     auto tmpdir = fs::unique_path();
-    auto rmdir = defer([&tmpdir] {
+    auto rmdir = ouinet::defer([&tmpdir] {
         sys::error_code ec;
         fs::remove_all(tmpdir, ec);
     });
@@ -920,7 +920,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
 
 BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
     auto tmpdir = fs::unique_path();
-    auto rmdir = defer([&tmpdir] {
+    auto rmdir = ouinet::defer([&tmpdir] {
         sys::error_code ec;
         fs::remove_all(tmpdir, ec);
     });
@@ -942,7 +942,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
 
 BOOST_DATA_TEST_CASE(test_hash_list, boost::unit_test::data::make(true_false), complete) {
     auto tmpdir = fs::unique_path();
-    auto rmdir = defer([&tmpdir] {
+    auto rmdir = ouinet::defer([&tmpdir] {
         sys::error_code ec;
         fs::remove_all(tmpdir, ec);
     });
