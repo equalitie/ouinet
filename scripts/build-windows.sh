@@ -31,7 +31,8 @@ fi
 
 # Using a single threaded compilation to simplify the debugging
 cmake \
-  --build "${BUILDDIR}"
+  --build "${BUILDDIR}" \
+  -t client
 
 #cd "${BUILDDIR}"
 #make -j`nproc`
