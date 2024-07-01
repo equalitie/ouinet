@@ -26,7 +26,7 @@ if [[ ! -e ${BUILDDIR}/Makefile ]]; then
     -Wno-error=dev \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_INSTALL_PREFIX="${BINDIR}" \
-    -DBOOST_VERSION="1.77.0"
+    -DBOOST_VERSION="1.79.0"
 fi
 
 # Using a single threaded compilation to simplify the debugging
