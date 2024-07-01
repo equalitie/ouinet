@@ -208,10 +208,9 @@ write( async_file_handle& f
      , asio::yield_context yield)
 {
     auto cancel_slot = cancel.connect([&] { f.close(); });
-    sys::error_code ec_write;
-    asio::async_write(f, b, [&ec_write](const boost::system::error_code& ec,
-                                        std::size_t bytes_transferred){ec_write = std::move(ec);});
-    return_or_throw_on_error(yield, cancel, ec_write)
+    sys::error_code ec;
+    asio::async_write(f, b, yield[ec]);
+    return_or_throw_on_error(yield, cancel, ec)
 }
 
 void
