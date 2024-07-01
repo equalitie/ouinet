@@ -130,7 +130,13 @@ struct UserAgentMetaData {
                 ret.dht_group = i->value().to_string();
                 rq.erase(i);
             } else {
-                ret.dht_group = get_dht_group(rq.target().to_string());
+                auto j = rq.find(http::field::referer);
+                if (j != rq.end()) {
+                    ret.dht_group = get_dht_group(j->value().to_string());
+                    rq.erase(j);
+                } else {
+                    ret.dht_group = get_dht_group(rq.target().to_string());
+                }
             }
         }
         {
