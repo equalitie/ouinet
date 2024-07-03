@@ -40,8 +40,10 @@ public:
     boost::filesystem::path repo_root() const
     { return _repo_root; }
 
+#ifdef __EXPERIMENTAL__
     bool listen_on_i2p() const
     { return _listen_on_i2p; }
+#endif // ifdef __EXPERIMENTAL__
 
     std::string bep5_injector_swarm_name() const
     {
@@ -67,6 +69,7 @@ public:
     boost::optional<asio::ip::udp::endpoint> utp_tls_endpoint() const
     { return _utp_tls_endpoint; }
 
+#ifdef __EXPERIMENTAL__
     boost::optional<asio::ip::tcp::endpoint> lampshade_endpoint() const
     { return _lampshade_endpoint; }
 
@@ -78,6 +81,7 @@ public:
 
     boost::optional<asio::ip::tcp::endpoint> obfs4_endpoint() const
     { return _obfs4_endpoint; }
+#endif // ifdef __EXPERIMENTAL__
 
     boost::program_options::options_description
     options_description();
@@ -105,16 +109,20 @@ private:
     boost::filesystem::path _repo_root;
     ExtraBtBsServers _bt_bootstrap_extras;
     boost::optional<size_t> _open_file_limit;
+#ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
+#endif // ifdef __EXPERIMENTAL__
     std::string _tls_ca_cert_store_path;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_tls_endpoint;
+#ifdef __EXPERIMENTAL__
     boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
+#endif // ifdef __EXPERIMENTAL__
     std::string _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
@@ -153,6 +161,7 @@ InjectorConfig::options_description()
         ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-utp", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (cleartext)")
         ("listen-on-utp-tls", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (encrypted)")
+#ifdef __EXPERIMENTAL__
         ("listen-on-lampshade", po::value<string>(), "IP:PORT endpoint on which we'll listen using the lampshade pluggable transport")
         ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
         ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
@@ -160,6 +169,7 @@ InjectorConfig::options_description()
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
+#endif // ifdef __EXPERIMENTAL__
         // It always announces the TLS uTP endpoint since
         // a TLS certificate is always generated.
         ("credentials", po::value<string>()
@@ -266,6 +276,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _disable_proxy = true;
     }
 
+#ifdef __EXPERIMENTAL__
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without
     // values in config files. Thus we need to force the 'listen-on-i2p' arg
     // to have one of the strings values "true" or "false".
@@ -279,6 +290,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
         _listen_on_i2p = (value == "true");
     }
+#endif // ifdef __EXPERIMENTAL__
 
     if (vm.count("listen-on-tcp")) {
         auto opt_tcp_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
@@ -310,6 +322,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _utp_tls_endpoint = ep;
     }
 
+#ifdef __EXPERIMENTAL__
     if (vm.count("listen-on-lampshade")) {
         _lampshade_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-lampshade"].as<string>());
     }
@@ -325,6 +338,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (vm.count("listen-on-obfs4")) {
         _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
     }
+#endif // ifdef __EXPERIMENTAL__
 
     // Please note that generating keys takes a long time
     // and it may cause time outs in CI tests.
