@@ -29,7 +29,7 @@ RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
-    strip injector client src/ouiservice/obfs4proxy/obfs4proxy test/bt-* test/oui-* \
+    strip injector client test/bt-* test/oui-* \
         && find . -name '*.so' -exec strip '{}' + \
         && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
 fi
@@ -69,16 +69,6 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     wget \
  && rm -rf /var/lib/apt/lists/*
-# Fetch and install i2pd.
-ARG I2PD_VERSION=2.44.0
-RUN wget -q -P /tmp "https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_VERSION}/i2pd_${I2PD_VERSION}-1$(lsb_release -sc)1_$(dpkg --print-architecture).deb" \
- && apt-get update && apt-get install -y \
-    cron \
-    logrotate \
-    $(dpkg --info /tmp/i2pd_*.deb | sed -nE 's/^.*Depends: (.*)/\1/p' | sed -E 's/( \([^)]+\))?,//g') \
- && dpkg -i /tmp/i2pd_*.deb \
- && rm -f /tmp/i2pd_*.deb \
- && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/ouinet
 # Copy locally built libraries (all placed along binaries).
 RUN mkdir /opt/ouinet/lib
@@ -87,7 +77,6 @@ COPY --from=builder /opt/ouinet/lib*.so /opt/ouinet/lib
 # This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig
 COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
-COPY --from=builder /opt/ouinet/src/ouiservice/obfs4proxy/obfs4proxy ./
 COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 RUN mkdir utils
 COPY --from=builder \

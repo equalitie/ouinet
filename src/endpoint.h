@@ -11,14 +11,16 @@ struct Endpoint {
     enum Type {
         TcpEndpoint,
         UtpEndpoint,
-        I2pEndpoint,
 #ifdef USE_GNUNET
         GnunetEndpoint,
 #endif
+#ifdef __EXPERIMENTAL__
+        I2pEndpoint,
         LampshadeEndpoint,
         Obfs2Endpoint,
         Obfs3Endpoint,
         Obfs4Endpoint,
+#endif // ifdef __EXPERIMENTAL__
         Bep5Endpoint
     };
 

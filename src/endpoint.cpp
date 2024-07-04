@@ -16,12 +16,13 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
         output.type = Endpoint::TcpEndpoint;
     } else if (type == "utp") {
         output.type = Endpoint::UtpEndpoint;
-    } else if (type == "i2p") {
-        output.type = Endpoint::I2pEndpoint;
 #ifdef USE_GNUNET
     } else if (type == "gnunet") {
         output.type = Endpoint::GnunetEndpoint;
 #endif
+#ifdef __EXPERIMENTAL__
+    } else if (type == "i2p") {
+        output.type = Endpoint::I2pEndpoint;
     } else if (type == "lampshade") {
         output.type = Endpoint::LampshadeEndpoint;
     } else if (type == "obfs2") {
@@ -30,6 +31,7 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
         output.type = Endpoint::Obfs3Endpoint;
     } else if (type == "obfs4") {
         output.type = Endpoint::Obfs4Endpoint;
+#endif // ifdef __EXPERIMENTAL__
     } else if (type == "bep5") {
         output.type = Endpoint::Bep5Endpoint;
     } else {
@@ -44,12 +46,13 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
         os << "tcp";
     } else if (ep.type == Endpoint::UtpEndpoint) {
         os << "utp";
-    } else if (ep.type == Endpoint::I2pEndpoint) {
-        os << "i2p";
 #ifdef USE_GNUNET
     } else if (ep.type == Endpoint::GnunetEndpoint) {
         os << "gnunet";
 #endif
+#ifdef __EXPERIMENTAL__
+    } else if (ep.type == Endpoint::I2pEndpoint) {
+        os << "i2p";
     } else if (ep.type == Endpoint::LampshadeEndpoint) {
         os << "lampshade";
     } else if (ep.type == Endpoint::Obfs2Endpoint) {
@@ -58,6 +61,7 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
         os << "obfs3";
     } else if (ep.type == Endpoint::Obfs4Endpoint) {
         os << "obfs4";
+#endif // ifdef __EXPERIMENTAL__
     } else if (ep.type == Endpoint::Bep5Endpoint) {
         os << "bep5";
     } else {

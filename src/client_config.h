@@ -177,10 +177,17 @@ private:
            ("injector-ep"
             , po::value<string>()
             , "Injector's endpoint as <TYPE>:<EP>, "
-              "where <TYPE> can be \"tcp\", \"utp\", \"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
+              "where <TYPE> can be \"tcp\", \"utp\",  "
+#ifdef __EXPERIMENTAL__
+              "\"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
+#endif // ifdef __EXPERIMENTAL__
               "and <EP> depends on the type of endpoint: "
-              "<IP>:<PORT> for TCP and uTP, <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
-              "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P")
+              "<IP>:<PORT> for TCP and uTP"
+#ifdef __EXPERIMENTAL__
+              ", <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
+              "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P"
+#endif // ifdef __EXPERIMENTAL__
+           )
            ("injector-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the injector")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
