@@ -2421,6 +2421,15 @@ void Client::State::serve_request( GenericStream&& con
         request_config = route_choose_config(req, matches, default_request_config);
 
         auto meta = UserAgentMetaData::extract(req);
+        auto ua = req[http::field::user_agent];
+        if (!ua.empty()) {
+            size_t index = ua.find("X-Ouinet-Private");
+            if (index != std::string::npos ){
+                req.set(http::field::user_agent, ua.substr(0, index));
+                meta.dht_group = "";
+                meta.is_private = true;
+            }
+        }
         Transaction tnx(con, req, std::move(meta));
 
         if (request_config.fresh_channels.empty()) {
