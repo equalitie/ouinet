@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- New CMake option `WITH_EXPERIMENTAL` set to `OFF` by the default that avoids
+compiling unused features, including i2p, pluggable transports like obfs4.
+- Configurable error page feature that allows path to html file to be pass
+into Ouinet config for android applications. The supplied html file is copied
+into the Ouinet client's assets and served in place of plain text failure
+message.
+
+### Removed
+
+- Commands in Dockerfile related to the installation of i2p and the pluggable
+transports.
+- Configuration options in client and injector related to i2p and obfs
+endpoints.
+- Deprecated CI pipelines that were building Ouinet with Debian 10.
+- Deprecated CI pipelines building Ouinet with Debian 12 and Boost 1.71-1.74.
+
 
 ## [v0.26.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.26.0) - 2024-06-26
 
