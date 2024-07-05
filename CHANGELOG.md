@@ -23,6 +23,8 @@ message.
 transports.
 - Configuration options in client and injector related to i2p and obfs
 endpoints.
+- Deprecated CI pipelines that were building Ouinet with Debian 10.
+- Deprecated CI pipelines building Ouinet with Debian 12 and Boost 1.71-1.74.
 
 
 ## [v0.26.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.26.0) - 2024-06-26
