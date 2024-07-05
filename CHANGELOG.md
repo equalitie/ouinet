@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- New CMake option `WITH_EXPERIMENTAL` set to `OFF` by the default that avoids
+compiling unused features, including i2p, pluggable transports like obfs4.
+
+### Removed
+
+- Commands in Dockerfile related to the installation of i2p and the pluggable
+transports.
+- Configuration options in client and injector related to i2p and obfs
+endpoints.
+
 
 ## [v0.26.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.26.0) - 2024-06-26
 
