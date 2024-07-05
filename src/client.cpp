@@ -101,6 +101,7 @@ using ouinet::util::AsioExecutor;
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
+static const fs::path OUINET_ERROR_PAGE_FILE = "error-page.html";
 
 // Flags for normal, case-insensitive regular expression.
 static const auto rx_icase = boost::regex::normal | boost::regex::icase;
@@ -401,6 +402,7 @@ private:
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
+    fs::path error_page_path()   const { return _config.repo_root() / OUINET_ERROR_PAGE_FILE;   }
 
     asio::io_context& get_io_context() { return _ctx; }
     AsioExecutor get_executor() { return _ctx.get_executor(); }
@@ -2046,15 +2048,54 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     return or_throw(yield, ec, true);
 }
 
+static
+string file_to_string(std::string fname)
+{
+    using std::ios;
+
+    std::fstream file_stream;
+    ostringstream out_ss;
+
+    if (fname.empty()) {
+        return out_ss.str();
+    }
+
+    if (ouinet::fs::exists(fname)) {
+        file_stream.open(fname, ios::in);
+    } else {
+        // File doesn't exist return empty string
+        return out_ss.str();
+    }
+
+    if (!file_stream.is_open()) {
+        std::cerr << "Failed to open file " << fname  << "\n";
+    } else {
+        std::copy( istreambuf_iterator<char>(file_stream)
+                    , istreambuf_iterator<char>()
+                    , ostreambuf_iterator<char>(out_ss));
+    }
+    return out_ss.str();
+}
+
 //------------------------------------------------------------------------------
 http::response<http::string_body>
 Client::State::retrieval_failure_response(const Request& req)
 {
-    auto res = util::http_error
-        ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
-        , http_::response_error_hdr_retrieval_failed
-        , "Failed to retrieve the resource "
-          "(after attempting all configured mechanisms)");
+    http::response<http::string_body> res;
+    std::string content = file_to_string(error_page_path().string());
+    if (content.empty()) {
+        res = util::http_error
+            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
+              , http_::response_error_hdr_retrieval_failed
+              , "Failed to retrieve the resource "
+              "(after attempting all configured mechanisms)");
+    }
+    else {
+        res = util::http_error_html
+            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
+              , http_::response_error_hdr_retrieval_failed
+              , content);
+    }
     maybe_add_proto_version_warning(res);
     return res;
 }
