@@ -50,7 +50,7 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
     asio::io_context ctx;
 
     fs::path td_path;
-    auto remove_td = defer([&] {
+    auto remove_td = ouinet::defer([&] {
         if (fs::exists(td_path)) fs::remove_all(td_path);
     });
     {
@@ -83,7 +83,7 @@ BOOST_DATA_TEST_CASE(test_tmp_file, boost::unit_test::data::make(true_false), ke
     asio::io_context ctx;
 
     fs::path tf_path;
-    auto remove_td = defer([&] {
+    auto remove_td = ouinet::defer([&] {
         if (fs::exists(tf_path)) fs::remove_all(tf_path);
     });
     {
@@ -107,7 +107,7 @@ BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), 
     asio::io_context ctx;
 
     fs::path ad_temp_path, ad_path = fs::unique_path();
-    auto remove_td = defer([&] {
+    auto remove_td = ouinet::defer([&] {
         if (fs::exists(ad_path)) fs::remove_all(ad_path);
         if (fs::exists(ad_temp_path)) fs::remove_all(ad_temp_path);
     });
@@ -147,7 +147,7 @@ BOOST_DATA_TEST_CASE(test_atomic_file, boost::unit_test::data::make(true_false),
     asio::io_context ctx;
 
     fs::path af_temp_path, af_path = fs::unique_path();
-    auto remove_af = defer([&] {
+    auto remove_af = ouinet::defer([&] {
         if (fs::exists(af_path)) fs::remove_all(af_path);
         if (fs::exists(af_temp_path)) fs::remove_all(af_temp_path);
     });
