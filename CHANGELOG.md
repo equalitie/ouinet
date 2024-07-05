@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New CMake option `WITH_EXPERIMENTAL` set to `OFF` by the default that avoids
 compiling unused features, including i2p, pluggable transports like obfs4.
+- Configurable error page feature that allows path to html file to be pass
+into Ouinet config for android applications. The supplied html file is copied
+into the Ouinet client's assets and served in place of plain text failure
+message.
 
 ### Removed
 
