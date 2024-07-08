@@ -32,10 +32,9 @@ fi
 # Using a single threaded compilation to simplify the debugging
 cmake \
   --build "${BUILDDIR}" \
-  -t client
-
-#cd "${BUILDDIR}"
-#make -j`nproc`
+  -t client \
+  -- \
+  -j`nproc`
 
 # Not supported yet
 #make install
