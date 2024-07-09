@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v0.27.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.27.0) - 2024-07-08
+
 ### Added
 
 - New CMake option `WITH_EXPERIMENTAL` set to `OFF` by the default that avoids
