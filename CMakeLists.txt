@@ -158,7 +158,7 @@ target_link_libraries(client
         lib::zdnsparser
         lib::gcrypt
         lib::json
-        lib::uri
+        lib::url
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
@@ -204,7 +204,7 @@ if (WITH_INJECTOR)
         lib::asio_utp
         lib::gcrypt
         lib::json
-        lib::uri
+        lib::url
         OpenSSL::Crypto
         ouinet::base
         ${EXPERIMENTAL_LIBRARIES}
