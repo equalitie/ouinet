@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Ouinet binaries and its dependencies are built now with C++ 20.
+
 
 ## [v0.30.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.1) - 2024-10-29
 
