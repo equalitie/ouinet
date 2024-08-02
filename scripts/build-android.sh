@@ -51,14 +51,6 @@ PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 SDK_MANAGER="${SDK_DIR}/cmdline-tools/bin/sdkmanager"
 
-# Until we upgrade Gradle to a version which
-# does not need an NDK with the `platforms` directory,
-# install this fixed version manually instead of
-# having Gradle install the latest one.
-NDK=android-ndk-r19b
-NDK_DIR=${NDK_DIR:-"$DIR/$NDK"}
-NDK_ZIP=${NDK}-linux-x86_64.zip
-
 # Android API level, see https://redmine.equalit.ie/issues/12143
 EMULATOR_PLATFORM=android-${EMULATOR_API}
 
@@ -80,7 +72,6 @@ cat <<EOF
 Configuration environment variables:
 
 ABI="$ABI"
-NDK_DIR="$NDK_DIR"
 SDK_DIR="$SDK_DIR"
 EMULATOR_AVD="$EMULATOR_AVD"
 EMULATOR_DEV="$EMULATOR_DEV"
@@ -179,22 +170,6 @@ function maybe_create_avd {
                                                   -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
                                                   -b "$ABI" -d "$EMULATOR_DEV"
     fi
-}
-
-######################################################################
-function maybe_install_ndk {
-    # This would be done automatically by Gradle if
-    # we upgraded it to a version which works with recent NDKs.
-    check_mode build || return 0
-
-    if [ ! -d "$NDK_DIR" ]; then
-        echo "Installing NDK..."
-        if [ ! -f ${NDK_ZIP} ]; then
-            wget -nv https://dl.google.com/android/repository/${NDK_ZIP}
-        fi
-        unzip -q ${NDK_ZIP}
-    fi
-    export ANDROID_NDK_HOME="$NDK_DIR"
 }
 
 ######################################################################
@@ -349,7 +324,6 @@ fi
 if check_mode bootstrap; then
     maybe_install_sdk
     setup_sdk_deps
-    maybe_install_ndk
     maybe_install_gradle
     # TODO: miniupnp
 fi
