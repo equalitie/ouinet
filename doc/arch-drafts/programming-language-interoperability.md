@@ -28,12 +28,12 @@ The sources used as a reference for this plan are stored in [gitlab.com/equaliti
 
 ### C++ standard support
 
-The base code Ouinet's core supports C++ 17 but some dependencies are still building with 11 or 14 standard.
+The base code of Ouinet's core supports C++ 20 but some optional dependencies like `i2pd` still require an upgrade.
 
 | module      | standard      |
 |-------------|---------------|
-| ouinet-base | c++1z / c++17 |
-| boost       | c++14         |
+| ouinet-base | c++20         |
+| boost       | c++20         |
 | i2pd        | c++11         |
 
 
