@@ -16,14 +16,14 @@ public:
     void async_read_some(const MutableBufferSequence& buffer, ReadHandler handler) {
         boost::system::error_code ec;
         auto offset = current_position(ec);
-        this->async_read_some_at(offset, buffer, std::move(handler));
+        return this->async_read_some_at(offset, buffer, std::move(handler));
     }
 
     template <typename ConstBufferSequence, typename WriteHandler>
     void async_write_some(const ConstBufferSequence& buffer, WriteHandler handler) {
         boost::system::error_code ec;
         auto offset = end_position(ec);
-        this->async_write_some_at(offset, buffer, std::move(handler));
+        return this->async_write_some_at(offset, buffer, std::move(handler));
     }
 
     static
