@@ -2,11 +2,11 @@
 #include <boost/test/included/unit_test.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/optional.hpp>
-#include <boost/asio/posix/stream_descriptor.hpp>
 
 #include <cache_control.h>
 #include <http_util.h>
 #include <util.h>
+#include <util/file_io/async_file_handle.h>
 #include <or_throw.h>
 #include <session.h>
 #include <iostream>
@@ -24,7 +24,7 @@ using posix_time::seconds;
 using boost::optional;
 using beast::string_view;
 using ouinet::util::str;
-using stream = asio::posix::stream_descriptor;
+using stream = async_file_handle;
 
 static const optional<string> dht_group("fake-dht-group");
 

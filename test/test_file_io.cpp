@@ -157,7 +157,9 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
                 ec);
         BOOST_CHECK(!ec);
         file_io::write(aio_file_ro, boost::asio::const_buffer("DEF456uvw", 9), cancel, yield[ec]);
+#ifndef _WIN32
         BOOST_CHECK(ec.value() == 9); // Expected errno 9, Bad file descriptor
+#endif
         ec.clear();
         timer.expires_from_now(std::chrono::seconds(default_timer));
         timer.async_wait(yield);

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem.hpp>
 
@@ -8,9 +7,8 @@
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/executor.h"
+#include "../util/file_io/async_file_handle.h"
 
-using async_file_handle = boost::asio::posix::stream_descriptor;
-using native_handle_t = int;
 
 namespace ouinet { namespace util { namespace file_io {
 

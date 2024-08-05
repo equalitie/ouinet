@@ -23,7 +23,7 @@ namespace persisten_lru_cache_detail {
 
     uint64_t ms_since_epoch();
     fs::path path_from_key(const fs::path&, const std::string&);
-    bool is_cache_entry(const struct dirent*);
+    bool is_cache_entry(const struct dirent*, boost::filesystem::path&);
 } // detail namespace
 
 template<class Value>
@@ -69,7 +69,7 @@ public:
         const Value& value() const;
         const Key& key() const;
 
-        asio::posix::stream_descriptor open(sys::error_code&) const;
+        async_file_handle open(sys::error_code&) const;
     };
 
 private:
@@ -220,7 +220,7 @@ public:
     }
 
     // Read-only byte-oriented access to on-disk data.
-    asio::posix::stream_descriptor open_value(sys::error_code& ec) const {
+    async_file_handle open_value(sys::error_code& ec) const {
         auto f = file_io::open_readonly(_ex, _path, ec);
         if (!ec) file_io::fseek(f, content_start(), ec);
         return f;
@@ -317,13 +317,13 @@ PersistentLruCache<Value>::load( const AsioExecutor& ex
     std::map<Id, std::shared_ptr<Element>> elements;
 
     {
-        DIR* directory = opendir(dir.c_str());
+        DIR* directory = opendir(dir.string().c_str());
         auto close_dir = defer([&] { if (directory != nullptr) closedir(directory); });
 
         uint64_t i = 0;
         struct dirent* entry;
         while ((entry = readdir(directory)) != NULL) {
-            if (is_cache_entry(entry)) {
+            if (is_cache_entry(entry, dir)) {
                 fs::path path(dir / entry->d_name);
                 uint64_t ts;
                 auto e = Element::read(ex, path, &ts, cancel, yield[ec]);
@@ -452,7 +452,7 @@ PersistentLruCache<Value>::iterator::key() const
 
 template<class Value>
 inline
-asio::posix::stream_descriptor
+async_file_handle
 PersistentLruCache<Value>::iterator::open(sys::error_code& ec) const
 {
     return i->second->second->open_value(ec);

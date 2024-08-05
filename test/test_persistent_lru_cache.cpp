@@ -12,7 +12,7 @@ BOOST_AUTO_TEST_SUITE(persistent_lru_cache)
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::util;
-using File = asio::posix::stream_descriptor;
+using File = async_file_handle;
 
 namespace fs = boost::filesystem;
 
