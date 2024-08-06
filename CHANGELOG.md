@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- A new `file_io` component that supports asynchronous I/O operations for
+Windows systems.
+
 ### Changed
 
 - Ouinet binaries and its dependencies are built now with C++ 20.
