@@ -78,9 +78,10 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         abi=${BOOST_ABI}
     )
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    string(TOLOWER "${CMAKE_BUILD_TYPE}" BOOST_BUILD_TYPE)
     set(BOOST_ARCH_CONFIGURATION
         address-model=64
-        variant=debug
+        variant=${BOOST_BUILD_TYPE}
     )
     link_libraries(ws2_32 mswsock)
 else()
