@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v0.28.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.28.0) - 2024-08-07
+
 ### Added
 
 - A new `file_io` component that supports asynchronous I/O operations for
