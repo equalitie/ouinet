@@ -8,11 +8,15 @@
 
 set -e
 
-DIR=$(pwd)
-SOURCEDIR=$(dirname "$(realpath "${BASH_SOURCE}")")/..
-BINDIR="${DIR}"/ouinet-windows-bin
-BUILDDIR="${DIR}"/ouinet-windows-build
+native_source_dir=$( dirname "$(realpath "${BASH_SOURCE}")" )/..
+SOURCEDIR=$( cygpath -u $(realpath ${native_source_dir} ))
+
+BASEDIR=${SOURCEDIR}".build"
+
+BINDIR="${BASEDIR}"/ouinet-windows-bin
+BUILDDIR="${BASEDIR}"/ouinet-windows-build
 GENERATOR="Unix Makefiles"
+
 
 if [[ ! -e ${BUILDDIR}/Makefile ]]; then
 	rm -rf "${BUILDDIR}"
@@ -39,4 +43,4 @@ cmake \
 # Not supported yet
 #make install
 
-cd "${DIR}"
+cd "${BASEDIR}"
