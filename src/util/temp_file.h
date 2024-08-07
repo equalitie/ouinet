@@ -1,11 +1,11 @@
 #pragma once
 
-#include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 #include <boost/system/error_code.hpp>
 
 #include "../namespaces.h"
+#include "../util/file_io/async_file_handle.h"
 #include "../util/executor.h"
 
 namespace ouinet { namespace util {
@@ -41,7 +41,7 @@ public:
     }
 
 public:
-    using lowest_layer_type = asio::posix::stream_descriptor;
+    using lowest_layer_type = async_file_handle;
 
     temp_file(const temp_file&) = delete;
     temp_file& operator=(const temp_file&) = delete;
