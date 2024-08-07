@@ -1,0 +1,26 @@
+# select as base image matching your host to get process isolation
+FROM mcr.microsoft.com/windows/servercore:2004
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+# Install msys2
+RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+  Invoke-WebRequest -UseBasicParsing -uri "https://github.com/msys2/msys2-installer/releases/download/nightly-x86_64/msys2-base-x86_64-latest.sfx.exe" -OutFile msys2.exe; \
+  .\msys2.exe -y -oC:\; \
+  Remove-Item msys2.exe ;
+
+# Install toolchain dependencies
+RUN \
+  function Invoke-Msys() { C:\msys64\usr\bin\bash.exe @('-lc') + @Args; } \
+  Invoke-Msys ' '; \
+  Invoke-Msys 'pacman --noconfirm -Syuu'; \
+  Invoke-Msys 'pacman --noconfirm -Syuu'; \
+  Invoke-Msys 'pacman --noconfirm -Scc'; \
+  Invoke-Msys 'pacman --noconfirm -S mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc git make patch';
+
+# Add msys2 binaries to the windows path
+RUN \
+  $path = $env:path + \
+    ';C:\msys64\usr\bin' + \
+    ';C:\msys64\mingw64\bin'; \
+  Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment\' -Name Path -Value $path;
