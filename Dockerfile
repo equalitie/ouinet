@@ -10,7 +10,6 @@ RUN apt-get install -y \
       librange-v3-dev \
       libssl-dev \
       python3-twisted \
-      nlohmann-json3-dev \
       zlib1g-dev
 # quieten wget and unzip
 RUN echo 'quiet = on' >> /etc/wgetrc

@@ -2,9 +2,9 @@ include(ExternalProject)
 
 externalproject_add(json
     # TODO: We only really need to download one header file.
-    # (https://github.com/nlohmann/json/releases/download/v3.6.1/json.hpp)
-    URL https://github.com/nlohmann/json/archive/v3.6.1.tar.gz
-    URL_MD5 c53592d55e7fec787cf0a406d36098a3
+    # (https://github.com/nlohmann/json/releases/download/v3.10.5/json.hpp)
+    URL https://github.com/nlohmann/json/archive/v3.10.5.tar.gz
+    URL_MD5 5b946f7d892fa55eabec45e76a20286b
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     UPDATE_COMMAND ""
