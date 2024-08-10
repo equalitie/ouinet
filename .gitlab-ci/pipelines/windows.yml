@@ -7,6 +7,8 @@ variables:
 windows / prepare-builder-image:
   extends:
     .prepare-builder-image
+  tags:
+    - windows
   needs:
     - job: 'debian-12 / prepare-builder-image'
       optional: true
