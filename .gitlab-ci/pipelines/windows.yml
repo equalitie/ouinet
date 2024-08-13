@@ -2,7 +2,7 @@ include: .gitlab-ci/jobs/common/prepare-builder-image.yml
 
 variables:
   TARGET_PLATFORM: 'windows'
-  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  BUILDER_IMAGE: '${CI_REGISTRY_IMAGE}:${TARGET_PLATFORM}-builder'
 
 windows / prepare-builder-image:
   extends:
