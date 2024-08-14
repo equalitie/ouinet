@@ -16,3 +16,15 @@ windows / prepare-builder-image:
     - docker push ${BUILDER_IMAGE}
     - docker logout ${CI_REGISTRY}
 
+windows / build:
+  stage: build
+  tags:
+    - windows-docker
+  needs:
+    - job: 'windows / prepare-builder-image'
+      optional: true
+  image: $BUILDER_IMAGE
+  script:
+    - mkdir -p build.windows
+    - cd build.windows
+    - bash ${CI_PROJECT_DIR}/scripts/build-windows.sh
