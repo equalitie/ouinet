@@ -1,15 +1,18 @@
-include: .gitlab-ci/jobs/common/prepare-builder-image.yml
-
 variables:
   TARGET_PLATFORM: 'windows'
-  BUILDER_IMAGE: '${CI_REGISTRY_IMAGE}:${TARGET_PLATFORM}-builder'
+  BUILDER_IMAGE_TAG: '${TARGET_PLATFORM}-builder'
+  BUILDER_IMAGE: '${CI_REGISTRY_IMAGE}:${BUILDER_IMAGE_TAG}'
 
 windows / prepare-builder-image:
-  extends:
-    .prepare-builder-image
+  stage: prepare
   tags:
-    - windows
+    - windows-shell
   needs:
     - job: 'debian-12 / prepare-builder-image'
       optional: true
+  script:
+    - echo ${CI_REGISTRY_PASSWORD} | docker login --password-stdin -u ${CI_REGISTRY_USER} ${CI_REGISTRY}
+    - Get-Content docker/Dockerfile.${BUILDER_IMAGE_TAG} | docker build --pull -t ${BUILDER_IMAGE} -
+    - docker push ${BUILDER_IMAGE}
+    - docker logout ${CI_REGISTRY}
 
