@@ -27,4 +27,4 @@ windows / build:
   script:
     - mkdir -p build.windows
     - cd build.windows
-    - bash ${CI_PROJECT_DIR}/scripts/build-windows.sh
+    - bash -c "../scripts/build-windows.sh"
