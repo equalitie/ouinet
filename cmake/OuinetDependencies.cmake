@@ -19,5 +19,5 @@ endif()
 # For client front-end status API.
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/json.cmake)
 
-# For URI parsing and encoding/decoding.
-include(${CMAKE_CURRENT_LIST_DIR}/dependencies/uri.cmake)
+# For URL parsing and encoding/decoding.
+include(${CMAKE_CURRENT_LIST_DIR}/dependencies/url.cmake)
