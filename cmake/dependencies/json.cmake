@@ -5,10 +5,10 @@ externalproject_add(json
     # (https://github.com/nlohmann/json/releases/download/v3.6.1/json.hpp)
     URL https://github.com/nlohmann/json/archive/v3.11.3.tar.gz
     URL_MD5 d603041cbc6051edbaa02ebb82cf0aa9
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
     UPDATE_COMMAND ""
     INSTALL_COMMAND ""
+    CMAKE_ARGS
+        -DJSON_BuildTests=OFF
     PREFIX json
 )
 
