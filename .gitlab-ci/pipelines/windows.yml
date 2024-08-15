@@ -29,5 +29,8 @@ windows / build:
   image: $BUILDER_IMAGE
   script:
     - mkdir -p build.windows
-    - cd build.windows
-    - bash -c "../scripts/build-windows.sh"
+    - cmake -S . -B build.windows -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+    - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
+    - echo "cmake --build build.windows -t client -- -j$cpuCount"
+    - cmake --build build.windows -t client -- -j $cpuCount
+  when: manual
