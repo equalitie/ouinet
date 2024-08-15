@@ -180,5 +180,9 @@ bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out
 
 string ouinet::util::percent_decode(const boost::string_view in) {
     if (in.empty()) return {};
-    return skyr::percent_decode(string_view(in.data(), in.size())).value();
+    try {
+        return skyr::percent_decode(string_view(in.data(), in.size())).value();
+    } catch (const skyr::percent_encoding::percent_encode_errc&) {
+        return {};
+    }
 }
