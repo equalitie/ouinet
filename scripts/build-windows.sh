@@ -25,12 +25,7 @@ if [[ ! -e ${BUILDDIR}/Makefile ]]; then
 	cmake \
     "${SOURCEDIR}" \
     -G "${GENERATOR}" \
-    --compile-no-warning-as-error \
-    -Wno-error=nonnull \
-    -Wno-error=dev \
-    -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_INSTALL_PREFIX="${BINDIR}" \
-    -DBOOST_VERSION="1.79.0"
+    -DCMAKE_BUILD_TYPE=Debug
 fi
 
 # Using a single threaded compilation to simplify the debugging
