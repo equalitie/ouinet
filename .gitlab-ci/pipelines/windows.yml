@@ -2,19 +2,22 @@ variables:
   TARGET_PLATFORM: 'windows'
   BUILDER_IMAGE_TAG: '${TARGET_PLATFORM}-builder'
   BUILDER_IMAGE: '${CI_REGISTRY_IMAGE}:${BUILDER_IMAGE_TAG}'
+  REBUILD_IMAGES: "false"
 
 windows / prepare-builder-image:
   stage: prepare
   tags:
     - windows-shell
-  needs:
-    - job: 'debian-12 / prepare-builder-image'
-      optional: true
   script:
     - echo ${CI_REGISTRY_PASSWORD} | docker login --password-stdin -u ${CI_REGISTRY_USER} ${CI_REGISTRY}
     - Get-Content docker/Dockerfile.${BUILDER_IMAGE_TAG} | docker build --pull -t ${BUILDER_IMAGE} -
     - docker push ${BUILDER_IMAGE}
     - docker logout ${CI_REGISTRY}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web" || $REBUILD_IMAGES == "true"
+      changes:
+        - docker/Dockerfile.*-builder
+      when: manual
 
 windows / build:
   stage: build
