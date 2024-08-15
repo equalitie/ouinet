@@ -31,7 +31,7 @@ create_udp_multiplexer( asio::io_service& ios
     };
 
     if (fs::exists(last_used_port)) {
-        fstream file(last_used_port.native());
+        fstream file(last_used_port.string());
 
         if (file.is_open()) {
             uint16_t port = 0;
@@ -70,7 +70,7 @@ create_udp_multiplexer( asio::io_service& ios
 
     LOG_DEBUG("UDP multiplexer bound to: ", ret.local_endpoint());
 
-    fstream file( last_used_port.native()
+    fstream file( last_used_port.string()
                 , fstream::binary | fstream::trunc | fstream::out);
 
     if (file.is_open()) {

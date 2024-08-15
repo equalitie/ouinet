@@ -82,7 +82,7 @@ static double log_get_timestamp()
 // Threshold adopts a default level of DEBUG if an invalid threshold is provided.
 Logger::Logger(log_level_t threshold)
 {
-    if (threshold < SILLY || threshold > ERROR) {
+    if (threshold < SILLY || threshold > ERROR_LEVEL) {
         this->threshold = default_log_level();
     } else {
         this->threshold = threshold;
@@ -265,7 +265,7 @@ void Logger::warn(const std::string& msg, boost::string_view function_name)
 
 void Logger::error(const std::string& msg, boost::string_view function_name)
 {
-    log(ERROR, msg, function_name);
+    log(ERROR_LEVEL, msg, function_name);
 }
 
 void Logger::abort(const std::string& msg, boost::string_view function_name)

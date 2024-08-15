@@ -184,7 +184,7 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 ClientFrontEnd::ClientFrontEnd(const ClientConfig& config)
     : _log_level_input(new Input<log_level_t>( "Log le<u>v</u>el", 'v', "loglevel"
-                                             , { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT }, config.log_level()))
+                                             , { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR_LEVEL, ABORT }, config.log_level()))
 {}
 
 void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringstream& ss

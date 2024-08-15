@@ -300,7 +300,7 @@ private:
         try {
             fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
             LOG_DEBUG("Saving persistent options");
-            ofstream(ouinet_save_path.native(), fstream::out | fstream::trunc) << ss.str();
+            ofstream(ouinet_save_path.string(), fstream::out | fstream::trunc) << ss.str();
         } catch (const exception& e) {
             LOG_ERROR("Failed to save persistent options: ", e.what());
         }
@@ -361,7 +361,7 @@ private:
 
         auto current_log_path = logger.current_log_file();
         auto ouinet_log_path = current_log_path.empty()
-            ? (_repo_root / log_file_name).native()
+            ? (_repo_root / log_file_name).string()
             : current_log_path;
 
         logger.log_to_file(ouinet_log_path);
@@ -449,7 +449,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             sys::error_code ignored_ec;
             fs::remove(ouinet_save_path, ignored_ec);
         } else if (fs::is_regular_file(ouinet_save_path)) {
-            ifstream ouinet_conf(ouinet_save_path.native());
+            ifstream ouinet_conf(ouinet_save_path.string());
             po::store(po::parse_config_file(ouinet_conf, desc_save), vm);
             po::notify(vm);
         }
@@ -462,7 +462,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     util::str("The path ", _repo_root, " does not contain the "
                              , _ouinet_conf_file, " configuration file"));
         }
-        ifstream ouinet_conf(ouinet_conf_path.native());
+        ifstream ouinet_conf(ouinet_conf_path.string());
         po::store(po::parse_config_file(ouinet_conf, desc), vm);
         po::notify(vm);
     }

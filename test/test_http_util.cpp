@@ -1,4 +1,5 @@
 #define BOOST_TEST_MODULE blocker
+#include <cstdint>
 #include <boost/test/included/unit_test.hpp>
 
 #include <boost/beast/http/message.hpp>
@@ -38,4 +39,3 @@ BOOST_AUTO_TEST_CASE(test_filter_fields) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
