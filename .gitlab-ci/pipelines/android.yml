@@ -5,6 +5,8 @@ variables:
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 android / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'android'
   extends:
     .prepare-builder-image
   needs:
