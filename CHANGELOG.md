@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Upgrade `nlohmann/json` package to version 3.11.3
+- Applied adjustments that are required to build the `windows-client`
+branch but that are not exclusively affecting to Windows builds.
 
 
 ## [v0.28.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.28.0) - 2024-08-07
