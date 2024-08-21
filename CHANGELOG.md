@@ -8,11 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v0.29.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.29.0) - 2024-08-21
+
 ### Changed
 
-- Upgrade `nlohmann/json` package to version 3.11.3
 - Applied adjustments that are required to build the `windows-client`
 branch but that are not exclusively affecting to Windows builds.
+- Upgrade `nlohmann/json` package to version 3.11.3
+
+### Removed
+
+- CI pipelines that were building Ouinet with Debian 12 and Boost 1.77.0.
 
 
 ## [v0.28.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.28.0) - 2024-08-07
@@ -22,9 +29,6 @@ branch but that are not exclusively affecting to Windows builds.
 - A new `file_io` component that supports asynchronous I/O operations for
 Windows systems.
 
-### Removed
-
-- CI pipelines that were building Ouinet with Debian 12 and Boost 1.77.0.
 
 ## [v0.27.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.27.0) - 2024-07-08
 
