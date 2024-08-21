@@ -22,6 +22,9 @@ branch but that are not exclusively affecting to Windows builds.
 - A new `file_io` component that supports asynchronous I/O operations for
 Windows systems.
 
+### Removed
+
+- CI pipelines that were building Ouinet with Debian 12 and Boost 1.77.0.
 
 ## [v0.27.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.27.0) - 2024-07-08
 
