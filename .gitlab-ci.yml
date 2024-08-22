@@ -11,4 +11,5 @@ include:
   - .gitlab-ci/pipelines/android.yml
   - .gitlab-ci/pipelines/debian-12.yml
   - .gitlab-ci/pipelines/debian-12-boost-1.79.yml
+  - .gitlab-ci/pipelines/windows.yml
 

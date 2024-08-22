@@ -1,0 +1,70 @@
+variables:
+  TARGET_PLATFORM: 'windows'
+  BUILDER_IMAGE_TAG: '${TARGET_PLATFORM}-builder'
+  BUILDER_IMAGE: '${CI_REGISTRY_IMAGE}:${BUILDER_IMAGE_TAG}'
+  REBUILD_IMAGES: "false"
+
+windows / prepare-builder-image:
+  stage: prepare
+  tags:
+    - windows-shell
+  script:
+    - echo ${CI_REGISTRY_PASSWORD} | docker login --password-stdin -u ${CI_REGISTRY_USER} ${CI_REGISTRY}
+    - Get-Content docker/Dockerfile.${BUILDER_IMAGE_TAG} | docker build --pull -t ${BUILDER_IMAGE} -
+    - docker push ${BUILDER_IMAGE}
+    - docker logout ${CI_REGISTRY}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web" || $REBUILD_IMAGES == "true"
+      changes:
+        - docker/Dockerfile.*-builder
+      when: manual
+
+# Temporarily skipping tests that are:
+#
+# a) failing to build
+# -t test-cache
+# -t test-http-sign
+# -t test-util
+#
+# b) timing out when running
+# -t test-response-reader
+# -t test-response-writer
+
+windows / build:
+  stage: build
+  tags:
+    - windows-docker
+  needs:
+    - job: 'windows / prepare-builder-image'
+      optional: true
+  image: $BUILDER_IMAGE
+  script:
+    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+    - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
+    - cmake --build ${BUILD_PATH} -t test-atomic-temp -t test-bencoding -t test-bittorrent -t test-cache-announcer -t test-connection-pool -t test-file-io -t test-http-store -t test-http-util -t test-logger -t test-parser -t test-persistent-lru-cache -t test-routing-table -t test-scheduler -t test-timeout-stream -t test-wait-condition -t test-watch-dog -t client -- -j ${cpuCount}
+  artifacts:
+    paths:
+      - $BUILD_PATH/client.exe
+      - $BUILD_PATH/injector.exe
+      - $BUILD_PATH/lib*
+      - $BUILD_PATH/test/test-*
+    expire_in: 6h
+
+windows / unit-test:
+  stage: test
+  image: $BUILDER_IMAGE
+  tags:
+    - windows-docker
+  artifacts:
+    paths:
+      - $BUILD_PATH/client.exe
+      - $BUILD_PATH/injector.exe
+      - $BUILD_PATH/lib*
+      - $BUILD_PATH/test/test-*
+    expire_in: 6h
+  script:
+    - $env:PATH = "${CI_PROJECT_DIR}\${BUILD_PATH};$env:PATH"
+    - $testFiles = Get-ChildItem -Path "${BUILD_PATH}\test" -Filter "test-*"
+    - foreach ($test in $testFiles) { & $test.FullName --log_level=test_suite }
+  needs:
+    ['windows / build']

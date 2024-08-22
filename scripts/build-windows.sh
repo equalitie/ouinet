@@ -8,11 +8,15 @@
 
 set -e
 
-DIR=$(pwd)
-SOURCEDIR=$(dirname "$(realpath "${BASH_SOURCE}")")/..
-BINDIR="${DIR}"/ouinet-windows-bin
-BUILDDIR="${DIR}"/ouinet-windows-build
+native_source_dir=$( dirname "$(realpath "${BASH_SOURCE}")" )/..
+SOURCEDIR=$( cygpath -u $(realpath ${native_source_dir} ))
+
+BASEDIR=${SOURCEDIR}".build"
+
+BINDIR="${BASEDIR}"/ouinet-windows-bin
+BUILDDIR="${BASEDIR}"/ouinet-windows-build
 GENERATOR="Unix Makefiles"
+
 
 if [[ ! -e ${BUILDDIR}/Makefile ]]; then
 	rm -rf "${BUILDDIR}"
@@ -21,15 +25,9 @@ if [[ ! -e ${BUILDDIR}/Makefile ]]; then
 	cmake \
     "${SOURCEDIR}" \
     -G "${GENERATOR}" \
-    --compile-no-warning-as-error \
-    -Wno-error=nonnull \
-    -Wno-error=dev \
-    -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_INSTALL_PREFIX="${BINDIR}" \
-    -DBOOST_VERSION="1.79.0"
+    -DCMAKE_BUILD_TYPE=Debug
 fi
 
-# Using a single threaded compilation to simplify the debugging
 cmake \
   --build "${BUILDDIR}" \
   -t client \
@@ -39,4 +37,4 @@ cmake \
 # Not supported yet
 #make install
 
-cd "${DIR}"
+cd "${BASEDIR}"
