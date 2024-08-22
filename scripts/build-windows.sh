@@ -28,7 +28,6 @@ if [[ ! -e ${BUILDDIR}/Makefile ]]; then
     -DCMAKE_BUILD_TYPE=Debug
 fi
 
-# Using a single threaded compilation to simplify the debugging
 cmake \
   --build "${BUILDDIR}" \
   -t client \
