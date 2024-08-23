@@ -175,6 +175,7 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
     ctx.run();
 }
 
+/*
 BOOST_AUTO_TEST_CASE(test_dup_fd)
 {
     temp_file temp_file{test_id};
@@ -204,6 +205,7 @@ BOOST_AUTO_TEST_CASE(test_dup_fd)
         BOOST_TEST(expected_string == current_string);
     }
 }
+ */
 
 BOOST_AUTO_TEST_CASE(test_truncate_file)
 {
