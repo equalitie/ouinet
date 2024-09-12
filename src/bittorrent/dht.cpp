@@ -2609,26 +2609,21 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
 
     auto node = make_unique<dht::DhtNode>(_exec, _storage_dir, _extra_bs);
 
+    auto cc = _cancel.connect([&] { node = nullptr; });
+
+    sys::error_code ec;
+    node->start(move(m), yield[ec]);
+
+    assert(!cc || ec == asio::error::operation_aborted);
+    if (cc) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<asio::ip::udp::endpoint>(yield, ec);
+
     auto wan_ep = node->wan_endpoint();
 
     assert(!_nodes.count(local_ep));
     assert(node);
 
     _nodes[local_ep] = std::move(node);
-
-    TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
-        auto ep = m.local_endpoint();
-        auto cc = _cancel.connect([&] { _nodes.erase(ep); });
-
-        sys::error_code ec;
-        _nodes[ep]->start(move(m), yield[ec]);
-
-        assert(!cc || ec == asio::error::operation_aborted);
-        if (cc) ec = asio::error::operation_aborted;
-        if (ec) {
-            _DEBUG( "Unable to start DHT node; ec=", ec);
-        }
-    }));
 
     return wan_ep;
 }
