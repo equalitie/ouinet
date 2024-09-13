@@ -309,10 +309,12 @@ public:
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
-        auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
-        if (ec) return or_throw(yield, ec, _bt_dht);
+        TRACK_SPAWN(_ctx, ([&, m = move(m)] (asio::yield_context yield) mutable {
+            auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
+            if (ec) return;
 
-        setup_upnp(ext_ep.port(), mpl.local_endpoint());
+            setup_upnp(ext_ep.port(), mpl.local_endpoint());
+        }));
 
         _bt_dht = move(bt_dht);
         return _bt_dht;
