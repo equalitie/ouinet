@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v0.29.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.29.1) - 2024-09-20
+
+### Changed
+
+- Updated list of bootstrap servers.
+
+### Removed
+
+- Disabled bencoding validation requiring sorted keys in dictionaries of
+the KRPC messages sent to the DHT.
+
+
 ## [v0.29.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.29.0) - 2024-08-21
 
 ### Changed
