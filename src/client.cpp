@@ -311,11 +311,21 @@ public:
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
-        TRACK_SPAWN(_ctx, ([&, m = move(m)] (asio::yield_context yield) mutable {
-            auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
-            if (ec) return;
-
-            setup_upnp(ext_ep.port(), mpl.local_endpoint());
+        shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
+        _upnps = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
+        TRACK_SPAWN(_ctx, ([
+            bt_dht,
+            executor = _ctx.get_executor(),
+            ext_ep,
+            local_ep = mpl.local_endpoint(),
+            m = move(m),
+            shutdown_signal = _shutdown_signal,
+            upnps = _upnps
+        ] (asio::yield_context yield) mutable {
+            sys::error_code ec;
+            *ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
+            if (ec || shutdown_signal) return;
+            State::setup_upnp(executor, ext_ep, local_ep, upnps);
         }));
 
         _bt_dht = move(bt_dht);
@@ -441,7 +451,7 @@ private:
         AsioExecutor executor,
         shared_ptr<asio::ip::udp::endpoint> ext_ep,
         asio::ip::udp::endpoint local_ep,
-        shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> upnps,
+        shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> upnps
     ){
         if (!local_ep.address().is_v4()) {
             LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
