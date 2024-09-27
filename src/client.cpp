@@ -244,6 +244,8 @@ public:
             return Client::RunningState::Degraded;
         if (use_cache && _cache_start_ec)
             return Client::RunningState::Degraded;
+        if (use_cache && !_bt_dht->is_bootstrapped())
+            return Client::RunningState::Degraded;
 
         return Client::RunningState::Started;
     }
