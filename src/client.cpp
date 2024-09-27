@@ -437,22 +437,27 @@ private:
 
     void serve_utp_request(GenericStream, Yield);
 
-    void setup_upnp(uint16_t ext_port, asio::ip::udp::endpoint local_ep) {
-        if (_shutdown_signal) return;
-
+    static void setup_upnp(
+        AsioExecutor executor,
+        shared_ptr<asio::ip::udp::endpoint> ext_ep,
+        asio::ip::udp::endpoint local_ep,
+        shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> upnps,
+    ){
         if (!local_ep.address().is_v4()) {
             LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
             return;
         }
 
-        auto& p = _upnps[local_ep];
+        auto &p = (*upnps)[local_ep];
 
         if (p) {
             LOG_WARN("UPnP redirection for ", local_ep, " is already set");
             return;
         }
 
-        p = make_unique<UPnPUpdater>(_ctx.get_executor(), ext_port, local_ep.port());
+        LOG_DEBUG("UPnP: Updater is starting with ",
+                 "local port ", local_ep.port(), " and external port ", ext_ep->port());
+        p = make_unique<UPnPUpdater>(executor, ext_ep->port(), local_ep.port());
     }
 
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
