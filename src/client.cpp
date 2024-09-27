@@ -198,7 +198,7 @@ public:
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
-        _upnps.clear();
+        _upnps->clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -546,7 +546,7 @@ private:
 
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
-    std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>> _upnps;
+    shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
 };
 
 //------------------------------------------------------------------------------
@@ -981,7 +981,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , _cache.get()
                                , *_ca_certificate
                                , local_ep
-                               , _upnps
+                               , *_upnps
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , yield[ec].tag("serve_frontend"));
