@@ -17,7 +17,7 @@ namespace ouinet {
 static
 asio_utp::udp_multiplexer
 create_udp_multiplexer( asio::io_service& ios
-                      , fs::path last_used_port)
+                      , fs::path last_used_port_path)
 {
     using namespace std;
     namespace ip = asio::ip;
@@ -30,8 +30,8 @@ create_udp_multiplexer( asio::io_service& ios
         m.bind(ip::udp::endpoint(ip::address_v4::any(), port), ec);
     };
 
-    if (fs::exists(last_used_port)) {
-        fstream file(last_used_port.string());
+    if (fs::exists(last_used_port_path)) {
+        fstream file(last_used_port_path.string());
 
         if (file.is_open()) {
             uint16_t port = 0;
@@ -51,7 +51,7 @@ create_udp_multiplexer( asio::io_service& ios
 
         }
         else {
-            LOG_WARN( "Failed to open file ", last_used_port, " "
+            LOG_WARN("Failed to open file ", last_used_port_path, " "
                     , " to reuse last used UDP port");
         }
     }
@@ -70,14 +70,14 @@ create_udp_multiplexer( asio::io_service& ios
 
     LOG_DEBUG("UDP multiplexer bound to: ", ret.local_endpoint());
 
-    fstream file( last_used_port.string()
+    fstream file(last_used_port_path.string()
                 , fstream::binary | fstream::trunc | fstream::out);
 
     if (file.is_open()) {
         file << ret.local_endpoint().port();
     } else {
         LOG_WARN("Failed to store UDP multiplexer port to file "
-                , last_used_port, " for later reuse");
+                , last_used_port_path, " for later reuse");
     }
 
     return ret;
