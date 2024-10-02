@@ -24,40 +24,44 @@ create_udp_multiplexer( asio::io_service& ios
 
     asio_utp::udp_multiplexer ret(ios);
 
+    auto read_last_used_port = [&last_used_port_path] () {
+        uint16_t port = 0;
+        if (fs::exists(last_used_port_path)) {
+            fstream file(last_used_port_path.string());
+
+            if (file.is_open()) {
+                file >> port;
+            }
+            else {
+                LOG_WARN("Failed to open file ", last_used_port_path, " "
+                        , " to reuse last used UDP port");
+            }
+        }
+        return port;
+    };
+
     auto bind = [] ( asio_utp::udp_multiplexer& m
                    , uint16_t port
                    , sys::error_code& ec) {
         m.bind(ip::udp::endpoint(ip::address_v4::any(), port), ec);
     };
 
-    if (fs::exists(last_used_port_path)) {
-        fstream file(last_used_port_path.string());
+    auto last_used_port = read_last_used_port();
+    if (last_used_port > 0) {
+        sys::error_code ec;
+        bind(ret, last_used_port, ec);
 
-        if (file.is_open()) {
-            uint16_t port = 0;
-            file >> port;
-
-            sys::error_code ec;
-            bind(ret, port, ec);
-
-            if (!ec) {
-                LOG_INFO("UDP multiplexer bound to last used port: ", port);
-                return ret;
-            }
-
-            // TODO: Move code to implementation file, use `util/quote_error_message.h`.
-            LOG_WARN( "Failed to bind UDP multiplexer to last used port: ", port
-                    , "; ec=", ec);
-
+        if (!ec) {
+            LOG_INFO("UDP multiplexer bound to last used port: ", last_used_port);
+            return ret;
         }
-        else {
-            LOG_WARN("Failed to open file ", last_used_port_path, " "
-                    , " to reuse last used UDP port");
-        }
+
+        // TODO: Move code to implementation file, use `util/quote_error_message.h`.
+        LOG_WARN( "Failed to bind UDP multiplexer to last used port: ", last_used_port
+        , "; ec=", ec);
     }
 
     sys::error_code ec;
-
     bind(ret, default_udp_port, ec);
 
     if (ec) {
