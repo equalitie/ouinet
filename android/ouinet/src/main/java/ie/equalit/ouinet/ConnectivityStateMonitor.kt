@@ -38,6 +38,7 @@ class ConnectivityStateMonitor (
         override fun run() {
             try {
                 if (background.getState() == Ouinet.RunningState.Started.toString() ||
+                    background.getState() == Ouinet.RunningState.Degraded.toString() ||
                     startupTimeout >= INIT_TIMEOUT
                 ) {
                     isStarted = true
