@@ -24,8 +24,9 @@ create_udp_multiplexer( asio::io_service& ios
 
     asio_utp::udp_multiplexer ret(ios);
 
-    auto read_last_used_port = [&last_used_port_path] () {
+    auto read_last_used_port_or_use_random = [&last_used_port_path] () {
         uint16_t port = random_port_selection;
+
         if (fs::exists(last_used_port_path)) {
             fstream file(last_used_port_path.string());
 
@@ -44,11 +45,18 @@ create_udp_multiplexer( asio::io_service& ios
                    , uint16_t port
                    , sys::error_code& ec) {
         m.bind(ip::udp::endpoint(ip::address_v4::any(), port), ec);
+
+        if (!ec) {
+            LOG_INFO("UDP multiplexer bound to port: ", m.local_endpoint().port());
+        } else {
+            LOG_WARN( "Failed to bind UDP multiplexer to port: ", port,
+                      "; ec=", ec);
+        }
     };
 
     auto write_last_used_port = [&last_used_port_path] (uint16_t port) {
         fstream file(last_used_port_path.string()
-                , fstream::binary | fstream::trunc | fstream::out);
+                    , fstream::binary | fstream::trunc | fstream::out);
 
         if (file.is_open()) {
             file << port;
@@ -58,37 +66,30 @@ create_udp_multiplexer( asio::io_service& ios
         }
     };
 
-    auto last_used_port = read_last_used_port();
-    if (last_used_port != random_port_selection) {
-        sys::error_code ec;
-        bind(ret, last_used_port, ec);
-
-        if (!ec) {
-            LOG_INFO("UDP multiplexer bound to last used port: ", last_used_port);
-            return ret;
-        }
-
-        // TODO: Move code to implementation file, use `util/quote_error_message.h`.
-        LOG_WARN( "Failed to bind UDP multiplexer to last used port: ", last_used_port
-        , "; ec=", ec);
+    /*
+     * If a previous port is set in last_used_port file use it.
+     * If it's not set, pick a random port and bind it
+     */
+    sys::error_code ec;
+    bind(ret, read_last_used_port_or_use_random(), ec);
+    if (!ec) {
+        write_last_used_port(ret.local_endpoint().port());
+        return ret;
     }
 
-    sys::error_code ec;
+    /*
+     * Fallback to default_udp_port, if it fails perform a last
+     * binding attempt using a random port.
+     */
+    ec.clear();
     bind(ret, default_udp_port, ec);
-
     if (ec) {
-        LOG_WARN("Failed to bind to the default UDP port ", default_udp_port
-                , " picking another port at random");
-        ec = {};
+        ec.clear();
         bind(ret, random_port_selection, ec);
         assert(!ec);
     }
-
-    LOG_DEBUG("UDP multiplexer bound to: ", ret.local_endpoint());
-
     write_last_used_port(ret.local_endpoint().port());
-
     return ret;
 }
 
-}
+} // ouinet namespace
