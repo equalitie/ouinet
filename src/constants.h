@@ -100,5 +100,6 @@ static const std::string response_source_hdr_local_cache = "local-cache";
 } // http_ namespace
 
 static const uint16_t default_udp_port = 28729;
+static const uint16_t random_port_selection = 0;
 
 } // ouinet namespace

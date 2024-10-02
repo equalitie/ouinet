@@ -25,7 +25,7 @@ create_udp_multiplexer( asio::io_service& ios
     asio_utp::udp_multiplexer ret(ios);
 
     auto read_last_used_port = [&last_used_port_path] () {
-        uint16_t port = 0;
+        uint16_t port = random_port_selection;
         if (fs::exists(last_used_port_path)) {
             fstream file(last_used_port_path.string());
 
@@ -59,7 +59,7 @@ create_udp_multiplexer( asio::io_service& ios
     };
 
     auto last_used_port = read_last_used_port();
-    if (last_used_port > 0) {
+    if (last_used_port != random_port_selection) {
         sys::error_code ec;
         bind(ret, last_used_port, ec);
 
@@ -80,7 +80,7 @@ create_udp_multiplexer( asio::io_service& ios
         LOG_WARN("Failed to bind to the default UDP port ", default_udp_port
                 , " picking another port at random");
         ec = {};
-        bind(ret, 0, ec);
+        bind(ret, random_port_selection, ec);
         assert(!ec);
     }
 
