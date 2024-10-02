@@ -46,6 +46,18 @@ create_udp_multiplexer( asio::io_service& ios
         m.bind(ip::udp::endpoint(ip::address_v4::any(), port), ec);
     };
 
+    auto write_last_used_port = [&last_used_port_path] (uint16_t port) {
+        fstream file(last_used_port_path.string()
+                , fstream::binary | fstream::trunc | fstream::out);
+
+        if (file.is_open()) {
+            file << port;
+        } else {
+            LOG_WARN("Failed to store UDP multiplexer port to file "
+            , last_used_port_path, " for later reuse");
+        }
+    };
+
     auto last_used_port = read_last_used_port();
     if (last_used_port > 0) {
         sys::error_code ec;
@@ -74,15 +86,7 @@ create_udp_multiplexer( asio::io_service& ios
 
     LOG_DEBUG("UDP multiplexer bound to: ", ret.local_endpoint());
 
-    fstream file(last_used_port_path.string()
-                , fstream::binary | fstream::trunc | fstream::out);
-
-    if (file.is_open()) {
-        file << ret.local_endpoint().port();
-    } else {
-        LOG_WARN("Failed to store UDP multiplexer port to file "
-                , last_used_port_path, " for later reuse");
-    }
+    write_last_used_port(ret.local_endpoint().port());
 
     return ret;
 }
