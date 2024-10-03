@@ -23,6 +23,13 @@ create_udp_multiplexer( asio::io_service& ios
     namespace ip = asio::ip;
 
     asio_utp::udp_multiplexer ret(ios);
+    struct PortBinding {
+        string attempt_type;
+        uint16_t port;
+        PortBinding(string type, uint16_t port) : attempt_type(std::move(type)), port(port){};
+    };
+    list<PortBinding> port_binding_attempts{};
+
 
     auto read_last_used_port_or_use_random = [&last_used_port_path] () {
         uint16_t port = random_port_selection;
@@ -34,7 +41,7 @@ create_udp_multiplexer( asio::io_service& ios
                 file >> port;
             }
             else {
-                LOG_WARN("Failed to open file ", last_used_port_path, " "
+                LOG_WARN( "Failed to open file ", last_used_port_path, " "
                         , " to reuse last used UDP port");
             }
         }
@@ -42,15 +49,16 @@ create_udp_multiplexer( asio::io_service& ios
     };
 
     auto bind = [] ( asio_utp::udp_multiplexer& m
-                   , uint16_t port
+                   , const PortBinding& port_bind
                    , sys::error_code& ec) {
-        m.bind(ip::udp::endpoint(ip::address_v4::any(), port), ec);
+        m.bind(ip::udp::endpoint(ip::address_v4::any(), port_bind.port), ec);
 
         if (!ec) {
-            LOG_INFO("UDP multiplexer bound to port: ", m.local_endpoint().port());
+            LOG_INFO( "UDP multiplexer bound to ", port_bind.attempt_type
+                     , " port: ", m.local_endpoint().port());
         } else {
-            LOG_WARN( "Failed to bind UDP multiplexer to port: ", port,
-                      "; ec=", ec);
+            LOG_WARN( "Failed to bind UDP multiplexer to ", port_bind.attempt_type
+                     , " port: ", port_bind.port, "; ec=", ec);
         }
     };
 
@@ -61,20 +69,27 @@ create_udp_multiplexer( asio::io_service& ios
         if (file.is_open()) {
             file << port;
         } else {
-            LOG_WARN("Failed to store UDP multiplexer port to file "
-            , last_used_port_path, " for later reuse");
+            LOG_WARN( "Failed to store UDP multiplexer port to file "
+                    , last_used_port_path, " for later reuse");
         }
     };
 
-    std::list<uint16_t> port_options{};
-    port_options.push_back(read_last_used_port_or_use_random()); // Use previous port, if saved, or pick a random one.
-    port_options.push_back(default_udp_port); // Fallback to default port.
-    port_options.push_back(random_port_selection); // Last resort, try again to set a random port.
+    // Use previous port, if saved, or pick a random one.
+    auto last_or_random = read_last_used_port_or_use_random();
+    if (last_or_random != random_port_selection) {
+        port_binding_attempts.emplace_back("last used", last_or_random);
+    } else {
+        port_binding_attempts.emplace_back("random", last_or_random);
+    }
+    // Fallback to default port.
+    port_binding_attempts.emplace_back("default", default_udp_port);
+    // Last resort, try again to set a random port.
+    port_binding_attempts.emplace_back("last resort", random_port_selection);
 
     sys::error_code ec;
-    for (const auto& port: port_options) {
+    for (const auto& port_binding_attempt: port_binding_attempts) {
         ec.clear();
-        bind(ret, port, ec);
+        bind(ret, port_binding_attempt, ec);
         if (!ec) {
             write_last_used_port(ret.local_endpoint().port());
             return ret;
