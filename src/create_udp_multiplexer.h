@@ -66,29 +66,21 @@ create_udp_multiplexer( asio::io_service& ios
         }
     };
 
-    /*
-     * If a previous port is set in last_used_port file use it.
-     * If it's not set, pick a random port and bind it
-     */
-    sys::error_code ec;
-    bind(ret, read_last_used_port_or_use_random(), ec);
-    if (!ec) {
-        write_last_used_port(ret.local_endpoint().port());
-        return ret;
-    }
+    std::list<uint16_t> port_options{};
+    port_options.push_back(read_last_used_port_or_use_random()); // Use previous port, if saved, or pick a random one.
+    port_options.push_back(default_udp_port); // Fallback to default port.
+    port_options.push_back(random_port_selection); // Last resort, try again to set a random port.
 
-    /*
-     * Fallback to default_udp_port, if it fails perform a last
-     * binding attempt using a random port.
-     */
-    ec.clear();
-    bind(ret, default_udp_port, ec);
-    if (ec) {
+    sys::error_code ec;
+    for (const auto& port: port_options) {
         ec.clear();
-        bind(ret, random_port_selection, ec);
-        assert(!ec);
+        bind(ret, port, ec);
+        if (!ec) {
+            write_last_used_port(ret.local_endpoint().port());
+            return ret;
+        }
     }
-    write_last_used_port(ret.local_endpoint().port());
+    assert(!ec);
     return ret;
 }
 
