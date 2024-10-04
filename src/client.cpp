@@ -256,7 +256,8 @@ public:
 
         _udp_multiplexer
             = create_udp_multiplexer( _ctx
-                                    , _config.repo_root() / "last_used_udp_port");
+                                    , _config.repo_root() / "last_used_udp_port"
+                                    , _config.udp_mux_port());
 
         _udp_reachability
             = make_unique<util::UdpServerReachabilityAnalysis>();
