@@ -3,6 +3,7 @@
 #include <asio_utp.hpp>
 #include <fstream>
 #include <boost/filesystem.hpp>
+#include <boost/optional.hpp>
 #include "namespaces.h"
 #include "logger.h"
 #include "constants.h"
@@ -17,7 +18,8 @@ namespace ouinet {
 static
 asio_utp::udp_multiplexer
 create_udp_multiplexer( asio::io_service& ios
-                      , fs::path last_used_port_path)
+                      , fs::path last_used_port_path
+                      , const boost::optional<uint16_t>& settings_port = boost::none)
 {
     using namespace std;
     namespace ip = asio::ip;
@@ -74,6 +76,10 @@ create_udp_multiplexer( asio::io_service& ios
         }
     };
 
+    // Use the port defined in `udp-mux-port` via ouinet.conf or CLI options
+    if (settings_port) {
+        port_binding_attempts.emplace_back("settings", *settings_port);
+    }
     // Use previous port, if saved, or pick a random one.
     auto last_or_random = read_last_used_port_or_use_random();
     if (last_or_random != random_port_selection) {
