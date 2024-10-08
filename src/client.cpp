@@ -198,7 +198,7 @@ public:
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
-        _upnps.clear();
+        _upnps->clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -243,6 +243,8 @@ public:
         if (use_injector && _injector_start_ec)
             return Client::RunningState::Degraded;
         if (use_cache && _cache_start_ec)
+            return Client::RunningState::Degraded;
+        if (use_cache && !_bt_dht->is_bootstrapped())
             return Client::RunningState::Degraded;
 
         return Client::RunningState::Started;
@@ -309,10 +311,22 @@ public:
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
-        auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
-        if (ec) return or_throw(yield, ec, _bt_dht);
-
-        setup_upnp(ext_ep.port(), mpl.local_endpoint());
+        shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
+        _upnps = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
+        TRACK_SPAWN(_ctx, ([
+            bt_dht,
+            executor = _ctx.get_executor(),
+            ext_ep,
+            local_ep = mpl.local_endpoint(),
+            m = move(m),
+            shutdown_signal = _shutdown_signal,
+            upnps = _upnps
+        ] (asio::yield_context yield) mutable {
+            sys::error_code ec;
+            *ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
+            if (ec || shutdown_signal) return;
+            State::setup_upnp(executor, ext_ep, local_ep, upnps);
+        }));
 
         _bt_dht = move(bt_dht);
         return _bt_dht;
@@ -433,22 +447,27 @@ private:
 
     void serve_utp_request(GenericStream, Yield);
 
-    void setup_upnp(uint16_t ext_port, asio::ip::udp::endpoint local_ep) {
-        if (_shutdown_signal) return;
-
+    static void setup_upnp(
+        AsioExecutor executor,
+        shared_ptr<asio::ip::udp::endpoint> ext_ep,
+        asio::ip::udp::endpoint local_ep,
+        shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> upnps
+    ){
         if (!local_ep.address().is_v4()) {
             LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
             return;
         }
 
-        auto& p = _upnps[local_ep];
+        auto &p = (*upnps)[local_ep];
 
         if (p) {
             LOG_WARN("UPnP redirection for ", local_ep, " is already set");
             return;
         }
 
-        p = make_unique<UPnPUpdater>(_ctx.get_executor(), ext_port, local_ep.port());
+        LOG_DEBUG("UPnP: Updater is starting with ",
+                 "local port ", local_ep.port(), " and external port ", ext_ep->port());
+        p = make_unique<UPnPUpdater>(executor, ext_ep->port(), local_ep.port());
     }
 
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
@@ -542,7 +561,7 @@ private:
 
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
-    std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>> _upnps;
+    shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
 };
 
 //------------------------------------------------------------------------------
@@ -977,7 +996,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , _cache.get()
                                , *_ca_certificate
                                , local_ep
-                               , _upnps
+                               , *_upnps
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , yield[ec].tag("serve_frontend"));

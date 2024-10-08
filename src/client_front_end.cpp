@@ -283,6 +283,7 @@ upnp_status(const ClientFrontEnd::UPnPs& upnps) {
 
     bool available = false;
     for (auto& pair : upnps) {
+        if (!pair.second) return "disabled";
         if (pair.second->mapping_is_active()) return "enabled";
         available = available || pair.second->is_available();
     }
