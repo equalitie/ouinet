@@ -15,6 +15,14 @@ namespace ouinet {
  * possible. If not, pick a random port and store it in a file so it can be
  * reused later.
  */
+
+namespace detail_create_udp_multiplexer {
+    using namespace std;
+
+    };
+
+} // namespace ouinet::detail_create_udp_multiplexer
+
 static
 asio_utp::udp_multiplexer
 create_udp_multiplexer( asio::io_service& ios
@@ -23,6 +31,7 @@ create_udp_multiplexer( asio::io_service& ios
 {
     using namespace std;
     namespace ip = asio::ip;
+    namespace detail = ouinet::detail_create_udp_multiplexer;
 
     asio_utp::udp_multiplexer ret(ios);
     struct PortBinding {
@@ -105,4 +114,4 @@ create_udp_multiplexer( asio::io_service& ios
     return ret;
 }
 
-} // ouinet namespace
+} // namespace ouinet
