@@ -19,30 +19,27 @@ namespace ouinet {
 namespace detail_create_udp_multiplexer {
     using namespace std;
 
-    };
-
-} // namespace ouinet::detail_create_udp_multiplexer
-
-static
-asio_utp::udp_multiplexer
-create_udp_multiplexer( asio::io_service& ios
-                      , fs::path last_used_port_path
-                      , const boost::optional<uint16_t>& settings_port = boost::none)
-{
-    using namespace std;
-    namespace ip = asio::ip;
-    namespace detail = ouinet::detail_create_udp_multiplexer;
-
-    asio_utp::udp_multiplexer ret(ios);
     struct PortBinding {
         string attempt_type;
         uint16_t port;
-        PortBinding(string type, uint16_t port) : attempt_type(std::move(type)), port(port){};
+        PortBinding(string type, uint16_t port)
+            : attempt_type(std::move(type)), port(port){};
     };
-    list<PortBinding> port_binding_attempts;
 
+    static void bind(asio_utp::udp_multiplexer& m, const PortBinding& port_bind, sys::error_code& ec) {
+        namespace ip = asio::ip;
+        m.bind(ip::udp::endpoint(ip::address_v4::any(), port_bind.port), ec);
 
-    auto read_last_used_port_or_use_random = [&last_used_port_path] () {
+        if (!ec) {
+            LOG_INFO( "UDP multiplexer bound to ", port_bind.attempt_type
+                    , " port: ", m.local_endpoint().port());
+        } else {
+            LOG_WARN( "Failed to bind UDP multiplexer to ", port_bind.attempt_type
+                    , " port: ", port_bind.port, "; ec=", ec);
+        }
+    }
+
+    static uint16_t read_last_used_port_or_use_random(const fs::path& last_used_port_path) {
         uint16_t port = random_port_selection;
 
         if (fs::exists(last_used_port_path)) {
@@ -50,31 +47,17 @@ create_udp_multiplexer( asio::io_service& ios
 
             if (file.is_open()) {
                 file >> port;
-            }
-            else {
+            } else {
                 LOG_WARN( "Failed to open file ", last_used_port_path, " "
                         , " to reuse last used UDP port");
             }
         }
         return port;
-    };
+    }
 
-    auto bind = [] ( asio_utp::udp_multiplexer& m
-                   , const PortBinding& port_bind
-                   , sys::error_code& ec) {
-        m.bind(ip::udp::endpoint(ip::address_v4::any(), port_bind.port), ec);
-
-        if (!ec) {
-            LOG_INFO( "UDP multiplexer bound to ", port_bind.attempt_type
-                     , " port: ", m.local_endpoint().port());
-        } else {
-            LOG_WARN( "Failed to bind UDP multiplexer to ", port_bind.attempt_type
-                     , " port: ", port_bind.port, "; ec=", ec);
-        }
-    };
-
-    auto write_last_used_port = [&last_used_port_path] (uint16_t port) {
-        fstream file(last_used_port_path.string()
+    static void write_last_used_port( const fs::path& last_used_port_path
+                        , uint16_t port) {
+        fstream file( last_used_port_path.string()
                     , fstream::binary | fstream::trunc | fstream::out);
 
         if (file.is_open()) {
@@ -83,30 +66,48 @@ create_udp_multiplexer( asio::io_service& ios
             LOG_WARN( "Failed to store UDP multiplexer port to file "
                     , last_used_port_path, " for later reuse");
         }
-    };
+    }
 
-    // Use the port defined in `udp-mux-port` via ouinet.conf or CLI options
+} // namespace ouinet::detail_create_udp_multiplexer
+
+static
+asio_utp::udp_multiplexer
+create_udp_multiplexer( asio::io_service& ios
+                      , const fs::path& last_used_port_path
+                      , const boost::optional<uint16_t>& settings_port = boost::none)
+{
+    using namespace std;
+    namespace detail = ouinet::detail_create_udp_multiplexer;
+
+    asio_utp::udp_multiplexer ret(ios);
+    list<detail::PortBinding> port_binding_attempts;
+
+    // 1. Use the port defined in `udp-mux-port` via ouinet.conf or CLI options
     if (settings_port) {
         port_binding_attempts.emplace_back("settings", *settings_port);
     }
-    // Use previous port, if saved, or pick a random one.
-    auto last_or_random = read_last_used_port_or_use_random();
+
+    // 2. Use previous port, if saved, or pick a random one.
+    auto last_or_random = detail::read_last_used_port_or_use_random(last_used_port_path);
     if (last_or_random != random_port_selection) {
         port_binding_attempts.emplace_back("last used", last_or_random);
     } else {
         port_binding_attempts.emplace_back("random", last_or_random);
     }
-    // Fallback to default port.
+
+    // 3. Fallback to default port.
     port_binding_attempts.emplace_back("default", default_udp_port);
-    // Last resort, try again to set a random port.
+
+    // 4. Last resort, try again to set a random port.
     port_binding_attempts.emplace_back("last resort", random_port_selection);
 
     sys::error_code ec;
     for (const auto& port_binding_attempt: port_binding_attempts) {
         ec.clear();
-        bind(ret, port_binding_attempt, ec);
+        detail::bind(ret, port_binding_attempt, ec);
         if (!ec) {
-            write_last_used_port(ret.local_endpoint().port());
+            detail::write_last_used_port( last_used_port_path
+                                        , ret.local_endpoint().port());
             return ret;
         }
     }
