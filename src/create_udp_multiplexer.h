@@ -30,7 +30,7 @@ create_udp_multiplexer( asio::io_service& ios
         uint16_t port;
         PortBinding(string type, uint16_t port) : attempt_type(std::move(type)), port(port){};
     };
-    list<PortBinding> port_binding_attempts{};
+    list<PortBinding> port_binding_attempts;
 
 
     auto read_last_used_port_or_use_random = [&last_used_port_path] () {
