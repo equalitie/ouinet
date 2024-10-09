@@ -118,6 +118,7 @@ public class Ouinet {
         // and change `http(s).proxyPort` to match.
         maybeAdd(args, "--listen-on-tcp",          config.getListenOnTcp());
         maybeAdd(args, "--front-end-ep",           config.getFrontEndEp());
+        maybeAdd(args, "--udp-mux-port",           config.getUdpMuxPort());
         maybeAdd(args, "--max-cached-age",         config.getMaxCachedAge());
         maybeAdd(args, "--local-domain",           config.getLocalDomain());
         maybeAdd(args, "--origin-doh-base",        config.getOriginDohBase());
