@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- New option `udp-mux-port` to control the port used by Ouinet's UDP multiplexer.
+
+### Changed
+
+- Full refactoring of `create_udp_multiplexer.h`.
+- Changed the order of the port binding attempts to `settings`, `random`,
+  `last_used`, `default` and `last_resort`.
+
+### Deprecated
+
+- Setting the `udp-mux-port` option is now preferable to use the file
+  `last_used_udp_port`. The possibility of using this file to set the UDP
+  port will be removed in future releases.
+
 
 ## [v0.29.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.29.1) - 2024-09-20
 
