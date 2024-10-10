@@ -62,6 +62,10 @@ public:
         return _local_ep;
     }
 
+    boost::optional<uint16_t> udp_mux_port() const {
+        return _udp_mux_port;
+    }
+
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
 
@@ -159,6 +163,9 @@ private:
            ("listen-on-tcp"
             , po::value<string>()->default_value("127.0.0.1:8077")
             , "HTTP proxy endpoint (in <IP>:<PORT> format)")
+           ("udp-mux-port"
+           , po::value<uint16_t>()
+           , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
@@ -374,6 +381,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
+    boost::optional<uint16_t> _udp_mux_port;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
@@ -509,6 +517,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error("Failed to parse '--listen-on-tcp' argument");
         }
         _local_ep = *opt_local_ep;
+    }
+
+    if (vm.count("udp-mux-port")) {
+        _udp_mux_port = vm["udp-mux-port"].as<uint16_t>();
     }
 
     if (vm.count("injector-ep")) {
