@@ -12,8 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New option `udp-mux-port` to control the port used by Ouinet's UDP multiplexer.
 
+### Fixed
+
+- Added a delay between the attempts of the UPnP updater to get a local
+  address. This is to prevent the loop from filling the logs when a network
+  adapter is not present, e.g. when the device is in airplane-mode.
+
 ### Changed
 
+- Avoid blocking the Ouinet service initialization by running the DHT
+  bootstrapping in a coroutine.
+- Ouinet client state is now set to `degraded` when the proxy is ready
+  to accept requests but the DHT is not bootstrapped.
 - Full refactoring of `create_udp_multiplexer.h`.
 - Changed the order of the port binding attempts to `settings`, `random`,
   `last_used`, `default` and `last_resort`.
