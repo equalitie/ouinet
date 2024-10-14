@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v0.30.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.0) - 2024-10-14
+
 ### Added
 
 - New option `udp-mux-port` to control the port used by Ouinet's UDP multiplexer.
