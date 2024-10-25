@@ -109,7 +109,7 @@ set(BOOST_PATCH_COMMAND
     cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
 )
 foreach (patch ${BOOST_PATCHES})
-    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 externalproject_add(built_boost
