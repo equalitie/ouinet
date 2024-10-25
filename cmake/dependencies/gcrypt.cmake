@@ -79,7 +79,7 @@ set(PATCH_COMMAND
     ${PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error
 )
 foreach (patch ${GPG_ERROR_PATCHES})
-    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 
