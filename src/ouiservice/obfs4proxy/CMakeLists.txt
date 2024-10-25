@@ -40,6 +40,6 @@ externalproject_add(obfs4proxy
                && export CGO_ENABLED=1
 	       && export GIT_SSL_NO_VERIFY=1 # XXX: go get gitlab.com/yawning/utls.git@v0.0.9-2 fails on GL CI otherwise
                && go build -o ${OBFS4PROXY_OUTPUT_DIRECTORY}/obfs4proxy ./obfs4proxy
-               && chmod u+w -R ${GOPATH} # Modules cache is ro by default which CI doesn't cope with; https://github.com/golang/go/issues/27161
+               && chmod -R u+w ${GOPATH} # Modules cache is ro by default which CI doesn't cope with; https://github.com/golang/go/issues/27161
     INSTALL_COMMAND ""
 )
