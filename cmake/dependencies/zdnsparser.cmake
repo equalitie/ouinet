@@ -13,7 +13,7 @@ set(PATCH_COMMAND
     cd ${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser
 )
 foreach (patch ${PATCHES})
-    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 externalproject_add(zdnsparser
