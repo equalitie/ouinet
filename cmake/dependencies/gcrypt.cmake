@@ -15,7 +15,7 @@ set(GPGERROR_LIBRARY_VERSION_FILENAMES
     ${GPGERROR_LIBRARY_BASE_FILENAME}
 )
 set(GCRYPT_LIBRARY_VERSION_FILENAMES
-    ${GCRYPT_LIBRARY_BASE_FILENAME}.20.2.3
+    ${GCRYPT_LIBRARY_BASE_FILENAME}.20.3.3
     ${GCRYPT_LIBRARY_BASE_FILENAME}.20
     ${GCRYPT_LIBRARY_BASE_FILENAME}
 )
@@ -169,8 +169,8 @@ externalproject_add(gpg_error
 
 externalproject_add(gcrypt
     DEPENDS gpg_error
-    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
-    URL_MD5 3139c2402e844985a67fb288a930534d
+    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.9.3.tar.bz2
+    URL_MD5 3fcb490b9b7347344708eeb7b4a95464
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
         ${UNDERSCORE_CONFIG}
