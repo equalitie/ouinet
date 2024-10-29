@@ -6,9 +6,16 @@ include(ExternalProject)
 # TODO: Perhaps do a check for Boost and gcc version before adding this flag?
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses -Wno-error=nonnull -Wno-error=deprecated-declarations")
 
-set(URI_FILENAME
-    "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
-)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    set(URI_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+else()
+    set(URI_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+endif()
+
 
 externalproject_add(uri
     GIT_REPOSITORY https://github.com/cpp-netlib/uri
