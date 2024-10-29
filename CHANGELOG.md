@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v0.30.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.1) - 2024-10-29
+
+### Fixed
+
+- A `_cancel` signal is now triggered when a DHT instance is stopped, instead
+of waiting until its destructor is invoked. This prevents the spawning of
+coroutines when the client process is stopped and also releases pending
+locks on the shared pointer to the DHT instance, reducing the time needed to
+perform a clean shutdown.
+
+
 ## [v0.30.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.0) - 2024-10-14
 
 ### Added
