@@ -1,8 +1,14 @@
 include(ExternalProject)
 
-set(ZDNSPARSER_FILENAME
-    "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
-)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    set(ZDNSPARSER_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+else()
+    set(ZDNSPARSER_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+endif()
 
 set(PATCHES
     ${CMAKE_CURRENT_LIST_DIR}/zdnsparser/disable-tests.patch

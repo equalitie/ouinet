@@ -77,6 +77,11 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+#elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+#    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++14")
+#    set(BOOST_ARCH_CONFIGURATION
+#            cxxflags=${BOOST_CXXFLAGS}
+#    )
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
