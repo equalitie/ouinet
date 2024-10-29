@@ -1,8 +1,19 @@
 include(ExternalProject)
 
-set(URL_FILENAME
-    "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
-)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+        set(skyr_LIBRARY_SUFFIX "d${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    else()
+        set(skyr_LIBRARY_SUFFIX "${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    endif()
+    set(URL_FILENAME
+        "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${skyr_LIBRARY_SUFFIX}"
+    )
+else()
+    set(URL_FILENAME
+        "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+endif()
 
 externalproject_add(expected
         URL https://github.com/TartanLlama/expected/archive/v1.1.0.tar.gz

@@ -64,7 +64,11 @@ add_executable(test-util "test-util.cpp")
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-    target_link_libraries(test-util asan)
+    if(${CMAKE_GENERATOR} STREQUAL "Xcode")
+        set_target_properties(test-util PROPERTIES LINK_FLAGS "-fsanitize=address")
+    else()
+        target_link_libraries(test-util asan)
+    endif()
 endif ()
 
 ######################################################################

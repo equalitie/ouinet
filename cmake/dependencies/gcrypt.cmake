@@ -67,6 +67,13 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set(GPGERROR_LIBRARY_BASE_FILENAME ${GPGERROR_LIBRARY_BASE_FILENAME}.a)
     set(GCRYPT_LIBRARY_BASE_FILENAME ${GCRYPT_LIBRARY_BASE_FILENAME}.a)
 
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    # TODO: does this need to be hard-coded
+    set(GCRYPT_CC /usr/bin/gcc)
+    set(PATCH_COMMAND "true")
+    set(HOST_CONFIG "")
+    set(UNDERSCORE_CONFIG "")
+    set(VERSIONED_LIBRARIES 0)
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
