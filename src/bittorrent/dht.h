@@ -474,6 +474,7 @@ class MainlineDht {
     void wait_all_ready(Cancel&, asio::yield_context);
 
     void stop() {
+        _cancel();
         _nodes.clear();
     }
 
