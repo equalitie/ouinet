@@ -10,7 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Ouinet binaries and its dependencies are built now with C++ 20.
+- Ouinet binaries and its dependencies can be built now with C++ 20 and GCC 14.
+
+### Removed
+
+- Unused `maybe_install_ndk` method was removed from `build-android.sh`
+now that the NDK is automatically installed by Gradle.
 
 
 ## [v0.30.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.1) - 2024-10-29
