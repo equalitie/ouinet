@@ -1,5 +1,6 @@
 #define BOOST_TEST_MODULE dht
 #include <boost/test/included/unit_test.hpp>
+#include <boost/asio.hpp>
 
 #include <chrono>
 #include <util/hash.h>
