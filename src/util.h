@@ -237,7 +237,7 @@ std::string percent_decode(const boost::string_view);
 // If existing, truncate it.
 inline
 void create_state_file(const boost::filesystem::path& path, const std::string& line) {
-    std::fstream fs(path.native(), std::fstream::out | std::fstream::trunc);
+    std::fstream fs(path.string(), std::fstream::out | std::fstream::trunc);
     fs << line << std::endl;
     fs.close();
 }

@@ -62,6 +62,10 @@ public:
         return _local_ep;
     }
 
+    boost::optional<uint16_t> udp_mux_port() const {
+        return _udp_mux_port;
+    }
+
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
 
@@ -159,6 +163,9 @@ private:
            ("listen-on-tcp"
             , po::value<string>()->default_value("127.0.0.1:8077")
             , "HTTP proxy endpoint (in <IP>:<PORT> format)")
+           ("udp-mux-port"
+           , po::value<uint16_t>()
+           , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
@@ -300,7 +307,7 @@ private:
         try {
             fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
             LOG_DEBUG("Saving persistent options");
-            ofstream(ouinet_save_path.native(), fstream::out | fstream::trunc) << ss.str();
+            ofstream(ouinet_save_path.string(), fstream::out | fstream::trunc) << ss.str();
         } catch (const exception& e) {
             LOG_ERROR("Failed to save persistent options: ", e.what());
         }
@@ -361,7 +368,7 @@ private:
 
         auto current_log_path = logger.current_log_file();
         auto ouinet_log_path = current_log_path.empty()
-            ? (_repo_root / log_file_name).native()
+            ? (_repo_root / log_file_name).string()
             : current_log_path;
 
         logger.log_to_file(ouinet_log_path);
@@ -374,6 +381,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
+    boost::optional<uint16_t> _udp_mux_port;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
@@ -449,7 +457,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             sys::error_code ignored_ec;
             fs::remove(ouinet_save_path, ignored_ec);
         } else if (fs::is_regular_file(ouinet_save_path)) {
-            ifstream ouinet_conf(ouinet_save_path.native());
+            ifstream ouinet_conf(ouinet_save_path.string());
             po::store(po::parse_config_file(ouinet_conf, desc_save), vm);
             po::notify(vm);
         }
@@ -462,7 +470,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     util::str("The path ", _repo_root, " does not contain the "
                              , _ouinet_conf_file, " configuration file"));
         }
-        ifstream ouinet_conf(ouinet_conf_path.native());
+        ifstream ouinet_conf(ouinet_conf_path.string());
         po::store(po::parse_config_file(ouinet_conf, desc), vm);
         po::notify(vm);
     }
@@ -509,6 +517,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             throw std::runtime_error("Failed to parse '--listen-on-tcp' argument");
         }
         _local_ep = *opt_local_ep;
+    }
+
+    if (vm.count("udp-mux-port")) {
+        _udp_mux_port = vm["udp-mux-port"].as<uint16_t>();
     }
 
     if (vm.count("injector-ep")) {

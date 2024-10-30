@@ -42,6 +42,7 @@ public class ConfigTest {
     private static final String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
     private static final String LISTEN_ON_TCP = "0.0.0.0:8077";
     private static final String FRONT_END_EP = "0.0.0.0:8078";
+    private static final String UDP_MUX_PORT = "24842";
     private static final boolean DISABLE_BRIDGE_ANNOUNCEMENT = true;
     private static final String MAX_CACHED_AGE = "120";
     private static final String LOCAL_DOMAIN = "local.domain";
@@ -100,6 +101,7 @@ public class ConfigTest {
                 .setCacheStaticContentPath(cacheStaticContentPath)
                 .setListenOnTcp(LISTEN_ON_TCP)
                 .setFrontEndEp(FRONT_END_EP)
+                .setUdpMuxPort(UDP_MUX_PORT)
                 .setDisableBridgeAnnouncement(DISABLE_BRIDGE_ANNOUNCEMENT)
                 .setMaxCachedAge(MAX_CACHED_AGE)
                 .setLocalDomain(LOCAL_DOMAIN)

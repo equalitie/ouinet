@@ -50,14 +50,14 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
     asio::io_context ctx;
 
     fs::path td_path;
-    auto remove_td = defer([&] {
+    auto remove_td = ouinet::defer([&] {
         if (fs::exists(td_path)) fs::remove_all(td_path);
     });
     {
         sys::error_code ec;
 
         auto td = util::temp_dir::make(ec);
-        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
 
         BOOST_CHECK(td->keep_on_close());
         td->keep_on_close(keep);
@@ -68,7 +68,7 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
         BOOST_REQUIRE(fs::is_directory(td_path));
 
         populate_directory(td_path, ctx.get_executor(), ec);
-        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
     }
 
     if (!keep) {
@@ -83,14 +83,14 @@ BOOST_DATA_TEST_CASE(test_tmp_file, boost::unit_test::data::make(true_false), ke
     asio::io_context ctx;
 
     fs::path tf_path;
-    auto remove_td = defer([&] {
+    auto remove_td = ouinet::defer([&] {
         if (fs::exists(tf_path)) fs::remove_all(tf_path);
     });
     {
         sys::error_code ec;
 
         auto tf = util::temp_file::make(ctx.get_executor(), ec);
-        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
 
         BOOST_CHECK(tf->keep_on_close());
         tf->keep_on_close(keep);
@@ -107,7 +107,7 @@ BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), 
     asio::io_context ctx;
 
     fs::path ad_temp_path, ad_path = fs::unique_path();
-    auto remove_td = defer([&] {
+    auto remove_td = ouinet::defer([&] {
         if (fs::exists(ad_path)) fs::remove_all(ad_path);
         if (fs::exists(ad_temp_path)) fs::remove_all(ad_temp_path);
     });
@@ -115,7 +115,7 @@ BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), 
         sys::error_code ec;
 
         auto ad = util::atomic_dir::make(ad_path, ec);
-        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
 
         BOOST_CHECK_EQUAL(ad->path(), ad_path);
         BOOST_REQUIRE(!fs::exists(ad_path));
@@ -126,11 +126,11 @@ BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), 
         BOOST_REQUIRE(fs::is_directory(ad_temp_path));
 
         populate_directory(ad_temp_path, ctx.get_executor(), ec);
-        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
 
         if (commit) {
             ad->commit(ec);
-            BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+            BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
         }
     }
 
@@ -147,7 +147,7 @@ BOOST_DATA_TEST_CASE(test_atomic_file, boost::unit_test::data::make(true_false),
     asio::io_context ctx;
 
     fs::path af_temp_path, af_path = fs::unique_path();
-    auto remove_af = defer([&] {
+    auto remove_af = ouinet::defer([&] {
         if (fs::exists(af_path)) fs::remove_all(af_path);
         if (fs::exists(af_temp_path)) fs::remove_all(af_temp_path);
     });
@@ -155,7 +155,7 @@ BOOST_DATA_TEST_CASE(test_atomic_file, boost::unit_test::data::make(true_false),
         sys::error_code ec;
 
         auto af = util::atomic_file::make(ctx.get_executor(), af_path, ec);
-        BOOST_REQUIRE_EQUAL(ec.message(), "Success");
+        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
 
         BOOST_CHECK_EQUAL(af->path(), af_path);
         BOOST_REQUIRE(!fs::exists(af_path));

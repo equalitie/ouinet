@@ -18,6 +18,79 @@ Windows systems.
 - Ouinet binaries and its dependencies are built now with C++ 20.
 
 
+## [v0.30.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.1) - 2024-10-29
+
+### Fixed
+
+- A `_cancel` signal is now triggered when a DHT instance is stopped, instead
+of waiting until its destructor is invoked. This prevents the spawning of
+coroutines when the client process is stopped and also releases pending
+locks on the shared pointer to the DHT instance, reducing the time needed to
+perform a clean shutdown.
+
+
+## [v0.30.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.0) - 2024-10-14
+
+### Added
+
+- New option `udp-mux-port` to control the port used by Ouinet's UDP multiplexer.
+
+### Fixed
+
+- Added a delay between the attempts of the UPnP updater to get a local
+  address. This is to prevent the loop from filling the logs when a network
+  adapter is not present, e.g. when the device is in airplane-mode.
+
+### Changed
+
+- Avoid blocking the Ouinet service initialization by running the DHT
+  bootstrapping in a coroutine.
+- Ouinet client state is now set to `degraded` when the proxy is ready
+  to accept requests but the DHT is not bootstrapped.
+- Full refactoring of `create_udp_multiplexer.h`.
+- Changed the order of the port binding attempts to `settings`, `random`,
+  `last_used`, `default` and `last_resort`.
+
+### Deprecated
+
+- Setting the `udp-mux-port` option is now preferable to use the file
+  `last_used_udp_port`. The possibility of using this file to set the UDP
+  port will be removed in future releases.
+
+
+## [v0.29.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.29.1) - 2024-09-20
+
+### Changed
+
+- Updated list of bootstrap servers.
+
+### Removed
+
+- Disabled bencoding validation requiring sorted keys in dictionaries of
+the KRPC messages sent to the DHT.
+
+
+## [v0.29.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.29.0) - 2024-08-21
+
+### Changed
+
+- Applied adjustments that are required to build the `windows-client`
+branch but that are not exclusively affecting to Windows builds.
+- Upgrade `nlohmann/json` package to version 3.11.3
+
+### Removed
+
+- CI pipelines that were building Ouinet with Debian 12 and Boost 1.77.0.
+
+
+## [v0.28.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.28.0) - 2024-08-07
+
+### Added
+
+- A new `file_io` component that supports asynchronous I/O operations for
+Windows systems.
+
+
 ## [v0.27.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.27.0) - 2024-07-08
 
 ### Added

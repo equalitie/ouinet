@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include "namespaces.h"
+#include <cstdint>
 #include <string>
 
 #include <boost/lexical_cast.hpp>

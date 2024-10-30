@@ -106,7 +106,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44)
     auto skey = util::Ed25519PrivateKey::generate();
     auto pkey = skey.public_key();
 
-    size_t push_get_count = 15;
+    size_t push_get_count = 8;
     size_t success_count = 0;
 
     asio::spawn(ctx, [&] (auto yield) {

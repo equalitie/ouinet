@@ -85,6 +85,7 @@ private:
         static const auto timeout_pause     = seconds(1);  // to ensure mapping removal after timeout
 
         auto mapping_desc = (boost::format("Ouinet-%04x") % _random_id).str();
+        std::uint8_t get_local_ipv4_attempts{0};
 
         while (true)
         {
@@ -92,9 +93,15 @@ private:
 
             auto int_addr = util::get_local_ipv4_address();
             if (!int_addr) {
-                LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting");
+                LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting ", get_local_ipv4_attempts);
+                if ( ++get_local_ipv4_attempts >= 5) {
+                    mapping_disabled();
+                    async_sleep(exec, failure_wait_time, cancel, yield);
+                }
+                if (cancel) return;
                 continue;  // probably no connection
             }
+            get_local_ipv4_attempts = 0;
 
             auto r_igds = upnp::igd::discover(exec, yield);
             if (cancel) return;

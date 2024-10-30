@@ -14,6 +14,9 @@
 #include <boost/nowide/fstream.hpp>
 #include <boost/optional.hpp>
 #include <boost/regex.hpp>
+#ifdef _WIN32
+#include <tchar.h>
+#endif
 
 #include "../defer.h"
 #include "../http_util.h"
@@ -688,7 +691,15 @@ canonical_from_content_relpath( const fs::path& body_path_p
         return boost::none;
     }
     for (const auto& c : body_rp)
-        if (c.empty() || !c.compare(".") || !c.compare("..")) {
+        if (c.empty() ||
+#ifdef _WIN32
+            !c.compare(reinterpret_cast<const fs::path::value_type*>(_T("."))) ||
+            !c.compare(reinterpret_cast<const fs::path::value_type*>(_T("..")))
+#else
+            !c.compare(".") ||
+            !c.compare("..")
+#endif
+        ){
             _ERROR("Invalid components in path of static cache content file,"
                    " possibly malicious file: ", body_path_p);
             return boost::none;

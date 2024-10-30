@@ -54,6 +54,12 @@ BOOST_AUTO_TEST_CASE(test_decoding)
     BOOST_REQUIRE_EQUAL("abcd", decoded_list->at(0));
     BOOST_REQUIRE_EQUAL("wxyz", decoded_list->at(1));
     std::cout << *decoded_value_3;
+
+    auto decoded_value_4 = bencoding_decode("d4:zero1:z3:one1:ae");
+    auto decoded_unsorted_map = decoded_value_4->as_map();
+    BOOST_REQUIRE_EQUAL("z", decoded_unsorted_map->at("zero"));
+    BOOST_REQUIRE_EQUAL("a", decoded_unsorted_map->at("one"));
+    std::cout << *decoded_value_4;
 }
 
 BOOST_AUTO_TEST_SUITE_END()

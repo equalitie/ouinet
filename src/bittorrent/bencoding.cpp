@@ -123,14 +123,14 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
             if (!value) {
                 return boost::none;
             }
-            /*
+            /* Disabled validation to allow unsorted dicts coming from bs servers:
              * key/value pairs MUST be in ascending key order.
-             */
+             *
             if (!output.empty()) {
                 if (output.rbegin()->first >= key) {
                     return boost::none;
                 }
-            }
+            }*/
             output[std::move(*key)] = std::move(*value);
         }
         if (encoded.size() == 0) {

@@ -61,7 +61,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
     auto dir = fs::temp_directory_path()
              / fs::unique_path("ouinet-persistent-lru-cache-test-%%%%-%%%%");
 
-    auto on_exit = defer([&] { fs::remove_all(dir); });
+    auto on_exit = ouinet::defer([&] { fs::remove_all(dir); });
 
     BOOST_REQUIRE(!exists(dir));
 
@@ -173,7 +173,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
     auto dir = fs::temp_directory_path()
              / fs::unique_path("ouinet-persistent-lru-cache-test-%%%%-%%%%");
 
-    auto on_exit = defer([&] { fs::remove_all(dir); });
+    auto on_exit = ouinet::defer([&] { fs::remove_all(dir); });
 
     BOOST_REQUIRE(!exists(dir));
 

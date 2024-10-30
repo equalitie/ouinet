@@ -30,11 +30,11 @@
 #define LOG_VERBOSE(...) do { if (logger.get_threshold() <= VERBOSE) logger.verbose(ouinet::util::str(__VA_ARGS__)); } while (false)
 #define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
 #define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_ERROR(...) do { if (logger.get_threshold() <= ERROR) logger.error(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_ERROR(...) do { if (logger.get_threshold() <= ERROR_LEVEL) logger.error(ouinet::util::str(__VA_ARGS__)); } while (false)
 #define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
 
 // Standard log levels, ascending order of specificity.
-enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR, ABORT };
+enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR_LEVEL, ABORT };
 
 log_level_t default_log_level();
 
@@ -45,7 +45,7 @@ inline std::ostream& operator<<(std::ostream& os, log_level_t ll) {
         case VERBOSE: return os << "VERBOSE";
         case INFO:    return os << "INFO";
         case WARN:    return os << "WARN";
-        case ERROR:   return os << "ERROR";
+        case ERROR_LEVEL:   return os << "ERROR";
         case ABORT:   return os << "ABORT";
     }
     return os << "???";
@@ -58,7 +58,7 @@ inline boost::optional<log_level_t> log_level_from_string(const std::string& ll)
     if (ll == "VERBOSE") return VERBOSE;
     if (ll == "INFO") return INFO;
     if (ll == "WARN") return WARN;
-    if (ll == "ERROR") return ERROR;
+    if (ll == "ERROR") return ERROR_LEVEL;
     if (ll == "ABORT") return ABORT;
     return {};
 }

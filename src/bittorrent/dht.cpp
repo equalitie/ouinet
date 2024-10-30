@@ -1709,17 +1709,14 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     sys::error_code ignored_ec;
 
     vector<bootstrap::Address> bootstraps {
-                               "router.bittorrent.com"
-                               , "router.utorrent.com"
+                               "dht.libtorrent.org:25401"
+                               , "dht.transmissionbt.com:6881"
                                // Alternative bootstrap servers from the Ouinet project.
                                , "router.bt.ouinet.work"
                                // Part of previous name (in case of DNS failure).
                                , asio::ip::make_address("74.3.163.127")
                                , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
-                               // I don't think I have ever seen these two working
-                               // (Perhaps they only listen on TCP?)
-                               , "dht.transmissionbt.com"
-                               , "dht.vuze.com" };
+                               };
 
     for (auto& bootstrap : _extra_bs) {
         bootstraps.push_back(bootstrap);
