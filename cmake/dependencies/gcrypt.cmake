@@ -157,6 +157,7 @@ externalproject_add(gpg_error
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
+            --disable-doc
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
@@ -176,6 +177,7 @@ externalproject_add(gcrypt
             ./configure ${HOST_CONFIG}
             --prefix=${GCRYPT_BUILD_DIRECTORY}
             --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
+            --disable-doc
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
