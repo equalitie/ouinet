@@ -77,11 +77,16 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
-#elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-#    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++14")
-#    set(BOOST_ARCH_CONFIGURATION
-#            cxxflags=${BOOST_CXXFLAGS}
-#    )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    if(BOOST_VERSION EQUAL 1.79.0)
+      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
+    endif()
+    # Unary function is deprecated in clang 16, this definition avoids using it
+    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
+    set(BOOST_ARCH_CONFIGURATION
+            cxxflags=${BOOST_CXXFLAGS}
+    )
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
@@ -188,6 +193,7 @@ target_compile_definitions(boost_asio
         # For some reason we need to define both of these
         -DBOOST_COROUTINES_NO_DEPRECATION_WARNING
         -DBOOST_COROUTINE_NO_DEPRECATION_WARNING
+        ${BOOST_COMPILE_DEFINITIONS}
 )
 target_compile_options(boost_asio
     PUBLIC -std=c++20
