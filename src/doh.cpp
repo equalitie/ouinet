@@ -165,7 +165,7 @@ public:
     void onDnsRec(in_addr addr, std::string name, std::string) override
     {
         if (name != _host) return;  // unrelated answer, ignore
-        auto ip4addr = asio::ip::make_address_v4(::ntohl(addr.s_addr));
+        auto ip4addr = asio::ip::make_address_v4(ntohl(addr.s_addr));
         LOG_DEBUG("DoH: ", name, " -> ", ip4addr);
         _answers.push_back(std::move(ip4addr));
     }
