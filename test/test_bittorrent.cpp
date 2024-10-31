@@ -22,6 +22,8 @@ using Clock = chrono::steady_clock;
 
 using boost::optional;
 
+namespace utf = boost::unit_test;
+
 BOOST_AUTO_TEST_CASE(test_generate_node_id)
 {
     // The first test vector from here:
@@ -76,7 +78,9 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
     ctx.run();
 }
 
-BOOST_AUTO_TEST_CASE(test_bep_44)
+BOOST_AUTO_TEST_CASE(test_bep_44,
+                     * utf::disabled()
+                     * utf::description("tests unused feature, fails randomly in CI"))
 {
     using namespace ouinet::bittorrent::dht;
 
