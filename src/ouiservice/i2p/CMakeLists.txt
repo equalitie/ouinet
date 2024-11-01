@@ -38,6 +38,7 @@ target_include_directories(ouiservice-i2p
     PRIVATE
         "./i2pd/libi2pd"
         "./i2pd/libi2pd_client"
+	"./i2pd/i18n"
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -45,6 +46,7 @@ target_link_libraries(ouiservice-i2p
     PRIVATE
         libi2pdclient
         libi2pd
+	libi2pdlang
         z
         OpenSSL::SSL
     PUBLIC

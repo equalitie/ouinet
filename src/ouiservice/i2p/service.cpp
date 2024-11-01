@@ -46,7 +46,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
         { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
         { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
     };
-    _local_destination = std::make_shared<i2p::client::ClientDestination>(keys, false, &params);
+    _local_destination = std::make_shared<i2p::client::RunnableClientDestination>(keys, false, &params);
     // start destination's thread and tunnel pool
     _local_destination->Start ();
 }
