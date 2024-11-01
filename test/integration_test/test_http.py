@@ -171,7 +171,7 @@ class OuinetTests(TestCase):
         return agent.request(b"GET", url.encode())
 
     @inlineCallbacks
-    def _test_i2p_transport(self):
+    def test_i2p_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http 
         request to the echoing http server through the client --i2p--> injector -> http server
@@ -184,7 +184,7 @@ class OuinetTests(TestCase):
         # #injector
         i2pinjector_tunnel_ready = defer.Deferred()
         i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true",
-                                             "--disable-cache"], i2pinjector_tunnel_ready)
+                                             ], i2pinjector_tunnel_ready) #"--disable-cache"
 
         #wait for the injector tunnel to be advertised
         success = yield i2pinjector_tunnel_ready
