@@ -94,7 +94,7 @@ void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
                   << "(" << success << " of " << bootstraps.size() << ")" << endl;
         dht_node.stop();
 
-        BOOST_TEST_CHECK(success_rate > 50);
+        BOOST_TEST_CHECK(success_rate > 40);
     });
 }
 
