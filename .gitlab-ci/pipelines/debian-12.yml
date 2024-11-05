@@ -1,5 +1,6 @@
-include: .gitlab-ci/jobs/common/prepare-builder-image.yml
-include: .gitlab-ci/jobs/linux.yml
+include:
+  - .gitlab-ci/jobs/common/prepare-builder-image.yml
+  - .gitlab-ci/jobs/linux.yml
 
 debian-12 / prepare-builder-image:
   variables:
