@@ -5,7 +5,6 @@ include:
 debian-12-boost-1.79 / build:
   variables:
     BOOST_VERSION: "1.79.0"
-    TARGET_PLATFORM: 'debian-12-boost-1.79'
   extends:
     .linux-build
   needs:
@@ -13,16 +12,12 @@ debian-12-boost-1.79 / build:
       optional: true
 
 debian-12-boost-1.79 / unit-test:
-  variables:
-    TARGET_PLATFORM: 'debian-12-boost-1.79'
   extends:
     .linux-unit-test
   needs:
     ['debian-12-boost-1.79 / build']
 
 debian-12-boost-1.79 / integration-test:
-  variables:
-    TARGET_PLATFORM: 'debian-12-boost-1.79'
   extends:
     .linux-integration-test
   needs:
