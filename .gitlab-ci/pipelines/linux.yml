@@ -15,7 +15,7 @@ linux / build:
   extends:
     .linux-build
   needs:
-    - job: 'linux / prepare-builder-image' # Reusing linux image
+    - job: 'linux / prepare-builder-image'
       optional: true
 
 linux / unit-test:

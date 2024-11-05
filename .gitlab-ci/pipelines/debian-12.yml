@@ -1,3 +1,0 @@
-include:
-  - .gitlab-ci/jobs/common/prepare-builder-image.yml
-  - .gitlab-ci/jobs/linux.yml
