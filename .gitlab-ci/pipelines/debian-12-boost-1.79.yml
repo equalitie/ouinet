@@ -2,34 +2,34 @@ include:
   - .gitlab-ci/jobs/common/prepare-builder-image.yml
   - .gitlab-ci/jobs/linux.yml
 
-debian-12-boost-1.79 / build:
+linux / build:
   variables:
     BOOST_VERSION: "1.79.0"
   extends:
     .linux-build
   needs:
-    - job: 'debian-12 / prepare-builder-image' # Reusing debian-12 image
+    - job: 'linux / prepare-builder-image' # Reusing linux image
       optional: true
 
-debian-12-boost-1.79 / unit-test:
+linux / unit-test:
   extends:
     .linux-unit-test
   needs:
-    ['debian-12-boost-1.79 / build']
+    ['linux / build']
 
-debian-12-boost-1.79 / integration-test:
+linux / integration-test:
   extends:
     .linux-integration-test
   needs:
-    ['debian-12-boost-1.79 / unit-test']
+    ['linux / unit-test']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
-debian-12-boost-1.79 / build-prod-image:
+linux / build-prod-image:
   stage: release
   tags:
     - shell
-  needs: ['debian-12-boost-1.79 / integration-test']
+  needs: ['linux / integration-test']
   script:
     - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
     - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile

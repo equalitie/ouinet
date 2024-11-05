@@ -9,7 +9,7 @@ android / prepare-builder-image:
   extends:
     .prepare-builder-image
   needs:
-    - job: 'debian-12 / prepare-builder-image'
+    - job: 'linux / prepare-builder-image'
       optional: true
 
 android / build:
@@ -21,7 +21,7 @@ android / build:
   needs:
     - job: 'android / prepare-builder-image'
       optional: true
-    - job: 'debian-12-boost-1.79 / build'
+    - job: 'linux / build'
   image: $BUILDER_IMAGE
   script:
     - mkdir -p build.android
@@ -40,7 +40,7 @@ android / build-prod-image:
   tags:
     - shell
   needs:
-    - job: 'debian-12 / build-prod-image'
+    - job: 'linux / build-prod-image'
       optional: true
     - job: 'android / build'
   script:

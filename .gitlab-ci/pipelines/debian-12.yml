@@ -2,7 +2,7 @@ include:
   - .gitlab-ci/jobs/common/prepare-builder-image.yml
   - .gitlab-ci/jobs/linux.yml
 
-debian-12 / prepare-builder-image:
+linux / prepare-builder-image:
   variables:
     TARGET_PLATFORM: 'linux'
   extends:
