@@ -188,4 +188,4 @@ add_executable(test-file-io
 
 #################################test_dht#####################################
 add_executable(test-dht "test_dht.cpp" ${bt_cpp_files})
-target_link_libraries(test-dht lib::asio_utp lib::gcrypt lib::uri)
+target_link_libraries(test-dht lib::asio_utp lib::gcrypt lib::url)
