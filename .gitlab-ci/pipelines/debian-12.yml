@@ -3,6 +3,6 @@ include: .gitlab-ci/jobs/linux.yml
 
 debian-12 / prepare-builder-image:
   variables:
-    TARGET_PLATFORM: 'debian-12'
+    TARGET_PLATFORM: 'linux'
   extends:
     .prepare-builder-image
