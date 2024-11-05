@@ -62,6 +62,12 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         NodeID infohash = util::sha1_digest("ouinet-test-" + to_string(time(0)));
 
         dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
+
+        asio::steady_timer timer(dht.get_executor());
+        while (!ec && !dht.ready()) {
+            timer.expires_from_now(chrono::milliseconds(200));
+            timer.async_wait(yield[ec]);
+        }
         BOOST_REQUIRE(!ec);
 
         dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
