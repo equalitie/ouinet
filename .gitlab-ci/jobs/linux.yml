@@ -13,6 +13,7 @@ variables:
       - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
       - $BUILD_PATH/lib*.so.*
+      - $BUILD_PATH/test/bt-*
       - $BUILD_PATH/test/test-*
     expire_in: 6h
   cache:
