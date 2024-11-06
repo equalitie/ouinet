@@ -50,6 +50,7 @@ void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
         sys::error_code ec;
         asio::steady_timer timer(ctx);
         size_t announcing_attempts{0};
+        size_t last_announcing_attempts{0};
 
         while (announcing_attempts < N_GROUPS) {
             announcing_attempts = 0;
@@ -61,8 +62,12 @@ void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
             timer.async_wait(yield[ec]);
             now = Clock::now();
             auto elapsed = duration_cast<seconds>(now - start).count();
-            std::cout << announcing_attempts << " of " << N_GROUPS << " entries announced after " \
+
+            if (announcing_attempts > last_announcing_attempts) {
+                last_announcing_attempts = announcing_attempts;
+                std::cout << announcing_attempts << " of " << N_GROUPS << " entries announced after " \
                       << elapsed << " seconds" << std::endl;
+            }
         }
 
         btu.stop();
