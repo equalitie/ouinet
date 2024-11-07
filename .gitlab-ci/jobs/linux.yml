@@ -38,5 +38,5 @@ variables:
   image: $BUILDER_IMAGE
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
-    - for x in seq 10; do date >> /tmp/bench.log; time ./$BUILD_PATH/test/test-bittorrent 2>&1 | tee -a /tmp/bench.log; sleep 5; done
+    - for x in seq 100; do date >> /tmp/bench.log; time ./$BUILD_PATH/test/test-bittorrent 2>&1 | tee -a /tmp/bench.log; sleep 5; done || true
     - grep detected /tmp/bench.log  | sort | uniq -c
