@@ -157,7 +157,7 @@ void collect(
                         , local_cancel
                         , yield[ec]);
             } else {
-                WatchDog wd(exec, std::chrono::seconds(1), [&] () mutable {
+                WatchDog wd(exec, std::chrono::seconds(2), [&] () mutable {
                         if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
                         on_finish();
                     });
