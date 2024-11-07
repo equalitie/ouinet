@@ -31,8 +31,6 @@ variables:
     - ptrace
   artifacts:
     paths:
-      - $BUILD_PATH/client
-      - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
       - $BUILD_PATH/lib*.so.*
       - $BUILD_PATH/test/test-*
@@ -40,4 +38,5 @@ variables:
   image: $BUILDER_IMAGE
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
-    - for test in ./$BUILD_PATH/test/test-*; do "$test" --log_level=test_suite; done
+    - for x in seq 10; do date >> /tmp/bench.log; time /$BUILD_PATH/test/test-bittorrent 2>&1 | tee -a /tmp/bench.log; sleep 5; done
+    - grep detected /tmp/bench.log  | sort | uniq -c

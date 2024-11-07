@@ -10,6 +10,6 @@ linux / build:
 
 linux / benchmark:
   extends:
-    .linux-unit-test
+    .linux-benchmark
   needs:
     ['linux / build']
