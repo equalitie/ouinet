@@ -22,7 +22,7 @@ variables:
     - mkdir -p $BUILD_PATH
     - cd $BUILD_PATH
     - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
-    - cmake --build $BUILD_PATH -t test-bittorrent -- -j `nproc`
+    - cmake --build . -t test-bittorrent -- -j `nproc`
 
 .linux-benchmark:
   stage: test
