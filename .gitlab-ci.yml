@@ -1,13 +1,10 @@
 stages:
-  - prepare
   - build
   - test
-  - release
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
 
 include:
-  - .gitlab-ci/pipelines/android.yml
   - .gitlab-ci/pipelines/linux.yml
 

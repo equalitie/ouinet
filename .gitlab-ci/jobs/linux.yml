@@ -9,11 +9,8 @@ variables:
   image: $BUILDER_IMAGE
   artifacts:
     paths:
-      - $BUILD_PATH/client
-      - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
       - $BUILD_PATH/lib*.so.*
-      - $BUILD_PATH/test/bt-*
       - $BUILD_PATH/test/test-*
     expire_in: 6h
   cache:
@@ -25,9 +22,9 @@ variables:
     - mkdir -p $BUILD_PATH
     - cd $BUILD_PATH
     - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
-    - make -j `nproc`
+    - cmake --build $BUILD_PATH -t test-bittorrent -- -j `nproc`
 
-.linux-unit-test:
+.linux-benchmark:
   stage: test
   tags:
     - docker
@@ -44,14 +41,3 @@ variables:
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
     - for test in ./$BUILD_PATH/test/test-*; do "$test" --log_level=test_suite; done
-
-.linux-integration-test:
-  stage: test
-  tags:
-    - docker
-  image: $BUILDER_IMAGE
-  script:
-    - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
-    - export OUINET_BUILD_DIR=$CI_PROJECT_DIR/$BUILD_PATH
-    - ./scripts/run_integration_tests.sh
-

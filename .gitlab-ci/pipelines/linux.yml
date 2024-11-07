@@ -1,48 +1,15 @@
 include:
-  - .gitlab-ci/jobs/common/prepare-builder-image.yml
   - .gitlab-ci/jobs/linux.yml
 
 variables:
   TARGET_PLATFORM: 'linux'
 
-linux / prepare-builder-image:
-  extends:
-    .prepare-builder-image
-
 linux / build:
-  variables:
-    BOOST_VERSION: "1.79.0"
   extends:
     .linux-build
-  needs:
-    - job: 'linux / prepare-builder-image'
-      optional: true
 
-linux / unit-test:
+linux / benchmark:
   extends:
     .linux-unit-test
   needs:
     ['linux / build']
-
-linux / integration-test:
-  extends:
-    .linux-integration-test
-  needs:
-    ['linux / unit-test']
-  before_script:
-    - ln -s /usr/bin/python3 /usr/bin/python
-
-linux / build-prod-image:
-  stage: release
-  tags:
-    - shell
-  needs: ['linux / integration-test']
-  script:
-    - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
-    - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
-    - docker push $CI_REGISTRY_IMAGE:latest
-    - docker logout $CI_REGISTRY
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      allow_failure: true
