@@ -149,10 +149,8 @@ void collect(
                         on_finish();
                     });
 
-                WatchDog dummy_wd;
-
                 evaluate( candidate
-                        , dummy_wd
+                        , wd
                         , new_candidates
                         , local_cancel
                         , yield[ec]);
