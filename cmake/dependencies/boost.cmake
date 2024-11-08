@@ -34,6 +34,8 @@ if(BOOST_VERSION LESS_EQUAL 1.72.0)
     )
 endif()
 
+set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
+set(BOOST_BUILD_SHARED ON)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
@@ -87,6 +89,57 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     set(BOOST_ARCH_CONFIGURATION
             cxxflags=${BOOST_CXXFLAGS}
     )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    # iOS libraries must to be built as static libs that are linked into a single dynamic lib
+    set(BOOST_BUILD_SHARED OFF)
+    if(BOOST_VERSION EQUAL 1.79.0)
+      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
+    endif()
+    set(CONFIG_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
+    # Unary function is deprecated in clang 16, this definition avoids using it
+    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
+    string(TOLOWER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
+    set(BOOST_ENVIRONMENT )
+    if (${PLATFORM} STREQUAL "OS64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-ios64.jam
+            toolset=darwin-ios64
+            macosx-version=iphone-18.0
+            architecture=arm
+            abi=aapcs
+        )
+    elseif (${PLATFORM} STREQUAL "SIMULATOR64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossim64.jam
+            toolset=darwin-iossim64
+            macosx-version=iphonesim-18.0
+            architecture=x86
+            abi=sysv
+        )
+    elseif (${PLATFORM} STREQUAL "SIMULATORARM64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossimarm64.jam
+            toolset=darwin-iossimarm64
+            macosx-version=iphonesim-18.0
+            architecture=arm
+            abi=aapcs
+        )
+    endif()
+
+    set(BOOST_ARCH_CONFIGURATION
+        ${BOOST_ARCH_CONFIGURATION}
+        --stagedir=iphone-build/stage
+        cxxflags=${BOOST_CXXFLAGS}
+        binary-format=mach-o
+        define=_LITTLE_ENDIAN
+        target-os=iphone
+        ${BUILD_TYPE}
+        address-model=64
+        runtime-link=static
+        define=BOOST_SPIRIT_THREADSAFE
+    )
+
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
@@ -127,9 +180,7 @@ externalproject_add(built_boost
     URL_HASH SHA256=${BOOST_VERSION_HASH}
     PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
-    CONFIGURE_COMMAND
-           cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-        && ./bootstrap.sh
+    CONFIGURE_COMMAND ${CONFIG_COMMAND}
     BUILD_COMMAND
            cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
         && ${BOOST_ENVIRONMENT} ./b2
@@ -177,7 +228,12 @@ set_target_properties(Boost::boost PROPERTIES
 # boundary, both the library and the program must link asio as a shared library
 # instead. Boost does not ship this library, so we need to create it.
 
-add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+if (${BOOST_BUILD_SHARED})
+    add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+else()
+    add_library(boost_asio STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+endif()
+
 add_library(Boost::asio ALIAS boost_asio)
 target_link_libraries(boost_asio
     PUBLIC
@@ -199,7 +255,11 @@ target_compile_options(boost_asio
     PUBLIC -std=c++20
 )
 
-add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+if (${BOOST_BUILD_SHARED})
+    add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+else()
+    add_library(boost_asio_ssl STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+endif()
 add_library(Boost::asio_ssl ALIAS boost_asio_ssl)
 target_link_libraries(boost_asio_ssl
     PUBLIC
