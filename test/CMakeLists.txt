@@ -95,7 +95,7 @@ add_executable(test-util
 )
 
 set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin" OR "${CMAKE_SYSTEM_NAME}" STREQUAL "iOS")
     set_target_properties(test-util PROPERTIES LINK_FLAGS "-fsanitize=address")
 else()
     target_link_libraries(test-util asan)
