@@ -223,13 +223,18 @@ file(GLOB client_sources
     ${VERSION_CPP}
 )
 
-if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    add_executable(client ${client_sources})
-else()
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     add_library(client SHARED ${client_sources})
     add_library(ouinet::client ALIAS client)
     find_library(android_log log)
     target_link_libraries(client PUBLIC ${android_log})
+elseif ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS")
+    add_library(client STATIC ${client_sources})
+    add_library(ouinet::client ALIAS client)
+    set(ouinet-ios_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet-ios REQUIRED)
+else()
+    add_executable(client ${client_sources})
 endif()
 
 target_link_libraries(client
