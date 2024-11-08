@@ -10,6 +10,17 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     set(URI_FILENAME
             "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    if (${PLATFORM} STREQUAL "OS64")
+        set(URI_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_BUILD_TYPE}-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+    else()
+        set(URI_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_BUILD_TYPE}-iphonesimulator/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+    endif()
+
 else()
     set(URI_FILENAME
             "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"
@@ -31,6 +42,7 @@ externalproject_add(uri
         -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
         -DANDROID_ABI=${ANDROID_ABI}
         -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+        -DPLATFORM=${PLATFORM}
     BUILD_BYPRODUCTS ${URI_FILENAME}
     PREFIX "uri"
 )
