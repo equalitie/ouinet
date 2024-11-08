@@ -1,6 +1,6 @@
 include(ExternalProject)
 
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     set(ZDNSPARSER_FILENAME
             "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
@@ -37,6 +37,7 @@ externalproject_add(zdnsparser
         -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
         -DANDROID_ABI=${ANDROID_ABI}
         -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+        -DPLATFORM=${PLATFORM}
     BUILD_BYPRODUCTS ${ZDNSPARSER_FILENAME}
     PREFIX "zdnsparser"
 )
