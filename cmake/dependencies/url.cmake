@@ -9,6 +9,17 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     set(URL_FILENAME
         "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${skyr_LIBRARY_SUFFIX}"
     )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    if (${PLATFORM} STREQUAL "OS64")
+        set(URL_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_BUILD_TYPE}-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+    else()
+        set(URL_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_BUILD_TYPE}-iphonesimulator/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+    endif()
+
 else()
     set(URL_FILENAME
         "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
