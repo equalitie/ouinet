@@ -1712,9 +1712,9 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
                                //"dht.libtorrent.org:25401"
                                //, "dht.transmissionbt.com:6881"
                                // Alternative bootstrap servers from the Ouinet project.
-                               "router.bt.ouinet.work"
+                               //"router.bt.ouinet.work"
                                // Part of previous name (in case of DNS failure).
-                               //, asio::ip::make_address("74.3.163.127")
+                               asio::ip::make_address("74.3.163.127")
                                //, "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
                                };
 
