@@ -17,3 +17,5 @@ android/local.properties
 *.pyc
 
 build-macos/
+build-ios/
+build-sim/
