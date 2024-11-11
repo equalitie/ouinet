@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix for connectivity state monitor, restart ouinet even when no networks
+  are available.
 - Added a timer to wait for the DHT to be ready in bittorrent tests.
 
 ### Removed
