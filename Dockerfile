@@ -13,7 +13,7 @@ RUN apt-get install -y \
 RUN echo 'quiet = on' >> /etc/wgetrc
 WORKDIR /usr/local/src
 
-FROM base as builder
+FROM base AS builder
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
