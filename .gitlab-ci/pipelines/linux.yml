@@ -4,14 +4,18 @@ include:
 
 variables:
   TARGET_PLATFORM: 'linux'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 linux / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .prepare-builder-image
 
 linux / build:
   variables:
     BOOST_VERSION: "1.79.0"
+    TARGET_PLATFORM: 'linux'
   extends:
     .linux-build
   needs:
@@ -19,12 +23,16 @@ linux / build:
       optional: true
 
 linux / unit-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .linux-unit-test
   needs:
     ['linux / build']
 
 linux / integration-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .linux-integration-test
   needs:
