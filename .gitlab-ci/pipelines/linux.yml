@@ -119,3 +119,9 @@ linux / build-prod-image:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
       allow_failure: true
+
+linux / trigger-acceptance-tests:
+  extends:
+    .linux-trigger-acceptance-tests
+  needs:
+    ['linux / build']
