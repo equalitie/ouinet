@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- Add trigger job to start ouinet-acceptance-tests downstream pipeline.
 
 ## [v1.6.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.1) - 2025-12-18
 
