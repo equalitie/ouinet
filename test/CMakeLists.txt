@@ -94,8 +94,10 @@ add_executable(test-util
     "../src/logger.cpp"
 )
 
-set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-target_link_libraries(test-util asan)
+if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
+    target_link_libraries(test-util asan)
+endif ()
 
 ######################################################################
 add_executable(test-logger "test_logger.cpp" "../src/logger.cpp")
