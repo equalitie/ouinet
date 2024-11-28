@@ -183,7 +183,7 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         # #injector
         i2pinjector_tunnel_ready = defer.Deferred()
-        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true",
+        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true", "--log-level", "DEBUG",
                                              ], i2pinjector_tunnel_ready) #"--disable-cache"
 
         #wait for the injector tunnel to be advertised
@@ -210,7 +210,8 @@ class OuinetTests(TestCase):
             self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
                                , [ "--disable-origin-access", "--disable-cache"
                                  , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                 , "--injector-ep", "i2p:" + injector_i2p_public_id
+                                   , "--injector-ep", "i2p:" + injector_i2p_public_id,
+                                   "--log-level", "DEBUG",
                                  ]
                                , i2pclient_tunnel_ready)
         
@@ -225,7 +226,7 @@ class OuinetTests(TestCase):
                     self.assertEquals(defered_response.code, 200)
 
                     response_body = yield readBody(defered_response)
-                    self.assertEquals(response_body.decode(), content)
+                    self.assertEquals(resoponse_body.decode(), content)
                     test_passed = True
                     break
                 else:

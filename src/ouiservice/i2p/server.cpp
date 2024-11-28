@@ -56,6 +56,9 @@ void Server::start_listen(asio::yield_context yield)
 
     sys::error_code ec;
 
+    /// announce that we started listening on i2p port
+    LOG_DEBUG("I2P server openning port..");
+
     _tcp_acceptor.open(endpoint.protocol(), ec);
     if (ec) {
         return or_throw(yield, ec);
