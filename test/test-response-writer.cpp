@@ -25,7 +25,8 @@ namespace HR = http_response;
 // (or the socket is closed).
 tcp::socket
 stream(stringstream& outs, WaitCondition& outwc, asio::io_service& ios, asio::yield_context yield) {
-    tcp::acceptor a(ios, tcp::endpoint(tcp::v4(), 0));
+    auto loopback_ep = tcp::endpoint(boost::asio::ip::make_address("127.0.0.1"), 0);
+    tcp::acceptor a(ios, loopback_ep);
     tcp::socket s1(ios), s2(ios);
 
     sys::error_code accept_ec;
