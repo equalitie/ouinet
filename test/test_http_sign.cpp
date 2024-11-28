@@ -917,9 +917,9 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
                 ( move(signed_r), pk
                 , cache::VerifyingReader::status_set{http::status::partial_content});
             auto signed_rs = Session::create(move(signed_rvr), false, cancel, y[e]);
-            BOOST_REQUIRE_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE_EQUAL(e.value(), sys::errc::success);
             signed_rs.flush_response(tested_w, cancel, y[e]);
-            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE_EQUAL(e.value(), sys::errc::success);
             tested_w.close();
         });
 
