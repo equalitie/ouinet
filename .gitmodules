@@ -8,3 +8,5 @@
 [submodule "modules/cpp-upnp"]
 	path = modules/cpp-upnp
 	url = https://gitlab.com/equalitie/cpp-upnp.git
+[submodule ".src/ouiservice/i2p/i2pd"]
+	branch = openssl

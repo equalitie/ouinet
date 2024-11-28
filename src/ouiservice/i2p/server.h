@@ -49,6 +49,37 @@ private:
     asio::ip::tcp::acceptor _tcp_acceptor;
 };
 
+class I2CPServer : public ouinet::OuiServiceImplementationServer {
+private:
+    // Client is constructed by i2poui::Service
+    friend class Service;
+
+    I2CPServer( std::shared_ptr<Service> service
+          , const std::string& private_key_filename
+            , uint32_t timeout, const AsioExecutor&);
+
+    void load_private_key(const std::string& key_file_name);
+
+public:
+    ~I2CPServer();
+
+    void start_listen(asio::yield_context yield) override;
+    void stop_listen() override;
+
+    GenericStream accept(asio::yield_context yield) override;
+
+    std::string public_identity() const;
+
+private:
+    std::shared_ptr<Service> _service;
+    AsioExecutor _exec;
+    std::unique_ptr<i2p::data::PrivateKeys> _private_keys;
+    uint32_t _timeout;
+
+    std::unique_ptr<Tunnel> _server_tunnel;
+    asio::ip::tcp::acceptor _tcp_acceptor;
+};
+
 } // i2poui namespace
 } // ouiservice namespace
 } // ouinet namespace
