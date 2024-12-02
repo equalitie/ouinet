@@ -1,23 +1,5 @@
 variables:
   TARGET_PLATFORM: 'windows'
-  BUILDER_IMAGE_TAG: '${TARGET_PLATFORM}-builder'
-  BUILDER_IMAGE: '${CI_REGISTRY_IMAGE}:${BUILDER_IMAGE_TAG}'
-  REBUILD_IMAGES: "false"
-
-windows / prepare-builder-image:
-  stage: prepare
-  tags:
-    - windows-shell
-  script:
-    - echo ${CI_REGISTRY_PASSWORD} | docker login --password-stdin -u ${CI_REGISTRY_USER} ${CI_REGISTRY}
-    - Get-Content docker/Dockerfile.${BUILDER_IMAGE_TAG} | docker build --pull -t ${BUILDER_IMAGE} -
-    - docker push ${BUILDER_IMAGE}
-    - docker logout ${CI_REGISTRY}
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web" || $REBUILD_IMAGES == "true"
-      changes:
-        - docker/Dockerfile.*-builder
-      when: manual
 
 # Temporarily skipping tests that are:
 #
@@ -32,11 +14,7 @@ windows / prepare-builder-image:
 windows / build:
   stage: build
   tags:
-    - windows-docker
-  needs:
-    - job: 'windows / prepare-builder-image'
-      optional: true
-  image: $BUILDER_IMAGE
+    - windows-shell
   script:
     - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
     - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
@@ -52,9 +30,8 @@ windows / build:
 
 windows / unit-test:
   stage: test
-  image: $BUILDER_IMAGE
   tags:
-    - windows-docker
+    - windows-shell
   artifacts:
     paths:
       - $BUILD_PATH/client.exe
