@@ -13,7 +13,9 @@
 #include <bittorrent/code.h>
 #include <util/hash.h>
 
-BOOST_AUTO_TEST_SUITE(bittorrent)
+namespace utf = boost::unit_test;
+
+BOOST_AUTO_TEST_SUITE(bittorrent, * utf::timeout(240))
 
 using namespace std;
 using namespace ouinet;
@@ -21,8 +23,6 @@ using namespace ouinet::bittorrent;
 using Clock = chrono::steady_clock;
 
 using boost::optional;
-
-namespace utf = boost::unit_test;
 
 BOOST_AUTO_TEST_CASE(test_generate_node_id)
 {
