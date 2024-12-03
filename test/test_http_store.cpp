@@ -46,7 +46,9 @@ namespace boost { namespace test_tools { namespace tt_detail {
     };
 }}} // namespace boost::test_tools::tt_detail
 
-BOOST_AUTO_TEST_SUITE(ouinet_http_store)
+namespace utf = boost::unit_test;
+
+BOOST_AUTO_TEST_SUITE(ouinet_http_store, * utf::timeout(10))
 
 using namespace std;
 using namespace ouinet;
