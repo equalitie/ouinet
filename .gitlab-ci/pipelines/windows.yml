@@ -27,6 +27,8 @@ windows / build:
       - $BUILD_PATH/lib*
       - $BUILD_PATH/test/test-*
     expire_in: 6h
+  needs:
+    []
 
 windows / unit-test:
   stage: test
