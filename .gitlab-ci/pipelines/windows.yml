@@ -6,11 +6,6 @@ variables:
 # a) failing to build
 # -t test-cache
 #
-# b) timing out when running
-# -t test-http-sign
-# -t test-response-reader
-# -t test-response-writer
-
 windows / build:
   stage: build
   tags:
@@ -18,7 +13,7 @@ windows / build:
   script:
     - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
     - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
-    - cmake --build ${BUILD_PATH} -t test-atomic-temp -t test-bencoding -t test-bittorrent -t test-cache-announcer -t test-connection-pool -t test-file-io -t test-http-store -t test-http-util -t test-logger -t test-parser -t test-persistent-lru-cache -t test-routing-table -t test-scheduler -t test-timeout-stream -t test-util -t test-wait-condition -t test-watch-dog -t client -- -j ${cpuCount}
+    - cmake --build ${BUILD_PATH} -t test-atomic-temp -t test-bencoding -t test-bittorrent -t test-cache-announcer -t test-connection-pool -t test-file-io -t test-http-sign -t test-http-store -t test-http-util -t test-logger -t test-parser -t test-persistent-lru-cache -t test-routing-table -t test-response-reader -t test-response-writer -t test-scheduler -t test-timeout-stream -t test-util -t test-wait-condition -t test-watch-dog -t client -- -j ${cpuCount}
     - Copy-Item -Path ${BUILD_PATH}\gcrypt\out\lib\*.dll, ${BUILD_PATH}\gcrypt\out\bin\*.dll, ${BUILD_PATH}\gpg_error\out\lib\*.dll, ${BUILD_PATH}\gpg_error\out\bin\*.dll -Destination ${BUILD_PATH}
   artifacts:
     paths:
