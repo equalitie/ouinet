@@ -47,7 +47,8 @@ float seconds(Clock::duration d)
     return duration_cast<milliseconds>(d).count() / 1000.f;
 }
 
-BOOST_AUTO_TEST_CASE(test_bep_5)
+BOOST_AUTO_TEST_CASE(test_bep_5,
+                     * utf::timeout(240))
 {
     using namespace ouinet::bittorrent::dht;
 
