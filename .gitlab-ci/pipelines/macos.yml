@@ -1,0 +1,17 @@
+variables:
+  BUILD_PATH: 'build-macos/Debug'
+
+macos / build:
+  stage: build
+  tags:
+    - macos-shell
+  artifacts:
+    paths:
+      - $BUILD_PATH/client
+      - $BUILD_PATH/injector
+      - $BUILD_PATH/lib*.dylib
+      - $BUILD_PATH/lib*.a
+    expire_in: 6h
+  script:
+    - cd scripts
+    - ./build-macos.sh
