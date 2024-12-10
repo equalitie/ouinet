@@ -1,0 +1,29 @@
+variables:
+  IOS_BUILD_PATH: 'build-ios/Debug-iphoneos'
+  SIM_BUILD_PATH: 'build-sim/Debug-iphonesimulator'
+
+iphoneos / build:
+  stage: build
+  tags:
+    - macos-shell
+  artifacts:
+    paths:
+      - $IOS_BUILD_PATH/ouinet-ios.framework
+      - $IOS_BUILD_PATH/injector.app
+      - $IOS_BUILD_PATH/lib*.a
+    expire_in: 6h
+  script:
+    - ./build-ios.sh build macos ios
+
+iphonesimulator / build:
+  stage: build
+  tags:
+    - macos-shell
+  artifacts:
+    paths:
+      - $SIM_BUILD_PATH/ouinet-ios.framework
+      - $SIM_BUILD_PATH/injector.app
+      - $SIM_BUILD_PATH/lib*.a
+    expire_in: 6h
+  script:
+    - ./build-ios.sh build macos sim
