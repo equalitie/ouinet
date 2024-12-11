@@ -27,7 +27,7 @@ CMAKE_CONFIG_ARGS="-GXcode \
 -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
 -DBOOST_VERSION=${BOOST_VERSION}"
 
-MACOS_CMAKE_BUILD_ARGS="PRODUCT_BUNDLE_IDENTIFIER=${MACOS_BUNDLE_ID} DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}"
+MACOS_CMAKE_BUILD_ARGS="-quiet PRODUCT_BUNDLE_IDENTIFIER=${MACOS_BUNDLE_ID} DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}"
 
 ######################################################################
 MODES=
@@ -54,7 +54,7 @@ function config_macos {
 
 function build_macos {
     pushd "$MACOS_BUILD_ROOT"
-    cmake --build . --config ${BUILD_TYPE} -- ${MACOS_CMAKE_BUILD_ARGS} | xcbeautify
+    cmake --build . --config ${BUILD_TYPE} -- ${MACOS_CMAKE_BUILD_ARGS}
     popd
 }
 

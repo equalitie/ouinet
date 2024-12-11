@@ -41,6 +41,7 @@ IOS_XCODE_BUILD_ARGS="-target ALL_BUILD \
 -hideShellScriptEnvironment \
 -allowProvisioningUpdates \
 -parallelizeTargets \
+-quiet \
 ENABLE_BITCODE=0 \
 PRODUCT_BUNDLE_IDENTIFIER=${IOS_BUNDLE_ID} \
 DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}"
