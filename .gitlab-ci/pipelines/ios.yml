@@ -13,10 +13,11 @@ iphoneos / build:
       - $IOS_BUILD_PATH/ouinet-ios.framework
       - $IOS_BUILD_PATH/injector.app
       - $IOS_BUILD_PATH/lib*.a
+      - build.log
     expire_in: 6h
   script:
     - cd scripts
-    - ./build-ios.sh build ios
+    - ./build-ios.sh clean build ios > ../build.log 2>&1
 
 iphonesimulator / build:
   stage: build
@@ -29,7 +30,8 @@ iphonesimulator / build:
       - $SIM_BUILD_PATH/ouinet-ios.framework
       - $SIM_BUILD_PATH/injector.app
       - $SIM_BUILD_PATH/lib*.a
+      - build.log
     expire_in: 6h
   script:
     - cd scripts
-    - ./build-ios.sh build sim
+    - ./build-ios.sh clean build sim > ../build.log 2>&1
