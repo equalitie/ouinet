@@ -74,7 +74,7 @@ function config_ios {
 
 function build_ios {
     pushd "$IOS_BUILD_ROOT"
-    xcodebuild -project ouinet-iOS.xcodeproj build ${IOS_XCODE_BUILD_ARGS}
+    xcodebuild -project ouinet-iOS.xcodeproj build ${IOS_XCODE_BUILD_ARGS} | xcbeautify
     echo "Build output: ${IOS_BUILD_ROOT}/${BUILD_TYPE}-iphoneos/ouinet-ios.framework"
     popd
 }
@@ -88,7 +88,7 @@ function config_sim {
 
 function build_sim {
     pushd "$SIM_BUILD_ROOT"
-    xcodebuild -project ouinet-iOS.xcodeproj build ${IOS_XCODE_BUILD_ARGS}
+    xcodebuild -project ouinet-iOS.xcodeproj build ${IOS_XCODE_BUILD_ARGS} | xcbeautify
     echo "Build output: ${SIM_BUILD_ROOT}/${BUILD_TYPE}-iphonesimulator/ouinet-ios.framework"
     popd
 }

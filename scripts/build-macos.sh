@@ -54,7 +54,7 @@ function config_macos {
 
 function build_macos {
     pushd "$MACOS_BUILD_ROOT"
-    cmake --build . --config ${BUILD_TYPE} -- ${MACOS_CMAKE_BUILD_ARGS}
+    cmake --build . --config ${BUILD_TYPE} -- ${MACOS_CMAKE_BUILD_ARGS} | xcbeautify
     popd
 }
 
