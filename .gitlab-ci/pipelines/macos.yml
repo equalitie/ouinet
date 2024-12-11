@@ -1,5 +1,8 @@
 variables:
   BUILD_PATH: 'build-macos/Debug'
+  BOOST_PATH: 'build-macos/boost/src/built_boost'
+  GCRYPT_PATH: 'build-macos/gcrypt/src/gcrypt'
+  GPGERROR_PATH: 'build-macos/gpg_error/src/gpg_error'
 
 macos / build:
   stage: build
@@ -11,6 +14,13 @@ macos / build:
       - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.dylib
       - $BUILD_PATH/lib*.a
+      - $BOOST_PATH/b2
+      - $GCRYPT_PATH/cipher/gost-s-box
+      - $GCRYPT_PATH/doc/yat2m
+      - $GCRYPT_PATH/tests/testdrv-build
+      - $GPGERROR_PATH/doc/yat2m-for-build
+      - $GPGERROR_PATH/src/mkerrcodes
+      - $GPGERROR_PATH/src/mkheader
     expire_in: 6h
   script:
     - cd scripts
