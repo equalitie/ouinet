@@ -72,7 +72,7 @@ if(NOT PLATFORM MATCHES ".*WATCHOS.*")
   find_host_package(XCTest REQUIRED)
 endif()
 
-set(OUINET_IOS_SOURCE ${ouinet-ios_DIR}/src)
+set(OUINET_IOS_SOURCE ${ouinet_DIR}/src)
 
 # Includes
 include_directories(${OUINET_IOS_SOURCE})
@@ -97,20 +97,20 @@ set(HEADERS
 )
 
 # Library
-add_library (ouinet-ios SHARED ${SOURCES} ${HEADERS})
-target_link_libraries(ouinet-ios
+add_library (ouinet SHARED ${SOURCES} ${HEADERS})
+target_link_libraries(ouinet
   PRIVATE
       ouinet::client
       ${FOUNDATION_LIBRARY}
 )
-target_compile_definitions(ouinet-ios PUBLIC IS_BUILDING_SHARED)
-message(STATUS "Building iOS framework bundle...")
-set_target_properties(ouinet-ios PROPERTIES
+target_compile_definitions(ouinet PUBLIC IS_BUILDING_SHARED)
+message(STATUS "Building framework bundle...")
+set_target_properties(ouinet PROPERTIES
   FRAMEWORK TRUE
-  FRAMEWORK_VERSION C
-  MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.ouinet-ios
+  FRAMEWORK_VERSION A
+  MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.ouinet
   # "current version" in semantic format in Mach-O binary file
-  VERSION 16.4.0
+  VERSION 1.0.0
   # "compatibility version" in semantic format in Mach-O binary file
   SOVERSION 1.0.0
   PUBLIC_HEADER Ouinet.h
@@ -119,47 +119,12 @@ set_target_properties(ouinet-ios PROPERTIES
   MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
 )
 
-# Executable
-if(PLATFORM MATCHES "MAC.*")
-  set(APP_NAME TestApp)
-  add_executable (${APP_NAME} MACOSX_BUNDLE main.cpp)
-  set_target_properties(${APP_NAME} PROPERTIES
-          BUNDLE True
-          MACOSX_BUNDLE_GUI_IDENTIFIER equalit.ie.ouinet
-          MACOSX_BUNDLE_BUNDLE_NAME ouinet
-          MACOSX_BUNDLE_BUNDLE_VERSION ${VERSION_NAME}
-          MACOSX_BUNDLE_SHORT_VERSION_STRING ${VERSION_NAME}
-          )
-  # Link the library with the executable
-  target_link_libraries(${APP_NAME} ouinet-ios)
-endif()
-
 # Debug symbols set in XCode project
-set_xcode_property(ouinet-ios GCC_GENERATE_DEBUGGING_SYMBOLS YES "All")
+set_xcode_property(ouinet GCC_GENERATE_DEBUGGING_SYMBOLS YES "All")
 
-# Installation
-if(PLATFORM MATCHES "MAC.*")
-  install(TARGETS ${APP_NAME}
-          BUNDLE DESTINATION . COMPONENT Runtime
-          RUNTIME DESTINATION bin COMPONENT Runtime
-          LIBRARY DESTINATION lib
-          ARCHIVE DESTINATION lib/static)
+install(TARGETS ouinet
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib/static
+        FRAMEWORK DESTINATION framework)
 
-  # Note Mac specific extension .app
-  set(APPS "\${CMAKE_INSTALL_PREFIX}/${APP_NAME}.app")
-
-  # Directories to look for dependencies
-  set(DIRS ${CMAKE_BINARY_DIR})
-
-  install(CODE "include(BundleUtilities)
-    fixup_bundle(\"${APPS}\" \"\" \"${DIRS}\")")
-
-  set(CPACK_GENERATOR "DRAGNDROP")
-  include(CPack)
-else()
-  install(TARGETS ouinet-ios
-          LIBRARY DESTINATION lib
-          ARCHIVE DESTINATION lib/static
-          FRAMEWORK DESTINATION framework)
-endif()
 install (FILES ${HEADERS} DESTINATION include)
