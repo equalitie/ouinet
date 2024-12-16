@@ -10,4 +10,6 @@ variables:
 include:
   - .gitlab-ci/pipelines/android.yml
   - .gitlab-ci/pipelines/linux.yml
+  - .gitlab-ci/pipelines/macos.yml
+  - .gitlab-ci/pipelines/ios.yml
 
