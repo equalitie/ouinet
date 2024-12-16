@@ -20,5 +20,3 @@ android/local.properties
 
 # When running rust tests with `cargo test --manifest-path=./rust/Cargo.toml`
 rust/target/
-
-build-macos/
