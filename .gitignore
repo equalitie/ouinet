@@ -15,5 +15,3 @@ android/local.properties
 
 #python byte codes
 *.pyc
-
-build-macos/
