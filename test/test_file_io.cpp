@@ -288,4 +288,71 @@ BOOST_AUTO_TEST_CASE(test_read_and_write_numbers)
     ctx.run();
 }
 
+std::string shrink(std::string str){
+    auto replace = [&str](const std::string& toReplace, const std::string& replacement){
+        size_t pos = str.find(toReplace);
+        while (pos != std::string::npos) {
+            str.replace(pos, toReplace.length(), replacement);
+            pos = str.find(toReplace, pos + replacement.length());
+        }
+    };
+
+    replace(std::string(16, 'x'), ".");
+    replace(std::string(16, '.'), "o");
+    replace(std::string(16, 'o'), "O");
+
+    replace(std::string(16, 'y'), ",");
+    replace(std::string(16, ','), "i");
+    replace(std::string(16, 'i'), "I");
+    return str;
+}
+
+BOOST_AUTO_TEST_CASE(test_read_files)
+{
+    temp_file temp_file{test_id};
+
+    // auto fill_count = 31 * 1024 + 1019;
+    auto fill_count = 63 * 1024 + 1019;
+    auto fill_char_1 = 'x';
+    auto fill_char_2 = 'y';
+    auto fill_1 = std::string(fill_count, fill_char_1);
+    auto fill_2 = std::string(fill_count, fill_char_2);
+
+    std::string expected{
+            "aaaa" + fill_1 +
+            "bbbb" + fill_2 +
+            "cccc" };
+    auto expected_size = expected.size();
+    std::string data_in(expected_size, '\0');
+
+    asio::spawn(ctx, [&](asio::yield_context yield) {
+        asio::steady_timer timer{ctx};
+
+        // Create test file and close it
+        async_file_handle aio_file_rw = file_io::open_or_create(
+                ctx.get_executor(),
+                temp_file.get_name(),
+                ec);
+        file_io::write(aio_file_rw, boost::asio::const_buffer(expected.data(), expected_size), cancel, yield);
+        aio_file_rw.close();
+
+        // Open the file again in read-only mode
+        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.async_wait(yield);
+        async_file_handle aio_file_ro = file_io::open_readonly(
+                ctx.get_executor(),
+                temp_file.get_name(),
+                ec);
+
+        file_io::read(aio_file_ro, asio::buffer(data_in), cancel, yield);
+        //std::cout << shrink(expected) << std::endl;
+        //std::cout << shrink(data_in) << std::endl;
+
+        BOOST_TEST(shrink(expected) == shrink(data_in));
+        aio_file_ro.close();
+
+    });
+    ctx.run();
+}
+
 BOOST_AUTO_TEST_SUITE_END();
