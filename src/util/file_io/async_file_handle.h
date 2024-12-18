@@ -2,8 +2,8 @@
 #define ASYNC_FILE_HANDLE
 
 #ifdef _WIN32
-#include <util/file_io/random_access_handle_extended.hpp>
-using async_file_handle = random_access_handle_extended;
+#include <boost/asio/stream_file.hpp>
+using async_file_handle = boost::asio::stream_file;
 using native_handle_t = HANDLE;
 #else
 #include <boost/asio/posix/stream_descriptor.hpp>
