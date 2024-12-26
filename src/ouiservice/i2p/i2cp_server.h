@@ -3,6 +3,8 @@
 #include "../../ouiservice.h"
 
 #include "tunnel.h"
+#include <I2CP.h>
+#include <bits/stdint-uintn.h>
 
 namespace i2p { namespace data {
     class PrivateKeys;
@@ -18,35 +20,30 @@ namespace i2poui {
 
 class Service;
 
-class Server : public ouinet::OuiServiceImplementationServer {
+class I2CPServer : public ouinet::OuiServiceImplementationServer {
 private:
     // Client is constructed by i2poui::Service
     friend class Service;
 
-    Server( std::shared_ptr<Service> service
+    I2CPServer( std::shared_ptr<Service> service
           , const std::string& private_key_filename
             , uint32_t timeout, const AsioExecutor&);
 
-    void load_private_key(const std::string& key_file_name);
-
-public:
-    ~Server();
+   public:
+    ~I2CPServer();
 
     void start_listen(asio::yield_context yield) override;
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context yield) override;
-
-    std::string public_identity() const;
 
 private:
     std::shared_ptr<Service> _service;
     AsioExecutor _exec;
-    std::unique_ptr<i2p::data::PrivateKeys> _private_keys;
     uint32_t _timeout;
+    std::shared_ptr<i2p::client::I2CPServer> _i2p_i2cpserver;
 
-    std::unique_ptr<Tunnel> _server_tunnel;
-    asio::ip::tcp::acceptor _tcp_acceptor;
+  static const uint16_t _c_i2cp_port = 7454;
+
 };
 
 } // i2poui namespace
