@@ -2805,6 +2805,9 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
         auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
 
+	//TODO: This should be flagged controled
+	i2p_service->start_i2cp_server();
+	
         /*
         if (!i2p_client->verify_endpoint()) {
             return or_throw(yield, ec = asio::error::invalid_argument);

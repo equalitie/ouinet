@@ -1,8 +1,7 @@
 #include <I2PService.h>
 #include "i2cp_server.h"
 
-// #include <Destination.h>
-// #include <I2PTunnel.h>
+#include <I2CP.h>
 #include <Identity.h>
 #include <api.h>
 
@@ -35,7 +34,7 @@ I2CPServer::~I2CPServer()
     this->stop_listen();
 }
 
-void I2CPServer::start_listen(asio::yield_context yield)
+void I2CPServer::start_listen()
 {
 
   _i2p_i2cpserver->Start();

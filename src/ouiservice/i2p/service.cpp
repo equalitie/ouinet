@@ -16,6 +16,7 @@ using namespace ouinet::ouiservice::i2poui;
 Service::Service(const string& datadir, const AsioExecutor& exec)
     : _exec(exec)
     , _data_dir(datadir)
+    , _i2cpserver(shared_from_this(), "", get_i2p_tunnel_ready_timeout(), _exec)
 {
     //here we are going to read the config file and
     //set options based on those values for now we just
@@ -54,6 +55,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
 Service::Service(Service&& other)
     : _exec(std::move(other._exec))
     , _data_dir(std::move(other._data_dir))
+    , _i2cpserver(shared_from_this(), "", get_i2p_tunnel_ready_timeout(), _exec)
 {}
 
 Service& Service::operator=(Service&& other)
@@ -76,4 +78,8 @@ std::unique_ptr<Server> Service::build_server(const std::string& private_key_fil
 std::unique_ptr<Client> Service::build_client(const std::string& target_id)
 {
     return std::unique_ptr<Client>(new Client(shared_from_this(), target_id, get_i2p_tunnel_ready_timeout(), _exec));
+}
+
+void Service::start_i2cp_server() {
+  _i2cpserver.start_listen();
 }

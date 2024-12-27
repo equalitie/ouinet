@@ -3,7 +3,6 @@
 #include "../../ouiservice.h"
 
 #include "tunnel.h"
-#include <I2CP.h>
 #include <bits/stdint-uintn.h>
 
 namespace i2p { namespace data {
@@ -11,16 +10,16 @@ namespace i2p { namespace data {
 }}
 
 namespace i2p { namespace client {
-    class I2PServerTunnel;
-}}
-
+    class I2CPServer;
+}
+}
 namespace ouinet {
 namespace ouiservice {
 namespace i2poui {
 
 class Service;
 
-class I2CPServer : public ouinet::OuiServiceImplementationServer {
+class I2CPServer {
 private:
     // Client is constructed by i2poui::Service
     friend class Service;
@@ -32,8 +31,8 @@ private:
    public:
     ~I2CPServer();
 
-    void start_listen(asio::yield_context yield) override;
-    void stop_listen() override;
+    void start_listen();
+    void stop_listen();
 
 
 private:
