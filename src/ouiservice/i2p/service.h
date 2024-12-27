@@ -6,6 +6,7 @@
 
 #include "client.h"
 #include "server.h"
+#include "i2cp_server.h"
 
 #include "../../ouiservice.h"
 
@@ -38,11 +39,15 @@ public:
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
     std::unique_ptr<Client> build_client(const std::string& target_id);
 
+  // simply start the I2CP server on the pre-defined port
+  void start_i2cp_server();
 protected:
     AsioExecutor _exec;
     std::string _data_dir;
     // all client tunnels share local destination, because destination is expensive    
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
+
+    I2CPServer _i2cpserver;
 };
 
 } // i2poui namespace
