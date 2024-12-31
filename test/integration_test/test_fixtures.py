@@ -16,6 +16,7 @@ class TestFixtures:
     BEP44_CACHE_TIMEOUT = 900
     
     TEST_TIMEOUT = {
+        "test_i2p_i2cp_server": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
         "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
         "test_ipfs_cache": IPFS_CACHE_TIMEOUT,
@@ -36,7 +37,7 @@ class TestFixtures:
     I2P_INJECTOR_NAME = "i2p_injector"
     I2P_TUNNEL_READY_REGEX = r'[\s\S]*I2P Tunnel has been established'
 
-    I2P_CLIENT = {"name":"i2p_client", "port": 8076}
+    I2P_CLIENT = {"name":"i2p_client", "port": 8076, "i2cp_port": 7654}
 
     MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5

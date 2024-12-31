@@ -171,9 +171,55 @@ class OuinetTests(TestCase):
         return agent.request(b"GET", url.encode())
 
     @inlineCallbacks
+    def test_i2p_i2cp_server(self):
+        """
+        Starts a client and check if i2cp port is open
+        """
+        logging.debug("################################################")
+        logging.debug("test_i2p_server");
+        logging.debug("################################################")
+
+        #client
+        test_passed = False
+        i2pclient_tunnel_ready = defer.Deferred()
+
+        #use only Proxy or Injector mechanisms
+        self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
+                               , [ "--disable-origin-access", "--disable-cache"
+                                 , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
+                                   , "--injector-ep", "i2p:" + "injector_i2p_public_id",
+                                   "--log-level", "DEBUG",
+                                 ]
+                               , i2pclient_tunnel_ready)
+        
+        #wait for the client tunnel to connect to the injector
+        success = yield i2pclient_tunnel_ready
+
+        content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
+            logging.debug("request attempt no " + str(i+1) + "...")
+            defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["i2cp_port"], content)
+            if defered_response.code == 200:
+                self.assertEquals(defered_response.code, 200)
+
+                response_body = yield readBody(defered_response)
+                self.assertEquals(resoponse_body.decode(), content)
+                test_passed = True
+            else:
+                logging.debug("request attempt no " + str(i+1) + " failed. with code " + str(defered_response.code))
+                yield task.deferLater(reactor, TestFixtures.I2P_TUNNEL_HEALING_PERIOD, lambda: None)
+
+        if not test_passed:
+            #stop the i2p client so we can start a new one
+            i2pclient = self.proc_list.pop()
+            yield i2pclient.proc_end
+
+        self.assertTrue(test_passed)
+
+    @inlineCallbacks
     def test_i2p_transport(self):
         """
-        Starts an echoing http server, a injector and a client and send a unique http 
+        Starts an echoing http server, an injector and a client and send a unique http 
         request to the echoing http server through the client --i2p--> injector -> http server
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
@@ -234,7 +280,7 @@ class OuinetTests(TestCase):
                     yield task.deferLater(reactor, TestFixtures.I2P_TUNNEL_HEALING_PERIOD, lambda: None)
 
             if test_passed:
-                break;
+                break
             else:
                 #stop the i2p client so we can start a new one
                 i2pclient = self.proc_list.pop()
