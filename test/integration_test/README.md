@@ -17,3 +17,8 @@ Then you could run the tests by
 $ cd test/integration_test
 $ python -m twisted.trial ./test_http.py
 ```
+
+or to run  a single test
+```
+$ python3 -m twisted.trial test_http.OuinetTests.test_i2p_i2cp_server
+```
