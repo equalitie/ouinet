@@ -2628,6 +2628,20 @@ void Client::State::listen_tcp
 
             GenericStream connection(move(socket) , move(tcp_shutter));
 
+#if defined(__APPLE__) && defined(__MACH__)
+            // Keep standard stack size on Darwin (macOS and iOS)
+            // increasing stack causes crash on iOS devices
+            TRACK_SPAWN( _ctx, ([
+                this,
+                self = shared_from_this(),
+                c = move(connection),
+                handler,
+                lock = wait_condition.lock()
+            ](asio::yield_context yield) mutable {
+                if (was_stopped()) return;
+                handler(move(c), yield);
+            }));
+#else
             // Increase the size of the coroutine stack.
             // Some interesing info:
             // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
@@ -2644,6 +2658,7 @@ void Client::State::listen_tcp
                 if (was_stopped()) return;
                 handler(move(c), yield);
             }), attribs);
+#endif
         }
     }
 
