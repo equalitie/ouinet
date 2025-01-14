@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- URL to download Boost is pointing now to `archives.boost.io`.
+
 
 ## [v0.31.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.31.0) - 2024-11-13
 
