@@ -87,6 +87,11 @@ BOOST_AUTO_TEST_CASE(test_cursor_operations, * ut::depends_on("suite_file_io/tes
 
         // Test remaining size
         BOOST_TEST(3 == file_io::file_remaining_size(aio_file, ec));
+
+        // Read remaining chars
+        std::string data_in(3, '\0');
+        file_io::read(aio_file, asio::buffer(data_in), cancel, yield);
+        BOOST_TEST("789" == data_in);
     });
     ctx.run();
 }
@@ -217,11 +222,15 @@ BOOST_AUTO_TEST_CASE(test_truncate_file)
                 ctx.get_executor(),
                 temp_file.get_name(),
                 ec);
-        file_io::write(aio_file, boost::asio::const_buffer("abcXYZ", 6), cancel, yield);
+        file_io::write(aio_file, boost::asio::const_buffer("xyz", 3), cancel, yield);
         asio::steady_timer timer{ctx};
         timer.expires_from_now(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
-        file_io::truncate(aio_file, 3, ec);
+
+        file_io::truncate(aio_file, 0, ec);
+        file_io::write(aio_file, boost::asio::const_buffer("abc", 3), cancel, yield);
+        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.async_wait(yield);
     });
     ctx.run();
 
