@@ -124,6 +124,7 @@ truncate( async_file_handle& f
         ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
     }
+    fseek(f, new_length, ec);
 }
 
 bool
