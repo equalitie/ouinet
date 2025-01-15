@@ -59,16 +59,14 @@ end_position(async_file_handle& f, sys::error_code& ec)
 size_t
 file_size(async_file_handle& f, sys::error_code& ec)
 {
-    auto start_pos = current_position(f, ec);
-    if (ec) return size_t(-1);
-
-    auto end = end_position(f, ec);
-    if (ec) return size_t(-1);
-
-    fseek(f, start_pos, ec);
-    if (ec) return size_t(-1);
-
-    return end;
+    native_handle_t native_handle = f.native_handle();
+    LARGE_INTEGER size;
+    if (!GetFileSizeEx(native_handle, &size)) {
+        ec = last_error();
+        if (!ec) ec = make_error_code(errc::no_message);
+        return -1;
+    }
+    return static_cast<size_t>(size.QuadPart);
 }
 
 size_t
