@@ -113,7 +113,7 @@ foreach (patch ${BOOST_PATCHES})
 endforeach()
 
 externalproject_add(built_boost
-    URL "https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
+    URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=${BOOST_VERSION_HASH}
     PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
