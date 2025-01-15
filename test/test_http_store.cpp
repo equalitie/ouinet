@@ -24,6 +24,12 @@
 #include <namespaces.h>
 #include "connected_pair.h"
 
+#ifdef _WIN32
+constexpr auto connection_aborted = WSAECONNABORTED;
+#else
+constexpr auto connection_aborted = boost::system::errc::connection_aborted;
+#endif
+
 // For checks to be able to report errors.
 namespace ouinet { namespace http_response {
     std::ostream& operator<<(std::ostream& os, const ChunkHdr& hdr) {
@@ -516,7 +522,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             store_s.flush_response(loaded_w, c, y[e]);
-            BOOST_CHECK_EQUAL(e.value(), complete ? sys::errc::success : sys::errc::connection_aborted);
+            BOOST_CHECK_EQUAL(e.value(), complete ? sys::errc::success : connection_aborted);
             loaded_w.close();
         });
 
