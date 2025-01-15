@@ -17,7 +17,9 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
     X509_gmtime_adj(X509_get_notBefore(_x), -48 * ssl::util::ONE_HOUR);
     // A value close to maximum CA-emitted certificate validity (39 months), see
     // [Validity Period, 9.4.1](https://cabforum.org/wp-content/uploads/BRv1.2.3.pdf).
-    X509_gmtime_adj(X509_get_notAfter(_x), 3 * ssl::util::ONE_YEAR);
+    // For iOS 13+, trusted certs must have validity period of 825 days or fewer
+    // https://support.apple.com/en-us/103769
+    X509_gmtime_adj(X509_get_notAfter(_x), 2 * ssl::util::ONE_YEAR);
 
     X509_set_pubkey(_x, ca_cert.get_private_key());
     
@@ -36,6 +38,7 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
     string alt_name("DNS.1:*." + cn + ",DNS.2:" + cn);
     // Add various standard extensions
     ssl::util::x509_add_ext(_x, NID_subject_alt_name, alt_name.c_str());
+    ssl::util::x509_add_ext(_x, NID_ext_key_usage, "serverAuth");
 
     if (!X509_sign(_x, ca_cert.get_private_key(), EVP_sha256()))
         throw runtime_error("Failed in X509_sign");
