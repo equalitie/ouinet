@@ -2400,6 +2400,20 @@ void Client::State::serve_request( GenericStream&& con
         Request req(reqhp.release());
         auto req_done = defer([&yield] { _YDEBUG(yield, "Done"); });
 
+#if defined(__MACH__)
+        // It is not possible to inject headers into every request made
+        // by WebKit on iOS, but we can modifiy the User Agent.
+        // Check if X-Ouinet-Private string is included in the User Agent.
+        auto ua = req[http::field::user_agent];
+        if (!ua.empty()) {
+            size_t index = ua.find("X-Ouinet-Private");
+            if (index != std::string::npos ){
+                req.set(http::field::user_agent, ua.substr(0, index));
+                req.set(http_::request_private_hdr, "true");
+            }
+        }
+#endif
+
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
             return authenticate(req, con, _config.client_credentials(), y);
         });
