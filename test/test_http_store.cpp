@@ -276,7 +276,8 @@ void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
         sys::error_code ec;
         auto body_path_f = util::file_io::open_or_create(ctx.get_executor(), tmpdir / "body-path", ec);
         if (ec) return or_throw(yield, ec);
-        auto crpath_b = asio::const_buffer(crpath.string().data(), crpath.string().size());
+        std::string crpath_str = crpath.string();
+        auto crpath_b = asio::const_buffer(crpath_str.data(), crpath_str.size());
         Cancel cancel;
         util::file_io::write(body_path_f, crpath_b, cancel, yield);
     }
