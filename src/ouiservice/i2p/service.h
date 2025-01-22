@@ -47,7 +47,7 @@ protected:
     // all client tunnels share local destination, because destination is expensive    
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 
-    I2CPServer _i2cpserver;
+  I2CPServer _i2cpserver;
 };
 
 } // i2poui namespace

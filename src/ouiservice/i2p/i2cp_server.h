@@ -24,8 +24,9 @@ private:
     // Client is constructed by i2poui::Service
     friend class Service;
 
-    I2CPServer( std::shared_ptr<Service> service
-          , const std::string& private_key_filename
+  I2CPServer( /*std::shared_ptr<Service> service
+          ,*/
+	  const std::string& private_key_filename
             , uint32_t timeout, const AsioExecutor&);
 
    public:
@@ -36,10 +37,10 @@ private:
 
 
 private:
-    std::shared_ptr<Service> _service;
+  //std::shared_ptr<Service> _service;
     AsioExecutor _exec;
     uint32_t _timeout;
-    std::shared_ptr<i2p::client::I2CPServer> _i2p_i2cpserver;
+  std::shared_ptr<i2p::client::I2CPServer> _i2p_i2cpserver;
 
   static const uint16_t _c_i2cp_port = 7454;
 
