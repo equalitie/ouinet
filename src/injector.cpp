@@ -55,7 +55,15 @@
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
+
+#ifdef __WIN32
+#include "util/file_win32_with_offset.h"
+using file_with_offset = ouinet::util::file_win32_with_offset;
+#else
 #include "util/file_posix_with_offset.h"
+using file_with_offset = ouinet::util::file_posix_with_offset;
+#endif
+
 #include "util/yield.h"
 
 #include "logger.h"
@@ -76,8 +84,7 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
-using ResponseWithFileBody = http::response<http::basic_file_body<
-    util::file_posix_with_offset>>;
+using ResponseWithFileBody = http::response<http::basic_file_body<file_with_offset>>;
 using ouinet::util::AsioExecutor;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
