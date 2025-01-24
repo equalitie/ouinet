@@ -24,7 +24,9 @@
 #include "generic_stream.h"
 #include "split_string.h"
 #include "async_sleep.h"
+#ifndef __WIN32
 #include "increase_open_file_limit.h"
+#endif
 #include "full_duplex_forward.h"
 #include "injector_config.h"
 #include "authenticate.h"
@@ -836,9 +838,11 @@ int main(int argc, const char* argv[])
         return EXIT_SUCCESS;
     }
 
+#ifndef __WIN32
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());
     }
+#endif
 
     // Create or load the TLS certificate.
     auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
