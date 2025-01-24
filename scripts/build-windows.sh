@@ -30,7 +30,6 @@ fi
 
 cmake \
   --build "${BUILDDIR}" \
-  -t client \
   -- \
   -j`nproc`
 
