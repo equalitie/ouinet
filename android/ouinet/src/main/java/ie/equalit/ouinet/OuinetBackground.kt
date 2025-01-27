@@ -22,7 +22,7 @@ class OuinetBackground() : NotificationListener {
     class Builder(context: Context) {
         private val context : Context
         private lateinit var ouinetConfig : Config
-        private lateinit var notificationConfig: NotificationConfig
+        private var notificationConfig: NotificationConfig? = null
         private var onNotificationTapped : (() -> Unit)? = null
         private var onConfirmTapped : (() -> Unit)? = null
         private var connectivityMonitorEnabled : Boolean = true
@@ -82,7 +82,7 @@ class OuinetBackground() : NotificationListener {
         private set
     lateinit var ouinetConfig: Config
         private set
-    lateinit var notificationConfig: NotificationConfig
+    var notificationConfig: NotificationConfig? = null
         private set
     var connectivityMonitorEnabled: Boolean = true
         private set
@@ -99,7 +99,7 @@ class OuinetBackground() : NotificationListener {
         context: Context,
         ouinetConfig : Config,
         connectivityMonitorEnabled : Boolean,
-        notificationConfig: NotificationConfig,
+        notificationConfig: NotificationConfig?,
         onNotificationTapped: (() -> Unit)?,
         onConfirmTapped: (() -> Unit)?
     ) : this() {
@@ -199,7 +199,7 @@ class OuinetBackground() : NotificationListener {
         OuinetNotification.getServicePendingIntent(
             context,
             OuinetNotification.UPDATE_CODE,
-            notificationConfig,
+            notificationConfig!!,
             mCurrentState
         ).send()
     }
@@ -215,7 +215,7 @@ class OuinetBackground() : NotificationListener {
             } finally {
                 mHandler.postDelayed(
                     this,
-                    notificationConfig.updateInterval.toLong())
+                    notificationConfig!!.updateInterval.toLong())
             }
         }
     }
@@ -232,9 +232,11 @@ class OuinetBackground() : NotificationListener {
     fun start(
         callback : (() -> Unit)? = null
     ) : Thread {
-        Intent(context, OuinetService::class.java).also {
-            it.putExtra(OuinetNotification.CONFIG_EXTRA, notificationConfig)
-            context.startService(it)
+        if (notificationConfig != null) {
+            Intent(context, OuinetService::class.java).also {
+                it.putExtra(OuinetNotification.CONFIG_EXTRA, notificationConfig)
+                context.startService(it)
+            }
         }
         return startOuinet(callback)
     }
@@ -243,8 +245,10 @@ class OuinetBackground() : NotificationListener {
     fun stop(
         callback : (() -> Unit)? = null
     ) : Thread {
-        Intent(context, OuinetService::class.java).also {
-            context.stopService(it)
+        if (notificationConfig != null) {
+            Intent(context, OuinetService::class.java).also {
+                context.stopService(it)
+            }
         }
         return stopOuinet(callback)
     }
@@ -254,8 +258,10 @@ class OuinetBackground() : NotificationListener {
     ) : Thread {
         val thread = start(callback)
         register()
-        if (!notificationConfig.disableStatus)
-            startUpdatingState()
+        if (notificationConfig != null) {
+            if (notificationConfig!!.disableStatus == false)
+                startUpdatingState()
+        }
         return thread
     }
 
@@ -270,8 +276,10 @@ class OuinetBackground() : NotificationListener {
         doClear : Boolean,
         callback : (() -> Unit)? = null
     ) : Thread {
-        if (!notificationConfig.disableStatus)
-            stopUpdatingState()
+        if (notificationConfig != null) {
+            if (notificationConfig!!.disableStatus == false)
+                stopUpdatingState()
+        }
         unregister()
         return stop {
             if (callback != null) {
