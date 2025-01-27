@@ -8,14 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Added
+### Fixed
 
-- A new `file_io` component that supports asynchronous I/O operations for
-Windows systems.
+- URL to download Boost is pointing now to `archives.boost.io`.
+
+
+## [v0.31.0](https://gitlab.com/equalitie/ouinet/-/releases/v0.31.0) - 2024-11-13
 
 ### Changed
 
 - Ouinet binaries and its dependencies are built now with C++ 20.
+- Renamed and refactored `debian-12` jobs and images to have a single
+  `linux` CI pipeline.
+- Minor changes and improvements to the CI tests and artifacts rules.
+
+### Fixed
+
+- Fix for connectivity state monitor, restart ouinet even when no networks
+  are available.
+- Added a timer to wait for the DHT to be ready in bittorrent tests.
+
+### Removed
+
+- The `test_bep_44` was disabled because it was failing randomly in the CI
+and the feature that covers is not in use.
 
 
 ## [v0.30.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.30.1) - 2024-10-29
