@@ -26,8 +26,8 @@ linux / build-experimental:
     .linux-build
   needs:
     - job: 'linux / prepare-builder-image'
-      when: manual
-      allow_failure: true
+  when: manual
+  allow_failure: true
 
 linux / unit-test:
   extends:
