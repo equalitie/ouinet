@@ -26,6 +26,7 @@ linux / build-experimental:
     .linux-build
   needs:
     - job: 'linux / prepare-builder-image'
+      optional: true
   when: manual
   allow_failure: true
 
