@@ -185,9 +185,9 @@ class OuinetTests(TestCase):
 
         #use only Proxy or Injector mechanisms
         self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
-                               , [ "--disable-origin-access", "--disable-cache"
+                               , [ "--disable-origin-access", "--cache-type" "bep5-http-over-i2p"
                                  , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                   , "--injector-ep", "i2p:" + "injector_i2p_public_id",
+                                   , "--injector-ep", "i2p:" + "none",
                                    "--log-level", "DEBUG",
                                  ]
                                , i2pclient_tunnel_ready)

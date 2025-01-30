@@ -32,7 +32,7 @@ static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
 class ClientConfig {
 public:
-    enum class CacheType { None, Bep5Http };
+  enum class CacheType { None, Bep5Http, Bep5HttpOverI2P };
 
     ClientConfig();
 
@@ -615,6 +615,35 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 };
             }
         }
+#ifdef __EXPERIMENTAL__
+        if (type_str == "bep5-http-over-i2p") {
+            _cache_type = CacheType::Bep5HttpOverI2P;
+
+            LOG_DEBUG("Using bep5-http cache over i2p");
+
+            //vmon: perhapse would like to apply the same rationale for discovering i2p end points
+            //as welln
+
+            // if (!_cache_http_pubkey) {
+            //     throw std::runtime_error(
+            //         "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
+            // }
+
+            // if (_injector_ep && _injector_ep->type == Endpoint::Bep5Endpoint) {
+            //     throw std::runtime_error(
+            //         util::str("A BEP5 injector endpoint is derived implicitly"
+            //             " when using '--cache-type=bep5-http',"
+            //             " but it is already set to: ", *_injector_ep));
+            // }
+            // if (!_injector_ep) {
+            //     _injector_ep = Endpoint{
+            //         Endpoint::Bep5Endpoint,
+            //         bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+            //     };
+            // }
+        }
+#endif // ifdef __EXPERIMENTAL__
+
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;
         }

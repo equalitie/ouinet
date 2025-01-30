@@ -2803,17 +2803,20 @@ void Client::State::setup_injector(asio::yield_context yield)
 #ifdef __EXPERIMENTAL__
     if (injector_ep->type == Endpoint::I2pEndpoint) {
         auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
-        auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
+        if (injector_ep->endpoint_string != "none") {
+            auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
+            client = std::move(i2p_client);
+          }
 
-	//TODO: This should be flagged controled
-	i2p_service->start_i2cp_server();
+        if (_config.cache_type() != ClientConfig::CacheType::Bep5HttpOverI2P) {
+            i2p_service->start_i2cp_server();
+        }
 	
         /*
         if (!i2p_client->verify_endpoint()) {
             return or_throw(yield, ec = asio::error::invalid_argument);
         }
         */
-        client = std::move(i2p_client);
     } else
 #endif // ifdef __EXPERIMENTAL__
     if (injector_ep->type == Endpoint::TcpEndpoint) {
