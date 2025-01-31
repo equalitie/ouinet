@@ -35,6 +35,9 @@ windows / unit-test:
   script:
     - $env:PATH = "${CI_PROJECT_DIR}\${BUILD_PATH};$env:PATH"
     - $testFiles = Get-ChildItem -Path "${BUILD_PATH}\test" -Filter "test-*"
-    - foreach ($test in $testFiles) { & $test.FullName --log_level=test_suite }
+    - $testsFailed = $false
+    - foreach ($test in $testFiles) { & $test.FullName --log_level=test_suite; if (-not $?) { $testsFailed = $true }}
+    - echo $testsFailed
+    - if ($testsFailed) { exit 1 }
   needs:
     ['windows / build']
