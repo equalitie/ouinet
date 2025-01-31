@@ -40,6 +40,7 @@ add_executable(test-response-writer
     "../src/response_part.cpp")
 
 ################################################################################
+if (NOT WIN32)
 add_executable(test-persistent-lru-cache
     "test_persistent_lru_cache.cpp"
     "../src/util/persistent_lru_cache.cpp"
@@ -50,6 +51,7 @@ add_executable(test-persistent-lru-cache
     "../src/util/temp_file.cpp"
 )
 target_link_libraries(test-persistent-lru-cache lib::gcrypt)
+endif ()
 
 ################################################################################
 file(GLOB bt_cpp_files
