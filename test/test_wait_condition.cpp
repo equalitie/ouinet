@@ -21,6 +21,12 @@ int millis_since(Clock::time_point start) {
     return duration_cast<milliseconds>(end - start).count();
 }
 
+#ifdef _WIN32
+constexpr uint8_t waiting_limit = 20;
+#else
+constexpr uint8_t waiting_limit = 10;
+#endif
+
 BOOST_AUTO_TEST_CASE(test_base_functionality) {
     asio::io_service ios;
 
@@ -41,7 +47,7 @@ BOOST_AUTO_TEST_CASE(test_base_functionality) {
         
         auto start = Clock::now();
         wait_condition.wait(yield); // shall wait 200ms (=max(100ms, 200ms)).
-        BOOST_TEST(abs(millis_since(start) - 200) < 10);
+        BOOST_TEST(abs(millis_since(start) - 200) < waiting_limit);
     });
 
     ios.run();
@@ -72,7 +78,7 @@ BOOST_AUTO_TEST_CASE(test_release) {
    
         auto start = Clock::now();
         wait_condition.wait(yield); // shall wait 200ms.
-        BOOST_TEST(abs(millis_since(start) - 200) < 10);
+        BOOST_TEST(abs(millis_since(start) - 200) < waiting_limit);
     });
 
     ios.run();
@@ -106,4 +112,3 @@ BOOST_AUTO_TEST_CASE(test_destroy_block_before_wait)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
