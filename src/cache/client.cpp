@@ -304,7 +304,7 @@ struct Client::Impl {
             if (e) return false;
             auto key = hdr[http_::response_uri_hdr];
             if (key.empty()) return false;
-            unpublish_cache_entry(key.to_string());
+            unpublish_cache_entry(std::string(key));
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
@@ -563,7 +563,7 @@ struct Client::Impl {
             _DEBUG( "Cached response is too old; removing: "
                   , age, " > ", _max_cached_age
                   , "; uri=", key );
-            unpublish_cache_entry(key.to_string());
+            unpublish_cache_entry(std::string(key));
             return false;
         }
 

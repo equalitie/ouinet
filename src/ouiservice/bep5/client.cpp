@@ -82,7 +82,7 @@ static inline void hash_combine(std::size_t& seed, const asio::ip::address& addr
 
     asio::ip::address_v6::bytes_type addr6{0,0,0,0, 0,0,0,0, 0xff,0xff,0xff,0xff, 0,0,0,0};
     if (addr.is_v4()) {
-        auto addr4 = addr.to_v4().to_ulong();
+        auto addr4 = addr.to_v4().to_uint();
         for (unsigned i = 15; i > 11; --i) {
             addr6[i] = addr4 & 0x000000fful;
             addr4 >>= 8;

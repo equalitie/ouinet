@@ -72,14 +72,14 @@ namespace detail_create_udp_multiplexer {
 
 static
 asio_utp::udp_multiplexer
-create_udp_multiplexer( asio::io_service& ios
+create_udp_multiplexer( asio::io_context& ctx
                       , const fs::path& last_used_port_path
                       , const boost::optional<uint16_t>& settings_port = boost::none)
 {
     using namespace std;
     namespace detail = ouinet::detail_create_udp_multiplexer;
 
-    asio_utp::udp_multiplexer ret(ios);
+    asio_utp::udp_multiplexer ret(ctx);
     list<detail::PortBinding> port_binding_attempts;
 
     // 1. Use the port defined in `udp-mux-port` via ouinet.conf or CLI options

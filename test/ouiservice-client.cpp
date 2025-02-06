@@ -46,7 +46,7 @@ int main(int argc, const char* argv[])
         }
 
         while (message.size()) {
-            size_t written = connection.async_write_some(asio::const_buffers_1(message.data(), message.size()), yield[ec]);
+            size_t written = connection.async_write_some(asio::const_buffer(message.data(), message.size()), yield[ec]);
             if (ec || !written) {
                 return;
             }
@@ -56,7 +56,7 @@ int main(int argc, const char* argv[])
         std::string line;
         while (true) {
             char c;
-            size_t read = connection.async_read_some(asio::mutable_buffers_1(&c, 1), yield[ec]);
+            size_t read = connection.async_read_some(asio::mutable_buffer(&c, 1), yield[ec]);
             if (ec || !read) {
                 return;
             }

@@ -261,7 +261,7 @@ void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
     auto crpath = fs::path("foo/bar/data.dat");
     {
         auto cpath = tmpcdir / crpath;
-        fs::create_directories(cpath.branch_path());
+        fs::create_directories(cpath.parent_path());
         fs::rename(tmpdir / "body", cpath);
     }
     {

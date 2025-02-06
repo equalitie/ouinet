@@ -14,45 +14,45 @@ BOOST_AUTO_TEST_SUITE(connection_pool)
 
 BOOST_AUTO_TEST_CASE(test_behavior)
 {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&ios] (asio::yield_context yield) {
-        asio::ip::tcp::acceptor server(ios, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 50123));
+    asio::spawn(ctx, [&ctx] (asio::yield_context yield) {
+        asio::ip::tcp::acceptor server(ctx, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 50123));
         server.listen();
 
-        asio::ip::tcp::socket connection(ios);
+        asio::ip::tcp::socket connection(ctx);
         server.async_accept(connection, yield);
         server.close();
 
         asio::async_write(connection, asio::const_buffer("test1\n", 6), yield);
 
         {
-            asio::steady_timer timer(ios);
-            timer.expires_from_now(std::chrono::milliseconds(1000));
+            asio::steady_timer timer(ctx);
+            timer.expires_after(std::chrono::milliseconds(1000));
             timer.async_wait(yield);
         }
 
         asio::async_write(connection, asio::const_buffer("test2\n", 6), yield);
 
         {
-            asio::steady_timer timer(ios);
-            timer.expires_from_now(std::chrono::milliseconds(1000));
+            asio::steady_timer timer(ctx);
+            timer.expires_after(std::chrono::milliseconds(1000));
             timer.async_wait(yield);
         }
 
         asio::async_write(connection, asio::const_buffer("test3\n", 6), yield);
 
         {
-            asio::steady_timer timer(ios);
-            timer.expires_from_now(std::chrono::milliseconds(2000));
+            asio::steady_timer timer(ctx);
+            timer.expires_after(std::chrono::milliseconds(2000));
             timer.async_wait(yield);
         }
 
         asio::async_write(connection, asio::const_buffer("test4\n", 6), yield);
 
         {
-            asio::steady_timer timer(ios);
-            timer.expires_from_now(std::chrono::milliseconds(1000));
+            asio::steady_timer timer(ctx);
+            timer.expires_after(std::chrono::milliseconds(1000));
             timer.async_wait(yield);
         }
 
@@ -61,12 +61,12 @@ BOOST_AUTO_TEST_CASE(test_behavior)
         connection.close();
     });
 
-    asio::spawn(ios, [&ios] (asio::yield_context yield) {
+    asio::spawn(ctx, [&ctx] (asio::yield_context yield) {
         ConnectionPool<std::string> pool;
 
         {
-            asio::ip::tcp::socket connection(ios);
-            connection.async_connect(asio::ip::tcp::endpoint(asio::ip::address::from_string("127.0.0.1"), 50123), yield);
+            asio::ip::tcp::socket connection(ctx);
+            connection.async_connect(asio::ip::tcp::endpoint(asio::ip::make_address("127.0.0.1"), 50123), yield);
 
             char buffer[6];
             asio::async_read(connection, asio::mutable_buffer(buffer, 6), yield);
@@ -109,8 +109,8 @@ BOOST_AUTO_TEST_CASE(test_behavior)
              */
 
             {
-                asio::steady_timer timer(ios);
-                timer.expires_from_now(std::chrono::milliseconds(2000));
+                asio::steady_timer timer(ctx);
+                timer.expires_after(std::chrono::milliseconds(2000));
                 timer.async_wait(yield);
             }
 
@@ -136,8 +136,8 @@ BOOST_AUTO_TEST_CASE(test_behavior)
 
         {
             {
-                asio::steady_timer timer(ios);
-                timer.expires_from_now(std::chrono::milliseconds(2000));
+                asio::steady_timer timer(ctx);
+                timer.expires_after(std::chrono::milliseconds(2000));
                 timer.async_wait(yield);
             }
 
@@ -152,7 +152,7 @@ BOOST_AUTO_TEST_CASE(test_behavior)
 
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

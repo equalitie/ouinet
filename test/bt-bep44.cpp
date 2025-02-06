@@ -159,9 +159,9 @@ void parse_args( const vector<string>& args
 
 int main(int argc, const char** argv)
 {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    unique_ptr<MainlineDht> dht(new MainlineDht(ios));
+    unique_ptr<MainlineDht> dht(new MainlineDht(ctx));
 
     vector<string> args;
 
@@ -181,15 +181,15 @@ int main(int argc, const char** argv)
 
     dht->set_endpoints(endpoints);
 
-    asio::spawn(ios, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
         using namespace std::chrono;
 
         sys::error_code ec;
-        asio::steady_timer timer(ios);
+        asio::steady_timer timer(ctx);
 
         while (!dht->all_ready() && !ec) {
             cerr << "Not ready yet..." << endl;
-            timer.expires_from_now(chrono::seconds(1));
+            timer.expires_after(chrono::seconds(1));
             timer.async_wait(yield[ec]);
         }
 
@@ -204,8 +204,8 @@ int main(int argc, const char** argv)
 
         steady_clock::time_point start = steady_clock::now();
 
-        async_file_handle input (ios, ::dup(STDIN_FILENO));
-        async_file_handle output (ios, ::dup(STDOUT_FILENO));
+        async_file_handle input (ctx, ::dup(STDIN_FILENO));
+        async_file_handle output (ctx, ::dup(STDOUT_FILENO));
 
         boost::asio::streambuf buffer;
         while (true) {
@@ -304,14 +304,14 @@ int main(int argc, const char** argv)
                 StressCmd stress_cmd;
                 stress_cmd.private_key = *util::Ed25519PrivateKey::from_hex(cmd_toks[1]);
 
-                WaitCondition wc(ios);
+                WaitCondition wc(ctx);
 
                 std::srand(std::time(nullptr));
 
                 string key_base = util::str("ouinet-stress-test-", std::rand());
 
                 for (unsigned int i = 0; i < 32; ++i) {
-                    asio::spawn(ios, [&, i, lock = wc.lock()](asio::yield_context yield) {
+                    asio::spawn(ctx, [&, i, lock = wc.lock()](asio::yield_context yield) {
                         steady_clock::time_point start = steady_clock::now();
 
                         auto key = util::str(key_base, "-", i, "-key");
@@ -350,11 +350,11 @@ int main(int argc, const char** argv)
         }
     });
 
-    boost::asio::signal_set signals(ios, SIGINT);
+    boost::asio::signal_set signals(ctx, SIGINT);
     signals.async_wait([&](const boost::system::error_code& error , int signal_number) {
         dht.reset();
-        ios.stop();
+        ctx.stop();
     });
 
-    ios.run();
+    ctx.run();
 }

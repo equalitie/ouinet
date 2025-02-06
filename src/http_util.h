@@ -341,7 +341,7 @@ static Message remove_ouinet_fields(Message message)
 template<class Body>
 static void remove_ouinet_nonerrors_ref(http::response_header<Body>& message)
 {
-    auto proto_err = message[http_::response_error_hdr].to_string();
+    auto proto_err = std::string(message[http_::response_error_hdr]);
     remove_ouinet_fields_ref(message);
 
     if (!boost::regex_match(proto_err, http_::response_error_rx))

@@ -66,7 +66,7 @@ std::size_t
 recursive_dir_size(const fs::path& path, sys::error_code& ec)
 {
     // TODO: make asynchronous?
-    fs::recursive_directory_iterator dit(path, fs::symlink_option::no_recurse, ec);
+    fs::recursive_directory_iterator dit(path, ec);
     if (ec) return 0;
 
     // TODO: take directories themselves into account
@@ -225,7 +225,7 @@ public:
         assert(!headf);
 
         // Get block size for future alignment checks.
-        uri = h[http_::response_uri_hdr].to_string();
+        uri = std::string(h[http_::response_uri_hdr]);
         if (uri.empty()) {
             _ERROR("Missing URI in signed head");
             return or_throw(yield, asio::error::invalid_argument);
@@ -267,7 +267,7 @@ public:
         // Only act when a chunk header with a signature is received;
         // upstream verification or the injector should have placed
         // them at the right chunk headers.
-        e.signature = block_sig_from_exts(ch.exts).to_string();
+        e.signature = std::string(block_sig_from_exts(ch.exts));
 
         if (e.signature.empty()) return;
 
@@ -402,7 +402,7 @@ public:
             return or_throw<http_response::Head>(yield, ec);
         }
 
-        uri = head[http_::response_uri_hdr].to_string();
+        uri = std::string(head[http_::response_uri_hdr]);
         if (uri.empty()) {
             _ERROR("Missing URI in stored head");
             return or_throw<http_response::Head>(yield, asio::error::bad_descriptor);

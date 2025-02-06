@@ -146,7 +146,7 @@ split_string_pair(beast::string_view v, char at) {
 
     if (at_pos == string_view::npos) {
         trim_whitespace(v);
-        return make_pair(v, string_view("", 0));
+        return std::make_pair(v, string_view("", 0));
     }
 
     auto key = v.substr(0, at_pos);
@@ -155,7 +155,7 @@ split_string_pair(beast::string_view v, char at) {
     trim_whitespace(key);
     trim_whitespace(val);
 
-    return make_pair(key, val);
+    return std::make_pair(key, val);
 };
 
 } // ouinet namespace

@@ -22,7 +22,7 @@ void async_sleep( asio::io_context& ioc
                 , asio::yield_context yield)
 {
     asio::steady_timer timer(ioc);
-    timer.expires_from_now(duration);
+    timer.expires_after(duration);
     sys::error_code ec;
     timer.async_wait(yield[ec]);
 }

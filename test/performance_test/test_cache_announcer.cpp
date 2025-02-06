@@ -58,7 +58,7 @@ void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
                 if (iter->first.attempted_update())
                     ++announcing_attempts;
 
-            timer.expires_from_now(chrono::seconds(1));
+            timer.expires_after(chrono::seconds(1));
             timer.async_wait(yield[ec]);
             now = Clock::now();
             auto elapsed = duration_cast<seconds>(now - start).count();

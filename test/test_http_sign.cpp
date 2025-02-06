@@ -364,7 +364,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     rs_head_signed.set("X-Foo", "bar");
     // Move a header, keeping the same value.
     // It should not break signature verification.
-    auto date = rs_head_signed[http::field::date].to_string();
+    auto date = std::string(rs_head_signed[http::field::date]);
     rs_head_signed.erase(http::field::date);
     rs_head_signed.set(http::field::date, date);
 
@@ -375,7 +375,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 
     // Add a bad third signature (by altering the second one).
     // It should not break signature verification, but it should be removed from its output.
-    auto sig1_copy = rs_head_signed["X-Ouinet-Sig1"].to_string();
+    auto sig1_copy = std::string(rs_head_signed["X-Ouinet-Sig1"]);
     string sstart(",signature=\"");
     auto spos = sig1_copy.find(sstart);
     BOOST_REQUIRE(spos != string::npos);

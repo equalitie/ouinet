@@ -3,6 +3,7 @@
 #include <limits>
 #include <boost/optional.hpp>
 #include <boost/utility/string_view.hpp>
+#include "../util.h"
 
 namespace ouinet { namespace parse {
 
@@ -42,6 +43,18 @@ number(boost::string_view& s)
 
     s.remove_prefix(endpos);
     return r;
+}
+
+template<class T>
+std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value
+                , boost::optional<T>
+                >
+number(beast::string_view& s)
+{
+    auto bs = util::to_boost(s);
+    auto ret = number<T>(bs);
+    s = util::to_beast(bs);
+    return ret;
 }
 
 //--------------------------------------------------------------------

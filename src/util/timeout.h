@@ -35,7 +35,7 @@ public:
 
                 sys::error_code ec;
 
-                s->timer.expires_from_now(duration);
+                s->timer.expires_after(duration);
                 s->timer.async_wait(yield[ec]);
 
                 if (s->finished) return;

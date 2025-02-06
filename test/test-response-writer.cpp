@@ -24,16 +24,16 @@ namespace HR = http_response;
 // and locks in `outwc` are released when an error occurs
 // (or the socket is closed).
 tcp::socket
-stream(stringstream& outs, WaitCondition& outwc, asio::io_service& ios, asio::yield_context yield) {
-    tcp::acceptor a(ios, tcp::endpoint(tcp::v4(), 0));
-    tcp::socket s1(ios), s2(ios);
+stream(stringstream& outs, WaitCondition& outwc, asio::io_context& ctx, asio::yield_context yield) {
+    tcp::acceptor a(ctx, tcp::endpoint(tcp::v4(), 0));
+    tcp::socket s1(ctx), s2(ctx);
 
     sys::error_code accept_ec;
     sys::error_code connect_ec;
 
-    WaitCondition wc(ios);
+    WaitCondition wc(ctx);
 
-    asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+    asio::spawn(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
         a.async_accept(s2, yield[accept_ec]);
     });
 
@@ -43,7 +43,7 @@ stream(stringstream& outs, WaitCondition& outwc, asio::io_service& ios, asio::yi
     if (accept_ec)  return or_throw(yield, accept_ec, move(s1));
     if (connect_ec) return or_throw(yield, connect_ec, move(s1));
 
-    asio::spawn(ios, [&outs, done = outwc.lock(), s = move(s2)]
+    asio::spawn(ctx, [&outs, done = outwc.lock(), s = move(s2)]
                      (asio::yield_context yield) mutable {
         array<uint8_t, 2048> outd;
         auto outb = asio::buffer(outd);
@@ -67,19 +67,19 @@ vector<uint8_t> str_to_vec(boost::string_view s) {
 BOOST_AUTO_TEST_SUITE(ouinet_response_writer)
 
 BOOST_AUTO_TEST_CASE(test_http10_no_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    asio::spawn(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
-        WaitCondition outwc(ios);
+        WaitCondition outwc(ctx);
         {
             http::response_header<> rh;
             rh.version(10);
             rh.result(http::status::ok);
 
-            GenericStream con = stream(outs, outwc, ios, y);
+            GenericStream con = stream(outs, outwc, ctx, y);
             HR::Part part;
 
             part = HR::Head(move(rh));
@@ -93,17 +93,17 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    asio::spawn(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
-        WaitCondition outwc(ios);
+        WaitCondition outwc(ctx);
         {
             const string rb("abcdef");
 
@@ -111,7 +111,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
             rh.version(10);
             rh.result(http::status::ok);
 
-            GenericStream con = stream(outs, outwc, ios, y);
+            GenericStream con = stream(outs, outwc, ctx, y);
             HR::Part part;
 
             part = HR::Head(move(rh));
@@ -129,17 +129,17 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    asio::spawn(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
-        WaitCondition outwc(ios);
+        WaitCondition outwc(ctx);
         {
             const string rb("0123456789");
 
@@ -150,7 +150,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             rh.set(http::field::content_type, "text/html");
             rh.set(http::field::content_length, std::to_string(rb.size()));
 
-            GenericStream con = stream(outs, outwc, ios, y);
+            GenericStream con = stream(outs, outwc, ctx, y);
             HR::Part part;
 
             part = HR::Head(move(rh));
@@ -171,17 +171,17 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_chunk) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    asio::spawn(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
-        WaitCondition outwc(ios);
+        WaitCondition outwc(ctx);
         {
             http::response_header<> rh;
             rh.version(11);
@@ -190,7 +190,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             rh.set(http::field::content_type, "text/html");
             rh.set(http::field::transfer_encoding, "chunked");
 
-            GenericStream con = stream(outs, outwc, ios, y);
+            GenericStream con = stream(outs, outwc, ctx, y);
             HR::Part part;
 
             part = HR::Head(move(rh));
@@ -226,17 +226,17 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_trailer) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    asio::spawn(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
-        WaitCondition outwc(ios);
+        WaitCondition outwc(ctx);
         {
             http::response_header<> rh;
             rh.version(11);
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             rh.set(http::field::transfer_encoding, "chunked");
             rh.set(http::field::trailer, "Hash");
 
-            GenericStream con = stream(outs, outwc, ios, y);
+            GenericStream con = stream(outs, outwc, ctx, y);
             HR::Part part;
 
             part = HR::Head(move(rh));
@@ -287,17 +287,17 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    asio::spawn(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
-        WaitCondition outwc(ios);
+        WaitCondition outwc(ctx);
         {
             const string rb1("0123456789");
 
@@ -317,7 +317,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             rh2.set(http::field::content_type, "text/html");
             rh2.set(http::field::content_length, std::to_string(rb2.size()));
 
-            GenericStream con = stream(outs, outwc, ios, y);
+            GenericStream con = stream(outs, outwc, ctx, y);
             HR::Part part;
 
             part = HR::Head(move(rh1));
@@ -351,17 +351,17 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    asio::spawn(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
-        WaitCondition outwc(ios);
+        WaitCondition outwc(ctx);
         {
             http::response_header<> rh1;
             rh1.version(11);
@@ -379,7 +379,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             rh2.set(http::field::content_type, "text/html");
             rh2.set(http::field::content_length, std::to_string(rb2.size()));
 
-            GenericStream con = stream(outs, outwc, ios, y);
+            GenericStream con = stream(outs, outwc, ctx, y);
             HR::Part part;
 
             part = HR::Head(move(rh1));
@@ -428,7 +428,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

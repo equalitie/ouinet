@@ -12,6 +12,8 @@ namespace ouinet { namespace util {
  *
  * Shamelessly based on:
  * https://stackoverflow.com/questions/28179817/how-can-i-store-generic-packaged-tasks-in-a-container
+ *
+ * TODO: C++23 has `non_copyable_function` with which we could replace this one.
  */
 
 template<class T> class unique_function;

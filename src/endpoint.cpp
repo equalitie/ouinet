@@ -10,7 +10,7 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
     }
     beast::string_view type = endpoint.substr(0, pos);
     Endpoint output;
-    output.endpoint_string = endpoint.substr(pos + 1).to_string();
+    output.endpoint_string = std::string(endpoint.substr(pos + 1));
 
     if (type == "tcp") {
         output.type = Endpoint::TcpEndpoint;

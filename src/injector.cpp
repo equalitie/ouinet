@@ -783,8 +783,9 @@ void listen( InjectorConfig& config
         // Increase the size of the coroutine stack (we do same in client).
         // Some interesing info:
         // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
-        boost::coroutines::attributes attribs;
-        attribs.size *= 2;
+#warning "Had to remove this attrib because boost 1.87.0 no longer supports it, is there a substitute?"
+        //boost::coroutines::attributes attribs;
+        //attribs.size *= 2;
 
         asio::spawn(exec, [
             connection = std::move(connection),
@@ -811,7 +812,7 @@ void listen( InjectorConfig& config
                 LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
-        }, attribs);
+        });
     }
 }
 

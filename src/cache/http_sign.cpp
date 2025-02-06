@@ -250,7 +250,7 @@ prep_sig_head(const Head& inh, Head& outh)
     map<string, string> hdr_values;
 
     for (auto& hdr : inh) {
-        auto name = hdr.name_string().to_string();  // lowercase
+        auto name = std::string(hdr.name_string());  // lowercase
         boost::algorithm::to_lower(name);
 
         auto value_v = hdr.value();  // trimmed
@@ -258,7 +258,7 @@ prep_sig_head(const Head& inh, Head& outh)
 
         auto vit = hdr_values.find(name);
         if (vit == hdr_values.end()) {  // new entry, add
-            hdr_values[name] = value_v.to_string();
+            hdr_values[name] = std::string(value_v);
             hdr_sorted.push_back(name);
         } else {  // existing entry, concatenate
             vit->second += ", ";
@@ -273,7 +273,7 @@ prep_sig_head(const Head& inh, Head& outh)
 static inline std::string
 request_target_ph(const http::request_header<>& rqh)
 {
-    auto method = rqh.method_string().to_string();
+    auto method = std::string(rqh.method_string());
     boost::algorithm::to_lower(method);
     return util::str(method, ' ', rqh.target());
 }
@@ -757,7 +757,7 @@ struct VerifyingReader::Impl {
             if (resp_status == http::status::partial_content) {
                 auto rrit = inh.find(http::field::content_range);
                 if (rrit != inh.end()) {
-                    resp_range = rrit->value().to_string();
+                    resp_range = std::string(rrit->value());
                     inh.erase(rrit);
                 }
             }
@@ -1043,7 +1043,7 @@ KeepSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
             keep_headers.emplace(sh);
     }
     for (auto hit = headp->begin(); hit != headp->end();) {  // remove unsigned (except sigs)
-        auto hn = hit->name_string().to_string();
+        auto hn = std::string(hit->name_string());
         boost::algorithm::to_lower(hn);  // signed headers are lower-case
         if ( !boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)
            && keep_headers.find(hn) == keep_headers.end()) {

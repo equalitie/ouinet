@@ -19,7 +19,7 @@ int main(int argc, const char* argv[])
 
     OuiServiceServer server(ctx.get_executor());
 
-    asio::ip::tcp::endpoint endpoint(asio::ip::address::from_string("127.0.0.1"), 10203);
+    asio::ip::tcp::endpoint endpoint(asio::ip::make_address("127.0.0.1"), 10203);
     server.add(make_unique<ouiservice::TcpOuiServiceServer>(ctx.get_executor(), endpoint));
 
     asio::spawn(ctx, [&ctx, &server] (asio::yield_context yield) {
@@ -44,7 +44,7 @@ int main(int argc, const char* argv[])
                 std::string line;
                 while (true) {
                     char c;
-                    size_t read = connection.async_read_some(asio::mutable_buffers_1(&c, 1), yield[ec]);
+                    size_t read = connection.async_read_some(asio::mutable_buffer(&c, 1), yield[ec]);
                     if (ec || !read) {
                         return;
                     }
@@ -53,7 +53,7 @@ int main(int argc, const char* argv[])
                     if (c == '\n') {
                         std::cerr << line;
                         while (line.size()) {
-                            size_t written = connection.async_write_some(asio::const_buffers_1(line.data(), line.size()), yield[ec]);
+                            size_t written = connection.async_write_some(asio::const_buffer(line.data(), line.size()), yield[ec]);
                             if (ec || !written) {
                                 return;
                             }

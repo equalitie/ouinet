@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(test_open_or_create)
     temp_file temp_file{test_id};
         asio::spawn(ctx, [&](asio::yield_context yield){
             asio::steady_timer timer{ctx};
-            timer.expires_from_now(std::chrono::seconds(default_timer));
+            timer.expires_after(std::chrono::seconds(default_timer));
             timer.async_wait(yield);
             auto aio_file = file_io::open_or_create(
                     ctx.get_executor(),
@@ -62,7 +62,7 @@ BOOST_AUTO_TEST_CASE(test_cursor_operations, * ut::depends_on("suite_file_io/tes
 
     asio::spawn(ctx, [&](asio::yield_context yield) {
         asio::steady_timer timer{ctx};
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
         async_file_handle aio_file = file_io::open_or_create(
                 ctx.get_executor(),
@@ -106,7 +106,7 @@ BOOST_AUTO_TEST_CASE(test_async_write)
         file_io::write(aio_file, boost::asio::const_buffer("-two", 4), cancel, yield);
         file_io::write(aio_file, boost::asio::const_buffer("-three", 6), cancel, yield);
         asio::steady_timer timer{ctx};
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
     });
     ctx.run();
@@ -137,7 +137,7 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
         aio_file_rw.close();
 
         // Open the file again in read-only mode
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
         async_file_handle aio_file_ro = file_io::open_readonly(
                 ctx.get_executor(),
@@ -149,7 +149,7 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
         aio_file_ro.close();
 
         // Check that the file is opened in read-only mode
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
         aio_file_ro = file_io::open_readonly(
                 ctx.get_executor(),
@@ -161,7 +161,7 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
         BOOST_CHECK(ec.value() == 9); // Expected errno 9, Bad file descriptor
 #endif
         ec.clear();
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
         aio_file_ro = file_io::open_readonly(
                 ctx.get_executor(),
@@ -192,7 +192,7 @@ BOOST_AUTO_TEST_CASE(test_dup_fd)
 
         file_io::write(aio_file, boost::asio::const_buffer("abcXYZ", 6), cancel, yield);
         asio::steady_timer timer{ctx};
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
     });
     ctx.run();
@@ -217,7 +217,7 @@ BOOST_AUTO_TEST_CASE(test_truncate_file)
                 ec);
         file_io::write(aio_file, boost::asio::const_buffer("abcXYZ", 6), cancel, yield);
         asio::steady_timer timer{ctx};
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
         file_io::truncate(aio_file, 3, ec);
     });
@@ -240,7 +240,7 @@ BOOST_AUTO_TEST_CASE(test_check_or_create_directory)
                 temp_file.get_name(), ec);
         BOOST_CHECK(success);
         asio::steady_timer timer{ctx};
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
     });
     ctx.run();
@@ -276,7 +276,7 @@ BOOST_AUTO_TEST_CASE(test_read_and_write_numbers)
         file_io::write_number<size_t>(aio_file, expected_number, cancel, yield[ec]);
         BOOST_REQUIRE(!ec);
         asio::steady_timer timer{ctx};
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
         file_io::fseek(aio_file, 0, ec);
         auto actual_number = file_io::read_number<size_t>(aio_file, cancel, yield[ec]);

@@ -91,8 +91,7 @@ public:
         // Tell coro we're done
         if (_coro) {
             _coro->_wd = nullptr;
-            sys::error_code ec;
-            _timer->cancel(ec);
+            _timer->cancel();
         }
     }
 
@@ -110,8 +109,7 @@ public:
         _deadline = Clock::now() + d;
 
         if (_deadline < old_deadline) {
-            sys::error_code ec;
-            _timer->cancel(ec);
+            _timer->cancel();
         }
     }
 

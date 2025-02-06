@@ -90,7 +90,7 @@ void wait_for_ready(DhtNode& dht, udp::endpoint ep, asio::yield_context yield)
     asio::steady_timer timer(ex);
 
     while (!ec && !dht.ready()) {
-        timer.expires_from_now(chrono::milliseconds(200));
+        timer.expires_after(chrono::milliseconds(200));
         timer.async_wait(yield[ec]);
     }
 }

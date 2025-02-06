@@ -147,7 +147,7 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
 boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded)
 {
     // TODO: We shouldn't need to create the string here
-    auto encoded_s = encoded.to_string();
+    auto encoded_s = std::string(encoded);
     return destructive_parse_value(encoded_s);
 }
 

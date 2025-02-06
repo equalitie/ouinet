@@ -264,7 +264,7 @@ void Yield::start_timing()
             while (ts->self) {
                 sys::error_code ec; // ignored
 
-                ts->timer.expires_from_now(timeout);
+                ts->timer.expires_after(timeout);
 
                 ts->timer.async_wait(yield[ec]);
 
