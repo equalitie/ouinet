@@ -780,13 +780,6 @@ void listen( InjectorConfig& config
 
         uint64_t connection_id = next_connection_id++;
 
-        // Increase the size of the coroutine stack (we do same in client).
-        // Some interesing info:
-        // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
-#warning "Had to remove this attrib because boost 1.87.0 no longer supports it, is there a substitute?"
-        //boost::coroutines::attributes attribs;
-        //attribs.size *= 2;
-
         asio::spawn(exec, [
             connection = std::move(connection),
             &ssl_ctx,
