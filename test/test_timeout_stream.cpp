@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
 
         BOOST_REQUIRE(about_equal(start + timeout_duration, now()));
         BOOST_REQUIRE_EQUAL(ec, asio::error::timed_out);
-    });
+    }, asio::detached);
 
     spawn(ioc, [&](auto yield) {
         tcp::socket s(ioc);
@@ -108,7 +108,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
             BOOST_REQUIRE(about_equal(start + timeout_duration, now()));
             BOOST_REQUIRE_EQUAL(ec, asio::error::timed_out);
         }
-    });
+    }, asio::detached);
 
     spawn(ioc, [&](auto yield) {
         tcp::socket s(ioc);

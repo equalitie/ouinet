@@ -120,7 +120,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
                 sent = 0;
                 recv = 0;
             }
-    });
+    }, asio::detached);
 #endif
 
     TRACK_SPAWN(get_executor(), [this] (asio::yield_context yield) {

@@ -77,7 +77,7 @@ struct GarbageCollector {
                 _DEBUG("Collecting garbage: done");
             }
             _DEBUG("Garbage collector stopped");
-        });
+        }, asio::detached);
     }
 };
 

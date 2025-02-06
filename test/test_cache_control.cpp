@@ -47,7 +47,7 @@ template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
             }
-        });
+        }, asio::detached);
     ctx.run();
 }
 
@@ -88,7 +88,7 @@ Session make_session(
 
     asio::spawn(ctx, [rs, &ctx, sink = move(pipe.sink)] (auto yield) mutable {
         http::async_write(sink, rs, yield);
-    });
+    }, asio::detached);
 
     Cancel c;
     return Session::create(move(pipe.source), false, c, y);

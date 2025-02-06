@@ -1,6 +1,7 @@
 #include "reachability.h"
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 #include <chrono>
@@ -232,7 +233,7 @@ void UdpServerReachabilityAnalysis::start(const AsioExecutor& executor, const as
                 }
             }
         }
-    });
+    }, asio::detached);
 
     /*
      * Track outgoing datagrams in ConnectionTracker.
@@ -306,7 +307,7 @@ void UdpServerReachabilityAnalysis::start(const AsioExecutor& executor, const as
                 }
             }
         }
-    });
+    }, asio::detached);
 }
 
 void UdpServerReachabilityAnalysis::stop()

@@ -43,7 +43,7 @@ public:
                 if (s->local_abort_signal.call_count() == 0) {
                     s->local_abort_signal();
                 }
-            });
+            }, asio::detached);
     }
 
     Signal<void()>& abort_signal()

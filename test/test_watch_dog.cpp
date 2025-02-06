@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_CASE(test_new_watch_dog) {
 
             BOOST_REQUIRE(cancel.call_count() == 1);
         }
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -143,7 +143,7 @@ BOOST_AUTO_TEST_CASE(test_old_watch_dog) {
 
             BOOST_REQUIRE(cancel.call_count() == 0);
         }
-    });
+    }, asio::detached);
 
     ctx.run();
 }

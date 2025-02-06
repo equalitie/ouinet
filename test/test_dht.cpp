@@ -44,11 +44,11 @@ void init_without_bootstrapping(asio::io_context& ctx, DhtNode& dht_node) {
 
         dht_node._node_id = NodeID::zero();
         dht_node._next_transaction_id = 1;
-    });
+    }, asio::detached);
 
     asio::spawn(ctx, [&](auto yield) {
         dht_node.receive_loop(yield);
-    });
+    }, asio::detached);
 }
 
 void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
@@ -95,7 +95,7 @@ void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
         dht_node.stop();
 
         BOOST_TEST_CHECK(success_rate >= 40);
-    });
+    }, asio::detached);
 }
 
 BOOST_AUTO_TEST_CASE(test_bootstrap)

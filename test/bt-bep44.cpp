@@ -340,7 +340,7 @@ int main(int argc, const char** argv)
                         else {
                             cerr << "FINISH" << i << ": Success, took:" << secs(now() - start) << "s\n";
                         }
-                    });
+                    }, asio::detached);
                 }
 
                 wc.wait(yield);
@@ -348,7 +348,7 @@ int main(int argc, const char** argv)
             }
             else { usage(std::cout, args[0]); }
         }
-    });
+    }, asio::detached);
 
     boost::asio::signal_set signals(ctx, SIGINT);
     signals.async_wait([&](const boost::system::error_code& error , int signal_number) {

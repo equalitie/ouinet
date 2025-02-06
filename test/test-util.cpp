@@ -38,12 +38,12 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
                 asio::spawn(ctx, [&] (asio::yield_context yield) {
                         asio::post(ctx, yield);
                     cancel();
-                });
+                }, asio::detached);
 
                 BOOST_REQUIRE(!cancel);
                 async_sleep(ctx, 1s, cancel, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
-        });
+        }, asio::detached);
 
         ctx.run();
     }
@@ -62,13 +62,13 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
                                  (asio::yield_context yield) mutable {
                     asio::post(ctx, yield);
                     c1();
-                });
+                }, asio::detached);
 
                 BOOST_REQUIRE(!c1);
                 BOOST_REQUIRE(!c2);
                 async_sleep(ctx, 1s, c2, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
-        });
+        }, asio::detached);
     }
 
     {
@@ -83,7 +83,7 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
                 }
 
                 c();
-        });
+        }, asio::detached);
 
         ctx.run();
     }
@@ -112,7 +112,7 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
             auto opt_val = gen.async_get_value(cancel, yield);
 
             BOOST_REQUIRE(opt_val && *opt_val == 1);
-        });
+        }, asio::detached);
 
         ctx.run();
     }
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
             auto opt_val = gen.async_get_value(cancel, yield);
 
             BOOST_REQUIRE(opt_val && *opt_val == 1);
-        });
+        }, asio::detached);
 
         ctx.run();
     }
@@ -149,7 +149,7 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
             sys::error_code ec;
             auto opt_val = gen.async_get_value(cancel, yield[ec]);
             BOOST_REQUIRE(!opt_val);
-        });
+        }, asio::detached);
 
         ctx.run();
     }

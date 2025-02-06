@@ -26,7 +26,7 @@ connected_pair(const AsioExecutor& ex, asio::yield_context yield)
 
     asio::spawn(ex, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
             a.async_accept(s2, yield[accept_ec]);
-        });
+        }, asio::detached);
 
     s1.async_connect(a.local_endpoint(), yield[connect_ec]);
     wc.wait(yield);

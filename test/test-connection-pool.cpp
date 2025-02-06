@@ -6,6 +6,7 @@
 #include <boost/asio/read.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/write.hpp>
+#include <boost/asio/detached.hpp>
 #include <chrono>
 
 using namespace ouinet;
@@ -59,7 +60,7 @@ BOOST_AUTO_TEST_CASE(test_behavior)
         asio::async_write(connection, asio::const_buffer("test5\n", 6), yield);
 
         connection.close();
-    });
+    }, asio::detached);
 
     asio::spawn(ctx, [&ctx] (asio::yield_context yield) {
         ConnectionPool<std::string> pool;
@@ -150,7 +151,7 @@ BOOST_AUTO_TEST_CASE(test_behavior)
             BOOST_CHECK(pool.empty());
         }
 
-    });
+    }, asio::detached);
 
     ctx.run();
 }

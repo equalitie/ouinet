@@ -805,7 +805,7 @@ void listen( InjectorConfig& config
                 LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
-        });
+        }, boost::asio::detached);
     }
 }
 
@@ -989,7 +989,7 @@ int main(int argc, const char* argv[])
             if (!ec) {
                 LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
             }
-        });
+        }, boost::asio::detached);
         proxy_server.add(std::move(server));
     }
 
@@ -1017,7 +1017,7 @@ int main(int argc, const char* argv[])
     ] (asio::yield_context yield) {
         sys::error_code ec;
         listen(config, proxy_server, cancel, yield[ec]);
-    });
+    }, boost::asio::detached);
 
     asio::signal_set signals(ex, SIGINT, SIGTERM);
 

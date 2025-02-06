@@ -170,7 +170,7 @@ void collect(
             }
 
             on_finish();
-        });
+        }, asio::detached);
     }
 
     local_cancel();

@@ -193,7 +193,7 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
             }
-        });
+        }, asio::detached);
     ctx.run();
 }
 
@@ -238,7 +238,7 @@ void store_response( const fs::path& tmpdir, bool complete
                          , y);
 
         signed_w.close();
-    });
+    }, asio::detached);
 
     // Store response.
     asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
@@ -248,7 +248,7 @@ void store_response( const fs::path& tmpdir, bool complete
         http_response::Reader signed_rr(std::move(signed_r));
         cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
         BOOST_CHECK(!complete || !e);
-    });
+    }, asio::detached);
 
     wc.wait(yield);
 }
@@ -310,7 +310,7 @@ void store_empty_response( const fs::path& tmpdir
                          , y);
 
         signed_w.close();
-    });
+    }, asio::detached);
 
     // Store response.
     asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
@@ -340,7 +340,7 @@ void store_response_head( const fs::path& tmpdir, const string& head_s
                          , asio::const_buffer(head_s.data(), head_s.size())
                          , y);
         signed_w.close();
-    });
+    }, asio::detached);
 
     // Store response.
     asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
@@ -349,7 +349,7 @@ void store_response_head( const fs::path& tmpdir, const string& head_s
         sys::error_code e;
         http_response::Reader signed_rr(std::move(signed_r));
         cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
-    });
+    }, asio::detached);
 
     wc.wait(yield);
 }
@@ -516,7 +516,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), complete ? "Success" : "Software caused connection abort");
             loaded_w.close();
-        });
+        }, asio::detached);
 
         // Check parts of the loaded response.
         asio::spawn(ctx, [ loaded_r = std::move(loaded_r), complete
@@ -582,7 +582,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
             BOOST_CHECK_EQUAL(*(part->as_trailer()), rrs_trailer);
-        });
+        }, asio::detached);
 
         wc.wait(yield);
     });
@@ -630,7 +630,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK(!e);
             loaded_w.close();
-        });
+        }, asio::detached);
 
         // Check parts of the loaded response.
         asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
@@ -687,7 +687,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
             BOOST_CHECK_EQUAL(*(part->as_trailer()), rrs_trailer);
-        });
+        }, asio::detached);
 
         wc.wait(yield);
     });
@@ -735,7 +735,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             loaded_w.close();
-        });
+        }, asio::detached);
 
         // Check parts of the loaded response.
         asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
@@ -767,7 +767,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
             BOOST_CHECK_EQUAL(*(part->as_trailer()), rrs_trailer);
-        });
+        }, asio::detached);
 
         wc.wait(yield);
     });
@@ -852,7 +852,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             loaded_w.close();
-        });
+        }, asio::detached);
 
         // Check parts of the loaded response.
         asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
@@ -912,7 +912,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
             BOOST_CHECK_EQUAL(*(part->as_trailer()), rrs_trailer);
-        });
+        }, asio::detached);
 
         wc.wait(yield);
     });

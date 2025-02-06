@@ -262,7 +262,7 @@ public:
             }
 
             on_timeout();
-        });
+        }, asio::detached);
     }
 
     Clock::duration stop()

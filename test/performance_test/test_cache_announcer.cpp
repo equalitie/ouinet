@@ -30,7 +30,7 @@ void start_btdht(asio::io_context& ctx, BtUtils& btu) {
     asio::spawn(ctx, [&] (asio::yield_context yield) {
         vector<asio::ip::address> ifaddrs{asio::ip::make_address("0.0.0.0")};
         btdht = std::move(btu.bittorrent_dht(yield, ifaddrs));
-    });
+    }, asio::detached);
 }
 
 void start_announcer_loop(asio::io_context& ctx) {
@@ -41,7 +41,7 @@ void start_announcer_loop(asio::io_context& ctx) {
         for (size_t n = 0; n < N_GROUPS; n++) {
             announcer->add("group-" + std::to_string(n));
         }
-    });
+    }, asio::detached);
 }
 
 void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
@@ -72,7 +72,7 @@ void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
 
         btu.stop();
         raise(SIGINT);
-    });
+    }, asio::detached);
 }
 
 int main(int argc, const char** argv)

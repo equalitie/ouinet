@@ -76,7 +76,7 @@ public:
     Signal<void()>& on_judgement_change();
 
 private:
-    class State;
+    struct State;
     std::shared_ptr<State> _state;
 };
 

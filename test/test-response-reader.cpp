@@ -32,7 +32,7 @@ stream(string response, asio::io_context& ctx, asio::yield_context yield)
 
     asio::spawn(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
             a.async_accept(s2, yield[accept_ec]);
-        });
+        }, asio::detached);
 
     s1.async_connect(a.local_endpoint(), yield[connect_ec]);
     wc.wait(yield);
@@ -43,7 +43,7 @@ stream(string response, asio::io_context& ctx, asio::yield_context yield)
     asio::spawn(ctx, [rsp = move(response), s = move(s2)]
                      (asio::yield_context yield) mutable {
             asio::async_write(s, asio::buffer(rsp), yield);
-        });
+        }, asio::detached);
 
     return s1;
 }
@@ -139,7 +139,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -172,7 +172,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -235,7 +235,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -288,7 +288,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -343,7 +343,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -401,7 +401,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -481,7 +481,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
         part = rr.async_read_part(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
-    });
+    }, asio::detached);
 
     ctx.run();
 }

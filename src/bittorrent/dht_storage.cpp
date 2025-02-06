@@ -7,6 +7,7 @@
 #include "../util/hash.h"
 
 #include <cstdlib>
+#include <boost/asio/detached.hpp>
 
 namespace ouinet {
 namespace bittorrent {
@@ -146,7 +147,7 @@ Tracker::Tracker(const AsioExecutor& exec):
                 }
             }
         }
-    });
+    }, asio::detached);
 }
 
 Tracker::~Tracker()
@@ -208,7 +209,7 @@ DataStore::DataStore(const AsioExecutor& exec):
                 }
             }
         }
-    });
+    }, asio::detached);
 }
 
 DataStore::~DataStore()

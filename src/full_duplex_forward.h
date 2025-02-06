@@ -68,13 +68,13 @@ full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(c1, c2, fwd_bytes_c1_c2, wdog, yield);
-          });
+          }, asio::detached);
 
     asio::spawn
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(c2, c1, fwd_bytes_c2_c1, wdog, yield);
-          });
+          }, asio::detached);
 
     sys::error_code ec;
     wait_condition.wait(yield[ec]);  // leave cancellation handling to tasks

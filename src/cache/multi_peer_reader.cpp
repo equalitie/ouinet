@@ -359,7 +359,7 @@ public:
             }
 
             _cv.notify();
-        });
+        }, asio::detached);
     }
 
     Peers(AsioExecutor exec
@@ -409,7 +409,7 @@ public:
             if (!ec) _good_peers.push_back(*p);
 
             _cv.notify();
-        });
+        }, asio::detached);
     }
 
     bool still_waiting_for_candidates() const {

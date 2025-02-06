@@ -79,7 +79,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         BOOST_REQUIRE(peers.count(dht.wan_endpoint()));
 
         dht.stop();
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -166,14 +166,14 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
                     BOOST_REQUIRE(value.str() == *s);
                     success_count++;
                 }
-            });
+            }, asio::detached);
         }
 
         wc.wait(yield[ec]);
         BOOST_REQUIRE(!ec);
 
         dht.stop();
-    });
+    }, asio::detached);
 
     ctx.run();
 

@@ -1,5 +1,6 @@
 #define BOOST_TEST_MODULE persistent_lru_cache
 #include <boost/test/included/unit_test.hpp>
+#include <boost/asio/detached.hpp>
 
 #include <util/persistent_lru_cache.h>
 #include <defer.h>
@@ -144,7 +145,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), new_max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
         }
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -244,7 +245,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
             BOOST_REQUIRE(!ec);
             BOOST_REQUIRE_EQUAL(data_in, data);
         }
-    });
+    }, asio::detached);
 
     ctx.run();
 }

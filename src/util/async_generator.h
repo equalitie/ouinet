@@ -77,7 +77,7 @@ public:
 
                 self->_queue.push_back(boost::none);
             }
-        });
+        }, asio::detached);
     }
 
     boost::optional<Value> async_get_value(Cancel cancel, Yield yield) {

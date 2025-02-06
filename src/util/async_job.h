@@ -78,7 +78,7 @@ public:
 
             auto on_finish_sig = std::move(self->_on_finish_sig);
             on_finish_sig();
-        });
+        }, asio::detached);
     }
 
     ~AsyncJob() {

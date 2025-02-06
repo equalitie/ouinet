@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/intrusive/list.hpp>
+#include <boost/asio/detached.hpp>
 #include <logger.h>
 
 namespace ouinet {
@@ -52,7 +53,7 @@ private:
             LOG_ERROR("Uncaught exception from coroutine " \
                       OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
         }\
-    }, ##__VA_ARGS__)
+    }, boost::asio::detached, ##__VA_ARGS__)
 
 #define TRACK_SPAWN_AFTER_STOP(exec, body, ...)\
     asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
@@ -63,4 +64,4 @@ private:
             LOG_ERROR("Uncaught exception from coroutine " \
                       OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
         }\
-    }, ##__VA_ARGS__)
+    }, boost::asio::detached, ##__VA_ARGS__)

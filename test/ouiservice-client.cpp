@@ -1,4 +1,5 @@
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <iostream>
 #include <string>
 
@@ -67,7 +68,7 @@ int main(int argc, const char* argv[])
                 break;
             }
         }
-    });
+    }, asio::detached);
 
     ctx.run();
     return 0;

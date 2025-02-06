@@ -9,6 +9,7 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
 
@@ -272,7 +273,7 @@ void Yield::start_timing()
 
                 notify(Clock::now() - ts->self->_start_time);
             }
-        });
+        }, asio::detached);
 }
 
 template<class... Args>
