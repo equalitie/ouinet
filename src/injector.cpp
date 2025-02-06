@@ -1017,7 +1017,6 @@ int main(int argc, const char* argv[])
     Cancel cancel;
 
     asio::spawn(ex, [
-        &ex,
         &proxy_server,
         &config,
         &cancel

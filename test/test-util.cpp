@@ -75,7 +75,6 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
         asio::io_context ctx;
 
         asio::spawn(ctx, [&] (asio::yield_context yield) {
-                sys::error_code ec;
                 Cancel c;
 
                 {

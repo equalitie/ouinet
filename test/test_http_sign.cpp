@@ -569,7 +569,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
 
         // Check generation of chained hashes.
         asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
-                         , &ctx, lock = wc.lock()](auto y) mutable {
+                         , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
             sys::error_code e;
@@ -779,7 +779,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
 
         // Check generation of chained hashes.
         asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w
-                         , &ctx, lock = wc.lock()](auto y) mutable {
+                         , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
             sys::error_code e;

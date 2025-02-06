@@ -26,7 +26,7 @@ namespace authenticate_detail {
 
         // Trim the Unicode character U+00A3 (POUND SIGN) from the end if present.
         if (const auto s = decoded.size() >= 2) {
-            if (decoded[s - 1] == 0xa3 && decoded[s - 2] == 0xc2) {
+            if (decoded[s - 1] == char(0xa3) && decoded[s - 2] == char(0xc2)) {
                 decoded.resize(s - 2);
             }
         }

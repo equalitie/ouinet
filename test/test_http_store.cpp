@@ -31,7 +31,7 @@ namespace ouinet { namespace http_response {
     }
 
     std::ostream& operator<<(std::ostream& os, const Trailer& trailer) {
-        return os << static_cast<Trailer::Base>(trailer);
+        return os << static_cast<const Trailer::Base&>(trailer);
     }
 }} // namespace ouinet::http_response
 
@@ -186,7 +186,7 @@ static const array<string, 4> rs_chunk_ext{
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    asio::spawn(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
+    asio::spawn(ctx, [f = forward<F>(f)] (auto yield) {
             try {
                 f(yield);
             }
