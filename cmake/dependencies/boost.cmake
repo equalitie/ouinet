@@ -16,6 +16,7 @@ endif ()
 
 set(BOOST_COMPONENTS
     context
+    fiber
     date_time
     filesystem
     iostreams
@@ -174,6 +175,7 @@ target_link_libraries(boost_asio
     PUBLIC
         Boost::boost
         Threads::Threads
+        Boost::fiber
     PRIVATE
         Boost::system
 )
