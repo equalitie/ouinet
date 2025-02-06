@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
     unsigned run_count = 0;
 
     for (unsigned i = 0; i < 20; ++i) {
-        spawn(ctx, [&ctx, &scheduler, &run_count, i](auto yield) {
+        spawn(ctx, [&ctx, &scheduler, &run_count](auto yield) {
             asio::post(ctx, yield);
 
             sys::error_code ec;
@@ -63,7 +63,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
 
     spawn(ctx, [&ctx, &scheduler](auto yield) {
         Cancel cancel;
-        spawn(ctx, [&ctx, &scheduler, &cancel](auto yield) {
+        spawn(ctx, [&ctx, &cancel](auto yield) {
             asio::post(ctx, yield);
             cancel();
         }, asio::detached);

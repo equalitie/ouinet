@@ -28,7 +28,14 @@ class SplitString {
 public:
     using value_type = string_view;
 
-    struct const_iterator : public std::iterator<std::input_iterator_tag, string_view> {
+    struct const_iterator {
+        // Iterator requirements
+        using iterator_category = std::input_iterator_tag;
+        using value_type        = string_view;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = string_view*;
+        using reference         = string_view&;
+
         string_view body;
         string_view rest;
         char separator;

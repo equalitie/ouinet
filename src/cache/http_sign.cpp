@@ -270,7 +270,7 @@ prep_sig_head(const Head& inh, Head& outh)
         outh.set(name, hdr_values[name]);
 }
 
-static inline std::string
+inline std::string
 request_target_ph(const http::request_header<>& rqh)
 {
     auto method = std::string(rqh.method_string());
@@ -278,13 +278,13 @@ request_target_ph(const http::request_header<>& rqh)
     return util::str(method, ' ', rqh.target());
 }
 
-static inline std::string
+inline std::string
 request_target_ph(const http::response_header<>&)
 {
     return {};
 }
 
-static inline std::string
+inline std::string
 response_status_ph(const http::request_header<>&)
 {
     return {};

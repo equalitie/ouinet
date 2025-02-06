@@ -86,7 +86,7 @@ Session make_session(
 {
     auto pipe = make_pipe(ctx);
 
-    asio::spawn(ctx, [rs, &ctx, sink = move(pipe.sink)] (auto yield) mutable {
+    asio::spawn(ctx, [rs, sink = move(pipe.sink)] (auto yield) mutable {
         http::async_write(sink, rs, yield);
     }, asio::detached);
 

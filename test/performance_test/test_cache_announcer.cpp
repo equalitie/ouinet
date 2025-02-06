@@ -29,7 +29,7 @@ Clock::time_point now;
 void start_btdht(asio::io_context& ctx, BtUtils& btu) {
     asio::spawn(ctx, [&] (asio::yield_context yield) {
         vector<asio::ip::address> ifaddrs{asio::ip::make_address("0.0.0.0")};
-        btdht = std::move(btu.bittorrent_dht(yield, ifaddrs));
+        btdht = btu.bittorrent_dht(yield, ifaddrs);
     }, asio::detached);
 }
 

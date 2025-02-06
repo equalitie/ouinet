@@ -825,8 +825,15 @@ public:
         : _addrs(addrs), _port(port)
     {}
 
-    class const_iterator : public std::iterator<std::input_iterator_tag, value_type> {
+    class const_iterator {
     public:
+        // Iterator requirements
+        using iterator_category = std::input_iterator_tag;
+        using value_type        = value_type;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = value_type*;
+        using reference         = value_type&;
+
         const_iterator(const addrs_iterator& it, unsigned short port)
             : _it(it), _port(port)
         {}
