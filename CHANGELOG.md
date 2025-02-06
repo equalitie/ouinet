@@ -8,9 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Support in CMake files to build Ouinet for Windows.
+- New CI pipeline to build Ouinet and run the unit tests in Windows.
+- Docker files to generate Windows builder images.
+
 ### Changed
 
 - Docker builder images for Android and Linux have now installed a Rust toolchain.
+- `file_io` component uses now `asio::stream_file` as its main backend
+in Windows.
+- Minor changes were applied to the injector and client sources to make
+them work in Windows.
+
+### Fixed
+
+- Unit tests are now bulding and passing in Windows.
 
 
 ## [v0.31.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.31.1) - 2025-01-28
