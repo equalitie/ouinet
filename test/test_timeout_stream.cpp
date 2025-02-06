@@ -72,7 +72,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
         tcp::socket s(ioc);
         s.async_connect(acceptor.local_endpoint(), yield);
         async_sleep(ioc, 1s, yield);
-    });
+    }, asio::detached);
 
     ioc.run();
 }
@@ -121,7 +121,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
         asio::async_write(s, asio::buffer(tx_buf), yield[ec]);
 
         async_sleep(ioc, 1s, yield);
-    });
+    }, asio::detached);
 
     ioc.run();
 }

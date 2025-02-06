@@ -320,7 +320,7 @@ void store_empty_response( const fs::path& tmpdir
         http_response::Reader signed_rr(std::move(signed_r));
         cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
         BOOST_CHECK_EQUAL(e.message(), "Success");
-    });
+    }, asio::detached);
 
     wc.wait(yield);
 }

@@ -488,7 +488,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             else
                 BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx.size());
             tested_w.close();
-        });
+        }, asio::detached);
 
         // Black hole.
         asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
@@ -641,7 +641,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
                              , y[e]);
             BOOST_REQUIRE(!e);
             origin_w.close();
-        });
+        }, asio::detached);
 
         // Sign origin response.
         asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
@@ -657,7 +657,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
-        });
+        }, asio::detached);
 
         // Forge (alter) signed output.
         asio::spawn(ctx, [ &signed_r, &forged_w
@@ -683,7 +683,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             BOOST_REQUIRE(ew == asio::error::eof || !ew);
             signed_r.close();
             forged_w.close();
-        });
+        }, asio::detached);
 
         // Verify forged output.
         asio::spawn(ctx, [ forged_r = std::move(forged_r), &tested_w
@@ -698,7 +698,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             forged_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::bad_message);
             tested_w.close();
-        });
+        }, asio::detached);
 
         // Black hole.
         asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
@@ -709,7 +709,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        });
+        }, asio::detached);
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });
@@ -760,7 +760,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             tr.async_write(signed_w, y);
 
             signed_w.close();
-        });
+        }, asio::detached);
 
         // Verify signed output.
         asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
@@ -775,7 +775,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             signed_rs.flush_response(hashed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             hashed_w.close();
-        });
+        }, asio::detached);
 
         // Check generation of chained hashes.
         asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w
@@ -799,7 +799,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             }
             BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
             tested_w.close();
-        });
+        }, asio::detached);
 
         // Black hole.
         asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
@@ -810,7 +810,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        });
+        }, asio::detached);
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });
@@ -904,7 +904,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             tr.async_write(signed_w, y);
 
             signed_w.close();
-        });
+        }, asio::detached);
 
         // Test the loaded response.
         asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
@@ -920,7 +920,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             signed_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             tested_w.close();
-        });
+        }, asio::detached);
 
         // Black hole.
         asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
@@ -931,7 +931,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        });
+        }, asio::detached);
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });

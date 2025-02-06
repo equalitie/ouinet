@@ -4,6 +4,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/detached.hpp>
 #include <namespaces.h>
 #include <util/scheduler.h>
 #include <defer.h>
@@ -49,7 +50,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
             timer.async_wait(yield[ec]);
 
             BOOST_REQUIRE(!ec);
-        });
+        }, asio::detached);
     }
 
     ctx.run();
@@ -65,11 +66,11 @@ BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
         spawn(ctx, [&ctx, &scheduler, &cancel](auto yield) {
             asio::post(ctx, yield);
             cancel();
-        });
+        }, asio::detached);
         sys::error_code ec;
         auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
         BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -83,12 +84,12 @@ BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
         spawn(ctx, [&ctx, &scheduler](auto yield) {
             asio::post(ctx, yield);
             scheduler.reset();
-        });
+        }, asio::detached);
 
         sys::error_code ec;
         auto slot = scheduler->wait_for_slot(yield[ec]);
         BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
-    });
+    }, asio::detached);
 
     ctx.run();
 }

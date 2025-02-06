@@ -6,6 +6,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/detached.hpp>
 
 #include "../src/util/bytes.h"
 #include "../src/response_part.h"
@@ -35,7 +36,7 @@ stream(stringstream& outs, WaitCondition& outwc, asio::io_context& ctx, asio::yi
 
     asio::spawn(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
         a.async_accept(s2, yield[accept_ec]);
-    });
+    }, asio::detached);
 
     s1.async_connect(a.local_endpoint(), yield[connect_ec]);
     wc.wait(yield);
@@ -53,7 +54,7 @@ stream(stringstream& outs, WaitCondition& outwc, asio::io_context& ctx, asio::yi
             outs << util::bytes::to_string_view(asio::buffer(outb, len));
             len = s.async_read_some(outb, yield[ec]);
         } while (!ec);
-    });
+    }, asio::detached);
 
     return s1;
 }
@@ -91,7 +92,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
             "HTTP/1.0 200 OK\r\n"
             "\r\n";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -127,7 +128,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
             "\r\n"
             "abcdef";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -169,7 +170,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             "\r\n"
             "0123456789";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -224,7 +225,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             "0\r\n"
             "\r\n";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -285,7 +286,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             "Hash: hash_of_1234\r\n"
             "\r\n";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -349,7 +350,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             "\r\n"
             "abcde";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -426,7 +427,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             "\r\n"
             "abcde";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    });
+    }, asio::detached);
 
     ctx.run();
 }

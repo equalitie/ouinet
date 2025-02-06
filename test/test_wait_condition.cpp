@@ -4,6 +4,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/detached.hpp>
 #include <namespaces.h>
 #include <util/wait_condition.h>
 #include <iostream>
@@ -31,18 +32,18 @@ BOOST_AUTO_TEST_CASE(test_base_functionality) {
                 Timer timer(ctx);
                 timer.expires_after(100ms);
                 timer.async_wait(yield);
-            });
+            }, asio::detached);
         
         spawn(ctx, [&, lock = wait_condition.lock()](auto yield) {
                 Timer timer(ctx);
                 timer.expires_after(200ms);
                 timer.async_wait(yield);
-            });
+            }, asio::detached);
         
         auto start = Clock::now();
         wait_condition.wait(yield); // shall wait 200ms (=max(100ms, 200ms)).
         BOOST_TEST(abs(millis_since(start) - 200) < 10);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -62,18 +63,18 @@ BOOST_AUTO_TEST_CASE(test_release) {
                 lock.release();
                 timer.expires_after(200ms);
                 timer.async_wait(yield);
-            });
+            }, asio::detached);
    
         spawn(ctx, [&, lock = wait_condition.lock()](auto yield) {
                 Timer timer(ctx);
                 timer.expires_after(200ms);
                 timer.async_wait(yield);
-            });
+            }, asio::detached);
    
         auto start = Clock::now();
         wait_condition.wait(yield); // shall wait 200ms.
         BOOST_TEST(abs(millis_since(start) - 200) < 10);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
@@ -95,12 +96,12 @@ BOOST_AUTO_TEST_CASE(test_destroy_block_before_wait)
                 Timer timer(ctx);
                 timer.expires_after(100ms);
                 timer.async_wait(yield);
-            });
+            }, asio::detached);
         
         auto start = Clock::now();
         wait_condition.wait(yield);
         BOOST_TEST(abs(millis_since(start) - 100) < 10);
-    });
+    }, asio::detached);
 
     ctx.run();
 }
