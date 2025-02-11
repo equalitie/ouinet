@@ -10,7 +10,7 @@ struct Progress {
     {
         using namespace std;
 
-        asio::spawn(ex, [&, ex] (asio::yield_context yield) {
+        task::spawn_detached(ex, [&, ex] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             const char p[] = {'|', '/', '-', '\\'};
 
@@ -18,7 +18,7 @@ struct Progress {
                 cerr << _message << "... " << p[_i++ % 4] << '\r';
                 async_sleep(ex, chrono::milliseconds(200), cancel, yield);
             }
-        }, asio::detached);
+        });
     }
 
     ~Progress() {

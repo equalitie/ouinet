@@ -7,6 +7,7 @@
 #include <boost/asio/detached.hpp>
 #include <namespaces.h>
 #include <util/scheduler.h>
+#include <task.h>
 #include <defer.h>
 #include <iostream>
 
@@ -33,7 +34,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
     unsigned run_count = 0;
 
     for (unsigned i = 0; i < 20; ++i) {
-        spawn(ctx, [&ctx, &scheduler, &run_count](auto yield) {
+        task::spawn_detached(ctx, [&ctx, &scheduler, &run_count](auto yield) {
             asio::post(ctx, yield);
 
             sys::error_code ec;
@@ -50,7 +51,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
             timer.async_wait(yield[ec]);
 
             BOOST_REQUIRE(!ec);
-        }, asio::detached);
+        });
     }
 
     ctx.run();
@@ -61,16 +62,16 @@ BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
 
     Scheduler scheduler(ctx, 0);
 
-    spawn(ctx, [&ctx, &scheduler](auto yield) {
+    task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
         Cancel cancel;
-        spawn(ctx, [&ctx, &cancel](auto yield) {
+        task::spawn_detached(ctx, [&ctx, &cancel](auto yield) {
             asio::post(ctx, yield);
             cancel();
-        }, asio::detached);
+        });
         sys::error_code ec;
         auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
         BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -80,16 +81,16 @@ BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
 
     auto scheduler = make_unique<Scheduler>(ctx, 0);
 
-    spawn(ctx, [&ctx, &scheduler](auto yield) {
-        spawn(ctx, [&ctx, &scheduler](auto yield) {
+    task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
+            task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
             asio::post(ctx, yield);
             scheduler.reset();
-        }, asio::detached);
+        });
 
         sys::error_code ec;
         auto slot = scheduler->wait_for_slot(yield[ec]);
         BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
-    }, asio::detached);
+    });
 
     ctx.run();
 }

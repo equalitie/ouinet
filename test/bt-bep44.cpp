@@ -181,7 +181,7 @@ int main(int argc, const char** argv)
 
     dht->set_endpoints(endpoints);
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         using namespace std::chrono;
 
         sys::error_code ec;
@@ -311,7 +311,7 @@ int main(int argc, const char** argv)
                 string key_base = util::str("ouinet-stress-test-", std::rand());
 
                 for (unsigned int i = 0; i < 32; ++i) {
-                    asio::spawn(ctx, [&, i, lock = wc.lock()](asio::yield_context yield) {
+                    task::spawn_detached(ctx, [&, i, lock = wc.lock()](asio::yield_context yield) {
                         steady_clock::time_point start = steady_clock::now();
 
                         auto key = util::str(key_base, "-", i, "-key");
@@ -340,7 +340,7 @@ int main(int argc, const char** argv)
                         else {
                             cerr << "FINISH" << i << ": Success, took:" << secs(now() - start) << "s\n";
                         }
-                    }, asio::detached);
+                    });
                 }
 
                 wc.wait(yield);
@@ -348,7 +348,7 @@ int main(int argc, const char** argv)
             }
             else { usage(std::cout, args[0]); }
         }
-    }, asio::detached);
+    });
 
     boost::asio::signal_set signals(ctx, SIGINT);
     signals.async_wait([&](const boost::system::error_code& error , int signal_number) {

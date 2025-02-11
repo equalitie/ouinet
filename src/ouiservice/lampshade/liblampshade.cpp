@@ -250,7 +250,7 @@ class LampshadeStream
             });
         }
 
-        asio::spawn(_ex, [
+        task::spawn_detached(_ex, [
             this,
             buffer,
             callback = std::move(callback)
@@ -273,7 +273,7 @@ class LampshadeStream
             asio::post(_ex, [this, ec, read, callback = std::move(callback)] {
                 callback(ec, read);
             });
-        }, asio::detached);
+        });
     }
 
     void async_write_some(const std::vector<asio::const_buffer>& buffers, std::function<void(sys::error_code, size_t)>&& callback)
@@ -293,7 +293,7 @@ class LampshadeStream
             });
         }
 
-        asio::spawn(_ex, [
+        task::spawn_detached(_ex, [
             this,
             buffer,
             callback = std::move(callback)
@@ -316,7 +316,7 @@ class LampshadeStream
             asio::post(_ex, [this, ec, read, callback = std::move(callback)] {
                 callback(ec, read);
             });
-        }, asio::detached);
+        });
     }
 
     void close()

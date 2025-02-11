@@ -340,7 +340,7 @@ public:
             return;
         }
 
-        asio::spawn(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
@@ -359,7 +359,7 @@ public:
             }
 
             _cv.notify();
-        }, asio::detached);
+        });
     }
 
     Peers(AsioExecutor exec
@@ -387,7 +387,7 @@ public:
 
         _candidate_peers.push_back(*p);
 
-        asio::spawn(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
@@ -409,7 +409,7 @@ public:
             if (!ec) _good_peers.push_back(*p);
 
             _cv.notify();
-        }, asio::detached);
+        });
     }
 
     bool still_waiting_for_candidates() const {

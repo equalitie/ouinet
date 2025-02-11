@@ -219,14 +219,14 @@ static const auto rs_chunk_ext_empty = rs_block_sig_cx_empty;
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    asio::spawn(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
+    task::spawn_detached(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
             try {
                 f(Yield(ctx, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
             }
-        }, asio::detached);
+        });
     ctx.run();
 }
 
@@ -420,7 +420,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
             const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
@@ -433,10 +433,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
                              , y[e]);
             BOOST_REQUIRE(!e);
             origin_w.close();
-        }, asio::detached);
+        });
 
         // Sign origin response.
-        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -449,10 +449,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
-        }, asio::detached);
+        });
 
         // Test signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
@@ -488,10 +488,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             else
                 BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx.size());
             tested_w.close();
-        }, asio::detached);
+        });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -499,7 +499,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        }, asio::detached);
+        });
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });
@@ -521,7 +521,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
             const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
@@ -534,10 +534,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
                              , y[e]);
             BOOST_REQUIRE(!e);
             origin_w.close();
-        }, asio::detached);
+        });
 
         // Sign origin response.
-        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -550,10 +550,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
-        }, asio::detached);
+        });
 
         // Verify signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -565,10 +565,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             signed_rs.flush_response(hashed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             hashed_w.close();
-        }, asio::detached);
+        });
 
         // Check generation of chained hashes.
-        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
+        task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
@@ -597,10 +597,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             else
                 BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
             tested_w.close();
-        }, asio::detached);
+        });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -608,7 +608,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        }, asio::detached);
+        });
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });
@@ -630,7 +630,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -641,10 +641,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
                              , y[e]);
             BOOST_REQUIRE(!e);
             origin_w.close();
-        }, asio::detached);
+        });
 
         // Sign origin response.
-        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -657,10 +657,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             origin_rs.flush_response(signed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_w.close();
-        }, asio::detached);
+        });
 
         // Forge (alter) signed output.
-        asio::spawn(ctx, [ &signed_r, &forged_w
+        task::spawn_detached(ctx, [ &signed_r, &forged_w
                          , lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
@@ -683,10 +683,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             BOOST_REQUIRE(ew == asio::error::eof || !ew);
             signed_r.close();
             forged_w.close();
-        }, asio::detached);
+        });
 
         // Verify forged output.
-        asio::spawn(ctx, [ forged_r = std::move(forged_r), &tested_w
+        task::spawn_detached(ctx, [ forged_r = std::move(forged_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -698,10 +698,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             forged_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::bad_message);
             tested_w.close();
-        }, asio::detached);
+        });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -709,7 +709,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        }, asio::detached);
+        });
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });
@@ -731,7 +731,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send signed response.
-        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&signed_w, lock = wc.lock()] (auto y) {
             // Head (raw).  With trailers as normal headers.
             auto trh_start = rs_head_signed_s.find("Trailer:");
             BOOST_REQUIRE(trh_start != string::npos);
@@ -760,10 +760,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             tr.async_write(signed_w, y);
 
             signed_w.close();
-        }, asio::detached);
+        });
 
         // Verify signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -775,10 +775,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             signed_rs.flush_response(hashed_w, cancel, y[e]);
             BOOST_REQUIRE(!e);
             hashed_w.close();
-        }, asio::detached);
+        });
 
         // Check generation of chained hashes.
-        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w
+        task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
@@ -799,10 +799,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             }
             BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
             tested_w.close();
-        }, asio::detached);
+        });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -810,7 +810,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        }, asio::detached);
+        });
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });
@@ -875,7 +875,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         tie(first_block, last_block) = firstb_lastb;
 
         // Send partial response.
-        asio::spawn(ctx, [ &signed_w
+        task::spawn_detached(ctx, [ &signed_w
                          , first_block, last_block
                          , lock = wc.lock()] (auto y) {
             // Head (raw).
@@ -904,10 +904,10 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             tr.async_write(signed_w, y);
 
             signed_w.close();
-        }, asio::detached);
+        });
 
         // Test the loaded response.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -920,10 +920,10 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             signed_rs.flush_response(tested_w, cancel, y[e]);
             BOOST_CHECK_EQUAL(e.message(), "Success");
             tested_w.close();
-        }, asio::detached);
+        });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -931,7 +931,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             while (!e) asio::async_read(tested_r, b, y[e]);
             BOOST_REQUIRE(e == asio::error::eof || !e);
             tested_r.close();
-        }, asio::detached);
+        });
 
         wc.wait(static_cast<asio::yield_context>(yield));
     });

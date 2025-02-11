@@ -2,6 +2,7 @@
 #include <boost/test/included/unit_test.hpp>
 
 #include "connection_pool.h"
+#include "../src/task.h"
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -17,7 +18,7 @@ BOOST_AUTO_TEST_CASE(test_behavior)
 {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&ctx] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&ctx] (asio::yield_context yield) {
         asio::ip::tcp::acceptor server(ctx, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 50123));
         server.listen();
 
@@ -60,9 +61,9 @@ BOOST_AUTO_TEST_CASE(test_behavior)
         asio::async_write(connection, asio::const_buffer("test5\n", 6), yield);
 
         connection.close();
-    }, asio::detached);
+    });
 
-    asio::spawn(ctx, [&ctx] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&ctx] (asio::yield_context yield) {
         ConnectionPool<std::string> pool;
 
         {
@@ -151,7 +152,7 @@ BOOST_AUTO_TEST_CASE(test_behavior)
             BOOST_CHECK(pool.empty());
         }
 
-    }, asio::detached);
+    });
 
     ctx.run();
 }

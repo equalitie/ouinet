@@ -40,14 +40,14 @@ static optional<string_view> get(const Request& rq, http::field f)
 }
 
 template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
-    asio::spawn(ctx, [&ctx, f = forward<F>(f)](auto yield) {
+    task::spawn_detached(ctx, [&ctx, f = forward<F>(f)](auto yield) {
             try {
                 f(Yield(ctx, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
             }
-        }, asio::detached);
+        });
     ctx.run();
 }
 
@@ -86,9 +86,9 @@ Session make_session(
 {
     auto pipe = make_pipe(ctx);
 
-    asio::spawn(ctx, [rs, sink = move(pipe.sink)] (auto yield) mutable {
+    task::spawn_detached(ctx, [rs, sink = move(pipe.sink)] (auto yield) mutable {
         http::async_write(sink, rs, yield);
-    }, asio::detached);
+    });
 
     Cancel c;
     return Session::create(move(pipe.source), false, c, y);

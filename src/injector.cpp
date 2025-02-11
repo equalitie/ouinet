@@ -780,7 +780,7 @@ void listen( InjectorConfig& config
 
         uint64_t connection_id = next_connection_id++;
 
-        asio::spawn(exec, [
+        task::spawn_detached(exec, [
             connection = std::move(connection),
             &ssl_ctx,
             &cancel,
@@ -805,7 +805,7 @@ void listen( InjectorConfig& config
                 LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
-        }, boost::asio::detached);
+        });
     }
 }
 
@@ -980,7 +980,7 @@ int main(int argc, const char* argv[])
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
             make_unique<ouiservice::Obfs4OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs4-server");
-        asio::spawn(ex, [
+        task::spawn_detached(ex, [
             obfs4 = server.get(),
             endpoint
         ] (asio::yield_context yield) {
@@ -989,7 +989,7 @@ int main(int argc, const char* argv[])
             if (!ec) {
                 LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
             }
-        }, boost::asio::detached);
+        });
         proxy_server.add(std::move(server));
     }
 
@@ -1009,14 +1009,14 @@ int main(int argc, const char* argv[])
 
     Cancel cancel;
 
-    asio::spawn(ex, [
+    task::spawn_detached(ex, [
         &proxy_server,
         &config,
         &cancel
     ] (asio::yield_context yield) {
         sys::error_code ec;
         listen(config, proxy_server, cancel, yield[ec]);
-    }, boost::asio::detached);
+    });
 
     asio::signal_set signals(ex, SIGINT, SIGTERM);
 

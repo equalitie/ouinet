@@ -4,6 +4,7 @@
 #include <string>
 
 #include "namespaces.h"
+#include "task.h"
 #include "ouiservice.h"
 #include "ouiservice/tcp.h"
 
@@ -23,7 +24,7 @@ int main(int argc, const char* argv[])
     asio::ip::tcp::endpoint endpoint(asio::ip::make_address("127.0.0.1"), 10203);
     server.add(make_unique<ouiservice::TcpOuiServiceServer>(ctx.get_executor(), endpoint));
 
-    asio::spawn(ctx, [&ctx, &server] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&ctx, &server] (asio::yield_context yield) {
         sys::error_code ec;
         server.start_listen(yield[ec]);
 
@@ -40,7 +41,7 @@ int main(int argc, const char* argv[])
                 break;
             }
 
-            asio::spawn(ctx, [connection = std::move(connection)] (asio::yield_context yield) mutable {
+            task::spawn_detached(ctx, [connection = std::move(connection)] (asio::yield_context yield) mutable {
                 sys::error_code ec;
                 std::string line;
                 while (true) {
@@ -62,9 +63,9 @@ int main(int argc, const char* argv[])
                         }
                     }
                 }
-            }, asio::detached);
+            });
         }
-    }, asio::detached);
+    });
 
     ctx.run();
     return 0;

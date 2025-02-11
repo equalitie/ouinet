@@ -55,7 +55,7 @@ struct GarbageCollector {
 
     void start()
     {
-        asio::spawn(_executor, [&] (asio::yield_context yield) {
+        task::spawn_detached(_executor, [&] (asio::yield_context yield) {
             TRACK_HANDLER();
             Cancel cancel(_cancel);
 
@@ -77,7 +77,7 @@ struct GarbageCollector {
                 _DEBUG("Collecting garbage: done");
             }
             _DEBUG("Garbage collector stopped");
-        }, asio::detached);
+        });
     }
 };
 

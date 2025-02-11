@@ -114,12 +114,12 @@ void collect(
         auto job_id = next_job_id++;
         active_jobs.insert(job_id);
 
-        asio::spawn(exec, [ &
-                          , candidate = candidate_i->first
-                          , job_id
-                          , lock = all_done.lock()
-                          , slot = std::move(slot)
-                          ] (asio::yield_context yield) mutable {
+        task::spawn_detached(exec, [ &
+                            , candidate = candidate_i->first
+                            , job_id
+                            , lock = all_done.lock()
+                            , slot = std::move(slot)
+                            ] (asio::yield_context yield) mutable {
             sys::error_code ec;
 
             bool on_finish_called = false;
@@ -170,7 +170,7 @@ void collect(
             }
 
             on_finish();
-        }, asio::detached);
+        });
     }
 
     local_cancel();

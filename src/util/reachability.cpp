@@ -6,6 +6,7 @@
 #include <boost/optional.hpp>
 #include <chrono>
 #include "condition_variable.h"
+#include "../task.h"
 
 namespace ouinet { namespace util {
 
@@ -193,7 +194,7 @@ void UdpServerReachabilityAnalysis::start(const AsioExecutor& executor, const as
      * Listen to incoming datagrams. Track active connections using ConnectionTracker.
      * When receiving a datagram not in the tracker, judge Reachable.
      */
-    asio::spawn(executor, [state = _state] (asio::yield_context yield) {
+    task::spawn_detached(executor, [state = _state] (asio::yield_context yield) {
         bool running = true;
         auto connection = state->on_destroy.connect([&running, state = state.get()] {
             running = false;
@@ -233,7 +234,7 @@ void UdpServerReachabilityAnalysis::start(const AsioExecutor& executor, const as
                 }
             }
         }
-    }, asio::detached);
+    });
 
     /*
      * Track outgoing datagrams in ConnectionTracker.
@@ -260,7 +261,7 @@ void UdpServerReachabilityAnalysis::start(const AsioExecutor& executor, const as
     /*
      * Wait for (last_unsolicited_traffic) + (expiracy time), then downgrade judgement.
      */
-    asio::spawn(executor, [state = _state, executor] (asio::yield_context yield) {
+    task::spawn_detached(executor, [state = _state, executor] (asio::yield_context yield) {
         ConditionVariable reachable_condition(executor);
         asio::steady_timer timer(executor);
         bool running = true;
@@ -307,7 +308,7 @@ void UdpServerReachabilityAnalysis::start(const AsioExecutor& executor, const as
                 }
             }
         }
-    }, asio::detached);
+    });
 }
 
 void UdpServerReachabilityAnalysis::stop()

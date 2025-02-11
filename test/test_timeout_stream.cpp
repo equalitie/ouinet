@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include <timeout_stream.h>
+#include <task.h>
 
 BOOST_AUTO_TEST_SUITE(ouinet_timeout_stream)
 
@@ -49,7 +50,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
 
     tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 0));
 
-    asio::spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         acceptor.async_accept(s, yield);
 
@@ -66,13 +67,13 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
 
         BOOST_REQUIRE(about_equal(start + timeout_duration, now()));
         BOOST_REQUIRE_EQUAL(ec, asio::error::timed_out);
-    }, asio::detached);
+    });
 
-    spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         s.async_connect(acceptor.local_endpoint(), yield);
         async_sleep(ioc, 1s, yield);
-    }, asio::detached);
+    });
 
     ioc.run();
 }
@@ -82,7 +83,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
 
     tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 0));
 
-    asio::spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         acceptor.async_accept(s, yield);
 
@@ -108,9 +109,9 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
             BOOST_REQUIRE(about_equal(start + timeout_duration, now()));
             BOOST_REQUIRE_EQUAL(ec, asio::error::timed_out);
         }
-    }, asio::detached);
+    });
 
-    spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         s.async_connect(acceptor.local_endpoint(), yield);
 
@@ -121,7 +122,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
         asio::async_write(s, asio::buffer(tx_buf), yield[ec]);
 
         async_sleep(ioc, 1s, yield);
-    }, asio::detached);
+    });
 
     ioc.run();
 }

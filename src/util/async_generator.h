@@ -54,12 +54,12 @@ public:
         , _shutdown_cancel(_lifetime_cancel)
         , _wc(ex)
     {
-        asio::spawn(ex, [ self = this
-                        , gen = std::move(gen)
-                        , lifetime_cancel = _lifetime_cancel
-                        , shutdown_cancel = _shutdown_cancel
-                        , lock = _wc.lock()
-                        ] (Yield yield) mutable {
+        task::spawn_detached(ex, [ self = this
+                            , gen = std::move(gen)
+                            , lifetime_cancel = _lifetime_cancel
+                            , shutdown_cancel = _shutdown_cancel
+                            , lock = _wc.lock()
+                            ] (Yield yield) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
             gen(self->_queue, shutdown_cancel, yield[ec]);
@@ -77,7 +77,7 @@ public:
 
                 self->_queue.push_back(boost::none);
             }
-        }, asio::detached);
+        });
     }
 
     boost::optional<Value> async_get_value(Cancel cancel, Yield yield) {

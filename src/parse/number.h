@@ -45,6 +45,10 @@ number(boost::string_view& s)
     return r;
 }
 
+// Since some boost version the `beast::string_view` became a different type
+// than `boost::string_view`.  TODO: Find the exact version where that changed
+// or just stop supporting old boost versions.
+#if BOOST_VERSION >= 108000
 template<class T>
 std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value
                 , boost::optional<T>
@@ -56,6 +60,7 @@ number(beast::string_view& s)
     s = util::to_beast(bs);
     return ret;
 }
+#endif
 
 //--------------------------------------------------------------------
 template<class T>

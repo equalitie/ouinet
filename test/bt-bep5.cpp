@@ -115,7 +115,7 @@ int main(int argc, const char** argv)
 
     parse_args(args, &ifaddrs, &ping_cmd, &announce_cmd, &get_peers_cmd);
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         sys::error_code ec;
 
         wait_for_ready(dht, { asio::ip::address_v4::any(), 0 }, yield);
@@ -213,7 +213,7 @@ int main(int argc, const char** argv)
 
         cerr << "End" << endl;
         dht.stop();
-    }, asio::detached);
+    });
 
     ctx.run();
 }

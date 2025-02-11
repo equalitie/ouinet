@@ -239,7 +239,7 @@ public:
     void start(const AsioExecutor& ex, Duration d, OnTimeout on_timeout) {
         stop();
 
-        asio::spawn(ex, [self_ = this, ex, d, on_timeout = std::move(on_timeout)]
+        task::spawn_detached(ex, [self_ = this, ex, d, on_timeout = std::move(on_timeout)]
                          (asio::yield_context yield) mutable {
             TRACK_HANDLER();
             State state(self_, Clock::now() + d, ex);
@@ -262,7 +262,7 @@ public:
             }
 
             on_timeout();
-        }, asio::detached);
+        });
     }
 
     Clock::duration stop()

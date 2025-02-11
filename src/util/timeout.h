@@ -29,7 +29,7 @@ public:
                 }
             });
 
-        asio::spawn(ex, [s = _state, duration] (asio::yield_context yield) {
+        task::spawn_detached(ex, [s = _state, duration] (asio::yield_context yield) {
                 TRACK_HANDLER();
                 if (s->finished) return;
 
@@ -43,7 +43,7 @@ public:
                 if (s->local_abort_signal.call_count() == 0) {
                     s->local_abort_signal();
                 }
-            }, asio::detached);
+            });
     }
 
     Signal<void()>& abort_signal()

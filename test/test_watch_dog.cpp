@@ -24,7 +24,7 @@ BOOST_AUTO_TEST_CASE(test_new_watch_dog) {
 
     auto d = 50ms;
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         {
             auto wd = watch_dog(exec, d, [&] { BOOST_REQUIRE(false); });
         }
@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_CASE(test_new_watch_dog) {
 
             BOOST_REQUIRE(cancel.call_count() == 1);
         }
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -105,7 +105,7 @@ BOOST_AUTO_TEST_CASE(test_old_watch_dog) {
 
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         {
             WatchDog wd(ctx, 1s, [&] { BOOST_REQUIRE(false); });
         }
@@ -143,7 +143,7 @@ BOOST_AUTO_TEST_CASE(test_old_watch_dog) {
 
             BOOST_REQUIRE(cancel.call_count() == 0);
         }
-    }, asio::detached);
+    });
 
     ctx.run();
 }

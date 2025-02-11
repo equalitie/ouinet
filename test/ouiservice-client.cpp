@@ -4,6 +4,7 @@
 #include <string>
 
 #include "namespaces.h"
+#include "task.h"
 #include "ouiservice.h"
 #include "ouiservice/tcp.h"
 
@@ -30,7 +31,7 @@ int main(int argc, const char* argv[])
     auto endpoint = Endpoint{Endpoint::TcpEndpoint, "127.0.0.1:10203"};
     client.add(endpoint, make_unique<ouiservice::TcpOuiServiceClient>(ctx.get_executor(), endpoint.endpoint_string));
 
-    asio::spawn(ctx, [&client, &message] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&client, &message] (asio::yield_context yield) {
         sys::error_code ec;
         client.start(yield[ec]);
 
@@ -68,7 +69,7 @@ int main(int argc, const char* argv[])
                 break;
             }
         }
-    }, asio::detached);
+    });
 
     ctx.run();
     return 0;

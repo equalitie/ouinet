@@ -27,25 +27,25 @@ Clock::time_point start;
 Clock::time_point now;
 
 void start_btdht(asio::io_context& ctx, BtUtils& btu) {
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         vector<asio::ip::address> ifaddrs{asio::ip::make_address("0.0.0.0")};
         btdht = btu.bittorrent_dht(yield, ifaddrs);
-    }, asio::detached);
+    });
 }
 
 void start_announcer_loop(asio::io_context& ctx) {
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         announcer = std::make_unique<Announcer>(btdht, TEST_SIMULTANEOUS_ANNOUNCEMENTS);
 
         start = Clock::now();
         for (size_t n = 0; n < N_GROUPS; n++) {
             announcer->add("group-" + std::to_string(n));
         }
-    }, asio::detached);
+    });
 }
 
 void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         using namespace std::chrono;
         sys::error_code ec;
         asio::steady_timer timer(ctx);
@@ -72,7 +72,7 @@ void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
 
         btu.stop();
         raise(SIGINT);
-    }, asio::detached);
+    });
 }
 
 int main(int argc, const char** argv)

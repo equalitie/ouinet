@@ -4,13 +4,15 @@ endif ()
 
 if (${BOOST_VERSION} EQUAL 1.79.0)
     set(BOOST_VERSION_HASH 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
+    set(BOOST_COROUTINE_BACKEND coroutine)
 elseif (${BOOST_VERSION} EQUAL 1.87.0)
     set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
+    set(BOOST_COROUTINE_BACKEND fiber)
 endif ()
 
 set(BOOST_COMPONENTS
     context
-    fiber
+    ${BOOST_COROUTINE_BACKEND}
     date_time
     filesystem
     iostreams
@@ -169,7 +171,7 @@ target_link_libraries(boost_asio
     PUBLIC
         Boost::boost
         Threads::Threads
-        Boost::fiber
+        Boost::${BOOST_COROUTINE_BACKEND}
     PRIVATE
         Boost::system
 )

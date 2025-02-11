@@ -7,6 +7,7 @@
 #include <namespaces.h>
 #include <iostream>
 #include <util/file_io.h>
+#include <task.h>
 
 BOOST_AUTO_TEST_SUITE(persistent_lru_cache)
 
@@ -77,7 +78,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
     const unsigned max_cache_size = 2;
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
 
         {
@@ -145,7 +146,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), new_max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
         }
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -184,7 +185,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
     const std::string key("test");
     const std::string data(4200, 'x');  // bigger than usual cache block
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
 
         // Create cache and insert element
@@ -245,7 +246,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
             BOOST_REQUIRE(!ec);
             BOOST_REQUIRE_EQUAL(data_in, data);
         }
-    }, asio::detached);
+    });
 
     ctx.run();
 }

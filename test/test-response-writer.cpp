@@ -34,9 +34,9 @@ stream(stringstream& outs, WaitCondition& outwc, asio::io_context& ctx, asio::yi
 
     WaitCondition wc(ctx);
 
-    asio::spawn(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+    task::spawn_detached(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
         a.async_accept(s2, yield[accept_ec]);
-    }, asio::detached);
+    });
 
     s1.async_connect(a.local_endpoint(), yield[connect_ec]);
     wc.wait(yield);
@@ -44,7 +44,7 @@ stream(stringstream& outs, WaitCondition& outwc, asio::io_context& ctx, asio::yi
     if (accept_ec)  return or_throw(yield, accept_ec, move(s1));
     if (connect_ec) return or_throw(yield, connect_ec, move(s1));
 
-    asio::spawn(ctx, [&outs, done = outwc.lock(), s = move(s2)]
+    task::spawn_detached(ctx, [&outs, done = outwc.lock(), s = move(s2)]
                      (asio::yield_context yield) mutable {
         array<uint8_t, 2048> outd;
         auto outb = asio::buffer(outd);
@@ -54,7 +54,7 @@ stream(stringstream& outs, WaitCondition& outwc, asio::io_context& ctx, asio::yi
             outs << util::bytes::to_string_view(asio::buffer(outb, len));
             len = s.async_read_some(outb, yield[ec]);
         } while (!ec);
-    }, asio::detached);
+    });
 
     return s1;
 }
@@ -70,7 +70,7 @@ BOOST_AUTO_TEST_SUITE(ouinet_response_writer)
 BOOST_AUTO_TEST_CASE(test_http10_no_body) {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
@@ -92,7 +92,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
             "HTTP/1.0 200 OK\r\n"
             "\r\n";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
 BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
             "\r\n"
             "abcdef";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -136,7 +136,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
 BOOST_AUTO_TEST_CASE(test_http11_body) {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             "\r\n"
             "0123456789";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
 BOOST_AUTO_TEST_CASE(test_http11_chunk) {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
@@ -225,7 +225,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             "0\r\n"
             "\r\n";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -233,7 +233,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
 BOOST_AUTO_TEST_CASE(test_http11_trailer) {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
@@ -286,7 +286,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             "Hash: hash_of_1234\r\n"
             "\r\n";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -294,7 +294,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
 BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
@@ -350,7 +350,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             "\r\n"
             "abcde";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -358,7 +358,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
 BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
     asio::io_context ctx;
 
-    asio::spawn(ctx, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         Cancel c;
 
         stringstream outs;
@@ -427,7 +427,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             "\r\n"
             "abcde";
         BOOST_REQUIRE_EQUAL(outs.str(), rsp);
-    }, asio::detached);
+    });
 
     ctx.run();
 }

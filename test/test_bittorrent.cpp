@@ -55,7 +55,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
     DhtNode dht(ctx);
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
@@ -79,7 +79,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
         BOOST_REQUIRE(peers.count(dht.wan_endpoint()));
 
         dht.stop();
-    }, asio::detached);
+    });
 
     ctx.run();
 }
@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     size_t push_get_count = 8;
     size_t success_count = 0;
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
 
         BOOST_REQUIRE(!ec);
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
         WaitCondition wc(ctx);
 
         for (size_t i = 0; i < push_get_count; i++) {
-            asio::spawn(ctx, [&, lock = wc.lock(), i] (auto yield) {
+        task::spawn_detached(ctx, [&, lock = wc.lock(), i] (auto yield) {
                 BOOST_REQUIRE(!ec);
 
                 stringstream salt;
@@ -166,14 +166,14 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
                     BOOST_REQUIRE(value.str() == *s);
                     success_count++;
                 }
-            }, asio::detached);
+            });
         }
 
         wc.wait(yield[ec]);
         BOOST_REQUIRE(!ec);
 
         dht.stop();
-    }, asio::detached);
+    });
 
     ctx.run();
 
