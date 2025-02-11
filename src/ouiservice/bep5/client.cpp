@@ -283,7 +283,7 @@ public:
         , _helper_announcement_enabled(helper_announcement_enabled)
     {
         TRACK_SPAWN(_injector_swarm->get_executor(),
-                    [=] (asio::yield_context yield) {
+                    [this] (asio::yield_context yield) {
             sys::error_code ec;
             loop(yield[ec]);
         });
@@ -481,7 +481,7 @@ void Bep5Client::start(asio::yield_context)
     }
 
     TRACK_SPAWN(get_executor(),
-                [=] (asio::yield_context yield) {
+                [this] (asio::yield_context yield) {
         sys::error_code ec;
         status_loop(yield[ec]);
     });
@@ -626,6 +626,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
         TRACK_SPAWN(exec, ([
             =,
+            this,
             &spawn_cancel,
             &ret_target,
             &ret_con,

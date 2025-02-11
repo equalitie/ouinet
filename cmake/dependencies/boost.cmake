@@ -8,6 +8,16 @@ if (${BOOST_VERSION} EQUAL 1.79.0)
 elseif (${BOOST_VERSION} EQUAL 1.87.0)
     set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
     set(BOOST_COROUTINE_BACKEND fiber)
+    if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+        # There is a bug in boost::outcome (used by cpp-upnp) which causes
+        # compilation issues. This works around it but also disables some nicer
+        # GDB error messages. I'm not sure it matters much on Android, plus
+        # AFAIK we always check the `outcome::result` type before we access
+        # it's value, so probably will also never happen.
+        # Github issue for the bug is here: https://github.com/ned14/outcome/pull/308
+        add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+        add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+    endif()
 endif ()
 
 set(BOOST_COMPONENTS
@@ -75,6 +85,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
