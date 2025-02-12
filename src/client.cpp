@@ -198,7 +198,7 @@ public:
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
-        _upnps->clear();
+        if (_upnps) _upnps->clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
