@@ -83,3 +83,9 @@ std::unique_ptr<Client> Service::build_client(const std::string& target_id)
 void Service::start_i2cp_server() {
     _i2cpserver.start_listen();
 }
+
+void Service::start_tunneller_service() {
+  _i2p_tunneller = std::unique_ptr<TunnellerService>(new TunnellerService(shared_from_this(), _exec));
+
+}
+
