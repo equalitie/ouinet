@@ -8,6 +8,8 @@
 #include "server.h"
 #include "i2cp_server.h"
 
+#include "tunneller_service.h"
+
 #include "../../ouiservice.h"
 
 namespace i2p { namespace client {
@@ -41,6 +43,10 @@ public:
 
   // simply start the I2CP server on the pre-defined port
   void start_i2cp_server();
+
+  // simply the tunneller service for testing bittorent dht over i2p
+  void start_tunneller_service();
+  
 protected:
     AsioExecutor _exec;
     std::string _data_dir;
@@ -48,6 +54,8 @@ protected:
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 
   I2CPServer _i2cpserver;
+  std::unique_ptr<TunnellerService> _i2p_tunneller;
+  
 };
 
 } // i2poui namespace
