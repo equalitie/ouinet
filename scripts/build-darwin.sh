@@ -79,8 +79,10 @@ function combine {
     if [[ -d ${DIR}/build-OS64 ]]; then
         if [[ ${DIR}/build-SIMULATORARM64 ]]; then
             xcodebuild -create-xcframework \
-                -framework ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework \
-                -framework ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework \
+                -library ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/libouinet.dylib \
+                -headers ${ROOT}/ios/ouinet/include \
+                -library ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/libouinet.dylib \
+                -headers ${ROOT}/ios/ouinet/include \
                 -output ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
         else
             echo "ERROR: ${DIR}/build-iphonesimulator not found, please build before combining frameworks"
