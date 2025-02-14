@@ -1,5 +1,6 @@
 variables:
-  BUILD_PATH: 'build/$TARGET_PLATFORM'
+  WITH_EXPERIMENTAL: 'OFF'
+  BUILD_PATH: 'build/$TARGET_PLATFORM-experimental_$WITH_EXPERIMENTAL'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 .linux-build:
@@ -24,7 +25,7 @@ variables:
   script:
     - mkdir -p $BUILD_PATH
     - cd $BUILD_PATH
-    - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
+    - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
     - make -j `nproc`
 
 .linux-unit-test:

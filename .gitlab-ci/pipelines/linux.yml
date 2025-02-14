@@ -18,6 +18,18 @@ linux / build:
     - job: 'linux / prepare-builder-image'
       optional: true
 
+linux / build-experimental:
+  variables:
+    BOOST_VERSION: "1.79.0"
+    WITH_EXPERIMENTAL: "ON"
+  extends:
+    .linux-build
+  needs:
+    - job: 'linux / prepare-builder-image'
+      optional: true
+  when: manual
+  allow_failure: true
+
 linux / unit-test:
   extends:
     .linux-unit-test
