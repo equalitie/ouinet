@@ -10,11 +10,13 @@ windows / build:
     - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
     - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
     - Copy-Item -Path ${BUILD_PATH}\gcrypt\out\lib\*.dll, ${BUILD_PATH}\gcrypt\out\bin\*.dll, ${BUILD_PATH}\gpg_error\out\lib\*.dll, ${BUILD_PATH}\gpg_error\out\bin\*.dll -Destination ${BUILD_PATH}
+    - $libs = @("libgcc_s_seh-1", "libcrypto-3-x64", "libssl-3-x64", "libstdc++-6", "libwinpthread-1", "zlib1")
+    - foreach ($lib in $libs) { Copy-Item C:\msys64\mingw64\bin\${lib}.dll -Destination ${BUILD_PATH} }
   artifacts:
     paths:
       - $BUILD_PATH/client.exe
       - $BUILD_PATH/injector.exe
-      - $BUILD_PATH/lib*
+      - $BUILD_PATH/*lib*
       - $BUILD_PATH/test/test-*
       - $BUILD_PATH/test/bt-*
     expire_in: 6h
@@ -29,7 +31,7 @@ windows / unit-test:
     paths:
       - $BUILD_PATH/client.exe
       - $BUILD_PATH/injector.exe
-      - $BUILD_PATH/lib*
+      - $BUILD_PATH/*lib*
       - $BUILD_PATH/test/test-*
     expire_in: 6h
   script:
