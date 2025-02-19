@@ -30,6 +30,7 @@
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
 #include "http_util.h"
+#include "http_logger.h"
 #include "origin_pools.h"
 #include "session.h"
 
@@ -81,6 +82,8 @@ using ouinet::util::AsioExecutor;
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
+
+static const fs::path HTTP_LOG_FILE = "access.log";
 
 
 //------------------------------------------------------------------------------
@@ -434,6 +437,8 @@ private:
         if (ec = compute_error_code(ec, cancel, overlong_wd)) {
             yield.log("Failed to process response; ec=", ec);
             return or_throw(yield, ec);
+        } else {
+            http_logger.log(con, cache_rq, orig_sess, fwd_bytes);
         }
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
@@ -835,6 +840,8 @@ int main(int argc, const char* argv[])
         cout << config.options_description() << endl;
         return EXIT_SUCCESS;
     }
+
+    http_logger.log_to_file((config.repo_root() / HTTP_LOG_FILE).string());
 
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());
