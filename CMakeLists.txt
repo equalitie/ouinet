@@ -161,9 +161,29 @@ target_link_libraries(client
         lib::uri
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
+        ${CMAKE_CURRENT_BINARY_DIR}/rust-target/debug/librust.a
     PUBLIC
         ouinet::base
 )
+
+################################################################################
+
+include(ExternalProject)
+
+externalproject_add(
+    rust
+    DOWNLOAD_COMMAND ""
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND cargo build --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml" --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust-target"
+    BUILD_ALWAYS TRUE
+    INSTALL_COMMAND "")
+
+add_dependencies(client rust)
+add_dependencies(rust built_boost)
+
+target_include_directories(client
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
+    ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
 
 ################################################################################
 if (WITH_INJECTOR)
