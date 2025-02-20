@@ -1,0 +1,17 @@
+[package]
+name = "rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+cxx = "1.0"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "fs"] }
+state_monitor = { path = "../../ouisync/state_monitor" }
+serde_json = "1.0.138"
+uuid = { version = "1.13.1", features = ["v4"] }
+
+[build-dependencies]
+cxx-build = "1.0"
