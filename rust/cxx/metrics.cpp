@@ -29,11 +29,11 @@ MainlineDht Client::mainline_dht()
 //--------------------------------------------------------------------
 
 DhtNode MainlineDht::dht_node_ipv4() {
-    return DhtNode{_impl->new_dht_node("ipv4")};
+    return DhtNode{_impl->new_dht_node(true)};
 }
 
 DhtNode MainlineDht::dht_node_ipv6() {
-    return DhtNode{_impl->new_dht_node("ipv6")};
+    return DhtNode{_impl->new_dht_node(false)};
 }
 
 //--------------------------------------------------------------------

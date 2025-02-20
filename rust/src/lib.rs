@@ -1,18 +1,13 @@
+mod metrics;
 mod record_processor;
 mod runtime;
 
 use crate::ffi::CxxRecordProcessor;
 use cxx::UniquePtr;
+use metrics::{IpVersion, Metrics};
 use record_processor::RecordProcessor;
-use state_monitor::{MonitoredValue, StateMonitor};
 use std::sync::{Arc, Mutex};
-use tokio::{
-    fs,
-    runtime::Runtime,
-    sync::oneshot,
-    task::JoinHandle,
-    time::{self, Duration},
-};
+use tokio::{fs, runtime::Runtime, sync::oneshot, task::JoinHandle, time, time::Duration};
 use uuid::Uuid;
 
 #[cxx::bridge]
@@ -28,7 +23,7 @@ mod ffi {
         //------------------------------------------------------------
         type MainlineDht;
 
-        fn new_dht_node(self: &MainlineDht, ip_version: &str) -> Box<DhtNode>;
+        fn new_dht_node(self: &MainlineDht, is_ipv4: bool) -> Box<DhtNode>;
 
         //------------------------------------------------------------
         type DhtNode;
@@ -89,10 +84,10 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     let processor = RecordProcessor::new(processor);
     let uuid = Uuid::new_v4();
     let runtime = runtime::get_runtime();
-    let monitor = Arc::new(StateMonitor::make_root());
+    let metrics = Arc::new(Metrics::new());
 
     let job_handle = runtime.spawn({
-        let monitor = monitor.clone();
+        let metrics = metrics.clone();
         let record_name = format!("v0_{uuid}.record");
         let record_path = format!("{store_path}/{record_name}.record");
 
@@ -100,8 +95,8 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
             fs::create_dir_all(&store_path).await.unwrap();
 
             loop {
-                time::sleep(Duration::from_secs(1)).await;
-                let json = serde_json::to_string(&monitor_to_json(&monitor)).unwrap();
+                time::sleep(Duration::from_secs(10)).await;
+                let json = metrics.to_json().to_string();
                 tokio::fs::write(&record_path, json.clone()).await.unwrap();
 
                 let Some(success) = processor.process(record_name.clone(), json).await else {
@@ -113,16 +108,14 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
 
     Box::new(Client {
         _runtime: runtime,
-        monitor,
-        inner: ClientInner::new(),
+        metrics,
         job_handle,
     })
 }
 
 pub struct Client {
     _runtime: Arc<Runtime>,
-    monitor: Arc<StateMonitor>,
-    inner: Arc<ClientInner>,
+    metrics: Arc<Metrics>,
     job_handle: JoinHandle<()>,
 }
 
@@ -135,84 +128,63 @@ impl Drop for Client {
 impl Client {
     fn new_mainline_dht(&self) -> Box<MainlineDht> {
         Box::new(MainlineDht {
-            monitor: self.monitor.make_child("MainlineDht"),
-            client_inner: self.inner.clone(),
-        })
-    }
-}
-
-struct ClientInner {
-    bootstrap_state: Mutex<Option<MonitoredValue<String>>>,
-}
-
-impl ClientInner {
-    fn new() -> Arc<Self> {
-        Arc::new(Self {
-            bootstrap_state: Mutex::new(None),
+            metrics: self.metrics.clone(),
         })
     }
 }
 
 pub struct MainlineDht {
-    monitor: StateMonitor,
-    client_inner: Arc<ClientInner>,
+    metrics: Arc<Metrics>,
 }
 
 impl MainlineDht {
-    fn new_dht_node(&self, ip_version: &str) -> Box<DhtNode> {
+    fn new_dht_node(&self, is_ipv4: bool) -> Box<DhtNode> {
+        let ipv = if is_ipv4 {
+            IpVersion::V4
+        } else {
+            IpVersion::V6
+        };
+
         Box::new(DhtNode {
-            monitor: self.monitor.make_child(format!("DhtNode_{ip_version}")),
-            client_inner: self.client_inner.clone(),
+            ipv,
+            metrics: self.metrics.clone(),
         })
     }
 }
 
 pub struct DhtNode {
-    monitor: StateMonitor,
-    client_inner: Arc<ClientInner>,
+    ipv: IpVersion,
+    metrics: Arc<Metrics>,
 }
 
 impl DhtNode {
     fn new_bootstrap(&self) -> Box<Bootstrap> {
-        let state = self.monitor.make_value("bootstrap_state", "started".into());
-        *self.client_inner.bootstrap_state.lock().unwrap() = Some(state.clone());
-        Box::new(Bootstrap { state })
+        let metrics = self.metrics.clone();
+        let bootstrap_id = metrics.bootstrap_start(self.ipv);
+        Box::new(Bootstrap {
+            bootstrap_id,
+            ipv: self.ipv,
+            metrics: metrics.clone(),
+        })
     }
 }
 
 pub struct Bootstrap {
-    state: MonitoredValue<String>,
+    bootstrap_id: usize,
+    ipv: IpVersion,
+    metrics: Arc<Metrics>,
 }
 
 impl Bootstrap {
-    fn mark_success(&self, wan_endpoint: String) {
-        *self.state.get() = format!("boostrap successfull {wan_endpoint}");
+    fn mark_success(&self, _wan_endpoint: String) {
+        self.metrics
+            .bootstrap_finish(self.bootstrap_id, self.ipv, true);
     }
 }
 
-fn monitor_to_json(monitor: &StateMonitor) -> serde_json::Value {
-    use serde_json::{json, Value};
-
-    let value_names = monitor.values();
-    let mut values = Vec::new();
-
-    for value_name in value_names {
-        if let Ok(value) = monitor.get_value::<String>(&value_name) {
-            values.push(Value::String(value));
-        }
+impl Drop for Bootstrap {
+    fn drop(&mut self) {
+        self.metrics
+            .bootstrap_finish(self.bootstrap_id, self.ipv, false);
     }
-
-    let children_ids = monitor.children();
-    let mut children = Vec::new();
-
-    for child_id in children_ids {
-        if let Some(child) = monitor.locate(Some(child_id)) {
-            children.push(monitor_to_json(&child));
-        }
-    }
-
-    json!({
-        "values": values,
-        "children": children,
-    })
 }

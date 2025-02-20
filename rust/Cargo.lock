@@ -338,6 +338,7 @@ version = "0.1.0"
 dependencies = [
  "cxx",
  "cxx-build",
+ "serde",
  "serde_json",
  "state_monitor",
  "tokio",
