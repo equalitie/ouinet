@@ -1349,8 +1349,6 @@ Session Client::State::fetch_fresh_through_simple_proxy
 }
 
 void Client::State::send_statistics_report(std::string_view report_name, std::string_view report_content, Cancel& cancel, Yield yield) {
-    std::cout << "!!!!!!!!!!! about to send !!!!!!!!!! " << report_name << " " << report_content << "\n";
-
     if (!_config.metrics_server_url()) {
         // User did not enable report sending.
         throw_error(asio::error::invalid_argument);
@@ -1358,43 +1356,60 @@ void Client::State::send_statistics_report(std::string_view report_name, std::st
 
     const util::url_match& server_url = *_config.metrics_server_url();
 
-    //curl -v -H 'token: abcdefghijklmnopqrstuvwxyz' -F uploadFile='@/etc/issue.net' -L http://185.196.61.146:8888/.well-known/endpoint
-    //
-    // POST /.well-known/endpoint HTTP/1.1
-    // Host: 185.196.61.146:8888
-    // User-Agent: curl/7.81.0
-    // Accept: */*
-    // token: abcdefghijklmnopqrstuvwxyz
-    // Content-Length: 226
-    // Content-Type: multipart/form-data; boundary=------------------------8e9e9cc2824d3a6e
-    //
     http::request<http::string_body> req;
+
     req.version(11);
     req.method(http::verb::post);
     req.target(server_url.path);
     req.set(http::field::host, server_url.host_and_port());
     req.set(http::field::user_agent, "Ouinet.Client");
+    req.set(http::field::content_type, "multipart/form-data");
+    req.set("report-name", util::to_beast(report_name));
+
     if (!_config.metrics_server_token().empty()) {
         req.set("token", _config.metrics_server_token());
     }
-    req.set("report-name", util::to_beast(report_name));
+
     req.body() = report_content;
     req.prepare_payload();
 
-    std::cout << "---------------- REQUEST ------------------\n";
-    std::cout << req << "\n";
-    std::cout << "-------------------------------------------\n";
+    sys::error_code direct_ec;
 
-    auto session = fetch_fresh_from_origin( req
-                                          , UserAgentMetaData()
-                                          , cancel
-                                          , yield);
+    // Try sending the record to the origin directly.
+    auto direct_session = fetch_fresh_from_origin( req
+                                                 , UserAgentMetaData()
+                                                 , cancel
+                                                 , yield[direct_ec]);
 
-    std::cout << "---------------- RESPONSE -----------------\n";
-    std::cout << session.response_header() << "\n";
-    std::cout << "is_done: " << session.is_done() << "\n";
-    std::cout << "-------------------------------------------\n";
-    //auto session = fetch_fresh_through_connect_proxy();
+    // We're only interested in the header of the response. We use this to read
+    // and ignore the rest of the response so the connection can potentially be
+    // reused.
+    auto ignore_rest = [](Session& session, Cancel& cancel, Yield yield) {
+        yield.run([&] (auto yield) {
+            session.flush_response(cancel, yield, [](auto part, auto cancel, auto yield) {}, 60s);
+        });
+    };
+
+    if (!direct_ec) {
+        ignore_rest(direct_session, cancel, yield);
+
+        if (direct_session.response_header().result() == http::status::ok) {
+            return;
+        } else {
+            // No point in trying through the injector because we connected to
+            // the origin, but it failed to process our message.
+            throw_error(asio::error::invalid_argument);
+        }
+    }
+
+    // Sending directly failed, try sending through the injector.
+    auto injector_session = fetch_fresh_through_connect_proxy(req, cancel, yield);
+
+    ignore_rest(injector_session, cancel, yield);
+
+    if (injector_session.response_header().result() != http::status::ok) {
+        throw_error(asio::error::invalid_argument);
+    }
 }
 
 //------------------------------------------------------------------------------

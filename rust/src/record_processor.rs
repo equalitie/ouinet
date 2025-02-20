@@ -1,6 +1,5 @@
 use crate::{CxxOneShotSender, CxxRecordProcessor};
 use cxx::UniquePtr;
-use std::sync::Mutex;
 use tokio::sync::oneshot;
 
 pub struct RecordProcessor {
