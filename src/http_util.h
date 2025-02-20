@@ -370,7 +370,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     auto absolute_target = absolute_req.target();
 
     if (!match_http_url(absolute_target, url)) {
-        assert(0 && "Failed to parse url");
+        // It's already in origin form
         return absolute_req;
     }
 

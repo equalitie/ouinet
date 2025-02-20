@@ -49,6 +49,8 @@
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
 
+#include "cxx/metrics.h"
+
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
 #endif // ifndef __ANDROID__
@@ -79,6 +81,7 @@
 #include "util/handler_tracker.h"
 #include "util/executor.h"
 
+#include "task.h"
 #include "logger.h"
 
 #define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
@@ -105,6 +108,13 @@ static const fs::path OUINET_ERROR_PAGE_FILE = "error-page.html";
 
 // Flags for normal, case-insensitive regular expression.
 static const auto rx_icase = boost::regex::normal | boost::regex::icase;
+
+// TODO: Put this somewhere in util/ if it turns out useful.
+void throw_error(const boost::system::error_code& err)
+{
+    if (!err) return;
+    throw boost::system::system_error(err);
+}
 
 //------------------------------------------------------------------------------
 struct UserAgentMetaData {
@@ -175,6 +185,30 @@ public:
         // would be accepted if presented by an injector.
         //inj_ctx.set_default_verify_paths();
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
+
+
+        // Tell metrics::Client how to send reports
+        {
+            auto cancel = make_shared<Cancel>(_shutdown_signal);
+
+            _metrics = make_unique<metrics::Client>
+                ( ctx.get_executor()
+                , _config.repo_root() / "metrics"
+                , [this, cancel = move(cancel)] ( std::string_view report_name
+                     , std::string_view report_content
+                     , asio::yield_context yield_) {
+                    if (*cancel) throw_error(asio::error::operation_aborted);
+
+                    Yield yield(_ctx, yield_, "metrics");
+
+                    try {
+                        send_statistics_report(report_name, report_content, *cancel, Yield(move(yield)));
+                    } catch (std::exception& e) {
+                        LOG_WARN("Failed to send statistics: ", e.what());
+                        throw;
+                    }
+                });
+        }
     }
 
     void start();
@@ -280,6 +314,7 @@ public:
         auto lock = _bt_dht_wc.lock();
 
         auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
+                                                       , _metrics->mainline_dht()
                                                        , _config.repo_root() / "dht"
                                                        , _config.bt_bootstrap_extras());
 
@@ -369,6 +404,11 @@ private:
                                             , bool can_inject
                                             , Cancel& cancel
                                             , Yield);
+
+    void send_statistics_report( std::string_view report_name
+                               , std::string_view report_content
+                               , Cancel& cancel
+                               , Yield);
 
     template<class Resp>
     void maybe_add_proto_version_warning(Resp& res) const {
@@ -563,6 +603,7 @@ private:
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
     shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
+    unique_ptr<metrics::Client> _metrics;
 };
 
 //------------------------------------------------------------------------------
@@ -1183,6 +1224,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
                                  , http_::response_source_hdr_proxy);
     return session;
 }
+
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_through_simple_proxy
         ( Request request
@@ -1306,6 +1348,56 @@ Session Client::State::fetch_fresh_through_simple_proxy
     return session;
 }
 
+void Client::State::send_statistics_report(std::string_view report_name, std::string_view report_content, Cancel& cancel, Yield yield) {
+    std::cout << "!!!!!!!!!!! about to send !!!!!!!!!! " << report_name << " " << report_content << "\n";
+
+    if (!_config.metrics_server_url()) {
+        // User did not enable report sending.
+        throw_error(asio::error::invalid_argument);
+    }
+
+    const util::url_match& server_url = *_config.metrics_server_url();
+
+    //curl -v -H 'token: abcdefghijklmnopqrstuvwxyz' -F uploadFile='@/etc/issue.net' -L http://185.196.61.146:8888/.well-known/endpoint
+    //
+    // POST /.well-known/endpoint HTTP/1.1
+    // Host: 185.196.61.146:8888
+    // User-Agent: curl/7.81.0
+    // Accept: */*
+    // token: abcdefghijklmnopqrstuvwxyz
+    // Content-Length: 226
+    // Content-Type: multipart/form-data; boundary=------------------------8e9e9cc2824d3a6e
+    //
+    http::request<http::string_body> req;
+    req.version(11);
+    req.method(http::verb::post);
+    req.target(server_url.path);
+    req.set(http::field::host, server_url.host_and_port());
+    req.set(http::field::user_agent, "Ouinet.Client");
+    if (!_config.metrics_server_token().empty()) {
+        req.set("token", _config.metrics_server_token());
+    }
+    req.set("report-name", util::to_beast(report_name));
+    req.body() = report_content;
+    req.prepare_payload();
+
+    std::cout << "---------------- REQUEST ------------------\n";
+    std::cout << req << "\n";
+    std::cout << "-------------------------------------------\n";
+
+    auto session = fetch_fresh_from_origin( req
+                                          , UserAgentMetaData()
+                                          , cancel
+                                          , yield);
+
+    std::cout << "---------------- RESPONSE -----------------\n";
+    std::cout << session.response_header() << "\n";
+    std::cout << "is_done: " << session.is_done() << "\n";
+    std::cout << "-------------------------------------------\n";
+    //auto session = fetch_fresh_through_connect_proxy();
+}
+
+//------------------------------------------------------------------------------
 class Transaction {
 public:
     Transaction(GenericStream& ua_con, const Request& rq, UserAgentMetaData meta)

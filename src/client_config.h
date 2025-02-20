@@ -20,6 +20,7 @@
 #include "logger.h"
 #include "constants.h"
 #include "bep5_swarms.h"
+#include "util.h"
 #include "bittorrent/bootstrap.h"
 
 namespace ouinet {
@@ -126,6 +127,14 @@ public:
 
     auto description() {
         return description_full();
+    }
+
+    const boost::optional<util::url_match>& metrics_server_url() const {
+        return _metrics_server_url;
+    }
+
+    const std::string& metrics_server_token() const {
+        return _metrics_server_token;
     }
 
 private:
@@ -260,13 +269,22 @@ private:
               "the \"dns=...\" query argument will be added for the GET request.")
            ;
 
+        po::options_description metrics("Metrics options");
+        metrics.add_options()
+           ("metrics-server-url", po::value<string>()
+            , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
+           ("metrics-server-token", po::value<string>()
+            , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
+           ;
+
         po::options_description desc;
         desc
             .add(general)
             .add(services)
             .add(injector)
             .add(cache)
-            .add(requests);
+            .add(requests)
+            .add(metrics);
         return desc;
     }
 
@@ -408,6 +426,8 @@ private:
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
+    boost::optional<util::url_match> _metrics_server_url;
+    std::string _metrics_server_token;
 };
 
 inline
@@ -688,6 +708,23 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (!_origin_doh_endpoint)
             throw std::runtime_error(util::str(
                     "Invalid URL for '--origin-doh-base': ", doh_base));
+    }
+
+    if (vm.count("metrics-server-url")) {
+        util::url_match url_match;
+        if (!util::match_http_url(vm["metrics-server-url"].as<string>(), url_match)) {
+            throw std::runtime_error(
+                    "The '--metrics-server-url' argument must be a valid URL");
+        }
+        _metrics_server_url = url_match;
+    }
+
+    if (vm.count("metrics-server-token")) {
+        if (!_metrics_server_url) {
+            throw std::runtime_error(
+                    "The '--metrics-server-token' must be used with '--metrics-server'");
+        }
+        _metrics_server_token = vm["metrics-server-token"].as<string>();
     }
 
     save_persistent();  // only if no errors happened

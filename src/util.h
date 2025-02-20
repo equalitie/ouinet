@@ -40,6 +40,14 @@ struct url_match {
             % (fragment.empty() ? "" : '#' + fragment);
         return url.str();
     }
+
+    std::string host_and_port() const {
+        if (port.empty()) {
+            return host;
+        } else {
+            return host + ':' + port;
+        }
+    }
 };
 
 // Parse the HTTP URL to tell the different components.
@@ -248,6 +256,11 @@ boost::string_view to_boost(boost::beast::string_view str) {
 
 inline
 boost::beast::string_view to_beast(boost::string_view str) {
+    return boost::beast::string_view(str.data(), str.size());
+}
+
+inline
+boost::beast::string_view to_beast(std::string_view str) {
     return boost::beast::string_view(str.data(), str.size());
 }
 
