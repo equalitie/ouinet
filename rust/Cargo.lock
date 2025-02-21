@@ -200,6 +200,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "log"
+version = "0.4.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
+
+[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -253,6 +259,7 @@ version = "0.1.0"
 dependencies = [
  "cxx",
  "cxx-build",
+ "log",
  "serde",
  "serde_json",
  "tokio",
@@ -376,6 +383,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ced87ca4be083373936a67f8de945faa23b6b42384bd5b64434850802c6dccd0"
 dependencies = [
  "getrandom",
+ "serde",
 ]
 
 [[package]]

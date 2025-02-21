@@ -7,7 +7,10 @@ use crate::ffi::CxxRecordProcessor;
 use cxx::UniquePtr;
 use metrics::{IpVersion, Metrics};
 use metrics_runner::metrics_runner;
-use std::sync::{Arc, Mutex};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tokio::{runtime::Runtime, sync::oneshot, task::JoinHandle};
 
 #[cxx::bridge]
@@ -85,7 +88,16 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     let runtime = runtime::get_runtime();
     let metrics = Arc::new(Metrics::new());
 
-    let job_handle = runtime.spawn(metrics_runner(metrics.clone(), store_path, processor));
+    let job_handle = runtime.spawn({
+        let metrics = metrics.clone();
+        let store_path = PathBuf::from(store_path);
+
+        async move {
+            if let Err(error) = metrics_runner(metrics, store_path, processor).await {
+                log::error!("Metrics runner finished with an error: {error:?}");
+            }
+        }
+    });
 
     Box::new(Client {
         _runtime: runtime,
