@@ -187,22 +187,22 @@ public:
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
 
 
-        // Tell metrics::Client how to send reports
+        // Tell metrics::Client how to send records
         {
             auto cancel = make_shared<Cancel>(_shutdown_signal);
 
             _metrics = make_unique<metrics::Client>
                 ( ctx.get_executor()
                 , _config.repo_root() / "metrics"
-                , [this, cancel = move(cancel)] ( std::string_view report_name
-                     , std::string_view report_content
+                , [this, cancel = move(cancel)] ( std::string_view record_name
+                     , std::string_view record_content
                      , asio::yield_context yield_) {
                     if (*cancel) throw_error(asio::error::operation_aborted);
 
                     Yield yield(_ctx, yield_, "metrics");
 
                     try {
-                        send_statistics_report(report_name, report_content, *cancel, Yield(move(yield)));
+                        send_metrics_record(record_name, record_content, *cancel, Yield(move(yield)));
                     } catch (std::exception& e) {
                         LOG_WARN("Failed to send statistics: ", e.what());
                         throw;
@@ -405,10 +405,10 @@ private:
                                             , Cancel& cancel
                                             , Yield);
 
-    void send_statistics_report( std::string_view report_name
-                               , std::string_view report_content
-                               , Cancel& cancel
-                               , Yield);
+    void send_metrics_record( std::string_view record_name
+                            , std::string_view record_content
+                            , Cancel& cancel
+                            , Yield);
 
     template<class Resp>
     void maybe_add_proto_version_warning(Resp& res) const {
@@ -1348,9 +1348,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
     return session;
 }
 
-void Client::State::send_statistics_report(std::string_view report_name, std::string_view report_content, Cancel& cancel, Yield yield) {
+void Client::State::send_metrics_record(std::string_view record_name, std::string_view record_content, Cancel& cancel, Yield yield) {
     if (!_config.metrics_server_url()) {
-        // User did not enable report sending.
+        // User did not enable record sending.
         throw_error(asio::error::invalid_argument);
     }
 
@@ -1364,13 +1364,13 @@ void Client::State::send_statistics_report(std::string_view report_name, std::st
     req.set(http::field::host, server_url.host_and_port());
     req.set(http::field::user_agent, "Ouinet.Client");
     req.set(http::field::content_type, "multipart/form-data");
-    req.set("report-name", util::to_beast(report_name));
+    req.set("record-name", util::to_beast(record_name));
 
     if (!_config.metrics_server_token().empty()) {
         req.set("token", _config.metrics_server_token());
     }
 
-    req.body() = report_content;
+    req.body() = record_content;
     req.prepare_payload();
 
     sys::error_code direct_ec;

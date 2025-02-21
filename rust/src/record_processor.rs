@@ -11,7 +11,7 @@ impl RecordProcessor {
         Self { cxx_processor }
     }
 
-    // Sends the report for processing in C++, awaits until done.
+    // Sends the record for processing in C++, awaits until done.
     //
     // Returns:
     //   `Some(true)` if the record was processed (sent) successfully

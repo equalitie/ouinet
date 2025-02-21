@@ -37,7 +37,10 @@ impl Metrics {
             IpVersion::V6 => self.bootstraps_v6.lock().unwrap(),
         };
 
-        bootstraps[id] = BootstrapState::Finished { success };
+        match bootstraps[id] {
+            BootstrapState::Started => bootstraps[id] = BootstrapState::Finished { success },
+            BootstrapState::Finished { .. } => (),
+        }
     }
 
     pub fn to_json(&self) -> serde_json::Value {

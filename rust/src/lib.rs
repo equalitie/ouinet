@@ -1,14 +1,14 @@
 mod metrics;
+mod metrics_runner;
 mod record_processor;
 mod runtime;
 
 use crate::ffi::CxxRecordProcessor;
 use cxx::UniquePtr;
 use metrics::{IpVersion, Metrics};
-use record_processor::RecordProcessor;
+use metrics_runner::metrics_runner;
 use std::sync::{Arc, Mutex};
-use tokio::{fs, runtime::Runtime, sync::oneshot, task::JoinHandle, time, time::Duration};
-use uuid::Uuid;
+use tokio::{runtime::Runtime, sync::oneshot, task::JoinHandle};
 
 #[cxx::bridge]
 mod ffi {
@@ -81,30 +81,11 @@ impl CxxOneShotSender {
 }
 
 fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
-    let processor = RecordProcessor::new(processor);
-    let uuid = Uuid::new_v4();
+    let processor = record_processor::RecordProcessor::new(processor);
     let runtime = runtime::get_runtime();
     let metrics = Arc::new(Metrics::new());
 
-    let job_handle = runtime.spawn({
-        let metrics = metrics.clone();
-        let record_name = format!("v0_{uuid}.record");
-        let record_path = format!("{store_path}/{record_name}.record");
-
-        async move {
-            fs::create_dir_all(&store_path).await.unwrap();
-
-            loop {
-                time::sleep(Duration::from_secs(10)).await;
-                let json = metrics.to_json().to_string();
-                tokio::fs::write(&record_path, json.clone()).await.unwrap();
-
-                let Some(success) = processor.process(record_name.clone(), json).await else {
-                    break;
-                };
-            }
-        }
-    });
+    let job_handle = runtime.spawn(metrics_runner(metrics.clone(), store_path, processor));
 
     Box::new(Client {
         _runtime: runtime,
