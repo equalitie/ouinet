@@ -2,6 +2,7 @@ mod metrics;
 mod metrics_runner;
 mod record_processor;
 mod runtime;
+mod store;
 
 use crate::ffi::CxxRecordProcessor;
 use cxx::UniquePtr;
