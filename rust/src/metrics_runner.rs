@@ -1,13 +1,14 @@
 use crate::{
     metrics::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
-    store::Store,
+    store::{Store, StoredRecord},
 };
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::{time, time::Duration};
 
-const ROTATE_UUID_AFTER: Duration = Duration::from_secs(60 * 60 * 24 * 7); // One week
+const DAY: Duration = Duration::from_secs(60 * 60 * 24);
+const ROTATE_UUID_AFTER: Duration = Duration::from_secs(60 * 60 * 24 * 7);
 
 pub async fn metrics_runner(
     metrics: Arc<Metrics>,
@@ -16,12 +17,10 @@ pub async fn metrics_runner(
 ) -> Result<(), MetricsRunnerError> {
     let store = Store::new(store_path).await?;
 
-    while let Some(record) = store.get_next_pre_existing_record().await? {
-        let success = processor.process(&record).await?;
+    let processor = PersistentRecordProcessor { processor };
 
-        if success {
-            record.discard().await?;
-        }
+    while let Some(record) = store.get_next_pre_existing_record().await? {
+        processor.process(record).await?;
     }
 
     let mut uuid_rotator = store.new_uuid_rotator(ROTATE_UUID_AFTER).await?;
@@ -36,11 +35,42 @@ pub async fn metrics_runner(
         let record_name = format!("v0_{uuid}");
         let record = store.store_record(&record_name, record).await?;
 
-        let success = processor.process(&record).await?;
+        processor.process(record).await?;
+    }
+}
 
-        if success {
+// Retries processing of a record with an exponential backoff untill succeeds. Discards the record
+// on success.
+struct PersistentRecordProcessor {
+    processor: RecordProcessor,
+}
+
+impl PersistentRecordProcessor {
+    async fn process(&self, record: StoredRecord) -> Result<(), MetricsRunnerError> {
+        let mut delay_after_failure = Duration::from_secs(10);
+        let max_delay = 2 * DAY;
+
+        loop {
+            if !self.processor.process(&record).await? {
+                time::sleep(delay_after_failure).await;
+
+                delay_after_failure += Self::random_up_to(2 * delay_after_failure);
+
+                if delay_after_failure > max_delay {
+                    delay_after_failure = max_delay + Self::random_up_to(DAY);
+                }
+
+                continue;
+            }
+
             record.discard().await?;
+            break Ok(());
         }
+    }
+
+    fn random_up_to(duration: Duration) -> Duration {
+        use rand::Rng;
+        Duration::from_secs(rand::rng().random_range(..duration.as_secs()))
     }
 }
 
