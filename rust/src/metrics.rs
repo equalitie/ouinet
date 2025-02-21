@@ -1,5 +1,6 @@
-use serde::Serialize;
-use std::sync::Mutex;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::{sync::Mutex, time::SystemTime};
 
 #[derive(Clone, Copy)]
 pub enum IpVersion {
@@ -12,10 +13,10 @@ pub struct Metrics {
     bootstraps_v6: Mutex<Vec<BootstrapState>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Record {
-    bootstraps_v4: Vec<BootstrapState>,
-    bootstraps_v6: Vec<BootstrapState>,
+    pub last_process_attempt_at: Option<SystemTime>,
+    pub data: String,
 }
 
 impl Metrics {
@@ -53,8 +54,12 @@ impl Metrics {
         let bv6 = self.bootstraps_v6.lock().unwrap();
 
         Record {
-            bootstraps_v4: bv4.clone(),
-            bootstraps_v6: bv6.clone(),
+            last_process_attempt_at: None,
+            data: json!({
+                "bootstraps_v4": bv4.clone(),
+                "bootstraps_v6": bv6.clone(),
+            })
+            .to_string(),
         }
     }
 }

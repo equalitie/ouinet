@@ -3,7 +3,7 @@ use serde_json::json;
 use std::{
     io,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::SystemTime,
 };
 use tokio::{fs, time::Duration};
 use uuid::Uuid;
@@ -38,18 +38,19 @@ impl Store {
         record: Record,
     ) -> io::Result<StoredRecord> {
         let record_path = self.records_dir_path.join(format!("{record_name}.record"));
-        let record_content = json!(record).to_string();
-        tokio::fs::write(&record_path, &record_content).await?;
+        tokio::fs::write(&record_path, &json!(record).to_string()).await?;
         Ok(StoredRecord {
             name: record_name.into(),
             path: record_path,
-            content: record_content,
+            record,
         })
     }
 
     pub async fn get_next_pre_existing_record(&self) -> io::Result<Option<StoredRecord>> {
         let mut entries = fs::read_dir(&self.records_dir_path).await?;
 
+        // TODO: Remove records which can't be parsed?
+        // TODO: Discard old records?
         while let Some(entry) = entries.next_entry().await? {
             if !entry.file_type().await?.is_file() {
                 continue;
@@ -57,7 +58,7 @@ impl Store {
 
             let path = entry.path();
 
-            let Some(stem) = path
+            let Some(name) = path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .map(str::to_string)
@@ -65,23 +66,22 @@ impl Store {
                 continue;
             };
 
-            let content = fs::read_to_string(&path).await?;
+            let Ok(record) = serde_json::from_str(&fs::read_to_string(&path).await?) else {
+                continue;
+            };
 
-            return Ok(Some(StoredRecord {
-                name: stem,
-                path,
-                content,
-            }));
+            return Ok(Some(StoredRecord { name, path, record }));
         }
 
         Ok(None)
     }
 }
 
+#[derive(Debug)]
 pub struct StoredRecord {
     pub name: String,
     pub path: PathBuf,
-    pub content: String,
+    pub record: Record,
 }
 
 impl StoredRecord {
@@ -129,16 +129,7 @@ impl UuidRotator {
         let uuid = Uuid::new_v4();
         let now = SystemTime::now();
 
-        fs::write(
-            file_path,
-            json!((
-                uuid,
-                // Unwrap: something is seriously wrong if UNIX_EPOCH > now.
-                now.duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            ))
-            .to_string(),
-        )
-        .await?;
+        fs::write(file_path, json!((uuid, now)).to_string()).await?;
 
         Ok((uuid, now))
     }

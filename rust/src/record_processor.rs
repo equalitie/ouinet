@@ -22,7 +22,7 @@ impl RecordProcessor {
         let (tx, rx) = oneshot::channel();
         self.cxx_processor.as_ref().unwrap().execute(
             record.name.clone(),
-            record.content.clone(),
+            record.record.data.clone(),
             Box::new(CxxOneShotSender::new(tx)),
         );
         match rx.await {
