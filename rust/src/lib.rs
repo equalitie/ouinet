@@ -4,7 +4,10 @@ mod record_processor;
 mod runtime;
 mod store;
 
-use crate::ffi::CxxRecordProcessor;
+use crate::{
+    ffi::CxxRecordProcessor, metrics_runner::MetricsRunnerError,
+    record_processor::RecordProcessorError,
+};
 use cxx::UniquePtr;
 use metrics::{IpVersion, Metrics};
 use metrics_runner::metrics_runner;
@@ -95,7 +98,14 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
 
         async move {
             if let Err(error) = metrics_runner(metrics, store_path, processor).await {
-                log::error!("Metrics runner finished with an error: {error:?}");
+                match error {
+                    MetricsRunnerError::RecordProcessor(RecordProcessorError::CxxDisconnected) => {
+                        ()
+                    }
+                    MetricsRunnerError::Io(error) => {
+                        log::error!("Metrics runner finished with an error: {error:?}")
+                    }
+                }
             }
         }
     });

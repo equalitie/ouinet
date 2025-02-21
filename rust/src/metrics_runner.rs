@@ -1,6 +1,11 @@
-use crate::{metrics::Metrics, record_processor::RecordProcessor, store::Store};
+use crate::{
+    metrics::Metrics,
+    record_processor::{RecordProcessor, RecordProcessorError},
+    store::Store,
+};
 use std::{io, path::PathBuf, sync::Arc};
-use tokio::{fs, time, time::Duration};
+use thiserror::Error;
+use tokio::{time, time::Duration};
 
 const ROTATE_UUID_AFTER: Duration = Duration::from_secs(60 * 60 * 24 * 7); // One week
 
@@ -8,8 +13,17 @@ pub async fn metrics_runner(
     metrics: Arc<Metrics>,
     store_path: PathBuf,
     processor: RecordProcessor,
-) -> io::Result<()> {
+) -> Result<(), MetricsRunnerError> {
     let store = Store::new(store_path).await?;
+
+    while let Some(record) = store.get_next_pre_existing_record().await? {
+        let success = processor.process(&record).await?;
+
+        if success {
+            record.discard().await?;
+        }
+    }
+
     let mut uuid_rotator = store.new_uuid_rotator(ROTATE_UUID_AFTER).await?;
 
     loop {
@@ -22,14 +36,18 @@ pub async fn metrics_runner(
         let record_name = format!("v0_{uuid}");
         let record = store.store_record(&record_name, record).await?;
 
-        let Some(success) = processor.process(&record).await else {
-            // The C++ callback has been destroyed, could theoretically happen when the
-            // asio::io_context is destroyed before the callback is finished.
-            return Ok(());
-        };
+        let success = processor.process(&record).await?;
 
         if success {
             record.discard().await?;
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum MetricsRunnerError {
+    #[error("RecordProcessor error {0}")]
+    RecordProcessor(#[from] RecordProcessorError),
+    #[error("IO error {0}")]
+    Io(#[from] io::Error),
 }

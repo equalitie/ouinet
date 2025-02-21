@@ -8,11 +8,12 @@ crate-type = ["staticlib"]
 
 [dependencies]
 cxx = "1.0"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "fs"] }
+log = "0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.138"
+thiserror = "2.0.11"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "fs"] }
 uuid = { version = "1.13.1", features = ["v4", "serde"] }
-log = "0"
 
 [build-dependencies]
 cxx-build = "1.0"
