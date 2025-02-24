@@ -16,5 +16,8 @@ thiserror = "2.0.11"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "fs", "macros"] }
 uuid = { version = "1.13.1", features = ["v4", "serde"] }
 
+[dev-dependencies]
+tmpdir = "1.0.0"
+
 [build-dependencies]
 cxx-build = "1.0"

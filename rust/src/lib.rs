@@ -1,4 +1,5 @@
 mod backoff;
+mod clock;
 mod metrics;
 mod metrics_runner;
 mod record_processor;
