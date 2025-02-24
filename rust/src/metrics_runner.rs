@@ -1,76 +1,65 @@
 use crate::{
     metrics::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
-    store::{Store, StoredRecord},
+    store::Store,
 };
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
-use tokio::{time, time::Duration};
-
-const DAY: Duration = Duration::from_secs(60 * 60 * 24);
-const ROTATE_UUID_AFTER: Duration = Duration::from_secs(60 * 60 * 24 * 7);
+use tokio::select;
 
 pub async fn metrics_runner(
     metrics: Arc<Metrics>,
     store_path: PathBuf,
     processor: RecordProcessor,
 ) -> Result<(), MetricsRunnerError> {
-    let store = Store::new(store_path).await?;
+    let mut store = Store::new(store_path).await?;
 
-    let processor = PersistentRecordProcessor { processor };
+    let mut on_metrics_modified_rx = metrics.subscribe();
 
-    while let Some(record) = store.get_next_pre_existing_record().await? {
-        processor.process(record).await?;
+    enum Event {
+        ProcessOneRecord,
+        MetricsModified,
     }
 
-    let mut uuid_rotator = store.new_uuid_rotator(ROTATE_UUID_AFTER).await?;
+    let mut backoff = store.backoff().await?;
 
     loop {
-        time::sleep(Duration::from_secs(5)).await;
-
-        let uuid = uuid_rotator.update().await?;
-
-        let record = metrics.make_record();
-
-        let record_name = format!("v0_{uuid}");
-        let record = store.store_record(&record_name, record).await?;
-
-        processor.process(record).await?;
-    }
-}
-
-// Retries processing of a record with an exponential backoff untill succeeds. Discards the record
-// on success.
-struct PersistentRecordProcessor {
-    processor: RecordProcessor,
-}
-
-impl PersistentRecordProcessor {
-    async fn process(&self, record: StoredRecord) -> Result<(), MetricsRunnerError> {
-        let mut delay_after_failure = Duration::from_secs(10);
-        let max_delay = 2 * DAY;
-
-        loop {
-            if !self.processor.process(&record).await? {
-                time::sleep(delay_after_failure).await;
-
-                delay_after_failure += Self::random_up_to(2 * delay_after_failure);
-
-                if delay_after_failure > max_delay {
-                    delay_after_failure = max_delay + Self::random_up_to(DAY);
+        let event = select! {
+            () = backoff.sleep() => Event::ProcessOneRecord,
+            result = on_metrics_modified_rx.changed() => {
+                match result {
+                    Ok(()) => Event::MetricsModified,
+                    Err(_) => return Ok(()),
                 }
-
-                continue;
             }
+        };
 
-            record.discard().await?;
-            break Ok(());
+        match event {
+            Event::ProcessOneRecord => {
+                println!(":::::::::: process one record");
+                let records = store.load_stored_records().await?;
+
+                let oldest_record = records.iter().min_by(|l, r| l.created.cmp(&r.created));
+
+                let Some(record) = oldest_record else {
+                    backoff.stop();
+                    continue;
+                };
+
+                if processor.process(&record).await? {
+                    backoff.succeeded().await?;
+                    record.discard().await?;
+                } else {
+                    backoff.failed().await?;
+                }
+            }
+            Event::MetricsModified => {
+                println!(":::::::::: modified");
+                let record = metrics.make_record_data();
+                store.store_record(record).await?;
+                backoff.resume();
+            }
         }
-    }
-
-    fn random_up_to(duration: Duration) -> Duration {
-        use rand::Rng;
-        Duration::from_secs(rand::rng().random_range(..duration.as_secs()))
     }
 }
 

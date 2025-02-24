@@ -1,3 +1,4 @@
+mod backoff;
 mod metrics;
 mod metrics_runner;
 mod record_processor;
@@ -87,6 +88,7 @@ impl CxxOneShotSender {
     }
 }
 
+// TODO: Don't create new client if one already exists
 fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
     let processor = record_processor::RecordProcessor::new(processor);
     let runtime = runtime::get_runtime();

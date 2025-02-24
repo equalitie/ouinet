@@ -1,6 +1,8 @@
-use crate::metrics::Record;
+use crate::backoff::Backoff;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
+    ffi::OsStr,
     io,
     path::{Path, PathBuf},
     time::SystemTime,
@@ -8,9 +10,14 @@ use std::{
 use tokio::{fs, time::Duration};
 use uuid::Uuid;
 
+const RECORD_VERSION: u32 = 0;
+const RECORD_FILE_EXTENSION: &str = "record";
+const ROTATE_UUID_AFTER: Duration = Duration::from_secs(60 * 60 * 24 * 7);
+
 pub struct Store {
+    root_path: PathBuf,
     records_dir_path: PathBuf,
-    uuid_file_path: PathBuf,
+    uuid_rotator: UuidRotator,
 }
 
 impl Store {
@@ -20,36 +27,43 @@ impl Store {
 
         fs::create_dir_all(&records_dir_path).await?;
 
+        let uuid_rotator = UuidRotator::new(uuid_file_path, ROTATE_UUID_AFTER).await?;
+
         Ok(Self {
+            root_path,
             records_dir_path,
-            uuid_file_path,
-        })
-    }
-}
-
-impl Store {
-    pub async fn new_uuid_rotator(&self, rotate_after: Duration) -> io::Result<UuidRotator> {
-        UuidRotator::new(self.uuid_file_path.clone(), rotate_after).await
-    }
-
-    pub async fn store_record(
-        &self,
-        record_name: &str,
-        record: Record,
-    ) -> io::Result<StoredRecord> {
-        let record_path = self.records_dir_path.join(format!("{record_name}.record"));
-        tokio::fs::write(&record_path, &json!(record).to_string()).await?;
-        Ok(StoredRecord {
-            name: record_name.into(),
-            path: record_path,
-            record,
+            uuid_rotator,
         })
     }
 
-    pub async fn get_next_pre_existing_record(&self) -> io::Result<Option<StoredRecord>> {
+    // TODO: Would be nice to ensure Backoff is created only once.
+    pub async fn backoff(&self) -> io::Result<Backoff> {
+        Backoff::new(self.root_path.join("backoff.json")).await
+    }
+
+    pub async fn store_record(&mut self, record_data: String) -> io::Result<()> {
+        let uuid = self.current_uuid().await?;
+
+        let record_name = Self::build_record_name(RECORD_VERSION, uuid);
+        let record_path = self
+            .records_dir_path
+            .join(format!("{record_name}.{RECORD_FILE_EXTENSION}"));
+
+        let content = StoredRecordContent {
+            created: SystemTime::now(),
+            data: record_data,
+        };
+
+        tokio::fs::write(&record_path, &json!(content).to_string()).await?;
+
+        Ok(())
+    }
+
+    pub async fn load_stored_records(&self) -> io::Result<Vec<StoredRecord>> {
         let mut entries = fs::read_dir(&self.records_dir_path).await?;
 
-        // TODO: Remove records which can't be parsed?
+        let mut records = Vec::new();
+
         // TODO: Discard old records?
         while let Some(entry) = entries.next_entry().await? {
             if !entry.file_type().await?.is_file() {
@@ -57,6 +71,10 @@ impl Store {
             }
 
             let path = entry.path();
+
+            if path.extension() != Some(OsStr::new(RECORD_FILE_EXTENSION)) {
+                continue;
+            }
 
             let Some(name) = path
                 .file_stem()
@@ -66,28 +84,82 @@ impl Store {
                 continue;
             };
 
-            let Ok(record) = serde_json::from_str(&fs::read_to_string(&path).await?) else {
+            let Some((version, uuid)) = Self::parse_record_name(&name) else {
                 continue;
             };
 
-            return Ok(Some(StoredRecord { name, path, record }));
+            if version != RECORD_VERSION {
+                fs::remove_file(&path).await?;
+                continue;
+            }
+
+            let Ok(content) =
+                serde_json::from_str::<StoredRecordContent>(&fs::read_to_string(&path).await?)
+            else {
+                // Possibly incomplete write before the app terminated.
+                fs::remove_file(&path).await?;
+                continue;
+            };
+
+            records.push(StoredRecord {
+                uuid,
+                path,
+                created: content.created,
+                data: content.data,
+            });
         }
 
-        Ok(None)
+        Ok(records)
+    }
+
+    pub async fn current_uuid(&mut self) -> io::Result<Uuid> {
+        self.uuid_rotator.update().await
+    }
+
+    fn build_record_name(version: u32, uuid: Uuid) -> String {
+        format!("v{version}_{uuid}")
+    }
+
+    fn parse_record_name(name: &str) -> Option<(u32, Uuid)> {
+        let mut parts = name.split('_');
+
+        let version_part = parts.next()?;
+        let uuid_part = parts.next()?;
+
+        if !version_part.starts_with('v') {
+            return None;
+        }
+        let version: u32 = version_part[1..].parse().ok()?;
+
+        let uuid = Uuid::parse_str(uuid_part).ok()?;
+
+        Some((version, uuid))
     }
 }
 
 #[derive(Debug)]
 pub struct StoredRecord {
-    pub name: String,
+    pub uuid: Uuid,
     pub path: PathBuf,
-    pub record: Record,
+    pub created: SystemTime,
+    pub data: String,
 }
 
 impl StoredRecord {
     pub async fn discard(&self) -> io::Result<()> {
         fs::remove_file(&self.path).await
     }
+
+    pub fn name(&self) -> String {
+        Store::build_record_name(RECORD_VERSION, self.uuid)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct StoredRecordContent {
+    // TODO: Should we get this from file meta-data?
+    created: SystemTime,
+    data: String,
 }
 
 pub struct UuidRotator {

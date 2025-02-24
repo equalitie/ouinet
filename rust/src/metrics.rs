@@ -1,6 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::json;
-use std::{sync::Mutex, time::SystemTime};
+use std::sync::Mutex;
+use tokio::sync::watch;
 
 #[derive(Clone, Copy)]
 pub enum IpVersion {
@@ -9,19 +10,15 @@ pub enum IpVersion {
 }
 
 pub struct Metrics {
+    on_modify_tx: watch::Sender<()>,
     bootstraps_v4: Mutex<Vec<BootstrapState>>,
     bootstraps_v6: Mutex<Vec<BootstrapState>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Record {
-    pub last_process_attempt_at: Option<SystemTime>,
-    pub data: String,
 }
 
 impl Metrics {
     pub fn new() -> Self {
         Self {
+            on_modify_tx: watch::channel(()).0,
             bootstraps_v4: Mutex::new(Vec::default()),
             bootstraps_v6: Mutex::new(Vec::default()),
         }
@@ -34,7 +31,11 @@ impl Metrics {
         };
 
         bootstraps.push(BootstrapState::Started);
-        bootstraps.len() - 1
+        let id = bootstraps.len() - 1;
+
+        self.mark_modified();
+
+        id
     }
 
     pub fn bootstrap_finish(&self, id: usize, ipv: IpVersion, success: bool) {
@@ -47,20 +48,27 @@ impl Metrics {
             BootstrapState::Started => bootstraps[id] = BootstrapState::Finished { success },
             BootstrapState::Finished { .. } => (),
         }
+
+        self.mark_modified()
     }
 
-    pub fn make_record(&self) -> Record {
+    pub fn make_record_data(&self) -> String {
         let bv4 = self.bootstraps_v4.lock().unwrap();
         let bv6 = self.bootstraps_v6.lock().unwrap();
 
-        Record {
-            last_process_attempt_at: None,
-            data: json!({
-                "bootstraps_v4": bv4.clone(),
-                "bootstraps_v6": bv6.clone(),
-            })
-            .to_string(),
-        }
+        json!({
+            "bootstraps_v4": bv4.clone(),
+            "bootstraps_v6": bv6.clone(),
+        })
+        .to_string()
+    }
+
+    pub fn subscribe(&self) -> watch::Receiver<()> {
+        self.on_modify_tx.subscribe()
+    }
+
+    fn mark_modified(&self) {
+        self.on_modify_tx.send_modify(|_| {});
     }
 }
 
