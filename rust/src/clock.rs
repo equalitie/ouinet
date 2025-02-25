@@ -1,6 +1,8 @@
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::SystemTime;
 
 // Replacement for SystemTime used for testing.
 

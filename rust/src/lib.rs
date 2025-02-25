@@ -15,7 +15,7 @@ use metrics::{IpVersion, Metrics};
 use metrics_runner::metrics_runner;
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Weak},
 };
 use tokio::{runtime::Runtime, sync::oneshot, task::JoinHandle};
 
@@ -89,46 +89,63 @@ impl CxxOneShotSender {
     }
 }
 
-// TODO: Don't create new client if one already exists
-fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
-    let processor = record_processor::RecordProcessor::new(processor);
-    let runtime = runtime::get_runtime();
-    let metrics = Arc::new(Metrics::new());
+struct Session {
+    job_handle: JoinHandle<()>,
+}
 
-    let job_handle = runtime.spawn({
-        let metrics = metrics.clone();
+impl Drop for Session {
+    fn drop(&mut self) {
+        // TODO: Send signal to metrics to store the metrics on disk and give it a little timeout
+        // to finish.
+        self.job_handle.abort();
+    }
+}
+
+static SESSION: Mutex<Option<Session>> = Mutex::new(None);
+
+// Create a new Client, if there were any clients created but not destroyed beforehand, all their
+// operations will be no-ops.
+fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
+    let runtime = runtime::get_runtime();
+
+    let mut session_lock = SESSION.lock().unwrap();
+
+    session_lock.take();
+
+    let metrics = Arc::new(Metrics::new());
+    let weak_metrics = Arc::downgrade(&metrics);
+
+    let processor = record_processor::RecordProcessor::new(processor);
+
+    let job_handle = runtime.spawn(async move {
         let store_path = PathBuf::from(store_path);
 
-        async move {
-            if let Err(error) = metrics_runner(metrics, store_path, processor).await {
-                match error {
-                    MetricsRunnerError::RecordProcessor(RecordProcessorError::CxxDisconnected) => {
-                        ()
-                    }
-                    MetricsRunnerError::Io(error) => {
-                        log::error!("Metrics runner finished with an error: {error:?}")
-                    }
+        if let Err(error) = metrics_runner(metrics, store_path, processor).await {
+            match error {
+                MetricsRunnerError::RecordProcessor(RecordProcessorError::CxxDisconnected) => (),
+                MetricsRunnerError::Io(error) => {
+                    log::error!("Metrics runner finished with an error: {error:?}")
                 }
             }
         }
     });
 
+    *session_lock = Some(Session { job_handle });
+
     Box::new(Client {
         _runtime: runtime,
-        metrics,
-        job_handle,
+        metrics: weak_metrics,
     })
 }
 
 pub struct Client {
     _runtime: Arc<Runtime>,
-    metrics: Arc<Metrics>,
-    job_handle: JoinHandle<()>,
+    metrics: Weak<Metrics>,
 }
 
 impl Drop for Client {
     fn drop(&mut self) {
-        self.job_handle.abort();
+        SESSION.lock().unwrap().take();
     }
 }
 
@@ -141,7 +158,7 @@ impl Client {
 }
 
 pub struct MainlineDht {
-    metrics: Arc<Metrics>,
+    metrics: Weak<Metrics>,
 }
 
 impl MainlineDht {
@@ -161,37 +178,64 @@ impl MainlineDht {
 
 pub struct DhtNode {
     ipv: IpVersion,
-    metrics: Arc<Metrics>,
+    metrics: Weak<Metrics>,
 }
 
 impl DhtNode {
     fn new_bootstrap(&self) -> Box<Bootstrap> {
-        let metrics = self.metrics.clone();
+        let Some(metrics) = self.metrics.upgrade() else {
+            return Box::new(Bootstrap {
+                ipv: self.ipv,
+                inner: None,
+            });
+        };
+
         let bootstrap_id = metrics.bootstrap_start(self.ipv);
+
         Box::new(Bootstrap {
-            bootstrap_id,
             ipv: self.ipv,
-            metrics: metrics.clone(),
+            inner: Some(BootstrapInner {
+                bootstrap_id,
+                metrics: self.metrics.clone(),
+            }),
         })
     }
 }
 
 pub struct Bootstrap {
-    bootstrap_id: usize,
     ipv: IpVersion,
-    metrics: Arc<Metrics>,
+    inner: Option<BootstrapInner>,
+}
+
+struct BootstrapInner {
+    bootstrap_id: usize,
+    metrics: Weak<Metrics>,
 }
 
 impl Bootstrap {
     fn mark_success(&self, _wan_endpoint: String) {
-        self.metrics
-            .bootstrap_finish(self.bootstrap_id, self.ipv, true);
+        let Some(inner) = &self.inner else {
+            return;
+        };
+
+        let Some(metrics) = inner.metrics.upgrade() else {
+            return;
+        };
+
+        metrics.bootstrap_finish(inner.bootstrap_id, self.ipv, true);
     }
 }
 
 impl Drop for Bootstrap {
     fn drop(&mut self) {
-        self.metrics
-            .bootstrap_finish(self.bootstrap_id, self.ipv, false);
+        let Some(inner) = &self.inner else {
+            return;
+        };
+
+        let Some(metrics) = inner.metrics.upgrade() else {
+            return;
+        };
+
+        metrics.bootstrap_finish(inner.bootstrap_id, self.ipv, false);
     }
 }
