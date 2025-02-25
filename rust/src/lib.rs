@@ -139,6 +139,8 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     })
 }
 
+// -------------------------------------------------------------------
+
 pub struct Client {
     _runtime: Arc<Runtime>,
     metrics: Weak<Metrics>,
@@ -157,6 +159,8 @@ impl Client {
         })
     }
 }
+
+// -------------------------------------------------------------------
 
 pub struct MainlineDht {
     metrics: Weak<Metrics>,
@@ -177,6 +181,8 @@ impl MainlineDht {
     }
 }
 
+// -------------------------------------------------------------------
+
 pub struct DhtNode {
     ipv: IpVersion,
     metrics: Weak<Metrics>,
@@ -184,24 +190,11 @@ pub struct DhtNode {
 
 impl DhtNode {
     fn new_bootstrap(&self) -> Box<Bootstrap> {
-        let Some(metrics) = self.metrics.upgrade() else {
-            return Box::new(Bootstrap {
-                ipv: self.ipv,
-                inner: None,
-            });
-        };
-
-        let bootstrap_id = metrics.bootstrap_start(self.ipv);
-
-        Box::new(Bootstrap {
-            ipv: self.ipv,
-            inner: Some(BootstrapInner {
-                bootstrap_id,
-                metrics: self.metrics.clone(),
-            }),
-        })
+        Box::new(Bootstrap::new(self.ipv, self.metrics.clone()))
     }
 }
+
+// -------------------------------------------------------------------
 
 pub struct Bootstrap {
     ipv: IpVersion,
@@ -214,6 +207,20 @@ struct BootstrapInner {
 }
 
 impl Bootstrap {
+    fn new(ipv: IpVersion, metrics_weak: Weak<Metrics>) -> Self {
+        let Some(metrics) = metrics_weak.upgrade() else {
+            return Bootstrap { ipv, inner: None };
+        };
+
+        Bootstrap {
+            ipv,
+            inner: Some(BootstrapInner {
+                bootstrap_id: metrics.bootstrap_start(ipv),
+                metrics: metrics_weak,
+            }),
+        }
+    }
+
     fn mark_success(&self, _wan_endpoint: String) {
         let Some(inner) = &self.inner else {
             return;
