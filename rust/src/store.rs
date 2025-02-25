@@ -9,13 +9,14 @@ const RECORD_VERSION: u32 = 0;
 const RECORD_FILE_EXTENSION: &str = "record";
 
 pub struct Store {
+    runtime_id: Uuid,
     root_path: PathBuf,
     records_dir_path: PathBuf,
     uuid_rotator: UuidRotator,
 }
 
 impl Store {
-    pub async fn new(root_path: PathBuf) -> io::Result<Self> {
+    pub async fn new(root_path: PathBuf, runtime_id: Uuid) -> io::Result<Self> {
         let records_dir_path = root_path.join("records");
         let uuid_file_path = root_path.join("uuid.json");
 
@@ -24,6 +25,7 @@ impl Store {
         let uuid_rotator = UuidRotator::new(uuid_file_path).await?;
 
         Ok(Self {
+            runtime_id,
             root_path,
             records_dir_path,
             uuid_rotator,
@@ -37,9 +39,9 @@ impl Store {
 
     pub async fn store_record(&mut self, record_data: String) -> io::Result<()> {
         // TODO: Store into '.tmp' file first and then rename?
-        let uuid = self.current_uuid().await?;
+        let device_id = self.current_device_id().await?;
 
-        let record_name = Self::build_record_name(RECORD_VERSION, uuid);
+        let record_name = Self::build_record_name(RECORD_VERSION, device_id, self.runtime_id);
         let record_path = self
             .records_dir_path
             .join(format!("{record_name}.{RECORD_FILE_EXTENSION}"));
@@ -79,7 +81,7 @@ impl Store {
                 continue;
             };
 
-            let Some((version, uuid)) = Self::parse_record_name(&name) else {
+            let Some((version, device_id, runtime_id)) = Self::parse_record_name(&name) else {
                 continue;
             };
 
@@ -97,7 +99,8 @@ impl Store {
             };
 
             records.push(StoredRecord {
-                uuid,
+                device_id,
+                runtime_id,
                 path,
                 created: content.created,
                 data: content.data,
@@ -107,34 +110,37 @@ impl Store {
         Ok(records)
     }
 
-    pub async fn current_uuid(&mut self) -> io::Result<Uuid> {
+    pub async fn current_device_id(&mut self) -> io::Result<Uuid> {
         self.uuid_rotator.update().await
     }
 
-    fn build_record_name(version: u32, uuid: Uuid) -> String {
-        format!("v{version}_{uuid}")
+    fn build_record_name(version: u32, device_id: Uuid, runtime_id: Uuid) -> String {
+        format!("v{version}_{device_id}_{runtime_id}")
     }
 
-    fn parse_record_name(name: &str) -> Option<(u32, Uuid)> {
+    fn parse_record_name(name: &str) -> Option<(u32, Uuid, Uuid)> {
         let mut parts = name.split('_');
 
         let version_part = parts.next()?;
-        let uuid_part = parts.next()?;
+        let device_id_part = parts.next()?;
+        let runtime_id_part = parts.next()?;
 
         if !version_part.starts_with('v') {
             return None;
         }
         let version: u32 = version_part[1..].parse().ok()?;
 
-        let uuid = Uuid::parse_str(uuid_part).ok()?;
+        let device_id = Uuid::parse_str(device_id_part).ok()?;
+        let runtime_id = Uuid::parse_str(runtime_id_part).ok()?;
 
-        Some((version, uuid))
+        Some((version, device_id, runtime_id))
     }
 }
 
 #[derive(Debug)]
 pub struct StoredRecord {
-    pub uuid: Uuid,
+    pub device_id: Uuid,
+    pub runtime_id: Uuid,
     pub path: PathBuf,
     pub created: SystemTime,
     pub data: String,
@@ -146,7 +152,7 @@ impl StoredRecord {
     }
 
     pub fn name(&self) -> String {
-        Store::build_record_name(RECORD_VERSION, self.uuid)
+        Store::build_record_name(RECORD_VERSION, self.device_id, self.runtime_id)
     }
 }
 

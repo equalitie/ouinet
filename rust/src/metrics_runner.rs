@@ -6,13 +6,16 @@ use crate::{
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::select;
+use uuid::Uuid;
 
 pub async fn metrics_runner(
     metrics: Arc<Metrics>,
     store_path: PathBuf,
     processor: RecordProcessor,
 ) -> Result<(), MetricsRunnerError> {
-    let mut store = Store::new(store_path).await?;
+    let runtime_id = Uuid::new_v4();
+
+    let mut store = Store::new(store_path, runtime_id).await?;
 
     let mut on_metrics_modified_rx = metrics.subscribe();
 
