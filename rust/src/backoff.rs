@@ -24,27 +24,7 @@ impl Backoff {
     }
 
     pub async fn new_with(file_path: PathBuf, clock: Clock) -> io::Result<Self> {
-        let state = match fs::read_to_string(&file_path).await {
-            Ok(content) => Some(content),
-            Err(error) => {
-                if error.kind() == io::ErrorKind::NotFound {
-                    None
-                } else {
-                    return Err(error);
-                }
-            }
-        };
-
-        let state = match state {
-            Some(string) => match serde_json::from_str(&string) {
-                Ok(state) => State::Failure(state),
-                Err(_) => {
-                    fs::remove_file(&file_path).await?;
-                    State::Success
-                }
-            },
-            None => State::Success,
-        };
+        let state = State::read(&file_path).await?;
 
         Ok(Self {
             file_path,
@@ -121,16 +101,55 @@ impl Backoff {
 
     async fn set_state(&mut self, new_state: State) -> io::Result<()> {
         self.state = new_state;
-        match &self.state {
-            State::Success => fs::remove_file(&self.file_path).await,
-            State::Failure(failed) => fs::write(&self.file_path, json!(&failed).to_string()).await,
-        }
+        self.state.write(&self.file_path).await
     }
 }
 
 enum State {
     Success,
     Failure(Failure),
+}
+
+impl State {
+    async fn read(file_path: &PathBuf) -> io::Result<Self> {
+        let state = match fs::read_to_string(&file_path).await {
+            Ok(content) => Some(content),
+            Err(error) => {
+                if error.kind() == io::ErrorKind::NotFound {
+                    None
+                } else {
+                    return Err(error);
+                }
+            }
+        };
+
+        match state {
+            Some(string) => match serde_json::from_str(&string) {
+                Ok(state) => Ok(State::Failure(state)),
+                Err(_) => {
+                    fs::remove_file(&file_path).await?;
+                    Ok(State::Success)
+                }
+            },
+            None => Ok(State::Success),
+        }
+    }
+
+    async fn write(&self, file_path: &PathBuf) -> io::Result<()> {
+        match &self {
+            State::Success => match fs::remove_file(&file_path).await {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    if error.kind() == io::ErrorKind::NotFound {
+                        Ok(())
+                    } else {
+                        return Err(error);
+                    }
+                }
+            },
+            State::Failure(failed) => fs::write(&file_path, json!(&failed).to_string()).await,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
