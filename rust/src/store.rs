@@ -1,12 +1,18 @@
 use crate::{backoff::Backoff, uuid_rotator::UuidRotator};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{ffi::OsStr, io, path::PathBuf, time::SystemTime};
+use std::{
+    ffi::OsStr,
+    io,
+    path::PathBuf,
+    time::{Duration, SystemTime},
+};
 use tokio::fs;
 use uuid::Uuid;
 
 const RECORD_VERSION: u32 = 0;
 const RECORD_FILE_EXTENSION: &str = "record";
+const DISCARD_RECORDS_AFTER: Duration = Duration::from_secs(60 * 60 * 24 * 7);
 
 pub struct Store {
     runtime_id: Uuid,
@@ -97,6 +103,17 @@ impl Store {
                 fs::remove_file(&path).await?;
                 continue;
             };
+
+            let discard = match SystemTime::now().duration_since(content.created) {
+                Ok(duration) => duration >= DISCARD_RECORDS_AFTER,
+                // System has moved time to prior to creating the record.
+                Err(_) => true,
+            };
+
+            if discard {
+                fs::remove_file(&path).await?;
+                continue;
+            }
 
             records.push(StoredRecord {
                 device_id,
