@@ -43,11 +43,11 @@ impl Store {
         Backoff::new(self.root_path.join("backoff.json")).await
     }
 
-    pub async fn store_record(&mut self, record_data: String) -> io::Result<()> {
+    pub async fn store_record(&mut self, record_data: String, part: u32) -> io::Result<()> {
         // TODO: Store into '.tmp' file first and then rename?
         let device_id = self.current_device_id().await?;
 
-        let record_name = Self::build_record_name(RECORD_VERSION, device_id, self.runtime_id);
+        let record_name = Self::build_record_name(RECORD_VERSION, device_id, self.runtime_id, part);
         let record_path = self
             .records_dir_path
             .join(format!("{record_name}.{RECORD_FILE_EXTENSION}"));
@@ -87,7 +87,8 @@ impl Store {
                 continue;
             };
 
-            let Some((version, device_id, runtime_id)) = Self::parse_record_name(&name) else {
+            let Some((version, device_id, runtime_id, part)) = Self::parse_record_name(&name)
+            else {
                 continue;
             };
 
@@ -118,6 +119,7 @@ impl Store {
             records.push(StoredRecord {
                 device_id,
                 runtime_id,
+                part,
                 path,
                 created: content.created,
                 data: content.data,
@@ -131,16 +133,17 @@ impl Store {
         self.uuid_rotator.update().await
     }
 
-    fn build_record_name(version: u32, device_id: Uuid, runtime_id: Uuid) -> String {
-        format!("v{version}_{device_id}_{runtime_id}")
+    fn build_record_name(version: u32, device_id: Uuid, runtime_id: Uuid, part: u32) -> String {
+        format!("v{version}_{device_id}_{runtime_id}_{part}")
     }
 
-    fn parse_record_name(name: &str) -> Option<(u32, Uuid, Uuid)> {
+    fn parse_record_name(name: &str) -> Option<(u32, Uuid, Uuid, u32)> {
         let mut parts = name.split('_');
 
         let version_part = parts.next()?;
         let device_id_part = parts.next()?;
         let runtime_id_part = parts.next()?;
+        let part_part = parts.next()?;
 
         if !version_part.starts_with('v') {
             return None;
@@ -149,8 +152,9 @@ impl Store {
 
         let device_id = Uuid::parse_str(device_id_part).ok()?;
         let runtime_id = Uuid::parse_str(runtime_id_part).ok()?;
+        let part = part_part.parse().ok()?;
 
-        Some((version, device_id, runtime_id))
+        Some((version, device_id, runtime_id, part))
     }
 }
 
@@ -158,6 +162,7 @@ impl Store {
 pub struct StoredRecord {
     pub device_id: Uuid,
     pub runtime_id: Uuid,
+    pub part: u32,
     pub path: PathBuf,
     pub created: SystemTime,
     pub data: String,
@@ -169,7 +174,11 @@ impl StoredRecord {
     }
 
     pub fn name(&self) -> String {
-        Store::build_record_name(RECORD_VERSION, self.device_id, self.runtime_id)
+        Store::build_record_name(RECORD_VERSION, self.device_id, self.runtime_id, self.part)
+    }
+
+    pub fn is_current(&self, runtime_id: Uuid, part: u32) -> bool {
+        self.runtime_id == runtime_id && self.part == part
     }
 }
 
