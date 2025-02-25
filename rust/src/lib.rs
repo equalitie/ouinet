@@ -5,6 +5,7 @@ mod metrics_runner;
 mod record_processor;
 mod runtime;
 mod store;
+mod uuid_rotator;
 
 use crate::{
     ffi::CxxRecordProcessor, metrics_runner::MetricsRunnerError,
