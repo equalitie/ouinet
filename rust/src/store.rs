@@ -42,6 +42,7 @@ impl Store {
     }
 
     pub async fn store_record(&mut self, record_data: String) -> io::Result<()> {
+        // TODO: Store into '.tmp' file first and then rename?
         let uuid = self.current_uuid().await?;
 
         let record_name = Self::build_record_name(RECORD_VERSION, uuid);

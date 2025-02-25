@@ -22,6 +22,7 @@ pub async fn metrics_runner(
     }
 
     let mut backoff = store.backoff().await?;
+    let mut oldest_record = None;
 
     loop {
         let event = select! {
@@ -37,11 +38,12 @@ pub async fn metrics_runner(
         match event {
             Event::ProcessOneRecord => {
                 println!(":::::::::: process one record");
-                let records = store.load_stored_records().await?;
+                if oldest_record.is_none() {
+                    let records = store.load_stored_records().await?;
+                    oldest_record = records.into_iter().min_by(|l, r| l.created.cmp(&r.created));
+                }
 
-                let oldest_record = records.iter().min_by(|l, r| l.created.cmp(&r.created));
-
-                let Some(record) = oldest_record else {
+                let Some(record) = &oldest_record else {
                     backoff.stop();
                     continue;
                 };
@@ -49,6 +51,7 @@ pub async fn metrics_runner(
                 if processor.process(&record).await? {
                     backoff.succeeded().await?;
                     record.discard().await?;
+                    oldest_record = None;
                 } else {
                     backoff.failed().await?;
                 }
