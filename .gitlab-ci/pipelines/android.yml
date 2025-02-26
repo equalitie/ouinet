@@ -33,23 +33,3 @@ android / build:
       - build.android/build-android-*/ouinet/outputs/apk/*.apk
     expire_in: 6h
 
-# TODO: Remove this job when the builder image created by prepare-builder-image
-#       is stable enough to build a production Ouinet AAR.
-android / build-prod-image:
-  stage: release
-  tags:
-    - shell
-  needs:
-    - job: 'linux / build-prod-image'
-      optional: true
-    - job: 'android / build'
-  script:
-    - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
-    - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
-    - docker push $CI_REGISTRY_IMAGE:android
-    - docker logout $CI_REGISTRY
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      allow_failure: true
-

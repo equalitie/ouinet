@@ -38,17 +38,3 @@ linux / integration-test:
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
-linux / build-prod-image:
-  stage: release
-  tags:
-    - shell
-  needs: ['linux / integration-test']
-  script:
-    - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
-    - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
-    - docker push $CI_REGISTRY_IMAGE:latest
-    - docker logout $CI_REGISTRY
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      allow_failure: true
