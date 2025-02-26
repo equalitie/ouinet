@@ -5,6 +5,7 @@ variables:
 android-boost-1.79 / build:
   variables:
     TARGET_PLATFORM: 'android-boost-1.79'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   stage: build
   tags:
     - docker
