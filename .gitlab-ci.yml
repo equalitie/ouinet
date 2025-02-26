@@ -9,6 +9,7 @@ variables:
 
 include:
   - .gitlab-ci/pipelines/android.yml
+  - .gitlab-ci/pipelines/android-boost-1.79.yml
   - .gitlab-ci/pipelines/linux.yml
   - .gitlab-ci/pipelines/linux-boost-1.79.yml
 

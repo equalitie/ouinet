@@ -1,0 +1,25 @@
+variables:
+  TARGET_PLATFORM: 'android-boost-1.79'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:android-builder'
+
+android-boost-1.79 / build:
+  variables:
+    TARGET_PLATFORM: 'android-boost-1.79'
+  stage: build
+  tags:
+    - docker
+  needs:
+    - job: 'android / prepare-builder-image'
+      optional: true
+    - job: 'linux-boost-1.79 / build'
+  image: $BUILDER_IMAGE
+  script:
+    - mkdir -p build.android-boost-1.79
+    - cd build.android-boost-1.79
+    - ../scripts/build-android.sh
+  artifacts:
+    paths:
+      - build.android-boost-1.79/build-android-*/ouinet/outputs/aar/*.aar
+      - build.android-boost-1.79/build-android-*/ouinet/outputs/apk/*.apk
+    expire_in: 6h
+
