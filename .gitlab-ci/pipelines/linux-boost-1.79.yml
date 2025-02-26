@@ -1,0 +1,35 @@
+include:
+  - .gitlab-ci/jobs/linux.yml
+
+variables:
+  TARGET_PLATFORM: 'linux-boost-1.79'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:linux-builder'
+
+linux-boost-1.79 / build:
+  variables:
+    BOOST_VERSION: "1.79.0"
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:linux-builder'
+  extends:
+    .linux-build
+  needs:
+    - job: 'linux / prepare-builder-image'
+      optional: true
+
+linux-boost-1.79 / unit-test:
+  variables:
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:linux-builder'
+  extends:
+    .linux-unit-test
+  needs:
+    ['linux-boost-1.79 / build']
+
+linux-boost-1.79 / integration-test:
+  variables:
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:linux-builder'
+  extends:
+    .linux-integration-test
+  needs:
+    ['linux-boost-1.79 / unit-test']
+  before_script:
+    - ln -s /usr/bin/python3 /usr/bin/python
+
