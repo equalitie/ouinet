@@ -188,6 +188,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.77
     # explicitly link with bcrypt after Boost::filesystem
     target_link_libraries(boost_asio
         PUBLIC
+            crypt32
             bcrypt)
 endif()
 target_compile_definitions(boost_asio
