@@ -52,7 +52,7 @@ using namespace ouinet::ouiservice::i2poui;
 
     _tcp_acceptor.listen(asio::socket_base::max_connections, ec);
 
-    while(true) {
+    //while(true) {
       _tcp_acceptor.async_accept(_socket, [this](boost::system::error_code ec) {
         if (!ec) {
           read_socket_data();
@@ -62,7 +62,7 @@ using namespace ouinet::ouiservice::i2poui;
           return;
         }
       });
-    }
+      //}
 
   }
 

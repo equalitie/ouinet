@@ -186,8 +186,7 @@ class OuinetTests(TestCase):
         #use only Proxy or Injector mechanisms
         self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
                                , [ "--disable-origin-access", "--cache-type" "bep5-http-over-i2p"
-                                 , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                   , "--injector-ep", "i2p:" + "none",
+                                   , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
                                    "--log-level", "DEBUG",
                                  ]
                                , i2pclient_tunnel_ready)
@@ -215,6 +214,80 @@ class OuinetTests(TestCase):
             yield i2pclient.proc_end
 
         self.assertTrue(test_passed)
+
+        
+    @inlineCallbacks
+    def test_i2p_injector_discovery_from_bep5_dht_over_i2p(self):
+        """
+        Starts an echoing http server which server a constant size response, an injector and a client.
+        the client listen on a tcp port to receive the injector's id thne send a http 
+        request to the echoing http server through the client --i2p--> injector -> http server
+        and make sure it gets the response.
+        """
+        logging.debug("################################################")
+        logging.debug("test_i2p_injector_discovery_from_bep5_dht_over_i2p");
+        logging.debug("################################################")
+        # #injector
+        i2pinjector_tunnel_ready = defer.Deferred()
+        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true", "--log-level", "DEBUG",
+                                             ], i2pinjector_tunnel_ready) #"--disable-cache"
+
+        #wait for the injector tunnel to be advertised
+        success = yield i2pinjector_tunnel_ready
+
+        #we only can request that after injector is ready
+        injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
+        # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
+        self.assert_(injector_i2p_public_id) #empty public id means injector coludn't read the endpoint file
+
+        #wait so the injector id gets advertised on the DHT
+        logging.debug("waiting " + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD) + " secs for the tunnel to get advertised on the DHT...")
+        yield task.deferLater(reactor, TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD, lambda: None)
+        
+        #http_server
+        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
+
+        #client
+        test_passed = False
+        for i2p_client_id in range(0, 1): #TestFixtures.MAX_NO_OF_I2P_CLIENTS):
+            i2pclient_tunnel_ready = defer.Deferred()
+
+            #use only Proxy or Injector mechanisms
+            self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
+                               , [ "--disable-origin-access", "--disable-cache"
+                                 , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
+                                   , "--cache-type", "bep5-http-over-i2p",
+                                   "--log-level", "DEBUG",
+                                 ]
+                               , i2pclient_tunnel_ready)
+        
+            #wait for the client tunnel to connect to the injector
+            success = yield i2pclient_tunnel_ready
+
+            content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+            for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
+                logging.debug("request attempt no " + str(i+1) + "...")
+                defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
+                if defered_response.code == 200:
+                    self.assertEquals(defered_response.code, 200)
+
+                    response_body = yield readBody(defered_response)
+                    self.assertEquals(resoponse_body.decode(), content)
+                    test_passed = True
+                    break
+                else:
+                    logging.debug("request attempt no " + str(i+1) + " failed. with code " + str(defered_response.code))
+                    yield task.deferLater(reactor, TestFixtures.I2P_TUNNEL_HEALING_PERIOD, lambda: None)
+
+            if test_passed:
+                break
+            else:
+                #stop the i2p client so we can start a new one
+                i2pclient = self.proc_list.pop()
+                yield i2pclient.proc_end
+
+        self.assertTrue(test_passed)
+
 
     @inlineCallbacks
     def test_i2p_transport(self):
