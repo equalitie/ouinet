@@ -563,6 +563,9 @@ private:
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
     shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
+
+    //this could be start either because of cache or injector
+    shared_ptr<ouiservice::I2pOuiService> _i2p_service;
 };
 
 //------------------------------------------------------------------------------
@@ -2512,12 +2515,8 @@ void Client::State::setup_cache(asio::yield_context yield)
         do_notify_ready();
     });
 
-    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http) {
-        ec = asio::error::operation_not_supported;
-        return;
-    };
-
-    LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
+    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+      LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
 #define fail_on_error(__msg) { \
     if (_shutdown_signal) ec = asio::error::operation_aborted; \
@@ -2557,6 +2556,24 @@ void Client::State::setup_cache(asio::yield_context yield)
     fail_on_error("Failed to enable BT DHT in cache::Client");
 
 #undef fail_on_error
+    }
+    //setup Bep5HttpOverI2P cache
+    else if (_config.cache_type() == ClientConfig::CacheType::Bep5HttpOverI2P) {    
+      //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
+      //with both services, we check if i2p ouiservice has already started      
+      if (!_i2p_service) {
+        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
+      }
+      
+      _i2p_service->start_i2cp_server();
+      _i2p_service->start_tunneller_service();
+    }
+    //unsupported cache type
+	else {
+        ec = asio::error::operation_not_supported;
+        return;
+    }
+
 }
 
 //------------------------------------------------------------------------------
@@ -2801,23 +2818,25 @@ void Client::State::setup_injector(asio::yield_context yield)
     std::unique_ptr<OuiServiceImplementationClient> client;
 
 #ifdef __EXPERIMENTAL__
-    if (injector_ep->type == Endpoint::I2pEndpoint) {
-        auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
-        if (injector_ep->endpoint_string != "none") {
-            auto i2p_client = i2p_service->build_client(injector_ep->endpoint_string);
-            client = std::move(i2p_client);
-          }
+    if (injector_ep->type == Endpoint::I2pEndpoint)
+        
+    {
+      //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
+      //with both services, we check if i2p ouiservice has already started      
+      if (!_i2p_service) {
+        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
+      }
 
-        if (_config.cache_type() != ClientConfig::CacheType::Bep5HttpOverI2P) {
-            i2p_service->start_i2cp_server();
-        }
-	
-        /*
-        if (!i2p_client->verify_endpoint()) {
-            return or_throw(yield, ec = asio::error::invalid_argument);
-        }
-        */
-    } else
+      auto i2p_client = _i2p_service->build_client(injector_ep->endpoint_string);
+
+      //TODO: should we uncomment this?
+      // if (!i2p_client->verify_endpoint()) {
+      //     return or_throw(yield, ec = asio::error::invalid_argument);
+      // }
+
+      client = std::move(i2p_client);
+    }
+    else
 #endif // ifdef __EXPERIMENTAL__
     if (injector_ep->type == Endpoint::TcpEndpoint) {
         auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), injector_ep->endpoint_string);
