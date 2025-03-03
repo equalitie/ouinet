@@ -22,6 +22,8 @@
 
 - (OuinetConfig*)setDisableInjectorAccess:(BOOL)value;
 
+- (OuinetConfig*)setLogLevel:(NSString*)level;
+
 - (NSString*)getOuinetDirectory;
 
 - (NSString*)getCacheHttpPubKey;
@@ -37,6 +39,8 @@
 - (NSString*)getListenOnTcp;
 
 - (NSString*)getFrontEndEp;
+
+- (NSString*)getLogLevel;
 
 - (BOOL)getDisableOriginAccess;
 
