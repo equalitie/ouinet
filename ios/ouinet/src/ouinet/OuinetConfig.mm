@@ -15,6 +15,7 @@
   NSString* cacheType;
   NSString* listenOnTcp;
   NSString* frontEndEp;
+  NSString* logLevel;
   BOOL disableOriginAccess;
   BOOL disableProxyAccess;
   BOOL disableInjectorAccess;
@@ -80,6 +81,12 @@
   return self;
 }
 
+- (OuinetConfig*)setLogLevel:(NSString*)level
+{
+  logLevel = level;
+  return self;
+}
+
 - (OuinetConfig*)setDisableOriginAccess:(BOOL)value
 {
   disableOriginAccess = value;
@@ -136,6 +143,11 @@
 - (NSString*)getFrontEndEp
 {
   return frontEndEp;
+}
+
+- (NSString*)getLogLevel
+{
+  return logLevel;
 }
 
 - (BOOL)getDisableOriginAccess
