@@ -2,6 +2,10 @@ use crate::{constants, store::Store};
 use std::{io, ops::Deref, path::PathBuf};
 use tokio::time::Instant;
 
+/// We can have multiple records with the same DeviceId and RecordNumber is used to disambiguate
+/// between them. RecordNumber is incremented on app restart or after
+/// INCREMENT_RECORD_VERSION_AFTER duration elapses. It is reset back to zero when DeviceId
+/// changes.
 pub struct RecordNumber {
     number: u32,
     time: Instant,
@@ -39,7 +43,7 @@ impl RecordNumber {
     }
 
     pub fn increment_at(&self) -> Instant {
-        self.time + constants::INCREMENT_RECORD_VERSION_AFTER_DURATION
+        self.time + constants::INCREMENT_RECORD_VERSION_AFTER
     }
 
     async fn store(&self) -> io::Result<()> {

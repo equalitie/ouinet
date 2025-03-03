@@ -122,13 +122,13 @@ impl Store {
                 Err(error) => return Err(error),
             };
 
-            let discard = match SystemTime::now().duration_since(content.created) {
-                Ok(duration) => duration >= constants::DISCARD_RECORDS_AFTER,
+            let delete = match SystemTime::now().duration_since(content.created) {
+                Ok(duration) => duration >= constants::DELETE_RECORDS_AFTER,
                 // System has moved time to prior to creating the record.
                 Err(_) => true,
             };
 
-            if discard {
+            if delete {
                 fs::remove_file(&path).await?;
                 continue;
             }
