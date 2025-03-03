@@ -1,13 +1,13 @@
 mod backoff;
 mod clock;
 mod constants;
+mod device_id;
 mod metrics;
 mod metrics_runner;
 mod record_number;
 mod record_processor;
 mod runtime;
 mod store;
-mod uuid_rotator;
 
 use crate::{
     ffi::CxxRecordProcessor, metrics_runner::MetricsRunnerError,

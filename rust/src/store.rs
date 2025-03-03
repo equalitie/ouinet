@@ -1,4 +1,4 @@
-use crate::{backoff::Backoff, constants, record_number::RecordNumber, uuid_rotator::UuidRotator};
+use crate::{backoff::Backoff, constants, device_id::DeviceId, record_number::RecordNumber};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -14,7 +14,7 @@ pub struct Store {
     records_dir_path: PathBuf,
     pub record_number: RecordNumber,
     pub backoff: Backoff,
-    pub device_id: UuidRotator,
+    pub device_id: DeviceId,
 }
 
 impl Store {
@@ -27,7 +27,7 @@ impl Store {
         fs::create_dir_all(&records_dir_path).await?;
 
         let record_number = RecordNumber::load(record_number_path).await?;
-        let device_id = UuidRotator::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
+        let device_id = DeviceId::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
         let backoff = Backoff::new(backoff_path).await?;
 
         Ok(Self {

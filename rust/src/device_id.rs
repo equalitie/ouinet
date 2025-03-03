@@ -9,14 +9,14 @@ use std::{
 use tokio::fs;
 use uuid::Uuid;
 
-pub struct UuidRotator {
-    current_uuid: Uuid,
+pub struct DeviceId {
+    current_id: Uuid,
     created: SystemTime,
     file_path: PathBuf,
     rotate_after: Duration,
 }
 
-impl UuidRotator {
+impl DeviceId {
     pub async fn new(file_path: PathBuf, rotate_after: Duration) -> io::Result<Self> {
         let (uuid, created) = match Store::read(&file_path).await? {
             Some(data) => data,
@@ -24,7 +24,7 @@ impl UuidRotator {
         };
 
         Ok(Self {
-            current_uuid: uuid,
+            current_id: uuid,
             created,
             file_path,
             rotate_after,
@@ -34,7 +34,7 @@ impl UuidRotator {
     pub async fn rotate(&mut self) -> io::Result<()> {
         let (new_uuid, created) = Self::create_and_store(&self.file_path).await?;
 
-        self.current_uuid = new_uuid;
+        self.current_id = new_uuid;
         self.created = created;
 
         Ok(())
@@ -60,10 +60,10 @@ impl UuidRotator {
     }
 }
 
-impl Deref for UuidRotator {
+impl Deref for DeviceId {
     type Target = Uuid;
 
     fn deref(&self) -> &Self::Target {
-        &self.current_uuid
+        &self.current_id
     }
 }
