@@ -27,7 +27,8 @@ impl Store {
         fs::create_dir_all(&records_dir_path).await?;
 
         let record_number = RecordNumber::load(record_number_path).await?;
-        let uuid_rotator = UuidRotator::new(uuid_file_path).await?;
+        let uuid_rotator =
+            UuidRotator::new(uuid_file_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
         let backoff = Backoff::new(backoff_path).await?;
 
         Ok(Self {

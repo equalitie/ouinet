@@ -7,17 +7,16 @@ use std::{
 use tokio::fs;
 use uuid::Uuid;
 
-const ROTATE_UUID_AFTER: Duration = Duration::from_secs(60 * 60 * 24 * 7);
-
 pub struct UuidRotator {
     current_uuid: Uuid,
     created: SystemTime,
     file_path: PathBuf,
+    rotate_after: Duration,
 }
 
 impl UuidRotator {
-    pub async fn new(file_path: PathBuf) -> io::Result<Self> {
-        let (uuid, created) = match Self::load(&file_path).await {
+    pub async fn new(file_path: PathBuf, rotate_after: Duration) -> io::Result<Self> {
+        let (uuid, created) = match Self::load(&file_path, rotate_after).await {
             Some(pair) => pair,
             None => Self::create_and_store(&file_path).await?,
         };
@@ -26,11 +25,12 @@ impl UuidRotator {
             current_uuid: uuid,
             created,
             file_path,
+            rotate_after,
         })
     }
 
     pub async fn update(&mut self) -> io::Result<Uuid> {
-        if !Self::requires_rotation(self.created) {
+        if !Self::requires_rotation(self.created, self.rotate_after) {
             return Ok(self.current_uuid);
         }
 
@@ -51,7 +51,7 @@ impl UuidRotator {
         Ok((uuid, now))
     }
 
-    async fn load(file_path: &Path) -> Option<(Uuid, SystemTime)> {
+    async fn load(file_path: &Path, rotate_after: Duration) -> Option<(Uuid, SystemTime)> {
         let (uuid, created): (Uuid, SystemTime) = match fs::read_to_string(&file_path).await {
             Ok(string) => match serde_json::from_str(&string) {
                 Ok(entry) => entry,
@@ -60,18 +60,18 @@ impl UuidRotator {
             Err(_) => return None,
         };
 
-        if Self::requires_rotation(created) {
+        if Self::requires_rotation(created, rotate_after) {
             return None;
         }
 
         Some((uuid, created))
     }
 
-    fn requires_rotation(created: SystemTime) -> bool {
+    fn requires_rotation(created: SystemTime, rotate_after: Duration) -> bool {
         let now = SystemTime::now();
 
         if let Ok(elapsed) = now.duration_since(created) {
-            if elapsed < ROTATE_UUID_AFTER {
+            if elapsed < rotate_after {
                 return false;
             }
         } else {
