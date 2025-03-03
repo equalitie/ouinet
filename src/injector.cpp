@@ -60,6 +60,8 @@
 #include "defer.h"
 #include "http_util.h"
 
+#include "cxx/metrics.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -853,8 +855,16 @@ int main(int argc, const char* argv[])
         // without connectivity restrictions,
         // using extra BT bootstrap servers may be useful
         // in environments like isolated LANs or community networks.
+
+        // Noop metrics.
+        auto metrics = make_unique<metrics::Client>();
+
         bt_dht_ptr = std::make_shared<bt::MainlineDht>
-            (ex, fs::path{}, config.bt_bootstrap_extras());  // default storage dir
+            ( ex
+            , metrics->mainline_dht()
+            , fs::path{}
+            , config.bt_bootstrap_extras());  // default storage dir
+                                              //
         bt_dht_ptr->set_endpoints({config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;

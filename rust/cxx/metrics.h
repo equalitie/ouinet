@@ -18,6 +18,9 @@ class Bootstrap;
 
 class Client {
 public:
+    // Creates a metrics client which does nothing.
+    Client();
+
     Client( util::AsioExecutor executor
           , fs::path repo_root_path
           , AsyncCallback process_report);

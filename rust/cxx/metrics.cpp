@@ -12,6 +12,11 @@ namespace asio = boost::asio;
 
 //--------------------------------------------------------------------
 
+Client::Client()
+    : _impl(bridge::new_noop_client())
+{
+}
+
 Client::Client( util::AsioExecutor executor
               , fs::path repo_root_path
               , AsyncCallback process_report)

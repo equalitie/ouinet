@@ -166,6 +166,12 @@ target_link_libraries(client
         ouinet::base
 )
 
+add_dependencies(client rust)
+
+target_include_directories(client
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
+    ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
+
 ################################################################################
 
 include(ExternalProject)
@@ -178,12 +184,7 @@ externalproject_add(
     BUILD_ALWAYS TRUE
     INSTALL_COMMAND "")
 
-add_dependencies(client rust)
 add_dependencies(rust built_boost)
-
-target_include_directories(client
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
-    ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -228,8 +229,17 @@ if (WITH_INJECTOR)
         OpenSSL::Crypto
         ouinet::base
         ${EXPERIMENTAL_LIBRARIES}
+        ${CMAKE_CURRENT_BINARY_DIR}/rust-target/debug/librust.a
     )
+
+    add_dependencies(injector rust)
+
+    target_include_directories(injector
+        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
+        ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
+
 endif() # if WITH_INJECTOR
+
 
 ################################################################################
 # Config file directory

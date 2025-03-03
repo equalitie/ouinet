@@ -28,6 +28,7 @@ mod ffi {
         type Client;
 
         fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client>;
+        fn new_noop_client() -> Box<Client>;
         fn new_mainline_dht(self: &Client) -> Box<MainlineDht>;
 
         //------------------------------------------------------------
@@ -110,7 +111,6 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     let runtime = runtime::get_runtime();
 
     let mut session_lock = SESSION.lock().unwrap();
-
     session_lock.take();
 
     let metrics = Arc::new(Metrics::new());
@@ -134,15 +134,24 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     *session_lock = Some(Session { job_handle });
 
     Box::new(Client {
-        _runtime: runtime,
+        _runtime: Some(runtime),
         metrics: weak_metrics,
+    })
+}
+
+fn new_noop_client() -> Box<Client> {
+    SESSION.lock().unwrap().take();
+
+    Box::new(Client {
+        _runtime: None,
+        metrics: Weak::new(),
     })
 }
 
 // -------------------------------------------------------------------
 
 pub struct Client {
-    _runtime: Arc<Runtime>,
+    _runtime: Option<Arc<Runtime>>,
     metrics: Weak<Metrics>,
 }
 
