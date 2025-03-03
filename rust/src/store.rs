@@ -14,28 +14,28 @@ pub struct Store {
     records_dir_path: PathBuf,
     pub record_number: RecordNumber,
     pub backoff: Backoff,
-    uuid_rotator: UuidRotator,
+    device_id_rotator: UuidRotator,
 }
 
 impl Store {
     pub async fn new(root_path: PathBuf) -> io::Result<Self> {
         let records_dir_path = root_path.join("records");
-        let uuid_file_path = root_path.join("uuid.json");
+        let device_id_path = root_path.join("device_id.json");
         let record_number_path = root_path.join("record_number.json");
         let backoff_path = root_path.join("backoff.json");
 
         fs::create_dir_all(&records_dir_path).await?;
 
         let record_number = RecordNumber::load(record_number_path).await?;
-        let uuid_rotator =
-            UuidRotator::new(uuid_file_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
+        let device_id_rotator =
+            UuidRotator::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
         let backoff = Backoff::new(backoff_path).await?;
 
         Ok(Self {
             records_dir_path,
             record_number,
             backoff,
-            uuid_rotator,
+            device_id_rotator,
         })
     }
 
@@ -148,7 +148,7 @@ impl Store {
     }
 
     pub async fn current_device_id(&mut self) -> io::Result<Uuid> {
-        self.uuid_rotator.update().await
+        self.device_id_rotator.update().await
     }
 
     fn build_record_name(version: u32, device_id: Uuid, record_number: u32) -> String {
