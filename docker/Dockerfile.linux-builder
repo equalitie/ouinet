@@ -1,4 +1,5 @@
-FROM debian:bookworm AS base
+FROM rust:slim-bookworm AS base
+
 ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get upgrade -y
@@ -9,9 +10,6 @@ RUN apt-get install -y \
       libssl-dev \
       python3-twisted \
       zlib1g-dev \
-      curl \
       && rm -rf /var/lib/apt/lists/*
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 WORKDIR /usr/local/src
