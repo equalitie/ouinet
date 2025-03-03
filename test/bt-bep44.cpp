@@ -16,7 +16,6 @@
 #include "../src/util/hash.h"
 #include "../src/util/file_io/async_file_handle.h"
 
-
 using namespace ouinet;
 using namespace std;
 using namespace ouinet::bittorrent;
@@ -161,7 +160,9 @@ int main(int argc, const char** argv)
 {
     asio::io_context ctx;
 
-    unique_ptr<MainlineDht> dht(new MainlineDht(ctx));
+    auto metrics = metrics::Client();
+
+    unique_ptr<MainlineDht> dht(new MainlineDht(ctx, metrics.mainline_dht()));
 
     vector<string> args;
 

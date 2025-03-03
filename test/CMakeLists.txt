@@ -66,19 +66,23 @@ file(GLOB bt_cpp_files
 )
 
 add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})
-target_link_libraries(test-bittorrent lib::asio_utp lib::gcrypt lib::uri)
+target_link_libraries(test-bittorrent lib::asio_utp lib::gcrypt lib::uri ${OUINET_RUST_LIB})
+target_include_directories(test-bittorrent ${OUINET_RUST_INCLUDE})
 
 ################################################################################
 add_executable(bt-bep44 "bt-bep44.cpp" ${bt_cpp_files})
-target_link_libraries(bt-bep44 lib::asio_utp lib::gcrypt lib::uri)
+target_link_libraries(bt-bep44 lib::asio_utp lib::gcrypt lib::uri ${OUINET_RUST_LIB})
+target_include_directories(bt-bep44 ${OUINET_RUST_INCLUDE})
 
 ################################################################################
 add_executable(test-routing-table "test-routing-table.cpp" ${bt_cpp_files})
-target_link_libraries(test-routing-table lib::asio_utp lib::gcrypt lib::uri)
+target_link_libraries(test-routing-table lib::asio_utp lib::gcrypt lib::uri ${OUINET_RUST_LIB})
+target_include_directories(test-routing-table ${OUINET_RUST_INCLUDE})
 
 ################################################################################
 add_executable(bt-bep5 "bt-bep5.cpp" ${bt_cpp_files})
-target_link_libraries(bt-bep5 lib::asio_utp lib::gcrypt lib::uri)
+target_link_libraries(bt-bep5 lib::asio_utp lib::gcrypt lib::uri ${OUINET_RUST_LIB})
+target_include_directories(bt-bep5 ${OUINET_RUST_INCLUDE})
 
 ######################################################################
 add_executable(test-watch-dog
@@ -173,7 +177,8 @@ add_executable(test-cache-announcer
     "performance_test/test_cache_announcer.cpp"
     ${bt_cpp_files}
     "../test/util/bittorrent_utils.cpp")
-target_link_libraries(test-cache-announcer lib::asio_utp lib::gcrypt lib::uri)
+target_link_libraries(test-cache-announcer lib::asio_utp lib::gcrypt lib::uri ${OUINET_RUST_LIB})
+target_include_directories(test-cache-announcer ${OUINET_RUST_INCLUDE})
 
 add_executable(test-bencoding
         "test_bencoding.cpp"
@@ -188,4 +193,5 @@ add_executable(test-file-io
 
 #################################test_dht#####################################
 add_executable(test-dht "test_dht.cpp" ${bt_cpp_files})
-target_link_libraries(test-dht lib::asio_utp lib::gcrypt lib::uri)
+target_link_libraries(test-dht lib::asio_utp lib::gcrypt lib::uri ${OUINET_RUST_LIB})
+target_include_directories(test-dht ${OUINET_RUST_INCLUDE})

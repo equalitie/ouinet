@@ -101,6 +101,25 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
+
+include(ExternalProject)
+
+externalproject_add(
+    ouinet-rust
+    DOWNLOAD_COMMAND ""
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND cargo build --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml" --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust-target"
+    BUILD_ALWAYS TRUE
+    INSTALL_COMMAND "")
+
+add_dependencies(ouinet-rust built_boost)
+
+set(OUINET_RUST_LIB ${CMAKE_CURRENT_BINARY_DIR}/rust-target/debug/librust.a)
+set(OUINET_RUST_INCLUDE
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
+    ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
+
+################################################################################
 file(GLOB client_sources
     "./src/client.cpp"
     "./src/connect_to_host.cpp"
@@ -161,30 +180,14 @@ target_link_libraries(client
         lib::uri
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
-        ${CMAKE_CURRENT_BINARY_DIR}/rust-target/debug/librust.a
+        ${OUINET_RUST_LIB}
     PUBLIC
         ouinet::base
 )
 
-add_dependencies(client rust)
+add_dependencies(client ouinet-rust)
 
-target_include_directories(client
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
-    ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
-
-################################################################################
-
-include(ExternalProject)
-
-externalproject_add(
-    rust
-    DOWNLOAD_COMMAND ""
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml" --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust-target"
-    BUILD_ALWAYS TRUE
-    INSTALL_COMMAND "")
-
-add_dependencies(rust built_boost)
+target_include_directories(client ${OUINET_RUST_INCLUDE})
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -229,14 +232,11 @@ if (WITH_INJECTOR)
         OpenSSL::Crypto
         ouinet::base
         ${EXPERIMENTAL_LIBRARIES}
-        ${CMAKE_CURRENT_BINARY_DIR}/rust-target/debug/librust.a
+        ${OUINET_RUST_LIB}
     )
 
-    add_dependencies(injector rust)
-
-    target_include_directories(injector
-        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
-        ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
+    add_dependencies(injector ouinet-rust)
+    target_include_directories(injector ${OUINET_RUST_INCLUDE})
 
 endif() # if WITH_INJECTOR
 

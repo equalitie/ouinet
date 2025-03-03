@@ -53,7 +53,10 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
     asio::io_context ctx;
 
-    DhtNode dht(ctx);
+    auto metrics_client = metrics::Client();
+    auto metrics_dht = metrics_client.mainline_dht();
+
+    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
 
     task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
@@ -92,7 +95,10 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     asio::io_context ctx;
 
-    DhtNode dht(ctx);
+    auto metrics_client = metrics::Client();
+    auto metrics_dht = metrics_client.mainline_dht();
+
+    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
 
     auto mutable_data = []( const string& value
                           , const string& salt
