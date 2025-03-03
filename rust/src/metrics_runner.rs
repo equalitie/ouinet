@@ -11,6 +11,7 @@ enum Event {
     ProcessOneRecord,
     MetricsModified,
     IncrementRecordNumber,
+    RotateDeviceId,
     Exit,
 }
 
@@ -24,6 +25,7 @@ async fn on_event(on_metrics_modified_rx: &mut watch::Receiver<()>, store: &Stor
             }
         }
         () = time::sleep_until(store.record_number.increment_at()) => Event::IncrementRecordNumber,
+        () = time::sleep(store.device_id.rotate_after()) => Event::RotateDeviceId,
     }
 }
 
@@ -45,7 +47,7 @@ pub async fn metrics_runner(
             Event::ProcessOneRecord => {
                 log::debug!("metrics_runner::ProcessOneRecord");
 
-                let device_id = store.current_device_id().await?;
+                let device_id = *store.device_id;
 
                 if oldest_record.is_none() {
                     oldest_record = store
@@ -75,6 +77,11 @@ pub async fn metrics_runner(
                 let record = metrics.make_record_data();
                 store.store_record(record).await?;
                 store.backoff.resume();
+            }
+            Event::RotateDeviceId => {
+                log::debug!("metrics_runner::RotateDeviceId");
+                store.record_number.reset().await?;
+                store.device_id.rotate().await?;
             }
             Event::IncrementRecordNumber => {
                 log::debug!("metrics_runner::IncrementRecordNumber");

@@ -14,7 +14,7 @@ pub struct Store {
     records_dir_path: PathBuf,
     pub record_number: RecordNumber,
     pub backoff: Backoff,
-    device_id_rotator: UuidRotator,
+    pub device_id: UuidRotator,
 }
 
 impl Store {
@@ -27,15 +27,14 @@ impl Store {
         fs::create_dir_all(&records_dir_path).await?;
 
         let record_number = RecordNumber::load(record_number_path).await?;
-        let device_id_rotator =
-            UuidRotator::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
+        let device_id = UuidRotator::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
         let backoff = Backoff::new(backoff_path).await?;
 
         Ok(Self {
             records_dir_path,
             record_number,
             backoff,
-            device_id_rotator,
+            device_id,
         })
     }
 
@@ -65,8 +64,7 @@ impl Store {
 
     pub async fn store_record(&mut self, record_data: String) -> io::Result<()> {
         // TODO: Store into '.tmp' file first and then rename?
-        let device_id = self.current_device_id().await?;
-
+        let device_id = *self.device_id;
         let record_number = *self.record_number;
 
         let record_name =
@@ -145,10 +143,6 @@ impl Store {
         }
 
         Ok(records)
-    }
-
-    pub async fn current_device_id(&mut self) -> io::Result<Uuid> {
-        self.device_id_rotator.update().await
     }
 
     fn build_record_name(version: u32, device_id: Uuid, record_number: u32) -> String {
