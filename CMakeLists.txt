@@ -28,7 +28,6 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 endif()
 add_compile_options("-Wall")
 
-
 ################################################################################
 project(ouinet)
 

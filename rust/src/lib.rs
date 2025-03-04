@@ -2,6 +2,7 @@ mod backoff;
 mod clock;
 mod constants;
 mod device_id;
+mod logger;
 mod metrics;
 mod metrics_runner;
 mod record_number;
@@ -110,6 +111,8 @@ static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 // Create a new Client, if there were any clients created but not destroyed beforehand, all their
 // operations will be no-ops.
 fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
+    logger::init_idempotent();
+
     let runtime = runtime::get_runtime();
 
     let mut session_lock = SESSION.lock().unwrap();
