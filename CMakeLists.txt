@@ -108,7 +108,13 @@ externalproject_add(
     ouinet-rust
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml" --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust-target"
+    BUILD_COMMAND
+        ${CMAKE_COMMAND} -E env
+            CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include
+            --
+            cargo build
+                --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml"
+                --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust-target"
     BUILD_ALWAYS TRUE
     INSTALL_COMMAND "")
 
