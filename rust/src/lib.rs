@@ -21,7 +21,13 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex, Weak},
 };
-use tokio::{runtime::Runtime, sync::oneshot, task::JoinHandle};
+use tokio::{
+    runtime::Runtime,
+    select,
+    sync::{oneshot, watch},
+    task::JoinHandle,
+    time::{sleep, Duration},
+};
 
 #[cxx::bridge]
 mod ffi {
@@ -95,14 +101,31 @@ impl CxxOneShotSender {
 }
 
 struct Session {
-    job_handle: JoinHandle<()>,
+    runtime: Arc<Runtime>,
+    finish_tx: Option<watch::Sender<()>>,
+    job_handle: Option<JoinHandle<()>>,
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // TODO: Send signal to metrics to store the metrics on disk and give it a little timeout
-        // to finish.
-        self.job_handle.abort();
+        // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
+
+        // TODO: The C++ code itself does some deinitialization with a timeout and the code in this
+        // function happens only after that is finished. Consider doing this session
+        // deinitialization concurrently with the C++ code.
+        self.finish_tx.take();
+
+        if let Some(mut job_handle) = self.job_handle.take() {
+            self.runtime.block_on(async move {
+                select! {
+                    () = sleep(Duration::from_secs(5)) => {
+                        log::warn!("Metrics runner failed to finish within 5 seconds");
+                        job_handle.abort();
+                    }
+                    _ = &mut job_handle => (),
+                }
+            });
+        }
     }
 }
 
@@ -116,8 +139,12 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     let runtime = runtime::get_runtime();
 
     let mut session_lock = SESSION.lock().unwrap();
+
+    // Stop existing session if there is one, this also ensures there is always at most one client
+    // that writes into the store.
     session_lock.take();
 
+    let (finish_tx, finish_rx) = watch::channel(());
     let metrics = Arc::new(Metrics::new());
     let weak_metrics = Arc::downgrade(&metrics);
 
@@ -126,7 +153,7 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     let job_handle = runtime.spawn(async move {
         let store_path = PathBuf::from(store_path);
 
-        if let Err(error) = metrics_runner(metrics, store_path, processor).await {
+        if let Err(error) = metrics_runner(metrics, store_path, processor, finish_rx).await {
             match error {
                 MetricsRunnerError::RecordProcessor(RecordProcessorError::CxxDisconnected) => (),
                 MetricsRunnerError::Io(error) => {
@@ -136,10 +163,13 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
         }
     });
 
-    *session_lock = Some(Session { job_handle });
+    *session_lock = Some(Session {
+        runtime,
+        finish_tx: Some(finish_tx),
+        job_handle: Some(job_handle),
+    });
 
     Box::new(Client {
-        _runtime: Some(runtime),
         metrics: weak_metrics,
     })
 }
@@ -148,7 +178,6 @@ fn new_noop_client() -> Box<Client> {
     SESSION.lock().unwrap().take();
 
     Box::new(Client {
-        _runtime: None,
         metrics: Weak::new(),
     })
 }
@@ -156,7 +185,6 @@ fn new_noop_client() -> Box<Client> {
 // -------------------------------------------------------------------
 
 pub struct Client {
-    _runtime: Option<Arc<Runtime>>,
     metrics: Weak<Metrics>,
 }
 

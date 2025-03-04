@@ -15,7 +15,11 @@ enum Event {
     Exit,
 }
 
-async fn on_event(on_metrics_modified_rx: &mut watch::Receiver<()>, store: &Store) -> Event {
+async fn on_event(
+    on_metrics_modified_rx: &mut watch::Receiver<()>,
+    store: &Store,
+    finish_rx: &mut watch::Receiver<()>,
+) -> Event {
     select! {
         () = store.backoff.sleep() => Event::ProcessOneRecord,
         result = on_metrics_modified_rx.changed() => {
@@ -24,6 +28,7 @@ async fn on_event(on_metrics_modified_rx: &mut watch::Receiver<()>, store: &Stor
                 Err(_) => Event::Exit,
             }
         }
+        _result = finish_rx.changed() => Event::Exit,
         () = time::sleep_until(store.record_number.increment_at()) => Event::IncrementRecordNumber,
         () = time::sleep(store.device_id.rotate_after()) => Event::RotateDeviceId,
     }
@@ -33,6 +38,7 @@ pub async fn metrics_runner(
     metrics: Arc<Metrics>,
     store_path: PathBuf,
     processor: RecordProcessor,
+    mut finish_rx: watch::Receiver<()>,
 ) -> Result<(), MetricsRunnerError> {
     let mut store = Store::new(store_path).await?;
 
@@ -41,11 +47,11 @@ pub async fn metrics_runner(
     let mut oldest_record = None;
 
     loop {
-        let event = on_event(&mut on_metrics_modified_rx, &store).await;
+        let event = on_event(&mut on_metrics_modified_rx, &store, &mut finish_rx).await;
 
         match event {
             Event::ProcessOneRecord => {
-                log::debug!("metrics_runner::ProcessOneRecord");
+                log::debug!("Event:ProcessOneRecord");
 
                 let device_id = *store.device_id;
 
@@ -59,6 +65,7 @@ pub async fn metrics_runner(
                 }
 
                 let Some(record) = &oldest_record else {
+                    log::debug!("Nothing to process");
                     store.backoff.stop();
                     continue;
                 };
@@ -73,25 +80,27 @@ pub async fn metrics_runner(
             }
             Event::MetricsModified => {
                 // TODO: Don't write on every change. Add some constant backoff.
-                log::debug!("metrics_runner::MetricsModified");
+                log::debug!("Event::MetricsModified");
                 let record = metrics.make_record_data();
                 store.store_record(record).await?;
                 store.backoff.resume();
             }
             Event::RotateDeviceId => {
-                log::debug!("metrics_runner::RotateDeviceId");
+                log::debug!("Event::RotateDeviceId");
                 store.record_number.reset().await?;
                 store.device_id.rotate().await?;
             }
             Event::IncrementRecordNumber => {
-                log::debug!("metrics_runner::IncrementRecordNumber");
+                log::debug!("Event::IncrementRecordNumber");
                 let record = metrics.make_record_data();
                 store.store_record(record).await?;
                 store.backoff.resume();
                 store.record_number.increment().await?;
             }
             Event::Exit => {
-                // TODO: Store
+                log::debug!("Event::Exit");
+                let record = metrics.make_record_data();
+                store.store_record(record).await?;
                 break Ok(());
             }
         }
