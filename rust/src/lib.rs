@@ -15,7 +15,7 @@ use crate::{
     record_processor::RecordProcessorError,
 };
 use cxx::UniquePtr;
-use metrics::{IpVersion, Metrics};
+use metrics::{BootstrapId, IpVersion, Metrics};
 use metrics_runner::metrics_runner;
 use std::{
     path::PathBuf,
@@ -145,7 +145,7 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
     session_lock.take();
 
     let (finish_tx, finish_rx) = watch::channel(());
-    let metrics = Arc::new(Metrics::new());
+    let metrics = Arc::new(Mutex::new(Metrics::new()));
     let weak_metrics = Arc::downgrade(&metrics);
 
     let processor = record_processor::RecordProcessor::new(processor);
@@ -185,7 +185,7 @@ fn new_noop_client() -> Box<Client> {
 // -------------------------------------------------------------------
 
 pub struct Client {
-    metrics: Weak<Metrics>,
+    metrics: Weak<Mutex<Metrics>>,
 }
 
 impl Drop for Client {
@@ -205,7 +205,7 @@ impl Client {
 // -------------------------------------------------------------------
 
 pub struct MainlineDht {
-    metrics: Weak<Metrics>,
+    metrics: Weak<Mutex<Metrics>>,
 }
 
 impl MainlineDht {
@@ -227,7 +227,7 @@ impl MainlineDht {
 
 pub struct DhtNode {
     ipv: IpVersion,
-    metrics: Weak<Metrics>,
+    metrics: Weak<Mutex<Metrics>>,
 }
 
 impl DhtNode {
@@ -239,25 +239,25 @@ impl DhtNode {
 // -------------------------------------------------------------------
 
 pub struct Bootstrap {
-    ipv: IpVersion,
     inner: Option<BootstrapInner>,
 }
 
 struct BootstrapInner {
-    bootstrap_id: usize,
-    metrics: Weak<Metrics>,
+    bootstrap_id: BootstrapId,
+    metrics: Weak<Mutex<Metrics>>,
 }
 
 impl Bootstrap {
-    fn new(ipv: IpVersion, metrics_weak: Weak<Metrics>) -> Self {
-        let Some(metrics) = metrics_weak.upgrade() else {
-            return Bootstrap { ipv, inner: None };
+    fn new(ipv: IpVersion, metrics_weak: Weak<Mutex<Metrics>>) -> Self {
+        let Some(metrics_strong) = metrics_weak.upgrade() else {
+            return Bootstrap { inner: None };
         };
 
+        let mut metrics_lock = metrics_strong.lock().unwrap();
+
         Bootstrap {
-            ipv,
             inner: Some(BootstrapInner {
-                bootstrap_id: metrics.bootstrap_start(ipv),
+                bootstrap_id: metrics_lock.bootstrap_start(ipv),
                 metrics: metrics_weak,
             }),
         }
@@ -272,7 +272,10 @@ impl Bootstrap {
             return;
         };
 
-        metrics.bootstrap_finish(inner.bootstrap_id, self.ipv, true);
+        metrics
+            .lock()
+            .unwrap()
+            .bootstrap_finish(inner.bootstrap_id, true);
     }
 }
 
@@ -286,6 +289,9 @@ impl Drop for Bootstrap {
             return;
         };
 
-        metrics.bootstrap_finish(inner.bootstrap_id, self.ipv, false);
+        metrics
+            .lock()
+            .unwrap()
+            .bootstrap_finish(inner.bootstrap_id, false);
     }
 }

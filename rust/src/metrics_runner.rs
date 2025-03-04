@@ -3,7 +3,11 @@ use crate::{
     record_processor::{RecordProcessor, RecordProcessorError},
     store::Store,
 };
-use std::{io, path::PathBuf, sync::Arc};
+use std::{
+    io,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use thiserror::Error;
 use tokio::{select, sync::watch, time};
 
@@ -35,14 +39,14 @@ async fn on_event(
 }
 
 pub async fn metrics_runner(
-    metrics: Arc<Metrics>,
+    metrics: Arc<Mutex<Metrics>>,
     store_path: PathBuf,
     processor: RecordProcessor,
     mut finish_rx: watch::Receiver<()>,
 ) -> Result<(), MetricsRunnerError> {
     let mut store = Store::new(store_path).await?;
 
-    let mut on_metrics_modified_rx = metrics.subscribe();
+    let mut on_metrics_modified_rx = metrics.lock().unwrap().subscribe();
 
     let mut oldest_record = None;
 
@@ -79,32 +83,46 @@ pub async fn metrics_runner(
                 }
             }
             Event::MetricsModified => {
-                // TODO: Don't write on every change. Add some constant backoff.
                 log::debug!("Event::MetricsModified");
-                let record = metrics.make_record_data();
-                store.store_record(record).await?;
-                store.backoff.resume();
+
+                // TODO: Don't write on every change. Add some constant backoff.
+                store_record(&mut store, &*metrics).await?;
             }
             Event::RotateDeviceId => {
                 log::debug!("Event::RotateDeviceId");
+
+                store_record(&mut store, &*metrics).await?;
+
                 store.record_number.reset().await?;
                 store.device_id.rotate().await?;
+
+                metrics.lock().unwrap().restart();
             }
             Event::IncrementRecordNumber => {
                 log::debug!("Event::IncrementRecordNumber");
-                let record = metrics.make_record_data();
-                store.store_record(record).await?;
-                store.backoff.resume();
+
+                store_record(&mut store, &*metrics).await?;
+
                 store.record_number.increment().await?;
+
+                metrics.lock().unwrap().restart();
             }
             Event::Exit => {
                 log::debug!("Event::Exit");
-                let record = metrics.make_record_data();
-                store.store_record(record).await?;
+
+                store_record(&mut store, &*metrics).await?;
+
                 break Ok(());
             }
         }
     }
+}
+
+async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<()> {
+    let record = metrics.lock().unwrap().make_record_data();
+    store.store_record(record).await?;
+    store.backoff.resume();
+    Ok(())
 }
 
 #[derive(Error, Debug)]
