@@ -247,6 +247,7 @@ pub struct Bootstrap {
 
 struct BootstrapInner {
     bootstrap_id: BootstrapId,
+    success: Mutex<bool>,
     metrics: Weak<Mutex<Metrics>>,
 }
 
@@ -261,6 +262,7 @@ impl Bootstrap {
         Bootstrap {
             inner: Some(BootstrapInner {
                 bootstrap_id: metrics_lock.bootstrap_start(ipv),
+                success: Mutex::new(false),
                 metrics: metrics_weak,
             }),
         }
@@ -270,6 +272,8 @@ impl Bootstrap {
         let Some(inner) = &self.inner else {
             return;
         };
+
+        *inner.success.lock().unwrap() = true;
 
         let Some(metrics) = inner.metrics.upgrade() else {
             return;
@@ -287,6 +291,11 @@ impl Drop for Bootstrap {
         let Some(inner) = &self.inner else {
             return;
         };
+
+        if *inner.success.lock().unwrap() {
+            // Don't report false if we already reported true.
+            return;
+        }
 
         let Some(metrics) = inner.metrics.upgrade() else {
             return;
