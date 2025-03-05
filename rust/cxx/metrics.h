@@ -3,7 +3,7 @@
 #include <string_view>
 #include <boost/filesystem.hpp>
 #include <boost/asio/ip/udp.hpp>
-#include "rust/src/lib.rs.h"
+#include "ouinet-rs/src/lib.rs.h"
 #include "cxx/record_processor.h"
 #include "cxx/async_callback.h"
 

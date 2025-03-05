@@ -13,12 +13,10 @@ namespace ouinet::metrics::bridge {
     struct CxxOneShotSender;
 }
 
-#include "rust/src/lib.rs.h"
+#include "ouinet-rs/src/lib.rs.h"
 #include "rust/cxx.h"
 
 namespace ouinet::metrics::bridge {
-
-using namespace std;
 
 struct CxxRecordProcessor {
     util::AsioExecutor executor;
@@ -27,8 +25,8 @@ struct CxxRecordProcessor {
     AsyncCallback async_callback;
 
     CxxRecordProcessor(util::AsioExecutor executor, AsyncCallback async_callback)
-        : executor(move(executor))
-        , async_callback(move(async_callback)) {}
+        : executor(std::move(executor))
+        , async_callback(std::move(async_callback)) {}
 
     void execute( rust::String record_name
                 , rust::String record_content

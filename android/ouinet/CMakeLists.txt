@@ -21,11 +21,8 @@ target_link_libraries(native-lib
 )
 
 # Add libc++_shared.so to the aar file
-get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
-string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
 set(LIBCPP_SHARED_PATH
-    ${COMPILER_DIR}/../sysroot/usr/lib/${COMPILER_HOSTTRIPLE}/libc++_shared.so
+    ${CMAKE_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/libc++_shared.so
 )
 add_custom_command(
     OUTPUT ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so

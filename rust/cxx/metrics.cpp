@@ -7,7 +7,6 @@
 
 namespace ouinet::metrics {
 
-using namespace std;
 namespace asio = boost::asio;
 
 //--------------------------------------------------------------------
@@ -22,7 +21,7 @@ Client::Client( util::AsioExecutor executor
               , AsyncCallback process_report)
     : _impl(bridge::new_client
                 ( rust::String(repo_root_path.native())
-                , make_unique<bridge::CxxRecordProcessor>(move(executor), move(process_report))))
+                , std::make_unique<bridge::CxxRecordProcessor>(std::move(executor), std::move(process_report))))
 {
 }
 
