@@ -1,3 +1,7 @@
+use crate::{
+    backoff_watch::{ConstantBackoffWatchReceiver, ConstantBackoffWatchSender},
+    constants,
+};
 use chrono::{offset::Utc, DateTime};
 use serde::Serialize;
 use serde_json::json;
@@ -5,10 +9,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     time::SystemTime,
 };
-use tokio::{
-    sync::watch,
-    time::{Duration, Instant},
-};
+use tokio::time::{Duration, Instant};
 
 const DAY_TIME_FORMAT: &'static str = "%FT%T%.3f";
 
@@ -27,7 +28,7 @@ pub struct BootstrapId {
 pub struct Metrics {
     start: DateTime<Utc>,
     restart: Option<DateTime<Utc>>,
-    on_modify_tx: watch::Sender<()>,
+    on_modify_tx: ConstantBackoffWatchSender,
     bootstraps: Bootstraps,
 }
 
@@ -36,7 +37,7 @@ impl Metrics {
         Self {
             start: SystemTime::now().into(),
             restart: None,
-            on_modify_tx: watch::channel(()).0,
+            on_modify_tx: ConstantBackoffWatchSender::new(constants::RECORD_WRITE_CONSTANT_BACKOFF),
             bootstraps: Bootstraps::new(),
         }
     }
@@ -84,7 +85,7 @@ impl Metrics {
         self.mark_modified();
     }
 
-    pub fn subscribe(&self) -> watch::Receiver<()> {
+    pub fn subscribe(&self) -> ConstantBackoffWatchReceiver {
         self.on_modify_tx.subscribe()
     }
 

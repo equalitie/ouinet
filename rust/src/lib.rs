@@ -1,4 +1,5 @@
 mod backoff;
+mod backoff_watch;
 mod clock;
 mod constants;
 mod device_id;
@@ -25,7 +26,7 @@ use tokio::{
     runtime::Runtime,
     select,
     sync::{oneshot, watch},
-    task::JoinHandle,
+    task::{self, JoinHandle},
     time::{sleep, Duration},
 };
 
@@ -138,6 +139,8 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
 
     let runtime = runtime::get_runtime();
 
+    let _runtime_guard = runtime.enter();
+
     let mut session_lock = SESSION.lock().unwrap();
 
     // Stop existing session if there is one, this also ensures there is always at most one client
@@ -150,7 +153,7 @@ fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> B
 
     let processor = record_processor::RecordProcessor::new(processor);
 
-    let job_handle = runtime.spawn(async move {
+    let job_handle = task::spawn(async move {
         let store_path = PathBuf::from(store_path);
 
         if let Err(error) = metrics_runner(metrics, store_path, processor, finish_rx).await {

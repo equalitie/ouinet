@@ -1,4 +1,5 @@
 use crate::{
+    backoff_watch::ConstantBackoffWatchReceiver,
     metrics::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
     store::Store,
@@ -19,39 +20,20 @@ enum Event {
     Exit,
 }
 
-async fn on_event(
-    on_metrics_modified_rx: &mut watch::Receiver<()>,
-    store: &Store,
-    finish_rx: &mut watch::Receiver<()>,
-) -> Event {
-    select! {
-        () = store.backoff.sleep() => Event::ProcessOneRecord,
-        result = on_metrics_modified_rx.changed() => {
-            match result {
-                Ok(()) => Event::MetricsModified,
-                Err(_) => Event::Exit,
-            }
-        }
-        _result = finish_rx.changed() => Event::Exit,
-        () = time::sleep_until(store.record_number.increment_at()) => Event::IncrementRecordNumber,
-        () = time::sleep(store.device_id.rotate_after()) => Event::RotateDeviceId,
-    }
-}
-
 pub async fn metrics_runner(
     metrics: Arc<Mutex<Metrics>>,
     store_path: PathBuf,
     processor: RecordProcessor,
-    mut finish_rx: watch::Receiver<()>,
+    finish_rx: watch::Receiver<()>,
 ) -> Result<(), MetricsRunnerError> {
     let mut store = Store::new(store_path).await?;
 
-    let mut on_metrics_modified_rx = metrics.lock().unwrap().subscribe();
+    let mut event_listener = EventListener::new(metrics.lock().unwrap().subscribe(), finish_rx);
 
     let mut oldest_record = None;
 
     loop {
-        let event = on_event(&mut on_metrics_modified_rx, &store, &mut finish_rx).await;
+        let event = event_listener.on_event(&store).await;
 
         match event {
             Event::ProcessOneRecord => {
@@ -114,6 +96,38 @@ pub async fn metrics_runner(
 
                 break Ok(());
             }
+        }
+    }
+}
+
+struct EventListener {
+    on_metrics_modified_rx: ConstantBackoffWatchReceiver,
+    finish_rx: watch::Receiver<()>,
+}
+
+impl EventListener {
+    fn new(
+        on_metrics_modified_rx: ConstantBackoffWatchReceiver,
+        finish_rx: watch::Receiver<()>,
+    ) -> Self {
+        Self {
+            on_metrics_modified_rx,
+            finish_rx,
+        }
+    }
+
+    async fn on_event(&mut self, store: &Store) -> Event {
+        select! {
+            () = store.backoff.sleep() => Event::ProcessOneRecord,
+            result = self.on_metrics_modified_rx.changed() => {
+                match result {
+                    Ok(()) => Event::MetricsModified,
+                    Err(_) => Event::Exit,
+                }
+            }
+            _result = self.finish_rx.changed() => Event::Exit,
+            () = time::sleep_until(store.record_number.increment_at()) => Event::IncrementRecordNumber,
+            () = time::sleep(store.device_id.rotate_after()) => Event::RotateDeviceId,
         }
     }
 }
