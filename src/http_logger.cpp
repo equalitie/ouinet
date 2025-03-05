@@ -24,18 +24,16 @@ std::string HTTPLogger::get_header_value(const Request& rq, const http::field& f
 
 std::string HTTPLogger::get_request_size(const Session& sess, size_t fwd_bytes)
 {
-    std::string content_length = "0";
     auto& res = sess.response_header();
     auto hdr = res.find(http::field::content_length);
     if (hdr != res.end()) {
-        content_length = "\"" + hdr->value().to_string() + "\"";
+        return "\"" + hdr->value().to_string() + "\"";
     } else {
-        content_length = std::to_string(fwd_bytes);
+        return std::to_string(fwd_bytes);
     }
-    return content_length;
 }
 
-void HTTPLogger::log_to_file(std::string fname)
+void HTTPLogger::log_to_file(const std::string& fname)
 {
     using std::ios;
 
@@ -81,13 +79,12 @@ void HTTPLogger::log(const std::string& host_id, const Request& rq, const Sessio
     request_line_ss << to_string(rq.method()) << " " << rq.target() << " " << http_version;
 
     if (log_file && log_file->is_open()) {
-        *log_file << host_id << " "
-                << "- " // identd
-                << "- " // userid
+        *log_file << host_id
+                << " - - " // unused fields: identd and userid
                 << get_datetime() << " "
                 << "\"" << request_line_ss.str() << "\" "
                 << inh.result_int() << " "
-                << get_request_size(sess, fwd_bytes) << " " // TODO: Calculate request size
+                << get_request_size(sess, fwd_bytes) << " "
                 << referer << " "
                 << ua << "\n";
     }
