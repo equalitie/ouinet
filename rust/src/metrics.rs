@@ -19,7 +19,7 @@ pub enum IpVersion {
     V6,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct BootstrapId {
     ipv: IpVersion,
     id: usize,
@@ -27,40 +27,51 @@ pub struct BootstrapId {
 
 pub struct Metrics {
     start: DateTime<Utc>,
-    restart: Option<DateTime<Utc>>,
+    record_start: DateTime<Utc>,
     on_modify_tx: ConstantBackoffWatchSender,
     bootstraps: Bootstraps,
+    has_new_data: bool,
 }
 
 impl Metrics {
     pub fn new() -> Self {
+        let now = SystemTime::now().into();
+
         Self {
-            start: SystemTime::now().into(),
-            restart: None,
+            start: now,
+            record_start: now,
             on_modify_tx: ConstantBackoffWatchSender::new(constants::RECORD_WRITE_CONSTANT_BACKOFF),
             bootstraps: Bootstraps::new(),
+            has_new_data: false,
         }
     }
 
     pub fn bootstrap_start(&mut self, ipv: IpVersion) -> BootstrapId {
+        log::debug!("Metrics::bootstrap_start ipv:{ipv:?}");
+
         let id = self.bootstraps.start(ipv);
-        self.mark_modified();
+        self.mark_modified(true);
         id
     }
 
     pub fn bootstrap_finish(&mut self, id: BootstrapId, success: bool) {
+        log::debug!("Metrics::bootstrap_finish id:{id:?} success:{success:?}");
+
         self.bootstraps.finish(id, success);
-        self.mark_modified()
+        self.mark_modified(true)
     }
 
-    pub fn make_record_data(&self) -> String {
+    pub fn collect(&mut self) -> Option<String> {
+        if !self.has_new_data() {
+            return None;
+        }
+
         let bv4 = &self.bootstraps.v4;
         let bv6 = &self.bootstraps.v6;
 
-        json!({
-            // For format see: https://docs.rs/chrono/0.4.0/chrono/format/strftime/index.html
+        let data = json!({
             "start": format!("{}", self.start.format(DAY_TIME_FORMAT)),
-            "restart": self.restart.map(|dt| format!("{}", dt.format(DAY_TIME_FORMAT))),
+            "record_start": format!("{}", self.record_start.format(DAY_TIME_FORMAT)),
             "bootstrap_ipv4": {
                 "histogram": ExponentialHistogram::new(200, 10, bv4.values().filter_map(|s| s.success_duration_ms())),
                 "unfinished": bv4.values().filter(|s| s.is_started()).count(),
@@ -74,23 +85,40 @@ impl Metrics {
                 "max": bv6.values().filter_map(|s| s.success_duration_ms()).max(),
             }
         })
-        .to_string()
+        .to_string();
+
+        self.clear_finished();
+
+        Some(data)
     }
 
-    pub fn restart(&mut self) {
-        self.bootstraps.clear_finished();
-        self.bootstraps.clear_finished();
-        self.restart = Some(SystemTime::now().into());
+    // Called when the device_id changes to not leak more data into the next record
+    pub fn clear(&mut self) {
+        let now = SystemTime::now().into();
+        self.start = now;
+        self.record_start = now;
+        self.bootstraps.clear();
+        self.mark_modified(false);
+    }
 
-        self.mark_modified();
+    // Clear whatever metrics have started and finished, leave the unfinished records.
+    fn clear_finished(&mut self) {
+        self.record_start = SystemTime::now().into();
+        self.bootstraps.clear_finished();
+        self.mark_modified(false);
     }
 
     pub fn subscribe(&self) -> ConstantBackoffWatchReceiver {
         self.on_modify_tx.subscribe()
     }
 
-    fn mark_modified(&self) {
+    fn mark_modified(&mut self, new_data: bool) {
+        self.has_new_data = new_data;
         self.on_modify_tx.send_modify(|_| {});
+    }
+
+    pub fn has_new_data(&self) -> bool {
+        self.has_new_data
     }
 }
 
@@ -167,7 +195,8 @@ impl Bootstraps {
         };
 
         let Some(bootstrap) = bootstrap else {
-            log::error!("Failed invariant: bootstrap entries must persist until finished");
+            // This could happen when the bootstrap started and the `clear` function was called
+            // because the `device_id` has rotated.
             return;
         };
 
@@ -187,6 +216,11 @@ impl Bootstraps {
     fn clear_finished(&mut self) {
         self.v4.retain(|_, state| !state.is_finished());
         self.v6.retain(|_, state| !state.is_finished());
+    }
+
+    fn clear(&mut self) {
+        self.v4.clear();
+        self.v6.clear();
     }
 }
 

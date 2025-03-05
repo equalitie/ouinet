@@ -51,7 +51,7 @@ pub async fn metrics_runner(
                 }
 
                 let Some(record) = &oldest_record else {
-                    log::debug!("Nothing to process");
+                    log::debug!("  Nothing to process");
                     store.backoff.stop();
                     continue;
                 };
@@ -66,19 +66,20 @@ pub async fn metrics_runner(
             }
             Event::MetricsModified => {
                 log::debug!("Event::MetricsModified");
-
-                // TODO: Don't write on every change. Add some constant backoff.
-                store_record(&mut store, &*metrics).await?;
+                if store_record(&mut store, &*metrics).await? {
+                    log::debug!("  stored");
+                } else {
+                    log::debug!("  no new data");
+                }
             }
             Event::RotateDeviceId => {
                 log::debug!("Event::RotateDeviceId");
 
                 store_record(&mut store, &*metrics).await?;
 
+                metrics.lock().unwrap().clear();
                 store.record_number.reset().await?;
                 store.device_id.rotate().await?;
-
-                metrics.lock().unwrap().restart();
             }
             Event::IncrementRecordNumber => {
                 log::debug!("Event::IncrementRecordNumber");
@@ -86,14 +87,10 @@ pub async fn metrics_runner(
                 store_record(&mut store, &*metrics).await?;
 
                 store.record_number.increment().await?;
-
-                metrics.lock().unwrap().restart();
             }
             Event::Exit => {
                 log::debug!("Event::Exit");
-
                 store_record(&mut store, &*metrics).await?;
-
                 break Ok(());
             }
         }
@@ -132,11 +129,16 @@ impl EventListener {
     }
 }
 
-async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<()> {
-    let record = metrics.lock().unwrap().make_record_data();
-    store.store_record(record).await?;
-    store.backoff.resume();
-    Ok(())
+async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<bool> {
+    let record = metrics.lock().unwrap().collect();
+
+    if let Some(record) = record {
+        store.store_record(record).await?;
+        store.backoff.resume();
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 #[derive(Error, Debug)]
