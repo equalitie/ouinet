@@ -87,7 +87,6 @@ impl Store {
 
         let mut records = Vec::new();
 
-        // TODO: Discard old records?
         while let Some(entry) = entries.next_entry().await? {
             if !entry.file_type().await?.is_file() {
                 continue;
