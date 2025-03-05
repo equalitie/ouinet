@@ -18,7 +18,7 @@ class HTTPLogger {
 public:
     HTTPLogger() = default;
     void log_to_file(std::string);
-    void log(const GenericStream&, const Request&, const Session&, size_t);
+    void log(const std::string&, const Request&, const Session&, size_t);
 
 private:
     std::string get_datetime();

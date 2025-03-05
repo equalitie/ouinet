@@ -67,7 +67,7 @@ void HTTPLogger::log_to_file(std::string fname)
     }
 }
 
-void HTTPLogger::log(const GenericStream& con, const Request& rq, const Session& sess, size_t fwd_bytes)
+void HTTPLogger::log(const std::string& host_id, const Request& rq, const Session& sess, size_t fwd_bytes)
 {
     if (!log_file || !log_file->is_open()) return;
 
@@ -81,7 +81,7 @@ void HTTPLogger::log(const GenericStream& con, const Request& rq, const Session&
     request_line_ss << to_string(rq.method()) << " " << rq.target() << " " << http_version;
 
     if (log_file && log_file->is_open()) {
-        *log_file << "\"" + con.remote_endpoint() + "\" " // TODO: Fetch the target IP
+        *log_file << host_id << " "
                 << "- " // identd
                 << "- " // userid
                 << get_datetime() << " "
