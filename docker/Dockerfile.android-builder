@@ -6,4 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       wget \
     && rm -rf /var/lib/apt/lists/*
 RUN echo 'quiet = on' >> /etc/wgetrc
+RUN rustup target add aarch64-linux-android
+RUN rustup target add armv7-linux-androideabi
+
 ENV UNZIPOPT=-q
