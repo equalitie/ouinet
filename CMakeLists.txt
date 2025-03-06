@@ -34,7 +34,6 @@ add_compile_options("-Wall")
 ################################################################################
 project(ouinet)
 
-
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
@@ -44,7 +43,7 @@ include(BuildVersion)
 add_library(ouinet_base INTERFACE)
 add_library(ouinet::base ALIAS ouinet_base)
 target_compile_options(ouinet_base
-    INTERFACE -std=c++17
+    INTERFACE -std=c++20
 )
 target_include_directories(ouinet_base
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src

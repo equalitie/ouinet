@@ -6,7 +6,7 @@ fn main() {
         .include("../src")
         .file("cxx/metrics.cpp")
         .file("cxx/record_processor.cpp")
-        .std("c++17")
+        .std("c++20")
         .compile("rust-bridge");
 
     println!("cargo:rerun-if-changed=src");

@@ -4,7 +4,8 @@ include(ExternalProject)
 # https://github.com/CauldronDevelopmentLLC/cbang/issues/26
 # (this library bundles Boost)
 # TODO: Perhaps do a check for Boost and gcc version before adding this flag?
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-parentheses -Wno-error=nonnull -Wno-error=deprecated-declarations")
+set(CMAKE_CXX_FLAGS
+    "${CMAKE_CXX_FLAGS} -Wno-parentheses -Wno-error=nonnull -Wno-error=deprecated-declarations -Wno-error=deprecated-builtins")
 
 set(URI_FILENAME
     "${CMAKE_CURRENT_BINARY_DIR}/uri/src/uri-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}network-uri${CMAKE_STATIC_LIBRARY_SUFFIX}"

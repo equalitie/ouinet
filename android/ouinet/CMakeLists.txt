@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.7.0)
 
+project(native-lib)
+
 # Place compiled executables in the gradle Assets directory.
 # If there is any better way of finding this, such as getting it out of gradle
 # in some way, I'm all ears.
