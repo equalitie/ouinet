@@ -1,5 +1,7 @@
 variables:
+  TARGET_PLATFORM: 'linux'
   BUILD_PATH: 'build/$TARGET_PLATFORM'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 .linux-build:
   stage: build
