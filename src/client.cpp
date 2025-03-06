@@ -15,6 +15,8 @@
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/adaptor/indexed.hpp>
 #include <boost/regex.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <iterator>
 #include <iostream>
 #include <cstdlib>  // for atexit()
@@ -97,6 +99,8 @@ using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
 using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
 using ouinet::util::AsioExecutor;
+using uuid = boost::uuids::uuid;
+using uuid_generator = boost::uuids::random_generator_mt19937;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -161,6 +165,7 @@ public:
         , _injector_starting{get_executor()}
         , _cache_starting{get_executor()}
         , _front_end(_config)
+        , _druid{uuid_generator()()}
         , ssl_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
         , _bt_dht_wc(_ctx)
@@ -546,6 +551,7 @@ private:
     ConnectionPool<Endpoint> _injector_connections;
     ConnectionPool<bool> _self_connections;  // stored value is unused
     OriginPools _origin_pools;
+    uuid _druid;
 
     asio::ssl::context ssl_ctx;
     asio::ssl::context inj_ctx;
@@ -1246,6 +1252,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     if (auto credentials = _config.credentials_for(*con))
         request = authorize(request, *credentials);
+
+    // Add DRUID header to the request sent to the injector
+    request.set(http_::request_druid_hdr, boost::uuids::to_string(_druid));
 
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request

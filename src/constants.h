@@ -97,6 +97,10 @@ static const std::string response_source_hdr_injector = "injector";
 static const std::string response_source_hdr_dist_cache = "dist-cache";
 static const std::string response_source_hdr_local_cache = "local-cache";
 
+// Device Reasonably Unique ID (DRUID) is used to generate statistics on the
+// injector side without using IP addresses.
+static const std::string request_druid_hdr = "DRUID";
+
 } // http_ namespace
 
 static const uint16_t default_udp_port = 28729;
