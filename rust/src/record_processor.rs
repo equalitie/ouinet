@@ -49,7 +49,12 @@ mod test_impl {
             Self {}
         }
 
-        pub async fn process(&self, _record: &StoredRecord) -> Result<bool, RecordProcessorError> {
+        pub async fn process(&self, record: &StoredRecord) -> Result<bool, RecordProcessorError> {
+            // Just use these so the compiler doesn't spit out warnings about not being used or
+            // constructed.
+            let _name = record.name();
+            let _data = record.data.clone();
+            let _err = RecordProcessorError::CxxDisconnected;
             Ok(true)
         }
     }
@@ -64,6 +69,5 @@ pub use test_impl::*;
 #[derive(Error, Debug)]
 pub enum RecordProcessorError {
     #[error("The C++ end destroyed the handler before completion")]
-    #[allow(dead_code)] // In tests this is never constructed
     CxxDisconnected,
 }

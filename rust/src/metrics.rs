@@ -117,6 +117,11 @@ impl Metrics {
         self.on_modify_tx.send_modify(|_| {});
     }
 
+    #[cfg(test)]
+    pub fn modify(&mut self) {
+        self.mark_modified(true);
+    }
+
     pub fn has_new_data(&self) -> bool {
         self.has_new_data
     }

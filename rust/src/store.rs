@@ -76,7 +76,7 @@ impl Store {
         Ok(record)
     }
 
-    pub async fn store_record(&mut self, record_data: String) -> io::Result<()> {
+    pub async fn store_record(&self, record_data: String) -> io::Result<()> {
         // TODO: Store into '.tmp' file first and then rename?
         let device_id = *self.device_id;
         let record_number = *self.record_number;

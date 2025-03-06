@@ -134,7 +134,7 @@ static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 
 // Create a new Client, if there were any clients created but not destroyed beforehand, all their
 // operations will be no-ops.
-fn new_client(store_path: String, _processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
+fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
     logger::init_idempotent();
 
     let runtime = runtime::get_runtime();
@@ -152,9 +152,12 @@ fn new_client(store_path: String, _processor: UniquePtr<CxxRecordProcessor>) -> 
     let weak_metrics = Arc::downgrade(&metrics);
 
     #[cfg(not(test))]
-    let processor = record_processor::RecordProcessor::new(_processor);
+    let processor = record_processor::RecordProcessor::new(processor);
     #[cfg(test)]
-    let processor = record_processor::RecordProcessor::new();
+    let processor = {
+        let _unused = processor;
+        record_processor::RecordProcessor::new()
+    };
 
     let job_handle = task::spawn(async move {
         let store_path = PathBuf::from(store_path);
