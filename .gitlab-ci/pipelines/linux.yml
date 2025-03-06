@@ -4,6 +4,7 @@ include:
 
 variables:
   TARGET_PLATFORM: 'linux'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder-$BUILDER_IMAGE_VERSION'
 
 linux / prepare-builder-image:
   extends:
