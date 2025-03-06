@@ -6,7 +6,6 @@ stages:
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
-  BUILDER_IMAGE_VERSION: 2
 
 include:
   - .gitlab-ci/pipelines/android.yml
