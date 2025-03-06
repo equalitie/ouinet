@@ -34,11 +34,12 @@ pub async fn metrics_runner(
     loop {
         let event = event_listener.on_event(&store).await;
 
-        if event_processor
+        match event_processor
             .process_event(event, &mut store, &*metrics)
             .await?
         {
-            break;
+            EventResult::Continue => (),
+            EventResult::Break => break,
         }
     }
 
@@ -63,7 +64,7 @@ impl EventProcessor {
         event: Event,
         store: &mut Store,
         metrics: &Mutex<Metrics>,
-    ) -> Result<bool, MetricsRunnerError> {
+    ) -> Result<EventResult, MetricsRunnerError> {
         match event {
             Event::ProcessOneRecord => {
                 log::debug!("Event:ProcessOneRecord");
@@ -75,7 +76,7 @@ impl EventProcessor {
                 let Some(record) = &self.oldest_record else {
                     log::debug!("  Nothing to process");
                     store.backoff.stop();
-                    return Ok(false);
+                    return Ok(EventResult::Continue);
                 };
 
                 if self.record_processor.process(&record).await? {
@@ -113,11 +114,11 @@ impl EventProcessor {
             Event::Exit => {
                 log::debug!("Event::Exit");
                 store_record(store, metrics).await?;
-                return Ok(true);
+                return Ok(EventResult::Break);
             }
         }
 
-        Ok(false)
+        Ok(EventResult::Continue)
     }
 }
 
@@ -163,6 +164,11 @@ async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result
     } else {
         Ok(false)
     }
+}
+
+enum EventResult {
+    Continue,
+    Break,
 }
 
 #[derive(Error, Debug)]
