@@ -1,4 +1,4 @@
-FROM registry.gitlab.com/equalitie/ouinet:debian-12-builder
+FROM registry.gitlab.com/equalitie/ouinet:linux-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ninja-build \
       openjdk-17-jdk-headless \
