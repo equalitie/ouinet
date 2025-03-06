@@ -183,32 +183,31 @@ public:
         // we will not be checking certificate names,
         // thus any certificate signed by a recognized CA
         // would be accepted if presented by an injector.
+        //
         //inj_ctx.set_default_verify_paths();
+
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
 
-
         // Tell metrics::Client how to send records
-        {
-            auto cancel = make_shared<Cancel>(_shutdown_signal);
+        _metrics = make_unique<metrics::Client>
+            ( ctx.get_executor()
+            , _config.repo_root() / "metrics"
+            , [ client = this
+              , cancel = make_shared<Cancel>(_shutdown_signal)]
+                 ( std::string_view record_name
+                 , std::string_view record_content
+                 , asio::yield_context yield_) {
+                if (*cancel) throw_error(asio::error::operation_aborted);
 
-            _metrics = make_unique<metrics::Client>
-                ( ctx.get_executor()
-                , _config.repo_root() / "metrics"
-                , [this, cancel = move(cancel)] ( std::string_view record_name
-                     , std::string_view record_content
-                     , asio::yield_context yield_) {
-                    if (*cancel) throw_error(asio::error::operation_aborted);
+                Yield yield(client->_ctx, yield_, "metrics");
 
-                    Yield yield(_ctx, yield_, "metrics");
-
-                    try {
-                        send_metrics_record(record_name, record_content, *cancel, Yield(move(yield)));
-                    } catch (std::exception& e) {
-                        LOG_WARN("Failed to send statistics: ", e.what());
-                        throw;
-                    }
-                });
-        }
+                try {
+                    client->send_metrics_record(record_name, record_content, *cancel, Yield(move(yield)));
+                } catch (std::exception& e) {
+                    LOG_WARN("Failed to send statistics: ", e.what());
+                    throw;
+                }
+            });
     }
 
     void start();

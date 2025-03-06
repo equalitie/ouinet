@@ -62,6 +62,20 @@ impl Store {
         }
     }
 
+    pub async fn oldest_non_current_record(&self) -> io::Result<Option<StoredRecord>> {
+        let current_device_id = *self.device_id;
+        let current_record_number = *self.record_number;
+
+        let record = self
+            .load_stored_records()
+            .await?
+            .into_iter()
+            .filter(|record| !record.is_current(current_device_id, current_record_number))
+            .min_by(|l, r| l.created.cmp(&r.created));
+
+        Ok(record)
+    }
+
     pub async fn store_record(&mut self, record_data: String) -> io::Result<()> {
         // TODO: Store into '.tmp' file first and then rename?
         let device_id = *self.device_id;

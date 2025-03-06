@@ -1,5 +1,5 @@
 fn main() {
-    cxx_build::bridge("src/lib.rs")
+    cxx_build::bridge("src/bridge.rs")
         // Include C++/Rust bridge headers as `#include "cxx/foo.h".
         .include("./")
         // Include C++ Ouinet headers as `#include "bar.h".
