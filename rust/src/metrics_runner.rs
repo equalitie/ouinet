@@ -64,6 +64,9 @@ impl EventHandler {
         store: &mut Store,
         metrics: &Mutex<Metrics>,
     ) -> Result<EventResult, MetricsRunnerError> {
+        // TODO: We don't want to store records when there is no record_processor (i.e. when
+        // metrics are disabled)
+
         match event {
             Event::ProcessOneRecord(record_processor) => {
                 log::debug!("Event:ProcessOneRecord");

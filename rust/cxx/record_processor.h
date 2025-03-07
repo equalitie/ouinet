@@ -7,7 +7,7 @@
 #include "util/executor.h"
 #include "cxx/async_callback.h"
 
-// Forward declarations for lib.rs.h
+// Forward declarations for bridge.rs.h
 namespace ouinet::metrics::bridge {
     struct CxxRecordProcessor;
     struct CxxOneShotSender;
