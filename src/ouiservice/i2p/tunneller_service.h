@@ -5,6 +5,8 @@
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 
+#include "client.h"
+
 namespace ouinet {
 namespace ouiservice {
 namespace i2poui {
@@ -30,6 +32,9 @@ private:
   boost::asio::ip::tcp::acceptor _tcp_acceptor;
   boost::asio::ip::tcp::socket _socket;
   boost::asio::streambuf _read_buffer;
+
+  std::unique_ptr<Client> _i2p_client;
+
 };
 
 } // i2poui namespace

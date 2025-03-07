@@ -21,12 +21,18 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     from ouinet client/injector process and report failure
     in case of fatal error
     """
-    def __init__(self, proc_config, ready_benchmark_regex="", ready_deferred=None):
+    def __init__(self, proc_config, ready_benchmark_regexes=[], ready_deferred_fns=[]):
         super(OuinetProcessProtocol, self).__init__()
-        self._ready_benchmark_regex = ready_benchmark_regex
-        self._ready_deferred = ready_deferred
+
+        # There should be as many deferred functions as benchmarks
+        assert len(ready_benchmark_regexes) == len(ready_deferred_fns), \
+            "The number of benchmark regex do not match the number of \
+            deferred events to be called on those benchmarks"
+
+        self._ready_benchmark_regexes = ready_benchmark_regexes
+        self._ready_deferred_fns = ready_deferred_fns
         self._proc_config = proc_config
-        self._got_ready = False
+        self._got_ready_level = -1
 
         self._logger = logging.getLogger()
 
@@ -41,15 +47,21 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
             raise Exception("Fatal error")
 
-        if (not self._got_ready) and self._ready_deferred and self.check_got_ready(data):
-            self._got_ready = True
-            self._ready_deferred.callback(self)
+        if self.check_next_level_got_ready(data):
+            self._got_ready_level += 1
+            self._ready_deferred_fns[self._got_ready_level].callback(self)
 
-    def check_got_ready(self, data):
-        if self._ready_benchmark_regex:
-            return re.match(self._ready_benchmark_regex, data)
+        #if self.check_error_received(data):
+        #    raise Exception("error")
+
+    def check_next_level_got_ready(self, data):
+        if len(self._ready_benchmark_regexes) > self._got_ready_level + 1:
+            return re.match(self._ready_benchmark_regexes[self._got_ready_level + 1], data)
 
         return False
+
+    def check_error_received(self, data):
+            return re.match(TestFixtures.I2P_CLIENT_ERROR_READING_REGEX, data)
 
     def outReceived(self, data):
         data = data.decode()

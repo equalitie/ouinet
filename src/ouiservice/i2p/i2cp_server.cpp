@@ -18,7 +18,7 @@ I2CPServer::I2CPServer(/*std::shared_ptr<Service> service,*/ const string& priva
   : //_service(service),
      _exec(exec)
     , _timeout(timeout)
-    , _i2p_i2cpserver(new i2p::client::I2CPServer("127.0.0.1",  _c_i2cp_port, false))
+    ,_i2p_i2cpserver(new i2p::client::I2CPServer("127.0.0.1",  _c_i2cp_port, false))
 {
   // it doesn't even seem that we need a private key as it does not require destination
   //we need a port though but we could start it on the standard i2cp port 7654 then
