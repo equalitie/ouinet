@@ -4,7 +4,6 @@ fn main() {
         .include("./")
         // Include C++ Ouinet headers as `#include "bar.h".
         .include("../src")
-        .include("../build/boost/install")
         .file("cxx/metrics.cpp")
         .file("cxx/record_processor.cpp")
         .std("c++20")
