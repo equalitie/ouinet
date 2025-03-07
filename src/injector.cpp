@@ -456,7 +456,7 @@ public:
         // Get DRUID before the Ouinet headers are removed.
         auto dr_it = rq.find(http_::request_druid_hdr);
         if (dr_it != rq.end())
-            druid = "\"" + dr_it->value().to_string() + "\"";
+            druid = dr_it->value().to_string();
 
         // Sanitize and pop out Ouinet internal HTTP headers.
         auto crq = util::to_cache_request(move(rq));
