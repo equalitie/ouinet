@@ -24,6 +24,7 @@ private:
     static std::string get_datetime();
     static std::string get_header_value(const Request&, const http::field&);
     static std::string get_request_size(const Session&, size_t);
+    static std::string get_request_line(const Request&);
 
     std::string log_filename;
     boost::optional<std::fstream> log_file;

@@ -33,6 +33,16 @@ std::string HTTPLogger::get_request_size(const Session& sess, size_t fwd_bytes)
     }
 }
 
+std::string HTTPLogger::get_request_line(const Request& rq) {
+    std::string http_version = "HTTP/"
+                             + std::to_string(rq.version() / 10) + '.'
+                             + std::to_string(rq.version() % 10);
+    std::stringstream request_line;
+    request_line << "\"" << to_string(rq.method()) << " "
+                 << rq.target() << " " << http_version << "\"";
+    return request_line.str();
+}
+
 void HTTPLogger::log_to_file(const std::string& fname)
 {
     using std::ios;
@@ -74,15 +84,11 @@ void HTTPLogger::log(const std::string& host_id, const Request& rq, const Sessio
     auto ua = get_header_value(rq, http::field::user_agent);
     auto referer = get_header_value(rq, http::field::referer);
 
-    std::stringstream request_line_ss;
-    std::string http_version = std::to_string(rq.version()); // TODO: Adjust the format of the HTTP version
-    request_line_ss << to_string(rq.method()) << " " << rq.target() << " " << http_version;
-
     if (log_file && log_file->is_open()) {
         *log_file << host_id
                 << " - - " // unused fields: identd and userid
                 << get_datetime() << " "
-                << "\"" << request_line_ss.str() << "\" "
+                << get_request_line(rq) << " "
                 << inh.result_int() << " "
                 << get_request_size(sess, fwd_bytes) << " "
                 << referer << " "
