@@ -53,7 +53,7 @@ protected:
     // all client tunnels share local destination, because destination is expensive    
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 
-  I2CPServer _i2cpserver;
+  std::unique_ptr<I2CPServer> _i2cpserver;
   std::unique_ptr<TunnellerService> _i2p_tunneller;
   
 };

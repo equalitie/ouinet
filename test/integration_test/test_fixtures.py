@@ -7,6 +7,8 @@ import logging
 class TestFixtures:
     LOGGING_LEVEL = logging.DEBUG #Change true to turn on debugging 
     KEEP_IO_ALIVE_PULSE_INTERVAL = 60 #seconds
+
+    SIMULATE_I2P_EXTERNAL_DISCOVERY = True
     
     FATAL_ERROR_INDICATOR_REGEX = r'[\s\S]*\[ABORT\][\s\S]*'
     DEFAULT_PROCESS_TIMEOUT = 15 # seconds
@@ -16,6 +18,7 @@ class TestFixtures:
     BEP44_CACHE_TIMEOUT = 900
     
     TEST_TIMEOUT = {
+        "test_externally_discovered_i2p_injector": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_i2cp_server": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
         "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
@@ -36,9 +39,14 @@ class TestFixtures:
 
     I2P_INJECTOR_NAME = "i2p_injector"
     I2P_TUNNEL_READY_REGEX = r'[\s\S]*I2P Tunnel has been established'
+    I2P_TUNNELLER_LISTENING_REGEX = r'[\s\S]*I2P tunneller listening[\s\S]*'
+    I2P_INJECTOR_ADDRESS_RECEIVED_REGEX = r'[\s\S]*Received: I2P seeder[\s\S]*'
+    I2P_CLIENT_FINISHED_READING_REGEX = r'[\s\S]*Finish reading[\s\S]*'
+    I2P_CLIENT_ERROR_READING_REGEX = r'[\s\S]*Error in getting i2p seeder response[\s\S]*'
 
-    I2P_CLIENT = {"name":"i2p_client", "port": 8076, "i2cp_port": 7654}
-
+    I2P_CLIENT = {"name":"i2p_client", "port": 3888, "i2cp_port": 7654,}
+    I2P_DISCOVERED_ID_ANNOUNCE_PORT = 8998
+    
     MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
     
@@ -79,3 +87,4 @@ class TestFixtures:
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
+    #TEST_PAGE_BODY=b"<html><body>" + b" "*2**20 + b"</body></html>\n"

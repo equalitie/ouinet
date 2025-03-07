@@ -70,7 +70,7 @@ class OuinetProcess(object):
         process_ready_deferred   a deferred object which get called back when the process is ready
         """
         self.config = ouinet_config
-        self._proc_protocol = OuinetProcessProtocol(proc_config = self.config, ready_benchmark_regex = ouinet_config.benchmark_regexes[TestFixtures.READY_REGEX_INDEX], ready_deferred=deferred_events[TestFixtures.READY_REGEX_INDEX]) # default protocol
+        self._proc_protocol = OuinetProcessProtocol(proc_config = self.config, ready_benchmark_regexes = ouinet_config.benchmark_regexes, ready_deferred_fns=deferred_events) # default protocol
         # in case the communication process protocol is not explicitly set 
         # starts a default process protocol to check on Fatal errors
         self._has_started = False
