@@ -23,12 +23,16 @@ public:
 
     Client(fs::path repo_root_path);
 
-    void set_processor(util::AsioExecutor executor, AsyncCallback record_processor);
+    void enable(util::AsioExecutor executor, AsyncCallback record_processor);
+    void disable();
+
+    bool is_enabled() const { return _is_enabled; }
 
     MainlineDht mainline_dht();
 
 private:
     rust::Box<bridge::Client> _impl;
+    bool _is_enabled = false;
 };
 
 class MainlineDht {

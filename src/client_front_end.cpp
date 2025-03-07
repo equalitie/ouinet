@@ -7,6 +7,7 @@
 #include "version.h"
 #include "upnp.h"
 #include "split_string.h"
+#include "or_throw.h"
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
@@ -394,6 +395,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
+                                  , ClientFrontEndMetricsController& metrics
+                                  , Cancel cancel
                                   , Yield yield)
 {
     res.set(http::field::content_type, "text/html");
@@ -444,10 +447,18 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?logfile=disable") != string::npos) {
             disable_log_to_file(config);
         }
+        else if (target.find("?metrics=enable") != string::npos) {
+            metrics.enable();
+        }
+        else if (target.find("?metrics=disable") != string::npos) {
+            metrics.disable();
+        }
         else if (target.find("?purge_cache=") != string::npos && cache_client) {
-            Cancel cancel;
             sys::error_code ec;
-            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield[ec]));
+            auto yield_ = static_cast<asio::yield_context>(yield);
+            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
+            if (!ec && cancel) ec = asio::error::operation_aborted;
+            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
         }
         else if (target.find("?bt_extra_bootstraps=") != string::npos) {
             auto eqpos = target.rfind('=');
@@ -588,9 +599,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                               " (i.e. not older than %s).<br>\n")
               % max_age.total_seconds() % past_as_string(max_age));
 
-        Cancel cancel;
         sys::error_code ec;
-        auto local_size = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto local_size = cache_client->local_size(cancel, yield_[ec]);
+        if (!ec && cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
+
         ss << "Approximate size of content cached locally: ";
         if (ec) ss << "(unknown)";
         else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
@@ -615,6 +629,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         }
     }
 
+    // Metrics
+    ss << "<h2>Metrics</h2>\n";
+    ss << ToggleInput{"<u>M</u>etrics",'m', "metrics", metrics.is_enabled()};
+
     // Highlight the label/form containing the input selected via the URL fragment.
     ss << "<script>var eid = window.location.hash.substr(1); "
           "if (eid) { var e = document.getElementById(eid); "
@@ -632,6 +650,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
+                                  , ClientFrontEndMetricsController& metrics
+                                  , Cancel cancel
                                   , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
@@ -648,7 +668,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"ouinet_protocol", http_::protocol_version_current},
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
-        {"bridge_announcement", config.is_bridge_announcement_enabled()}
+        {"bridge_announcement", config.is_bridge_announcement_enabled()},
+        {"metrics_enabled", metrics.is_enabled()}
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
@@ -665,9 +686,11 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
     if (cache_client) {
-        Cancel cancel;
         sys::error_code ec;
-        auto sz = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto sz = cache_client->local_size(cancel, yield_[ec]);
+        if (!ec && cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
         if (ec) {
             LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
         } else {
@@ -687,6 +710,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const UPnPs& upnps
                               , const bittorrent::MainlineDht* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
+                              , ClientFrontEndMetricsController& metrics
+                              , Cancel cancel
                               , Yield yield)
 {
     Response res{http::status::ok, req.version()};
@@ -710,12 +735,12 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (path == "/api/status") {
         sys::error_code e;
         handle_status( config, client_state, local_ep, upnps, dht, reachability
-                     , req, res, ss, cache_client
+                     , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps, dht, reachability
-                     , req, res, ss, cache_client
+                     , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
     }
 

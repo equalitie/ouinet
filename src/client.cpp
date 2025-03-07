@@ -175,6 +175,7 @@ public:
         , inj_ctx{asio::ssl::context::tls_client}
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
+        , _metrics(_config.repo_root() / "metrics")
     {
         ssl_ctx.set_default_verify_paths();
         ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
@@ -188,27 +189,9 @@ public:
 
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
 
-        _metrics = make_unique<metrics::Client>(_config.repo_root() / "metrics");
-
-        // Tell metrics::Client how to send records
-        _metrics->set_processor
-            ( ctx.get_executor()
-            , [ client = this
-              , cancel = make_shared<Cancel>(_shutdown_signal)]
-                 ( std::string_view record_name
-                 , std::string_view record_content
-                 , asio::yield_context yield_) {
-                if (*cancel) throw_error(asio::error::operation_aborted);
-
-                Yield yield(client->_ctx, yield_, "metrics");
-
-                try {
-                    client->send_metrics_record(record_name, record_content, *cancel, Yield(move(yield)));
-                } catch (std::exception& e) {
-                    LOG_WARN("Failed to send statistics: ", e.what());
-                    throw;
-                }
-            });
+        if (_config.metrics_enable_on_start()) {
+            enable_metrics();
+        }
     }
 
     void start();
@@ -314,7 +297,7 @@ public:
         auto lock = _bt_dht_wc.lock();
 
         auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
-                                                       , _metrics->mainline_dht()
+                                                       , _metrics.mainline_dht()
                                                        , _config.repo_root() / "dht"
                                                        , _config.bt_bootstrap_extras());
 
@@ -370,6 +353,34 @@ public:
 
     http::response<http::string_body>
     retrieval_failure_response(const Request&);
+
+    void enable_metrics() {
+        LOG_INFO("Enabling metrics");
+
+        _metrics.enable
+            ( _ctx.get_executor()
+            , [ client = this
+              , cancel = make_shared<Cancel>(_shutdown_signal)]
+                 ( std::string_view record_name
+                 , std::string_view record_content
+                 , asio::yield_context yield_) {
+                if (*cancel) throw_error(asio::error::operation_aborted);
+
+                Yield yield(client->_ctx, yield_, "metrics");
+
+                try {
+                    client->send_metrics_record(record_name, record_content, *cancel, Yield(move(yield)));
+                } catch (std::exception& e) {
+                    LOG_WARN("Failed to send statistics: ", e.what());
+                    throw;
+                }
+            });
+    }
+
+    void disable_metrics() {
+        LOG_INFO("Disabling metrics");
+        _metrics.disable();
+    }
 
 private:
     GenericStream ssl_mitm_handshake( GenericStream&&
@@ -603,7 +614,7 @@ private:
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
     shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
-    unique_ptr<metrics::Client> _metrics;
+    metrics::Client _metrics;
 };
 
 //------------------------------------------------------------------------------
@@ -1038,6 +1049,28 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
         local_ep = _udp_multiplexer->local_endpoint();
     }
 
+    class MetricsController : public ClientFrontEndMetricsController {
+      public:
+        MetricsController(Client::State* client) : client(client) {}
+
+        void enable() override {
+            client->enable_metrics();
+        }
+
+        void disable() override {
+            client->disable_metrics();
+        }
+
+        bool is_enabled() const override {
+            return client->_metrics.is_enabled();
+        }
+
+      private:
+        Client::State* client;
+    };
+
+    auto metrics_controller = MetricsController(this);
+
     sys::error_code ec;
     auto res = _front_end.serve( _config
                                , rq
@@ -1048,7 +1081,10 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
                                , *_upnps
                                , _bt_dht.get()
                                , _udp_reachability.get()
+                               , metrics_controller
+                               , cancel
                                , yield[ec].tag("serve_frontend"));
+
     return_or_throw_on_error(yield, cancel, ec, Response{});
 
     res.set( http_::response_source_hdr  // for agent

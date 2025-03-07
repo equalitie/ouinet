@@ -129,6 +129,10 @@ public:
         return description_full();
     }
 
+    bool metrics_enable_on_start() const {
+        return _metrics_enable_on_start;
+    }
+
     const boost::optional<util::url_match>& metrics_server_url() const {
         return _metrics_server_url;
     }
@@ -271,6 +275,8 @@ private:
 
         po::options_description metrics("Metrics options");
         metrics.add_options()
+           ("metrics-enable-on-start", po::value<bool>()
+            , "Enable metrics at startup. Must be used with --metrics-server-url")
            ("metrics-server-url", po::value<string>()
             , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
            ("metrics-server-token", po::value<string>()
@@ -426,6 +432,8 @@ private:
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
+
+    bool _metrics_enable_on_start = false;
     boost::optional<util::url_match> _metrics_server_url;
     std::string _metrics_server_token;
 };
@@ -717,6 +725,13 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     "The '--metrics-server-url' argument must be a valid URL");
         }
         _metrics_server_url = url_match;
+    }
+
+    if (vm.count("metrics-enable-on-start")) {
+        _metrics_enable_on_start = vm["metrics-enable-on-start"].as<bool>();
+        if (_metrics_enable_on_start && !_metrics_server_url) {
+            throw std::runtime_error("--metrics-enable-on-start must be used with --metrics-server-url");
+        }
     }
 
     if (vm.count("metrics-server-token")) {

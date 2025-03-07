@@ -21,11 +21,17 @@ Client::Client(fs::path repo_root_path)
 {
 }
 
-void Client::set_processor(util::AsioExecutor executor, AsyncCallback record_processor) {
+void Client::enable(util::AsioExecutor executor, AsyncCallback record_processor) {
     _impl->set_processor(
             make_unique<bridge::CxxRecordProcessor>(
                 std::move(executor),
                 std::move(record_processor)));
+    _is_enabled = true;
+}
+
+void Client::disable() {
+    _impl->set_processor(nullptr);
+    _is_enabled = false;
 }
 
 MainlineDht Client::mainline_dht()
