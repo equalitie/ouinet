@@ -2,11 +2,11 @@
 #include <sstream>
 #include "metrics.h"
 #include "record_processor.h"
+#include "util/executor.h"
 #include "cxx/async_callback.h"
 
 namespace ouinet::metrics {
 
-using namespace std;
 namespace asio = boost::asio;
 
 //--------------------------------------------------------------------
@@ -24,8 +24,8 @@ Client::Client(fs::path repo_root_path)
 void Client::set_processor(util::AsioExecutor executor, AsyncCallback record_processor) {
     _impl->set_processor(
             make_unique<bridge::CxxRecordProcessor>(
-                move(executor),
-                move(record_processor)));
+                std::move(executor),
+                std::move(record_processor)));
 }
 
 MainlineDht Client::mainline_dht()

@@ -18,8 +18,6 @@ namespace ouinet::metrics::bridge {
 
 namespace ouinet::metrics::bridge {
 
-using namespace std;
-
 struct CxxRecordProcessor {
     util::AsioExecutor executor;
 
@@ -27,8 +25,8 @@ struct CxxRecordProcessor {
     AsyncCallback async_callback;
 
     CxxRecordProcessor(util::AsioExecutor executor, AsyncCallback async_callback)
-        : executor(move(executor))
-        , async_callback(move(async_callback)) {}
+        : executor(std::move(executor))
+        , async_callback(std::move(async_callback)) {}
 
     void execute( rust::String record_name
                 , rust::String record_content

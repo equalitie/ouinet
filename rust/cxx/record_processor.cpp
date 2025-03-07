@@ -11,13 +11,13 @@ void CxxRecordProcessor::execute( rust::String report_name
 {
     task::spawn_detached(executor
             , [ async_callback = async_callback
-              , report_name = move(report_name)
-              , report_content = move(report_content)
-              , on_finish = move(on_finish)
+              , report_name = std::move(report_name)
+              , report_content = std::move(report_content)
+              , on_finish = std::move(on_finish)
               ] (asio::yield_context yield)
     {
-        string_view report_name_sv(report_name.data(), report_name.size());
-        string_view report_content_sv(report_content.data(), report_content.size());
+        std::string_view report_name_sv(report_name.data(), report_name.size());
+        std::string_view report_content_sv(report_content.data(), report_content.size());
 
         try {
             async_callback(report_name_sv, report_content_sv, yield);

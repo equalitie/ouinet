@@ -18,6 +18,8 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 
+
+
 ################################################################################
 # Global build flags
 if (WITH_ASAN)
@@ -30,7 +32,6 @@ add_compile_options("-Wall")
 
 ################################################################################
 project(ouinet)
-
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
@@ -100,23 +101,25 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
+# ouinet-rs (ouinet components written in rust)
 
-include(ExternalProject)
+include(FetchContent)
 
-externalproject_add(
-    ouinet-rust
-    DOWNLOAD_COMMAND ""
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml" --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust-target"
-    BUILD_ALWAYS TRUE
-    INSTALL_COMMAND "")
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5.1
+)
+FetchContent_MakeAvailable(Corrosion)
 
-add_dependencies(ouinet-rust built_boost)
+corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml)
+corrosion_set_env_vars(ouinet_rs CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
+add_dependencies(cargo-prebuild_ouinet_rs built_boost)
 
-set(OUINET_RUST_LIB ${CMAKE_CURRENT_BINARY_DIR}/rust-target/debug/librust.a)
-set(OUINET_RUST_INCLUDE
+set(OUINET_RS_INCLUDE_DIR
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
-    ${CMAKE_CURRENT_BINARY_DIR}/rust-target/cxxbridge)
+    # XXX: Isn't there a better way to obtain the cargo target directory?
+    ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
 
 ################################################################################
 file(GLOB client_sources
@@ -179,14 +182,11 @@ target_link_libraries(client
         lib::uri
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
-        ${OUINET_RUST_LIB}
+        ouinet_rs
     PUBLIC
         ouinet::base
 )
-
-add_dependencies(client ouinet-rust)
-
-target_include_directories(client ${OUINET_RUST_INCLUDE})
+target_include_directories(client ${OUINET_RS_INCLUDE_DIR})
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -230,12 +230,11 @@ if (WITH_INJECTOR)
         lib::uri
         OpenSSL::Crypto
         ouinet::base
+        ouinet_rs
         ${EXPERIMENTAL_LIBRARIES}
-        ${OUINET_RUST_LIB}
     )
 
-    add_dependencies(injector ouinet-rust)
-    target_include_directories(injector ${OUINET_RUST_INCLUDE})
+    target_include_directories(injector ${OUINET_RS_INCLUDE_DIR})
 
 endif() # if WITH_INJECTOR
 

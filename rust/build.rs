@@ -4,16 +4,12 @@ fn main() {
         .include("./")
         // Include C++ Ouinet headers as `#include "bar.h".
         .include("../src")
-        .include("../build/boost/install/include")
         .file("cxx/metrics.cpp")
         .file("cxx/record_processor.cpp")
-        .std("c++17")
+        .std("c++20")
         .compile("rust-bridge");
 
-    println!("cargo:rerun-if-changed=src/bridge.rs");
-    println!("cargo:rerun-if-changed=src/record_processor.rs");
-    println!("cargo:rerun-if-changed=cxx/metrics.cpp");
-    println!("cargo:rerun-if-changed=cxx/metrics.h");
-    println!("cargo:rerun-if-changed=cxx/record_processor.cpp");
-    println!("cargo:rerun-if-changed=cxx/record_processor.h");
+    println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=cxx");
+    println!("cargo:rerun-if-env-changed=CXXFLAGS");
 }

@@ -2,10 +2,9 @@ include:
   - .gitlab-ci/jobs/common/prepare-builder-image.yml
   - .gitlab-ci/jobs/linux.yml
 
-variables:
-  TARGET_PLATFORM: 'linux'
-
 linux / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .prepare-builder-image
 
