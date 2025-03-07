@@ -3,7 +3,7 @@
 #include <string_view>
 #include <boost/filesystem.hpp>
 #include <boost/asio/ip/udp.hpp>
-#include "rust/src/lib.rs.h"
+#include "rust/src/bridge.rs.h"
 #include "cxx/record_processor.h"
 #include "cxx/async_callback.h"
 
@@ -21,9 +21,9 @@ public:
     // Creates a metrics client which does nothing.
     Client();
 
-    Client( util::AsioExecutor executor
-          , fs::path repo_root_path
-          , AsyncCallback process_report);
+    Client(fs::path repo_root_path);
+
+    void set_processor(util::AsioExecutor executor, AsyncCallback record_processor);
 
     MainlineDht mainline_dht();
 

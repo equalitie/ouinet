@@ -188,10 +188,11 @@ public:
 
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
 
+        _metrics = make_unique<metrics::Client>(_config.repo_root() / "metrics");
+
         // Tell metrics::Client how to send records
-        _metrics = make_unique<metrics::Client>
+        _metrics->set_processor
             ( ctx.get_executor()
-            , _config.repo_root() / "metrics"
             , [ client = this
               , cancel = make_shared<Cancel>(_shutdown_signal)]
                  ( std::string_view record_name

@@ -33,7 +33,6 @@ mod ffi {
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
         // processor is set eventually, the metrics from this runtime can be collected.
-        // will, however, collect metrics in
         fn set_processor(self: &Client, processor: UniquePtr<CxxRecordProcessor>);
 
         //------------------------------------------------------------

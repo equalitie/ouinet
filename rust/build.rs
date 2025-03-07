@@ -10,7 +10,7 @@ fn main() {
         .std("c++17")
         .compile("rust-bridge");
 
-    println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=src/bridge.rs");
     println!("cargo:rerun-if-changed=src/record_processor.rs");
     println!("cargo:rerun-if-changed=cxx/metrics.cpp");
     println!("cargo:rerun-if-changed=cxx/metrics.h");

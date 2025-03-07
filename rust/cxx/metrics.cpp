@@ -2,7 +2,6 @@
 #include <sstream>
 #include "metrics.h"
 #include "record_processor.h"
-#include "util/executor.h"
 #include "cxx/async_callback.h"
 
 namespace ouinet::metrics {
@@ -17,13 +16,16 @@ Client::Client()
 {
 }
 
-Client::Client( util::AsioExecutor executor
-              , fs::path repo_root_path
-              , AsyncCallback process_report)
-    : _impl(bridge::new_client
-                ( rust::String(repo_root_path.native())
-                , make_unique<bridge::CxxRecordProcessor>(move(executor), move(process_report))))
+Client::Client(fs::path repo_root_path)
+    : _impl(bridge::new_client(rust::String(repo_root_path.native())))
 {
+}
+
+void Client::set_processor(util::AsioExecutor executor, AsyncCallback record_processor) {
+    _impl->set_processor(
+            make_unique<bridge::CxxRecordProcessor>(
+                move(executor),
+                move(record_processor)));
 }
 
 MainlineDht Client::mainline_dht()

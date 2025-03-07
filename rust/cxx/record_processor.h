@@ -13,7 +13,7 @@ namespace ouinet::metrics::bridge {
     struct CxxOneShotSender;
 }
 
-#include "rust/src/lib.rs.h"
+#include "rust/src/bridge.rs.h"
 #include "rust/cxx.h"
 
 namespace ouinet::metrics::bridge {
