@@ -10,10 +10,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
-use tokio::{select, sync::watch, time};
+use tokio::{select, sync::mpsc, time};
 
 enum Event {
-    ProcessOneRecord,
+    // TODO: Use lifetime instead of an Arc?
+    ProcessOneRecord(Arc<RecordProcessor>),
     MetricsModified,
     IncrementRecordNumber,
     RotateDeviceId,
@@ -23,18 +24,18 @@ enum Event {
 pub async fn metrics_runner(
     metrics: Arc<Mutex<Metrics>>,
     store_path: PathBuf,
-    record_processor: RecordProcessor,
-    finish_rx: watch::Receiver<()>,
+    record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
 ) -> Result<(), MetricsRunnerError> {
     let mut store = Store::new(store_path).await?;
 
-    let mut event_listener = EventListener::new(metrics.lock().unwrap().subscribe(), finish_rx);
-    let mut event_processor = EventProcessor::new(record_processor);
+    let mut event_listener =
+        EventListener::new(metrics.lock().unwrap().subscribe(), record_processor_rx);
+    let mut event_handler = EventHandler::new();
 
     loop {
         let event = event_listener.on_event(&store).await;
 
-        match event_processor
+        match event_handler
             .process_event(event, &mut store, &*metrics)
             .await?
         {
@@ -46,16 +47,14 @@ pub async fn metrics_runner(
     Ok(())
 }
 
-struct EventProcessor {
+struct EventHandler {
     oldest_record: Option<StoredRecord>,
-    record_processor: RecordProcessor,
 }
 
-impl EventProcessor {
-    fn new(record_processor: RecordProcessor) -> Self {
+impl EventHandler {
+    fn new() -> Self {
         Self {
             oldest_record: None,
-            record_processor,
         }
     }
 
@@ -66,7 +65,7 @@ impl EventProcessor {
         metrics: &Mutex<Metrics>,
     ) -> Result<EventResult, MetricsRunnerError> {
         match event {
-            Event::ProcessOneRecord => {
+            Event::ProcessOneRecord(record_processor) => {
                 log::debug!("Event:ProcessOneRecord");
 
                 if self.oldest_record.is_none() {
@@ -79,7 +78,7 @@ impl EventProcessor {
                     return Ok(EventResult::Continue);
                 };
 
-                if self.record_processor.process(&record).await? {
+                if record_processor.as_ref().process(&record).await? {
                     store.backoff.succeeded().await?;
                     record.discard().await?;
                     self.oldest_record = None;
@@ -124,32 +123,53 @@ impl EventProcessor {
 
 pub struct EventListener {
     on_metrics_modified_rx: ConstantBackoffWatchReceiver,
-    finish_rx: watch::Receiver<()>,
+    record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
+    record_processor: Option<Arc<RecordProcessor>>,
 }
 
 impl EventListener {
     fn new(
         on_metrics_modified_rx: ConstantBackoffWatchReceiver,
-        finish_rx: watch::Receiver<()>,
+        record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
     ) -> Self {
         Self {
             on_metrics_modified_rx,
-            finish_rx,
+            record_processor_rx,
+            record_processor: None,
         }
     }
 
     async fn on_event(&mut self, store: &Store) -> Event {
-        select! {
-            () = store.backoff.sleep() => Event::ProcessOneRecord,
-            result = self.on_metrics_modified_rx.changed() => {
-                match result {
-                    Ok(()) => Event::MetricsModified,
-                    Err(_) => Event::Exit,
+        loop {
+            let processing_backoff = async {
+                store.backoff.sleep().await;
+                match self.record_processor.as_ref() {
+                    Some(record_processor) => record_processor.clone(),
+                    None => std::future::pending().await,
                 }
+            };
+
+            select! {
+                record_processor = processing_backoff =>
+                    break Event::ProcessOneRecord(record_processor),
+                result = self.on_metrics_modified_rx.changed() => {
+                    match result {
+                        Ok(()) => break Event::MetricsModified,
+                        Err(_) => break Event::Exit,
+                    }
+                }
+                result = self.record_processor_rx.recv() => {
+                    match result {
+                        Some(record_processor) => {
+                            self.record_processor = record_processor.map(Arc::new);
+                            continue;
+                        }
+                        None => break Event::Exit
+                    }
+                }
+                () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber,
+                () = time::sleep(store.device_id.rotate_after()) => break Event::RotateDeviceId,
             }
-            _result = self.finish_rx.changed() => Event::Exit,
-            () = time::sleep_until(store.record_number.increment_at()) => Event::IncrementRecordNumber,
-            () = time::sleep(store.device_id.rotate_after()) => Event::RotateDeviceId,
         }
     }
 }
@@ -194,7 +214,7 @@ mod test {
 
     struct Setup {
         _tmpdir: TmpDir,
-        event_processor: EventProcessor,
+        event_handler: EventHandler,
         store: Store,
         metrics: Mutex<Metrics>,
     }
@@ -203,19 +223,19 @@ mod test {
         async fn new() -> Self {
             let tmpdir = TmpDir::new("metrics_runner_store").await.unwrap();
             let store = Store::new(tmpdir.as_ref().into()).await.unwrap();
-            let event_processor = EventProcessor::new(RecordProcessor::new());
+            let event_handler = EventHandler::new();
             let metrics = Mutex::new(Metrics::new());
 
             Self {
                 _tmpdir: tmpdir,
-                event_processor,
+                event_handler,
                 store,
                 metrics,
             }
         }
 
         async fn process(&mut self, event: Event) {
-            self.event_processor
+            self.event_handler
                 .process_event(event, &mut self.store, &self.metrics)
                 .await
                 .unwrap();
@@ -253,7 +273,11 @@ mod test {
     async fn event_processing() {
         let mut setup = Setup::new().await;
 
-        setup.process(Event::ProcessOneRecord).await;
+        let processor = Arc::new(RecordProcessor::new());
+
+        setup
+            .process(Event::ProcessOneRecord(processor.clone()))
+            .await;
 
         assert!(setup.stored_record_ids().await.is_empty());
 
@@ -323,21 +347,27 @@ mod test {
         // -------------------
         // Process the records
         // -------------------
-        setup.process(Event::ProcessOneRecord).await;
+        setup
+            .process(Event::ProcessOneRecord(processor.clone()))
+            .await;
 
         assert_eq!(
             setup.stored_record_ids().await,
             [record1_id, record2_id].into_iter().collect()
         );
 
-        setup.process(Event::ProcessOneRecord).await;
+        setup
+            .process(Event::ProcessOneRecord(processor.clone()))
+            .await;
 
         assert_eq!(
             setup.stored_record_ids().await,
             [record2_id].into_iter().collect()
         );
 
-        setup.process(Event::ProcessOneRecord).await;
+        setup
+            .process(Event::ProcessOneRecord(processor.clone()))
+            .await;
 
         // Not removed because record2_id is "current" (still being updated)
         assert_eq!(
@@ -349,7 +379,9 @@ mod test {
         setup.process(Event::RotateDeviceId).await;
 
         // Process again, this time it should be removed
-        setup.process(Event::ProcessOneRecord).await;
+        setup
+            .process(Event::ProcessOneRecord(processor.clone()))
+            .await;
 
         assert_eq!(setup.stored_record_ids().await, [].into_iter().collect());
     }

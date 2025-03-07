@@ -3,8 +3,7 @@ use crate::{
     metrics::{BootstrapId, IpVersion, Metrics},
     metrics_runner::metrics_runner,
     metrics_runner::MetricsRunnerError,
-    record_processor,
-    record_processor::RecordProcessorError,
+    record_processor::{RecordProcessor, RecordProcessorError},
     runtime,
 };
 use cxx::UniquePtr;
@@ -15,7 +14,7 @@ use std::{
 use tokio::{
     runtime::Runtime,
     select,
-    sync::{oneshot, watch},
+    sync::{mpsc, oneshot},
     task::{self, JoinHandle},
     time::{sleep, Duration},
 };
@@ -27,7 +26,7 @@ mod ffi {
         //------------------------------------------------------------
         type Client;
 
-        fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client>;
+        fn new_client(store_path: String) -> Box<Client>;
         fn new_noop_client() -> Box<Client>;
         fn new_mainline_dht(self: &Client) -> Box<MainlineDht>;
 
@@ -35,7 +34,7 @@ mod ffi {
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
         // processor is set eventually, the metrics from this runtime can be collected.
         // will, however, collect metrics in
-        //fn set_processor(self: &Client, processor: UniquePtr<CxxRecordProcessor>);
+        fn set_processor(self: &Client, processor: UniquePtr<CxxRecordProcessor>);
 
         //------------------------------------------------------------
         type MainlineDht;
@@ -94,122 +93,191 @@ impl CxxOneShotSender {
             .lock()
             .unwrap()
             .take()
-            // This `send` function must not be used more than once.
-            .unwrap()
+            .expect("The CxxOneShot::send function must be used at most once")
             .send(success)
             .unwrap_or(());
     }
 }
 
-struct Session {
-    runtime: Arc<Runtime>,
-    finish_tx: Option<watch::Sender<()>>,
-    job_handle: Option<JoinHandle<()>>,
-}
+// -------------------------------------------------------------------
 
-impl Drop for Session {
-    fn drop(&mut self) {
-        // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
+static CURRENT_CLIENT_INNER: Mutex<Weak<ClientInner>> = Mutex::new(Weak::new());
 
-        // TODO: The C++ code itself does some deinitialization with a timeout and the code in this
-        // function happens only after that is finished. Consider doing this session
-        // deinitialization concurrently with the C++ code.
-        self.finish_tx.take();
+// Stop existing client if there is one, this also ensures there is always at most one client
+// that writes into the store.
+// TODO: Alternative is to have multiple c++ clients to point to the same rust client, both
+// approaches have pros and cons.
+fn stop_current_client() -> Option<Arc<Runtime>> {
+    let client_inner_lock = CURRENT_CLIENT_INNER.lock().unwrap();
 
-        if let Some(mut job_handle) = self.job_handle.take() {
-            self.runtime.block_on(async move {
-                select! {
-                    () = sleep(Duration::from_secs(5)) => {
-                        log::warn!("Metrics runner failed to finish within 5 seconds");
-                        job_handle.abort();
-                    }
-                    _ = &mut job_handle => (),
-                }
-            });
-        }
+    if let Some(client_inner) = client_inner_lock.upgrade() {
+        client_inner.stop()
+    } else {
+        None
     }
 }
 
-static SESSION: Mutex<Option<Session>> = Mutex::new(None);
-
 // Create a new Client, if there were any clients created but not destroyed beforehand, all their
 // operations will be no-ops.
-fn new_client(store_path: String, processor: UniquePtr<CxxRecordProcessor>) -> Box<Client> {
+fn new_client(store_path: String) -> Box<Client> {
     logger::init_idempotent();
-
-    let runtime = runtime::get_runtime();
-
-    let _runtime_guard = runtime.enter();
-
-    let mut session_lock = SESSION.lock().unwrap();
-
-    // Stop existing session if there is one, this also ensures there is always at most one client
-    // that writes into the store.
-    session_lock.take();
-
-    let (finish_tx, finish_rx) = watch::channel(());
-    let metrics = Arc::new(Mutex::new(Metrics::new()));
-    let weak_metrics = Arc::downgrade(&metrics);
-
-    #[cfg(not(test))]
-    let processor = record_processor::RecordProcessor::new(processor);
-    #[cfg(test)]
-    let processor = {
-        let _unused = processor;
-        record_processor::RecordProcessor::new()
+    let runtime = match stop_current_client() {
+        Some(runtime) => runtime,
+        None => runtime::get_runtime(),
     };
-
-    let job_handle = task::spawn(async move {
-        let store_path = PathBuf::from(store_path);
-
-        if let Err(error) = metrics_runner(metrics, store_path, processor, finish_rx).await {
-            match error {
-                MetricsRunnerError::RecordProcessor(RecordProcessorError::CxxDisconnected) => (),
-                MetricsRunnerError::Io(error) => {
-                    log::error!("Metrics runner finished with an error: {error:?}")
-                }
-            }
-        }
-    });
-
-    *session_lock = Some(Session {
-        runtime,
-        finish_tx: Some(finish_tx),
-        job_handle: Some(job_handle),
-    });
-
-    Box::new(Client {
-        metrics: weak_metrics,
-    })
+    Box::new(Client::new(PathBuf::from(store_path), runtime))
 }
 
 fn new_noop_client() -> Box<Client> {
-    SESSION.lock().unwrap().take();
-
-    Box::new(Client {
-        metrics: Weak::new(),
-    })
+    logger::init_idempotent();
+    stop_current_client();
+    Box::new(Client::new_noop())
 }
 
 // -------------------------------------------------------------------
 
 pub struct Client {
-    metrics: Weak<Mutex<Metrics>>,
-}
-
-impl Drop for Client {
-    fn drop(&mut self) {
-        SESSION.lock().unwrap().take();
-    }
+    inner: Arc<ClientInner>,
 }
 
 impl Client {
-    //fn set_processor(&self, processor: UniquePtr<CxxRecordProcessor>) {}
+    fn new(store_path: PathBuf, runtime: Arc<Runtime>) -> Self {
+        let _runtime_guard = runtime.enter();
+
+        let (processor_tx, processor_rx) = mpsc::unbounded_channel();
+
+        let metrics = Arc::new(Mutex::new(Metrics::new()));
+
+        let job_handle = task::spawn({
+            let metrics = metrics.clone();
+
+            async move {
+                let store_path = PathBuf::from(store_path);
+
+                if let Err(error) = metrics_runner(metrics, store_path, processor_rx).await {
+                    match error {
+                        MetricsRunnerError::RecordProcessor(
+                            RecordProcessorError::CxxDisconnected,
+                        ) => (),
+                        MetricsRunnerError::Io(error) => {
+                            log::error!("Metrics runner finished with an error: {error:?}")
+                        }
+                    }
+                }
+            }
+        });
+
+        Self {
+            inner: Arc::new(ClientInner {
+                runner: Mutex::new(Some(Runner {
+                    runtime,
+                    processor_tx,
+                    job_handle,
+                })),
+                metrics: Arc::downgrade(&metrics),
+            }),
+        }
+    }
+
+    fn new_noop() -> Self {
+        Self {
+            inner: Arc::new(ClientInner {
+                runner: Mutex::new(None),
+                metrics: Weak::new(),
+            }),
+        }
+    }
+
+    fn set_processor(&self, processor: UniquePtr<CxxRecordProcessor>) {
+        self.inner.set_processor(processor)
+    }
+
+    fn new_mainline_dht(&self) -> Box<MainlineDht> {
+        self.inner.new_mainline_dht()
+    }
+}
+
+struct ClientInner {
+    runner: Mutex<Option<Runner>>,
+    metrics: Weak<Mutex<Metrics>>,
+}
+
+struct Runner {
+    runtime: Arc<Runtime>,
+    processor_tx: mpsc::UnboundedSender<Option<RecordProcessor>>,
+    job_handle: JoinHandle<()>,
+}
+
+impl ClientInner {
+    fn set_processor(&self, processor: UniquePtr<CxxRecordProcessor>) {
+        let processor = if !processor.is_null() {
+            #[cfg(not(test))]
+            {
+                Some(RecordProcessor::new(processor))
+            }
+            #[cfg(test)]
+            {
+                let _unused = processor;
+                Some(RecordProcessor::new())
+            }
+        } else {
+            None
+        };
+
+        let runner_lock = self.runner.lock().unwrap();
+
+        let Some(runner) = runner_lock.as_ref() else {
+            log::warn!("Passing record processor to a noop client");
+            return;
+        };
+
+        runner
+            .processor_tx
+            .send(processor)
+            .expect("While the client exist the mpsc channel should not close");
+    }
 
     fn new_mainline_dht(&self) -> Box<MainlineDht> {
         Box::new(MainlineDht {
             metrics: self.metrics.clone(),
         })
+    }
+
+    fn stop(&self) -> Option<Arc<Runtime>> {
+        let mut lock = self.runner.lock().unwrap();
+
+        let Some(Runner {
+            runtime,
+            processor_tx,
+            mut job_handle,
+        }) = lock.take()
+        else {
+            return None;
+        };
+
+        // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
+        drop(processor_tx);
+
+        // TODO: The C++ code itself does some deinitialization with a timeout and the code in this
+        // function happens only after that is finished. Consider doing this session
+        // deinitialization concurrently with the C++ code.
+        runtime.block_on(async move {
+            select! {
+                () = sleep(Duration::from_secs(5)) => {
+                    log::warn!("Metrics runner failed to finish within 5 seconds");
+                    job_handle.abort();
+                }
+                _ = &mut job_handle => (),
+            }
+        });
+
+        Some(runtime)
+    }
+}
+
+impl Drop for ClientInner {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
