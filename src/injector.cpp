@@ -83,9 +83,6 @@ static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
-static const fs::path HTTP_LOG_FILE = "access.log";
-
-
 //------------------------------------------------------------------------------
 template<class Res>
 static
@@ -846,8 +843,6 @@ int main(int argc, const char* argv[])
         cout << config.options_description() << endl;
         return EXIT_SUCCESS;
     }
-
-    http_logger.log_to_file((config.repo_root() / HTTP_LOG_FILE).string());
 
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());

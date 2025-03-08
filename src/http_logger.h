@@ -18,6 +18,8 @@ class HTTPLogger {
 public:
     HTTPLogger() = default;
     void log_to_file(const std::string&);
+    std::string current_log_file() { return log_filename; }
+    std::fstream* get_log_file();
     void log(const std::string&, const Request&, const Session&, size_t);
 
 private:

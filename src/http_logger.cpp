@@ -75,6 +75,11 @@ void HTTPLogger::log_to_file(const std::string& fname)
     }
 }
 
+std::fstream* HTTPLogger::get_log_file() {
+    if (!log_file) return nullptr;
+    return &*log_file;
+}
+
 void HTTPLogger::log(const std::string& host_id, const Request& rq, const Session& sess, size_t fwd_bytes)
 {
     if (!log_file || !log_file->is_open()) return;
