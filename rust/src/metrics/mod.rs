@@ -66,6 +66,7 @@ impl Metrics {
             "start": format!("{}", self.start.format(DAY_TIME_FORMAT)),
             "record_start": format!("{}", self.record_start.format(DAY_TIME_FORMAT)),
             "bootstraps": self.bootstraps,
+            "requests": self.requests,
         })
         .to_string();
 
