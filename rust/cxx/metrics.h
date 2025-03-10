@@ -15,6 +15,7 @@ namespace asio = boost::asio;
 class MainlineDht;
 class DhtNode;
 class Bootstrap;
+class Request;
 
 class Client {
 public:
@@ -30,10 +31,16 @@ public:
 
     MainlineDht mainline_dht();
 
+    Request new_origin_request();
+    Request new_injector_request();
+    Request new_cache_request();
+
 private:
     rust::Box<bridge::Client> _impl;
     bool _is_enabled = false;
 };
+
+// -- DHT ------------------------------------------------------------
 
 class MainlineDht {
 public:
@@ -70,6 +77,22 @@ private:
     Bootstrap(rust::Box<bridge::Bootstrap> impl) : _impl(std::move(impl)) {}
 
     rust::Box<bridge::Bootstrap> _impl;
+};
+
+// -- Requessts ------------------------------------------------------
+
+class Request {
+public:
+    void start();
+    void success();
+    void failure();
+
+private:
+    friend class Client;
+
+    Request(rust::Box<bridge::Request> impl): _impl(std::move(impl)) {};
+
+    rust::Box<bridge::Request> _impl;
 };
 
 } // namespace

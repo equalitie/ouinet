@@ -39,6 +39,18 @@ MainlineDht Client::mainline_dht()
     return MainlineDht{_impl->new_mainline_dht()};
 }
 
+Request Client::new_origin_request() {
+    return Request{_impl->new_origin_request()};
+}
+
+Request Client::new_injector_request() {
+    return Request{_impl->new_injector_request()};
+}
+
+Request Client::new_cache_request() {
+    return Request{_impl->new_cache_request()};
+}
+
 //--------------------------------------------------------------------
 
 DhtNode MainlineDht::dht_node_ipv4() {
@@ -64,5 +76,17 @@ void Bootstrap::mark_success(asio::ip::udp::endpoint wan_endpoint) {
 }
 
 //--------------------------------------------------------------------
+
+void Request::start() {
+    _impl->mark_started();
+}
+
+void Request::success() {
+    _impl->mark_success();
+}
+
+void Request::failure() {
+    _impl->mark_failure();
+}
 
 } // namespace

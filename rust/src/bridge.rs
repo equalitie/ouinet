@@ -1,6 +1,9 @@
 use crate::{
     logger,
-    metrics::{BootstrapId, IpVersion, Metrics},
+    metrics::{
+        request::{self, RequestId, RequestType},
+        BootstrapId, IpVersion, Metrics,
+    },
     metrics_runner::metrics_runner,
     metrics_runner::MetricsRunnerError,
     record_processor::{RecordProcessor, RecordProcessorError},
@@ -29,6 +32,9 @@ mod ffi {
         fn new_client(store_path: String) -> Box<Client>;
         fn new_noop_client() -> Box<Client>;
         fn new_mainline_dht(self: &Client) -> Box<MainlineDht>;
+        fn new_origin_request(self: &Client) -> Box<Request>;
+        fn new_injector_request(self: &Client) -> Box<Request>;
+        fn new_cache_request(self: &Client) -> Box<Request>;
 
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
@@ -37,18 +43,19 @@ mod ffi {
 
         //------------------------------------------------------------
         type MainlineDht;
-
         fn new_dht_node(self: &MainlineDht, is_ipv4: bool) -> Box<DhtNode>;
 
-        //------------------------------------------------------------
         type DhtNode;
-
         fn new_bootstrap(self: &DhtNode) -> Box<Bootstrap>;
 
-        //------------------------------------------------------------
         type Bootstrap;
-
         fn mark_success(self: &Bootstrap, wan_endpoint: String);
+
+        //------------------------------------------------------------
+        type Request;
+        fn mark_started(self: &Request);
+        fn mark_success(self: &Request);
+        fn mark_failure(self: &Request);
 
         //------------------------------------------------------------
         // Tells the rust code when record processing on the C++ side has finished.
@@ -193,6 +200,34 @@ impl Client {
 
     fn new_mainline_dht(&self) -> Box<MainlineDht> {
         self.inner.new_mainline_dht()
+    }
+
+    fn new_origin_request(&self) -> Box<Request> {
+        self.new_request(RequestType::Origin)
+    }
+
+    fn new_injector_request(&self) -> Box<Request> {
+        self.new_request(RequestType::Injector)
+    }
+
+    fn new_cache_request(&self) -> Box<Request> {
+        self.new_request(RequestType::Cache)
+    }
+
+    fn new_request(&self, request_type: RequestType) -> Box<Request> {
+        let Some(metrics) = self.inner.metrics.upgrade() else {
+            return Box::new(Request {
+                metrics: self.inner.metrics.clone(),
+                id: None,
+            });
+        };
+
+        let id = metrics.lock().unwrap().requests.add_request(request_type);
+
+        Box::new(Request {
+            metrics: self.inner.metrics.clone(),
+            id: Some(id),
+        })
     }
 }
 
@@ -380,5 +415,52 @@ impl Drop for Bootstrap {
             .lock()
             .unwrap()
             .bootstrap_finish(inner.bootstrap_id, false);
+    }
+}
+
+// -------------------------------------------------------------------
+
+struct Request {
+    metrics: Weak<Mutex<Metrics>>,
+    id: Option<RequestId>,
+}
+
+impl Request {
+    fn mark_started(&self) {
+        let Some(metrics) = self.metrics.upgrade() else {
+            return;
+        };
+
+        let Some(id) = self.id else {
+            return;
+        };
+
+        metrics.lock().unwrap().requests.mark_request_started(id);
+    }
+
+    fn mark_success(&self) {
+        self.remove_request(request::RemoveReason::Success);
+    }
+
+    fn mark_failure(&self) {
+        self.remove_request(request::RemoveReason::Failure);
+    }
+
+    fn remove_request(&self, reason: request::RemoveReason) {
+        let Some(metrics) = self.metrics.upgrade() else {
+            return;
+        };
+
+        let Some(id) = self.id else {
+            return;
+        };
+
+        metrics.lock().unwrap().requests.remove_request(id, reason);
+    }
+}
+
+impl Drop for Request {
+    fn drop(&mut self) {
+        self.remove_request(request::RemoveReason::Cancelled);
     }
 }

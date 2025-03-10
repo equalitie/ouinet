@@ -1,4 +1,5 @@
 mod bootstrap;
+pub mod request;
 
 use crate::{
     backoff_watch::{ConstantBackoffWatchReceiver, ConstantBackoffWatchSender},
@@ -6,6 +7,7 @@ use crate::{
 };
 pub use bootstrap::{BootstrapId, Bootstraps};
 use chrono::{offset::Utc, DateTime};
+pub use request::{RequestId, Requests};
 use serde_json::json;
 use std::time::SystemTime;
 
@@ -22,6 +24,7 @@ pub struct Metrics {
     record_start: DateTime<Utc>,
     on_modify_tx: ConstantBackoffWatchSender,
     bootstraps: Bootstraps,
+    pub requests: Requests,
     has_new_data: bool,
 }
 
@@ -34,6 +37,7 @@ impl Metrics {
             record_start: now,
             on_modify_tx: ConstantBackoffWatchSender::new(constants::RECORD_WRITE_CONSTANT_BACKOFF),
             bootstraps: Bootstraps::new(),
+            requests: Requests::new(),
             has_new_data: false,
         }
     }
