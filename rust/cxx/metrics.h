@@ -17,6 +17,9 @@ class DhtNode;
 class Bootstrap;
 class Request;
 
+template<typename T>
+using OptBox = std::optional<rust::Box<T>>; 
+
 class Client {
 public:
     // Creates a metrics client which does nothing.
@@ -36,7 +39,7 @@ public:
     Request new_cache_request();
 
 private:
-    rust::Box<bridge::Client> _impl;
+    OptBox<bridge::Client> _impl;
     bool _is_enabled = false;
 };
 
@@ -50,9 +53,9 @@ public:
 private:
     friend class Client;
 
-    MainlineDht(rust::Box<bridge::MainlineDht> impl) : _impl(std::move(impl)) {}
+    MainlineDht(OptBox<bridge::MainlineDht> impl) : _impl(std::move(impl)) {}
 
-    rust::Box<bridge::MainlineDht> _impl;
+    OptBox<bridge::MainlineDht> _impl;
 };
 
 class DhtNode {
@@ -62,9 +65,9 @@ public:
 private:
     friend class MainlineDht;
 
-    DhtNode(rust::Box<bridge::DhtNode> impl) : _impl(std::move(impl)) {}
+    DhtNode(OptBox<bridge::DhtNode> impl) : _impl(std::move(impl)) {}
 
-    rust::Box<bridge::DhtNode> _impl;
+    OptBox<bridge::DhtNode> _impl;
 };
 
 class Bootstrap {
@@ -74,9 +77,9 @@ public:
 private:
     friend class DhtNode;
 
-    Bootstrap(rust::Box<bridge::Bootstrap> impl) : _impl(std::move(impl)) {}
+    Bootstrap(OptBox<bridge::Bootstrap> impl) : _impl(std::move(impl)) {}
 
-    rust::Box<bridge::Bootstrap> _impl;
+    OptBox<bridge::Bootstrap> _impl;
 };
 
 // -- Requessts ------------------------------------------------------
@@ -90,9 +93,9 @@ public:
 private:
     friend class Client;
 
-    Request(rust::Box<bridge::Request> impl): _impl(std::move(impl)) {};
+    Request(OptBox<bridge::Request> impl): _impl(std::move(impl)) {};
 
-    rust::Box<bridge::Request> _impl;
+    OptBox<bridge::Request> _impl;
 };
 
 } // namespace

@@ -30,7 +30,6 @@ mod ffi {
         type Client;
 
         fn new_client(store_path: String) -> Box<Client>;
-        fn new_noop_client() -> Box<Client>;
         fn new_mainline_dht(self: &Client) -> Box<MainlineDht>;
         fn new_origin_request(self: &Client) -> Box<Request>;
         fn new_injector_request(self: &Client) -> Box<Request>;
@@ -134,12 +133,6 @@ fn new_client(store_path: String) -> Box<Client> {
     Box::new(Client::new(PathBuf::from(store_path), runtime))
 }
 
-fn new_noop_client() -> Box<Client> {
-    logger::init_idempotent();
-    stop_current_client();
-    Box::new(Client::new_noop())
-}
-
 // -------------------------------------------------------------------
 
 pub struct Client {
@@ -180,16 +173,7 @@ impl Client {
                     processor_tx,
                     job_handle,
                 })),
-                metrics: Arc::downgrade(&metrics),
-            }),
-        }
-    }
-
-    fn new_noop() -> Self {
-        Self {
-            inner: Arc::new(ClientInner {
-                runner: Mutex::new(None),
-                metrics: Weak::new(),
+                metrics,
             }),
         }
     }
@@ -215,25 +199,17 @@ impl Client {
     }
 
     fn new_request(&self, request_type: RequestType) -> Box<Request> {
-        let Some(metrics) = self.inner.metrics.upgrade() else {
-            return Box::new(Request {
-                metrics: self.inner.metrics.clone(),
-                id: None,
-            });
-        };
+        let metrics = self.inner.metrics.clone();
 
         let id = metrics.lock().unwrap().requests.add_request(request_type);
 
-        Box::new(Request {
-            metrics: self.inner.metrics.clone(),
-            id: Some(id),
-        })
+        Box::new(Request { metrics, id })
     }
 }
 
 struct ClientInner {
     runner: Mutex<Option<Runner>>,
-    metrics: Weak<Mutex<Metrics>>,
+    metrics: Arc<Mutex<Metrics>>,
 }
 
 struct Runner {
@@ -318,7 +294,7 @@ impl Drop for ClientInner {
 // -------------------------------------------------------------------
 
 pub struct MainlineDht {
-    metrics: Weak<Mutex<Metrics>>,
+    metrics: Arc<Mutex<Metrics>>,
 }
 
 impl MainlineDht {
@@ -340,7 +316,7 @@ impl MainlineDht {
 
 pub struct DhtNode {
     ipv: IpVersion,
-    metrics: Weak<Mutex<Metrics>>,
+    metrics: Arc<Mutex<Metrics>>,
 }
 
 impl DhtNode {
@@ -352,90 +328,60 @@ impl DhtNode {
 // -------------------------------------------------------------------
 
 pub struct Bootstrap {
-    inner: Option<BootstrapInner>,
-}
-
-struct BootstrapInner {
     bootstrap_id: BootstrapId,
     success: Mutex<bool>,
-    metrics: Weak<Mutex<Metrics>>,
+    metrics: Arc<Mutex<Metrics>>,
 }
 
 impl Bootstrap {
-    fn new(ipv: IpVersion, metrics_weak: Weak<Mutex<Metrics>>) -> Self {
-        let Some(metrics_strong) = metrics_weak.upgrade() else {
-            return Bootstrap { inner: None };
-        };
-
-        let mut metrics_lock = metrics_strong.lock().unwrap();
+    fn new(ipv: IpVersion, metrics: Arc<Mutex<Metrics>>) -> Self {
+        let bootstrap_id = metrics.lock().unwrap().bootstrap_start(ipv);
 
         Bootstrap {
-            inner: Some(BootstrapInner {
-                bootstrap_id: metrics_lock.bootstrap_start(ipv),
-                success: Mutex::new(false),
-                metrics: metrics_weak,
-            }),
+            bootstrap_id,
+            success: Mutex::new(false),
+            metrics,
         }
     }
 
     fn mark_success(&self, _wan_endpoint: String) {
-        let Some(inner) = &self.inner else {
-            return;
-        };
+        *self.success.lock().unwrap() = true;
 
-        *inner.success.lock().unwrap() = true;
-
-        let Some(metrics) = inner.metrics.upgrade() else {
-            return;
-        };
-
-        metrics
+        self.metrics
             .lock()
             .unwrap()
-            .bootstrap_finish(inner.bootstrap_id, true);
+            .bootstrap_finish(self.bootstrap_id, true);
     }
 }
 
 impl Drop for Bootstrap {
     fn drop(&mut self) {
-        let Some(inner) = &self.inner else {
-            return;
-        };
-
-        if *inner.success.lock().unwrap() {
+        if *self.success.lock().unwrap() {
             // Don't report false if we already reported true.
             return;
         }
 
-        let Some(metrics) = inner.metrics.upgrade() else {
-            return;
-        };
-
-        metrics
+        self.metrics
             .lock()
             .unwrap()
-            .bootstrap_finish(inner.bootstrap_id, false);
+            .bootstrap_finish(self.bootstrap_id, false);
     }
 }
 
 // -------------------------------------------------------------------
 
 struct Request {
-    metrics: Weak<Mutex<Metrics>>,
-    id: Option<RequestId>,
+    metrics: Arc<Mutex<Metrics>>,
+    id: RequestId,
 }
 
 impl Request {
     fn mark_started(&self) {
-        let Some(metrics) = self.metrics.upgrade() else {
-            return;
-        };
-
-        let Some(id) = self.id else {
-            return;
-        };
-
-        metrics.lock().unwrap().requests.mark_request_started(id);
+        self.metrics
+            .lock()
+            .unwrap()
+            .requests
+            .mark_request_started(self.id);
     }
 
     fn mark_success(&self) {
@@ -447,15 +393,11 @@ impl Request {
     }
 
     fn remove_request(&self, reason: request::RemoveReason) {
-        let Some(metrics) = self.metrics.upgrade() else {
-            return;
-        };
-
-        let Some(id) = self.id else {
-            return;
-        };
-
-        metrics.lock().unwrap().requests.remove_request(id, reason);
+        self.metrics
+            .lock()
+            .unwrap()
+            .requests
+            .remove_request(self.id, reason);
     }
 }
 

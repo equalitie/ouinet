@@ -7,7 +7,7 @@ use crate::{
 };
 pub use bootstrap::{BootstrapId, Bootstraps};
 use chrono::{offset::Utc, DateTime};
-pub use request::{RequestId, Requests};
+pub use request::Requests;
 use serde_json::json;
 use std::time::SystemTime;
 
