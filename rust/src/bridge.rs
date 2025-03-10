@@ -53,7 +53,6 @@ mod ffi {
 
         //------------------------------------------------------------
         type Request;
-        fn mark_started(self: &Request);
         fn mark_success(self: &Request);
         fn mark_failure(self: &Request);
 
@@ -381,14 +380,6 @@ struct Request {
 }
 
 impl Request {
-    fn mark_started(&self) {
-        self.metrics
-            .lock()
-            .unwrap()
-            .requests
-            .mark_request_started(self.id);
-    }
-
     fn mark_success(&self) {
         self.remove_request(request::RemoveReason::Success);
     }

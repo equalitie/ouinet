@@ -14,7 +14,7 @@ pub enum RequestType {
 
 pub struct Requests {
     next_id: u64,
-    active: HashMap<RequestId, RequestState>,
+    active: HashMap<RequestId, RequestType>,
     summary: HashMap<RequestType, Summary>,
 }
 
@@ -30,43 +30,24 @@ impl Requests {
     pub fn add_request(&mut self, request_type: RequestType) -> RequestId {
         let id = RequestId(self.next_id);
         self.next_id += 1;
-        self.active.insert(id, RequestState::Exists(request_type));
+        self.active.insert(id, request_type);
         id
     }
 
-    pub fn mark_request_started(&mut self, id: RequestId) {
-        let Some(state) = self.active.get_mut(&id) else {
-            log::error!("Attempted to start a non active request");
-            return;
-        };
-
-        match state {
-            RequestState::Exists(request_type) => *state = RequestState::Started(*request_type),
-            RequestState::Started(_) => {
-                log::error!("Attempted to start an already started request");
-            }
-        }
-    }
-
     pub fn remove_request(&mut self, id: RequestId, reason: RemoveReason) {
-        let Some(state) = self.active.remove(&id) else {
+        let Some(request_type) = self.active.remove(&id) else {
             log::error!("Attempted to remove a non active request");
             return;
         };
 
-        match state {
-            RequestState::Exists(_) => {}
-            RequestState::Started(request_type) => {
-                let summary = self
-                    .summary
-                    .entry(request_type)
-                    .or_insert_with(Default::default);
-                match reason {
-                    RemoveReason::Success => summary.success_count += 1,
-                    RemoveReason::Failure => summary.failure_count += 1,
-                    RemoveReason::Cancelled => (),
-                }
-            }
+        let summary = self
+            .summary
+            .entry(request_type)
+            .or_insert_with(Default::default);
+        match reason {
+            RemoveReason::Success => summary.success_count += 1,
+            RemoveReason::Failure => summary.failure_count += 1,
+            RemoveReason::Cancelled => (),
         }
     }
 }
@@ -97,9 +78,4 @@ pub enum RemoveReason {
     Success,
     Failure,
     Cancelled,
-}
-
-enum RequestState {
-    Exists(RequestType),
-    Started(RequestType),
 }
