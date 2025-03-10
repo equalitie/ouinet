@@ -7,7 +7,8 @@ pub struct RequestId(u64);
 #[derive(Clone, Copy, Hash, Eq, PartialEq)]
 pub enum RequestType {
     Origin,
-    Injector,
+    InjectorPrivate,
+    InjectorPublic,
     Cache,
 }
 
@@ -76,7 +77,8 @@ impl Serialize for Requests {
         for (request_type, summary) in &self.summary {
             let key = match request_type {
                 RequestType::Origin => "origin",
-                RequestType::Injector => "injector",
+                RequestType::InjectorPrivate => "injector_private",
+                RequestType::InjectorPublic => "injector_public",
                 RequestType::Cache => "cache",
             };
             map.serialize_entry(key, summary)?;

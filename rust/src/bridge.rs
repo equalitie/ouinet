@@ -32,7 +32,8 @@ mod ffi {
         fn new_client(store_path: String) -> Box<Client>;
         fn new_mainline_dht(self: &Client) -> Box<MainlineDht>;
         fn new_origin_request(self: &Client) -> Box<Request>;
-        fn new_injector_request(self: &Client) -> Box<Request>;
+        fn new_private_injector_request(self: &Client) -> Box<Request>;
+        fn new_public_injector_request(self: &Client) -> Box<Request>;
         fn new_cache_request(self: &Client) -> Box<Request>;
 
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
@@ -190,8 +191,12 @@ impl Client {
         self.new_request(RequestType::Origin)
     }
 
-    fn new_injector_request(&self) -> Box<Request> {
-        self.new_request(RequestType::Injector)
+    fn new_public_injector_request(&self) -> Box<Request> {
+        self.new_request(RequestType::InjectorPublic)
+    }
+
+    fn new_private_injector_request(&self) -> Box<Request> {
+        self.new_request(RequestType::InjectorPrivate)
     }
 
     fn new_cache_request(&self) -> Box<Request> {

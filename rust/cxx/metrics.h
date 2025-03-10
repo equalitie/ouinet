@@ -18,7 +18,7 @@ class Bootstrap;
 class Request;
 
 template<typename T>
-using OptBox = std::optional<rust::Box<T>>; 
+using OptBox = std::optional<rust::Box<T>>;
 
 class Client {
 public:
@@ -35,7 +35,8 @@ public:
     MainlineDht mainline_dht();
 
     Request new_origin_request();
-    Request new_injector_request();
+    Request new_public_injector_request();
+    Request new_private_injector_request();
     Request new_cache_request();
 
 private:
@@ -86,9 +87,7 @@ private:
 
 class Request {
 public:
-    void start();
-    void success();
-    void failure();
+    void finish(boost::system::error_code ec);
 
 private:
     friend class Client;

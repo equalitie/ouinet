@@ -48,9 +48,14 @@ Request Client::new_origin_request() {
     return Request{(*_impl)->new_origin_request()};
 }
 
-Request Client::new_injector_request() {
+Request Client::new_private_injector_request() {
     if (!_impl) return Request{{}};
-    return Request{(*_impl)->new_injector_request()};
+    return Request{(*_impl)->new_private_injector_request()};
+}
+
+Request Client::new_public_injector_request() {
+    if (!_impl) return Request{{}};
+    return Request{(*_impl)->new_public_injector_request()};
 }
 
 Request Client::new_cache_request() {
@@ -88,19 +93,16 @@ void Bootstrap::mark_success(asio::ip::udp::endpoint wan_endpoint) {
 
 //--------------------------------------------------------------------
 
-void Request::start() {
+void Request::finish(boost::system::error_code ec) {
     if (!_impl) return;
-    (*_impl)->mark_started();
-}
 
-void Request::success() {
-    if (!_impl) return;
-    (*_impl)->mark_success();
-}
-
-void Request::failure() {
-    if (!_impl) return;
-    (*_impl)->mark_failure();
+    if (ec) {
+        if (ec != boost::asio::error::operation_aborted) {
+            (*_impl)->mark_failure();
+        }
+    } else {
+        (*_impl)->mark_success();
+    }
 }
 
 } // namespace
