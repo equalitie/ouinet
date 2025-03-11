@@ -1,5 +1,4 @@
 #include <iostream>
-#include <sstream>
 #include "metrics.h"
 #include "record_processor.h"
 #include "util/executor.h"
@@ -84,11 +83,9 @@ Bootstrap DhtNode::bootstrap() {
 
 //--------------------------------------------------------------------
 
-void Bootstrap::mark_success(asio::ip::udp::endpoint wan_endpoint) {
+void Bootstrap::mark_success() {
     if (!_impl) return;
-    std::stringstream ss;
-    ss << wan_endpoint;
-    (*_impl)->mark_success(rust::String(ss.str()));
+    (*_impl)->mark_success();
 }
 
 //--------------------------------------------------------------------

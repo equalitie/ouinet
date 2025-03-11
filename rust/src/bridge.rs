@@ -49,7 +49,7 @@ mod ffi {
         fn new_bootstrap(self: &DhtNode) -> Box<Bootstrap>;
 
         type Bootstrap;
-        fn mark_success(self: &Bootstrap, wan_endpoint: String);
+        fn mark_success(self: &Bootstrap);
 
         //------------------------------------------------------------
         type Request;
@@ -348,7 +348,7 @@ impl Bootstrap {
         }
     }
 
-    fn mark_success(&self, _wan_endpoint: String) {
+    fn mark_success(&self) {
         *self.success.lock().unwrap() = true;
 
         self.metrics

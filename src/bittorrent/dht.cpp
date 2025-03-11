@@ -1889,7 +1889,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * necessary for implementing queries.
      */
     _ready = true;
-    metrics.mark_success(my_endpoint);
+    metrics.mark_success();
 }
 
 

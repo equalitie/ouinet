@@ -73,7 +73,7 @@ private:
 
 class Bootstrap {
 public:
-    void mark_success(asio::ip::udp::endpoint wan_endpoint);
+    void mark_success();
 
 private:
     friend class DhtNode;
