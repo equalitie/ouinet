@@ -1122,13 +1122,21 @@ Session Client::State::fetch_fresh_from_origin( Request rq
 
     sys::error_code ec;
 
+    auto metrics = _metrics.new_origin_request();
     auto maybe_con = _origin_pools.get_connection(rq);
+
     OriginPools::Connection con;
+
     if (maybe_con) {
         con = std::move(*maybe_con);
     } else {
         auto stream = connect_to_origin(rq, meta, timeout_cancel, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
+        ec = compute_error_code(ec, cancel, watch_dog);
+
+        if (ec) {
+            metrics.finish(ec);
+            return or_throw<Session>(yield, ec);
+        }
 
         con = _origin_pools.wrap(rq, std::move(stream));
     }
@@ -1142,13 +1150,25 @@ Session Client::State::fetch_fresh_from_origin( Request rq
         auto con_close = timeout_cancel.connect([&] { con.close(); });
         http::async_write(con, rq_, y);
     });
-    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
+
+    ec = compute_error_code(ec, cancel, watch_dog);
+
+    if (ec) {
+        metrics.finish(ec);
+        return or_throw<Session>(yield, ec);
+    }
 
     auto ret = yield[ec].tag("read_hdr").run([&] (auto y) {
         return Session::create( std::move(con), rq.method() == http::verb::head
+                              , move(metrics)
                               , timeout_cancel, y);
     });
-    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session());
+
+    ec = compute_error_code(ec, cancel, watch_dog);
+
+    if (ec) {
+        return or_throw<Session>(yield, ec);
+    }
 
     // Prevent others from inserting ouinet headers.
     util::remove_ouinet_fields_ref(ret.response_header());
