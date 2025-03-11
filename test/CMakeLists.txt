@@ -18,7 +18,8 @@ add_executable(test-cache
     "../src/util/handler_tracker.cpp"
     "../src/logger.cpp"
 )
-target_link_libraries(test-cache lib::uri)
+target_link_libraries(test-cache lib::uri ouinet_rs)
+target_include_directories(test-cache ${OUINET_RS_INCLUDE_DIR})
 
 ######################################################################
 add_executable(test-wait-condition "test_wait_condition.cpp")
@@ -140,7 +141,8 @@ add_executable(test-http-sign
     "../src/util/crypto.cpp"
     "../src/util/hash.cpp"
 )
-target_link_libraries(test-http-sign lib::gcrypt lib::uri)
+target_link_libraries(test-http-sign lib::gcrypt lib::uri ouinet_rs)
+target_include_directories(test-http-sign ${OUINET_RS_INCLUDE_DIR})
 
 ######################################################################
 add_executable(test-http-store
@@ -160,7 +162,8 @@ add_executable(test-http-store
     "../src/util/temp_dir.cpp"
     "../src/util/temp_file.cpp"
 )
-target_link_libraries(test-http-store lib::gcrypt lib::uri)
+target_link_libraries(test-http-store lib::gcrypt lib::uri ouinet_rs)
+target_include_directories(test-http-store ${OUINET_RS_INCLUDE_DIR})
 
 ######################################################################
 add_executable(test-atomic-temp
