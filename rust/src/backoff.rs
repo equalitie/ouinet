@@ -76,6 +76,11 @@ impl Backoff {
         self.stopped = false;
     }
 
+    #[cfg(test)]
+    pub fn is_stopped(&self) -> bool {
+        self.stopped
+    }
+
     pub async fn succeeded(&mut self) -> io::Result<()> {
         self.set_state(State::Success).await
     }

@@ -12,17 +12,19 @@ namespace asio = boost::asio;
 //--------------------------------------------------------------------
 
 Client::Client()
-    : _impl(bridge::new_noop_client())
+    : _impl({})
 {
 }
 
 Client::Client(fs::path repo_root_path)
-    : _impl(bridge::new_client(rust::String(repo_root_path.native())))
+    : _impl({bridge::new_client(rust::String(repo_root_path.native()))})
 {
 }
 
 void Client::enable(util::AsioExecutor executor, AsyncCallback record_processor) {
-    _impl->set_processor(
+    if (!_impl) return;
+
+    (*_impl)->set_processor(
             make_unique<bridge::CxxRecordProcessor>(
                 std::move(executor),
                 std::move(record_processor)));
@@ -30,39 +32,77 @@ void Client::enable(util::AsioExecutor executor, AsyncCallback record_processor)
 }
 
 void Client::disable() {
-    _impl->set_processor(nullptr);
+    if (!_impl) return;
+    (*_impl)->set_processor(nullptr);
     _is_enabled = false;
 }
 
 MainlineDht Client::mainline_dht()
 {
-    return MainlineDht{_impl->new_mainline_dht()};
+    if (!_impl) return MainlineDht{{}};
+    return MainlineDht{(*_impl)->new_mainline_dht()};
+}
+
+Request Client::new_origin_request() {
+    if (!_impl) return Request{{}};
+    return Request{(*_impl)->new_origin_request()};
+}
+
+Request Client::new_private_injector_request() {
+    if (!_impl) return Request{{}};
+    return Request{(*_impl)->new_private_injector_request()};
+}
+
+Request Client::new_public_injector_request() {
+    if (!_impl) return Request{{}};
+    return Request{(*_impl)->new_public_injector_request()};
+}
+
+Request Client::new_cache_request() {
+    if (!_impl) return Request{{}};
+    return Request{(*_impl)->new_cache_request()};
 }
 
 //--------------------------------------------------------------------
 
 DhtNode MainlineDht::dht_node_ipv4() {
-    return DhtNode{_impl->new_dht_node(true)};
+    if (!_impl) return DhtNode{{}};
+    return DhtNode{(*_impl)->new_dht_node(true)};
 }
 
 DhtNode MainlineDht::dht_node_ipv6() {
-    return DhtNode{_impl->new_dht_node(false)};
+    if (!_impl) return DhtNode{{}};
+    return DhtNode{(*_impl)->new_dht_node(false)};
 }
 
 //--------------------------------------------------------------------
 
 Bootstrap DhtNode::bootstrap() {
-    return Bootstrap{_impl->new_bootstrap()};
+    if (!_impl) return Bootstrap{{}};
+    return Bootstrap{(*_impl)->new_bootstrap()};
 }
 
 //--------------------------------------------------------------------
 
 void Bootstrap::mark_success(asio::ip::udp::endpoint wan_endpoint) {
+    if (!_impl) return;
     std::stringstream ss;
     ss << wan_endpoint;
-    _impl->mark_success(rust::String(ss.str()));
+    (*_impl)->mark_success(rust::String(ss.str()));
 }
 
 //--------------------------------------------------------------------
+
+void Request::finish(boost::system::error_code ec) {
+    if (!_impl) return;
+
+    if (ec) {
+        if (ec != boost::asio::error::operation_aborted) {
+            (*_impl)->mark_failure();
+        }
+    } else {
+        (*_impl)->mark_success();
+    }
+}
 
 } // namespace

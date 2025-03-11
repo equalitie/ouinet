@@ -180,9 +180,11 @@ impl EventListener {
 async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<bool> {
     let record = metrics.lock().unwrap().collect();
 
+    // Backoff may have stopped due to there being no more records, so resume it.
+    store.backoff.resume();
+
     if let Some(record) = record {
         store.store_record(record).await?;
-        store.backoff.resume();
         Ok(true)
     } else {
         Ok(false)
@@ -387,5 +389,30 @@ mod test {
             .await;
 
         assert_eq!(setup.stored_record_ids().await, [].into_iter().collect());
+    }
+
+    #[tokio::test]
+    async fn resume_after_record_id_change_even_if_no_write() {
+        let mut setup = Setup::new().await;
+
+        let processor = Arc::new(RecordProcessor::new());
+
+        // Modify metrics and store it on disk.
+        setup.modify_metrics_and_process().await;
+
+        // Try processing a record. This won't process anything because the one stored record is
+        // "current". But because there is nothing to proces it should `stop` the processing
+        // timeout.
+        setup
+            .process(Event::ProcessOneRecord(processor.clone()))
+            .await;
+
+        assert!(setup.store.backoff.is_stopped());
+
+        // Nothing is written here because no modifications to metrics happened since the last
+        // write, but we still want the backoff to be resumed.
+        setup.process(Event::IncrementRecordNumber).await;
+
+        assert!(!setup.store.backoff.is_stopped());
     }
 }
