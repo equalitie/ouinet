@@ -36,7 +36,10 @@ impl Requests {
 
     pub fn remove_request(&mut self, id: RequestId, reason: RemoveReason) {
         let Some(request_type) = self.active.remove(&id) else {
-            log::error!("Attempted to remove a non active request");
+            // Cancellation is done from the destructor which is always called.
+            if reason != RemoveReason::Cancelled {
+                log::error!("Attempted to remove a non active request");
+            }
             return;
         };
 
@@ -74,6 +77,7 @@ struct Summary {
     failure_count: u64,
 }
 
+#[derive(PartialEq)]
 pub enum RemoveReason {
     Success,
     Failure,
