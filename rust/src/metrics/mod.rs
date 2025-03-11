@@ -9,7 +9,7 @@ pub use bootstrap::{BootstrapId, Bootstraps};
 use chrono::{offset::Utc, DateTime};
 pub use request::Requests;
 use serde_json::json;
-use std::time::SystemTime;
+use std::{sync::Arc, time::SystemTime};
 
 const DAY_TIME_FORMAT: &'static str = "%FT%T%.3f";
 
@@ -22,7 +22,7 @@ pub enum IpVersion {
 pub struct Metrics {
     start: DateTime<Utc>,
     record_start: DateTime<Utc>,
-    on_modify_tx: ConstantBackoffWatchSender,
+    on_modify_tx: Arc<ConstantBackoffWatchSender>,
     bootstraps: Bootstraps,
     pub requests: Requests,
     has_new_data: bool,
@@ -32,12 +32,16 @@ impl Metrics {
     pub fn new() -> Self {
         let now = SystemTime::now().into();
 
+        let on_modify_tx = Arc::new(ConstantBackoffWatchSender::new(
+            constants::RECORD_WRITE_CONSTANT_BACKOFF,
+        ));
+
         Self {
             start: now,
             record_start: now,
-            on_modify_tx: ConstantBackoffWatchSender::new(constants::RECORD_WRITE_CONSTANT_BACKOFF),
+            on_modify_tx: on_modify_tx.clone(),
             bootstraps: Bootstraps::new(),
-            requests: Requests::new(),
+            requests: Requests::new(on_modify_tx),
             has_new_data: false,
         }
     }
@@ -81,6 +85,7 @@ impl Metrics {
         self.start = now;
         self.record_start = now;
         self.bootstraps.clear();
+        self.requests.clear();
         self.mark_modified(false);
     }
 
@@ -88,6 +93,7 @@ impl Metrics {
     fn clear_finished(&mut self) {
         self.record_start = SystemTime::now().into();
         self.bootstraps.clear_finished();
+        self.requests.clear_finished();
         self.mark_modified(false);
     }
 
@@ -106,6 +112,6 @@ impl Metrics {
     }
 
     pub fn has_new_data(&self) -> bool {
-        self.has_new_data
+        self.has_new_data || self.requests.has_new_data()
     }
 }
