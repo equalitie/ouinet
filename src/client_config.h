@@ -275,7 +275,7 @@ private:
 
         po::options_description metrics("Metrics options");
         metrics.add_options()
-           ("metrics-enable-on-start", po::value<bool>()
+           ("metrics-enable-on-start", po::bool_switch()->default_value(false)
             , "Enable metrics at startup. Must be used with --metrics-server-url")
            ("metrics-server-url", po::value<string>()
             , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
