@@ -168,8 +168,6 @@ impl Client {
             let metrics = metrics.clone();
 
             async move {
-                let store_path = PathBuf::from(store_path);
-
                 if let Err(error) =
                     metrics_runner(metrics, store_path, processor_rx, encryption_key).await
                 {
@@ -279,14 +277,11 @@ impl ClientInner {
     fn stop(&self) -> Option<Arc<Runtime>> {
         let mut lock = self.runner.lock().unwrap();
 
-        let Some(Runner {
+        let Runner {
             runtime,
             processor_tx,
             mut job_handle,
-        }) = lock.take()
-        else {
-            return None;
-        };
+        } = lock.take()?;
 
         // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
         drop(processor_tx);

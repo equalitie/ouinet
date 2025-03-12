@@ -49,10 +49,7 @@ impl Requests {
             return;
         };
 
-        let summary = self
-            .summary
-            .entry(request_type)
-            .or_insert_with(Default::default);
+        let summary = self.summary.entry(request_type).or_default();
         match reason {
             RemoveReason::Success => summary.success_count += 1,
             RemoveReason::Failure => summary.failure_count += 1,

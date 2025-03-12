@@ -39,7 +39,7 @@ pub async fn metrics_runner(
         let event = event_listener.on_event(&store).await;
 
         match event_handler
-            .process_event(event, &mut store, &*metrics)
+            .process_event(event, &mut store, &metrics)
             .await?
         {
             EventResult::Continue => (),
@@ -84,7 +84,7 @@ impl EventHandler {
                     return Ok(EventResult::Continue);
                 };
 
-                if record_processor.as_ref().process(&record).await? {
+                if record_processor.as_ref().process(record).await? {
                     store.backoff.succeeded().await?;
                     record.discard().await?;
                     self.oldest_record = None;

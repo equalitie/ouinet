@@ -148,7 +148,7 @@ impl State {
                     if error.kind() == io::ErrorKind::NotFound {
                         Ok(())
                     } else {
-                        return Err(error);
+                        Err(error)
                     }
                 }
             },

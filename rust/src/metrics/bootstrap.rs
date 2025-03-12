@@ -124,7 +124,7 @@ struct BootstrapSerializer<'a> {
     bs: &'a HashMap<usize, BootstrapState>,
 }
 
-impl<'a> Serialize for BootstrapSerializer<'a> {
+impl Serialize for BootstrapSerializer<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(Some(4))?;
         map.serialize_entry(
