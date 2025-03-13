@@ -171,7 +171,7 @@ public:
         , _injector_starting{get_executor()}
         , _cache_starting{get_executor()}
         , _front_end(_config)
-        , ssl_ctx{asio::ssl::context::tls_client}
+        , pub_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
@@ -179,8 +179,8 @@ public:
     {
         LOG_INFO("Repo root: ", _config.repo_root());
 
-        ssl_ctx.set_default_verify_paths();
-        ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+        pub_ctx.set_default_verify_paths();
+        pub_ctx.set_verify_mode(asio::ssl::verify_peer);
 
         // We do *not* want to do this since
         // we will not be checking certificate names,
@@ -407,13 +407,19 @@ private:
                           , Cancel&, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
+
+    // Metrics is optional because we use this function also for sending
+    // statistics which we don't want to meter.
     Session fetch_fresh_from_origin( Request
                                    , const UserAgentMetaData&
+                                   , asio::ssl::context&
+                                   , std::optional<metrics::Request> metrics
                                    , Cancel, Yield);
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
     Session fetch_fresh_through_connect_proxy( const Request&
+                                             , asio::ssl::context&
                                              , std::optional<metrics::Request>
                                              , Cancel&
                                              , Yield);
@@ -499,6 +505,7 @@ private:
 
     GenericStream connect_to_origin( const Request&
                                    , const UserAgentMetaData&
+                                   , asio::ssl::context&
                                    , Cancel&, Yield);
 
     unique_ptr<OuiServiceImplementationClient>
@@ -607,7 +614,7 @@ private:
     ConnectionPool<bool> _self_connections;  // stored value is unused
     OriginPools _origin_pools;
 
-    asio::ssl::context ssl_ctx;
+    asio::ssl::context pub_ctx;
     asio::ssl::context inj_ctx;
 
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
@@ -1010,6 +1017,7 @@ Client::State::resolve_tcp_dns( const std::string& host
 GenericStream
 Client::State::connect_to_origin( const Request& rq
                                 , const UserAgentMetaData& meta
+                                , asio::ssl::context& tls_ctx
                                 , Cancel& cancel
                                 , Yield yield)
 {
@@ -1037,7 +1045,7 @@ Client::State::connect_to_origin( const Request& rq
 
     if (rq.target().starts_with("https:") || rq.target().starts_with("wss:")) {
         stream = ssl::util::client_handshake( move(sock)
-                                            , ssl_ctx
+                                            , tls_ctx
                                             , host
                                             , cancel
                                             , static_cast<asio::yield_context>(yield[ec]));
@@ -1110,6 +1118,8 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_from_origin( Request rq
                                               , const UserAgentMetaData& meta
+                                              , asio::ssl::context& tls_ctx
+                                              , std::optional<metrics::Request> metrics
                                               , Cancel cancel, Yield yield)
 {
     Cancel timeout_cancel(cancel);
@@ -1118,11 +1128,9 @@ Session Client::State::fetch_fresh_from_origin( Request rq
                                       , [&] { timeout_cancel(); });
 
     assert(!rq[http::field::host].empty());  // origin pools require host
-    util::remove_ouinet_fields_ref(rq);  // avoid leaking to non-injectors
 
     sys::error_code ec;
 
-    auto metrics = _metrics.new_origin_request();
     auto maybe_con = _origin_pools.get_connection(rq);
 
     OriginPools::Connection con;
@@ -1130,11 +1138,10 @@ Session Client::State::fetch_fresh_from_origin( Request rq
     if (maybe_con) {
         con = std::move(*maybe_con);
     } else {
-        auto stream = connect_to_origin(rq, meta, timeout_cancel, yield[ec]);
-        ec = compute_error_code(ec, cancel, watch_dog);
+        auto stream = connect_to_origin(rq, meta, tls_ctx, timeout_cancel, yield[ec]);
 
-        if (ec) {
-            metrics.finish(ec);
+        if (ec = compute_error_code(ec, cancel, watch_dog)) {
+            if (metrics) metrics->finish(ec);
             return or_throw<Session>(yield, ec);
         }
 
@@ -1151,10 +1158,8 @@ Session Client::State::fetch_fresh_from_origin( Request rq
         http::async_write(con, rq_, y);
     });
 
-    ec = compute_error_code(ec, cancel, watch_dog);
-
-    if (ec) {
-        metrics.finish(ec);
+    if (ec = compute_error_code(ec, cancel, watch_dog)) {
+        if (metrics) metrics->finish(ec);
         return or_throw<Session>(yield, ec);
     }
 
@@ -1164,9 +1169,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
                               , timeout_cancel, y);
     });
 
-    ec = compute_error_code(ec, cancel, watch_dog);
-
-    if (ec) {
+    if (ec = compute_error_code(ec, cancel, watch_dog)) {
         return or_throw<Session>(yield, ec);
     }
 
@@ -1180,6 +1183,7 @@ Session Client::State::fetch_fresh_from_origin( Request rq
 
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
+                                                        , asio::ssl::context& tls_ctx
                                                         , std::optional<metrics::Request> metrics
                                                         , Cancel& cancel
                                                         , Yield yield)
@@ -1286,7 +1290,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
 
     if (url.scheme == "https") {
         con = ssl::util::client_handshake( move(inj.connection)
-                                         , ssl_ctx
+                                         , tls_ctx
                                          , url.host
                                          , timeout_cancel
                                          , static_cast<asio::yield_context>(yield[ec]));
@@ -1474,24 +1478,30 @@ void Client::State::send_metrics_record(std::string_view record_name, std::strin
 
     req.version(11);
     req.method(http::verb::post);
-    req.target(server_url.path);
+    req.target(server_url.reassemble());
     req.set(http::field::host, server_url.host_and_port());
     req.set(http::field::user_agent, "Ouinet.Client");
     req.set(http::field::content_type, "multipart/form-data");
     req.set("record-name", util::to_beast(record_name));
 
     if (!_config.metrics_server_token().empty()) {
-        req.set("token", _config.metrics_server_token());
+        req.set("X-Ouinet-Metrics-Server-Token", _config.metrics_server_token());
     }
 
     req.body() = record_content;
     req.prepare_payload();
+
+    auto& tls_ctx = _config.metrics_server_tls_cert()
+                  ? *_config.metrics_server_tls_cert()
+                  : pub_ctx;
 
     sys::error_code direct_ec;
 
     // Try sending the record to the origin directly.
     auto direct_session = fetch_fresh_from_origin( req
                                                  , UserAgentMetaData()
+                                                 , tls_ctx
+                                                 , {}
                                                  , cancel
                                                  , yield[direct_ec]);
 
@@ -1517,7 +1527,7 @@ void Client::State::send_metrics_record(std::string_view record_name, std::strin
     }
 
     // Sending directly failed, try sending through the injector.
-    auto injector_session = fetch_fresh_through_connect_proxy(req, {}, cancel, yield);
+    auto injector_session = fetch_fresh_through_connect_proxy(req, tls_ctx, {}, cancel, yield);
 
     ignore_rest(injector_session, cancel, yield);
 
@@ -1699,8 +1709,16 @@ public:
 
         _YDEBUG(yield, "Start");
 
+        // Avoid leaking to non-injectors
+        auto rq = tnx.request();
+        util::remove_ouinet_fields_ref(rq);
+
+        auto metrics = client_state._metrics.new_origin_request();
+
         sys::error_code ec;
-        auto session = client_state.fetch_fresh_from_origin( tnx.request(), tnx.meta()
+        auto session = client_state.fetch_fresh_from_origin( rq, tnx.meta()
+                                                           , client_state.pub_ctx
+                                                           , move(metrics)
                                                            , cancel, yield[ec]);
 
         _YDEBUG(yield, "Fetch; ec=", ec);
@@ -1727,7 +1745,7 @@ public:
             auto metrics = client_state._metrics.new_private_injector_request();
 
             session = client_state.fetch_fresh_through_connect_proxy
-                    (rq, std::move(metrics), cancel, yield[ec]);
+                    (rq, client_state.pub_ctx, std::move(metrics), cancel, yield[ec]);
         }
         else {
             auto metrics = client_state._metrics.new_public_injector_request();
@@ -2270,7 +2288,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     // this is hard because those are stored not as streams but as
     // ConnectionPool::Connection.
     auto meta = UserAgentMetaData::extract(rq);
-    auto origin = connect_to_origin(rq, meta, cancel, yield[ec]);
+    auto origin = connect_to_origin(rq, meta, pub_ctx, cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec, true);
 
@@ -2894,7 +2912,7 @@ void Client::State::start()
     if (_config.front_end_endpoint() != tcp::endpoint())
         front_end_acceptor = make_acceptor(_config.front_end_endpoint(), "frontend");
 
-    ssl::util::load_tls_ca_certificates(ssl_ctx, _config.tls_ca_cert_store_path());
+    ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
         ( "Your own local Ouinet client"

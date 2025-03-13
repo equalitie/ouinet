@@ -4,6 +4,7 @@
 #include <sstream>
 #include <vector>
 
+#include <boost/asio/ssl/context.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -40,8 +41,11 @@ public:
     // Throws on error
     ClientConfig(int argc, char* argv[]);
 
-    ClientConfig(const ClientConfig&) = default;
-    ClientConfig& operator=(const ClientConfig&) = default;
+    ClientConfig(ClientConfig&&) = default;
+    ClientConfig& operator=(ClientConfig&&) = default;
+
+    ClientConfig(const ClientConfig&) = delete;
+    ClientConfig& operator=(const ClientConfig&) = delete;
 
     const fs::path& repo_root() const {
         return _repo_root;
@@ -139,6 +143,10 @@ public:
 
     const std::string& metrics_server_token() const {
         return _metrics_server_token;
+    }
+
+    boost::optional<asio::ssl::context>& metrics_server_tls_cert() {
+        return _metrics_server_tls_cert;
     }
 
 private:
@@ -281,6 +289,10 @@ private:
             , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
            ("metrics-server-token", po::value<string>()
             , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
+           ("metrics-server-tls-cert", po::value<string>()
+            , "Tls certificate for the metrics server")
+           ("metrics-server-tls-cert-file", po::value<string>()
+            , "File containing the certificate for the metrics server")
            ;
 
         po::options_description desc;
@@ -399,6 +411,14 @@ private:
         LOG_INFO("Log file set to: ", ouinet_log_path);
     }
 
+    template<typename T>
+    static boost::optional<T> as_optional(const boost::program_options::variables_map& vm, const char* name) {
+        if (vm.count(name) == 0) {
+            return boost::none;
+        }
+        return vm[name].as<T>();
+    }
+
 private:
     bool _is_help = false;
     fs::path _repo_root;
@@ -436,6 +456,7 @@ private:
     bool _metrics_enable_on_start = false;
     boost::optional<util::url_match> _metrics_server_url;
     std::string _metrics_server_token;
+    boost::optional<asio::ssl::context> _metrics_server_tls_cert;
 };
 
 inline
@@ -718,9 +739,9 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     "Invalid URL for '--origin-doh-base': ", doh_base));
     }
 
-    if (vm.count("metrics-server-url")) {
+    if (auto opt = as_optional<string>(vm, "metrics-server-url")) {
         util::url_match url_match;
-        if (!util::match_http_url(vm["metrics-server-url"].as<string>(), url_match)) {
+        if (!util::match_http_url(*opt, url_match)) {
             throw std::runtime_error(
                     "The '--metrics-server-url' argument must be a valid URL");
         }
@@ -740,6 +761,49 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     "The '--metrics-server-token' must be used with '--metrics-server'");
         }
         _metrics_server_token = vm["metrics-server-token"].as<string>();
+    }
+
+
+    auto metrics_server_tls_cert = as_optional<string>(vm, "metrics-server-tls-cert");
+    auto metrics_server_tls_cert_file = as_optional<string>(vm, "metrics-server-tls-cert-file");
+
+    if (metrics_server_tls_cert && metrics_server_tls_cert_file) {
+        throw std::runtime_error(
+                "Only one of the --metrics-server-tls-cert and --metrics-server-tls-cert-file options may be specified");
+    } else if (metrics_server_tls_cert) {
+        asio::ssl::context ctx{asio::ssl::context::tls_client};
+        sys::error_code ec;
+        ctx.add_certificate_authority(
+                asio::const_buffer(
+                    metrics_server_tls_cert->data(),
+                    metrics_server_tls_cert->size()),
+                ec);
+        if (ec) {
+            throw std::runtime_error(
+                util::str("Failed to add tls certificate for metrics server:", ec.message()));
+        }
+        ctx.set_verify_mode(asio::ssl::verify_peer, ec);
+        if (ec) {
+            throw std::runtime_error(
+                util::str("Failed to set verification mode for metrics server certificate:", ec.message()));
+        }
+        _metrics_server_tls_cert = std::move(ctx);
+    } else if (metrics_server_tls_cert_file) {
+        asio::ssl::context ctx{asio::ssl::context::tls_client};
+        sys::error_code ec;
+        ctx.load_verify_file(*metrics_server_tls_cert_file, ec);
+        if (ec) {
+            throw std::runtime_error(
+                util::str("Failed to read tls certificate for metrics server from \"",
+                          metrics_server_tls_cert_file,
+                          "\" error:", ec.message()));
+        }
+        ctx.set_verify_mode(asio::ssl::verify_peer, ec);
+        if (ec) {
+            throw std::runtime_error(
+                util::str("Failed to set verification mode for metrics server certificate:", ec.message()));
+        }
+        _metrics_server_tls_cert = std::move(ctx);
     }
 
     save_persistent();  // only if no errors happened
