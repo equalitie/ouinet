@@ -124,6 +124,7 @@ set(OUINET_RS_INCLUDE_DIR
 ################################################################################
 file(GLOB client_sources
     "./src/client.cpp"
+    "./src/client_config.cpp"
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
