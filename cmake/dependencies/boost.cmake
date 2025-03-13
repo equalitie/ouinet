@@ -18,6 +18,7 @@ elseif (${BOOST_VERSION} EQUAL 1.87.0)
         add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
         add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
     endif()
+    set(BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
 endif ()
 
 set(BOOST_COMPONENTS
