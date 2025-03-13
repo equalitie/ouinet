@@ -2376,6 +2376,31 @@ void Client::State::serve_request( GenericStream&& con
         Request req(reqhp.release());
         auto req_done = defer([&yield] { _YDEBUG(yield, "Done"); });
 
+        // Some APIs don't allow setting the target but allow including other
+        // headers.  This reads the 'X-Ouinet-Replace-Target' header and if
+        // preset it'll set the target to the header value.
+        {
+            auto field_name = "X-Ouinet-Replace-Target";
+            auto new_target = req[field_name];
+
+            if (!new_target.empty()) {
+                req.target(new_target);
+                util::url_match url;
+                // From https://datatracker.ietf.org/doc/html/rfc7230#page-44
+                //
+                // When a proxy receives a request with an absolute-form of
+                // request-target, the proxy MUST ignore the received Host header field
+                // (if any) and instead replace it with the host information of the
+                // request-target.  A proxy that forwards such a request MUST generate a
+                // new Host field-value based on the received request-target rather than
+                // forward the received Host field-value.
+                if (util::match_http_url(new_target, url)) {
+                    req.set(http::field::host, url.host_and_port());
+                }
+                req.erase(field_name);
+            }
+        }
+
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
             return authenticate(req, con, _config.client_credentials(), y);
         });

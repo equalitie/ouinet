@@ -39,6 +39,14 @@ struct url_match {
             % (fragment.empty() ? "" : '#' + fragment);
         return url.str();
     }
+
+    std::string host_and_port() const {
+        if (port.empty()) {
+            return host;
+        } else {
+            return host + ":" + port;
+        }
+    }
 };
 
 // Parse the HTTP URL to tell the different components.
