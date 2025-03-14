@@ -70,13 +70,11 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     {
         fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
-        if (!fs::is_regular_file(ouinet_conf_path)) {
-            throw error("The path ", _repo_root, " does not contain the "
-                       , _ouinet_conf_file, " configuration file");
+        if (fs::is_regular_file(ouinet_conf_path)) {
+            ifstream ouinet_conf(ouinet_conf_path.string());
+            po::store(po::parse_config_file(ouinet_conf, desc), vm);
+            po::notify(vm);
         }
-        ifstream ouinet_conf(ouinet_conf_path.string());
-        po::store(po::parse_config_file(ouinet_conf, desc), vm);
-        po::notify(vm);
     }
 
     if (vm.count("log-level")) {
