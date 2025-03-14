@@ -20,6 +20,8 @@ std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value
                 >
 number(boost::string_view& s)
 {
+    static_assert(std::numeric_limits<T>::max() <= std::numeric_limits<uint64_t>::max());
+
     size_t endpos = 0;
 
     while (endpos < s.size() && detail::is_digit(s[endpos])) {
@@ -33,6 +35,7 @@ number(boost::string_view& s)
 
     for (size_t i = 0; i < endpos; ++i) {
         unsigned c = (unsigned char) s[endpos-i-1];
+
         r += m * (c - '0');
         m *= 10;
 
@@ -80,6 +83,13 @@ number(boost::string_view& s)
         s.remove_prefix(1);
     }
 
+    // Min is always less by one than (-1 * max)
+    static_assert(-(std::numeric_limits<T>::min() + 1) == std::numeric_limits<T>::max());
+
+    // Check that uint64_t is enough to temporarily store the negative value of the parsed string.
+    // The check for the positive value is done inside the unsigned `number` parser function.
+    static_assert(-(std::numeric_limits<T>::min() + 1) <= std::numeric_limits<uint64_t>::max());
+
     auto on = number<uint64_t>(s);
 
     if (!on) {
@@ -95,7 +105,7 @@ number(boost::string_view& s)
         return *on;
     }
     else {
-        if (*on > (uint64_t) -std::numeric_limits<T>::min()) {
+        if (*on > (uint64_t) -(std::numeric_limits<T>::min() + 1)) {
             s = s_;
             return boost::none;
         }
