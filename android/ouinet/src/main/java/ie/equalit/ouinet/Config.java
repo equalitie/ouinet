@@ -70,6 +70,9 @@ public class Config implements Parcelable {
         private boolean metricsEnableOnStart = false;
         private String metricsServerUrl;
         private String metricsServerToken;
+        // Set either-or, not both.
+        private String metricsServerTlsCaCert;
+        private String metricsServerTlsCaCertPath;
 
         public ConfigBuilder(Context context) {
             Ouinet.maybeLoadLibraries(context);
@@ -195,6 +198,14 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setMetricsServerToken(String token) {
             this.metricsServerToken = token;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerTlsCaCert(String caCert) {
+            this.metricsServerTlsCaCert = caCert;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerTlsCaCertPath(String path) {
+            this.metricsServerTlsCaCertPath = path;
             return this;
         }
 
@@ -381,7 +392,9 @@ public class Config implements Parcelable {
                     enableLogFile,
                     metricsEnableOnStart,
                     metricsServerUrl,
-                    metricsServerToken);
+                    metricsServerToken,
+                    metricsServerTlsCaCert,
+                    metricsServerTlsCaCertPath);
         }
     }
 
@@ -413,6 +426,8 @@ public class Config implements Parcelable {
     private boolean metricsEnableOnStart;
     private String metricsServerUrl;
     private String metricsServerToken;
+    private String metricsServerTlsCaCert;
+    private String metricsServerTlsCaCertPath;
 
     private Config(String ouinetDirectory,
                   Set<String> btBootstrapExtras,
@@ -441,7 +456,9 @@ public class Config implements Parcelable {
                   boolean enableLogFile,
                   boolean metricsEnableOnStart,
                   String metricsServerUrl,
-                  String metricsServerToken) {
+                  String metricsServerToken,
+                  String metricsServerTlsCaCert,
+                  String metricsServerTlsCaCertPath) {
         this.ouinetDirectory = ouinetDirectory;
         this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
         this.cacheHttpPubKey = cacheHttpPubKey;
@@ -470,6 +487,8 @@ public class Config implements Parcelable {
         this.metricsEnableOnStart = metricsEnableOnStart;
         this.metricsServerUrl = metricsServerUrl;
         this.metricsServerToken = metricsServerToken;
+        this.metricsServerTlsCaCert = metricsServerTlsCaCert;
+        this.metricsServerTlsCaCertPath = metricsServerTlsCaCertPath;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -555,6 +574,12 @@ public class Config implements Parcelable {
     public String getMetricsServerToken() {
         return metricsServerToken;
     }
+    public String getMetricsServerTlsCaCert() {
+        return metricsServerTlsCaCert;
+    }
+    public String getMetricsServerTlsCaCertPath() {
+        return metricsServerTlsCaCertPath;
+    }
 
     public static final Parcelable.Creator<Config> CREATOR
             = new Parcelable.Creator<Config>() {
@@ -603,6 +628,8 @@ public class Config implements Parcelable {
         out.writeInt(metricsEnableOnStart ? 1 : 0);
         out.writeString(metricsServerUrl);
         out.writeString(metricsServerToken);
+        out.writeString(metricsServerTlsCaCert);
+        out.writeString(metricsServerTlsCaCertPath);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -646,6 +673,8 @@ public class Config implements Parcelable {
         metricsEnableOnStart = in.readInt() != 0;
         metricsServerUrl = in.readString();
         metricsServerToken = in.readString();
+        metricsServerTlsCaCert = in.readString();
+        metricsServerTlsCaCertPath = in.readString();
     }
 
 }
