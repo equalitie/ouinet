@@ -564,8 +564,11 @@ private:
 
     shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
 
+#ifdef __EXPERIMENTAL__
     //this could be start either because of cache or injector
     shared_ptr<ouiservice::I2pOuiService> _i2p_service;
+#endif // ifdef __EXPERIMENTAL__
+
 };
 
 //------------------------------------------------------------------------------
@@ -2557,6 +2560,7 @@ void Client::State::setup_cache(asio::yield_context yield)
 
 #undef fail_on_error
     }
+#ifdef __EXPERIMENTAL__
     //setup Bep5HttpOverI2P cache
     else if (_config.cache_type() == ClientConfig::CacheType::Bep5HttpOverI2P) {
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
@@ -2568,6 +2572,7 @@ void Client::State::setup_cache(asio::yield_context yield)
       _i2p_service->start_i2cp_server();
       _i2p_service->start_tunneller_service();
     }
+#endif // ifdef __EXPERIMENTAL__
     //unsupported cache type
 	else {
         ec = asio::error::operation_not_supported;
