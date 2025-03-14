@@ -9,6 +9,18 @@ std::runtime_error error(Args&&... args) {
     return std::runtime_error(util::str(std::forward<Args>(args)...));
 }
 
+// Helper to avoid writing the name of the option twice.
+template<typename T>
+static boost::optional<T> as_optional(const boost::program_options::variables_map& vm, const char* name) {
+    if (vm.count(name) == 0) {
+        return boost::none;
+    }
+    return vm[name].as<T>();
+}
+
+asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom);
+asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, const char* for_whom);
+
 ClientConfig::ClientConfig(int argc, char* argv[])
 {
     using namespace std;
@@ -26,18 +38,19 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         return;
     }
 
-    if (!vm.count("repo")) {
+    if (auto opt = as_optional<string>(vm, "repo")) {
+        _repo_root = fs::path(*opt);
+
+        if (!fs::exists(_repo_root)) {
+            throw error("No such directory: ", _repo_root);
+        }
+
+        if (!fs::is_directory(_repo_root)) {
+            throw error("The path is not a directory: ", _repo_root);
+        }
+    }
+    else {
         throw error("The '--repo' option is missing");
-    }
-
-    _repo_root = fs::path(vm["repo"].as<string>());
-
-    if (!fs::exists(_repo_root)) {
-        throw error("No such directory: ", _repo_root);
-    }
-
-    if (!fs::is_directory(_repo_root)) {
-        throw error("The path is not a directory: ", _repo_root);
     }
 
     // Load the file with saved configuration options, if it exists
@@ -79,8 +92,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _is_log_file_enabled(true);
     }
 
-    if (vm.count("bt-bootstrap-extra")) {
-        for (const auto& btbsx : vm["bt-bootstrap-extra"].as<vector<string>>()) {
+    if (auto opt = as_optional<vector<string>>(vm, "bt-bootstrap-extra")) {
+        for (const auto& btbsx : *opt) {
             // Better processing will take place later on, just very basic checking here.
             auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
             if (!btbs_addr)
@@ -89,33 +102,33 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    if (vm.count("open-file-limit")) {
-        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
+    if (auto opt = as_optional<unsigned int>(vm, "open-file-limit")) {
+        increase_open_file_limit(*opt);
     }
 
-    if (vm.count("max-cached-age")) {
-        _max_cached_age = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
+    if (auto opt = as_optional<int>(vm, "max-cached-age")) {
+        _max_cached_age = boost::posix_time::seconds(*opt);
     }
 
-    if (vm.count("max-simultaneous-announcements")) {
-        _max_simultaneous_announcements = vm["max-simultaneous-announcements"].as<int>();
+    if (auto opt = as_optional<int>(vm, "max-simultaneous-announcements")) {
+        _max_simultaneous_announcements = *opt;
     }
 
-    assert(vm.count("listen-on-tcp"));
+    assert(vm.count("listen-on-tcp") && "--listen-on-tcp should have a default value");
     {
         auto opt_local_ep = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
         if (!opt_local_ep) {
-            throw error("Failed to parse '--listen-on-tcp' argument");
+            throw error("Failed to parse '--listen-on-tcp' argument as TCP endpoint");
         }
         _local_ep = *opt_local_ep;
     }
 
-    if (vm.count("udp-mux-port")) {
-        _udp_mux_port = vm["udp-mux-port"].as<uint16_t>();
+    if (auto opt = as_optional<uint16_t>(vm, "udp-mux-port")) {
+        _udp_mux_port = *opt;
     }
 
-    if (vm.count("injector-ep")) {
-        auto injector_ep_str = vm["injector-ep"].as<string>();
+    if (auto opt = as_optional<string>(vm, "injector-ep")) {
+        auto injector_ep_str = *opt;
 
         if (!injector_ep_str.empty()) {
             auto opt = parse_endpoint(injector_ep_str);
@@ -128,7 +141,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
-    assert(vm.count("front-end-ep"));
+    assert(vm.count("front-end-ep") && "--front-end-ep should have a default value");
     {
         auto opt_fe_ep = parse::endpoint<asio::ip::tcp>(vm["front-end-ep"].as<string>());
         if (!opt_fe_ep) {
@@ -137,12 +150,12 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _front_end_endpoint = *opt_fe_ep;
     }
 
-    if (vm.count("disable-bridge-announcement")) {
-        _disable_bridge_announcement = vm["disable-bridge-announcement"].as<bool>();
+    if (auto opt = as_optional<bool>(vm, "disable-bridge-announcement")) {
+        _disable_bridge_announcement = *opt;
     }
 
-    if (vm.count("client-credentials")) {
-        auto cred = vm["client-credentials"].as<string>();
+    if (auto opt = as_optional<string>(vm, "client-credentials")) {
+        auto cred = *opt;
 
         if (!cred.empty() && cred.find(':') == string::npos) {
             throw error(
@@ -154,9 +167,9 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _client_credentials = move(cred);
     }
 
-    auto maybe_set_pk = [&] (const string& opt, auto& pk) {
-        if (vm.count(opt)) {
-            string value = vm[opt].as<string>();
+    auto maybe_set_pk = [&] (const string& opt_name, auto& pk) {
+        if (auto opt = as_optional<string>(vm, opt_name.c_str())) {
+            string value = *opt;
 
             using PubKey = util::Ed25519PublicKey;
             pk = PubKey::from_hex(value);
@@ -177,8 +190,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     maybe_set_pk("cache-http-public-key", _cache_http_pubkey);
 
-    if (vm.count("cache-type")) {
-        auto type_str = vm["cache-type"].as<string>();
+    if (auto opt = as_optional<string>(vm, "cache-type")) {
+        auto type_str = *opt;
 
         if (type_str == "bep5-http") {
             // https://redmine.equalit.ie/issues/14920#note-1
@@ -212,8 +225,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
     }
 
-    if (vm.count("injector-credentials")) {
-        auto cred = vm["injector-credentials"].as<string>();
+    if (auto opt = as_optional<string>(vm, "injector-credentials")) {
+        auto cred = *opt;
 
         if (!cred.empty()
           && cred.find(':') == string::npos) {
@@ -240,8 +253,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         throw error("BEP5/HTTP cache selected but no injector HTTP public key specified");
     }
 
-    if (vm.count("cache-static-root")) {
-        _cache_static_content_path = vm["cache-static-root"].as<string>();
+    if (auto opt = as_optional<string>(vm, "cache-static-root")) {
+        _cache_static_content_path = *opt;
         if (!fs::is_directory(_cache_static_content_path))
             throw error("No such directory: ", _cache_static_content_path);
         if (!vm.count("cache-static-repo")) {
@@ -249,25 +262,25 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             LOG_INFO("No static cache repository given, assuming: ", _cache_static_path);
         }
     }
-    if (vm.count("cache-static-repo")) {
-        _cache_static_path = vm["cache-static-repo"].as<string>();
+    if (auto opt = as_optional<string>(vm, "cache-static-repo")) {
+        _cache_static_path = *opt;
         if (!vm.count("cache-static-root"))
             throw error("'--cache-static-root' must be explicity given when using a static cache");
     }
     if (!_cache_static_path.empty() && !fs::is_directory(_cache_static_path))
         throw error("No such directory: ", _cache_static_path);
 
-    if (vm.count("local-domain")) {
+    if (auto opt = as_optional<string>(vm, "local-domain")) {
+        auto local_domain = *opt;
         auto tld_rx = boost::regex("[-0-9a-zA-Z]+");
-        auto local_domain = vm["local-domain"].as<string>();
         if (!boost::regex_match(local_domain, tld_rx)) {
             throw error("Invalid TLD for '--local-domain': ", local_domain);
         }
         _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
-    if (vm.count("origin-doh-base")) {
-        auto doh_base = vm["origin-doh-base"].as<string>();
+    if (auto opt = as_optional<string>(vm, "origin-doh-base")) {
+        auto doh_base = *opt;
         _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
         if (!_origin_doh_endpoint)
             throw error(util::str(
@@ -283,18 +296,18 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _metrics_server_url = url_match;
     }
 
-    if (vm.count("metrics-enable-on-start")) {
-        _metrics_enable_on_start = vm["metrics-enable-on-start"].as<bool>();
+    if (auto opt = as_optional<bool>(vm, "metrics-enable-on-start")) {
+        _metrics_enable_on_start = *opt;
         if (_metrics_enable_on_start && !_metrics_server_url) {
             throw error("--metrics-enable-on-start must be used with --metrics-server-url");
         }
     }
 
-    if (vm.count("metrics-server-token")) {
+    if (auto opt = as_optional<string>(vm, "metrics-server-token")) {
         if (!_metrics_server_url) {
             throw error("The '--metrics-server-token' must be used with '--metrics-server'");
         }
-        _metrics_server_token = vm["metrics-server-token"].as<string>();
+        _metrics_server_token = *opt;
     }
 
 
@@ -304,39 +317,56 @@ ClientConfig::ClientConfig(int argc, char* argv[])
     if (metrics_server_tls_cert && metrics_server_tls_cert_file) {
         throw error("Only one of the --metrics-server-tls-cert and --metrics-server-tls-cert-file options may be specified");
     } else if (metrics_server_tls_cert) {
-        asio::ssl::context ctx{asio::ssl::context::tls_client};
-        sys::error_code ec;
-        ctx.add_certificate_authority(
-                asio::const_buffer(
-                    metrics_server_tls_cert->data(),
-                    metrics_server_tls_cert->size()),
-                ec);
-        if (ec) {
-            throw error("Failed to add tls certificate for metrics server:", ec.message());
-        }
-        ctx.set_verify_mode(asio::ssl::verify_peer, ec);
-        if (ec) {
-            throw std::runtime_error(
-                util::str("Failed to set verification mode for metrics server certificate:", ec.message()));
-        }
-        _metrics_server_tls_cert = std::move(ctx);
+        _metrics_server_tls_cert = load_tls_client_ctx_from_string(*metrics_server_tls_cert, "metrics server");
     } else if (metrics_server_tls_cert_file) {
-        asio::ssl::context ctx{asio::ssl::context::tls_client};
-        sys::error_code ec;
-        ctx.load_verify_file(*metrics_server_tls_cert_file, ec);
-        if (ec) {
-            throw error("Failed to read tls certificate for metrics server from \""
-                       , metrics_server_tls_cert_file
-                       , "\" error:", ec.message());
-        }
-        ctx.set_verify_mode(asio::ssl::verify_peer, ec);
-        if (ec) {
-            throw error("Failed to set verification mode for metrics server certificate:", ec.message());
-        }
-        _metrics_server_tls_cert = std::move(ctx);
+        _metrics_server_tls_cert = load_tls_client_ctx_from_file(*metrics_server_tls_cert_file, "metrics server");
     }
 
     save_persistent();  // only if no errors happened
 }
+
+asio::ssl::context load_tls_client_ctx_from_string(const std::string& cert_str, const char* for_whom) {
+        asio::ssl::context ctx{asio::ssl::context::tls_client};
+        sys::error_code ec;
+
+        ctx.add_certificate_authority(
+                asio::const_buffer(cert_str.data(), cert_str.size()), ec);
+
+        if (ec) {
+            throw error("Failed to add tls certificate for ", for_whom, ":", ec.message(), "\n"
+                       , "The certificate passed:\n"
+                       , cert_str, "\n");
+        }
+
+        ctx.set_verify_mode(asio::ssl::verify_peer, ec);
+
+        if (ec) {
+            throw std::runtime_error(
+                util::str("Failed to set verification mode for ", for_whom, " certificate:", ec.message()));
+        }
+        return ctx;
+}
+
+asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom) {
+    asio::ssl::context ctx{asio::ssl::context::tls_client};
+    sys::error_code ec;
+
+    ctx.load_verify_file(path, ec);
+
+    if (ec) {
+        throw error("Failed to read tls certificate for ", for_whom, " from \""
+                   , path
+                   , "\" error:", ec.message());
+    }
+
+    ctx.set_verify_mode(asio::ssl::verify_peer, ec);
+
+    if (ec) {
+        throw error("Failed to set verification mode for ", for_whom, " certificate:", ec.message());
+    }
+    return ctx;
+}
+
+asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str);
 
 } // namespace

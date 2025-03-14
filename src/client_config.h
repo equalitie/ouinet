@@ -412,14 +412,6 @@ private:
         LOG_INFO("Log file set to: ", ouinet_log_path);
     }
 
-    template<typename T>
-    static boost::optional<T> as_optional(const boost::program_options::variables_map& vm, const char* name) {
-        if (vm.count(name) == 0) {
-            return boost::none;
-        }
-        return vm[name].as<T>();
-    }
-
 private:
     bool _is_help = false;
     fs::path _repo_root;
