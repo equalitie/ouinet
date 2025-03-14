@@ -11,16 +11,26 @@ namespace ouinet { namespace parse {
 namespace detail {
     inline
     bool is_digit(char c) { return '0' <= c && c <= '9'; }
+
+    inline
+    uint8_t digit(char c) { return c - '0'; }
+
+    template<typename T> struct MaxStr;
+    template<> struct MaxStr<uint8_t>  { boost::string_view str() { return boost::string_view("255", 3); } };
+    template<> struct MaxStr<uint16_t> { boost::string_view str() { return boost::string_view("65535", 5); } };
+    template<> struct MaxStr<uint32_t> { boost::string_view str() { return boost::string_view("4294967295", 10); } };
+    template<> struct MaxStr<uint64_t> { boost::string_view str() { return boost::string_view("18446744073709551615", 20); } };
 }
 
 //--------------------------------------------------------------------
-template<class T>
-std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value
+template<class StoreT, class T>
+std::enable_if_t< std::is_unsigned<StoreT>::value && std::is_integral<StoreT>::value
+                && std::is_unsigned<T>::value && std::is_integral<T>::value
                 , boost::optional<T>
                 >
-number(boost::string_view& s)
+number_with(boost::string_view& s)
 {
-    static_assert(std::numeric_limits<T>::max() <= std::numeric_limits<uint64_t>::max());
+    static_assert(std::numeric_limits<T>::max() <= std::numeric_limits<StoreT>::max());
 
     size_t endpos = 0;
 
@@ -30,22 +40,48 @@ number(boost::string_view& s)
 
     if (endpos == 0) return boost::none;
 
-    uint64_t r = 0;
-    uint64_t m = 1;
+    auto max_str = detail::MaxStr<T>().str();
+
+    if (endpos > max_str.size()) {
+        return boost::none;
+    }
+
+    if (endpos == max_str.size()) {
+        for (size_t i = 0; i <= endpos; ++i) {
+            auto d_in  = detail::digit(s[i]);
+            auto d_max = detail::digit(max_str[i]);
+
+            if (d_in > d_max) {
+                return boost::none;
+            }
+
+            if (d_in < d_max) {
+                break;
+            }
+        }
+    }
+
+    StoreT r = 0;
+    StoreT m = 1;
 
     for (size_t i = 0; i < endpos; ++i) {
-        unsigned c = (unsigned char) s[endpos-i-1];
+        uint8_t d = detail::digit(s[endpos-i-1]);
 
-        r += m * (c - '0');
+        r += m * d;
         m *= 10;
-
-        if (r > std::numeric_limits<T>::max()) {
-            return boost::none;
-        }
     }
 
     s.remove_prefix(endpos);
     return r;
+}
+
+template<class T>
+std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value
+                , boost::optional<T>
+                >
+number(boost::string_view& s)
+{
+    return number_with<uint64_t, T>(s);
 }
 
 // Since some boost version the `beast::string_view` became a different type
@@ -76,10 +112,10 @@ number(boost::string_view& s)
 
     if (s.empty()) return boost::none;
 
-    int64_t sign = +1;
+    bool positive = true;
 
     if (s[0] == '+' || s[0] == '-') {
-        if (s[0] == '-') sign = -1;
+        if (s[0] == '-') positive = false;
         s.remove_prefix(1);
     }
 
@@ -97,19 +133,24 @@ number(boost::string_view& s)
         return boost::none;
     }
 
-    if (sign > 0) {
-        if (*on > std::numeric_limits<T>::max()) {
+    auto n = *on;
+
+    if (positive) {
+        if (n > std::numeric_limits<T>::max()) {
             s = s_;
             return boost::none;
         }
-        return *on;
+        return n;
     }
     else {
-        if (*on > (uint64_t) -(std::numeric_limits<T>::min() + 1)) {
+        if ((n - 1) == std::numeric_limits<T>::max()) {
+            return -n;
+        }
+        if (n > (uint64_t) -(std::numeric_limits<T>::min() + 1)) {
             s = s_;
             return boost::none;
         }
-        return -*on;
+        return -n;
     }
 }
 
