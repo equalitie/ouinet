@@ -173,7 +173,6 @@ endif()
 
 target_link_libraries(client
     PRIVATE
-        Boost::asio_ssl
         Boost::iostreams
         lib::asio_utp
         cpp_upnp
@@ -185,6 +184,10 @@ target_link_libraries(client
         ${EXPERIMENTAL_LIBRARIES}
         ouinet_rs
     PUBLIC
+        # Boost::asio_ssl is public for Android because the ClientConfig used
+        # in native-lib.cpp contains ssl::context and we need its move
+        # constructor and destructor implementations.
+        Boost::asio_ssl
         ouinet::base
 )
 target_include_directories(client ${OUINET_RS_INCLUDE_DIR})
