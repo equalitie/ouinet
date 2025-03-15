@@ -170,7 +170,9 @@ BOOST_AUTO_TEST_CASE(test_signed_number) {
         string_view s = "-129";
         BOOST_REQUIRE(!parse::number<char>(s));
     }
+}
 
+BOOST_AUTO_TEST_CASE(test_overflows) {
     {
         stringstream ss;
         ss << numeric_limits<uint64_t>::max();
@@ -207,7 +209,7 @@ BOOST_AUTO_TEST_CASE(test_signed_number) {
         ss << i;
         auto str = ss.str();
         string_view sv(str.data(), str.size());
-        auto on = parse::number_with<uint8_t, uint8_t>(sv);
+        auto on = parse::number<uint8_t>(sv);
         if (i <= numeric_limits<uint8_t>::max()) {
             BOOST_REQUIRE(on);
             BOOST_REQUIRE_EQUAL(i, *on);
@@ -215,6 +217,16 @@ BOOST_AUTO_TEST_CASE(test_signed_number) {
         else {
             BOOST_REQUIRE(!on);
         }
+    }
+
+    // There can be any number of preceding zeros, even if the length of the
+    // string is longer than stringified version of the max value of the given
+    // type.
+    {
+        string_view s = "0255";
+        auto on = parse::number<uint8_t>(s);
+        BOOST_REQUIRE(on);
+        BOOST_REQUIRE_EQUAL(255, *on);
     }
 }
 
