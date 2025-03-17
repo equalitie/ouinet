@@ -27,7 +27,7 @@ mod normal_impl {
             let (tx, rx) = oneshot::channel();
             self.cxx_processor.as_ref().unwrap().execute(
                 record.name(),
-                record.data.clone(),
+                record.content.clone(),
                 Box::new(CxxOneShotSender::new(tx)),
             );
             match rx.await {
@@ -53,7 +53,7 @@ mod test_impl {
             // Just use these so the compiler doesn't spit out warnings about not being used or
             // constructed.
             let _name = record.name();
-            let _data = record.data.clone();
+            let _data = record.content.clone();
             let _err = RecordProcessorError::CxxDisconnected;
             Ok(true)
         }

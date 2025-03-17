@@ -1,6 +1,11 @@
-use crate::{backoff::Backoff, constants, device_id::DeviceId, record_number::RecordNumber};
+use crate::{
+    backoff::Backoff,
+    constants,
+    crypto::{self, PublicKey},
+    device_id::DeviceId,
+    record_number::RecordNumber,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::{
     ffi::OsStr,
     io,
@@ -12,13 +17,14 @@ use uuid::Uuid;
 
 pub struct Store {
     records_dir_path: PathBuf,
+    encryption_key: PublicKey,
     pub record_number: RecordNumber,
     pub backoff: Backoff,
     pub device_id: DeviceId,
 }
 
 impl Store {
-    pub async fn new(root_path: PathBuf) -> io::Result<Self> {
+    pub async fn new(root_path: PathBuf, encryption_key: PublicKey) -> io::Result<Self> {
         let records_dir_path = root_path.join("records");
         let device_id_path = root_path.join("device_id.json");
         let record_number_path = root_path.join("record_number.json");
@@ -32,6 +38,7 @@ impl Store {
 
         Ok(Self {
             records_dir_path,
+            encryption_key,
             record_number,
             backoff,
             device_id,
@@ -39,12 +46,13 @@ impl Store {
     }
 
     pub async fn write<D: Serialize>(path: &Path, data: &D) -> io::Result<()> {
-        fs::write(path, &json!(data).to_string()).await
+        let content = serde_json::to_vec(data)?;
+        fs::write(path, &content).await
     }
 
     pub async fn read<D: for<'a> Deserialize<'a>>(path: &Path) -> io::Result<Option<D>> {
-        match fs::read_to_string(path).await {
-            Ok(string) => match serde_json::from_str::<D>(&string) {
+        match fs::read(path).await {
+            Ok(content) => match serde_json::from_slice(&content) {
                 Ok(data) => Ok(Some(data)),
                 Err(_) => {
                     log::warn!("Failed to parse file {path:?}, removing it");
@@ -88,12 +96,10 @@ impl Store {
             constants::RECORD_FILE_EXTENSION
         ));
 
-        let content = StoredRecordContent {
-            created: SystemTime::now(),
-            data: record_data,
-        };
+        let content = crypto::encrypt(&self.encryption_key, record_data.as_bytes())
+            .map_err(io::Error::other)?;
 
-        Self::write(&record_path, &content).await
+        fs::write(record_path, &content).await
     }
 
     pub async fn load_stored_records(&self) -> io::Result<Vec<StoredRecord>> {
@@ -129,13 +135,10 @@ impl Store {
                 continue;
             }
 
-            let content = match Self::read::<StoredRecordContent>(&path).await {
-                Ok(None) => continue,
-                Ok(Some(content)) => content,
-                Err(error) => return Err(error),
-            };
+            let created = entry.metadata().await?.created()?;
+            let content = fs::read(&path).await?;
 
-            let delete = match SystemTime::now().duration_since(content.created) {
+            let delete = match created.elapsed() {
                 Ok(duration) => duration >= constants::DELETE_RECORDS_AFTER,
                 // System has moved time to prior to creating the record.
                 Err(_) => true,
@@ -150,8 +153,8 @@ impl Store {
                 device_id,
                 record_number,
                 path,
-                created: content.created,
-                data: content.data,
+                created,
+                content,
             });
         }
 
@@ -193,7 +196,7 @@ pub struct StoredRecord {
     pub record_number: u32,
     pub path: PathBuf,
     pub created: SystemTime,
-    pub data: String,
+    pub content: Vec<u8>,
 }
 
 impl StoredRecord {
@@ -218,5 +221,6 @@ impl StoredRecord {
 struct StoredRecordContent {
     // TODO: Should we get this from file meta-data?
     created: SystemTime,
-    data: String,
+    #[serde(with = "serde_bytes")]
+    data: Vec<u8>,
 }

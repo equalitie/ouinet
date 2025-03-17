@@ -3,6 +3,7 @@ mod backoff_watch;
 mod bridge;
 mod clock;
 mod constants;
+mod crypto;
 mod device_id;
 mod logger;
 mod metrics;
