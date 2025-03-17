@@ -70,6 +70,7 @@ public class Config implements Parcelable {
         private boolean metricsEnableOnStart = false;
         private String metricsServerUrl;
         private String metricsServerToken;
+        private String metricsEncryptionKey;
         // Set either-or, not both.
         private String metricsServerTlsCaCert;
         private String metricsServerTlsCaCertPath;
@@ -198,6 +199,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setMetricsServerToken(String token) {
             this.metricsServerToken = token;
+            return this;
+        }
+        public ConfigBuilder setMetricsEncryptionKey(String key) {
+            this.metricsEncryptionKey = key;
             return this;
         }
         public ConfigBuilder setMetricsServerTlsCaCert(String caCert) {
@@ -393,6 +398,7 @@ public class Config implements Parcelable {
                     metricsEnableOnStart,
                     metricsServerUrl,
                     metricsServerToken,
+                    metricsEncryptionKey,
                     metricsServerTlsCaCert,
                     metricsServerTlsCaCertPath);
         }
@@ -426,6 +432,7 @@ public class Config implements Parcelable {
     private boolean metricsEnableOnStart;
     private String metricsServerUrl;
     private String metricsServerToken;
+    private String metricsEncryptionKey;
     private String metricsServerTlsCaCert;
     private String metricsServerTlsCaCertPath;
 
@@ -457,6 +464,7 @@ public class Config implements Parcelable {
                   boolean metricsEnableOnStart,
                   String metricsServerUrl,
                   String metricsServerToken,
+                  String metricsEncryptionKey,
                   String metricsServerTlsCaCert,
                   String metricsServerTlsCaCertPath) {
         this.ouinetDirectory = ouinetDirectory;
@@ -487,6 +495,7 @@ public class Config implements Parcelable {
         this.metricsEnableOnStart = metricsEnableOnStart;
         this.metricsServerUrl = metricsServerUrl;
         this.metricsServerToken = metricsServerToken;
+        this.metricsEncryptionKey = metricsEncryptionKey;
         this.metricsServerTlsCaCert = metricsServerTlsCaCert;
         this.metricsServerTlsCaCertPath = metricsServerTlsCaCertPath;
     }
@@ -574,6 +583,9 @@ public class Config implements Parcelable {
     public String getMetricsServerToken() {
         return metricsServerToken;
     }
+    public String getMetricsEncryptionKey() {
+        return metricsEncryptionKey;
+    }
     public String getMetricsServerTlsCaCert() {
         return metricsServerTlsCaCert;
     }
@@ -628,6 +640,7 @@ public class Config implements Parcelable {
         out.writeInt(metricsEnableOnStart ? 1 : 0);
         out.writeString(metricsServerUrl);
         out.writeString(metricsServerToken);
+        out.writeString(metricsEncryptionKey);
         out.writeString(metricsServerTlsCaCert);
         out.writeString(metricsServerTlsCaCertPath);
     }
@@ -673,6 +686,7 @@ public class Config implements Parcelable {
         metricsEnableOnStart = in.readInt() != 0;
         metricsServerUrl = in.readString();
         metricsServerToken = in.readString();
+        metricsEncryptionKey = in.readString();
         metricsServerTlsCaCert = in.readString();
         metricsServerTlsCaCertPath = in.readString();
     }

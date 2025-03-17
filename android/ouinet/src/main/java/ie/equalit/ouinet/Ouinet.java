@@ -142,9 +142,10 @@ public class Ouinet {
         maybeAddBool(args, "--cache-private",               config.getCachePrivate());
         maybeAddBool(args, "--disable-bridge-announcement", config.getDisableBridgeAnnouncement());
 
-        maybeAddBool(args, "--metrics-enable-on-start", config.getMetricsEnableOnStart());
-        maybeAdd    (args, "--metrics-server-url",      config.getMetricsServerUrl());
-        maybeAdd    (args, "--metrics-server-token",    config.getMetricsServerToken());
+        maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
+        maybeAdd    (args, "--metrics-server-url",          config.getMetricsServerUrl());
+        maybeAdd    (args, "--metrics-server-token",        config.getMetricsServerToken());
+        maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
         maybeAdd    (args, "--metrics-server-cacert",       config.getMetricsServerTlsCaCert());
         maybeAdd    (args, "--metrics-server-cacert-file",  config.getMetricsServerTlsCaCertPath());
 
