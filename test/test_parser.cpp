@@ -114,6 +114,14 @@ BOOST_AUTO_TEST_CASE(test_signed_number) {
     }
 
     {
+        string_view s = "-0";
+        auto on = parse::number<int>(s);
+
+        BOOST_REQUIRE(on);
+        BOOST_REQUIRE_EQUAL(0, *on);
+    }
+
+    {
         string_view s = "01234";
         auto on = parse::number<int>(s);
 

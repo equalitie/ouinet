@@ -161,6 +161,11 @@ number(boost::string_view& s)
 
     Abs abs = *abs_opt;
 
+    if (abs == 0) {
+        // Regardless of the sign.
+        return abs;
+    }
+
     if (!negative) {
         if (abs > std::numeric_limits<T>::max()) {
             s = s_;
