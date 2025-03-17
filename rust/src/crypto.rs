@@ -7,9 +7,9 @@ use x25519_dalek::EphemeralSecret;
 
 /// Static public key for asymmetric encryption
 #[derive(Clone, Copy)]
-pub struct PublicKey(x25519_dalek::PublicKey);
+pub struct EncryptionKey(x25519_dalek::PublicKey);
 
-impl PublicKey {
+impl EncryptionKey {
     const SIZE: usize = 32;
 
     /// Parse the public key from the content of a PEM file
@@ -28,15 +28,15 @@ impl PublicKey {
     }
 }
 
-impl From<[u8; Self::SIZE]> for PublicKey {
+impl From<[u8; Self::SIZE]> for EncryptionKey {
     fn from(bytes: [u8; Self::SIZE]) -> Self {
         Self(bytes.into())
     }
 }
 
-pub(crate) struct SecretKey(x25519_dalek::StaticSecret);
+pub(crate) struct DecryptionKey(x25519_dalek::StaticSecret);
 
-impl SecretKey {
+impl DecryptionKey {
     #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn random<R: CryptoRng>(rng: &mut R) -> Self {
         use rand::Rng;
@@ -49,9 +49,9 @@ impl SecretKey {
     }
 }
 
-impl<'a> From<&'a SecretKey> for PublicKey {
-    fn from(sk: &'a SecretKey) -> Self {
-        PublicKey(x25519_dalek::PublicKey::from(&sk.0))
+impl<'a> From<&'a DecryptionKey> for EncryptionKey {
+    fn from(dk: &'a DecryptionKey) -> Self {
+        EncryptionKey(x25519_dalek::PublicKey::from(&dk.0))
     }
 }
 
@@ -88,11 +88,11 @@ pub struct EncryptError;
 /// perform a diffie-hellman with the static secret key and this public key to obtain the shared
 /// secret, then decrypt the rest of the message using the AES-256-GCM scheme with the previously
 /// obtained shared secret and a zero nonce.
-pub fn encrypt(static_public_key: &PublicKey, plaintext: &[u8]) -> Result<Vec<u8>, EncryptError> {
+pub fn encrypt(encryption_key: &EncryptionKey, plaintext: &[u8]) -> Result<Vec<u8>, EncryptError> {
     let ephemeral_secret_key = EphemeralSecret::random();
     let ephemeral_public_key = x25519_dalek::PublicKey::from(&ephemeral_secret_key);
 
-    let shared_secret = ephemeral_secret_key.diffie_hellman(&static_public_key.0);
+    let shared_secret = ephemeral_secret_key.diffie_hellman(&encryption_key.0);
     let mut cipher = Aes256Gcm::new(shared_secret.as_bytes().into());
 
     let mut output = Vec::new();
@@ -102,7 +102,7 @@ pub fn encrypt(static_public_key: &PublicKey, plaintext: &[u8]) -> Result<Vec<u8
     // We use unique key for every message so there is no need to have unique nonce as well. Using
     // 0000... so that we don't have to embed the nonce with the message.
     let tag = cipher
-        .encrypt_in_place_detached(&Nonce::default(), &[], &mut output[PublicKey::SIZE..])
+        .encrypt_in_place_detached(&Nonce::default(), &[], &mut output[EncryptionKey::SIZE..])
         .map_err(|_| EncryptError)?;
 
     output.extend_from_slice(&tag);
@@ -127,15 +127,15 @@ mod tests {
         let n = 32;
 
         for _ in 0..n {
-            let static_secret_key = SecretKey::random(&mut rng);
-            let static_public_key = PublicKey::from(&static_secret_key);
+            let decryption_key = DecryptionKey::random(&mut rng);
+            let encryption_key = EncryptionKey::from(&decryption_key);
 
             let plaintext_len = rng.random_range(1..=1024);
             let plaintext = Alphanumeric.sample_string(&mut rng, plaintext_len);
 
-            let ciphertext = encrypt(&static_public_key, plaintext.as_bytes()).unwrap();
+            let ciphertext = encrypt(&encryption_key, plaintext.as_bytes()).unwrap();
 
-            let roundtrip = decrypt(&static_secret_key, &ciphertext).unwrap();
+            let roundtrip = decrypt(&decryption_key, &ciphertext).unwrap();
             let roundtrip = String::from_utf8(roundtrip).unwrap();
 
             assert_eq!(plaintext, roundtrip);
@@ -145,12 +145,12 @@ mod tests {
     #[derive(Debug)]
     struct DecryptError;
 
-    fn decrypt(static_secret_key: &SecretKey, ciphertext: &[u8]) -> Result<Vec<u8>, DecryptError> {
+    fn decrypt(decryption_key: &DecryptionKey, ciphertext: &[u8]) -> Result<Vec<u8>, DecryptError> {
         let ephemeral_public_key: [u8; 32] =
             ciphertext[..32].try_into().map_err(|_| DecryptError)?;
         let ephemeral_public_key = x25519_dalek::PublicKey::from(ephemeral_public_key);
 
-        let shared_secret = static_secret_key.0.diffie_hellman(&ephemeral_public_key);
+        let shared_secret = decryption_key.0.diffie_hellman(&ephemeral_public_key);
         let cipher = Aes256Gcm::new(shared_secret.as_bytes().into());
 
         cipher

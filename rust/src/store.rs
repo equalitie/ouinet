@@ -1,7 +1,7 @@
 use crate::{
     backoff::Backoff,
     constants,
-    crypto::{self, PublicKey},
+    crypto::{self, EncryptionKey},
     device_id::DeviceId,
     record_number::RecordNumber,
 };
@@ -17,14 +17,14 @@ use uuid::Uuid;
 
 pub struct Store {
     records_dir_path: PathBuf,
-    encryption_key: PublicKey,
+    encryption_key: EncryptionKey,
     pub record_number: RecordNumber,
     pub backoff: Backoff,
     pub device_id: DeviceId,
 }
 
 impl Store {
-    pub async fn new(root_path: PathBuf, encryption_key: PublicKey) -> io::Result<Self> {
+    pub async fn new(root_path: PathBuf, encryption_key: EncryptionKey) -> io::Result<Self> {
         let records_dir_path = root_path.join("records");
         let device_id_path = root_path.join("device_id.json");
         let record_number_path = root_path.join("record_number.json");

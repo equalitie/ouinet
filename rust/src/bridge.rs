@@ -1,5 +1,5 @@
 use crate::{
-    crypto::PublicKey,
+    crypto::EncryptionKey,
     logger,
     metrics::{
         request::{self, RequestId, RequestType},
@@ -81,11 +81,9 @@ mod ffi {
     }
 }
 
-type EncryptionKey = PublicKey;
-
 fn validate_encryption_key(pem_str: String) -> Result<Box<EncryptionKey>, String> {
     Ok(Box::new(
-        PublicKey::from_pem(&pem_str).map_err(|error| error.to_string())?,
+        EncryptionKey::from_pem(&pem_str).map_err(|error| error.to_string())?,
     ))
 }
 
@@ -136,7 +134,7 @@ fn stop_current_client() -> Option<Arc<Runtime>> {
 
 // Create a new Client, if there were any clients created but not destroyed beforehand, all their
 // operations will be no-ops.
-fn new_client(store_path: String, encryption_key: Box<PublicKey>) -> Box<Client> {
+fn new_client(store_path: String, encryption_key: Box<EncryptionKey>) -> Box<Client> {
     logger::init_idempotent();
     let runtime = match stop_current_client() {
         Some(runtime) => runtime,
@@ -156,7 +154,7 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(runtime: Arc<Runtime>, store_path: PathBuf, encryption_key: Box<PublicKey>) -> Self {
+    fn new(runtime: Arc<Runtime>, store_path: PathBuf, encryption_key: Box<EncryptionKey>) -> Self {
         let _runtime_guard = runtime.enter();
 
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();

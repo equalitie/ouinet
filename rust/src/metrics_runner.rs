@@ -1,6 +1,6 @@
 use crate::{
     backoff_watch::ConstantBackoffWatchReceiver,
-    crypto::PublicKey,
+    crypto::EncryptionKey,
     metrics::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
     store::{Store, StoredRecord},
@@ -25,7 +25,7 @@ enum Event {
 pub async fn metrics_runner(
     metrics: Arc<Mutex<Metrics>>,
     store_path: PathBuf,
-    encryption_key: PublicKey,
+    encryption_key: EncryptionKey,
     record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
 ) -> Result<(), MetricsRunnerError> {
     let mut store = Store::new(store_path, encryption_key).await?;
@@ -209,7 +209,7 @@ pub enum MetricsRunnerError {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::crypto::SecretKey;
+    use crate::crypto::{DecryptionKey, EncryptionKey};
     use std::collections::BTreeSet;
     use tmpdir::TmpDir;
     use uuid::Uuid;
@@ -230,11 +230,9 @@ mod test {
     impl Setup {
         async fn new() -> Self {
             let tmpdir = TmpDir::new("metrics_runner_store").await.unwrap();
-            let secret_key = SecretKey::random(&mut rand::rng());
-            let public_key = PublicKey::from(&secret_key);
-            let store = Store::new(tmpdir.as_ref().into(), public_key)
-                .await
-                .unwrap();
+            let dk = DecryptionKey::random(&mut rand::rng());
+            let ek = EncryptionKey::from(&dk);
+            let store = Store::new(tmpdir.as_ref().into(), ek).await.unwrap();
             let event_handler = EventHandler::new();
             let metrics = Mutex::new(Metrics::new());
 
