@@ -32,6 +32,15 @@ static const fs::path log_file_name{_LOG_FILE_NAME};
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
+struct MetricsConfig {
+    bool enable_on_start = false;
+    util::url_match server_url;
+    boost::optional<std::string> server_token;
+    boost::optional<asio::ssl::context> server_cacert;
+    metrics::EncryptionKey encryption_key;
+
+    static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
+};
 
 class ClientConfig {
 public:
@@ -134,20 +143,14 @@ public:
         return description_full();
     }
 
-    bool metrics_enable_on_start() const {
-        return _metrics_enable_on_start;
+    // Is `nullptr` if metrics is disabled
+    const MetricsConfig* metrics() const {
+        return _metrics.get();
     }
 
-    const boost::optional<util::url_match>& metrics_server_url() const {
-        return _metrics_server_url;
-    }
-
-    const std::string& metrics_server_token() const {
-        return _metrics_server_token;
-    }
-
-    boost::optional<asio::ssl::context>& metrics_server_tls_cert() {
-        return _metrics_server_tls_cert;
+    // Is `nullptr` if metrics is disabled
+    MetricsConfig* metrics() {
+        return _metrics.get();
     }
 
 private:
@@ -290,10 +293,12 @@ private:
             , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
            ("metrics-server-token", po::value<string>()
             , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
-           ("metrics-server-tls-cert", po::value<string>()
-            , "Tls certificate for the metrics server")
-           ("metrics-server-tls-cert-file", po::value<string>()
-            , "File containing the certificate for the metrics server")
+           ("metrics-server-cacert", po::value<string>()
+            , "Tls CA certificate for the metrics server")
+           ("metrics-server-cacert-file", po::value<string>()
+            , "File containing the CA certificate for the metrics server")
+           ("metrics-encryption-key", po::value<string>()
+            , "Key to encrypt metrics records with")
            ;
 
         po::options_description desc;
@@ -446,10 +451,12 @@ private:
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
 
-    bool _metrics_enable_on_start = false;
-    boost::optional<util::url_match> _metrics_server_url;
-    std::string _metrics_server_token;
-    boost::optional<asio::ssl::context> _metrics_server_tls_cert;
+    std::unique_ptr<MetricsConfig> _metrics;
+    //bool _metrics_enable_on_start = false;
+    //boost::optional<util::url_match> _metrics_server_url;
+    //std::string _metrics_server_token;
+    //boost::optional<asio::ssl::context> _metrics_server_tls_cert;
+    //boost::optional<std::string> _metrics_encryption_key;
 };
 
 #undef _LOG_FILE_NAME

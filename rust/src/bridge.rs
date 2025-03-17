@@ -29,7 +29,7 @@ mod ffi {
         //------------------------------------------------------------
         type Client;
 
-        fn new_client(store_path: String) -> Box<Client>;
+        fn new_client(store_path: String, encryption_key: Box<EncryptionKey>) -> Box<Client>;
         fn new_mainline_dht(self: &Client) -> Box<MainlineDht>;
         fn new_origin_request(self: &Client) -> Box<Request>;
         fn new_private_injector_request(self: &Client) -> Box<Request>;
@@ -60,6 +60,10 @@ mod ffi {
         // Tells the rust code when record processing on the C++ side has finished.
         pub type CxxOneShotSender;
         fn send(self: &CxxOneShotSender, success: bool);
+
+        //------------------------------------------------------------
+        type EncryptionKey;
+        fn validate_encryption_key(key_str: String) -> Result<Box<EncryptionKey>>;
     }
 
     #[namespace = "ouinet::metrics::bridge"]
@@ -75,6 +79,15 @@ mod ffi {
             on_finish: Box<CxxOneShotSender>,
         );
     }
+}
+
+#[derive(Clone)]
+pub struct EncryptionKey {
+    // TODO
+}
+
+fn validate_encryption_key(_key_str: String) -> Result<Box<EncryptionKey>, String> {
+    Ok(Box::new(EncryptionKey {}))
 }
 
 pub use ffi::CxxRecordProcessor;
@@ -124,13 +137,17 @@ fn stop_current_client() -> Option<Arc<Runtime>> {
 
 // Create a new Client, if there were any clients created but not destroyed beforehand, all their
 // operations will be no-ops.
-fn new_client(store_path: String) -> Box<Client> {
+fn new_client(store_path: String, encryption_key: Box<EncryptionKey>) -> Box<Client> {
     logger::init_idempotent();
     let runtime = match stop_current_client() {
         Some(runtime) => runtime,
         None => runtime::get_runtime(),
     };
-    Box::new(Client::new(PathBuf::from(store_path), runtime))
+    Box::new(Client::new(
+        PathBuf::from(store_path),
+        runtime,
+        encryption_key,
+    ))
 }
 
 // -------------------------------------------------------------------
@@ -140,7 +157,7 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(store_path: PathBuf, runtime: Arc<Runtime>) -> Self {
+    fn new(store_path: PathBuf, runtime: Arc<Runtime>, encryption_key: Box<EncryptionKey>) -> Self {
         let _runtime_guard = runtime.enter();
 
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
@@ -153,7 +170,9 @@ impl Client {
             async move {
                 let store_path = PathBuf::from(store_path);
 
-                if let Err(error) = metrics_runner(metrics, store_path, processor_rx).await {
+                if let Err(error) =
+                    metrics_runner(metrics, store_path, processor_rx, encryption_key).await
+                {
                     match error {
                         MetricsRunnerError::RecordProcessor(
                             RecordProcessorError::CxxDisconnected,

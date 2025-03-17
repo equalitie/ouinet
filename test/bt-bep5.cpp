@@ -99,7 +99,7 @@ int main(int argc, const char** argv)
 {
     asio::io_context ctx;
 
-    auto metrics_client = metrics::Client();
+    auto metrics_client = metrics::Client::noop();
     auto metrics_dht = metrics_client.mainline_dht();
 
     DhtNode dht {ctx, metrics_dht.dht_node_ipv4()};

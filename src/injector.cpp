@@ -856,12 +856,9 @@ int main(int argc, const char* argv[])
         // using extra BT bootstrap servers may be useful
         // in environments like isolated LANs or community networks.
 
-        // Noop metrics.
-        auto metrics = make_unique<metrics::Client>();
-
         bt_dht_ptr = std::make_shared<bt::MainlineDht>
             ( ex
-            , metrics->mainline_dht()
+            , metrics::Client::noop().mainline_dht()
             , fs::path{}
             , config.bt_bootstrap_extras());  // default storage dir
                                               //

@@ -10,13 +10,14 @@ namespace asio = boost::asio;
 
 //--------------------------------------------------------------------
 
-Client::Client()
-    : _impl({})
-{
+Client Client::noop() {
+    return Client();
 }
 
-Client::Client(fs::path repo_root_path)
-    : _impl({bridge::new_client(rust::String(repo_root_path.native()))})
+Client::Client(const fs::path& repo_root_path, EncryptionKey encryption_key)
+    : _impl({
+            bridge::new_client( rust::String(repo_root_path.native())
+                              , std::move(*encryption_key._impl))})
 {
 }
 
@@ -99,6 +100,16 @@ void Request::finish(boost::system::error_code ec) {
         }
     } else {
         (*_impl)->mark_success();
+    }
+}
+
+//--------------------------------------------------------------------
+
+std::optional<EncryptionKey> EncryptionKey::validate(const std::string& key_str) {
+    try {
+        return EncryptionKey(bridge::validate_encryption_key(rust::String(key_str)));
+    } catch (...) {
+        return {};
     }
 }
 

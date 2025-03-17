@@ -16,6 +16,7 @@ class MainlineDht;
 class DhtNode;
 class Bootstrap;
 class Request;
+class EncryptionKey;
 
 template<typename T>
 using OptBox = std::optional<rust::Box<T>>;
@@ -23,9 +24,9 @@ using OptBox = std::optional<rust::Box<T>>;
 class Client {
 public:
     // Creates a metrics client which does nothing.
-    Client();
+    static Client noop();
 
-    Client(fs::path repo_root_path);
+    Client(const fs::path& repo_root_path, EncryptionKey encryption_key);
 
     void enable(util::AsioExecutor executor, AsyncCallback record_processor);
     void disable();
@@ -40,6 +41,8 @@ public:
     Request new_cache_request();
 
 private:
+    Client() = default;
+
     OptBox<bridge::Client> _impl;
     bool _is_enabled = false;
 };
@@ -92,9 +95,25 @@ public:
 private:
     friend class Client;
 
-    Request(OptBox<bridge::Request> impl): _impl(std::move(impl)) {};
+    Request(OptBox<bridge::Request> impl): _impl(std::move(impl)) {}
 
     OptBox<bridge::Request> _impl;
+};
+
+// -- Encryption key  ------------------------------------------------
+
+class EncryptionKey {
+public:
+    static std::optional<EncryptionKey> validate(const std::string& key_str);
+
+    EncryptionKey(EncryptionKey&& other) : _impl(std::move(other._impl)) {}
+
+private:
+    friend class Client;
+
+    EncryptionKey(OptBox<bridge::EncryptionKey> impl) : _impl(std::move(impl)) {}
+
+    OptBox<bridge::EncryptionKey> _impl;
 };
 
 } // namespace

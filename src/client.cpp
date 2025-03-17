@@ -175,7 +175,10 @@ public:
         , inj_ctx{asio::ssl::context::tls_client}
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
-        , _metrics(_config.repo_root() / "metrics")
+        , _metrics(_config.metrics()
+                    ? metrics::Client( _config.repo_root() / "metrics"
+                                     , std::move(_config.metrics()->encryption_key))
+                    : metrics::Client::noop())
     {
         LOG_INFO("Repo root: ", _config.repo_root());
 
@@ -191,7 +194,7 @@ public:
 
         inj_ctx.set_verify_mode(asio::ssl::verify_peer);
 
-        if (_config.metrics_enable_on_start()) {
+        if (_config.metrics() && _config.metrics()->enable_on_start) {
             enable_metrics();
         }
     }
@@ -1467,12 +1470,14 @@ Session Client::State::fetch_fresh_through_simple_proxy
 }
 
 void Client::State::send_metrics_record(std::string_view record_name, std::string_view record_content, Cancel& cancel, Yield yield) {
-    if (!_config.metrics_server_url()) {
+    auto metrics_conf = _config.metrics();
+
+    if (!metrics_conf) {
         // User did not enable record sending.
         throw_error(asio::error::invalid_argument);
     }
 
-    const util::url_match& server_url = *_config.metrics_server_url();
+    const util::url_match& server_url = metrics_conf->server_url;
 
     http::request<http::string_body> req;
 
@@ -1484,15 +1489,15 @@ void Client::State::send_metrics_record(std::string_view record_name, std::strin
     req.set(http::field::content_type, "multipart/form-data");
     req.set("record-name", util::to_beast(record_name));
 
-    if (!_config.metrics_server_token().empty()) {
-        req.set("X-Ouinet-Metrics-Server-Token", _config.metrics_server_token());
+    if (metrics_conf->server_token) {
+        req.set("X-Ouinet-Metrics-Server-Token", *metrics_conf->server_token);
     }
 
     req.body() = record_content;
     req.prepare_payload();
 
-    auto& tls_ctx = _config.metrics_server_tls_cert()
-                  ? *_config.metrics_server_tls_cert()
+    auto& tls_ctx = metrics_conf->server_cacert
+                  ? *metrics_conf->server_cacert
                   : pub_ctx;
 
     sys::error_code direct_ec;

@@ -1,5 +1,6 @@
 use crate::{
     backoff_watch::ConstantBackoffWatchReceiver,
+    bridge::EncryptionKey,
     metrics::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
     store::{Store, StoredRecord},
@@ -25,6 +26,8 @@ pub async fn metrics_runner(
     metrics: Arc<Mutex<Metrics>>,
     store_path: PathBuf,
     record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
+    // TODO: Use to encrypt records
+    _encryption_key: Box<EncryptionKey>,
 ) -> Result<(), MetricsRunnerError> {
     let mut store = Store::new(store_path).await?;
 
