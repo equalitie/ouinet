@@ -298,7 +298,13 @@ private:
            ("metrics-server-cacert-file", po::value<string>()
             , "File containing the CA certificate for the metrics server")
            ("metrics-encryption-key", po::value<string>()
-            , "Key to encrypt metrics records with")
+            , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
+              "the following. \n"
+              "   First generate the private key:\n"
+              "     `openssl genpkey -algorithm x25519 -out private_key.pem`\n"
+              "   Then get the public encryption key:\n"
+              "     `openssl pkey -in private_key.pem -pubout -out public_key.pem`"
+              )
            ;
 
         po::options_description desc;
