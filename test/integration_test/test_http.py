@@ -224,7 +224,7 @@ class OuinetTests(TestCase):
                 self.assertEquals(defered_response.code, 200)
 
                 response_body = yield readBody(defered_response)
-                self.assertEquals(resoponse_body.decode(), content)
+                self.assertEquals(response_body.decode(), content)
                 test_passed = True
             else:
                 logging.debug("request attempt no " + str(i+1) + " failed. with code " + str(defered_response.code))
@@ -355,7 +355,7 @@ class OuinetTests(TestCase):
                 defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
                 if defered_response.code == 200:
                     response_body = yield readBody(defered_response)
-                    self.assertEquals(resoponse_body.decode(), content)
+                    self.assertEquals(response_body.decode(), content)
                     test_passed = True
                     break
                 
