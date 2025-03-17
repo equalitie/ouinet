@@ -14,25 +14,25 @@ BOOST_AUTO_TEST_CASE(test_unsigned_number) {
     {
         stringstream ss;
         ss << (uint64_t) numeric_limits<uint8_t>::max();
-        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<uint8_t>().str());
+        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<1>().str());
     }
 
     {
         stringstream ss;
         ss << (uint64_t) numeric_limits<uint16_t>::max();
-        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<uint16_t>().str());
+        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<2>().str());
     }
 
     {
         stringstream ss;
         ss << (uint64_t) numeric_limits<uint32_t>::max();
-        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<uint32_t>().str());
+        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<4>().str());
     }
 
     {
         stringstream ss;
         ss << (uint64_t) numeric_limits<uint64_t>::max();
-        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<uint64_t>().str());
+        BOOST_REQUIRE_EQUAL(ss.str(), parse::detail::MaxStr<8>().str());
     }
 
     {

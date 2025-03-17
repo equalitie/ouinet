@@ -16,20 +16,19 @@ namespace detail {
     inline
     uint8_t digit(char c) { return c - '0'; }
 
-    template<typename T> struct MaxStr;
-    template<> struct MaxStr<uint8_t>  { boost::string_view str() { return boost::string_view("255", 3); } };
-    template<> struct MaxStr<uint16_t> { boost::string_view str() { return boost::string_view("65535", 5); } };
-    template<> struct MaxStr<uint32_t> { boost::string_view str() { return boost::string_view("4294967295", 10); } };
-    template<> struct MaxStr<uint64_t> { boost::string_view str() { return boost::string_view("18446744073709551615", 20); } };
+    template<size_t byte_count> struct MaxStr;
+    template<> struct MaxStr<1> { boost::string_view str() { return boost::string_view("255", 3); } };
+    template<> struct MaxStr<2> { boost::string_view str() { return boost::string_view("65535", 5); } };
+    template<> struct MaxStr<4> { boost::string_view str() { return boost::string_view("4294967295", 10); } };
+    template<> struct MaxStr<8> { boost::string_view str() { return boost::string_view("18446744073709551615", 20); } };
 
     // Might be worth considering using boost::type_traits::make_unsigned,
     // thoug we don't need that genericity and this may compile faster.
-    template<typename T> struct Unsigned;
-    template<> struct Unsigned<char>    { using type = uint8_t; };
-    template<> struct Unsigned<int8_t>  { using type = uint8_t; };
-    template<> struct Unsigned<int16_t> { using type = uint16_t; };
-    template<> struct Unsigned<int32_t> { using type = uint32_t; };
-    template<> struct Unsigned<int64_t> { using type = uint64_t; };
+    template<size_t byte_count> struct Unsigned;
+    template<> struct Unsigned<1> { using type = uint8_t; };
+    template<> struct Unsigned<2> { using type = uint16_t; };
+    template<> struct Unsigned<4> { using type = uint32_t; };
+    template<> struct Unsigned<8> { using type = uint64_t; };
 }
 
 //--------------------------------------------------------------------
@@ -64,7 +63,7 @@ number(boost::string_view& s)
         return boost::none;
     }
 
-    auto max_str = detail::MaxStr<T>().str();
+    auto max_str = detail::MaxStr<sizeof(T)>().str();
 
     // Check the parsed string will fit into T without overflow.
     if (endpos > max_str.size()) {
@@ -128,7 +127,7 @@ std::enable_if_t< std::is_signed<T>::value && std::is_integral<T>::value
                 >
 number(boost::string_view& s)
 {
-    using Abs = typename detail::Unsigned<T>::type;
+    using Abs = typename detail::Unsigned<sizeof(T)>::type;
 
     // Min is always less by one than (-1 * max)
     static_assert(-(std::numeric_limits<T>::min() + 1) == std::numeric_limits<T>::max());
