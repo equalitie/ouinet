@@ -145,8 +145,8 @@ public class Ouinet {
         maybeAddBool(args, "--metrics-enable-on-start", config.getMetricsEnableOnStart());
         maybeAdd    (args, "--metrics-server-url",      config.getMetricsServerUrl());
         maybeAdd    (args, "--metrics-server-token",    config.getMetricsServerToken());
-        maybeAdd    (args, "--metrics-server-tls-cert", config.getMetricsServerTlsCaCert());
-        maybeAdd    (args, "--metrics-server-tls-cert-file", config.getMetricsServerTlsCaCertPath());
+        maybeAdd    (args, "--metrics-server-cacert",       config.getMetricsServerTlsCaCert());
+        maybeAdd    (args, "--metrics-server-cacert-file",  config.getMetricsServerTlsCaCertPath());
 
         Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
         if (btBootstrapExtras != null) {
