@@ -12,6 +12,9 @@ get_filename_component(RUNTIME_DIR_4 ${RUNTIME_DIR_3} DIRECTORY)
 get_filename_component(RUNTIME_DIR_VARIANT ${RUNTIME_DIR_2} NAME)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${RUNTIME_DIR_4}/library_assets/${RUNTIME_DIR_VARIANT}/out")
 
+# TODO: This is to silent warnings from using unqualified std::move and std::forward.
+# The internet says we should used qualified ones so we should probably start doing that.
+add_compile_options(-Wno-unqualified-std-cast-call)
 
 add_subdirectory(../.. libouinet)
 
