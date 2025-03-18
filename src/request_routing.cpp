@@ -2,7 +2,7 @@
 
 using namespace ouinet;
 
-using Request = http::request<http::buffer_body>;
+using Request = http::request<http::string_body>;
 
 //------------------------------------------------------------------------------
 namespace ouinet {
@@ -18,7 +18,7 @@ class ReqExpr {
         ReqExpr(const ReqExpr&) = default;
         ReqExpr& operator=(const ReqExpr&) = default;
 
-        virtual bool match(const Request&) const = 0;
+        virtual bool match(const http::request<http::string_body>&) const = 0;
 };
 
 class RegexReqExpr : public ReqExpr {  // can match a request field against a regular expression
@@ -30,21 +30,21 @@ class RegexReqExpr : public ReqExpr {  // can match a request field against a re
         RegexReqExpr(const field_getter& gf, const boost::regex& rx)
             : get_field(gf), regexp(rx) { };
 
-        bool match(const Request& req) const override {
+        bool match(const http::request<http::string_body>& req) const override {
             return boost::regex_match(std::string(get_field(req)), regexp);
         }
 };
 
 class TrueReqExpr : public ReqExpr {  // matches all requests
     public:
-        bool match(const Request& req) const override {
+        bool match(const http::request<http::string_body>& req) const override {
             return true;
         }
 };
 
 class FalseReqExpr : public ReqExpr {  // matches no request
     public:
-        bool match(const Request& req) const override {
+        bool match(const http::request<http::string_body>& req) const override {
             return false;
         }
 };
@@ -57,7 +57,7 @@ class NotReqExpr : public ReqExpr {  // negates match of subexpr
         NotReqExpr(const std::shared_ptr<ReqExpr> sub)
             : child(sub) { }
 
-        bool match(const Request& req) const override {
+        bool match(const http::request<http::string_body>& req) const override {
             return !(child->match(req));
         }
 };
@@ -70,7 +70,7 @@ class AndReqExpr : public ReqExpr {  // a shortcircuit logical AND of two subexp
         AndReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
             : left(left_), right(right_) { }
 
-        bool match(const Request& req) const override {
+        bool match(const http::request<http::string_body>& req) const override {
             if (left->match(req))
               return right->match(req);
             return false;
@@ -85,7 +85,7 @@ class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
         OrReqExpr(const std::shared_ptr<ReqExpr> left_, const std::shared_ptr<ReqExpr> right_)
             : left(left_), right(right_) { }
 
-        bool match(const Request& req) const override {
+        bool match(const http::request<http::string_body>& req) const override {
             if (left->match(req))
                 return true;
             return right->match(req);
@@ -93,7 +93,7 @@ class OrReqExpr : public ReqExpr {  // a shortcircuit logical OR of two subexprs
 };
 
 bool
-reqex::match(const Request& req) const {
+reqex::match(const http::request<http::string_body>& req) const {
     return impl->match(req);
 }
 
@@ -144,7 +144,7 @@ operator||(const reqex& left, const reqex& right)
 //------------------------------------------------------------------------------
 namespace request_route {
 const Config&
-route_choose_config( const Request& req
+route_choose_config( const http::request<http::string_body>& req
                    , const std::vector<std::pair<const reqexpr::reqex, const Config>>& matches
                    , const Config& default_config )
 {

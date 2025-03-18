@@ -65,7 +65,7 @@ namespace reqexpr {
 class ReqExpr;
 
 // The type of functions that retrieve a given field (as a string) from a request.
-using field_getter = std::function<beast::string_view (const http::request<http::buffer_body>&)>;
+using field_getter = std::function<beast::string_view (const http::request<http::string_body>&)>;
 
 class reqex {
     friend reqex true_();
@@ -81,7 +81,7 @@ class reqex {
 
     public:
         // True when the request matches this expression.
-        bool match(const http::request<http::buffer_body>& req) const;
+        bool match(const http::request<http::string_body>& req) const;
 };
 
 // Use the following functions to create request expressions,
@@ -111,7 +111,7 @@ namespace request_route {
 // with the first matching expression in the given list,
 // otherwise route it according to the given list of default channels.
 const Config&
-route_choose_config( const http::request<http::buffer_body>& req
+route_choose_config( const http::request<http::string_body>& req
                    , const std::vector<std::pair<const reqexpr::reqex, const Config>>& matches
                    , const Config& default_config );
 } // request_route namespace

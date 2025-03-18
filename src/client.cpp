@@ -95,7 +95,7 @@ namespace posix_time = boost::posix_time;
 namespace bt = ouinet::bittorrent;
 
 using tcp      = asio::ip::tcp;
-using Request  = http::request<http::buffer_body>;
+using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
 using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
@@ -406,14 +406,14 @@ private:
                           , Yield yield);
 
     template<class Rq>
-    Session fetch_via_self( Rq, const UserAgentMetaData&
-                          , Cancel&, Yield);
+    Session fetch_via_self(Rq, const UserAgentMetaData&, Cancel&, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
-    Session fetch_fresh_from_origin( Request
+    template<class Rq>
+    Session fetch_fresh_from_origin( Rq
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
                                    , std::optional<metrics::Request> metrics
@@ -421,7 +421,8 @@ private:
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
-    Session fetch_fresh_through_connect_proxy( const Request&
+    template<class Rq>
+    Session fetch_fresh_through_connect_proxy( const Rq&
                                              , asio::ssl::context&
                                              , std::optional<metrics::Request>
                                              , Cancel&
@@ -506,7 +507,7 @@ private:
                              , const doh::Endpoint&
                              , Cancel&, Yield);
 
-    GenericStream connect_to_origin( const Request&
+    GenericStream connect_to_origin( const http::request_header<>&
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
                                    , Cancel&, Yield);
@@ -1018,7 +1019,7 @@ Client::State::resolve_tcp_dns( const std::string& host
 }
 
 GenericStream
-Client::State::connect_to_origin( const Request& rq
+Client::State::connect_to_origin( const http::request_header<>& rq
                                 , const UserAgentMetaData& meta
                                 , asio::ssl::context& tls_ctx
                                 , Cancel& cancel
@@ -1119,7 +1120,8 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_from_origin( Request rq
+template<class Rq>
+Session Client::State::fetch_fresh_from_origin( Rq rq
                                               , const UserAgentMetaData& meta
                                               , asio::ssl::context& tls_ctx
                                               , std::optional<metrics::Request> metrics
@@ -1185,7 +1187,8 @@ Session Client::State::fetch_fresh_from_origin( Request rq
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
+template<class Rq>
+Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
                                                         , asio::ssl::context& tls_ctx
                                                         , std::optional<metrics::Request> metrics
                                                         , Cancel& cancel
@@ -1780,11 +1783,7 @@ public:
         sys::error_code cache_ec;
 
         _YDEBUG(yield, "Start");
-
-        // TODO: After changing the body type from `string_body` to `buffer_body`, logging whole
-        // request no longer works. Logging just `method` and `target` instead, but not sure it's
-        // enough.
-        _YDEBUG(yield, tnx.request().method_string(), " ", tnx.request().target());
+        _YDEBUG(yield, tnx.request());
 
         const auto& rq   = tnx.request();
         const auto& meta = tnx.meta();

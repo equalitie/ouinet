@@ -73,7 +73,7 @@ namespace bt = bittorrent;
 // than we are in getting unpredictable IDs;
 // thus we use a pseudo-random generator.
 using uuid_generator = boost::uuids::random_generator_mt19937;
-using Request     = http::request<http::buffer_body>;
+using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
 using ResponseWithFileBody = http::response<http::basic_file_body<

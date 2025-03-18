@@ -54,7 +54,7 @@ public:
     static constexpr const char* group_list_apath = "/groups.txt";
 
 public:
-    using Request = http::request<http::buffer_body>;
+    using Request = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
     using UdpEndpoint = asio::ip::udp::endpoint;
     using UPnPs = std::map<UdpEndpoint, std::unique_ptr<UPnPUpdater>>;
@@ -82,7 +82,7 @@ public:
 
 public:
     Response serve( ClientConfig&
-                  , const Request&
+                  , const http::request<http::string_body>&
                   , Client::RunningState
                   , cache::Client*
                   , const CACertificate&
