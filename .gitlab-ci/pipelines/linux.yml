@@ -27,7 +27,6 @@ linux / build-experimental:
   needs:
     - job: 'linux / prepare-builder-image'
       optional: true
-  when: manual
   allow_failure: true
 
 linux / unit-test:
@@ -36,6 +35,15 @@ linux / unit-test:
   needs:
     ['linux / build']
 
+linux / unit-test-experimental:
+  variables:
+    WITH_EXPERIMENTAL: "ON"
+  extends:
+    .linux-unit-test
+  needs:
+    ['linux / build-experimental']
+  allow_failure: true
+
 linux / integration-test:
   extends:
     .linux-integration-test
@@ -43,6 +51,17 @@ linux / integration-test:
     ['linux / unit-test']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
+
+linux / integration-test-experimental:
+  variables:
+    WITH_EXPERIMENTAL: "ON"
+  extends:
+    .linux-integration-test
+  needs:
+    ['linux / unit-test-experimental']
+  before_script:
+    - ln -s /usr/bin/python3 /usr/bin/python
+  allow_failure: true
 
 linux / build-prod-image:
   stage: release
