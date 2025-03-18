@@ -7,6 +7,7 @@
 
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/beast/http/buffer_body.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/empty_body.hpp>
@@ -29,7 +30,7 @@ namespace util {
 // either from the ``Host:`` header or from the target URI.
 // IPv6 addresses are returned without brackets.
 std::pair<std::string, std::string>
-get_host_port(const http::request<http::string_body>&);
+get_host_port(const http::request<http::buffer_body>&);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helps parsing and printing contents of `Content-Range` headers.

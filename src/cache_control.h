@@ -29,7 +29,7 @@ private:
 
 public:
     using DhtGroup = std::string;
-    using Request  = http::request<http::string_body>;
+    using Request  = http::request<http::buffer_body>;
     using Response = http::response<http::dynamic_body>;
 
     using FetchStored = std::function<CacheEntry(const Request&, const DhtGroup&, Cancel&, Yield)>;

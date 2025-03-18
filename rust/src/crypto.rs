@@ -1,7 +1,6 @@
 //! Cryptography utilities
 
 use aes_gcm::{aead::AeadMutInPlace, Aes256Gcm, KeyInit, Nonce};
-use rand::CryptoRng;
 use thiserror::Error;
 use x25519_dalek::EphemeralSecret;
 
@@ -34,11 +33,12 @@ impl From<[u8; Self::SIZE]> for EncryptionKey {
     }
 }
 
+#[cfg(test)]
 pub(crate) struct DecryptionKey(x25519_dalek::StaticSecret);
 
+#[cfg(test)]
 impl DecryptionKey {
-    #[cfg_attr(not(test), expect(dead_code))]
-    pub(crate) fn random<R: CryptoRng>(rng: &mut R) -> Self {
+    pub(crate) fn random<R: rand::CryptoRng>(rng: &mut R) -> Self {
         use rand::Rng;
 
         // TODO: There is `StaticSecret::random_from_rng` but it requires an old version of rand.
@@ -49,6 +49,7 @@ impl DecryptionKey {
     }
 }
 
+#[cfg(test)]
 impl<'a> From<&'a DecryptionKey> for EncryptionKey {
     fn from(dk: &'a DecryptionKey) -> Self {
         EncryptionKey(x25519_dalek::PublicKey::from(&dk.0))

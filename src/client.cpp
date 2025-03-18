@@ -95,7 +95,7 @@ namespace posix_time = boost::posix_time;
 namespace bt = ouinet::bittorrent;
 
 using tcp      = asio::ip::tcp;
-using Request  = http::request<http::string_body>;
+using Request  = http::request<http::buffer_body>;
 using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
 using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
@@ -368,7 +368,7 @@ public:
             , [ client = this
               , cancel = make_shared<Cancel>(_shutdown_signal)]
                  ( std::string_view record_name
-                 , std::string_view record_content
+                 , asio::const_buffer record_content
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
@@ -435,7 +435,7 @@ private:
                                             , Yield);
 
     void send_metrics_record( std::string_view record_name
-                            , std::string_view record_content
+                            , asio::const_buffer record_content
                             , Cancel& cancel
                             , Yield);
 
@@ -1469,7 +1469,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     return session;
 }
 
-void Client::State::send_metrics_record(std::string_view record_name, std::string_view record_content, Cancel& cancel, Yield yield) {
+void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, Yield yield) {
     auto metrics_conf = _config.metrics();
 
     if (!metrics_conf) {
@@ -1479,7 +1479,7 @@ void Client::State::send_metrics_record(std::string_view record_name, std::strin
 
     const util::url_match& server_url = metrics_conf->server_url;
 
-    http::request<http::string_body> req;
+    http::request<http::buffer_body> req;
 
     req.version(11);
     req.method(http::verb::post);
@@ -1493,7 +1493,9 @@ void Client::State::send_metrics_record(std::string_view record_name, std::strin
         req.set("X-Ouinet-Metrics-Server-Token", *metrics_conf->server_token);
     }
 
-    req.body() = record_content;
+    req.body().data = const_cast<void*>(record_content.data());
+    req.body().size = record_content.size();
+    req.body().more = false;
     req.prepare_payload();
 
     auto& tls_ctx = metrics_conf->server_cacert
@@ -1778,7 +1780,11 @@ public:
         sys::error_code cache_ec;
 
         _YDEBUG(yield, "Start");
-        _YDEBUG(yield, tnx.request());
+
+        // TODO: After changing the body type from `string_body` to `buffer_body`, logging whole
+        // request no longer works. Logging just `method` and `target` instead, but not sure it's
+        // enough.
+        _YDEBUG(yield, tnx.request().method_string(), " ", tnx.request().target());
 
         const auto& rq   = tnx.request();
         const auto& meta = tnx.meta();
