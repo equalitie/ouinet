@@ -64,8 +64,9 @@ Request Client::new_cache_request() {
 }
 
 std::optional<std::string> Client::current_device_id() const {
-#warning "TODO: return current device id"
-    return "TODO";
+    if (!_impl) return {};
+    rust::String str = (*_impl)->device_id();
+    return std::string(str.data(), str.size());
 }
 
 //--------------------------------------------------------------------
