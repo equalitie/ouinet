@@ -204,6 +204,12 @@ Session::async_read_part(Cancel cancel, asio::yield_context yield)
     sys::error_code ec;
     auto part = _reader->async_read_part(cancel, yield[ec]);
 
+    if (!ec && part && _metrics) {
+        if (auto body = part->as_body()) {
+            _metrics->increment_transfer_size(body->size());
+        }
+    }
+
     if (ec || _reader->is_done()) {
         finish_metering(_metrics, ec);
     }

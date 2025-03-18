@@ -59,6 +59,7 @@ mod ffi {
         type Request;
         fn mark_success(self: &Request);
         fn mark_failure(self: &Request);
+        fn increment_transfer_size(self: &Request, added: usize);
 
         //------------------------------------------------------------
         // Tells the rust code when record processing on the C++ side has finished.
@@ -242,7 +243,11 @@ impl Client {
 
         let id = metrics.lock().unwrap().requests.add_request(request_type);
 
-        Box::new(Request { metrics, id })
+        Box::new(Request {
+            metrics,
+            request_type,
+            id,
+        })
     }
 
     fn device_id(&self) -> String {
@@ -413,10 +418,19 @@ impl Drop for Bootstrap {
 
 struct Request {
     metrics: Arc<Mutex<Metrics>>,
+    request_type: RequestType,
     id: RequestId,
 }
 
 impl Request {
+    fn increment_transfer_size(&self, added: usize) {
+        self.metrics
+            .lock()
+            .unwrap()
+            .requests
+            .increment_transfer_size(self.request_type, added);
+    }
+
     fn mark_success(&self) {
         self.remove_request(request::RemoveReason::Success);
     }

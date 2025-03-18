@@ -97,6 +97,11 @@ void Bootstrap::mark_success() {
 
 //--------------------------------------------------------------------
 
+void Request::increment_transfer_size(size_t added) {
+    if (!_impl) return;
+    (*_impl)->increment_transfer_size(added);
+}
+
 void Request::finish(boost::system::error_code ec) {
     if (!_impl) return;
 

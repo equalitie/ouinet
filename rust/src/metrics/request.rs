@@ -74,6 +74,11 @@ impl Requests {
         self.has_new_data
     }
 
+    pub fn increment_transfer_size(&mut self, request_type: RequestType, added: usize) {
+        let summary = self.summary.entry(request_type).or_default();
+        summary.transferred += added as u64;
+    }
+
     fn mark_modified(&mut self, has_new_data: bool) {
         self.has_new_data = has_new_data;
         self.on_modify_tx.send_modify(|_| {})
@@ -100,6 +105,7 @@ impl Serialize for Requests {
 struct Summary {
     success_count: u64,
     failure_count: u64,
+    transferred: u64,
 }
 
 #[derive(PartialEq, Debug)]

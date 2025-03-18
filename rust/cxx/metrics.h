@@ -88,10 +88,14 @@ private:
     OptBox<bridge::Bootstrap> _impl;
 };
 
-// -- Requessts ------------------------------------------------------
+// -- Requests ------------------------------------------------------
 
 class Request {
 public:
+    // Mark how much data was transferred in the body of the response.  Can be
+    // called repeatedly (e.g. because the body is uses chunked encoding).
+    void increment_transfer_size(size_t);
+
     void finish(boost::system::error_code ec);
 
 private:
@@ -107,8 +111,6 @@ private:
 class EncryptionKey {
 public:
     static std::optional<EncryptionKey> validate(const std::string& key_str);
-
-    EncryptionKey(EncryptionKey&& other) : _impl(std::move(other._impl)) {}
 
 private:
     friend class Client;
