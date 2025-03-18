@@ -77,7 +77,7 @@ impl ConstantBackoffWatchReceiver {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[tokio::test]

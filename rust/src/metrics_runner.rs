@@ -19,7 +19,7 @@ enum Event {
     MetricsModified,
     IncrementRecordNumber,
     RotateDeviceId,
-    Exit,
+    Exit { purge: bool },
 }
 
 pub async fn metrics_runner(
@@ -115,9 +115,15 @@ impl EventHandler {
 
                 store.record_number.increment().await?;
             }
-            Event::Exit => {
-                log::debug!("Event::Exit");
-                store_record(store, metrics).await?;
+            Event::Exit { purge } => {
+                log::debug!("Event::Exit {{ purge: {purge} }}");
+
+                if purge {
+                    store.delete_stored_records().await?;
+                } else {
+                    store_record(store, metrics).await?;
+                }
+
                 return Ok(EventResult::Break);
             }
         }
@@ -160,7 +166,7 @@ impl EventListener {
                 result = self.on_metrics_modified_rx.changed() => {
                     match result {
                         Ok(()) => break Event::MetricsModified,
-                        Err(_) => break Event::Exit,
+                        Err(_) => break Event::Exit { purge: false },
                     }
                 }
                 result = self.record_processor_rx.recv() => {
@@ -169,7 +175,7 @@ impl EventListener {
                             self.record_processor = record_processor.map(Arc::new);
                             continue;
                         }
-                        None => break Event::Exit
+                        None => break Event::Exit { purge: true },
                     }
                 }
                 () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber,
@@ -207,9 +213,12 @@ pub enum MetricsRunnerError {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use crate::crypto::{DecryptionKey, EncryptionKey};
+    use crate::{
+        crypto::{DecryptionKey, EncryptionKey},
+        logger,
+    };
     use std::collections::BTreeSet;
     use tmpdir::TmpDir;
     use uuid::Uuid;
@@ -229,6 +238,8 @@ mod test {
 
     impl Setup {
         async fn new() -> Self {
+            logger::init_idempotent();
+
             let tmpdir = TmpDir::new("metrics_runner_store").await.unwrap();
             let dk = DecryptionKey::random(&mut rand::rng());
             let ek = EncryptionKey::from(&dk);

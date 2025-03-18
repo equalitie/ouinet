@@ -30,8 +30,6 @@ impl Store {
         let record_number_path = root_path.join("record_number.json");
         let backoff_path = root_path.join("backoff.json");
 
-        fs::create_dir_all(&records_dir_path).await?;
-
         let record_number = RecordNumber::load(record_number_path).await?;
         let device_id = DeviceId::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
         let backoff = Backoff::new(backoff_path).await?;
@@ -47,6 +45,11 @@ impl Store {
 
     pub async fn write<D: Serialize>(path: &Path, data: &D) -> io::Result<()> {
         let content = serde_json::to_vec(data)?;
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
         fs::write(path, &content).await
     }
 
@@ -99,11 +102,19 @@ impl Store {
         let content = crypto::encrypt(&self.encryption_key, record_data.as_bytes())
             .map_err(io::Error::other)?;
 
+        if let Some(parent) = record_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
         fs::write(record_path, &content).await
     }
 
     pub async fn load_stored_records(&self) -> io::Result<Vec<StoredRecord>> {
-        let mut entries = fs::read_dir(&self.records_dir_path).await?;
+        let mut entries = match fs::read_dir(&self.records_dir_path).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
 
         let mut records = Vec::new();
 
@@ -159,6 +170,10 @@ impl Store {
         }
 
         Ok(records)
+    }
+
+    pub async fn delete_stored_records(&self) -> io::Result<()> {
+        fs::remove_dir_all(&self.records_dir_path).await
     }
 
     fn build_record_name(version: u32, device_id: Uuid, record_number: u32) -> String {
