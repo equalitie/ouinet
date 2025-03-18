@@ -1,5 +1,5 @@
 use crate::{constants, store::Store};
-use std::{io, ops::Deref, path::PathBuf};
+use std::{io, path::PathBuf};
 use tokio::time::Instant;
 
 /// We can have multiple records with the same DeviceId and RecordNumber is used to disambiguate
@@ -30,6 +30,10 @@ impl RecordNumber {
         })
     }
 
+    pub fn get(&self) -> u32 {
+        self.number
+    }
+
     pub async fn increment(&mut self) -> io::Result<()> {
         self.number += 1;
         self.time = Instant::now();
@@ -48,13 +52,5 @@ impl RecordNumber {
 
     async fn store(&self) -> io::Result<()> {
         Store::write(&self.file_path, &self.number).await
-    }
-}
-
-impl Deref for RecordNumber {
-    type Target = u32;
-
-    fn deref(&self) -> &Self::Target {
-        &self.number
     }
 }

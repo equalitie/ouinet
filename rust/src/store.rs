@@ -74,8 +74,8 @@ impl Store {
     }
 
     pub async fn oldest_non_current_record(&self) -> io::Result<Option<StoredRecord>> {
-        let current_device_id = *self.device_id;
-        let current_record_number = *self.record_number;
+        let current_device_id = self.device_id.get();
+        let current_record_number = self.record_number.get();
 
         let record = self
             .load_stored_records()
@@ -89,8 +89,8 @@ impl Store {
 
     pub async fn store_record(&self, record_data: String) -> io::Result<()> {
         // TODO: Store into '.tmp' file first and then rename?
-        let device_id = *self.device_id;
-        let record_number = *self.record_number;
+        let device_id = self.device_id.get();
+        let record_number = self.record_number.get();
 
         let record_name =
             Self::build_record_name(constants::RECORD_VERSION, device_id, record_number);

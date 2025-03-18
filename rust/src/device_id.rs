@@ -2,15 +2,14 @@ use crate::store::Store;
 use serde_json::json;
 use std::{
     io,
-    ops::Deref,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
-use tokio::fs;
+use tokio::{fs, sync::watch};
 use uuid::Uuid;
 
 pub struct DeviceId {
-    current_id: Uuid,
+    value_tx: watch::Sender<Uuid>,
     created: SystemTime,
     file_path: PathBuf,
     rotate_after: Duration,
@@ -18,23 +17,33 @@ pub struct DeviceId {
 
 impl DeviceId {
     pub async fn new(file_path: PathBuf, rotate_after: Duration) -> io::Result<Self> {
-        let (uuid, created) = match Store::read(&file_path).await? {
+        let (value, created) = match Store::read(&file_path).await? {
             Some(data) => data,
             None => Self::create_and_store(&file_path).await?,
         };
 
+        let value_tx = watch::Sender::new(value);
+
         Ok(Self {
-            current_id: uuid,
+            value_tx,
             created,
             file_path,
             rotate_after,
         })
     }
 
-    pub async fn rotate(&mut self) -> io::Result<()> {
-        let (new_uuid, created) = Self::create_and_store(&self.file_path).await?;
+    pub fn get(&self) -> Uuid {
+        *self.value_tx.borrow()
+    }
 
-        self.current_id = new_uuid;
+    pub fn subscribe(&self) -> watch::Receiver<Uuid> {
+        self.value_tx.subscribe()
+    }
+
+    pub async fn rotate(&mut self) -> io::Result<()> {
+        let (new_value, created) = Self::create_and_store(&self.file_path).await?;
+
+        self.value_tx.send_replace(new_value);
         self.created = created;
 
         Ok(())
@@ -57,13 +66,5 @@ impl DeviceId {
         fs::write(file_path, json!((uuid, now)).to_string()).await?;
 
         Ok((uuid, now))
-    }
-}
-
-impl Deref for DeviceId {
-    type Target = Uuid;
-
-    fn deref(&self) -> &Self::Target {
-        &self.current_id
     }
 }

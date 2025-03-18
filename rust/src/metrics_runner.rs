@@ -1,13 +1,11 @@
 use crate::{
     backoff_watch::ConstantBackoffWatchReceiver,
-    crypto::EncryptionKey,
     metrics::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
     store::{Store, StoredRecord},
 };
 use std::{
     io,
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
@@ -24,12 +22,9 @@ enum Event {
 
 pub async fn metrics_runner(
     metrics: Arc<Mutex<Metrics>>,
-    store_path: PathBuf,
-    encryption_key: EncryptionKey,
+    mut store: Store,
     record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
 ) -> Result<(), MetricsRunnerError> {
-    let mut store = Store::new(store_path, encryption_key).await?;
-
     let mut event_listener =
         EventListener::new(metrics.lock().unwrap().subscribe(), record_processor_rx);
     let mut event_handler = EventHandler::new();
@@ -277,8 +272,8 @@ mod tests {
 
         fn current_record_id(&self) -> RecordId {
             RecordId {
-                device_id: *self.store.device_id,
-                record_no: *self.store.record_number,
+                device_id: self.store.device_id.get(),
+                record_no: self.store.record_number.get(),
             }
         }
 

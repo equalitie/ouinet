@@ -8,6 +8,7 @@ use crate::{
     metrics_runner::{metrics_runner, MetricsRunnerError},
     record_processor::{RecordProcessor, RecordProcessorError},
     runtime,
+    store::Store,
 };
 use cxx::UniquePtr;
 use std::{
@@ -17,10 +18,11 @@ use std::{
 use tokio::{
     runtime::Runtime,
     select,
-    sync::{mpsc, oneshot},
+    sync::{mpsc, oneshot, watch},
     task::{self, JoinHandle},
     time::{sleep, Duration},
 };
+use uuid::Uuid;
 
 #[cxx::bridge]
 mod ffi {
@@ -40,6 +42,8 @@ mod ffi {
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
         // processor is set eventually, the metrics from this runtime can be collected.
         fn set_processor(self: &Client, processor: UniquePtr<CxxRecordProcessor>);
+
+        fn device_id(self: &Client) -> String;
 
         //------------------------------------------------------------
         type MainlineDht;
@@ -132,9 +136,13 @@ fn stop_current_client() -> Option<Arc<Runtime>> {
     }
 }
 
-// Create a new Client, if there were any clients created but not destroyed beforehand, all their
-// operations will be no-ops.
-fn new_client(store_path: String, encryption_key: Box<EncryptionKey>) -> Box<Client> {
+/// Create a new Client, if there were any clients created but not destroyed beforehand, all their
+/// operations will be no-ops.
+fn new_client(
+    store_path: String,
+    // False positive: we need to box the key because its opaque to C++
+    #[expect(clippy::boxed_local)] encryption_key: Box<EncryptionKey>,
+) -> Box<Client> {
     logger::init_idempotent();
     let runtime = match stop_current_client() {
         Some(runtime) => runtime,
@@ -143,7 +151,7 @@ fn new_client(store_path: String, encryption_key: Box<EncryptionKey>) -> Box<Cli
     Box::new(Client::new(
         runtime,
         PathBuf::from(store_path),
-        encryption_key,
+        *encryption_key,
     ))
 }
 
@@ -154,40 +162,53 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(runtime: Arc<Runtime>, store_path: PathBuf, encryption_key: Box<EncryptionKey>) -> Self {
+    fn new(runtime: Arc<Runtime>, store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
         let _runtime_guard = runtime.enter();
 
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
 
         let metrics = Arc::new(Mutex::new(Metrics::new()));
+        let store = runtime.block_on(Store::new(store_path, encryption_key));
 
-        let job_handle = task::spawn({
-            let metrics = metrics.clone();
-
-            async move {
-                if let Err(error) =
-                    metrics_runner(metrics, store_path, *encryption_key, processor_rx).await
-                {
-                    match error {
-                        MetricsRunnerError::RecordProcessor(
-                            RecordProcessorError::CxxDisconnected,
-                        ) => (),
-                        MetricsRunnerError::Io(error) => {
-                            log::error!("Metrics runner finished with an error: {error:?}")
+        let (runner, device_id_rx) = match store {
+            Ok(store) => {
+                let metrics = metrics.clone();
+                let device_id_rx = store.device_id.subscribe();
+                let job_handle = task::spawn(async move {
+                    if let Err(error) = metrics_runner(metrics, store, processor_rx).await {
+                        match error {
+                            MetricsRunnerError::RecordProcessor(
+                                RecordProcessorError::CxxDisconnected,
+                            ) => (),
+                            MetricsRunnerError::Io(error) => {
+                                log::error!("Metrics runner finished with an error: {error:?}")
+                            }
                         }
                     }
-                }
+                });
+
+                (
+                    Some(Runner {
+                        runtime,
+                        processor_tx,
+                        job_handle,
+                    }),
+                    device_id_rx,
+                )
             }
-        });
+            Err(error) => {
+                log::error!("Failed to initialize metrics store: {error:?}");
+
+                // Dummy device id receiver that always returns `Uuid::nil()`
+                (None, watch::channel(Uuid::nil()).1)
+            }
+        };
 
         Self {
             inner: Arc::new(ClientInner {
-                runner: Mutex::new(Some(Runner {
-                    runtime,
-                    processor_tx,
-                    job_handle,
-                })),
+                runner: Mutex::new(runner),
                 metrics,
+                device_id_rx,
             }),
         }
     }
@@ -223,11 +244,16 @@ impl Client {
 
         Box::new(Request { metrics, id })
     }
+
+    fn device_id(&self) -> String {
+        self.inner.device_id_rx.borrow().to_string()
+    }
 }
 
 struct ClientInner {
     runner: Mutex<Option<Runner>>,
     metrics: Arc<Mutex<Metrics>>,
+    device_id_rx: watch::Receiver<Uuid>,
 }
 
 struct Runner {
