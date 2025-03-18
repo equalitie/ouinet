@@ -295,7 +295,7 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
     boost::optional<util::url_match> server_url;
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
-    boost::optional<metrics::EncryptionKey> encryption_key;
+    std::optional<metrics::EncryptionKey> encryption_key;
 
     if (auto opt = as_optional<std::string>(vm, "metrics-server-url")) {
         util::url_match url_match;
@@ -342,12 +342,12 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
 
     if (server_url) {
         if (auto opt = as_optional<std::string>(vm, "metrics-encryption-key")) {
-            auto encryption_key = metrics::EncryptionKey::validate(*opt);
+            encryption_key = metrics::EncryptionKey::validate(*opt);
             if (!encryption_key) {
                 throw error("Failed to validate --metrics-encryption-key");
             }
         } else {
-            throw error("The --metrics-encryption-key can only be used with --metrics-server-url");
+            throw error("--metrics-server-url must be used with --metrics-encryption-key");
         }
     }
 
