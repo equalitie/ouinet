@@ -1,6 +1,6 @@
 use crate::{
     backoff_watch::ConstantBackoffWatchReceiver,
-    bridge::EncryptionKey,
+    crypto::EncryptionKey,
     metrics::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
     store::{Store, StoredRecord},
@@ -19,17 +19,16 @@ enum Event {
     MetricsModified,
     IncrementRecordNumber,
     RotateDeviceId,
-    Exit,
+    Exit { purge: bool },
 }
 
 pub async fn metrics_runner(
     metrics: Arc<Mutex<Metrics>>,
     store_path: PathBuf,
+    encryption_key: EncryptionKey,
     record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
-    // TODO: Use to encrypt records
-    _encryption_key: Box<EncryptionKey>,
 ) -> Result<(), MetricsRunnerError> {
-    let mut store = Store::new(store_path).await?;
+    let mut store = Store::new(store_path, encryption_key).await?;
 
     let mut event_listener =
         EventListener::new(metrics.lock().unwrap().subscribe(), record_processor_rx);
@@ -39,7 +38,7 @@ pub async fn metrics_runner(
         let event = event_listener.on_event(&store).await;
 
         match event_handler
-            .process_event(event, &mut store, &*metrics)
+            .process_event(event, &mut store, &metrics)
             .await?
         {
             EventResult::Continue => (),
@@ -84,7 +83,7 @@ impl EventHandler {
                     return Ok(EventResult::Continue);
                 };
 
-                if record_processor.as_ref().process(&record).await? {
+                if record_processor.as_ref().process(record).await? {
                     store.backoff.succeeded().await?;
                     record.discard().await?;
                     self.oldest_record = None;
@@ -116,9 +115,15 @@ impl EventHandler {
 
                 store.record_number.increment().await?;
             }
-            Event::Exit => {
-                log::debug!("Event::Exit");
-                store_record(store, metrics).await?;
+            Event::Exit { purge } => {
+                log::debug!("Event::Exit {{ purge: {purge} }}");
+
+                if purge {
+                    store.delete_stored_records().await?;
+                } else {
+                    store_record(store, metrics).await?;
+                }
+
                 return Ok(EventResult::Break);
             }
         }
@@ -161,7 +166,7 @@ impl EventListener {
                 result = self.on_metrics_modified_rx.changed() => {
                     match result {
                         Ok(()) => break Event::MetricsModified,
-                        Err(_) => break Event::Exit,
+                        Err(_) => break Event::Exit { purge: false },
                     }
                 }
                 result = self.record_processor_rx.recv() => {
@@ -170,7 +175,7 @@ impl EventListener {
                             self.record_processor = record_processor.map(Arc::new);
                             continue;
                         }
-                        None => break Event::Exit
+                        None => break Event::Exit { purge: true },
                     }
                 }
                 () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber,
@@ -201,15 +206,19 @@ enum EventResult {
 
 #[derive(Error, Debug)]
 pub enum MetricsRunnerError {
-    #[error("RecordProcessor error {0}")]
+    #[error("record processor error")]
     RecordProcessor(#[from] RecordProcessorError),
-    #[error("IO error {0}")]
+    #[error("IO error")]
     Io(#[from] io::Error),
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
+    use crate::{
+        crypto::{DecryptionKey, EncryptionKey},
+        logger,
+    };
     use std::collections::BTreeSet;
     use tmpdir::TmpDir;
     use uuid::Uuid;
@@ -229,8 +238,12 @@ mod test {
 
     impl Setup {
         async fn new() -> Self {
+            logger::init_idempotent();
+
             let tmpdir = TmpDir::new("metrics_runner_store").await.unwrap();
-            let store = Store::new(tmpdir.as_ref().into()).await.unwrap();
+            let dk = DecryptionKey::random(&mut rand::rng());
+            let ek = EncryptionKey::from(&dk);
+            let store = Store::new(tmpdir.as_ref().into(), ek).await.unwrap();
             let event_handler = EventHandler::new();
             let metrics = Mutex::new(Metrics::new());
 
@@ -417,5 +430,17 @@ mod test {
         setup.process(Event::IncrementRecordNumber).await;
 
         assert!(!setup.store.backoff.is_stopped());
+    }
+
+    #[tokio::test]
+    async fn delete_stored_records() {
+        let mut setup = Setup::new().await;
+        assert_eq!(setup.store.load_stored_records().await.unwrap().len(), 0);
+
+        setup.modify_metrics_and_process().await;
+        assert_eq!(setup.store.load_stored_records().await.unwrap().len(), 1);
+
+        setup.store.delete_stored_records().await.unwrap();
+        assert_eq!(setup.store.load_stored_records().await.unwrap().len(), 0);
     }
 }

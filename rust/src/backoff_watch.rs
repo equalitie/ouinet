@@ -28,9 +28,8 @@ impl ConstantBackoffWatchSender {
                     }
 
                     if let Some(time_sent) = last_sent {
-                        match delay.checked_sub(time_sent.elapsed()) {
-                            Some(remaining) => time::sleep(remaining).await,
-                            None => (),
+                        if let Some(remaining) = delay.checked_sub(time_sent.elapsed()) {
+                            time::sleep(remaining).await
                         }
                     }
 
@@ -78,7 +77,7 @@ impl ConstantBackoffWatchReceiver {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[tokio::test]

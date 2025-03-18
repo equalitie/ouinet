@@ -148,7 +148,7 @@ impl State {
                     if error.kind() == io::ErrorKind::NotFound {
                         Ok(())
                     } else {
-                        return Err(error);
+                        Err(error)
                     }
                 }
             },
@@ -196,7 +196,7 @@ impl SleepFor {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use tmpdir::TmpDir;
 

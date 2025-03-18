@@ -1,11 +1,11 @@
 use crate::{
+    crypto::EncryptionKey,
     logger,
     metrics::{
         request::{self, RequestId, RequestType},
         BootstrapId, IpVersion, Metrics,
     },
-    metrics_runner::metrics_runner,
-    metrics_runner::MetricsRunnerError,
+    metrics_runner::{metrics_runner, MetricsRunnerError},
     record_processor::{RecordProcessor, RecordProcessorError},
     runtime,
 };
@@ -63,7 +63,7 @@ mod ffi {
 
         //------------------------------------------------------------
         type EncryptionKey;
-        fn validate_encryption_key(key_str: String) -> Result<Box<EncryptionKey>>;
+        fn validate_encryption_key(pem_str: String) -> Result<Box<EncryptionKey>>;
     }
 
     #[namespace = "ouinet::metrics::bridge"]
@@ -75,19 +75,16 @@ mod ffi {
         fn execute(
             self: &CxxRecordProcessor,
             record_name: String,
-            record_data: String,
+            record_data: Vec<u8>,
             on_finish: Box<CxxOneShotSender>,
         );
     }
 }
 
-#[derive(Clone)]
-pub struct EncryptionKey {
-    // TODO
-}
-
-fn validate_encryption_key(_key_str: String) -> Result<Box<EncryptionKey>, String> {
-    Ok(Box::new(EncryptionKey {}))
+fn validate_encryption_key(pem_str: String) -> Result<Box<EncryptionKey>, String> {
+    Ok(Box::new(
+        EncryptionKey::from_pem(&pem_str).map_err(|error| error.to_string())?,
+    ))
 }
 
 pub use ffi::CxxRecordProcessor;
@@ -144,8 +141,8 @@ fn new_client(store_path: String, encryption_key: Box<EncryptionKey>) -> Box<Cli
         None => runtime::get_runtime(),
     };
     Box::new(Client::new(
-        PathBuf::from(store_path),
         runtime,
+        PathBuf::from(store_path),
         encryption_key,
     ))
 }
@@ -157,7 +154,7 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(store_path: PathBuf, runtime: Arc<Runtime>, encryption_key: Box<EncryptionKey>) -> Self {
+    fn new(runtime: Arc<Runtime>, store_path: PathBuf, encryption_key: Box<EncryptionKey>) -> Self {
         let _runtime_guard = runtime.enter();
 
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
@@ -168,10 +165,8 @@ impl Client {
             let metrics = metrics.clone();
 
             async move {
-                let store_path = PathBuf::from(store_path);
-
                 if let Err(error) =
-                    metrics_runner(metrics, store_path, processor_rx, encryption_key).await
+                    metrics_runner(metrics, store_path, *encryption_key, processor_rx).await
                 {
                     match error {
                         MetricsRunnerError::RecordProcessor(
@@ -279,14 +274,11 @@ impl ClientInner {
     fn stop(&self) -> Option<Arc<Runtime>> {
         let mut lock = self.runner.lock().unwrap();
 
-        let Some(Runner {
+        let Runner {
             runtime,
             processor_tx,
             mut job_handle,
-        }) = lock.take()
-        else {
-            return None;
-        };
+        } = lock.take()?;
 
         // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
         drop(processor_tx);

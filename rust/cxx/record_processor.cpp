@@ -1,12 +1,13 @@
 #include <task.h>
 #include <namespaces.h>
+#include <boost/asio/buffer.hpp>
 #include "record_processor.h"
 
 namespace ouinet::metrics::bridge {
 
 // Called from rust to pass record data to the use provided `async_callback`.
 void CxxRecordProcessor::execute( rust::String report_name
-                                , rust::String report_content
+                                , rust::Vec<rust::u8> report_content
                                 , rust::Box<bridge::CxxOneShotSender> on_finish) const
 {
     task::spawn_detached(executor
@@ -16,11 +17,11 @@ void CxxRecordProcessor::execute( rust::String report_name
               , on_finish = std::move(on_finish)
               ] (asio::yield_context yield)
     {
-        std::string_view report_name_sv(report_name.data(), report_name.size());
-        std::string_view report_content_sv(report_content.data(), report_content.size());
+        std::string_view report_name_view(report_name.data(), report_name.size());
+        asio::const_buffer report_content_view(report_content.data(), report_content.size());
 
         try {
-            async_callback(report_name_sv, report_content_sv, yield);
+            async_callback(report_name_view, report_content_view, yield);
         }
         catch (std::exception& e) {
             on_finish->send(false);

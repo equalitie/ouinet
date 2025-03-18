@@ -11,7 +11,7 @@ pub use request::Requests;
 use serde_json::json;
 use std::{sync::Arc, time::SystemTime};
 
-const DAY_TIME_FORMAT: &'static str = "%FT%T%.3f";
+const DAY_TIME_FORMAT: &str = "%FT%T%.3f";
 
 #[derive(Clone, Copy, Debug)]
 pub enum IpVersion {

@@ -29,7 +29,7 @@ struct CxxRecordProcessor {
         , async_callback(std::move(async_callback)) {}
 
     void execute( rust::String record_name
-                , rust::String record_content
+                , rust::Vec<rust::u8> record_content
                 , rust::Box<bridge::CxxOneShotSender> on_finish) const;
 };
 

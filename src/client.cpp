@@ -373,7 +373,7 @@ public:
             , [ client = this
               , cancel = make_shared<Cancel>(_shutdown_signal)]
                  ( std::string_view record_name
-                 , std::string_view record_content
+                 , asio::const_buffer record_content
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
@@ -411,14 +411,14 @@ private:
                           , Yield yield);
 
     template<class Rq>
-    Session fetch_via_self( Rq, const UserAgentMetaData&
-                          , Cancel&, Yield);
+    Session fetch_via_self(Rq, const UserAgentMetaData&, Cancel&, Yield);
 
     Response fetch_fresh_from_front_end(const Request&, Yield);
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
-    Session fetch_fresh_from_origin( Request
+    template<class Rq>
+    Session fetch_fresh_from_origin( Rq
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
                                    , std::optional<metrics::Request> metrics
@@ -426,7 +426,8 @@ private:
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
-    Session fetch_fresh_through_connect_proxy( const Request&
+    template<class Rq>
+    Session fetch_fresh_through_connect_proxy( const Rq&
                                              , asio::ssl::context&
                                              , std::optional<metrics::Request>
                                              , Cancel&
@@ -440,7 +441,7 @@ private:
                                             , Yield);
 
     void send_metrics_record( std::string_view record_name
-                            , std::string_view record_content
+                            , asio::const_buffer record_content
                             , Cancel& cancel
                             , Yield);
 
@@ -511,7 +512,7 @@ private:
                              , const doh::Endpoint&
                              , Cancel&, Yield);
 
-    GenericStream connect_to_origin( const Request&
+    GenericStream connect_to_origin( const http::request_header<>&
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
                                    , Cancel&, Yield);
@@ -1024,7 +1025,7 @@ Client::State::resolve_tcp_dns( const std::string& host
 }
 
 GenericStream
-Client::State::connect_to_origin( const Request& rq
+Client::State::connect_to_origin( const http::request_header<>& rq
                                 , const UserAgentMetaData& meta
                                 , asio::ssl::context& tls_ctx
                                 , Cancel& cancel
@@ -1125,7 +1126,8 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yiel
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_from_origin( Request rq
+template<class Rq>
+Session Client::State::fetch_fresh_from_origin( Rq rq
                                               , const UserAgentMetaData& meta
                                               , asio::ssl::context& tls_ctx
                                               , std::optional<metrics::Request> metrics
@@ -1191,7 +1193,8 @@ Session Client::State::fetch_fresh_from_origin( Request rq
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_through_connect_proxy( const Request& rq
+template<class Rq>
+Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
                                                         , asio::ssl::context& tls_ctx
                                                         , std::optional<metrics::Request> metrics
                                                         , Cancel& cancel
@@ -1478,7 +1481,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     return session;
 }
 
-void Client::State::send_metrics_record(std::string_view record_name, std::string_view record_content, Cancel& cancel, Yield yield) {
+void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, Yield yield) {
     auto metrics_conf = _config.metrics();
 
     if (!metrics_conf) {
@@ -1488,7 +1491,7 @@ void Client::State::send_metrics_record(std::string_view record_name, std::strin
 
     const util::url_match& server_url = metrics_conf->server_url;
 
-    http::request<http::string_body> req;
+    http::request<http::buffer_body> req;
 
     req.version(11);
     req.method(http::verb::post);
@@ -1502,7 +1505,9 @@ void Client::State::send_metrics_record(std::string_view record_name, std::strin
         req.set("X-Ouinet-Metrics-Server-Token", *metrics_conf->server_token);
     }
 
-    req.body() = record_content;
+    req.body().data = const_cast<void*>(record_content.data());
+    req.body().size = record_content.size();
+    req.body().more = false;
     req.prepare_payload();
 
     auto& tls_ctx = metrics_conf->server_cacert
