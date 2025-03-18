@@ -40,6 +40,8 @@ public:
     Request new_private_injector_request();
     Request new_cache_request();
 
+    std::optional<std::string> current_device_id() const;
+
 private:
     Client() = default;
 

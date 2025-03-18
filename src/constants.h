@@ -99,7 +99,7 @@ static const std::string response_source_hdr_local_cache = "local-cache";
 
 // Device Reasonably Unique ID (DRUID) is used to generate statistics on the
 // injector side without using IP addresses.
-static const std::string request_druid_hdr = "DRUID";
+static const std::string request_druid_hdr = "X-Ouinet-DRUID";
 
 } // http_ namespace
 

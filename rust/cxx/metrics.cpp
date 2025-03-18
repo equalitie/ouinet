@@ -63,6 +63,11 @@ Request Client::new_cache_request() {
     return Request{(*_impl)->new_cache_request()};
 }
 
+std::optional<std::string> Client::current_device_id() const {
+#warning "TODO: return current device id"
+    return "TODO";
+}
+
 //--------------------------------------------------------------------
 
 DhtNode MainlineDht::dht_node_ipv4() {
