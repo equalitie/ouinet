@@ -431,4 +431,16 @@ mod tests {
 
         assert!(!setup.store.backoff.is_stopped());
     }
+
+    #[tokio::test]
+    async fn delete_stored_records() {
+        let mut setup = Setup::new().await;
+        assert_eq!(setup.store.load_stored_records().await.unwrap().len(), 0);
+
+        setup.modify_metrics_and_process().await;
+        assert_eq!(setup.store.load_stored_records().await.unwrap().len(), 1);
+
+        setup.store.delete_stored_records().await.unwrap();
+        assert_eq!(setup.store.load_stored_records().await.unwrap().len(), 0);
+    }
 }
