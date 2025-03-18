@@ -1,11 +1,13 @@
 #define BOOST_TEST_MODULE persistent_lru_cache
 #include <boost/test/included/unit_test.hpp>
+#include <boost/asio/detached.hpp>
 
 #include <util/persistent_lru_cache.h>
 #include <defer.h>
 #include <namespaces.h>
 #include <iostream>
 #include <util/file_io.h>
+#include <task.h>
 
 BOOST_AUTO_TEST_SUITE(persistent_lru_cache)
 
@@ -76,7 +78,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
     const unsigned max_cache_size = 2;
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
 
         {
@@ -183,7 +185,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
     const std::string key("test");
     const std::string data(4200, 'x');  // bigger than usual cache block
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
 
         // Create cache and insert element

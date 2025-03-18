@@ -1,8 +1,10 @@
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <iostream>
 #include <string>
 
 #include "namespaces.h"
+#include "task.h"
 #include "ouiservice.h"
 #include "ouiservice/tcp.h"
 
@@ -29,7 +31,7 @@ int main(int argc, const char* argv[])
     auto endpoint = Endpoint{Endpoint::TcpEndpoint, "127.0.0.1:10203"};
     client.add(endpoint, make_unique<ouiservice::TcpOuiServiceClient>(ctx.get_executor(), endpoint.endpoint_string));
 
-    asio::spawn(ctx, [&client, &message] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&client, &message] (asio::yield_context yield) {
         sys::error_code ec;
         client.start(yield[ec]);
 
@@ -46,7 +48,7 @@ int main(int argc, const char* argv[])
         }
 
         while (message.size()) {
-            size_t written = connection.async_write_some(asio::const_buffers_1(message.data(), message.size()), yield[ec]);
+            size_t written = connection.async_write_some(asio::const_buffer(message.data(), message.size()), yield[ec]);
             if (ec || !written) {
                 return;
             }
@@ -56,7 +58,7 @@ int main(int argc, const char* argv[])
         std::string line;
         while (true) {
             char c;
-            size_t read = connection.async_read_some(asio::mutable_buffers_1(&c, 1), yield[ec]);
+            size_t read = connection.async_read_some(asio::mutable_buffer(&c, 1), yield[ec]);
             if (ec || !read) {
                 return;
             }

@@ -67,6 +67,14 @@ public class Config implements Parcelable {
         private LogLevel logLevel = null;
         private boolean enableLogFile = false;
 
+        private boolean metricsEnableOnStart = false;
+        private String metricsServerUrl;
+        private String metricsServerToken;
+        private String metricsEncryptionKey;
+        // Set either-or, not both.
+        private String metricsServerTlsCaCert;
+        private String metricsServerTlsCaCertPath;
+
         public ConfigBuilder(Context context) {
             Ouinet.maybeLoadLibraries(context);
 
@@ -179,6 +187,30 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setEnableLogFile(boolean enableLogFile){
             this.enableLogFile = enableLogFile;
+            return this;
+        }
+        public ConfigBuilder setMetricsEnableOnStart(boolean enable) {
+            this.metricsEnableOnStart = enable;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerUrl(String url) {
+            this.metricsServerUrl = url;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerToken(String token) {
+            this.metricsServerToken = token;
+            return this;
+        }
+        public ConfigBuilder setMetricsEncryptionKey(String key) {
+            this.metricsEncryptionKey = key;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerTlsCaCert(String caCert) {
+            this.metricsServerTlsCaCert = caCert;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerTlsCaCertPath(String path) {
+            this.metricsServerTlsCaCertPath = path;
             return this;
         }
 
@@ -362,7 +394,13 @@ public class Config implements Parcelable {
                     disableProxyAccess,
                     disableInjectorAccess,
                     logLevel,
-                    enableLogFile);
+                    enableLogFile,
+                    metricsEnableOnStart,
+                    metricsServerUrl,
+                    metricsServerToken,
+                    metricsEncryptionKey,
+                    metricsServerTlsCaCert,
+                    metricsServerTlsCaCertPath);
         }
     }
 
@@ -391,6 +429,12 @@ public class Config implements Parcelable {
     private boolean disableInjectorAccess;
     private LogLevel logLevel;
     private boolean enableLogFile;
+    private boolean metricsEnableOnStart;
+    private String metricsServerUrl;
+    private String metricsServerToken;
+    private String metricsEncryptionKey;
+    private String metricsServerTlsCaCert;
+    private String metricsServerTlsCaCertPath;
 
     private Config(String ouinetDirectory,
                   Set<String> btBootstrapExtras,
@@ -416,7 +460,13 @@ public class Config implements Parcelable {
                   boolean disableProxyAccess,
                   boolean disableInjectorAccess,
                   LogLevel logLevel,
-                  boolean enableLogFile) {
+                  boolean enableLogFile,
+                  boolean metricsEnableOnStart,
+                  String metricsServerUrl,
+                  String metricsServerToken,
+                  String metricsEncryptionKey,
+                  String metricsServerTlsCaCert,
+                  String metricsServerTlsCaCertPath) {
         this.ouinetDirectory = ouinetDirectory;
         this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
         this.cacheHttpPubKey = cacheHttpPubKey;
@@ -442,6 +492,12 @@ public class Config implements Parcelable {
         this.disableInjectorAccess = disableInjectorAccess;
         this.logLevel = logLevel;
         this.enableLogFile = enableLogFile;
+        this.metricsEnableOnStart = metricsEnableOnStart;
+        this.metricsServerUrl = metricsServerUrl;
+        this.metricsServerToken = metricsServerToken;
+        this.metricsEncryptionKey = metricsEncryptionKey;
+        this.metricsServerTlsCaCert = metricsServerTlsCaCert;
+        this.metricsServerTlsCaCertPath = metricsServerTlsCaCertPath;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -518,6 +574,24 @@ public class Config implements Parcelable {
     public boolean getEnableLogFile() {
         return enableLogFile;
     }
+    public boolean getMetricsEnableOnStart() {
+        return metricsEnableOnStart;
+    }
+    public String getMetricsServerUrl() {
+        return metricsServerUrl;
+    }
+    public String getMetricsServerToken() {
+        return metricsServerToken;
+    }
+    public String getMetricsEncryptionKey() {
+        return metricsEncryptionKey;
+    }
+    public String getMetricsServerTlsCaCert() {
+        return metricsServerTlsCaCert;
+    }
+    public String getMetricsServerTlsCaCertPath() {
+        return metricsServerTlsCaCertPath;
+    }
 
     public static final Parcelable.Creator<Config> CREATOR
             = new Parcelable.Creator<Config>() {
@@ -563,6 +637,12 @@ public class Config implements Parcelable {
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
         out.writeInt(enableLogFile ? 1 : 0);
+        out.writeInt(metricsEnableOnStart ? 1 : 0);
+        out.writeString(metricsServerUrl);
+        out.writeString(metricsServerToken);
+        out.writeString(metricsEncryptionKey);
+        out.writeString(metricsServerTlsCaCert);
+        out.writeString(metricsServerTlsCaCertPath);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -602,6 +682,13 @@ public class Config implements Parcelable {
         logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
 
         enableLogFile = in.readInt() != 0;
+
+        metricsEnableOnStart = in.readInt() != 0;
+        metricsServerUrl = in.readString();
+        metricsServerToken = in.readString();
+        metricsEncryptionKey = in.readString();
+        metricsServerTlsCaCert = in.readString();
+        metricsServerTlsCaCertPath = in.readString();
     }
 
 }

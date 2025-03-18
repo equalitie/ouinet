@@ -1,5 +1,4 @@
-#ifndef HTTP_LOGGER_H
-#define HTTP_LOGGER_H
+#pragma once
 
 #include <boost/beast/http.hpp>
 #include <boost/filesystem.hpp>
@@ -7,6 +6,8 @@
 #include "generic_stream.h"
 #include "namespaces.h"
 #include "session.h"
+
+namespace ouinet {
 
 namespace http = ouinet::http;
 using Request = http::request<http::string_body>;
@@ -34,4 +35,4 @@ private:
 
 extern HTTPLogger http_logger;
 
-#endif //HTTP_LOGGER_H
+} // namespaces

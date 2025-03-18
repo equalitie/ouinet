@@ -61,6 +61,8 @@
 #include "defer.h"
 #include "http_util.h"
 
+#include "cxx/metrics.h"
+
 using namespace std;
 using namespace ouinet;
 
@@ -453,7 +455,7 @@ public:
         // Get DRUID before the Ouinet headers are removed.
         auto dr_it = rq.find(http_::request_druid_hdr);
         if (dr_it != rq.end())
-            druid = dr_it->value().to_string();
+            druid = std::string(dr_it->value());
 
         // Sanitize and pop out Ouinet internal HTTP headers.
         auto crq = util::to_cache_request(move(rq));
@@ -788,13 +790,7 @@ void listen( InjectorConfig& config
 
         uint64_t connection_id = next_connection_id++;
 
-        // Increase the size of the coroutine stack (we do same in client).
-        // Some interesing info:
-        // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
-        boost::coroutines::attributes attribs;
-        attribs.size *= 2;
-
-        asio::spawn(exec, [
+        task::spawn_detached(exec, [
             connection = std::move(connection),
             &ssl_ctx,
             &cancel,
@@ -819,7 +815,7 @@ void listen( InjectorConfig& config
                 LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
-        }, attribs);
+        });
     }
 }
 
@@ -867,8 +863,13 @@ int main(int argc, const char* argv[])
         // without connectivity restrictions,
         // using extra BT bootstrap servers may be useful
         // in environments like isolated LANs or community networks.
+
         bt_dht_ptr = std::make_shared<bt::MainlineDht>
-            (ex, fs::path{}, config.bt_bootstrap_extras());  // default storage dir
+            ( ex
+            , metrics::Client::noop().mainline_dht()
+            , fs::path{}
+            , config.bt_bootstrap_extras());  // default storage dir
+                                              //
         bt_dht_ptr->set_endpoints({config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
@@ -994,7 +995,7 @@ int main(int argc, const char* argv[])
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
             make_unique<ouiservice::Obfs4OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs4-server");
-        asio::spawn(ex, [
+        task::spawn_detached(ex, [
             obfs4 = server.get(),
             endpoint
         ] (asio::yield_context yield) {
@@ -1023,8 +1024,7 @@ int main(int argc, const char* argv[])
 
     Cancel cancel;
 
-    asio::spawn(ex, [
-        &ex,
+    task::spawn_detached(ex, [
         &proxy_server,
         &config,
         &cancel

@@ -18,6 +18,8 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 
+
+
 ################################################################################
 # Global build flags
 if (WITH_ASAN)
@@ -28,10 +30,8 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 endif()
 add_compile_options("-Wall")
 
-
 ################################################################################
 project(ouinet)
-
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
@@ -101,8 +101,30 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
+# ouinet-rs (ouinet components written in rust)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5.1
+)
+FetchContent_MakeAvailable(Corrosion)
+
+corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml)
+corrosion_set_env_vars(ouinet_rs CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
+add_dependencies(cargo-prebuild_ouinet_rs built_boost)
+
+set(OUINET_RS_INCLUDE_DIR
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
+    # XXX: Isn't there a better way to obtain the cargo target directory?
+    ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+
+################################################################################
 file(GLOB client_sources
     "./src/client.cpp"
+    "./src/client_config.cpp"
     "./src/connect_to_host.cpp"
     "./src/client_front_end.cpp"
     "./src/endpoint.cpp"
@@ -151,7 +173,6 @@ endif()
 
 target_link_libraries(client
     PRIVATE
-        Boost::asio_ssl
         Boost::iostreams
         lib::asio_utp
         cpp_upnp
@@ -161,9 +182,15 @@ target_link_libraries(client
         lib::uri
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
+        ouinet_rs
     PUBLIC
+        # Boost::asio_ssl is public for Android because the ClientConfig used
+        # in native-lib.cpp contains ssl::context and we need its move
+        # constructor and destructor implementations.
+        Boost::asio_ssl
         ouinet::base
 )
+target_include_directories(client ${OUINET_RS_INCLUDE_DIR})
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -208,9 +235,14 @@ if (WITH_INJECTOR)
         lib::uri
         OpenSSL::Crypto
         ouinet::base
+        ouinet_rs
         ${EXPERIMENTAL_LIBRARIES}
     )
+
+    target_include_directories(injector ${OUINET_RS_INCLUDE_DIR})
+
 endif() # if WITH_INJECTOR
+
 
 ################################################################################
 # Config file directory

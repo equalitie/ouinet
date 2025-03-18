@@ -2,16 +2,15 @@ include:
   - .gitlab-ci/jobs/common/prepare-builder-image.yml
   - .gitlab-ci/jobs/linux.yml
 
-variables:
-  TARGET_PLATFORM: 'linux'
-
 linux / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .prepare-builder-image
 
 linux / build:
   variables:
-    BOOST_VERSION: "1.79.0"
+    BOOST_VERSION: "1.87.0"
   extends:
     .linux-build
   needs:

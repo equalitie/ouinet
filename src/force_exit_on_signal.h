@@ -14,20 +14,20 @@ public:
     ForceExitOnSignal()
     {
         _thread = std::thread([this] {
-            asio::signal_set signals(_ios, SIGINT, SIGTERM);
+            asio::signal_set signals(_ctx, SIGINT, SIGTERM);
             signals.async_wait([] (const sys::error_code&, int) { exit(1); });
-            _ios.run();
+            _ctx.run();
         });
     }
 
     ~ForceExitOnSignal()
     {
-        _ios.stop();
+        _ctx.stop();
         _thread.join();
     }
 
 private:
-    asio::io_service _ios;
+    asio::io_context _ctx;
     std::thread _thread;
 };
 

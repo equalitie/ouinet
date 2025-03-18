@@ -30,14 +30,14 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
 
     if (hp.empty() && req.version() == 10) {
         // HTTP/1.0 proxy client with no ``Host:``, use URI.
-        network::uri uri(target.to_string());
+        network::uri uri{std::string(target)};
         return make_pair( uri.host().to_string()
                         , (uri.has_port() ? uri.port().to_string() : defport));
     }
 
     auto host_port = util::split_ep(hp);
-    return make_pair( host_port.first.to_string()
-                    , host_port.second.empty() ? defport : host_port.second.to_string());
+    return make_pair( std::string(host_port.first)
+                    , host_port.second.empty() ? defport : std::string(host_port.second));
 }
 
 boost::optional<ouinet::util::HttpResponseByteRange>

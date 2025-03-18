@@ -27,7 +27,9 @@ public:
         if (_bt_dht) return _bt_dht;
         auto lock = _bt_dht_wc.lock();
 
-        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor());
+        auto metrics_client = metrics::Client::noop();
+
+        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor(), metrics_client.mainline_dht());
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);

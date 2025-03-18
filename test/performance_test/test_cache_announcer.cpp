@@ -27,14 +27,14 @@ Clock::time_point start;
 Clock::time_point now;
 
 void start_btdht(asio::io_context& ctx, BtUtils& btu) {
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         vector<asio::ip::address> ifaddrs{asio::ip::make_address("0.0.0.0")};
-        btdht = std::move(btu.bittorrent_dht(yield, ifaddrs));
+        btdht = btu.bittorrent_dht(yield, ifaddrs);
     });
 }
 
 void start_announcer_loop(asio::io_context& ctx) {
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         announcer = std::make_unique<Announcer>(btdht, TEST_SIMULTANEOUS_ANNOUNCEMENTS);
 
         start = Clock::now();
@@ -45,7 +45,7 @@ void start_announcer_loop(asio::io_context& ctx) {
 }
 
 void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         using namespace std::chrono;
         sys::error_code ec;
         asio::steady_timer timer(ctx);
@@ -58,7 +58,7 @@ void monitor_announcements(asio::io_context& ctx, BtUtils& btu) {
                 if (iter->first.attempted_update())
                     ++announcing_attempts;
 
-            timer.expires_from_now(chrono::seconds(1));
+            timer.expires_after(chrono::seconds(1));
             timer.async_wait(yield[ec]);
             now = Clock::now();
             auto elapsed = duration_cast<seconds>(now - start).count();

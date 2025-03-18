@@ -1,4 +1,5 @@
 variables:
+  TARGET_PLATFORM: 'linux'
   BUILD_PATH: 'build/$TARGET_PLATFORM'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
@@ -25,7 +26,7 @@ variables:
     - mkdir -p $BUILD_PATH
     - cd $BUILD_PATH
     - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
-    - make -j `nproc`
+    - cmake --build . -j `nproc`
 
 .linux-unit-test:
   stage: test

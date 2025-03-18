@@ -6,9 +6,11 @@
 #include "../util/str.h"
 #include "../logger.h"
 #include "../or_throw.h"
+#include "../task.h"
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
 
@@ -242,7 +244,7 @@ void Yield::start_timing()
 
     _timeout_state = std::make_shared<TimeoutState>(_ex, this);
 
-    asio::spawn(_ex
+    task::spawn_detached(_ex
                , [ ts = _timeout_state, timeout]
                  (asio::yield_context yield) {
 
@@ -264,7 +266,7 @@ void Yield::start_timing()
             while (ts->self) {
                 sys::error_code ec; // ignored
 
-                ts->timer.expires_from_now(timeout);
+                ts->timer.expires_after(timeout);
 
                 ts->timer.async_wait(yield[ec]);
 

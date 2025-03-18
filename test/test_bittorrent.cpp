@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(test_generate_node_id)
     // I think that is a bug in bittorrent's documentation because
     // even their own reference implementation does differ.
 
-    auto ip = boost::asio::ip::address_v4::from_string("124.31.75.21");
+    auto ip = boost::asio::ip::make_address_v4("124.31.75.21");
     auto id = NodeID::generate(ip, 1).to_hex();
     BOOST_REQUIRE_EQUAL(id.substr(0, 6), "5fbfbf");
     BOOST_REQUIRE_EQUAL(id.substr(38), "01");
@@ -53,9 +53,12 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
     asio::io_context ctx;
 
-    DhtNode dht(ctx);
+    auto metrics_client = metrics::Client();
+    auto metrics_dht = metrics_client.mainline_dht();
 
-    asio::spawn(ctx, [&] (auto yield) {
+    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
+
+    task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
@@ -65,7 +68,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
         asio::steady_timer timer(dht.get_executor());
         while (!ec && !dht.ready()) {
-            timer.expires_from_now(chrono::milliseconds(200));
+            timer.expires_after(chrono::milliseconds(200));
             timer.async_wait(yield[ec]);
         }
         BOOST_REQUIRE(!ec);
@@ -92,7 +95,10 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     asio::io_context ctx;
 
-    DhtNode dht(ctx);
+    auto metrics_client = metrics::Client();
+    auto metrics_dht = metrics_client.mainline_dht();
+
+    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
 
     auto mutable_data = []( const string& value
                           , const string& salt
@@ -119,7 +125,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     size_t push_get_count = 8;
     size_t success_count = 0;
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
 
         BOOST_REQUIRE(!ec);
@@ -128,7 +134,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
         WaitCondition wc(ctx);
 
         for (size_t i = 0; i < push_get_count; i++) {
-            asio::spawn(ctx, [&, lock = wc.lock(), i] (auto yield) {
+        task::spawn_detached(ctx, [&, lock = wc.lock(), i] (auto yield) {
                 BOOST_REQUIRE(!ec);
 
                 stringstream salt;

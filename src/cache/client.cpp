@@ -55,7 +55,7 @@ struct GarbageCollector {
 
     void start()
     {
-        asio::spawn(_executor, [&] (asio::yield_context yield) {
+        task::spawn_detached(_executor, [&] (asio::yield_context yield) {
             TRACK_HANDLER();
             Cancel cancel(_cancel);
 
@@ -304,7 +304,7 @@ struct Client::Impl {
             if (e) return false;
             auto key = hdr[http_::response_uri_hdr];
             if (key.empty()) return false;
-            unpublish_cache_entry(key.to_string());
+            unpublish_cache_entry(std::string(key));
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
@@ -358,6 +358,7 @@ struct Client::Impl {
     Session load( const std::string& key
                 , const GroupName& group
                 , bool is_head_request
+                , metrics::Client& metrics_client
                 , Cancel cancel
                 , Yield yield)
     {
@@ -375,12 +376,15 @@ struct Client::Impl {
         if (!ec) {
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
-            if (is_head_request) return rs;  // do not care about body size
+            if (is_head_request) {
+                return rs;  // do not care about body size
+            }
 
             auto data_size_sv = rs.response_header()[http_::response_data_size_hdr];
             auto data_size_o = parse::number<std::size_t>(data_size_sv);
-            if (data_size_o && rs_sz == *data_size_o)
+            if (data_size_o && rs_sz == *data_size_o) {
                 return rs;  // local copy available and complete, use it
+            }
             rs_available = true;  // available but incomplete
             // TODO: Ideally, an incomplete or stale local cache entry
             // could be reused in the multi-peer download below.
@@ -393,7 +397,12 @@ struct Client::Impl {
         };
 
         std::unique_ptr<MultiPeerReader> reader;
+
+        std::optional<metrics::Request> metrics;
+
         if (_dht) {
+            metrics = metrics_client.new_cache_request();
+
             auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
 
             if (!debug_tag.empty()) {
@@ -426,7 +435,7 @@ struct Client::Impl {
         }
 
         auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return Session::create(std::move(reader), is_head_request, cancel, y);
+            return Session::create(std::move(reader), is_head_request, std::move(metrics), cancel, y);
         });
 
         if (!ec) {
@@ -563,7 +572,7 @@ struct Client::Impl {
             _DEBUG( "Cached response is too old; removing: "
                   , age, " > ", _max_cached_age
                   , "; uri=", key );
-            unpublish_cache_entry(key.to_string());
+            unpublish_cache_entry(std::string(key));
             return false;
         }
 
@@ -729,9 +738,10 @@ bool Client::enable_dht(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_ann
 Session Client::load( const std::string& key
                     , const GroupName& group
                     , bool is_head_request
+                    , metrics::Client& metrics
                     , Cancel cancel, Yield yield)
 {
-    return _impl->load(key, group, is_head_request, cancel, yield);
+    return _impl->load(key, group, is_head_request, metrics, cancel, yield);
 }
 
 void Client::store( const std::string& key

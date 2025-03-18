@@ -1,8 +1,11 @@
+#include <iomanip>
+#include "util/str.h"
 #include "http_logger.h"
 
+using namespace ouinet;
 static const long LOG_FILE_MAX_SIZE = 15 * 1024 * 1024;
 
-HTTPLogger http_logger{};
+HTTPLogger ouinet::http_logger{};
 
 std::string HTTPLogger::get_datetime()
 {
@@ -18,7 +21,7 @@ std::string HTTPLogger::get_header_value(const Request& rq, const http::field& f
     auto it = rq.find(field);
     std::string hdr_value = "-";
     if (it != rq.end())
-        hdr_value = "\"" + it->value().to_string() + "\"";
+        hdr_value = util::str("\"", it->value(), "\"");
     return hdr_value;
 }
 
@@ -27,7 +30,7 @@ std::string HTTPLogger::get_request_size(const Session& sess, size_t fwd_bytes)
     auto& res = sess.response_header();
     auto hdr = res.find(http::field::content_length);
     if (hdr != res.end()) {
-        return "\"" + hdr->value().to_string() + "\"";
+        return util::str("\"", hdr->value(), "\"");
     } else {
         return std::to_string(fwd_bytes);
     }

@@ -135,29 +135,19 @@ public class Ouinet {
             args.add("--log-level=" + config.getLogLevel().name());
         }
 
-        if (config.getEnableLogFile()) {
-            args.add("--enable-log-file");
-        }
+        maybeAddBool(args, "--enable-log-file",             config.getEnableLogFile());
+        maybeAddBool(args, "--disable-origin-access",       config.getDisableOriginAccess());
+        maybeAddBool(args, "--disable-proxy-access",        config.getDisableProxyAccess());
+        maybeAddBool(args, "--disable-injector-access",     config.getDisableInjectorAccess());
+        maybeAddBool(args, "--cache-private",               config.getCachePrivate());
+        maybeAddBool(args, "--disable-bridge-announcement", config.getDisableBridgeAnnouncement());
 
-        if (config.getDisableOriginAccess()) {
-            args.add("--disable-origin-access");
-        }
-
-        if (config.getDisableProxyAccess()) {
-            args.add("--disable-proxy-access");
-        }
-
-        if (config.getDisableInjectorAccess()) {
-            args.add("--disable-injector-access");
-        }
-
-        if (config.getCachePrivate()) {
-            args.add("--cache-private");
-        }
-
-        if (config.getDisableBridgeAnnouncement()) {
-            args.add("--disable-bridge-announcement");
-        }
+        maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
+        maybeAdd    (args, "--metrics-server-url",          config.getMetricsServerUrl());
+        maybeAdd    (args, "--metrics-server-token",        config.getMetricsServerToken());
+        maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
+        maybeAdd    (args, "--metrics-server-cacert",       config.getMetricsServerTlsCaCert());
+        maybeAdd    (args, "--metrics-server-cacert-file",  config.getMetricsServerTlsCaCertPath());
 
         Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
         if (btBootstrapExtras != null) {
@@ -271,6 +261,11 @@ public class Ouinet {
     private void maybeAdd(List<String> args, String key, @Nullable String value) {
         if (value == null || value.isEmpty()) return;
         args.add(key + "=" + value);
+    }
+
+    private void maybeAddBool(List<String> args, String key, boolean value) {
+        if (!value) return;
+        args.add(key);
     }
 
     /*

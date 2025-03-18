@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <ostream>
+#include <iomanip>
 #include "../util/str.h"
 
 namespace ouinet { namespace bittorrent {

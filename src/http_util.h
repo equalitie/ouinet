@@ -341,7 +341,7 @@ static Message remove_ouinet_fields(Message message)
 template<class Body>
 static void remove_ouinet_nonerrors_ref(http::response_header<Body>& message)
 {
-    auto proto_err = message[http_::response_error_hdr].to_string();
+    auto proto_err = std::string(message[http_::response_error_hdr]);
     remove_ouinet_fields_ref(message);
 
     if (!boost::regex_match(proto_err, http_::response_error_rx))
@@ -370,7 +370,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     auto absolute_target = absolute_req.target();
 
     if (!match_http_url(absolute_target, url)) {
-        assert(0 && "Failed to parse url");
+        // It's already in origin form
         return absolute_req;
     }
 

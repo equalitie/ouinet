@@ -1,4 +1,4 @@
-FROM registry.gitlab.com/equalitie/ouinet:debian-12-builder
+FROM registry.gitlab.com/equalitie/ouinet:linux-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ninja-build \
       openjdk-17-jdk-headless \
@@ -6,4 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       wget \
     && rm -rf /var/lib/apt/lists/*
 RUN echo 'quiet = on' >> /etc/wgetrc
+RUN rustup target add aarch64-linux-android
+RUN rustup target add armv7-linux-androideabi
+RUN rustup target add x86_64-linux-android
+
 ENV UNZIPOPT=-q

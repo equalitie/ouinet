@@ -6,6 +6,7 @@
 #include <chrono>
 #include <deque>
 #include <string>
+#include <map>
 
 #include "bencoding.h"
 #include "mutable_data.h"

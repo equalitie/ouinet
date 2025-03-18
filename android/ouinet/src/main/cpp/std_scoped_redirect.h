@@ -48,7 +48,7 @@ StdScopedRedirect::StdScopedRedirect()
 
     if (!_cout_pipe[0] && !_cerr_pipe[0]) return;
 
-    _thread = std::thread([=] {
+    _thread = std::thread([=, this] {
         std::string line[2];
 
         fd_set fds;

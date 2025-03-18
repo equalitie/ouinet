@@ -1,20 +1,29 @@
 if(NOT BOOST_VERSION)
-    set(BOOST_VERSION 1.79.0)
+    set(BOOST_VERSION 1.87.0)
 endif ()
 
-if (${BOOST_VERSION} EQUAL 1.71.0)
-    set(BOOST_VERSION_HASH d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee)
-elseif (${BOOST_VERSION} EQUAL 1.74.0)
-    set(BOOST_VERSION_HASH 83bfc1507731a0906e387fc28b7ef5417d591429e51e788417fe9ff025e116b1)
-elseif (${BOOST_VERSION} EQUAL 1.77.0)
-    set(BOOST_VERSION_HASH fc9f85fc030e233142908241af7a846e60630aa7388de9a5fafb1f3a26840854)
-elseif (${BOOST_VERSION} EQUAL 1.79.0)
+if (${BOOST_VERSION} EQUAL 1.79.0)
     set(BOOST_VERSION_HASH 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
+    set(BOOST_COROUTINE_BACKEND coroutine)
+elseif (${BOOST_VERSION} EQUAL 1.87.0)
+    set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
+    set(BOOST_COROUTINE_BACKEND fiber)
+    if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+        # There is a bug in boost::outcome (used by cpp-upnp) which causes
+        # compilation issues. This works around it but also disables some nicer
+        # GDB error messages. I'm not sure it matters much on Android, plus
+        # AFAIK we always check the `outcome::result` type before we access
+        # it's value, so probably will also never happen.
+        # Github issue for the bug is here: https://github.com/ned14/outcome/pull/308
+        add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+        add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+    endif()
+    set(BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
 endif ()
 
 set(BOOST_COMPONENTS
     context
-    coroutine
+    ${BOOST_COROUTINE_BACKEND}
     date_time
     filesystem
     iostreams
@@ -36,10 +45,8 @@ endif()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-    get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
-    string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
-    # This is the same as COMPILER_HOSTTRIPLE, _except_ on arm32.
-    set(COMPILER_CC_PREFIX ${COMPILER_HOSTTRIPLE})
+    # This is the same as CMAKE_LIBRARY_ARCHITECTURE, _except_ on arm32.
+    set(COMPILER_CC_PREFIX ${CMAKE_LIBRARY_ARCHITECTURE})
 
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
         set(COMPILER_CC_PREFIX "armv7a-linux-androideabi")
@@ -77,6 +84,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
@@ -172,17 +180,14 @@ add_library(Boost::asio ALIAS boost_asio)
 target_link_libraries(boost_asio
     PUBLIC
         Boost::boost
-        Boost::coroutine
         Threads::Threads
+        Boost::${BOOST_COROUTINE_BACKEND}
     PRIVATE
         Boost::system
 )
 target_compile_definitions(boost_asio
     PUBLIC
         -DBOOST_ASIO_DYN_LINK
-        # For some reason we need to define both of these
-        -DBOOST_COROUTINES_NO_DEPRECATION_WARNING
-        -DBOOST_COROUTINE_NO_DEPRECATION_WARNING
 )
 target_compile_options(boost_asio
     PUBLIC -std=c++20

@@ -24,7 +24,7 @@ connected_pair(const AsioExecutor& ex, asio::yield_context yield)
 
     WaitCondition wc(ex);
 
-    asio::spawn(ex, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+    task::spawn_detached(ex, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
             a.async_accept(s2, yield[accept_ec]);
         });
 
