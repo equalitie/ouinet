@@ -8,12 +8,16 @@
 #include <boost/regex.hpp>
 
 #include "logger.h"
+#include "http_logger.h"
 #include "util/crypto.h"
 #include "parse/endpoint.h"
 #include "bep5_swarms.h"
 #include "bittorrent/bootstrap.h"
 
 namespace ouinet {
+
+#define _HTTP_LOG_FILE_NAME "access.log"
+static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
 
 class InjectorConfig {
 public:
@@ -40,6 +44,27 @@ public:
 
     boost::filesystem::path repo_root() const
     { return _repo_root; }
+
+    inline bool _is_http_log_file_enabled() const {
+        return http_logger.get_log_file() != nullptr;
+    }
+
+    inline void _is_http_log_file_enabled(bool v) {
+        if (!v) {
+            http_logger.log_to_file("");
+            return;
+        }
+
+        if (_is_http_log_file_enabled()) return;
+
+        auto current_log_path = http_logger.current_log_file();
+        auto http_log_path = current_log_path.empty()
+                               ? (_repo_root / http_log_file_name).string()
+                               : current_log_path;
+
+        http_logger.log_to_file(http_log_path);
+        LOG_INFO("Log file set to: ", http_log_path);
+    }
 
 #ifdef __EXPERIMENTAL__
     bool listen_on_i2p() const
@@ -146,6 +171,10 @@ InjectorConfig::options_description()
         ("repo", po::value<string>(), "Path to the repository root")
         ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
          , "Set log level: silly, debug, verbose, info, warn, error, abort")
+        ("enable-http-log-file"
+         , po::bool_switch()->default_value(false)
+         , "Enable logging of HTTP requests received via public mode"
+           " to log file \"" _HTTP_LOG_FILE_NAME "\" under the repository root")
         ("bt-bootstrap-extra", po::value<std::vector<string>>()->composing()
          , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
            "to start the DHT (can be used several times). "
@@ -246,6 +275,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
             throw std::runtime_error(util::str("Invalid log level: ", level));
         logger.set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
+    }
+
+    if (vm["enable-http-log-file"].as<bool>()) {
+        _is_http_log_file_enabled(true);
     }
 
     if (vm.count("bt-bootstrap-extra")) {

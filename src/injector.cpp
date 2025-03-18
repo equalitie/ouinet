@@ -30,6 +30,7 @@
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
 #include "http_util.h"
+#include "http_logger.h"
 #include "origin_pools.h"
 #include "session.h"
 
@@ -83,7 +84,6 @@ using ouinet::util::AsioExecutor;
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
-
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -436,6 +436,8 @@ private:
         if (ec = compute_error_code(ec, cancel, overlong_wd)) {
             yield.log("Failed to process response; ec=", ec);
             return or_throw(yield, ec);
+        } else {
+            http_logger.log(druid, cache_rq, orig_sess, fwd_bytes);
         }
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
@@ -449,6 +451,11 @@ public:
     {
         sys::error_code ec;
         bool rq_keep_alive = rq.keep_alive();
+
+        // Get DRUID before the Ouinet headers are removed.
+        auto dr_it = rq.find(http_::request_druid_hdr);
+        if (dr_it != rq.end())
+            druid = std::string(dr_it->value());
 
         // Sanitize and pop out Ouinet internal HTTP headers.
         auto crq = util::to_cache_request(move(rq));
@@ -494,6 +501,7 @@ private:
     const InjectorConfig& config;
     uuid_generator& genuuid;
     OriginPools& origin_pools;
+    string druid{"-"};
 };
 
 //------------------------------------------------------------------------------

@@ -219,6 +219,7 @@ if (WITH_INJECTOR)
         "./src/util/hash.cpp"
         "./src/util/handler_tracker.cpp"
         "./src/util.cpp"
+        "./src/http_logger.cpp"
         "./src/http_util.cpp"
         ${EXPERIMENTAL_SOURCES}
     )

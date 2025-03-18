@@ -1418,6 +1418,13 @@ Session Client::State::fetch_fresh_through_simple_proxy
     if (auto credentials = _config.credentials_for(*con))
         request = authorize(request, *credentials);
 
+    if (_metrics.is_enabled()) {
+        if (auto druid = _metrics.current_device_id()) {
+            // Add DRUID header to the request sent to the injector
+            request.set(http_::request_druid_hdr, *druid);
+        }
+    }
+
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request
     yield[ec].tag("write_injector_req").run([&] (auto y) {
