@@ -44,7 +44,7 @@ class TestFixtures:
     I2P_CLIENT_FINISHED_READING_REGEX = r'[\s\S]*Finish reading[\s\S]*'
     I2P_CLIENT_ERROR_READING_REGEX = r'[\s\S]*Error in getting i2p seeder response[\s\S]*'
 
-    I2P_CLIENT = {"name":"i2p_client", "port": 3888, "i2cp_port": 7654,}
+    I2P_CLIENT = {"name":"i2p_client", "port": 3888, "i2cp_port": 7454,}
     I2P_DISCOVERED_ID_ANNOUNCE_PORT = 8998
     
     MAX_NO_OF_I2P_CLIENTS = 5
