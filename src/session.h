@@ -55,7 +55,7 @@ public:
     template<class SinkStream>
     void flush_response(SinkStream&, Cancel&, asio::yield_context);
     template<class Handler>
-    void flush_response(Cancel&, asio::yield_context, Handler&& h);
+    void flush_response(Cancel, asio::yield_context, Handler&& h);
     // The timeout will get reset with each successful send/recv operation,
     // so that the exchange does not get stuck for too long.
     template<class Handler, class TimeoutDuration>
@@ -108,6 +108,7 @@ private:
     bool _debug = false;
     std::string _debug_prefix;
     std::optional<metrics::Request> _metrics;
+    Cancel _destroyed;
 };
 
 //--------------------------------------------------------------------
@@ -163,8 +164,6 @@ Session Session::create( std::unique_ptr<Reader>&& reader
 
     auto head_opt_part = reader->async_read_part(cancel, yield[ec]);
 
-    ec = compute_error_code(ec, cancel);
-
     if (!ec && !head_opt_part) {
         // This is ok for the reader,
         // but it should be made explicit to code creating sessions.
@@ -193,6 +192,8 @@ inline
 boost::optional<http_response::Part>
 Session::async_read_part(Cancel cancel, asio::yield_context yield)
 {
+    auto destroyed = _destroyed.connect([&cancel] { cancel(); });
+
     if (!_reader)
         return or_throw(yield, asio::error::not_connected, boost::none);
 
@@ -224,10 +225,12 @@ Session::async_read_part(Cancel cancel, asio::yield_context yield)
 template<class Handler>
 inline
 void
-Session::flush_response(Cancel& cancel,
+Session::flush_response(Cancel cancel,
                         asio::yield_context yield,
                         Handler&& h)
 {
+    auto destroyed = _destroyed.connect([&cancel] { cancel(); });
+
     if (!_reader)
         return or_throw(yield, asio::error::not_connected);
 
