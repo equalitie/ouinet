@@ -5,7 +5,7 @@ use crate::{
     store::{Store, StoredRecord},
 };
 use std::{
-    io,
+    fmt, io,
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
@@ -14,11 +14,38 @@ use tokio::{select, sync::mpsc, time};
 enum Event {
     // TODO: Use lifetime instead of an Arc?
     ProcessOneRecord(Arc<RecordProcessor>),
-    MetricsModified,
-    IncrementRecordNumber,
-    RotateDeviceId,
+    MetricsModified { metrics_enabled: bool },
+    IncrementRecordNumber { metrics_enabled: bool },
+    RotateDeviceId { metrics_enabled: bool },
     Purge,
-    Exit,
+    Exit { metrics_enabled: bool },
+}
+
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ProcessOneRecord(_) => write!(f, "Event::ProcessOneRecord"),
+            Self::MetricsModified { metrics_enabled } => write!(
+                f,
+                "Event::MetricsModified{{ metrics_enabled: {:?} }}",
+                metrics_enabled
+            ),
+            Self::IncrementRecordNumber { metrics_enabled } => write!(
+                f,
+                "Event::IncrementRecordNumber{{ metrics_enabled: {:?} }}",
+                metrics_enabled
+            ),
+            Self::RotateDeviceId { metrics_enabled } => write!(
+                f,
+                "Event::RotateDeviceId{{ metrics_enabled: {:?} }}",
+                metrics_enabled
+            ),
+            Self::Purge => write!(f, "Event::Purge",),
+            Self::Exit { metrics_enabled } => {
+                write!(f, "Event::Exit{{ metrics_enabled: {:?} }}", metrics_enabled)
+            }
+        }
+    }
 }
 
 pub async fn metrics_runner(
@@ -62,13 +89,10 @@ impl EventHandler {
         store: &mut Store,
         metrics: &Mutex<Metrics>,
     ) -> Result<EventResult, MetricsRunnerError> {
-        // TODO: We don't want to store records when there is no record_processor (i.e. when
-        // metrics are disabled)
+        log::debug!("{event:?}");
 
         match event {
             Event::ProcessOneRecord(record_processor) => {
-                log::debug!("Event:ProcessOneRecord");
-
                 if self.oldest_record.is_none() {
                     self.oldest_record = store.oldest_non_current_record().await?;
                 }
@@ -80,45 +104,48 @@ impl EventHandler {
                 };
 
                 if record_processor.as_ref().process(record).await? {
+                    log::debug!("  Sucess {:?}", record.name());
                     store.backoff.succeeded().await?;
                     record.discard().await?;
                     self.oldest_record = None;
                 } else {
+                    log::debug!("  Failure {:?}", record.name());
                     store.backoff.failed().await?;
                 }
             }
-            Event::MetricsModified => {
-                log::debug!("Event::MetricsModified");
-                if store_record(store, metrics).await? {
-                    log::debug!("  stored");
-                } else {
-                    log::debug!("  no new data");
+            Event::MetricsModified { metrics_enabled } => {
+                if metrics_enabled {
+                    if store_record(store, metrics).await? {
+                        log::debug!("  stored");
+                    } else {
+                        log::debug!("  no new data");
+                    }
                 }
             }
-            Event::RotateDeviceId => {
-                log::debug!("Event::RotateDeviceId");
-
-                store_record(store, metrics).await?;
+            Event::RotateDeviceId { metrics_enabled } => {
+                if metrics_enabled {
+                    store_record(store, metrics).await?;
+                }
 
                 metrics.lock().unwrap().clear();
                 store.record_number.reset().await?;
                 store.device_id.rotate().await?;
             }
-            Event::IncrementRecordNumber => {
-                log::debug!("Event::IncrementRecordNumber");
-
-                store_record(store, metrics).await?;
+            Event::IncrementRecordNumber { metrics_enabled } => {
+                if metrics_enabled {
+                    store_record(store, metrics).await?;
+                }
 
                 store.record_number.increment().await?;
             }
             Event::Purge => {
-                log::debug!("Event::Purge");
                 store.delete_stored_records().await?;
                 return Ok(EventResult::Continue);
             }
-            Event::Exit => {
-                log::debug!("Event::Exit");
-                store_record(store, metrics).await?;
+            Event::Exit { metrics_enabled } => {
+                if metrics_enabled {
+                    store_record(store, metrics).await?;
+                }
                 return Ok(EventResult::Break);
             }
         }
@@ -155,13 +182,15 @@ impl EventListener {
                 }
             };
 
+            let metrics_enabled = self.record_processor.is_some();
+
             select! {
                 record_processor = processing_backoff =>
                     break Event::ProcessOneRecord(record_processor),
                 result = self.on_metrics_modified_rx.changed() => {
                     match result {
-                        Ok(()) => break Event::MetricsModified,
-                        Err(_) => break Event::Exit,
+                        Ok(()) => break Event::MetricsModified { metrics_enabled },
+                        Err(_) => break Event::Exit { metrics_enabled },
                     }
                 }
                 result = self.record_processor_rx.recv() => {
@@ -174,11 +203,11 @@ impl EventListener {
                             self.record_processor = None;
                             break Event::Purge;
                         }
-                        None => break Event::Exit,
+                        None => break Event::Exit { metrics_enabled },
                     }
                 }
-                () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber,
-                () = time::sleep(store.device_id.rotate_after()) => break Event::RotateDeviceId,
+                () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber { metrics_enabled },
+                () = time::sleep(store.device_id.rotate_after()) => break Event::RotateDeviceId { metrics_enabled },
             }
         }
     }
@@ -187,7 +216,8 @@ impl EventListener {
 async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<bool> {
     let record = metrics.lock().unwrap().collect();
 
-    // Backoff may have stopped due to there being no more records, so resume it.
+    // Backoff may have stopped due to there being no records *or* because the one record that was
+    // there was "current". So resume it.
     store.backoff.resume();
 
     if let Some(record) = record {
@@ -285,7 +315,10 @@ mod tests {
             // Modifying metrics normally sends an event through `tokio::watch` to the
             // event_listener. But we don't have event_listener here so we need to simulate it.
             self.metrics.lock().unwrap().modify();
-            self.process(Event::MetricsModified).await;
+            self.process(Event::MetricsModified {
+                metrics_enabled: true,
+            })
+            .await;
         }
     }
 
@@ -294,6 +327,7 @@ mod tests {
         let mut setup = Setup::new().await;
 
         let processor = Arc::new(RecordProcessor::new());
+        let metrics_enabled = true;
 
         setup
             .process(Event::ProcessOneRecord(processor.clone()))
@@ -321,7 +355,9 @@ mod tests {
         );
 
         // Update record number within the record id
-        setup.process(Event::IncrementRecordNumber).await;
+        setup
+            .process(Event::IncrementRecordNumber { metrics_enabled })
+            .await;
 
         let record1_id = setup.current_record_id();
 
@@ -343,7 +379,9 @@ mod tests {
         );
 
         // Rotate device id
-        setup.process(Event::RotateDeviceId).await;
+        setup
+            .process(Event::RotateDeviceId { metrics_enabled })
+            .await;
 
         let record2_id = setup.current_record_id();
 
@@ -396,7 +434,9 @@ mod tests {
         );
 
         // Rotate the current record id
-        setup.process(Event::RotateDeviceId).await;
+        setup
+            .process(Event::RotateDeviceId { metrics_enabled })
+            .await;
 
         // Process again, this time it should be removed
         setup
@@ -426,7 +466,11 @@ mod tests {
 
         // Nothing is written here because no modifications to metrics happened since the last
         // write, but we still want the backoff to be resumed.
-        setup.process(Event::IncrementRecordNumber).await;
+        setup
+            .process(Event::IncrementRecordNumber {
+                metrics_enabled: true,
+            })
+            .await;
 
         assert!(!setup.store.backoff.is_stopped());
     }
