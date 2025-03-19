@@ -58,9 +58,14 @@ Request Client::new_public_injector_request() {
     return Request{(*_impl)->new_public_injector_request()};
 }
 
-Request Client::new_cache_request() {
+Request Client::new_cache_in_request() {
     if (!_impl) return Request{{}};
-    return Request{(*_impl)->new_cache_request()};
+    return Request{(*_impl)->new_cache_in_request()};
+}
+
+Request Client::new_cache_out_request() {
+    if (!_impl) return Request{{}};
+    return Request{(*_impl)->new_cache_out_request()};
 }
 
 std::optional<std::string> Client::current_device_id() const {

@@ -36,7 +36,8 @@ mod ffi {
         fn new_origin_request(self: &Client) -> Box<Request>;
         fn new_private_injector_request(self: &Client) -> Box<Request>;
         fn new_public_injector_request(self: &Client) -> Box<Request>;
-        fn new_cache_request(self: &Client) -> Box<Request>;
+        fn new_cache_in_request(self: &Client) -> Box<Request>;
+        fn new_cache_out_request(self: &Client) -> Box<Request>;
 
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
@@ -234,8 +235,12 @@ impl Client {
         self.new_request(RequestType::InjectorPrivate)
     }
 
-    fn new_cache_request(&self) -> Box<Request> {
-        self.new_request(RequestType::Cache)
+    fn new_cache_in_request(&self) -> Box<Request> {
+        self.new_request(RequestType::CacheIn)
+    }
+
+    fn new_cache_out_request(&self) -> Box<Request> {
+        self.new_request(RequestType::CacheOut)
     }
 
     fn new_request(&self, request_type: RequestType) -> Box<Request> {

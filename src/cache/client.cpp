@@ -166,6 +166,7 @@ struct Client::Impl {
 
     bool serve_local( const http::request<http::empty_body>& req
                     , GenericStream& sink
+                    , metrics::Client& metrics_client
                     , Cancel& cancel
                     , Yield& yield)
     {
@@ -260,7 +261,8 @@ struct Client::Impl {
         bool is_head_request = req.method() == http::verb::head;
 
         auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return Session::create(move(rr), is_head_request, cancel, y);
+            auto metrics = metrics_client.new_cache_out_request();
+            return Session::create(move(rr), is_head_request, std::move(metrics), cancel, y);
         });
 
         if (ec) return or_throw(yield, ec, false);
@@ -401,7 +403,7 @@ struct Client::Impl {
         std::optional<metrics::Request> metrics;
 
         if (_dht) {
-            metrics = metrics_client.new_cache_request();
+            metrics = metrics_client.new_cache_in_request();
 
             auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
 
@@ -755,10 +757,11 @@ void Client::store( const std::string& key
 
 bool Client::serve_local( const http::request<http::empty_body>& req
                         , GenericStream& sink
+                        , metrics::Client& metrics
                         , Cancel& cancel
                         , Yield yield)
 {
-    return _impl->serve_local(req, sink, cancel, yield);
+    return _impl->serve_local(req, sink, metrics, cancel, yield);
 }
 
 std::size_t Client::local_size( Cancel cancel

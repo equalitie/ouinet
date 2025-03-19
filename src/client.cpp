@@ -702,7 +702,13 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
         }
 
         if (req.method() != http::verb::connect) {
-            auto keep_alive = _cache->serve_local(req, con, cancel, yield[ec].tag("serve_local"));
+            auto keep_alive = _cache->serve_local(
+                    req,
+                    con,
+                    _metrics,
+                    cancel,
+                    yield[ec].tag("serve_local"));
+
             if (keep_alive) {
                 continue;  // possible error is recoverable
             }

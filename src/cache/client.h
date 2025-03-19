@@ -100,6 +100,7 @@ public:
     // Times out if forwarding to the sink gets stuck.
     bool serve_local( const http::request<http::empty_body>&
                     , GenericStream& sink
+                    , metrics::Client&
                     , Cancel&
                     , Yield);
 

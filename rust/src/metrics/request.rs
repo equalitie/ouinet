@@ -10,7 +10,10 @@ pub enum RequestType {
     Origin,
     InjectorPrivate,
     InjectorPublic,
-    Cache,
+    // Entries from cache we received
+    CacheIn,
+    // Entries from cache received served
+    CacheOut,
 }
 
 pub struct Requests {
@@ -93,7 +96,8 @@ impl Serialize for Requests {
                 RequestType::Origin => "origin",
                 RequestType::InjectorPrivate => "injector_private",
                 RequestType::InjectorPublic => "injector_public",
-                RequestType::Cache => "cache",
+                RequestType::CacheIn => "cache_in",
+                RequestType::CacheOut => "cache_out",
             };
             map.serialize_entry(key, summary)?;
         }

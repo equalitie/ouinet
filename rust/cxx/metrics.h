@@ -38,7 +38,8 @@ public:
     Request new_origin_request();
     Request new_public_injector_request();
     Request new_private_injector_request();
-    Request new_cache_request();
+    Request new_cache_in_request();
+    Request new_cache_out_request();
 
     std::optional<std::string> current_device_id() const;
 
