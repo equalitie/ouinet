@@ -260,6 +260,12 @@ Session::flush_response(Cancel& cancel,
             break;
         }
 
+        if (_metrics) {
+            if (auto body = opt_part->as_body()) {
+                _metrics->increment_transfer_size(body->size());
+            }
+        }
+
         h(std::move(*opt_part), cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec);
     }
