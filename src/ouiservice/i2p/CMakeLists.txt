@@ -22,6 +22,7 @@ set_target_properties(libi2pdclient PROPERTIES
 # Work around this issue by setting them by hand.
 add_dependencies(libi2pd OpenSSL::Crypto OpenSSL::SSL Boost::boost)
 add_dependencies(libi2pdclient OpenSSL::Crypto OpenSSL::SSL Boost::boost)
+add_dependencies(libi2pdlang Boost::boost)
 
 ################################################################################
 project(ouiservice-i2p)
