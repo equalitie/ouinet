@@ -93,11 +93,21 @@ public:
     void debug() { _debug = true; }
     void debug_prefix(std::string s) { _debug_prefix = std::move(s); }
 
+private:
     static void finish_metering(std::optional<metrics::Request>& metrics, sys::error_code ec) {
         if (metrics) {
             metrics->finish(ec);
             metrics = {};
         }
+    }
+
+    static size_t payload_size(const http_response::Part& part) {
+        if (auto body = part.as_body()) {
+            return body->size();
+        } else if (auto chunk_body = part.as_chunk_body()) {
+            return chunk_body->size();
+        }
+        return 0;
     }
 
 private:
@@ -206,8 +216,8 @@ Session::async_read_part(Cancel cancel, asio::yield_context yield)
     auto part = _reader->async_read_part(cancel, yield[ec]);
 
     if (!ec && part && _metrics) {
-        if (auto body = part->as_body()) {
-            _metrics->increment_transfer_size(body->size());
+        if (auto size = payload_size(*part)) {
+            _metrics->increment_transfer_size(size);
         }
     }
 
@@ -264,8 +274,8 @@ Session::flush_response(Cancel cancel,
         }
 
         if (_metrics) {
-            if (auto body = opt_part->as_body()) {
-                _metrics->increment_transfer_size(body->size());
+            if (auto size = payload_size(*opt_part)) {
+                _metrics->increment_transfer_size(size);
             }
         }
 
