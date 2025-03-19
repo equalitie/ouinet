@@ -17,7 +17,8 @@ enum Event {
     MetricsModified,
     IncrementRecordNumber,
     RotateDeviceId,
-    Exit { purge: bool },
+    Purge,
+    Exit,
 }
 
 pub async fn metrics_runner(
@@ -110,15 +111,14 @@ impl EventHandler {
 
                 store.record_number.increment().await?;
             }
-            Event::Exit { purge } => {
-                log::debug!("Event::Exit {{ purge: {purge} }}");
-
-                if purge {
-                    store.delete_stored_records().await?;
-                } else {
-                    store_record(store, metrics).await?;
-                }
-
+            Event::Purge => {
+                log::debug!("Event::Purge");
+                store.delete_stored_records().await?;
+                return Ok(EventResult::Continue);
+            }
+            Event::Exit => {
+                log::debug!("Event::Exit");
+                store_record(store, metrics).await?;
                 return Ok(EventResult::Break);
             }
         }
@@ -161,16 +161,20 @@ impl EventListener {
                 result = self.on_metrics_modified_rx.changed() => {
                     match result {
                         Ok(()) => break Event::MetricsModified,
-                        Err(_) => break Event::Exit { purge: false },
+                        Err(_) => break Event::Exit,
                     }
                 }
                 result = self.record_processor_rx.recv() => {
                     match result {
-                        Some(record_processor) => {
-                            self.record_processor = record_processor.map(Arc::new);
+                        Some(Some(record_processor)) => {
+                            self.record_processor = Some(Arc::new(record_processor));
                             continue;
                         }
-                        None => break Event::Exit { purge: true },
+                        Some(None) => {
+                            self.record_processor = None;
+                            break Event::Purge;
+                        }
+                        None => break Event::Exit,
                     }
                 }
                 () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber,
