@@ -943,18 +943,20 @@ void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
     fs::path path = stored_contacts_path();
     if (path == fs::path()) return;
 
+    Cancel cancel(_cancel);
+
     while (true) {
         if (!_routing_table) return;
         auto contacts = _routing_table->dump_contacts();
 
         sys::error_code ignored_ec;
-        write_stored_contacts(_exec, move(contacts), path, _cancel, yield[ignored_ec]);
-        if (_cancel) return;
+        write_stored_contacts(_exec, move(contacts), path, cancel, yield[ignored_ec]);
+        if (cancel) return;
 
         sys::error_code ec;
-        async_sleep(_exec, std::chrono::minutes(6), _cancel, yield[ec]);
-        if (_cancel) return;
-        return_or_throw_on_error(yield, _cancel, ec);
+        async_sleep(_exec, std::chrono::minutes(6), cancel, yield[ec]);
+        if (cancel) return;
+        return_or_throw_on_error(yield, cancel, ec);
     }
 }
 
