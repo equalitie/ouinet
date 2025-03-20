@@ -4,6 +4,8 @@ fn main() {
         .include("./")
         // Include C++ Ouinet headers as `#include "bar.h".
         .include("../src")
+        // Don't include asio *.ipp headers as we're using a separately built library
+        .define("BOOST_ASIO_SEPARATE_COMPILATION", None)
         .file("cxx/metrics.cpp")
         .file("cxx/record_processor.cpp")
         .std("c++20")
