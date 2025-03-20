@@ -59,6 +59,7 @@ file(GLOB bt_cpp_files
     "../src/util/random.cpp"
     "../src/util/hash.cpp"
     "../src/logger.cpp"
+    "../src/async_sleep.cpp"
     "../src/util.cpp"
     "../src/util/file_io.cpp"
     "../src/util/temp_file.cpp"
@@ -89,6 +90,7 @@ target_include_directories(bt-bep5 ${OUINET_RS_INCLUDE_DIR})
 add_executable(test-watch-dog
     "test_watch_dog.cpp"
     "../src/util/handler_tracker.cpp"
+    "../src/async_sleep.cpp"
     "../src/logger.cpp"
 )
 
@@ -96,6 +98,7 @@ add_executable(test-watch-dog
 add_executable(test-util
     "test-util.cpp"
     "../src/util/handler_tracker.cpp"
+    "../src/async_sleep.cpp"
     "../src/logger.cpp"
 )
 
@@ -114,6 +117,7 @@ add_executable(oui-server
     "../src/logger.cpp"
     "../src/endpoint.cpp"
     "../src/ouiservice.cpp"
+    "../src/async_sleep.cpp"
     "../src/ouiservice/tcp.cpp"
     "../src/util/handler_tracker.cpp"
 )
@@ -123,6 +127,7 @@ add_executable(oui-client
     "ouiservice-client.cpp"
     "../src/logger.cpp"
     "../src/endpoint.cpp"
+    "../src/async_sleep.cpp"
     "../src/ouiservice.cpp"
     "../src/ouiservice/tcp.cpp"
     "../src/util/handler_tracker.cpp"

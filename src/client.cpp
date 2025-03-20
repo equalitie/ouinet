@@ -219,6 +219,7 @@ public:
         if (_injector_starting) _injector_starting->notify(asio::error::shut_down);
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
+        // peter
         _cache = nullptr;
         if (_upnps) _upnps->clear();
         _shutdown_signal();
@@ -336,6 +337,7 @@ public:
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
+        // peter
         _upnps = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         TRACK_SPAWN(_ctx, ([
             bt_dht,

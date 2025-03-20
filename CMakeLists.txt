@@ -130,6 +130,7 @@ file(GLOB client_sources
     "./src/endpoint.cpp"
     "./src/cache_control.cpp"
     "./src/request_routing.cpp"
+    "./src/async_sleep.cpp"
     "./src/ouiservice.cpp"
     "./src/response_part.cpp"
     "./src/bep5_swarms.cpp"
@@ -197,6 +198,7 @@ if (WITH_INJECTOR)
     file(GLOB injector_sources
         "./src/injector.cpp"
         "./src/connect_to_host.cpp"
+        "./src/async_sleep.cpp"
         "./src/ouiservice.cpp"
         "./src/response_part.cpp"
         "./src/bep5_swarms.cpp"
