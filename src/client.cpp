@@ -1502,8 +1502,8 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     req.target(server_url.reassemble());
     req.set(http::field::host, server_url.host_and_port());
     req.set(http::field::user_agent, "Ouinet.Client");
-    req.set(http::field::content_type, "multipart/form-data");
-    req.set("record-name", util::to_beast(record_name));
+    req.set(http::field::content_type, "application/octet-stream");
+    req.set("X-Ouinet-Metrics-Record-Name", util::to_beast(record_name));
 
     if (metrics_conf->server_token) {
         req.set("X-Ouinet-Metrics-Server-Token", *metrics_conf->server_token);
