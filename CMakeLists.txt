@@ -78,6 +78,7 @@ add_library(lib::asio_utp ALIAS asio_utp)
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
+target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
 if(WITH_EXPERIMENTAL)
