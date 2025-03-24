@@ -289,16 +289,18 @@ impl ClientInner {
         };
 
         let runner_lock = self.runner.lock().unwrap();
+        let enabling = processor.is_some();
 
         let Some(runner) = runner_lock.as_ref() else {
             log::warn!("Passing record processor to a noop client");
             return;
         };
 
-        runner
-            .processor_tx
-            .send(processor)
-            .expect("While the client exist the mpsc channel should not close");
+        let result = runner.processor_tx.send(processor);
+
+        if enabling && result.is_err() {
+            panic!("While the client exists the mpsc channel should not close");
+        }
     }
 
     fn new_mainline_dht(&self) -> Box<MainlineDht> {

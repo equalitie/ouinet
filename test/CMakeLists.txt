@@ -105,3 +105,6 @@ add_executable(test-file-io
 
 ######################################################################
 add_executable(test-dht "test_dht.cpp")
+
+######################################################################
+add_executable(test-metrics "test-metrics.cpp")

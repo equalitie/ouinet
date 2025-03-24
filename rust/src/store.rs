@@ -173,7 +173,16 @@ impl Store {
     }
 
     pub async fn delete_stored_records(&self) -> io::Result<()> {
-        fs::remove_dir_all(&self.records_dir_path).await
+        match fs::remove_dir_all(&self.records_dir_path).await {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                if error.kind() == io::ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            }
+        }
     }
 
     fn build_record_name(version: u32, device_id: Uuid, record_number: u32) -> String {
