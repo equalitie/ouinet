@@ -24,11 +24,13 @@ string public_key_pem =
 
 struct Setup {
     string testname;
+    string testsuite;
     fs::path tempdir;
 
     Setup()
         : testname(ut::framework::current_test_case().p_name)
-        , tempdir(fs::temp_directory_path() / "ouinet-cpp-tests" / testname / fs::unique_path())
+        , testsuite(ut::framework::get<ut::test_suite>(ut::framework::current_test_case().p_parent_id).p_name)
+        , tempdir(fs::temp_directory_path() / "ouinet-cpp-tests" / testsuite / testname / fs::unique_path())
     {
         fs::create_directories(tempdir);
     }
