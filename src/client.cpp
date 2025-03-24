@@ -77,7 +77,7 @@
 #include "util/scheduler.h"
 #include "util/reachability.h"
 #include "util/async_job.h"
-#include "upnp.h"
+#include "upnp_updater.h"
 #include "util/handler_tracker.h"
 #include "util/executor.h"
 

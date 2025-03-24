@@ -5,7 +5,7 @@
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
-#include "upnp.h"
+#include "upnp_updater.h"
 #include "split_string.h"
 #include "or_throw.h"
 
