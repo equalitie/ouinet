@@ -117,8 +117,11 @@ corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml
 corrosion_set_env_vars(ouinet_rs CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
 add_dependencies(cargo-prebuild_ouinet_rs built_boost)
 
-set(OUINET_RS_INCLUDE_DIR
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rust
+# This is not necessry to build the ouinet_rs library, but using it
+# automatically adds the include directories to every target that has ouinet_rs
+# as dependency.
+target_include_directories(ouinet_rs
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rust
     # XXX: Isn't there a better way to obtain the cargo target directory?
     ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
 
@@ -192,7 +195,6 @@ target_link_libraries(client
         Boost::asio_ssl
         ouinet::base
 )
-target_include_directories(client ${OUINET_RS_INCLUDE_DIR})
 
 ################################################################################
 if (WITH_INJECTOR)
@@ -241,8 +243,6 @@ if (WITH_INJECTOR)
         ouinet_rs
         ${EXPERIMENTAL_LIBRARIES}
     )
-
-    target_include_directories(injector ${OUINET_RS_INCLUDE_DIR})
 
 endif() # if WITH_INJECTOR
 
