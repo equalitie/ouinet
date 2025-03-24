@@ -501,7 +501,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
 
-    if (!!dht_group) {
+    if (!dht_group) {
         _YDEBUG(yield, "No group given");
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
