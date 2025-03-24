@@ -219,7 +219,6 @@ public:
         if (_injector_starting) _injector_starting->notify(asio::error::shut_down);
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
-        // peter
         _cache = nullptr;
         if (_upnps) _upnps->clear();
         _shutdown_signal();
@@ -337,7 +336,6 @@ public:
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
-        // peter
         _upnps = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         TRACK_SPAWN(_ctx, ([
             bt_dht,
@@ -3198,12 +3196,12 @@ Client::RunningState Client::get_state() const noexcept {
 
 void Client::charging_state_change(bool is_charging) {
     LOG_DEBUG("Charging state changed, is charging: ", is_charging);
-    //TODO(peter) do something
+    //TODO do something
 }
 
 void Client::wifi_state_change(bool is_wifi_connected) {
     LOG_DEBUG("Wifi state changed, is connected: ", is_wifi_connected);
-    //TODO(peter) do something
+    //TODO do something
 }
 
 fs::path Client::ca_cert_path() const
