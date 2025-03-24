@@ -495,8 +495,14 @@ CacheControl::do_fetch_stored(FetchState& fs,
                               Yield yield)
 {
     is_fresh = false;
-    if (!fetch_stored || !dht_group) {
-        _YDEBUG(yield, "No fetch stored operation, or no group given");
+
+    if (!fetch_stored) {
+        _YDEBUG(yield, "No fetch stored_operation provided");
+        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
+    }
+
+    if (!!dht_group) {
+        _YDEBUG(yield, "No group given");
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
 

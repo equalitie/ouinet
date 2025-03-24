@@ -1718,7 +1718,7 @@ public:
     void front_end_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
         sys::error_code ec;
         Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield[ec]);
-        ec = compute_error_code(ec, cancel);;
+        ec = compute_error_code(ec, cancel);
         if (!ec) tnx.write_to_user_agent(res, cancel, static_cast<asio::yield_context>(yield[ec]));
         return or_throw(yield, ec);
     }
@@ -1796,7 +1796,6 @@ public:
         sys::error_code cache_ec;
 
         _YDEBUG(yield, "Start");
-        _YDEBUG(yield, tnx.request());
 
         const auto& rq   = tnx.request();
         const auto& meta = tnx.meta();
@@ -2106,6 +2105,9 @@ public:
                 return or_throw(y, ec, boost::none);
             });
         };
+
+        _YDEBUG(yield, "Handling request:");
+        _YDEBUG(yield, tnx.request().base());
 
         // TODO: When the origin is enabled and it always times out, it
         // will induce an unnecessary delay to the other routes. We need a
