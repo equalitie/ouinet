@@ -56,6 +56,7 @@ public class Config implements Parcelable {
         private String cacheStaticContentPath;
         private String listenOnTcp;
         private String frontEndEp;
+        private String frontEndAccessToken;
         private String udpMuxPort;
         private boolean disableBridgeAnnouncement = false;
         private String maxCachedAge;
@@ -147,6 +148,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setFrontEndEp(String frontEndEp){
             this.frontEndEp = frontEndEp;
+            return this;
+        }
+        public ConfigBuilder setFrontEndAccessToken(String token){
+            this.frontEndAccessToken = token;
             return this;
         }
         public ConfigBuilder setUdpMuxPort(String udpMuxPort){
@@ -385,6 +390,7 @@ public class Config implements Parcelable {
                     cacheStaticContentPath,
                     listenOnTcp,
                     frontEndEp,
+                    frontEndAccessToken,
                     udpMuxPort,
                     disableBridgeAnnouncement,
                     maxCachedAge,
@@ -419,6 +425,7 @@ public class Config implements Parcelable {
     private String cacheStaticContentPath;
     private String listenOnTcp;
     private String frontEndEp;
+    private String frontEndAccessToken;
     private String udpMuxPort;
     private boolean disableBridgeAnnouncement;
     private String maxCachedAge;
@@ -451,6 +458,7 @@ public class Config implements Parcelable {
                   String cacheStaticContentPath,
                   String listenOnTcp,
                   String frontEndEp,
+                  String frontEndAccessToken,
                   String udpMuxPort,
                   boolean disableBridgeAnnouncement,
                   String maxCachedAge,
@@ -482,6 +490,7 @@ public class Config implements Parcelable {
         this.cacheStaticContentPath = cacheStaticContentPath;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
+        this.frontEndAccessToken = frontEndAccessToken;
         this.udpMuxPort = udpMuxPort;
         this.disableBridgeAnnouncement = disableBridgeAnnouncement;
         this.maxCachedAge = maxCachedAge;
@@ -543,6 +552,9 @@ public class Config implements Parcelable {
     }
     public String getFrontEndEp() {
         return frontEndEp;
+    }
+    public String getFrontEndAccessToken() {
+        return frontEndAccessToken;
     }
     public String getUdpMuxPort() {
         return udpMuxPort;
@@ -626,6 +638,7 @@ public class Config implements Parcelable {
         out.writeString(cacheStaticContentPath);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
+        out.writeString(frontEndAccessToken);
         out.writeString(udpMuxPort);
         out.writeInt(disableBridgeAnnouncement ? 1 : 0);
         out.writeString(maxCachedAge);
@@ -668,6 +681,7 @@ public class Config implements Parcelable {
         cacheStaticContentPath = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
+        frontEndAccessToken = in.readString();
         udpMuxPort = in.readString();
         disableBridgeAnnouncement = in.readInt() != 0;
         maxCachedAge = in.readString();

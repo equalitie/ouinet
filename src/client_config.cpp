@@ -148,6 +148,13 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _front_end_endpoint = *opt_fe_ep;
     }
 
+    if (auto opt = as_optional<string>(vm, "front-end-access-token")) {
+        if (opt->empty()) {
+            throw error("--front-end-access-token must not be an empty string");
+        }
+        _front_end_access_token = *opt;
+    }
+
     if (auto opt = as_optional<bool>(vm, "disable-bridge-announcement")) {
         _disable_bridge_announcement = *opt;
     }

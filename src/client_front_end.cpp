@@ -714,6 +714,26 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , Cancel cancel
                               , Yield yield)
 {
+    if (auto& token = config.front_end_access_token()) {
+        std::string_view header_key = "X-Ouinet-Front-End-Token";
+        if (*token != req[header_key]) {
+            Response res{http::status::forbidden, req.version()};
+            res.keep_alive(false);
+
+            auto body = std::string("The request is missing a valid ")
+                      + std::string(header_key)
+                      + " HTTP header\n";
+
+            Response::body_type::reader reader(res, res.body());
+            sys::error_code ec;
+            reader.put(asio::buffer(body), ec);
+            assert(!ec);
+
+            res.prepare_payload();
+            return res;
+        }
+    }
+
     Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.keep_alive(false);

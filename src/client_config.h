@@ -125,6 +125,10 @@ public:
         return _front_end_endpoint;
     }
 
+    const boost::optional<std::string>& front_end_access_token() const {
+        return _front_end_access_token;
+    }
+
     boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
         return _cache_http_pubkey;
     }
@@ -198,6 +202,10 @@ private:
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ("front-end-access-token"
+            , po::value<string>()
+            , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
+              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
            ("disable-bridge-announcement"
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
             , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
@@ -439,6 +447,7 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    boost::optional<std::string> _front_end_access_token;
     bool _disable_bridge_announcement = false;
 
     boost::posix_time::time_duration _max_cached_age
