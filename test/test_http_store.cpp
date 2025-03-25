@@ -31,7 +31,17 @@ namespace ouinet { namespace http_response {
     }
 
     std::ostream& operator<<(std::ostream& os, const Trailer& trailer) {
-        return os << static_cast<const Trailer::Base&>(trailer);
+        os << "Trailer{";
+        bool is_first = true;
+        for (auto& field : trailer) {
+            if (is_first) {
+                is_first = false;
+            } else {
+                os << ", ";
+            }
+            os << field.name() << ":" << field.value();
+        }
+        return os << "}";
     }
 }} // namespace ouinet::http_response
 
