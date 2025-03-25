@@ -1,7 +1,3 @@
-# Set cmake policies
-include(cmake/policy.cmake)
-apply_policy()
-
 include(ExternalProject)
 
 set(GPGERROR_LIBRARY_BASE_FILENAME
