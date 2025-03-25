@@ -1,3 +1,7 @@
+# Set cmake policies
+include(cmake/policy.cmake)
+apply_policy()
+
 include(ExternalProject)
 
 externalproject_add(json
