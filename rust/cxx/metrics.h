@@ -41,6 +41,11 @@ public:
     Request new_cache_in_request();
     Request new_cache_out_request();
 
+    // Meter number of bytes transferred when this node acts as a bridge
+    // between the injector and the other client.
+    void bridge_transfer_i2c(size_t);
+    void bridge_transfer_c2i(size_t);
+
     std::optional<std::string> current_device_id() const;
 
 private:

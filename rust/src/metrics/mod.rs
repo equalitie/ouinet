@@ -24,6 +24,7 @@ pub struct Metrics {
     record_start: DateTime<Utc>,
     on_modify_tx: Arc<ConstantBackoffWatchSender>,
     bootstraps: Bootstraps,
+    bridge: Bridge,
     pub requests: Requests,
     has_new_data: bool,
 }
@@ -41,6 +42,7 @@ impl Metrics {
             record_start: now,
             on_modify_tx: on_modify_tx.clone(),
             bootstraps: Bootstraps::new(),
+            bridge: Default::default(),
             requests: Requests::new(on_modify_tx),
             has_new_data: false,
         }
@@ -59,6 +61,16 @@ impl Metrics {
 
         self.bootstraps.finish(id, success);
         self.mark_modified(true)
+    }
+
+    pub fn bridge_transfer_i2c(&mut self, byte_count: usize) {
+        self.bridge.transfer_injector_to_client += byte_count as u64;
+        self.mark_modified(true);
+    }
+
+    pub fn bridge_transfer_c2i(&mut self, byte_count: usize) {
+        self.bridge.transfer_client_to_injector += byte_count as u64;
+        self.mark_modified(true);
     }
 
     pub fn collect(&mut self) -> Option<String> {
@@ -87,6 +99,7 @@ impl Metrics {
         self.record_start = now;
         self.bootstraps.clear();
         self.requests.clear();
+        self.bridge.clear();
         self.mark_modified(false);
     }
 
@@ -95,6 +108,7 @@ impl Metrics {
         self.record_start = SystemTime::now().into();
         self.bootstraps.clear_finished();
         self.requests.clear_finished();
+        self.bridge.clear_finished();
         self.mark_modified(false);
     }
 
@@ -114,5 +128,22 @@ impl Metrics {
 
     pub fn has_new_data(&self) -> bool {
         self.has_new_data || self.requests.has_new_data()
+    }
+}
+
+#[derive(Default)]
+struct Bridge {
+    transfer_injector_to_client: u64,
+    transfer_client_to_injector: u64,
+}
+
+impl Bridge {
+    fn clear(&mut self) {
+        self.transfer_injector_to_client = 0;
+        self.transfer_client_to_injector = 0;
+    }
+
+    fn clear_finished(&mut self) {
+        self.clear();
     }
 }

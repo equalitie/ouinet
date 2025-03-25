@@ -74,6 +74,16 @@ std::optional<std::string> Client::current_device_id() const {
     return std::string(str.data(), str.size());
 }
 
+void Client::bridge_transfer_i2c(size_t byte_count) {
+    if (!_impl) return;
+    (*_impl)->bridge_transfer_i2c(byte_count);
+}
+
+void Client::bridge_transfer_c2i(size_t byte_count) {
+    if (!_impl) return;
+    (*_impl)->bridge_transfer_c2i(byte_count);
+}
+
 //--------------------------------------------------------------------
 
 DhtNode MainlineDht::dht_node_ipv4() {

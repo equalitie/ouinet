@@ -766,7 +766,13 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 
         // Forward the rest of data in both directions.
         auto c2i_i2c = cyield[ec].tag("full_duplex").run([&] (auto y) {
-            return full_duplex(move(con), move(inj), cancel, y);
+            return full_duplex(
+                    move(con),
+                    move(inj),
+                    [&] (size_t byte_count) { _metrics.bridge_transfer_c2i(byte_count); },
+                    [&] (size_t byte_count) { _metrics.bridge_transfer_i2c(byte_count); },
+                    cancel,
+                    y);
         });
         std::tie(fwd_bytes_c2i, fwd_bytes_i2c) = c2i_i2c;
         return or_throw(cyield, ec);

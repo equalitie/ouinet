@@ -38,6 +38,8 @@ mod ffi {
         fn new_public_injector_request(self: &Client) -> Box<Request>;
         fn new_cache_in_request(self: &Client) -> Box<Request>;
         fn new_cache_out_request(self: &Client) -> Box<Request>;
+        fn bridge_transfer_i2c(self: &Client, byte_count: usize);
+        fn bridge_transfer_c2i(self: &Client, byte_count: usize);
 
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
@@ -257,6 +259,16 @@ impl Client {
 
     fn device_id(&self) -> String {
         self.inner.device_id_rx.borrow().to_string()
+    }
+
+    fn bridge_transfer_i2c(&self, byte_count: usize) {
+        let mut metrics = self.inner.metrics.lock().unwrap();
+        metrics.bridge_transfer_i2c(byte_count);
+    }
+
+    fn bridge_transfer_c2i(&self, byte_count: usize) {
+        let mut metrics = self.inner.metrics.lock().unwrap();
+        metrics.bridge_transfer_c2i(byte_count);
     }
 }
 
