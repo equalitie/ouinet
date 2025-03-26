@@ -71,9 +71,11 @@ truncate( async_file_handle& f
         , sys::error_code& ec)
 {
     f.resize(new_length);
-    f.seek(static_cast<int64_t>(new_length),
-           async_file_handle::seek_set,
-           ec);
+    // Move to cursor to the end only when the previous position was in the truncated area
+    if (new_length < f.seek(0, async_file_handle::seek_basis::seek_cur, ec))
+        f.seek(static_cast<int64_t>(new_length),
+               async_file_handle::seek_set,
+               ec);
 }
 
 bool
