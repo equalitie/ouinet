@@ -22,13 +22,6 @@ current_position(async_file_handle& f, sys::error_code& ec)
 }
 
 size_t
-end_position(async_file_handle& f, sys::error_code& ec)
-{
-    size_t offset = f.seek(0, async_file_handle::seek_basis::seek_end, ec);
-    return offset;
-}
-
-size_t
 file_size(async_file_handle& f, sys::error_code& ec)
 {
     return f.size(ec);

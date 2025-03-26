@@ -69,12 +69,6 @@ BOOST_AUTO_TEST_CASE(test_cursor_operations, * ut::depends_on("suite_file_io/tes
                 temp_file.get_name(),
                 ec);
 
-#ifdef _WIN32
-        // Test end position
-        size_t current_position = file_io::end_position(aio_file, ec);
-        BOOST_TEST(expected_position == current_position);
-#endif
-
         // Test file size
         size_t expected_size = expected_string.size();
         size_t actual_size = file_io::file_size(aio_file, ec);
