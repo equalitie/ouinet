@@ -215,11 +215,15 @@ BOOST_AUTO_TEST_CASE(test_truncate_file)
                 ctx.get_executor(),
                 temp_file.get_name(),
                 ec);
-        file_io::write(aio_file, boost::asio::const_buffer("abcXYZ", 6), cancel, yield);
+        file_io::write(aio_file, boost::asio::const_buffer("xyz", 3), cancel, yield);
         asio::steady_timer timer{ctx};
         timer.expires_from_now(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
-        file_io::truncate(aio_file, 3, ec);
+
+        file_io::truncate(aio_file, 0, ec);
+        file_io::write(aio_file, boost::asio::const_buffer("abc", 3), cancel, yield);
+        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.async_wait(yield);
     });
     ctx.run();
 
