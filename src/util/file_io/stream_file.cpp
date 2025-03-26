@@ -31,7 +31,7 @@ end_position(async_file_handle& f, sys::error_code& ec)
 size_t
 file_size(async_file_handle& f, sys::error_code& ec)
 {
-    return f.size();
+    return f.size(ec);
 }
 
 size_t
