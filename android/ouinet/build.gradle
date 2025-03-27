@@ -18,7 +18,7 @@ android {
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_STL='c++_shared'"
+                arguments "-DWITH_ASAN=ON -DANDROID_STL='c++_shared'"
                 cppFlags "-std=c++20 -frtti -fexceptions"
                 targets "native-lib"
             }
