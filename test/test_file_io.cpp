@@ -174,9 +174,13 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
     ctx.run();
 }
 
-/*
-BOOST_AUTO_TEST_CASE(test_dup_fd)
-{
+
+BOOST_AUTO_TEST_CASE(
+    test_dup_fd
+#ifdef _WIN32
+    , * ut::disabled() * ut::description("file_io::dup_fd not implemented yet for Windows")
+#endif
+){
     temp_file temp_file{test_id};
     std::string expected_string = "abcXYZ";
 
@@ -204,7 +208,6 @@ BOOST_AUTO_TEST_CASE(test_dup_fd)
         BOOST_TEST(expected_string == current_string);
     }
 }
- */
 
 BOOST_AUTO_TEST_CASE(test_truncate_file)
 {
