@@ -111,7 +111,11 @@ ouinet::GenericStream Server::accept(asio::yield_context yield)
 
     _tcp_acceptor.async_accept(connection.socket(), yield[ec]);
 
-    if (ec || !_server_tunnel) {
+    if (!_server_tunnel) {
+        ec = asio::error::operation_aborted;
+    }
+
+    if (ec) {
         return or_throw<GenericStream>(yield, ec);
     }
 
