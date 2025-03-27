@@ -16,7 +16,7 @@ connected_pair(const AsioExecutor& ex, asio::yield_context yield)
     using tcp = asio::ip::tcp;
     using Ret = pair<tcp::socket, tcp::socket>;
 
-    auto loopback_ep = tcp::endpoint(boost::asio::ip::make_address("127.0.0.1"), 0);
+    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
     tcp::acceptor a(ex, loopback_ep);
     tcp::socket s1(ex), s2(ex);
 
