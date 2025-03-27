@@ -50,10 +50,17 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
   // acutally connect and then unblock
   LOG_DEBUG("Waiting for I2P tunnel to get established");
   
-  _i2p_tunnel->AddReadyCallback([wd, &ec, this](const sys::error_code& error) mutable {
-      ec = error;
-      if (*wd) return;
-      _ready_condition->notify();
+  auto exec = _exec;
+
+  _i2p_tunnel->AddReadyCallback([&exec, wd, &ec, this](const sys::error_code& error) mutable {
+      // _i2p_tunnel is not using our executor and thus will execute the
+      // callback in a different thread, so use `asio::post` to get back to our
+      // thread.
+      asio::post(exec, [wd = std::move(wd), &ec, this, error] () {
+          ec = error;
+          if (*wd) return;
+          _ready_condition->notify();
+      });
     });
 
   // This _returns_ once the `block` thing create above gets destroyed
