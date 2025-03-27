@@ -14,6 +14,7 @@
 
 namespace i2p { namespace client {
     class ClientDestination;
+    class AddressBook;
 }}
 
 namespace ouinet {
@@ -51,7 +52,10 @@ protected:
     AsioExecutor _exec;
     std::string _data_dir;
     // all client tunnels share local destination, because destination is expensive    
-    std::shared_ptr<i2p::client::ClientDestination> _local_destination;
+  std::shared_ptr<i2p::client::ClientDestination> _local_destination;
+
+     //We run an address book as soon as we start the the i2pd daemon simialr to i2pd client
+  std::unique_ptr<i2p::client::AddressBook> _i2p_address_book;
 
   std::unique_ptr<I2CPServer> _i2cpserver;
   std::unique_ptr<TunnellerService> _i2p_tunneller;

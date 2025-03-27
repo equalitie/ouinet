@@ -9,6 +9,7 @@
 #include <Identity.h>
 #include <Destination.h>
 #include <api.h>
+#include <AddressBook.h>
 
 using namespace std;
 using namespace ouinet::ouiservice;
@@ -50,6 +51,12 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
     _local_destination = std::make_shared<i2p::client::RunnableClientDestination>(keys, false, &params);
     // start destination's thread and tunnel pool
     _local_destination->Start ();
+
+    //start address book after starting local destination
+    _i2p_address_book = std::make_unique<i2p::client::AddressBook>();
+    _i2p_address_book->Start ();
+    //TOOD: verify if it is correct place to start resolver (or after i2cp starts
+    _i2p_address_book->StartResolvers();
 }
 
 Service::Service(Service&& other)
