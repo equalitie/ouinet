@@ -186,6 +186,25 @@ add_executable(test-file-io
         "../src/util/file_io.cpp"
 )
 
-#################################test_dht#####################################
+######################################################################
 add_executable(test-dht "test_dht.cpp" ${bt_cpp_files})
 target_link_libraries(test-dht lib::asio_utp lib::gcrypt lib::uri)
+
+######################################################################
+if(WITH_EXPERIMENTAL)
+    # TODO: Hack, this forces cmake to add `-lz` at the *end* of the linking
+    # command. For some reason we get unresolved libz dependencies otherwise.
+    add_library(test-i2p-link-last INTERFACE)
+    target_link_libraries(test-i2p-link-last INTERFACE z)
+
+    add_executable(test-i2p
+        "test-i2p.cpp"
+        "../src/ouiservice.cpp"
+        "../src/ouiservice/i2p/service.cpp"
+        "../src/ouiservice/i2p/client.cpp"
+        "../src/ouiservice/i2p/server.cpp"
+        "../src/util/handler_tracker.cpp"
+    )
+    target_link_libraries(test-i2p ouinet::ouiservice-i2p test-i2p-link-last)
+    target_compile_definitions(test-i2p INTERFACE -D__EXPERIMENTAL__)
+endif()
