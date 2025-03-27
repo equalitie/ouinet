@@ -22,7 +22,7 @@ namespace HR = http_response;
 tcp::socket
 stream(string response, asio::io_service& ios, asio::yield_context yield)
 {
-    auto loopback_ep = tcp::endpoint(boost::asio::ip::make_address("127.0.0.1"), 0);
+    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
     tcp::acceptor a(ios, loopback_ep);
     tcp::socket s1(ios), s2(ios);
 
@@ -488,5 +488,3 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
-
