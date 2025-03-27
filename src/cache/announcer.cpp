@@ -1,5 +1,6 @@
 #include <list>
 #include <sstream>
+#include <iomanip>
 #include "announcer.h"
 #include "util/async_queue.h"
 #include "logger.h"

@@ -12,6 +12,7 @@
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <boost/utility/string_view.hpp>
+#include <boost/beast/core/string_type.hpp>
 
 #include "namespaces.h"
 #include "util/signal.h"
@@ -136,7 +137,7 @@ auto tcp_async_resolve( const std::string& host
         tcp::resolver resolver{exec};
         rp = &resolver;
         sys::error_code ec_;
-        auto r = resolver.async_resolve({host, port}, yield[ec_]);
+        auto r = resolver.async_resolve(host, port, yield[ec_]);
         // Turn this confusing resolver error into something more understandable.
         static const sys::error_code busy_ec{ sys::errc::device_or_resource_busy
                                             , sys::system_category()};
@@ -231,6 +232,24 @@ base64_decode(const boost::string_view in) {
 
 // Returns an empty string on error (or empty input).
 std::string percent_decode(const boost::string_view);
+
+///////////////////////////////////////////////////////////////////////////////
+// Conversions between various `string_view` implementations.
+
+inline
+std::string_view to_std(boost::string_view str) {
+    return std::string_view(str.data(), str.size());
+}
+
+inline
+boost::string_view to_boost(boost::beast::string_view str) {
+    return boost::string_view(str.data(), str.size());
+}
+
+inline
+boost::beast::string_view to_beast(boost::string_view str) {
+    return boost::beast::string_view(str.data(), str.size());
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Write a small file at the given `path` with a `line` of content.

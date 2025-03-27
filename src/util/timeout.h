@@ -29,13 +29,13 @@ public:
                 }
             });
 
-        asio::spawn(ex, [s = _state, duration] (asio::yield_context yield) {
+        task::spawn_detached(ex, [s = _state, duration] (asio::yield_context yield) {
                 TRACK_HANDLER();
                 if (s->finished) return;
 
                 sys::error_code ec;
 
-                s->timer.expires_from_now(duration);
+                s->timer.expires_after(duration);
                 s->timer.async_wait(yield[ec]);
 
                 if (s->finished) return;

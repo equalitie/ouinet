@@ -1,8 +1,10 @@
 #pragma once
 
 #include <boost/utility/string_view.hpp>
+#include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
 #include "number.h"
+#include "util.h"
 
 namespace ouinet { namespace parse {
 
@@ -23,7 +25,7 @@ endpoint(boost::string_view& s, sys::error_code& ec)
         return {};
     }
 
-    auto addr = asio::ip::address::from_string(s.substr(0, pos).to_string(), ec);
+    auto addr = asio::ip::make_address(util::to_std(s.substr(0, pos)), ec);
 
     if (ec) return {};
 

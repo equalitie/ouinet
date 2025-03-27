@@ -3,6 +3,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
 #include <util/executor.h>
+#include <util/unique_function.h>
 
 namespace ouinet {
 
@@ -34,8 +35,9 @@ private:
     using Clock     = typename Timer::clock_type;
     using Duration  = typename Timer::duration;
     using TimePoint = typename Timer::time_point;
-    using Handler   = std::function<void(const sys::error_code&, size_t)>;
-    using ConnectHandler = std::function<void(const sys::error_code&)>;
+    using WriteHandler   = util::unique_function<void(const sys::error_code&, size_t)>;
+    using ReadHandler    = util::unique_function<void(const sys::error_code&, size_t)>;
+    using ConnectHandler = util::unique_function<void(const sys::error_code&)>;
 
     class Deadline : public std::enable_shared_from_this<Deadline> {
         using Parent = std::enable_shared_from_this<Deadline>;
@@ -110,8 +112,8 @@ private:
         std::shared_ptr<Deadline> write_deadline;
         std::shared_ptr<Deadline> connect_deadline;
 
-        Handler read_handler;
-        Handler write_handler;
+        ReadHandler read_handler;
+        WriteHandler write_handler;
         ConnectHandler connect_handler;
 
         State(InnerStream&& in)
@@ -213,12 +215,6 @@ public:
 
 private:
 
-    template<class Handler>
-    void on_read(Handler&&, const boost::system::error_code&, size_t);
-
-    template<class Handler>
-    void on_write(Handler&&, const boost::system::error_code&, size_t);
-
     void setup_deadline( boost::optional<Duration>
                        , Deadline&
                        , std::function<void()>);
@@ -244,29 +240,30 @@ auto TimeoutStream<InnerStream>::async_read_some
     ( const MutableBufferSequence& bs
     , Token&& token)
 {
-    using Sig = void(const sys::error_code&, size_t);
+    auto init = [&] (auto completion_handler) {
+        _state->read_handler = std::move(completion_handler);
 
-    boost::asio::async_completion<Token, Sig> init(token);
+        setup_deadline(_max_read_duration, *_state->read_deadline, [s = _state] {
+            auto h = std::move(s->read_handler);
+            s->inner.close();
+            h(asio::error::timed_out, 0);
+        });
 
-    _state->read_handler = std::move(init.completion_handler);
+        _state->inner.async_read_some( bs
+                                     , [s = _state]
+                                       (const sys::error_code& ec, size_t size) {
+                                           s->read_deadline->stop();
+                                           if (s->read_handler) {
+                                               auto h = std::move(s->read_handler);
+                                               h(ec, size);
+                                           }
+                                       });
+    };
 
-    setup_deadline(_max_read_duration, *_state->read_deadline, [s = _state] {
-        auto h = std::move(s->read_handler);
-        s->inner.close();
-        h(asio::error::timed_out, 0);
-    });
-
-    _state->inner.async_read_some( bs
-                                 , [s = _state]
-                                   (const sys::error_code& ec, size_t size) {
-                                       s->read_deadline->stop();
-                                       if (s->read_handler) {
-                                           auto h = std::move(s->read_handler);
-                                           h(ec, size);
-                                       }
-                                   });
-
-    return init.result.get();
+    return boost::asio::async_initiate<
+        Token,
+        void(sys::error_code, size_t)
+    >(init, token);
 }
 
 template<class InnerStream>

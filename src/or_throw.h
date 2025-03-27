@@ -1,7 +1,6 @@
 #pragma once
 
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/io_service.hpp>
 #include "namespaces.h"
 
 namespace ouinet {

@@ -117,7 +117,7 @@ struct UserAgentMetaData {
         {
             auto i = rq.find(http_::request_group_hdr);
             if (i != rq.end()) {
-                ret.dht_group = i->value().to_string();
+                ret.dht_group = string(i->value());
                 rq.erase(i);
             }
         }
@@ -198,7 +198,7 @@ public:
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
-        _upnps->clear();
+        if (_upnps) _upnps->clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -825,8 +825,15 @@ public:
         : _addrs(addrs), _port(port)
     {}
 
-    class const_iterator : public std::iterator<std::input_iterator_tag, value_type> {
+    class const_iterator {
     public:
+        // Iterator requirements
+        using iterator_category = std::input_iterator_tag;
+        using value_type        = Endpoint;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = value_type*;
+        using reference         = value_type&;
+
         const_iterator(const addrs_iterator& it, unsigned short port)
             : _it(it), _port(port)
         {}
@@ -1869,7 +1876,7 @@ public:
         boost::optional<sys::error_code> final_ec;
 
         auto target = tnx.request().target();
-        std::string short_target = target.substr(0, 64).to_string();
+        std::string short_target = std::string(target.substr(0, 64));
         if (target.length() > 64)
             short_target.replace(short_target.end() - 3, short_target.end(), "...");
 
@@ -1940,7 +1947,7 @@ string base_domain_from_target(const beast::string_view& target)
         // Two different dots were found
         // (e.g. "www.example.com" but not "localhost" or "example.com").
         dot1 = dot0 + 1;  // skip first component and dot (e.g. "www.")
-    return full_host.substr(dot1).to_string();
+    return std::string(full_host.substr(dot1));
 }
 
 //------------------------------------------------------------------------------
@@ -2021,11 +2028,12 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
         // Make this a "proxy" request. Among other things, this is important
         // to let the consecutive code know we want encryption.
-        rq.target( string("wss://")
-                 + ( (rq[http::field::host].length() > 0)
-                     ? rq[http::field::host]
-                     : connect_hp).to_string()
-                 + rq.target().to_string());
+        rq.target( util::str(
+                    "wss://",
+                    (rq[http::field::host].length() > 0)
+                        ? rq[http::field::host]
+                        : connect_hp,
+                    rq.target()));
     }
 
     Cancel cancel(_shutdown_signal);
@@ -2406,10 +2414,9 @@ void Client::State::serve_request( GenericStream&& con
             // in case of subsequent HTTP/1.0 requests with no ``Host:`` header.
             auto port_pos = max( target.length() - 4 /* strlen(":443") */
                                , string::npos);
-            connect_hp = target
+            connect_hp = string(target
                 // Do not to hit ``:443`` inside of an IPv6 address.
-                .substr(0, target.rfind(":443", port_pos))
-                .to_string();
+                .substr(0, target.rfind(":443", port_pos)));
             // Go for requests in the encrypted channel.
             continue;
         }
@@ -2434,9 +2441,7 @@ void Client::State::serve_request( GenericStream&& con
                     req.set(http::field::host, connect_hp);
                     host = connect_hp;
                 }
-                req.target( string("https://")
-                          + host.to_string()
-                          + target.to_string());
+                req.target(util::str("https://", host, target));
                 target = req.target();
             } else {
                 // TODO: Maybe later we want to support front-end and API calls
@@ -2582,7 +2587,7 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
     }
 
     // Start listening for connections
-    acceptor.listen(asio::socket_base::max_connections, ec);
+    acceptor.listen(asio::socket_base::max_listen_connections, ec);
     if (ec) {
         throw runtime_error(util::str("Failed to 'listen' to service on TCP acceptor: ", service, "; ec=", ec));
     }
@@ -2628,12 +2633,6 @@ void Client::State::listen_tcp
 
             GenericStream connection(move(socket) , move(tcp_shutter));
 
-            // Increase the size of the coroutine stack.
-            // Some interesing info:
-            // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
-            boost::coroutines::attributes attribs;
-            attribs.size *= 2;
-
             TRACK_SPAWN( _ctx, ([
                 this,
                 self = shared_from_this(),
@@ -2643,7 +2642,7 @@ void Client::State::listen_tcp
             ](asio::yield_context yield) mutable {
                 if (was_stopped()) return;
                 handler(move(c), yield);
-            }), attribs);
+            }));
         }
     }
 

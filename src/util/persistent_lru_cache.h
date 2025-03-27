@@ -6,6 +6,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/asio/spawn.hpp>
 #include <dirent.h>
+#include <map>
 
 #include "../namespaces.h"
 #include "../defer.h"
