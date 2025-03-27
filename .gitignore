@@ -15,3 +15,5 @@ android/local.properties
 
 #python byte codes
 *.pyc
+# python tests temp dir
+test/integration_test/_trial_temp/
