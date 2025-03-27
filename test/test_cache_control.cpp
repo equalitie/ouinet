@@ -79,7 +79,7 @@ public:
     explicit readable_pipe_patched(asio::io_context &ctx) : asio::readable_pipe{ctx} {}
 
     template <typename ConstBufferSequence, typename WriteHandler>
-    void async_write_some(const ConstBufferSequence& buffer, WriteHandler handler) {}
+    void async_write_some(const ConstBufferSequence& buffer, WriteHandler handler) { assert(false); }
 };
 
 struct Pipe {
