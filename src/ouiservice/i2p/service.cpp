@@ -56,7 +56,12 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
     _i2p_address_book = std::make_unique<i2p::client::AddressBook>();
     _i2p_address_book->Start ();
     //TOOD: verify if it is correct place to start resolver (or after i2cp starts
+
+    //Now we are going to load our pre-defined addresses
+    load_known_hosts_to_address_book();
+
     _i2p_address_book->StartResolvers();
+
 }
 
 Service::Service(Service&& other)
@@ -93,6 +98,18 @@ void Service::start_i2cp_server() {
 
 void Service::start_tunneller_service() {
   _i2p_tunneller = std::unique_ptr<TunnellerService>(new TunnellerService(shared_from_this(), _exec));
-
 }
 
+void Service::load_known_hosts_to_address_book()
+{
+  std::ifstream f (_data_dir + "/" + "hosts.txt", std::ifstream::in);
+  if (f.is_open ())
+    {
+      _i2p_address_book->LoadHostsFromStream (f, false);
+      LogPrint(eLogInfo, "Pre-resolved host loaded!");
+    }
+  else
+    {
+      LogPrint(eLogWarning, "Failed to load host resolver!");
+    }  
+}
