@@ -38,10 +38,10 @@ add_library(ouiservice-i2p
 )
 add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
 target_include_directories(ouiservice-i2p
-    PRIVATE
+    PUBLIC
         "./i2pd/libi2pd"
         "./i2pd/libi2pd_client"
-	"./i2pd/i18n"
+        "./i2pd/i18n"
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -49,8 +49,8 @@ target_link_libraries(ouiservice-i2p
     PRIVATE
         libi2pdclient
         libi2pd
-	libi2pdlang
         z
+        libi2pdlang
         OpenSSL::SSL
     PUBLIC
         ouinet::base

@@ -2600,7 +2600,11 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
     if (ec) {
-        throw runtime_error(util::str("Failed to bind TCP acceptor for service: ", service, "; ec=", ec));
+        throw runtime_error(
+            util::str("Failed to bind TCP acceptor on port "
+                     , local_endpoint.port()
+                     , " for service: "
+                     , service, "; ec=", ec));
     }
 
     // Start listening for connections
