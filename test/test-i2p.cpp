@@ -117,6 +117,122 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
     ctx.run();
 }
 
+BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchage) {
+    Setup setup;
+
+    asio::io_context ctx;
+
+    struct SharedState {
+        SharedState(const Setup& setup, AsioExecutor exec)
+            : exec(exec)
+            , service(make_shared<I2pOuiService>(setup.tempdir.string(), exec))
+            , server_ready(exec)
+            , client_finished(exec)
+            , client_finished_lock(client_finished.lock())
+        {}
+
+        AsioExecutor exec;
+        Cancel cancel;
+        shared_ptr<I2pOuiService> service;
+        WaitCondition server_ready;
+        WaitCondition client_finished;
+        WaitCondition::Lock client_finished_lock;
+        string server_ep;
+        string message = "hello";
+    };
+
+    BOOST_TEST_MESSAGE("Preparing shared state");
+    auto shared = make_shared<SharedState>(setup, ctx.get_executor());
+
+    // Server
+    asio::spawn(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+        BOOST_TEST_MESSAGE("Server spawned");
+        auto server = shared->service->build_server("i2p-private-key");
+
+        shared->server_ep = server->public_identity();
+
+        sys::error_code ec;
+
+        server->start_listen(yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
+
+        server_ready_lock.release();
+
+        while (!shared->cancel) {
+            auto cancelled = shared->cancel.connect([&server] {
+                server->stop_listen();
+            });
+
+            GenericStream conn = server->accept(yield[ec]);
+
+            if (cancelled) {
+                break;
+            }
+
+            BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
+
+            asio::spawn(shared->exec, [shared, conn = std::move(conn)] (asio::yield_context yield) mutable {
+                sys::error_code ec;
+                asio::async_write(conn, asio::buffer(shared->message), yield[ec]);
+                BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
+                shared->client_finished.wait(yield);
+            });
+        }
+    });
+
+
+    // Client
+    asio::spawn(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
+        BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
+        shared->server_ready.wait(yield);
+        BOOST_TEST_MESSAGE("Server is ready");
+
+        unsigned retry_count = 8;
+        unsigned retry_num = 0;
+
+        while (true) {
+            BOOST_TEST_REQUIRE(retry_num < retry_count);
+
+            auto client = shared->service->build_client(shared->server_ep);
+
+            sys::error_code ec;
+
+            client->start(yield[ec]);
+            BOOST_TEST_WARN(!ec, "Client start: " << ec.message());
+
+            if (ec) {
+                retry_num += 1;
+                continue;
+            }
+
+            auto conn = client->connect(yield[ec], shared->cancel);
+            BOOST_TEST_WARN(!ec, "Client connect: " << ec.message());
+
+            if (ec) {
+                retry_num += 1;
+                continue;
+            }
+
+            std::string buffer(shared->message.size(), 'X');
+            asio::async_read(conn, asio::buffer(buffer), yield[ec]);
+            BOOST_TEST_WARN(!ec, "Client read: " << ec.message());
+
+            if (ec) {
+                retry_num += 1;
+                continue;
+            }
+
+            BOOST_REQUIRE_EQUAL(buffer, shared->message);
+
+            shared->client_finished_lock.release();
+
+            shared->cancel();
+            break;
+        }
+    });
+
+    ctx.run();
+}
 
 BOOST_AUTO_TEST_SUITE_END()
 
