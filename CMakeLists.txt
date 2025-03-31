@@ -22,6 +22,7 @@ option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 # Global build flags
 if (WITH_ASAN)
     add_compile_options("-fsanitize=address" "-fno-omit-frame-pointer")
+    link_libraries(-fsanitize=address)
 endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options("-ggdb")
@@ -47,7 +48,6 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
-
 
 # This target needs to be linked by all code that includes ouinet headers.
 add_library(ouinet_dependencies INTERFACE)

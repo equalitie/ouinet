@@ -212,6 +212,7 @@ set_target_properties(Boost::boost PROPERTIES
 
 add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
 add_library(Boost::asio ALIAS boost_asio)
+
 target_link_libraries(boost_asio
     PUBLIC
         Boost::boost
