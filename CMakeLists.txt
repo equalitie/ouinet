@@ -22,6 +22,7 @@ option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 # Global build flags
 if (WITH_ASAN)
     add_compile_options("-fsanitize=address" "-fno-omit-frame-pointer")
+    link_libraries(-fsanitize=address)
 endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options("-ggdb")
@@ -34,7 +35,6 @@ project(ouinet)
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
-
 
 # This target needs to be linked by all code that includes ouinet headers.
 add_library(ouinet_dependencies INTERFACE)
@@ -57,12 +57,6 @@ target_link_libraries(ouinet_dependencies
         # generic_stream.h needs openssl headers, but not the library.
         OpenSSL::headers
 )
-if (WITH_ASAN)
-    # NOTE: https://stackoverflow.com/a/50163972
-    target_link_libraries(ouinet_dependencies
-        INTERFACE -fsanitize=address
-    )
-endif()
 
 ###########################################################
 option(ASIO_UTP_WITH_TESTS             "" OFF)
