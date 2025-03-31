@@ -44,14 +44,13 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
     asio::io_context ctx;
 
-    struct State {
-        State(const Setup& setup, AsioExecutor exec)
+    struct SharedState {
+        SharedState(const Setup& setup, AsioExecutor exec)
             : exec(exec)
             , service(make_shared<I2pOuiService>(setup.tempdir.string(), exec))
             , server_ready(exec)
             , client_finished(exec)
             , client_finished_lock(client_finished.lock())
-            , work_guard(exec)
         {}
 
         AsioExecutor exec;
@@ -61,44 +60,40 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
         WaitCondition::Lock client_finished_lock;
         string server_ep;
         string message = "hello";
-        // TODO: We should not need this here, the i2p service should take care of it.
-        asio::executor_work_guard<AsioExecutor> work_guard;
     };
 
-    auto state = make_shared<State>(setup, ctx.get_executor());
+    auto shared = make_shared<SharedState>(setup, ctx.get_executor());
 
     // Server
-    asio::spawn(ctx, [state, server_ready_lock = state->server_ready.lock()] (asio::yield_context yield) {
-        auto server = state->service->build_server("i2p-private-key");
+    asio::spawn(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+        auto server = shared->service->build_server("i2p-private-key");
 
-        state->server_ep = server->public_identity();
+        shared->server_ep = server->public_identity();
 
         sys::error_code ec;
 
         server->start_listen(yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, ec.message());
+        BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
 
         server_ready_lock.release();
 
         GenericStream conn = server->accept(yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, ec.message());
-        cout << "Server accepted connection\n";
+        BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
 
-        asio::async_write(conn, asio::buffer(state->message), yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, ec.message());
-        cout << "Server sent \"" << state->message << "\"\n";
+        asio::async_write(conn, asio::buffer(shared->message), yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
 
-        state->client_finished.wait(yield);
+        shared->client_finished.wait(yield);
     });
 
 
     // Client
-    asio::spawn(ctx, [state = std::move(state)] (asio::yield_context yield) {
-        cout << "Await server_ready (this may take a while)\n";
-        state->server_ready.wait(yield);
-        cout << "Server is ready\n";
+    asio::spawn(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
+        BOOST_TEST_MESSAGE("Await server_ready (this may take a while)");
+        shared->server_ready.wait(yield);
+        BOOST_TEST_MESSAGE("Server is ready");
 
-        auto client = state->service->build_client(state->server_ep);
+        auto client = shared->service->build_client(shared->server_ep);
 
         sys::error_code ec;
 
@@ -108,21 +103,20 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
         Cancel cancel;
 
         auto conn = client->connect(yield[ec], cancel);
-        BOOST_TEST_REQUIRE(!ec, ec.message());
-        cout << "Client connected\n";
+        BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
 
-        std::string buffer(state->message.size(), 'X');
+        std::string buffer(shared->message.size(), 'X');
         asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, ec.message());
+        BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
 
-        cout << "Client read \"" << buffer << "\"\n";
-        BOOST_REQUIRE_EQUAL(buffer, state->message);
+        BOOST_REQUIRE_EQUAL(buffer, shared->message);
 
-        state->client_finished_lock.release();
+        shared->client_finished_lock.release();
     });
 
     ctx.run();
 }
+
 
 BOOST_AUTO_TEST_SUITE_END()
 
