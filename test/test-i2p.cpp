@@ -81,14 +81,17 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
         sys::error_code ec;
 
+        BOOST_TEST_MESSAGE("Server starts listening");
         server->start_listen(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
 
         server_ready_lock.release();
 
+        BOOST_TEST_MESSAGE("Server accepting");
         GenericStream conn = server->accept(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
 
+        BOOST_TEST_MESSAGE("Server writing hello message");
         asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
 
@@ -106,14 +109,17 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
         sys::error_code ec;
 
+        BOOST_TEST_MESSAGE("Client starting");
         client->start(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, ec.message());
 
         Cancel cancel;
 
+        BOOST_TEST_MESSAGE("Client connecting");
         auto conn = client->connect(yield[ec], cancel);
         BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
 
+        BOOST_TEST_MESSAGE("Client reading hello message");
         std::string buffer(hello_message.size(), 'X');
         asio::async_read(conn, asio::buffer(buffer), yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
@@ -134,6 +140,7 @@ GenericStream accept_with_retry(Server& server, Cancel cancel, asio::yield_conte
             server.stop_listen();
         });
     
+        BOOST_TEST_MESSAGE("Server accepting");
         GenericStream conn = server.accept(yield[ec]);
     
         if (cancelled) {
@@ -142,9 +149,11 @@ GenericStream accept_with_retry(Server& server, Cancel cancel, asio::yield_conte
     
         BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
     
+        BOOST_TEST_MESSAGE("Server writing hello message");
         asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
 
+        BOOST_TEST_MESSAGE("Server reading hello message");
         std::string buffer(hello_message.size(), 'x');
         asio::async_read(conn, asio::buffer(buffer), yield[ec]);
         BOOST_TEST_WARN(!ec, "Server write: " << ec.message());
@@ -174,6 +183,7 @@ struct RetryingClient {
         
             sys::error_code ec;
         
+            BOOST_TEST_MESSAGE("Client starting");
             _client->start(yield[ec]);
             BOOST_TEST_WARN(!ec, "Client start: " << ec.message());
         
@@ -182,6 +192,7 @@ struct RetryingClient {
                 continue;
             }
         
+            BOOST_TEST_MESSAGE("Client connecting");
             auto conn = _client->connect(yield[ec], cancel);
             BOOST_TEST_WARN(!ec, "Client connect: " << ec.message());
         
@@ -190,9 +201,11 @@ struct RetryingClient {
                 continue;
             }
         
+            BOOST_TEST_MESSAGE("Client writing hello message");
             asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
             BOOST_TEST_REQUIRE(!ec, "Client write: " << ec.message());
 
+            BOOST_TEST_MESSAGE("Client reading hello message");
             std::string buffer(hello_message.size(), 'X');
             asio::async_read(conn, asio::buffer(buffer), yield[ec]);
             BOOST_TEST_WARN(!ec, "Client read: " << ec.message());
@@ -244,13 +257,14 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchage) {
 
         sys::error_code ec;
 
+        BOOST_TEST_MESSAGE("Server starts listening");
         server->start_listen(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
 
         server_ready_lock.release();
 
         accept_with_retry(*server, shared->cancel, yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
+        BOOST_TEST_REQUIRE(!ec, "Server accept with retry: " << ec.message());
 
         shared->client_finished.wait(yield);
     });
@@ -342,17 +356,21 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
         sys::error_code ec;
 
+        BOOST_TEST_MESSAGE("Server starts listening");
         server->start_listen(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
 
         server_ready_lock.release();
 
         auto conn = accept_with_retry(*server, shared->cancel, yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
+        BOOST_TEST_REQUIRE(!ec, "Server accept with retries: " << ec.message());
 
         std::vector<unsigned char> buffer(shared->buffer_size);
 
         for (uint32_t i = 0; i < shared->message_count; i++) {
+            if (i % 512 == 0 && i != 0) {
+                BOOST_TEST_MESSAGE("Server received " << i << " out of " << shared->message_count << " messages so far");
+            }
             asio::async_read(conn, asio::buffer(buffer), yield[ec]);
             BOOST_TEST_REQUIRE(!ec, "Server read: " << ec.message());
             assert(!shared->sent_messages.empty());
