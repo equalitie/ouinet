@@ -1,12 +1,13 @@
 variables:
   TARGET_PLATFORM: 'windows'
+  BUILD_TYPE: 'Release'
 
 windows / build:
   stage: build
   tags:
     - windows-shell
   script:
-    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
     - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
     - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
     - Copy-Item -Path ${BUILD_PATH}\gcrypt\out\lib\*.dll, ${BUILD_PATH}\gcrypt\out\bin\*.dll, ${BUILD_PATH}\gpg_error\out\lib\*.dll, ${BUILD_PATH}\gpg_error\out\bin\*.dll -Destination ${BUILD_PATH}
