@@ -18,6 +18,13 @@
 #include <util/wait_condition.h>
 #include <ouiservice/i2p.h>
 
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/mean.hpp>
+#include <boost/accumulators/statistics/min.hpp>
+#include <boost/accumulators/statistics/max.hpp>
+#include <boost/accumulators/statistics/variance.hpp>
+
 BOOST_AUTO_TEST_SUITE(ouinet_i2p)
 
 using namespace std;
@@ -48,6 +55,11 @@ struct Setup {
         fs::remove_all(tempdir);
     }
 };
+
+template<class Rep, class Period>
+float as_seconds(std::chrono::duration<Rep, Period> duration) {
+    return duration_cast<milliseconds>(duration).count() / 1000.f;
+}
 
 BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
     Setup setup;
@@ -168,6 +180,28 @@ GenericStream accept_with_retry(Server& server, Cancel cancel, asio::yield_conte
     return or_throw<GenericStream>(yield, asio::error::connection_aborted);
 }
 
+GenericStream accept(Server& server, asio::yield_context yield) {
+    sys::error_code ec;
+
+    BOOST_TEST_MESSAGE("Server accepting");
+    GenericStream conn = server.accept(yield[ec]);
+    
+    BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
+    
+    BOOST_TEST_MESSAGE("Server writing hello message");
+    asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
+    BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
+
+    BOOST_TEST_MESSAGE("Server reading hello message");
+    std::string buffer(hello_message.size(), 'x');
+    asio::async_read(conn, asio::buffer(buffer), yield[ec]);
+    BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
+
+    BOOST_REQUIRE_EQUAL(buffer, hello_message);
+
+    return conn;
+}
+
 struct RetryingClient {
     std::shared_ptr<I2pOuiService> _service;
     std::unique_ptr<Client> _client = nullptr;
@@ -179,13 +213,16 @@ struct RetryingClient {
         while (true) {
             BOOST_TEST_REQUIRE(retry_num < retry_count);
         
-            auto _client = _service->build_client(server_ep);
+            _client = _service->build_client(server_ep);
         
             sys::error_code ec;
         
+            auto start = steady_clock::now();
             BOOST_TEST_MESSAGE("Client starting");
             _client->start(yield[ec]);
             BOOST_TEST_WARN(!ec, "Client start: " << ec.message());
+            auto end = steady_clock::now();
+            BOOST_TEST_MESSAGE("Client starting took " << as_seconds(end - start) << "s");
         
             if (ec) {
                 retry_num += 1;
@@ -219,6 +256,30 @@ struct RetryingClient {
         
             return conn;
         }
+    }
+
+    GenericStream connect(std::string server_ep, Cancel cancel, asio::yield_context yield) {
+        BOOST_TEST_REQUIRE(_client, "Client already exists");
+        
+        sys::error_code ec;
+        
+        BOOST_TEST_MESSAGE("Client connecting");
+        auto conn = _client->connect(yield[ec], cancel);
+        BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
+        
+        
+        BOOST_TEST_MESSAGE("Client writing hello message");
+        asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Client write: " << ec.message());
+
+        BOOST_TEST_MESSAGE("Client reading hello message");
+        std::string buffer(hello_message.size(), 'X');
+        asio::async_read(conn, asio::buffer(buffer), yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
+        
+        BOOST_REQUIRE_EQUAL(buffer, hello_message);
+        
+        return conn;
     }
 };
 
@@ -413,6 +474,109 @@ BOOST_AUTO_TEST_CASE(test_speed) {
             asio::async_write(conn, asio::buffer(shared->sent_messages.back()), yield[ec]);
             BOOST_TEST_REQUIRE(!ec, "Client sending buffer #" << i << ": " << ec.message());
         }
+
+        // Tell the server we're done.
+        shared->client_finished_lock.release();
+        shared->cancel();
+    });
+
+    ctx.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
+    Setup setup;
+
+    asio::io_context ctx;
+
+    struct SharedState {
+        SharedState(const Setup& setup, AsioExecutor exec)
+            : exec(exec)
+            , service(make_shared<I2pOuiService>(setup.tempdir.string(), exec))
+            , server_ready(exec)
+            , client_finished(exec)
+            , client_finished_lock(client_finished.lock())
+        {}
+
+        AsioExecutor exec;
+        Cancel cancel;
+        shared_ptr<I2pOuiService> service;
+        WaitCondition server_ready;
+        WaitCondition client_finished;
+        WaitCondition::Lock client_finished_lock;
+        string server_ep;
+        unsigned subsequent_conn_count = 32;
+    };
+
+    BOOST_TEST_MESSAGE("Preparing shared state");
+    auto shared = make_shared<SharedState>(setup, ctx.get_executor());
+
+    // Server
+    asio::spawn(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+        BOOST_TEST_MESSAGE("Server spawned");
+        auto server = shared->service->build_server("i2p-private-key");
+
+        shared->server_ep = server->public_identity();
+
+        sys::error_code ec;
+
+        BOOST_TEST_MESSAGE("Server starts listening");
+        server->start_listen(yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
+
+        server_ready_lock.release();
+
+        auto conn0 = accept_with_retry(*server, shared->cancel, yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Server accept #0 with retries: " << ec.message());
+
+        for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
+            auto conn = accept(*server, yield[ec]);
+            BOOST_TEST_REQUIRE(!ec, "Server accept #1: " << ec.message());
+        }
+
+        shared->client_finished.wait(yield);
+    });
+
+
+    // Client
+    asio::spawn(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
+        BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
+        shared->server_ready.wait(yield);
+        BOOST_TEST_MESSAGE("Server is ready");
+
+        RetryingClient client{shared->service};
+
+        sys::error_code ec;
+
+        steady_clock::time_point conn0_start = steady_clock::now();
+        auto conn0 = client.connect_with_retry(shared->server_ep, shared->cancel, yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+        steady_clock::time_point conn0_end = steady_clock::now();
+
+        BOOST_TEST_MESSAGE("Connection #0 established in " << as_seconds(conn0_end - conn0_start) << " seconds");
+
+        namespace accu = boost::accumulators;
+        accu::accumulator_set<float, accu::stats<accu::tag::mean, accu::tag::variance, accu::tag::min, accu::tag::max > > acc;
+
+        for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
+
+            steady_clock::time_point conn_start = steady_clock::now();
+            auto conn = client.connect(shared->server_ep, shared->cancel, yield[ec]);
+            BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+            steady_clock::time_point conn_end = steady_clock::now();
+
+            auto duration_s = as_seconds(conn_end - conn_start);
+            BOOST_TEST_MESSAGE("Connection #" << (i+1) << " established in " << duration_s << " seconds");
+
+            acc(duration_s);
+        }
+
+        std::cout << "Subsequent connections:\n";
+        std::cout << "    Sample count:  " << accu::count(acc) << "\n";
+        std::cout << "    mean:          " << accu::mean(acc) << "\n";
+        std::cout << "    variance:      " << accu::variance(acc) << "\n";
+        std::cout << "    std deviation: " << sqrt(accu::variance(acc)) << "\n";
+        std::cout << "    min:           " << accu::min(acc) << "\n";
+        std::cout << "    max:           " << accu::max(acc) << "\n";
 
         // Tell the server we're done.
         shared->client_finished_lock.release();
