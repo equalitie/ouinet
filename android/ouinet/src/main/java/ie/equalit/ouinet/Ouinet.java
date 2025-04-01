@@ -11,8 +11,8 @@ import android.os.Build;
 import androidx.annotation.Nullable;
 import android.util.Log;
 
-import com.getkeepsafe.relinker.ReLinker;
-import com.getkeepsafe.relinker.ReLinkerInstance;
+//import com.getkeepsafe.relinker.ReLinker;
+//import com.getkeepsafe.relinker.ReLinkerInstance;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,7 +32,7 @@ public class Ouinet {
         // ReLinker should take care of working around these issues,
         // but it still has some problems with API < 18
         // (see <https://github.com/KeepSafe/ReLinker/issues/15>).
-        if (Build.VERSION.SDK_INT < 18) {
+        //if (Build.VERSION.SDK_INT < 18) {
             System.loadLibrary("c++_shared");
             System.loadLibrary("boost_asio");
             System.loadLibrary("boost_asio_ssl");
@@ -41,11 +41,14 @@ public class Ouinet {
 
             System.loadLibrary("client");
             System.loadLibrary("native-lib");
-        } else {
+        /*
+        }
+        else {
             ReLinkerInstance relinker = ReLinker.recursively();
             relinker.loadLibrary(context, "client");
             relinker.loadLibrary(context, "native-lib");
         }
+        */
 
         libsLoaded = true;
     }
