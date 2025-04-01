@@ -228,7 +228,7 @@ BOOST_AUTO_TEST_CASE(test_truncate_file)
 
         file_io::truncate(aio_file, 0, ec);
         file_io::write(aio_file, boost::asio::const_buffer("abc", 3), cancel, yield);
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
     });
     ctx.run();
@@ -345,7 +345,7 @@ BOOST_AUTO_TEST_CASE(test_read_files)
         aio_file_rw.close();
 
         // Open the file again in read-only mode
-        timer.expires_from_now(std::chrono::seconds(default_timer));
+        timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
         async_file_handle aio_file_ro = file_io::open_readonly(
                 ctx.get_executor(),
