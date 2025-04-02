@@ -32,7 +32,7 @@ using namespace ouinet;
 using namespace chrono;
 using namespace chrono_literals;
 namespace test = boost::unit_test;
-using ouiservice::I2pOuiService;
+using ouiservice::i2poui::Service;
 using ouiservice::i2poui::Server;
 using ouiservice::i2poui::Client;
 
@@ -69,14 +69,14 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
             : exec(exec)
-            , service(make_shared<I2pOuiService>(setup.tempdir.string(), exec))
+            , service(make_shared<Service>(setup.tempdir.string(), exec))
             , server_ready(exec)
             , client_finished(exec)
             , client_finished_lock(client_finished.lock())
         {}
 
         AsioExecutor exec;
-        shared_ptr<I2pOuiService> service;
+        shared_ptr<Service> service;
         WaitCondition server_ready;
         WaitCondition client_finished;
         WaitCondition::Lock client_finished_lock;
@@ -203,7 +203,7 @@ GenericStream accept(Server& server, asio::yield_context yield) {
 }
 
 struct RetryingClient {
-    std::shared_ptr<I2pOuiService> _service;
+    std::shared_ptr<Service> _service;
     std::unique_ptr<Client> _client = nullptr;
 
     GenericStream connect_with_retry(std::string server_ep, Cancel cancel, asio::yield_context yield) {
@@ -291,7 +291,7 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchage) {
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
             : exec(exec)
-            , service(make_shared<I2pOuiService>(setup.tempdir.string(), exec))
+            , service(make_shared<Service>(setup.tempdir.string(), exec))
             , server_ready(exec)
             , client_finished(exec)
             , client_finished_lock(client_finished.lock())
@@ -299,7 +299,7 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchage) {
 
         AsioExecutor exec;
         Cancel cancel;
-        shared_ptr<I2pOuiService> service;
+        shared_ptr<Service> service;
         WaitCondition server_ready;
         WaitCondition client_finished;
         WaitCondition::Lock client_finished_lock;
@@ -386,7 +386,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
             : exec(exec)
-            , service(make_shared<I2pOuiService>(setup.tempdir.string(), exec))
+            , service(make_shared<Service>(setup.tempdir.string(), exec))
             , server_ready(exec)
             , client_finished(exec)
             , client_finished_lock(client_finished.lock())
@@ -394,7 +394,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
         AsioExecutor exec;
         Cancel cancel;
-        shared_ptr<I2pOuiService> service;
+        shared_ptr<Service> service;
         WaitCondition server_ready;
         WaitCondition client_finished;
         WaitCondition::Lock client_finished_lock;
@@ -491,7 +491,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
             : exec(exec)
-            , service(make_shared<I2pOuiService>(setup.tempdir.string(), exec))
+            , service(make_shared<Service>(setup.tempdir.string(), exec))
             , server_ready(exec)
             , client_finished(exec)
             , client_finished_lock(client_finished.lock())
@@ -499,7 +499,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 
         AsioExecutor exec;
         Cancel cancel;
-        shared_ptr<I2pOuiService> service;
+        shared_ptr<Service> service;
         WaitCondition server_ready;
         WaitCondition client_finished;
         WaitCondition::Lock client_finished_lock;
