@@ -119,7 +119,7 @@ ouinet::GenericStream Server::accept(asio::yield_context yield)
         return or_throw<GenericStream>(yield, ec);
     }
 
-    _server_tunnel->_connections.add(connection);
+    _server_tunnel->intrusive_add(connection);
     return GenericStream(std::move(connection));
 }
 

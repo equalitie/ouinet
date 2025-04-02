@@ -1,9 +1,9 @@
 #include <map>
 #include <string>
 #include "service.h"
-#include "i2cp_server.h"
 
 //i2p stuff
+#include <I2CP.h>
 #include <I2PTunnel.h>
 #include <Log.h>
 #include <Identity.h>
@@ -14,6 +14,8 @@
 using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
+
+static const uint16_t i2cp_port = 7454;
 
 Service::Service(const string& datadir, const AsioExecutor& exec)
     : _exec(exec)
@@ -36,7 +38,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
 
     // create local destination shared with client tunnels
     // we might change CryptoType to ECIES or to x25519 once it's available in the network
-    auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519); 
+    auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519);
     // here we override default parameter, because we need to bypass censorship, rather then provide high-level of anominty
     // hence we can set tunnel length to 1 (rather than 3 by default), that makes I2P connections faster
     // we set ack delay to 20 ms, because this outnet is considered as low-latency
@@ -49,60 +51,49 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
         { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
     };
     _local_destination = std::make_shared<i2p::client::RunnableClientDestination>(keys, false, &params);
-    // start destination's thread and tunnel pool
-    _local_destination->Start ();
+    // Start destination's thread and tunnel pool
+    _local_destination->Start();
 
-    //start address book after starting local destination
+    // Start address book after starting local destination
     _i2p_address_book = std::make_unique<i2p::client::AddressBook>();
-    _i2p_address_book->Start ();
-    //TOOD: verify if it is correct place to start resolver (or after i2cp starts
+    _i2p_address_book->Start();
+    // TODO: verify if it is correct place to start resolver (or after i2cp starts
 
-    //Now we are going to load our pre-defined addresses
+    // Now we are going to load our pre-defined addresses
     load_known_hosts_to_address_book();
 
     _i2p_address_book->StartResolvers();
-
-}
-
-Service::Service(Service&& other)
-    : _exec(std::move(other._exec))
-    , _data_dir(std::move(other._data_dir))
-{}
-
-Service& Service::operator=(Service&& other)
-{
-    _data_dir = std::move(other._data_dir);
-    return *this;
 }
 
 Service::~Service()
 {
-    if (_local_destination) _local_destination->Stop ();    
+    if (_local_destination) _local_destination->Stop();
+    if (_i2cpserver) _i2cpserver->Stop();
     i2p::api::StopI2P();
 }
 
 std::unique_ptr<Server> Service::build_server(const std::string& private_key_filename)
 {
-    return std::unique_ptr<Server>(new Server(shared_from_this(), _data_dir + "/" + private_key_filename, get_i2p_tunnel_ready_timeout(), _exec));
+    return std::make_unique<Server>(shared_from_this(), _data_dir + "/" + private_key_filename, get_i2p_tunnel_ready_timeout(), _exec);
 }
 
 std::unique_ptr<Client> Service::build_client(const std::string& target_id)
 {
-    return std::unique_ptr<Client>(new Client(shared_from_this(), target_id, get_i2p_tunnel_ready_timeout(), _exec));
+    return std::make_unique<Client>(shared_from_this(), target_id, get_i2p_tunnel_ready_timeout(), _exec);
 }
 
 void Service::start_i2cp_server() {
-  _i2cpserver = std::unique_ptr<I2CPServer>(new I2CPServer("", get_i2p_tunnel_ready_timeout(), _exec));
-  _i2cpserver->start_listen();
+  _i2cpserver = std::make_unique<i2p::client::I2CPServer>("127.0.0.1",  i2cp_port, false);
+  _i2cpserver->Start();
 }
 
 void Service::start_tunneller_service() {
-  _i2p_tunneller = std::unique_ptr<TunnellerService>(new TunnellerService(shared_from_this(), _exec));
+  _i2p_tunneller = std::make_unique<TunnellerService>(shared_from_this(), _exec);
 }
 
 void Service::load_known_hosts_to_address_book()
 {
-  std::ifstream f (_data_dir + "/" + "hosts.txt", std::ifstream::in);
+  std::ifstream f(_data_dir + "/" + "hosts.txt", std::ifstream::in);
   if (f.is_open ())
     {
       _i2p_address_book->LoadHostsFromStream (f, false);
@@ -111,5 +102,5 @@ void Service::load_known_hosts_to_address_book()
   else
     {
       LogPrint(eLogWarning, "Failed to load host resolver!");
-    }  
+    }
 }

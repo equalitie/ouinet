@@ -31,7 +31,6 @@ add_library(ouiservice-i2p
     "./tunnel.cpp"
     "./client.cpp"
     "./server.cpp"
-    "./i2cp_server.cpp"
     "./tunneller_service.cpp"
     "./service.cpp"
     "../../logger.cpp"

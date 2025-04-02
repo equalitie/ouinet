@@ -24,45 +24,44 @@ using namespace ouinet::ouiservice::i2poui;
     _tcp_acceptor(_exec),
     _socket(_exec)
   {
-        start_listen_and_accept();
-    }
+      start_listen_and_accept();
+  }
 
   void TunnellerService::start_listen_and_accept() {
-    boost::asio::ip::tcp::endpoint endpoint(asio::ip::tcp::v4(), 8998);
+      boost::asio::ip::tcp::endpoint endpoint(asio::ip::tcp::v4(), 8998);
 
-    sys::error_code ec;
+      sys::error_code ec;
 
-    /// announce that we started listening on i2p port
-    LOG_DEBUG("I2P tunneller openning port..");
+      /// announce that we started listening on i2p port
+      LOG_DEBUG("I2P tunneller openning port..");
 
-    _tcp_acceptor.open(endpoint.protocol(), ec);
-    if (ec) {
-      LOG_ERROR( "Error: " + ec.message());
-      return;
-    }
+      _tcp_acceptor.open(endpoint.protocol(), ec);
+      if (ec) {
+        LOG_ERROR( "Error: " + ec.message());
+        return;
+      }
 
-    _tcp_acceptor.set_option(asio::socket_base::reuse_address(true));
+      _tcp_acceptor.set_option(asio::socket_base::reuse_address(true));
 
-    _tcp_acceptor.bind(endpoint, ec);
-    if (ec) {
-      _tcp_acceptor.close();
-      LOG_ERROR( "Error: " + ec.message());
-      return;
-    }
+      _tcp_acceptor.bind(endpoint, ec);
+      if (ec) {
+        _tcp_acceptor.close();
+        LOG_ERROR( "Error: " + ec.message());
+        return;
+      }
 
-    _tcp_acceptor.listen(asio::socket_base::max_connections, ec);
-    LOG_DEBUG("I2P tunneller listening...");
+      _tcp_acceptor.listen(asio::socket_base::max_connections, ec);
+      LOG_DEBUG("I2P tunneller listening...");
 
-    _tcp_acceptor.async_accept(_socket, [this](boost::system::error_code ec) {
-        if (!ec) {
-          read_socket_data();
-        } else {
-          LOG_ERROR( "Error: " + ec.message());
-          _tcp_acceptor.close();
-          return;
-        }
-    });
-
+      _tcp_acceptor.async_accept(_socket, [this](boost::system::error_code ec) {
+          if (!ec) {
+            read_socket_data();
+          } else {
+            LOG_ERROR( "Error: " + ec.message());
+            _tcp_acceptor.close();
+            return;
+          }
+      });
   }
 
   void TunnellerService::read_socket_data() {
@@ -101,10 +100,11 @@ using namespace ouinet::ouiservice::i2poui;
 
                   for(int retry = 0; retry < 10; retry++) {
                   LOG_DEBUG("try number " + std::to_string(retry));
-                  Signal<void()> cancel = Signal<void()>();
-                  auto i2p_seeder_stream = _i2p_client->connect(yield, cancel);
-                  LOG_DEBUG("connecting to I2P seeder done");
 
+                  Cancel cancel;
+                  auto i2p_seeder_stream = _i2p_client->connect(yield, cancel);
+
+                  LOG_DEBUG("connecting to I2P seeder done");
 
                   std::string request = "GET http://httpforver.com/ HTTP/1.1\r\nHost: httpforever.com\r\n\r\n";
 

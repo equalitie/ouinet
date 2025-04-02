@@ -29,7 +29,7 @@ void Client::start(asio::yield_context yield)
   sys::error_code ec;
 
   do {
-    std::unique_ptr<i2p::client::I2PClientTunnel> i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, _service ? _service->get_local_destination () : nullptr);
+    auto i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, _service ? _service->get_local_destination () : nullptr);
     _client_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_client_tunnel), _timeout);
 
     _client_tunnel->wait_to_get_ready(yield[ec]);
@@ -38,11 +38,7 @@ void Client::start(asio::yield_context yield)
     if (!ec && !_client_tunnel) ec = asio::error::operation_aborted;
     if (ec) return or_throw(yield, ec);
 
-  //The client_tunnel can't return its port becaues it doesn't know
-  //that it is a client i2p tunnel, all it knows is that it is an
-  //i2ptunnel holding some connections but doesn't know how connections
-  //are created.
-  _port = dynamic_cast<i2p::client::I2PClientTunnel*>(_client_tunnel->_i2p_tunnel.get())->GetLocalEndpoint().port();
+  _port = _client_tunnel->local_endpoint().port();
 }
 
 void Client::stop()
@@ -75,7 +71,7 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     LOG_DEBUG("Connection to the i2p injector is established");
 
-    _client_tunnel->_connections.add(connection);
+    _client_tunnel->intrusive_add(connection);
 
     return GenericStream{move(connection)};
 }

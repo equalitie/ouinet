@@ -1,4 +1,5 @@
 #include <I2PService.h>
+#include <I2PTunnel.h>
 
 #include "../../logger.h"
 #include "../../defer.h"
@@ -78,6 +79,18 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
   else {
       return or_throw(yield, asio::error::operation_aborted);
   }
+}
+
+boost::asio::ip::tcp::endpoint Tunnel::local_endpoint() {
+  //The client_tunnel can't return its port becaues it doesn't know
+  //that it is a client i2p tunnel, all it knows is that it is an
+  //i2ptunnel holding some connections but doesn't know how connections
+  //are created.
+  return dynamic_cast<i2p::client::I2PClientTunnel*>(_i2p_tunnel.get())->GetLocalEndpoint();
+}
+
+void Tunnel::intrusive_add(Connection& connection) {
+    _connections.add(connection);
 }
 
 Tunnel::~Tunnel() {

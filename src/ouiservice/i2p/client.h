@@ -4,26 +4,21 @@
 
 #include "tunnel.h"
 
-namespace i2p { namespace client {
+namespace i2p::client {
     class I2PClientTunnel;
-}}
+}
 
-namespace ouinet {
-namespace ouiservice {
-namespace i2poui {
+namespace ouinet::ouiservice::i2poui {
 
 class Service;
 
 class Client : public ouinet::OuiServiceImplementationClient {
-private:
-    // Client is constructed by i2poui::Service
-    friend class Service;
+public:
     Client( std::shared_ptr<Service> service
           , const std::string& target_id
           , uint32_t timeout
           , const AsioExecutor&);
 
-public:
     ~Client();
 
     AsioExecutor get_executor() { return _exec; }
@@ -45,6 +40,4 @@ private:
     uint16_t _port;
 };
 
-} // i2poui namespace
-} // ouiservice namespace
-} // ouinet namespace
+} // namespaces
