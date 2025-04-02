@@ -724,6 +724,11 @@ Response ClientFrontEnd::serve( ClientConfig& config
                       + std::string(header_key)
                       + " HTTP header\n";
 
+            if (config.debug_front_end_access_token()) {
+                body += "Provided token: \"" + std::string(req[header_key]) + "\"\n"
+                      + "Valid token   : \"" + *token + "\"\n";
+            }
+
             Response::body_type::reader reader(res, res.body());
             sys::error_code ec;
             reader.put(asio::buffer(body), ec);
