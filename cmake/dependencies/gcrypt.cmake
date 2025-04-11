@@ -156,8 +156,6 @@ else()
     )
 endif()
 
-
-
 externalproject_add(gpg_error
     URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
     URL_MD5 ef3d928a5a453fa701ecc3bb22be1c64

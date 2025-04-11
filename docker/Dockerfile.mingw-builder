@@ -20,15 +20,23 @@ ARG with_debug=no
 #
 # Example usage
 #
-#   docker build \
-#          -t ouinet.mingw \
-#          --build-arg with_sshd=yes \
-#          --build-arg with_ssh_authorized_key="$(cat ~/.ssh/id_ed25519.pub)" \
-#          - < docker/Dockerfile.mingw-builder
+#     $ docker build \
+#            -t ouinet.mingw \
+#            --build-arg with_sshd=yes \
+#            --build-arg with_ssh_authorized_key="$(cat ~/.ssh/id_ed25519.pub)" \
+#            - < docker/Dockerfile.mingw-builder
 #
-#   docker run -it --rm -p 2022:22 ouinet.mingw
+#     $ docker run -it --rm -p 2022:22 ouinet.mingw
 #
-#   ssh localhost -p 2022
+#     $ ssh localhost -p 2022
+#
+# Building
+#
+#     Once in the container obtain Ouinet sources (scp, rsync, git pull,...)
+#     into some directory, cd into the directory and invoke:
+#
+#     $ cmake -B build -DCMAKE_TOOLCHAIN_FILE=./cmake/toolchain-mingw64.cmake
+#     $ cmake --build build
 #
 
 FROM ubuntu:24.04 AS base
@@ -46,8 +54,6 @@ FROM ubuntu:24.04 AS base
     # Gets rid of some warnings during compilation
     RUN locale-gen en_US.UTF-8
 
-    WORKDIR /usr/local/src
-
 FROM base as with-sshd-no
 FROM base as with-sshd-yes
     ARG with_ssh_authorized_key
@@ -63,7 +69,6 @@ FROM base as with-sshd-yes
     EXPOSE 22
 
     ENTRYPOINT service ssh restart && bash
-
 
 FROM with-sshd-${with_sshd} as with-debug-no
 FROM with-sshd-${with_sshd} as with-debug-yes

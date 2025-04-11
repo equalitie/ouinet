@@ -82,6 +82,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
             CONFIGURE_COMMAND
             cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
             && set PATH=${COMPILER_DIR};$ENV{PATH}
+            && export CC=${CMAKE_C_COMPILER}
             && ./Configure
             ${OPENSSL_TARGET}
             -no-shared -no-ssl3 -no-comp -no-engine
