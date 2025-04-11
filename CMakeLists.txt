@@ -26,6 +26,7 @@ endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options("-ggdb")
 endif()
+
 add_compile_options("-Wall")
 
 if(WIN32)
@@ -36,6 +37,12 @@ endif()
 ################################################################################
 project(ouinet)
 
+if(MINGW) # Note that MING gets defined only after `project(ouinet)`
+    # Fixes errors
+    #   "Fatal error: can't write 103 bytes to section .text of <CPP_FILE>.obj: 'file too big'"
+    # https://digitalkarabela.com/mingw-w64-how-to-fix-file-too-big-too-many-sections/
+    add_compile_options(-Wa,-mbig-obj)
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
