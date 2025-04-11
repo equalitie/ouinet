@@ -1,12 +1,14 @@
 #define BOOST_TEST_MODULE blocker
 #include <boost/test/included/unit_test.hpp>
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/detached.hpp>
 #include <namespaces.h>
 #include <util/wait_condition.h>
 #include <iostream>
+#include "task.h"
 
 BOOST_AUTO_TEST_SUITE(ouinet_wait_condition)
 
@@ -22,20 +24,20 @@ int millis_since(Clock::time_point start) {
 }
 
 BOOST_AUTO_TEST_CASE(test_base_functionality) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    spawn(ios, [&ios](auto yield) {
-        WaitCondition wait_condition(ios);
+    task::spawn_detached(ctx, [&ctx](auto yield) {
+        WaitCondition wait_condition(ctx);
         
-        spawn(ios, [&, lock = wait_condition.lock()](auto yield) {
-                Timer timer(ios);
-                timer.expires_from_now(100ms);
+        task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) {
+                Timer timer(ctx);
+                timer.expires_after(100ms);
                 timer.async_wait(yield);
             });
         
-        spawn(ios, [&, lock = wait_condition.lock()](auto yield) {
-                Timer timer(ios);
-                timer.expires_from_now(200ms);
+        task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) {
+                Timer timer(ctx);
+                timer.expires_after(200ms);
                 timer.async_wait(yield);
             });
         
@@ -44,29 +46,29 @@ BOOST_AUTO_TEST_CASE(test_base_functionality) {
         BOOST_TEST(abs(millis_since(start) - 200) < 10);
     });
 
-    ios.run();
+    ctx.run();
 }
     
 BOOST_AUTO_TEST_CASE(test_release) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    spawn(ios, [&ios](auto yield) {
-        WaitCondition wait_condition(ios);
+    task::spawn_detached(ctx, [&ctx](auto yield) {
+        WaitCondition wait_condition(ctx);
         
-        spawn(ios, [&, lock = wait_condition.lock()](auto yield) {
-                Timer timer(ios);
-                timer.expires_from_now(100ms);
+        task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) {
+                Timer timer(ctx);
+                timer.expires_after(100ms);
                 timer.async_wait(yield);
                 // Now we unlock the lock early, so that the wait_condition
                 // does not wait for the following sleep operation.
                 lock.release();
-                timer.expires_from_now(200ms);
+                timer.expires_after(200ms);
                 timer.async_wait(yield);
             });
    
-        spawn(ios, [&, lock = wait_condition.lock()](auto yield) {
-                Timer timer(ios);
-                timer.expires_from_now(200ms);
+        task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) {
+                Timer timer(ctx);
+                timer.expires_after(200ms);
                 timer.async_wait(yield);
             });
    
@@ -75,25 +77,25 @@ BOOST_AUTO_TEST_CASE(test_release) {
         BOOST_TEST(abs(millis_since(start) - 200) < 10);
     });
 
-    ios.run();
+    ctx.run();
 }
     
 BOOST_AUTO_TEST_CASE(test_destroy_block_before_wait)
 {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    WaitCondition wait_condition(ios);
+    WaitCondition wait_condition(ctx);
 
-    spawn(ios, [&ios](auto yield) {
-        WaitCondition wait_condition(ios);
+    task::spawn_detached(ctx, [&ctx](auto yield) {
+        WaitCondition wait_condition(ctx);
         
         {
             auto lock = wait_condition.lock();
         }
 
-        spawn(ios, [&, lock = wait_condition.lock()](auto yield) {
-                Timer timer(ios);
-                timer.expires_from_now(100ms);
+        task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) {
+                Timer timer(ctx);
+                timer.expires_after(100ms);
                 timer.async_wait(yield);
             });
         
@@ -102,7 +104,7 @@ BOOST_AUTO_TEST_CASE(test_destroy_block_before_wait)
         BOOST_TEST(abs(millis_since(start) - 100) < 10);
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

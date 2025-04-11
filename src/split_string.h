@@ -28,7 +28,14 @@ class SplitString {
 public:
     using value_type = string_view;
 
-    struct const_iterator : public std::iterator<std::input_iterator_tag, string_view> {
+    struct const_iterator {
+        // Iterator requirements
+        using iterator_category = std::input_iterator_tag;
+        using value_type        = string_view;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = string_view*;
+        using reference         = string_view&;
+
         string_view body;
         string_view rest;
         char separator;
@@ -146,7 +153,7 @@ split_string_pair(beast::string_view v, char at) {
 
     if (at_pos == string_view::npos) {
         trim_whitespace(v);
-        return make_pair(v, string_view("", 0));
+        return std::make_pair(v, string_view("", 0));
     }
 
     auto key = v.substr(0, at_pos);
@@ -155,7 +162,7 @@ split_string_pair(beast::string_view v, char at) {
     trim_whitespace(key);
     trim_whitespace(val);
 
-    return make_pair(key, val);
+    return std::make_pair(key, val);
 };
 
 } // ouinet namespace

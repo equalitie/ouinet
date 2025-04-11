@@ -55,7 +55,7 @@ public:
         if (_self) return;
 
         AsyncJob* s = this;
-        asio::spawn(_ex, [s, job = std::move(job)]
+        task::spawn_detached(_ex, [s, job = std::move(job)]
                          (asio::yield_context yield) {
             AsyncJob* self = s;
 

@@ -5,8 +5,10 @@
 #include "../util/crypto.h"
 #include "../util/random.h"
 #include "../util/hash.h"
+#include "../task.h"
 
 #include <cstdlib>
+#include <boost/asio/detached.hpp>
 
 namespace ouinet {
 namespace bittorrent {
@@ -127,7 +129,7 @@ Tracker::Tracker(const AsioExecutor& exec):
     /*
      * Every so often, remove expired peers from swarms.
      */
-    asio::spawn(_exec, [this] (asio::yield_context yield) {
+    task::spawn_detached(_exec, [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {
@@ -179,7 +181,7 @@ DataStore::DataStore(const AsioExecutor& exec):
     /*
      * Every so often, remove expired data items.
      */
-    asio::spawn(_exec, [this] (asio::yield_context yield) {
+    task::spawn_detached(_exec, [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {

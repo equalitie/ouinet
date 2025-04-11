@@ -340,7 +340,7 @@ public:
             return;
         }
 
-        asio::spawn(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
@@ -387,7 +387,7 @@ public:
 
         _candidate_peers.push_back(*p);
 
-        asio::spawn(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [=, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 

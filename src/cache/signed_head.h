@@ -302,7 +302,7 @@ inline
 boost::optional<SignedHead>
 SignedHead::create_from_trusted_source(http::response_header<> rsh)
 {
-    auto uri = rsh[http_::response_uri_hdr].to_string();
+    auto uri = std::string(rsh[http_::response_uri_hdr]);
     // Get and validate HTTP block signature parameters.
     auto bsh = rsh[http_::response_block_signatures_hdr];
     if (bsh.empty()) {
@@ -319,7 +319,7 @@ SignedHead::create_from_trusted_source(http::response_header<> rsh)
         return boost::none;
     }
     // The injection id is also needed to verify block signatures.
-    std::string injection_id = util::http_injection_id(rsh).to_string();
+    std::string injection_id{util::http_injection_id(rsh)};
 
     if (injection_id.empty()) {
         LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);

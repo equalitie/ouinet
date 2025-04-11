@@ -17,7 +17,7 @@ bool async_sleep( const AsioExecutor& exec
                 , asio::yield_context yield)
 {
     asio::steady_timer timer(exec);
-    timer.expires_from_now(duration);
+    timer.expires_after(duration);
     sys::error_code ec;
 
     auto stop_timer = cancel.connect([&timer] {
@@ -40,7 +40,7 @@ bool async_sleep( asio::io_context& ctx
                 , asio::yield_context yield)
 {
     asio::steady_timer timer(ctx);
-    timer.expires_from_now(duration);
+    timer.expires_after(duration);
     sys::error_code ec;
 
     auto stop_timer = cancel.connect([&timer] {
