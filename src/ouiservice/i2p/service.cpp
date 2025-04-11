@@ -39,14 +39,14 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
     // create local destination shared with client tunnels
     // we might change CryptoType to ECIES or to x25519 once it's available in the network
     auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519);
-    // here we override default parameter, because we need to bypass censorship, rather then provide high-level of anominty
-    // hence we can set tunnel length to 1 (rather than 3 by default), that makes I2P connections faster
-    // we set ack delay to 20 ms, because this outnet is considered as low-latency
+    // Inbound and outbound tunnel length was set before to 1 in order to reduce latency.
+    // The default parameters are restored now because we want to increase the level of anonymity,
+    // TODO: Check that ack delay set to 20 ms is still honoured after increasing the tunnel length
     std::map<std::string, std::string> params =
     {
-        { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, "1"},
+        { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, "3"},
         { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},
-        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, "1"},
+        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, "3"},
         { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
         { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
     };
