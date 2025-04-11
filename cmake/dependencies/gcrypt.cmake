@@ -165,9 +165,11 @@ externalproject_add(gpg_error
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
+    BUILD_JOB_SERVER_AWARE YES
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
+    INSTALL_JOB_SERVER_AWARE YES
     INSTALL_COMMAND
            make install
         && ${GPGERROR_INSTALL}
@@ -184,9 +186,11 @@ externalproject_add(gcrypt
             ./configure ${HOST_CONFIG}
             --prefix=${GCRYPT_BUILD_DIRECTORY}
             --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
+    BUILD_JOB_SERVER_AWARE YES
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
+    INSTALL_JOB_SERVER_AWARE YES
     INSTALL_COMMAND
            make install
         && ${GCRYPT_INSTALL}

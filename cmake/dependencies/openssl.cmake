@@ -88,6 +88,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
             -no-shared -no-ssl3 -no-comp -no-engine
             --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
             --libdir=${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib
+            BUILD_JOB_SERVER_AWARE YES
             BUILD_COMMAND
             cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
             && set PATH=${COMPILER_DIR};$ENV{PATH}
@@ -96,6 +97,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
             BUILD_BYPRODUCTS
             ${BUILT_OPENSSL_SSL_LIBRARY}
             ${BUILT_OPENSSL_CRYPTO_LIBRARY}
+            INSTALL_JOB_SERVER_AWARE YES
             INSTALL_COMMAND
             cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
             && set PATH=${COMPILER_DIR};$ENV{PATH}
