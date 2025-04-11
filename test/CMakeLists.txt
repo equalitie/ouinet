@@ -1,5 +1,15 @@
 cmake_minimum_required (VERSION 3.13)
 
+if(MINGW)
+    # Add `#include <winsock2.h>` to every cpp file.
+    # This gets rid of an error and a warning:
+    #   error: #error WinSock.h has already been included
+    #   warning: #warning Please include winsock2.h before windows.h
+    # TODO: Only add to targets where needed or patch the file where it's
+    # coming from (asio).
+    add_definitions(-include winsock2.h)
+endif()
+
 link_libraries(
     Boost::iostreams
     Boost::system
