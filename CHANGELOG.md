@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The default Boost version used by Ouinet is now 1.87.0.
 - Docker builder images for Android and Linux have now installed a Rust toolchain.
 
 
