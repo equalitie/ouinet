@@ -903,38 +903,39 @@ int main(int argc, const char* argv[])
         proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
     }
 
-    if (config.utp_endpoint()) {
-        udp::endpoint endpoint = *config.utp_endpoint();
-        LOG_INFO("uTP address: ", endpoint);
-
-        util::create_state_file( config.repo_root()/"endpoint-utp"
-                               , util::str(endpoint));
-
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
-        proxy_server.add(move(srv));
-    }
-
-    if (config.utp_tls_endpoint()) {
-        ssl_context = read_ssl_certs();
-
-        udp::endpoint endpoint = *config.utp_tls_endpoint();
-
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
-
-        auto local_ep = base->local_endpoint();
-
-        if (local_ep) {
-            LOG_INFO("uTP/TLS address: ", *local_ep);
-            util::create_state_file( config.repo_root()/"endpoint-utp-tls"
-                                   , util::str(*local_ep));
-            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
-
-        } else {
-            LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
-        }
-    }
-
+    if (config.utp_endpoint() || config.utp_tls_endpoint())
     {
+        if (config.utp_endpoint()) {
+            udp::endpoint endpoint = *config.utp_endpoint();
+            LOG_INFO("uTP address: ", endpoint);
+
+            util::create_state_file( config.repo_root()/"endpoint-utp"
+                                   , util::str(endpoint));
+
+            auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
+            proxy_server.add(move(srv));
+        }
+
+        if (config.utp_tls_endpoint()) {
+            ssl_context = read_ssl_certs();
+
+            udp::endpoint endpoint = *config.utp_tls_endpoint();
+
+            auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
+
+            auto local_ep = base->local_endpoint();
+
+            if (local_ep) {
+                LOG_INFO("uTP/TLS address: ", *local_ep);
+                util::create_state_file( config.repo_root()/"endpoint-utp-tls"
+                                       , util::str(*local_ep));
+                proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
+
+            } else {
+                LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
+            }
+        }
+
         ssl_context = read_ssl_certs();
         auto dht = bittorrent_dht();
         assert(dht);
