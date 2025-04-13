@@ -26,8 +26,8 @@ variables:
     - mkdir -p $BUILD_PATH
     - cd $BUILD_PATH
     - source $CI_PROJECT_DIR/scripts/install-cmake.sh $CMAKE_VERSION
-    - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
-    - make -j `nproc`
+    - cmake -S $CI_PROJECT_DIR -B $BUILD_PATH -DBOOST_VERSION=$BOOST_VERSION
+    - cmake --build $BUILD_PATH -- -j `nproc`
 
 .linux-unit-test:
   stage: test
