@@ -1,6 +1,7 @@
 variables:
   BUILD_PATH: 'build/$TARGET_PLATFORM'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  CMAKE_VERSION: "3.31.7-linux-x86_64"
 
 .linux-build:
   stage: build
@@ -24,6 +25,7 @@ variables:
   script:
     - mkdir -p $BUILD_PATH
     - cd $BUILD_PATH
+    - source $CI_PROJECT_DIR/scripts/install-cmake.sh $CMAKE_VERSION
     - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
     - make -j `nproc`
 

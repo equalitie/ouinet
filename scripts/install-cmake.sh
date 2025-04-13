@@ -19,6 +19,7 @@ fi
 IFS='.' read -r MAJOR MINOR PATCH <<< $(echo $CMAKE_VERSION | cut -d- -f 1 )
 
 filename="cmake-"$CMAKE_VERSION
+mkdir -p $INSTALL_DIR
 cd $INSTALL_DIR
 echo "Downloading ${filename}..."
 wget --quiet "https://cmake.org/files/v"$MAJOR"."$MINOR"/"$filename".tar.gz"
