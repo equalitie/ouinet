@@ -23,11 +23,11 @@ variables:
       - $BUILD_PATH/modules/*/go-workspace
       - $BUILD_PATH/src/ouiservice/lampshade/go-workspace
   script:
-    - mkdir -p $BUILD_PATH
-    - cd $BUILD_PATH
     - source $CI_PROJECT_DIR/scripts/install-cmake.sh $CMAKE_VERSION
-    - cmake -S $CI_PROJECT_DIR -B $BUILD_PATH -DBOOST_VERSION=$BOOST_VERSION
-    - cmake --build $BUILD_PATH -- -j `nproc`
+    - mkdir -p $CI_PROJECT_DIR/$BUILD_PATH
+    - cd $BUILD_PATH
+    - cmake -S $CI_PROJECT_DIR -B $CI_PROJECT_DIR/$BUILD_PATH -DBOOST_VERSION=$BOOST_VERSION
+    - cmake --build $CI_PROJECT_DIR/$BUILD_PATH -- -j `nproc`
 
 .linux-unit-test:
   stage: test
