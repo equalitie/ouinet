@@ -39,3 +39,4 @@ tar -xzf $filename".tar.gz"
 echo $INSTALL_DIR"/"$filename"/bin was added to the PATH"
 export PATH=$INSTALL_DIR"/"$filename"/bin:"$PATH
 
+cd -
