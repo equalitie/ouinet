@@ -18,6 +18,9 @@ fi
 
 IFS='.' read -r MAJOR MINOR PATCH <<< $(echo $CMAKE_VERSION | cut -d- -f 1 )
 
+echo "Installing wget..."
+apt update && apt install -y wget
+
 filename="cmake-"$CMAKE_VERSION
 mkdir -p $INSTALL_DIR
 cd $INSTALL_DIR
