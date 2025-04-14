@@ -154,6 +154,8 @@ foreach (patch ${BOOST_PATCHES})
     set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -p1 -i ${patch})
 endforeach()
 
+execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
+
 externalproject_add(built_boost
     URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=${BOOST_VERSION_HASH}
@@ -165,7 +167,7 @@ externalproject_add(built_boost
         ${BOOST_ENVIRONMENT} ./b2
             link=static
             threading=multi
-            -j2
+            -j${NPROC}
             #--verbose -d2 # Output exact commands when building
             --layout=system
             --prefix=${OUINET_BOOST_PREFIX}/install
