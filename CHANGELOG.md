@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.0.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.0.0) - 2025-04-14
+
 ### Changed
 
 - The default Boost version used by Ouinet is now 1.87.0.
