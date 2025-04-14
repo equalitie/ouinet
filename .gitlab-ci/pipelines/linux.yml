@@ -14,8 +14,9 @@ linux / prepare-builder-image:
 
 linux / build:
   variables:
-    BOOST_VERSION: "1.87.0"
     TARGET_PLATFORM: 'linux'
+    BOOST_VERSION: "1.87.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
   extends:
     .linux-build
   needs:
