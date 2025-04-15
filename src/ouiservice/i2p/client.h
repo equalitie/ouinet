@@ -38,6 +38,8 @@ private:
     std::unique_ptr<Tunnel> _client_tunnel; //the tunnel is a pointer because
     //the client can be stopped (tunnel gets destroyed) and started again
     uint16_t _port;
+    // Triggered by destructor and Client::stop
+    Cancel _stopped;
 };
 
 } // namespaces

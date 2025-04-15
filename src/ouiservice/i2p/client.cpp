@@ -1,3 +1,5 @@
+#include <chrono>
+
 #include <I2PTunnel.h>
 #include <I2PService.h>
 
@@ -7,10 +9,13 @@
 #include "../../logger.h"
 #include "../../util/condition_variable.h"
 #include "../../or_throw.h"
+#include "../../async_sleep.h"
+
+#include "../../namespaces.h"
+
+namespace ouinet::ouiservice::i2poui {
 
 using namespace std;
-using namespace ouinet::ouiservice;
-using namespace ouinet::ouiservice::i2poui;
 
 Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const AsioExecutor& exec)
     : _service(service)
@@ -46,13 +51,26 @@ void Client::stop()
   _client_tunnel.reset();
   //tunnel destructor will stop the i2p tunnel after the connections
   //are closed. (TODO: maybe we need to add a wait here)
+  _stopped();
+}
 
+inline void exponential_backoff(AsioExecutor& exec, uint32_t i, Cancel& cancel, asio::yield_context yield) {
+    // Constants in this function are made up, feel free to modify them as needed.
+    if (i < 3) return;
+    i -= 3;
+    uint32_t constant_after = 8; // max 12.8 seconds
+    if (i > constant_after) i = constant_after;
+    float delay_s = powf(2, i) / 10.f;
+
+    if (!async_sleep(exec, chrono::milliseconds(long(delay_s * 1000.f)), cancel, yield)) {
+        return or_throw(yield, asio::error::operation_aborted);
+    }
 }
 
 ::ouinet::GenericStream
-Client::connect(asio::yield_context yield, Signal<void()>& cancel)
+Client::connect(asio::yield_context yield, Cancel& cancel)
 {
-    sys::error_code ec;
+    auto stopped = _stopped.connect([&cancel] { cancel(); });
 
     Connection connection(_exec);
     
@@ -63,15 +81,29 @@ Client::connect(asio::yield_context yield, Signal<void()>& cancel)
 
     LOG_DEBUG("Connecting to the i2p injector...");
 
-    connection._socket.async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
+    for (uint32_t i = 0;; ++i) {
+        sys::error_code ec;
 
-    if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+        connection._socket.async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
+        ec = compute_error_code(ec, cancel);
+
+        if (ec == asio::error::operation_aborted) {
+            return or_throw<GenericStream>(yield, ec);
+        }
+
+        if (ec) {
+            ec = {};
+            exponential_backoff(_exec, i, cancel, yield[ec]);
+            if (ec) return or_throw<GenericStream>(yield, ec);
+            continue;
+        }
+
+        LOG_DEBUG("Connection to the i2p injector is established");
+
+        _client_tunnel->intrusive_add(connection);
+
+        return GenericStream{move(connection)};
     }
-
-    LOG_DEBUG("Connection to the i2p injector is established");
-
-    _client_tunnel->intrusive_add(connection);
-
-    return GenericStream{move(connection)};
 }
+
+} // namespaces
