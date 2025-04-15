@@ -31,19 +31,28 @@ Client::~Client()
 
 void Client::start(asio::yield_context yield)
 {
-  sys::error_code ec;
+    Cancel stopped = _stopped;
 
-  do {
-    auto i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>("i2p_oui_client", _target_id, "127.0.0.1", 0, _service ? _service->get_local_destination () : nullptr);
-    _client_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_client_tunnel), _timeout);
+    sys::error_code ec;
 
-    _client_tunnel->wait_to_get_ready(yield[ec]);
-  } while(_client_tunnel->has_timed_out());
+    do {
+        auto i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>(
+                "i2p_oui_client",
+                _target_id,
+                "127.0.0.1",
+                0,
+                _service ? _service->get_local_destination () : nullptr);
+
+        _client_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_client_tunnel), _timeout);
+
+        _client_tunnel->wait_to_get_ready(yield[ec]);
+    } while(_client_tunnel->has_timed_out() && !stopped);
 
     if (!ec && !_client_tunnel) ec = asio::error::operation_aborted;
+    ec = compute_error_code(ec, stopped);
     if (ec) return or_throw(yield, ec);
 
-  _port = _client_tunnel->local_endpoint().port();
+    _port = _client_tunnel->local_endpoint().port();
 }
 
 void Client::stop()
