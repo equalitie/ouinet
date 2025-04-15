@@ -62,9 +62,11 @@ FROM base as with-sshd-yes
 
     RUN service ssh start
 
-    RUN echo "$with_ssh_authorized_key" > /root/.ssh/authorized_keys && \
-        sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config && \
-        service ssh restart
+    RUN if [ -n "$with_ssh_authorized_key" ]; then \
+            echo "$with_ssh_authorized_key" > /root/.ssh/authorized_keys && \
+            sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config && \
+            service ssh restart; \
+        fi
 
     EXPOSE 22
 
@@ -75,7 +77,7 @@ FROM with-sshd-${with_sshd} as with-debug-yes
     RUN apt-get install -y wine64
 
     # Convenience: tell wine where to look for dll files.  This will only work
-    # when running the executables from the ouisync root folder and the build
+    # when running the executables from the ouinet root folder and the build
     # folder is named `./build/`
     RUN echo "export WINEPATH='./build;./build/gcrypt/out/bin;./build/gpg_error/out/bin;/usr/lib/gcc/x86_64-w64-mingw32/13-win32'" >> ~/.bashrc
 
