@@ -108,6 +108,7 @@ public:
 
     operator bool() const { return call_count() != 0; }
 
+    [[nodiscard]]
     Connection connect(std::function<T> slot)
     {
         Connection connection;
