@@ -31,6 +31,9 @@ public:
 
     GenericStream accept(asio::yield_context yield) override;
 
+    // Only used in tests
+    GenericStream accept_without_handshake(asio::yield_context yield);
+
     std::string public_identity() const;
 
 private:
@@ -44,6 +47,9 @@ private:
 
     std::unique_ptr<Tunnel> _server_tunnel;
     asio::ip::tcp::acceptor _tcp_acceptor;
+
+    // Triggered by destructor and Server::stop_listen
+    Cancel _stopped;
 };
 
 } // namespaces

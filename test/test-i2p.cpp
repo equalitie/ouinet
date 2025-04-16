@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
         server_ready_lock.release();
 
         BOOST_TEST_MESSAGE("Server accepting");
-        GenericStream conn = server->accept(yield[ec]);
+        GenericStream conn = server->accept_without_handshake(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
 
         BOOST_TEST_MESSAGE("Server writing hello message");
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
         Cancel cancel;
 
         BOOST_TEST_MESSAGE("Client connecting");
-        auto conn = client->connect(yield[ec], cancel);
+        auto conn = client->connect_without_handshake(yield[ec], cancel);
         BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
 
         BOOST_TEST_MESSAGE("Client reading hello message");
@@ -143,145 +143,6 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
     ctx.run();
 }
-
-GenericStream accept_with_retry(Server& server, Cancel cancel, asio::yield_context yield) {
-    while (!cancel) {
-        sys::error_code ec;
-
-        auto cancelled = cancel.connect([&server] {
-            server.stop_listen();
-        });
-    
-        BOOST_TEST_MESSAGE("Server accepting");
-        GenericStream conn = server.accept(yield[ec]);
-    
-        if (cancelled) {
-            break;
-        }
-    
-        BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
-    
-        BOOST_TEST_MESSAGE("Server writing hello message");
-        asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
-
-        BOOST_TEST_MESSAGE("Server reading hello message");
-        std::string buffer(hello_message.size(), 'x');
-        asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-        BOOST_TEST_WARN(!ec, "Server write: " << ec.message());
-
-        if (ec) continue;
-
-        BOOST_REQUIRE_EQUAL(buffer, hello_message);
-
-        return conn;
-    }
-
-    return or_throw<GenericStream>(yield, asio::error::connection_aborted);
-}
-
-GenericStream accept(Server& server, asio::yield_context yield) {
-    sys::error_code ec;
-
-    BOOST_TEST_MESSAGE("Server accepting");
-    GenericStream conn = server.accept(yield[ec]);
-    
-    BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
-    
-    BOOST_TEST_MESSAGE("Server writing hello message");
-    asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
-    BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
-
-    BOOST_TEST_MESSAGE("Server reading hello message");
-    std::string buffer(hello_message.size(), 'x');
-    asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-    BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
-
-    BOOST_REQUIRE_EQUAL(buffer, hello_message);
-
-    return conn;
-}
-
-struct RetryingClient {
-    std::shared_ptr<Service> _service;
-    std::unique_ptr<Client> _client = nullptr;
-
-    GenericStream connect_with_retry(std::string server_ep, Cancel cancel, asio::yield_context yield) {
-        unsigned retry_count = 32;
-        unsigned retry_num = 0;
-        
-        while (true) {
-            BOOST_TEST_REQUIRE(retry_num < retry_count);
-        
-            _client = _service->build_client(server_ep);
-        
-            sys::error_code ec;
-        
-            auto start = steady_clock::now();
-            BOOST_TEST_MESSAGE("Client starting");
-            _client->start(yield[ec]);
-            BOOST_TEST_WARN(!ec, "Client start: " << ec.message());
-            auto end = steady_clock::now();
-            BOOST_TEST_MESSAGE("Client starting took " << as_seconds(end - start) << "s");
-        
-            if (ec) {
-                retry_num += 1;
-                continue;
-            }
-        
-            BOOST_TEST_MESSAGE("Client connecting");
-            auto conn = _client->connect(yield[ec], cancel);
-            BOOST_TEST_WARN(!ec, "Client connect: " << ec.message());
-        
-            if (ec) {
-                retry_num += 1;
-                continue;
-            }
-        
-            BOOST_TEST_MESSAGE("Client writing hello message");
-            asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Client write: " << ec.message());
-
-            BOOST_TEST_MESSAGE("Client reading hello message");
-            std::string buffer(hello_message.size(), 'X');
-            asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-            BOOST_TEST_WARN(!ec, "Client read: " << ec.message());
-        
-            if (ec) {
-                retry_num += 1;
-                continue;
-            }
-        
-            BOOST_REQUIRE_EQUAL(buffer, hello_message);
-        
-            return conn;
-        }
-    }
-
-    GenericStream connect(std::string server_ep, Cancel cancel, asio::yield_context yield) {
-        BOOST_TEST_REQUIRE(_client, "Client already exists");
-        
-        sys::error_code ec;
-        
-        BOOST_TEST_MESSAGE("Client connecting");
-        auto conn = _client->connect(yield[ec], cancel);
-        BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
-        
-        
-        BOOST_TEST_MESSAGE("Client writing hello message");
-        asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, "Client write: " << ec.message());
-
-        BOOST_TEST_MESSAGE("Client reading hello message");
-        std::string buffer(hello_message.size(), 'X');
-        asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
-        
-        BOOST_REQUIRE_EQUAL(buffer, hello_message);
-        
-        return conn;
-    }
-};
 
 BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchage) {
     Setup setup;
@@ -318,13 +179,15 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchage) {
 
         sys::error_code ec;
 
+        auto cancelled = shared->cancel.connect([&] { server->stop_listen(); });
+
         BOOST_TEST_MESSAGE("Server starts listening");
         server->start_listen(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
 
         server_ready_lock.release();
 
-        accept_with_retry(*server, shared->cancel, yield[ec]);
+        server->accept(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server accept with retry: " << ec.message());
 
         shared->client_finished.wait(yield);
@@ -337,10 +200,16 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchage) {
         shared->server_ready.wait(yield);
         BOOST_TEST_MESSAGE("Server is ready");
 
-        RetryingClient client{shared->service};
+        auto client = shared->service->build_client(shared->server_ep);
 
         sys::error_code ec;
-        client.connect_with_retry(shared->server_ep, shared->cancel, yield[ec]);
+
+        BOOST_TEST_MESSAGE("Client starting");
+        client->start(yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, ec.message());
+
+        BOOST_TEST_MESSAGE("Client connecting");
+        client->connect(yield[ec], shared->cancel);
         BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
 
         // Tell the server we're done.
@@ -417,13 +286,15 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
         sys::error_code ec;
 
+        auto cancelled = shared->cancel.connect([&] { server->stop_listen(); });
+
         BOOST_TEST_MESSAGE("Server starts listening");
         server->start_listen(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
 
         server_ready_lock.release();
 
-        auto conn = accept_with_retry(*server, shared->cancel, yield[ec]);
+        auto conn = server->accept(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server accept with retries: " << ec.message());
 
         std::vector<unsigned char> buffer(shared->buffer_size);
@@ -461,10 +332,17 @@ BOOST_AUTO_TEST_CASE(test_speed) {
         shared->server_ready.wait(yield);
         BOOST_TEST_MESSAGE("Server is ready");
 
-        RetryingClient client{shared->service};
+        //RetryingClient client{shared->service};
+        auto client = shared->service->build_client(shared->server_ep);
 
         sys::error_code ec;
-        auto conn = client.connect_with_retry(shared->server_ep, shared->cancel, yield[ec]);
+
+        BOOST_TEST_MESSAGE("Client starting");
+        client->start(yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, ec.message());
+
+        BOOST_TEST_MESSAGE("Client connecting");
+        auto conn = client->connect(yield[ec], shared->cancel);
         BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
 
         shared->send_started = steady_clock::now();
@@ -519,18 +397,20 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 
         sys::error_code ec;
 
+        auto cancelled = shared->cancel.connect([&] { server->stop_listen(); });
+
         BOOST_TEST_MESSAGE("Server starts listening");
         server->start_listen(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
 
         server_ready_lock.release();
 
-        auto conn0 = accept_with_retry(*server, shared->cancel, yield[ec]);
+        auto conn0 = server->accept(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server accept #0 with retries: " << ec.message());
 
         for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
-            auto conn = accept(*server, yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server accept #1: " << ec.message());
+            auto conn = server->accept(yield[ec]);
+            BOOST_TEST_REQUIRE(!ec, "Server accept #" << (i+1) << ": " << ec.message());
         }
 
         shared->client_finished.wait(yield);
@@ -543,13 +423,20 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
         shared->server_ready.wait(yield);
         BOOST_TEST_MESSAGE("Server is ready");
 
-        RetryingClient client{shared->service};
+        auto client = shared->service->build_client(shared->server_ep);
 
         sys::error_code ec;
 
+        BOOST_TEST_MESSAGE("Client starting");
+        client->start(yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, ec.message());
+
         steady_clock::time_point conn0_start = steady_clock::now();
-        auto conn0 = client.connect_with_retry(shared->server_ep, shared->cancel, yield[ec]);
+
+        BOOST_TEST_MESSAGE("Client connecting");
+        auto conn0 = client->connect(yield[ec], shared->cancel);
         BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+
         steady_clock::time_point conn0_end = steady_clock::now();
 
         BOOST_TEST_MESSAGE("Connection #0 established in " << as_seconds(conn0_end - conn0_start) << " seconds");
@@ -560,7 +447,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
         for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
 
             steady_clock::time_point conn_start = steady_clock::now();
-            auto conn = client.connect(shared->server_ep, shared->cancel, yield[ec]);
+            auto conn = client->connect(yield[ec], shared->cancel);
             BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
             steady_clock::time_point conn_end = steady_clock::now();
 

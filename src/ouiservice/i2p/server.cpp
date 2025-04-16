@@ -10,10 +10,12 @@
 #include <streambuf>
 
 #include "../../or_throw.h"
+#include "handshake.h"
+
+
+namespace ouinet::ouiservice::i2poui {
 
 using namespace std;
-using namespace ouinet::ouiservice;
-using namespace ouinet::ouiservice::i2poui;
 
 Server::Server(std::shared_ptr<Service> service, const string& private_key_filename, uint32_t timeout, const AsioExecutor& exec)
     : _service(service)
@@ -96,6 +98,8 @@ void Server::start_listen(asio::yield_context yield)
 
 void Server::stop_listen()
 {
+    _stopped();
+
     _server_tunnel.reset();
 
     if (_tcp_acceptor.is_open()) {
@@ -103,15 +107,38 @@ void Server::stop_listen()
     }
 }
 
-ouinet::GenericStream Server::accept(asio::yield_context yield)
+GenericStream Server::accept(asio::yield_context yield) {
+    sys::error_code ec;
+    auto conn = accept_without_handshake(yield[ec]);
+    
+    if (ec) {
+        return or_throw<GenericStream>(yield, ec);
+    }
+
+    Cancel cancel = _stopped;
+    perform_handshake(conn, cancel, yield[ec]);
+
+    if (ec) {
+        return or_throw<GenericStream>(yield, ec);
+    }
+
+    return conn;
+}
+
+GenericStream Server::accept_without_handshake(asio::yield_context yield)
 {
+    // Make a copy on the stack
+    Cancel cancel = _stopped;
+
     sys::error_code ec;
 
     Connection connection(_exec);
 
     _tcp_acceptor.async_accept(connection.socket(), yield[ec]);
 
-    if (!_server_tunnel) {
+    ec = compute_error_code(ec, cancel);
+
+    if (!ec && !_server_tunnel) {
         ec = asio::error::operation_aborted;
     }
 
@@ -127,3 +154,5 @@ std::string Server::public_identity() const
 {
     return _private_keys->GetPublic()->ToBase64();
 }
+
+} // namespaces

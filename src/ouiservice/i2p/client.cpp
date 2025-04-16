@@ -5,6 +5,7 @@
 
 #include "client.h"
 #include "service.h"
+#include "handshake.h"
 
 #include "../../logger.h"
 #include "../../util/condition_variable.h"
@@ -57,10 +58,10 @@ void Client::start(asio::yield_context yield)
 
 void Client::stop()
 {
-  _client_tunnel.reset();
-  //tunnel destructor will stop the i2p tunnel after the connections
-  //are closed. (TODO: maybe we need to add a wait here)
-  _stopped();
+    _client_tunnel.reset();
+    //tunnel destructor will stop the i2p tunnel after the connections
+    //are closed. (TODO: maybe we need to add a wait here)
+    _stopped();
 }
 
 inline void exponential_backoff(AsioExecutor& exec, uint32_t i, Cancel& cancel, asio::yield_context yield) {
@@ -78,6 +79,37 @@ inline void exponential_backoff(AsioExecutor& exec, uint32_t i, Cancel& cancel, 
 
 ::ouinet::GenericStream
 Client::connect(asio::yield_context yield, Cancel& cancel)
+{
+    for (uint32_t i = 0;; ++i) {
+        sys::error_code ec;
+        auto conn = connect_without_handshake(yield[ec], cancel);
+
+        if (!ec) {
+            auto stopped = _stopped.connect([&cancel] { cancel(); });
+            perform_handshake(conn, cancel, yield[ec]);
+
+            if (!ec) {
+                return conn;
+            }
+        }
+
+        if (ec == asio::error::operation_aborted) {
+            return or_throw<GenericStream>(yield, ec);
+        }
+
+        assert(ec);
+
+        ec = {};
+        exponential_backoff(_exec, i, cancel, yield[ec]);
+
+        if (ec) {
+            return or_throw<GenericStream>(yield, ec);
+        }
+    }
+}
+
+::ouinet::GenericStream
+Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
 {
     auto stopped = _stopped.connect([&cancel] { cancel(); });
 

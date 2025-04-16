@@ -29,6 +29,7 @@ project(ouiservice-i2p)
 
 add_library(ouiservice-i2p
     "./tunnel.cpp"
+    "./handshake.cpp"
     "./client.cpp"
     "./server.cpp"
     "./tunneller_service.cpp"

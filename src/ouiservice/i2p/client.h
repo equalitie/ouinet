@@ -29,6 +29,10 @@ public:
     GenericStream
     connect(asio::yield_context yield, Signal<void()>& cancel) override;
 
+    // Used only in tests
+    GenericStream
+    connect_without_handshake(asio::yield_context yield, Signal<void()>& cancel);
+
 private:
     std::shared_ptr<Service> _service;
     AsioExecutor _exec;
