@@ -30,6 +30,10 @@ static const fs::path log_file_name{_LOG_FILE_NAME};
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
+#ifdef __EXPERIMENTAL__
+#define _MAX_I2P_HOPS 8
+#endif // ifdef __EXPERIMENTAL__
+
 class ClientConfig {
 public:
   enum class CacheType { None, Bep5Http, Bep5HttpOverI2P };
@@ -57,6 +61,12 @@ public:
     const std::string& tls_ca_cert_store_path() const {
         return _tls_ca_cert_store_path;
     }
+
+#ifdef __EXPERIMENTAL__
+    size_t i2p_hops_per_tunnel() const {
+      return _i2p_hops_per_tunnel;
+    }
+#endif // ifdef __EXPERIMENTAL__
 
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
@@ -408,6 +418,11 @@ private:
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
+
+#ifdef __EXPERIMENTAL__
+  size_t _i2p_hops_per_tunnel = 1;
+#endif // ifdef __EXPERIMENTAL__
+  
 };
 
 inline
@@ -673,6 +688,32 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
         _injector_credentials[*_injector_ep] = cred;
     }
+
+#ifdef __EXPERIMENTAL__
+        if (vm.count("i2p-hops-per-tunnel")) {
+        auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
+
+        if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
+            throw std::runtime_error(util::str(
+                "The '--i2p-hops-per-tunnel' argument expects an integer "
+                "between 1 and 8"
+                ));
+        }
+
+        if (!(//If we neither connecting for an i2p injector 
+            (_injector_ep && _injector_ep->type == Endpoint::I2pEndpoint) ||
+            //nor we are not  running a Bep5 over i2p cache
+            (_cache_type == CacheType::Bep5HttpOverI2P)))
+          {
+            throw std::runtime_error(
+                "The '--i2p-hops-per-tunnel' argument must be used with "
+                "'--injector-ep' with an i2p injector or with "
+                "--cache-type=bep5-http-over-i2p ");
+          }
+
+        _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
+    }
+#endif // ifdef __EXPERIMENTAL__ _i2p_hops_
 
     if (_cache_type == CacheType::None) {
         LOG_WARN("Not using d-cache");

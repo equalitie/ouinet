@@ -2566,7 +2566,7 @@ void Client::State::setup_cache(asio::yield_context yield)
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started      
       if (!_i2p_service) {
-        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
+        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
       
       _i2p_service->start_i2cp_server();
@@ -2833,7 +2833,7 @@ void Client::State::setup_injector(asio::yield_context yield)
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started      
       if (!_i2p_service) {
-        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
+        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
       auto i2p_client = _i2p_service->build_client(injector_ep->endpoint_string);

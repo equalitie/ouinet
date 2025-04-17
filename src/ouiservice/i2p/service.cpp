@@ -1,5 +1,6 @@
 #include <map>
 #include <string>
+#include <algorithm>
 #include "service.h"
 #include "i2cp_server.h"
 
@@ -16,7 +17,7 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
-Service::Service(const string& datadir, const AsioExecutor& exec)
+Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _number_of_hops_per_tunnel)
     : _exec(exec)
     , _data_dir(datadir)
 {
@@ -37,17 +38,20 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
 
     // create local destination shared with client tunnels
     // we might change CryptoType to ECIES or to x25519 once it's available in the network
-    auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519); 
-    // here we override default parameter, because we need to bypass censorship, rather then provide high-level of anominty
-    // hence we can set tunnel length to 1 (rather than 3 by default), that makes I2P connections faster
+    auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519);
+
+    //i2pd does not support more than 8 hops
+    auto no_of_tunnel_hops_str = std::to_string(std::min(_number_of_hops_per_tunnel, (size_t)(8)));
+
+    LogPrint(eLogInfo, "Number of hops in I2P inbound and outbound tunnels is set to be " + no_of_tunnel_hops_str);
     // we set ack delay to 20 ms, because this outnet is considered as low-latency
     std::map<std::string, std::string> params =
     {
-        { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, "1"},
-        { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},
-        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, "1"},
-        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
-        { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
+      { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, no_of_tunnel_hops_str},
+      { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},
+      { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, no_of_tunnel_hops_str},
+      { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
+      { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
     };
     _local_destination = std::make_shared<i2p::client::RunnableClientDestination>(keys, false, &params);
     // start destination's thread and tunnel pool

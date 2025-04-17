@@ -23,7 +23,9 @@ namespace i2poui {
 
 class Service : public std::enable_shared_from_this<Service> {
 public:
-    Service(const std::string& datadir, const AsioExecutor&);
+    // because by default to prioritize bypassing censorship over providing high-level of anominty
+    // the default tunnel length is set to 1 (rather than 3 by default), that makes I2P connections faster
+    Service(const std::string& datadir, const AsioExecutor&, const size_t _number_of_hops_per_tunnel = 1);
 
     Service(const Service&) = delete;
     Service& operator=(const Service&) = delete;
