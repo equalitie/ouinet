@@ -17,9 +17,15 @@ linux / build:
     - job: 'linux / prepare-builder-image'
       optional: true
 
-linux / unit-test:
+linux / unit-cpp-test:
   extends:
-    .linux-unit-test
+    .linux-unit-cpp-test
+  needs:
+    ['linux / build']
+
+linux / unit-rust-test:
+  extends:
+    .linux-unit-rust-test
   needs:
     ['linux / build']
 
@@ -27,7 +33,7 @@ linux / integration-test:
   extends:
     .linux-integration-test
   needs:
-    ['linux / unit-test']
+    ['linux / unit-rust-test', 'linux / unit-cpp-test']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
