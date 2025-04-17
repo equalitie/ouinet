@@ -28,9 +28,12 @@ void Server::load_private_key(const string& key_file_name)
 {
     ifstream in_file(key_file_name);
     string keys_str;
+    LOG_DEBUG("Reading private key from" + key_file_name);
     if (in_file.is_open()) {
         keys_str = string( istreambuf_iterator<char>(in_file)
                          , istreambuf_iterator<char>());
+        
+        
     } else {
         // File doesn't exist
         i2p::data::SigningKeyType sig_type = i2p::data::SIGNING_KEY_TYPE_ECDSA_SHA256_P256;

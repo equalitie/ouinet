@@ -14,10 +14,12 @@ class TestFixtures:
     DEFAULT_PROCESS_TIMEOUT = 15 # seconds
     TCP_TRANSPORT_TIMEOUT = 30
     I2P_TRANSPORT_TIMEOUT = 600
+    I2P_BROWSER_TEST_TIMEOUT = 3600 * 24
     IPFS_CACHE_TIMEOUT = 900
     BEP44_CACHE_TIMEOUT = 900
     
     TEST_TIMEOUT = {
+        "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
         "test_externally_discovered_i2p_injector": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_i2cp_server": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
@@ -38,6 +40,8 @@ class TestFixtures:
     INJECTOR_CONF_FILE_CONTENT = "open-file-limit = 32768\n"
 
     I2P_INJECTOR_NAME = "i2p_injector"
+
+    I2P_INJECTOR_PRIVATE_KEY = "KWi-Y9dah6Acn52RFt6AnbAgr~c6zn0p9wSkuJMfiOe1tRAJ3wxxM36Hx1ASDS0no9EXoWBMk4EkiTSC7p4FNAuODhpTzITKQowOyBUWwSJnC4xzTYdturDqaZ3kJAPXgfxZoCQyPHMy3p8x7I7A3g03Pmlt26pQPF7slbUfp~Gptl0lQVKCwpHoIc1WlgcCzZDEAjCRcAuw36r5tluL3qrHVcJhsv73ZBq-ZfOoWAgi5D~UsUoq82EdpvpC6B37I9Gsj44IDByAG7xvG44R9RiJ3-ZBbGkAebJXhOtWFcoDoX~pnOcscY~q8C6HdYVG7gsfMWwW0cmD8YsCx0eYAByqMB~lmOWcEiBXFMj3Mcswtsk-5vSZmoiRvYs57g2hq8EHGm77~bOmoseUan2NjJRDwiCJa4X8jWv2qbYN84hEa2vALoxfNNoc0Feq3N9MjACf6H0kg4BpqBS0qG0wXHEjH9L~TwmpkdnjpB8iW2jp~v7XGjm7q5S2ycySQrHxBQAEAAEAAPGosOGDfqdjVcsK1h4tnCQUvuDyOOq1nI9bA2XCCje8T77VNux4z7IncMAZy02G04WD2bYCDusTgbeKCgtGdVoiF9zT3wpqOmpSDfs1fPPnIDZrTt1CJHg4vnu~RhqBoaXLRFjsojZ4lC~UYXWKaawTm0~mvexvSzzXOYwlzAi0Cgp1zHNPHS8BI9afnQjvNGLzdNaZ4gHlC1Am0iNmUA0WvQ3OsZFC7HRoOa9FtzLg8FCgKrIcNORCJKRIknrC7ODVnd5WJsEfrVTQlQXeBwB56POz1lrEEtSRHlMIap6YhKGSDKBpAUubrGqYtkiiOAXJp1QCAqyPaLeZumf2VeJ9AeU6lVvqP6dK3sDf7Tj2lbF7O92LlanedKNoEDa1Ow=="
     I2P_TUNNEL_READY_REGEX = r'[\s\S]*I2P Tunnel has been established'
     I2P_TUNNELLER_LISTENING_REGEX = r'[\s\S]*I2P tunneller listening[\s\S]*'
     I2P_INJECTOR_ADDRESS_RECEIVED_REGEX = r'[\s\S]*Received: I2P seeder[\s\S]*'

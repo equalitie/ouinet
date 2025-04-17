@@ -7,16 +7,10 @@ import os.path
 
 from twisted.internet import reactor, defer, task
 from twisted.internet.endpoints import TCP4ClientEndpoint
-from twisted.internet.protocol import Protocol
-from twisted.web.client import ProxyAgent, Agent, readBody
-from twisted.web.http_headers import Headers
-from twisted.internet.defer import inlineCallbacks, Deferred
-
+# from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
-from twisted.internet.base import DelayedCall
 
 import socket
-import urllib
 
 #making random requests not to relying on cache
 import string

@@ -10,6 +10,7 @@
 #include <Destination.h>
 #include <api.h>
 #include <AddressBook.h>
+#include <ClientContext.h>
 
 using namespace std;
 using namespace ouinet::ouiservice;
@@ -53,14 +54,16 @@ Service::Service(const string& datadir, const AsioExecutor& exec)
     _local_destination->Start ();
 
     //start address book after starting local destination
-    _i2p_address_book = std::make_unique<i2p::client::AddressBook>();
-    _i2p_address_book->Start ();
+    //_i2p_address_book = std::make_unique<i2p::client::AddressBook>();
+    // _i2p_address_book = &i2p::client::context.GetAddressBook();//std::make_unique<i2p::client::AddressBook>();
+    //_i2p_address_book->Start ();
+
     //TOOD: verify if it is correct place to start resolver (or after i2cp starts
 
     //Now we are going to load our pre-defined addresses
-    load_known_hosts_to_address_book();
+    //load_known_hosts_to_address_book();
 
-    _i2p_address_book->StartResolvers();
+    //_i2p_address_book->StartResolvers();
 
 }
 
