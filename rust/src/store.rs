@@ -10,9 +10,9 @@ use std::{
     ffi::OsStr,
     io,
     path::{Path, PathBuf},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
-use tokio::fs;
+use tokio::fs::{self, File};
 use uuid::Uuid;
 
 pub struct Store {
@@ -99,14 +99,14 @@ impl Store {
             constants::RECORD_FILE_EXTENSION
         ));
 
-        let content = crypto::encrypt(&self.encryption_key, record_data.as_bytes())
+        let encrypted_record_data = crypto::encrypt(&self.encryption_key, record_data.as_bytes())
             .map_err(io::Error::other)?;
 
         if let Some(parent) = record_path.parent() {
             fs::create_dir_all(parent).await?;
         }
 
-        fs::write(record_path, &content).await
+        Self::write_record_content(&record_path, encrypted_record_data).await
     }
 
     pub async fn load_stored_records(&self) -> io::Result<Vec<StoredRecord>> {
@@ -138,6 +138,7 @@ impl Store {
             };
 
             let Some((version, device_id, record_number)) = Self::parse_record_name(&name) else {
+                fs::remove_file(&path).await?;
                 continue;
             };
 
@@ -146,8 +147,11 @@ impl Store {
                 continue;
             }
 
-            let created = entry.metadata().await?.created()?;
-            let content = fs::read(&path).await?;
+            let Some((created, content)) = Self::read_record_content(&path).await? else {
+                log::warn!("Failed to parse record {path:?}, removing it");
+                fs::remove_file(&path).await?;
+                continue;
+            };
 
             let delete = match created.elapsed() {
                 Ok(duration) => duration >= constants::DELETE_RECORDS_AFTER,
@@ -211,6 +215,46 @@ impl Store {
         let record_number = record_number_part.parse().ok()?;
 
         Some((version, device_id, record_number))
+    }
+
+    async fn write_record_content(
+        file_path: &Path,
+        encrypted_record_data: Vec<u8>,
+    ) -> io::Result<()> {
+        use tokio::io::AsyncWriteExt;
+
+        let mut file = File::create(file_path).await?;
+        let created = SystemTime::now();
+        let timestamp_ms = created
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        file.write_all(format!("{timestamp_ms}\n").as_bytes())
+            .await?;
+        file.write_all(&encrypted_record_data).await?;
+        file.flush().await
+    }
+
+    async fn read_record_content(file_path: &Path) -> io::Result<Option<(SystemTime, Vec<u8>)>> {
+        use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+
+        let file = File::open(file_path).await?;
+        let mut reader = BufReader::new(file);
+        let mut line = String::new();
+        reader.read_line(&mut line).await?;
+        line.pop(); // Remove trailing new line
+        let Ok(timestamp_ms) = line.parse::<u64>() else {
+            log::warn!("Failed to parse string {line:?} as u64");
+            return Ok(None);
+        };
+        let Some(created) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp_ms))
+        else {
+            log::warn!("Failed add {timestamp_ms} to UNIX_EPOCH");
+            return Ok(None);
+        };
+        let mut encrypted_record_data = Vec::new();
+        reader.read_to_end(&mut encrypted_record_data).await?;
+        Ok(Some((created, encrypted_record_data)))
     }
 }
 
