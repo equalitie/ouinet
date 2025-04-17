@@ -32,7 +32,7 @@ static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
 class ClientConfig {
 public:
-  enum class CacheType { None, Bep5Http, Bep5HttpOverI2P };
+  enum class CacheType { None, Bep5Http, Bep3HTTPOverI2P };
 
     ClientConfig();
 
@@ -616,8 +616,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             }
         }
 #ifdef __EXPERIMENTAL__
-        if (type_str == "bep5-http-over-i2p") {
-            _cache_type = CacheType::Bep5HttpOverI2P;
+        if (type_str == "bep3-http-over-i2p") {
+            _cache_type = CacheType::Bep3HTTPOverI2P;
 
             LOG_DEBUG("Using bep5-http cache over i2p");
 

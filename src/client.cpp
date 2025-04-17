@@ -2561,8 +2561,8 @@ void Client::State::setup_cache(asio::yield_context yield)
 #undef fail_on_error
     }
 #ifdef __EXPERIMENTAL__
-    //setup Bep5HttpOverI2P cache
-    else if (_config.cache_type() == ClientConfig::CacheType::Bep5HttpOverI2P) {
+    //setup Bep3HTTPOverI2P cache
+    else if (_config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P) {
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started      
       if (!_i2p_service) {

@@ -225,7 +225,7 @@ class OuinetTests(TestCase):
         self.run_i2p_bep44_client( TestFixtures.I2P_CLIENT["name"], None
                                    , [ "--disable-origin-access"
                                        , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                       , "--cache-type", "bep5-http-over-i2p",
+                                       , "--cache-type", "bep3-http-over-i2p",
                                        "--log-level", "DEBUG",
                                       ]
                                    , i2p_tunneller_ready, i2p_client_finished_reading)
@@ -277,7 +277,7 @@ class OuinetTests(TestCase):
             self.run_i2p_bep44_client( TestFixtures.I2P_CLIENT["name"], None
                                , [ "--disable-origin-access"
                                  , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                   , "--cache-type", "bep5-http-over-i2p",
+                                   , "--cache-type", "bep3-http-over-i2p",
                                    "--log-level", "DEBUG",
                                  ]
                                  , i2p_tunneller_ready, i2p_client_finished_reading)
