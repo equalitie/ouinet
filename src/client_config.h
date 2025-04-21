@@ -619,28 +619,33 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (type_str == "bep3-http-over-i2p") {
             _cache_type = CacheType::Bep3HTTPOverI2P;
 
-            LOG_DEBUG("Using bep5-http cache over i2p");
+            LOG_DEBUG("Using bep3-http cache over i2p");
 
-            //vmon: perhapse would like to apply the same rationale for discovering i2p end points
-            //as welln
+            if (!_cache_http_pubkey) {
+                throw std::runtime_error(
+                    "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
+            }
 
-            // if (!_cache_http_pubkey) {
-            //     throw std::runtime_error(
-            //         "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
-            // }
+            // An injector can be explicitly set but it should always be an I2P endpoint
+            if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
+                throw std::runtime_error(
+                    util::str("A BEP3-I2P injector is derived implicitly"
+                              " when using '--cache-type=bep3-http-over-i2p',"
+                              " but it is already set to a non I2P endpoint: ",
+                              *_injector_ep));
+            }
 
-            // if (_injector_ep && _injector_ep->type == Endpoint::Bep5Endpoint) {
-            //     throw std::runtime_error(
-            //         util::str("A BEP5 injector endpoint is derived implicitly"
-            //             " when using '--cache-type=bep5-http',"
-            //             " but it is already set to: ", *_injector_ep));
-            // }
-            // if (!_injector_ep) {
-            //     _injector_ep = Endpoint{
-            //         Endpoint::Bep5Endpoint,
-            //         bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-            //     };
-            // }
+            /*
+             * We use an I2P endpoint here as the discovery is performed using BEP3, to support
+             * BEP5 the endpoint should be something different in order to manage multiple
+             * connections when performing the discovery of peers using a DHT.
+             */
+            if (!_injector_ep) {
+                _injector_ep = Endpoint{
+                   Endpoint::I2pEndpoint,
+                   bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+               };
+            }
         }
 #endif // ifdef __EXPERIMENTAL__
 
