@@ -34,6 +34,9 @@ public:
     connect_without_handshake(asio::yield_context yield, Signal<void()>& cancel);
 
 private:
+    using AbstractClient = OuiServiceImplementationClient;
+    struct Swarm;
+
     std::shared_ptr<Service> _service;
     AsioExecutor _exec;
     std::string _target_id;
@@ -44,6 +47,9 @@ private:
     uint16_t _port;
     // Triggered by destructor and Client::stop
     Cancel _stopped;
+
+    std::string _injector_swarm_name;
+    std::shared_ptr<Swarm> _injector_swarm;
 };
 
 } // namespaces

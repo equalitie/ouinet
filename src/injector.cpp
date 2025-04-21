@@ -16,6 +16,7 @@
 #include "cache/http_sign.h"
 
 #include "bittorrent/dht.h"
+#include "bittorrent/bep3_announcer.h"
 
 #include "namespaces.h"
 #include "util.h"
@@ -852,6 +853,7 @@ int main(int argc, const char* argv[])
     AsioExecutor ex = ioc.get_executor();
 
     shared_ptr<bt::MainlineDht> bt_dht_ptr;
+    shared_ptr<bt::Bep3PeriodicAnnouncer> bt_bep3_announcer;
 
     auto bittorrent_dht = [&bt_dht_ptr, &config, ex] {
         if (bt_dht_ptr) return bt_dht_ptr;
@@ -865,6 +867,9 @@ int main(int argc, const char* argv[])
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
     };
+
+    // TODO: Enable BEP3 announcements with a config value
+    bt_bep3_announcer = make_unique<bt::Bep3PeriodicAnnouncer>(ex, config.bep5_injector_swarm_name());
 
     if (!config.is_proxy_enabled())
         LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
@@ -1030,11 +1035,14 @@ int main(int argc, const char* argv[])
 
     unique_ptr<ForceExitOnSignal> force_exit;
 
-    signals.async_wait([&cancel, &signals, &force_exit, &bt_dht_ptr]
+    signals.async_wait([&cancel, &signals, &force_exit, &bt_dht_ptr, &bt_bep3_announcer]
                        (const sys::error_code& ec, int signal_number) {
             if (bt_dht_ptr) {
                 bt_dht_ptr->stop();
                 bt_dht_ptr = nullptr;
+            }
+            if (bt_bep3_announcer) {
+                bt_bep3_announcer = nullptr;
             }
             cancel();
             signals.clear();
