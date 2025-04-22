@@ -129,10 +129,6 @@ public:
         return _front_end_access_token;
     }
 
-    bool debug_front_end_access_token() const {
-        return _debug_front_end_access_token;
-    }
-
     boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
         return _cache_http_pubkey;
     }
@@ -210,9 +206,6 @@ private:
             , po::value<string>()
             , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
               "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
-           // TODO: Remove this option once we're done with the debugging
-           ("debug-front-end-access-token", po::bool_switch()->default_value(false)
-            , "Enable debugging of the --front-end-access-token option (This options it temporary)")
            ("disable-bridge-announcement"
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
             , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
@@ -455,7 +448,6 @@ private:
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
     boost::optional<std::string> _front_end_access_token;
-    bool _debug_front_end_access_token = false;
     bool _disable_bridge_announcement = false;
 
     boost::posix_time::time_duration _max_cached_age

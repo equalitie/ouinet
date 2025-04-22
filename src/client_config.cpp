@@ -155,15 +155,6 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _front_end_access_token = *opt;
     }
 
-    if (auto opt = as_optional<bool>(vm, "debug-front-end-access-token")) {
-        if (*opt) {
-            if (!_front_end_access_token) {
-                throw error("--debug-front-end-access-token must be used with --front-end-access-token");
-            }
-            _debug_front_end_access_token = *opt;
-        }
-    }
-
     if (auto opt = as_optional<bool>(vm, "disable-bridge-announcement")) {
         _disable_bridge_announcement = *opt;
     }
