@@ -68,6 +68,7 @@ public:
 
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
+    bool is_cache_bep5() const { return _cache_type == CacheType::Bep5Http; }
 
     boost::posix_time::time_duration max_cached_age() const {
         return _max_cached_age;
