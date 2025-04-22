@@ -8,6 +8,9 @@ SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-omni}
 
+CMAKE_WITH_ASAN=${WITH_ASAN}
+CMAKE_WITH_EXPERIMENTAL=${WITH_EXPERIMENTAL}
+
 RELEASE_BUILD=0
 while getopts r option; do
     case "$option" in
@@ -81,6 +84,9 @@ EOF
 
 # Export variables required by subprocesses (always prefixed with `OUINET_`).
 export OUINET_MIN_API OUINET_TARGET_API
+
+# Export CMake extra flags so they can be used when invoked by Gradle (always prefixed with `CMAKE_`).
+export CMAKE_WITH_ASAN CMAKE_WITH_EXPERIMENTAL
 
 ######################################################################
 MODES=
