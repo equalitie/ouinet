@@ -4,30 +4,24 @@
 
 #include "tunnel.h"
 
-namespace i2p { namespace data {
+namespace i2p::data {
     class PrivateKeys;
-}}
+}
 
-namespace i2p { namespace client {
+namespace i2p::client {
     class I2PServerTunnel;
-}}
+}
 
-namespace ouinet {
-namespace ouiservice {
-namespace i2poui {
+namespace ouinet::ouiservice::i2poui {
 
 class Service;
 
 class Server : public ouinet::OuiServiceImplementationServer {
-private:
-    // Client is constructed by i2poui::Service
-    friend class Service;
+public:
 
     Server( std::shared_ptr<Service> service
           , const std::string& private_key_filename
             , uint32_t timeout, const AsioExecutor&);
-
-    void load_private_key(const std::string& key_file_name);
 
 public:
     ~Server();
@@ -37,7 +31,13 @@ public:
 
     GenericStream accept(asio::yield_context yield) override;
 
+    // Only used in tests
+    GenericStream accept_without_handshake(asio::yield_context yield);
+
     std::string public_identity() const;
+
+private:
+    void load_private_key(const std::string& key_file_name);
 
 private:
     std::shared_ptr<Service> _service;
@@ -47,8 +47,9 @@ private:
 
     std::unique_ptr<Tunnel> _server_tunnel;
     asio::ip::tcp::acceptor _tcp_acceptor;
+
+    // Triggered by destructor and Server::stop_listen
+    Cancel _stopped;
 };
 
-} // i2poui namespace
-} // ouiservice namespace
-} // ouinet namespace
+} // namespaces

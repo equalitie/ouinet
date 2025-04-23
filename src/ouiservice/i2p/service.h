@@ -12,26 +12,25 @@
 
 #include "../../ouiservice.h"
 
-namespace i2p { namespace client {
+namespace i2p::client {
     class ClientDestination;
     class AddressBook;
-}}
+    class I2CPServer;
+}
 
-namespace ouinet {
-namespace ouiservice {
-namespace i2poui {
+namespace ouinet::ouiservice::i2poui {
 
 class Service : public std::enable_shared_from_this<Service> {
 public:
-    // because by default to prioritize bypassing censorship over providing high-level of anominty
-    // the default tunnel length is set to 1 (rather than 3 by default), that makes I2P connections faster
-    Service(const std::string& datadir, const AsioExecutor&, const size_t _number_of_hops_per_tunnel = 1);
+    // because by default usage of i2p service is to  prioritize anominty 
+    // the default tunnel length is set to 3. To makes I2P connections faster this could be reduced to 1
+    Service(const std::string& datadir, const AsioExecutor&, const size_t _number_of_hops_per_tunnel = 3);
 
     Service(const Service&) = delete;
     Service& operator=(const Service&) = delete;
 
-    Service(Service&&);
-    Service& operator=(Service&&);
+    Service(Service&&) = delete;
+    Service& operator=(Service&&) = delete;
 
     ~Service();
 
@@ -44,28 +43,26 @@ public:
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
     std::unique_ptr<Client> build_client(const std::string& target_id);
 
-  // simply start the I2CP server on the pre-defined port
-  void start_i2cp_server();
+    // simply start the I2CP server on the pre-defined port
+    void start_i2cp_server();
 
-  // simply the tunneller service for testing bittorent dht over i2p
-  void start_tunneller_service();
+    // simply the tunneller service for testing bittorent dht over i2p
+    void start_tunneller_service();
   
 protected:
-  void load_known_hosts_to_address_book();
+    void load_known_hosts_to_address_book();
 
     AsioExecutor _exec;
     std::string _data_dir;
-    // all client tunnels share local destination, because destination is expensive    
-  std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 
-     //We run an address book as soon as we start the the i2pd daemon simialr to i2pd client
-  i2p::client::AddressBook* _i2p_address_book;  
+    // all client tunnels share local destination, because destination is expensive
+    std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 
-  std::unique_ptr<I2CPServer> _i2cpserver;
-  std::unique_ptr<TunnellerService> _i2p_tunneller;
-  
+    // We run an address book as soon as we start the the i2pd daemon simialr to i2pd client
+    std::unique_ptr<i2p::client::AddressBook> _i2p_address_book;
+
+    std::unique_ptr<i2p::client::I2CPServer> _i2cpserver;
+    std::unique_ptr<TunnellerService> _i2p_tunneller;
 };
 
-} // i2poui namespace
-} // ouiservice namespace
-} // ouinet namespace
+} // namespaces

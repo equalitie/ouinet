@@ -6,5 +6,5 @@
 (gdb (concat "gdb -i=mi -x client --args " ouinet-build-dir "/client --repo repos/client --disable-cache --listen-on-tcp 127.0.0.1:3888 --injector-ep i2p:" injector-i2p-public-id " --log-level DEBUG"))
 
 ;;i2p client with i2psnark test cache
-(gdb (concat "gdb -i=mi -x client  --args " ouinet-build-dir "/client --repo repos/client --cache-type bep5-http-over-i2p --listen-on-tcp 127.0.0.1:3888 --front-end-ep 127.0.0.1:3889 --log-level DEBUG"))
+(gdb (concat "gdb -i=mi -x client  --args " ouinet-build-dir "/client --repo repos/client --cache-type bep3-http-over-i2p --listen-on-tcp 127.0.0.1:3888 --front-end-ep 127.0.0.1:3889 --log-level DEBUG"))
 

@@ -1,12 +1,9 @@
 [submodule "src/ouiservice/i2p/i2pd"]
 	path = src/ouiservice/i2p/i2pd
 	url = https://gitlab.com/equalitie/i2pd.git
-	branch = vmon--upgrade-to-latest-purple-i2p-20241017
 [submodule "modules/asio-utp"]
 	path = modules/asio-utp
 	url = https://gitlab.com/equalitie/asio-utp.git
 [submodule "modules/cpp-upnp"]
 	path = modules/cpp-upnp
 	url = https://gitlab.com/equalitie/cpp-upnp.git
-[submodule ".src/ouiservice/i2p/i2pd"]
-	branch = openssl

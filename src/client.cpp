@@ -236,6 +236,7 @@ public:
         // TODO: check front-end acceptor
         bool use_injector(_config.injector_endpoint());
         bool use_cache(_config.is_cache_enabled());
+        bool use_cache_bep5(use_cache && _config.is_cache_bep5());
         if (use_injector && _injector_starting)
             return Client::RunningState::Starting;
         if (use_cache && _cache_starting)
@@ -244,7 +245,7 @@ public:
             return Client::RunningState::Degraded;
         if (use_cache && _cache_start_ec)
             return Client::RunningState::Degraded;
-        if (use_cache && !_bt_dht->is_bootstrapped())
+        if (use_cache_bep5 && !_bt_dht->is_bootstrapped())
             return Client::RunningState::Degraded;
 
         return Client::RunningState::Started;
@@ -2561,12 +2562,14 @@ void Client::State::setup_cache(asio::yield_context yield)
 #undef fail_on_error
     }
 #ifdef __EXPERIMENTAL__
-    //setup Bep5HttpOverI2P cache
-    else if (_config.cache_type() == ClientConfig::CacheType::Bep5HttpOverI2P) {
+    //setup Bep3HTTPOverI2P cache
+    else if (_config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P) {
+      // set _upnps just to prevent crashes when displaying its status in the frontend interface
+      _upnps = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started      
       if (!_i2p_service) {
-        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
+        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
       }
       
       _i2p_service->start_i2cp_server();

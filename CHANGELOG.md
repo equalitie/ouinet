@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- A new `file_io` component that supports asynchronous I/O operations for
+Windows systems.
+
+### Changed
+
+- Docker builder images for Android and Linux have now installed a Rust toolchain.
+
+
+## [v0.31.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.31.1) - 2025-01-28
+
+### Changed
+
+- Functionality to `OuinetBackground` kotlin wrapper was modified, allowing the
+notification associated with the `OuinetService` to be disabled.
+
 ### Fixed
 
 - URL to download Boost is pointing now to `archives.boost.io`.
