@@ -93,6 +93,7 @@ public class ConfigTest {
         Config config = new Config.ConfigBuilder(mockContext)
                 .setBtBootstrapExtras(BT_BOOTSTRAP_EXTRAS)
                 .setCacheHttpPubKey(CACHE_HTTP_PUB_KEY)
+                .setInjectorEp(INJECTOR_ENDPOINT)
                 .setInjectorCredentials(INJECTOR_CREDENTIALS)
                 .setInjectorTlsCert(INJECTOR_TLS_CERT)
                 .setTlsCaCertStorePath(TLS_CA_CERT_PATH)
@@ -111,6 +112,7 @@ public class ConfigTest {
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
         assertThat(config.getBtBootstrapExtras(), is(BT_BOOTSTRAP_EXTRAS));
         assertThat(config.getCacheHttpPubKey(), is(CACHE_HTTP_PUB_KEY));
+        assertThat(config.getInjectorEp(), is(INJECTOR_ENDPOINT));
         assertThat(config.getInjectorCredentials(), is(INJECTOR_CREDENTIALS));
         assertThat(config.getCaRootCertPath(), is(caRootCertPath));
         assertThat(config.getCacheType(), is(CACHE_TYPE));

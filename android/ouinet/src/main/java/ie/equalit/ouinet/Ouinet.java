@@ -123,6 +123,7 @@ public class Ouinet {
         maybeAdd(args, "--local-domain",           config.getLocalDomain());
         maybeAdd(args, "--origin-doh-base",        config.getOriginDohBase());
 
+        maybeAdd(args, "--injector-ep",            config.getInjectorEp());
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
         maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
