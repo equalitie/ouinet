@@ -1543,6 +1543,8 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
         });
     };
 
+    LOG_DEBUG("Metrics direct: ec:\"", direct_ec.message(), "\" result:", direct_session.response_header().result());
+
     if (!direct_ec) {
         ignore_rest(direct_session, cancel, yield);
 
@@ -1555,8 +1557,16 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
         }
     }
 
+    sys::error_code injector_ec;
+
     // Sending directly failed, try sending through the injector.
-    auto injector_session = fetch_fresh_through_connect_proxy(req, tls_ctx, {}, cancel, yield);
+    auto injector_session = fetch_fresh_through_connect_proxy(req, tls_ctx, {}, cancel, yield[injector_ec]);
+
+    LOG_DEBUG("Metrics injector: ec:\"", injector_ec.message(), "\" result:", injector_session.response_header().result());
+
+    if (injector_ec) {
+        throw_error(injector_ec);
+    }
 
     ignore_rest(injector_session, cancel, yield);
 
