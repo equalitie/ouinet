@@ -7,7 +7,6 @@
 //i2p stuff
 #include <I2CP.h>
 #include <I2PTunnel.h>
-#include <Log.h>
 #include <Identity.h>
 #include <Destination.h>
 #include <api.h>
@@ -18,6 +17,13 @@ using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
+#include "../../logger.h"
+//Includeding logger doesn't work for a reason I do not understand
+#define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
+
 static const uint16_t i2cp_port = 7454;
 
 Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _number_of_hops_per_tunnel)
@@ -27,10 +33,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
     //here we are going to read the config file and
     //set options based on those values for now we just
     //set it up by some default values;
-
-    i2p::log::Logger().Start();
-
-    LogPrint(eLogInfo, "Starting i2p tunnels");
+    LOG_INFO("Starting i2p tunnels");
 
     string datadir_arg = "--datadir=" + datadir;
 
@@ -46,7 +49,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
     //i2pd does not support more than 8 hops
     auto no_of_tunnel_hops_str = std::to_string(std::min(_number_of_hops_per_tunnel, (size_t)(8)));
 
-    LogPrint(eLogInfo, "Number of hops in I2P inbound and outbound tunnels is set to be " + no_of_tunnel_hops_str);
+    LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be " + no_of_tunnel_hops_str);
     // we set ack delay to 20 ms, because this outnet is considered as low-latency
     std::map<std::string, std::string> params =
     {
@@ -60,17 +63,11 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
     // Start destination's thread and tunnel pool
     _local_destination->Start ();
 
-    // Start address book after starting local destination
-    // _i2p_address_book = std::make_unique<i2p::client::AddressBook>();
-    // _i2p_address_book = &i2p::client::context.GetAddressBook();//std::make_unique<i2p::client::AddressBook>();
-    // _i2p_address_book->Start ();
+    // Access the client address book 
+    _i2p_address_book = &i2p::client::context.GetAddressBook();
 
-    // TOOD: verify if it is correct place to start resolver (or after i2cp starts
-
-    // Now we are going to load our pre-defined addresses
-    // load_known_hosts_to_address_book();
-
-    //_i2p_address_book->StartResolvers();
+    //we do not need to start the address book. It is seemingly has been initiated by the client context
+    load_known_hosts_to_address_book();
 
 }
 
@@ -102,14 +99,21 @@ void Service::start_tunneller_service() {
 
 void Service::load_known_hosts_to_address_book()
 {
-  std::ifstream f(_data_dir + "/" + "hosts.txt", std::ifstream::in);
-  if (f.is_open ())
-    {
-      _i2p_address_book->LoadHostsFromStream (f, false);
-      LogPrint(eLogInfo, "Pre-resolved host loaded!");
-    }
-  else
-    {
-      LogPrint(eLogWarning, "Failed to load host resolver!");
-    }
+  if (_i2p_address_book) {
+    std::ifstream f(_data_dir + "/" + "hosts.txt", std::ifstream::in);
+    if (f.is_open ())
+      {
+        _i2p_address_book->LoadHostsFromStream (f, false);
+        LOG_INFO("Pre-resolved host loaded!");
+
+      }
+    else
+      {
+        LOG_WARN("Failed to load host resolver file!");
+      }
+  } else {
+    //inform then panic!
+    LOG_ABORT("address book has not been initiated before loading!");
+  }
+    
 }

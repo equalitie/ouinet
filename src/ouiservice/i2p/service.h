@@ -12,6 +12,7 @@
 
 #include "../../ouiservice.h"
 
+
 namespace i2p::client {
     class ClientDestination;
     class AddressBook;
@@ -59,7 +60,7 @@ protected:
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
 
     // We run an address book as soon as we start the the i2pd daemon simialr to i2pd client
-    std::unique_ptr<i2p::client::AddressBook> _i2p_address_book;
+    i2p::client::AddressBook* _i2p_address_book = nullptr;
 
     std::unique_ptr<i2p::client::I2CPServer> _i2cpserver;
     std::unique_ptr<TunnellerService> _i2p_tunneller;

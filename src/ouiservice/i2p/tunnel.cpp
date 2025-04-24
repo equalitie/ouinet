@@ -3,7 +3,6 @@
 
 #include "../../logger.h"
 #include "../../defer.h"
-#include "../../or_throw.h"
 
 #include "tunnel.h"
 
