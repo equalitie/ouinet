@@ -30,6 +30,7 @@ static const fs::path log_file_name{_LOG_FILE_NAME};
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
+  //TODO: move this to somewhere where both client and injector config has access to
 #ifdef __EXPERIMENTAL__
 #define _MAX_I2P_HOPS 8
 #endif // ifdef __EXPERIMENTAL__
@@ -210,6 +211,10 @@ private:
             , "<username>:<password> authentication pair for the injector")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the injector's TLS certificate; enable TLS for TCP and uTP")
+#ifdef __EXPERIMENTAL__
+          ("i2p-hops-per-tunnel", po::value<size_t>()
+            , "number intermediary hops to be used for I2P garlic routing.")
+#endif // ifdef __EXPERIMENTAL__
            ;
 
         po::options_description cache("Cache options");
@@ -421,7 +426,7 @@ private:
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
 
 #ifdef __EXPERIMENTAL__
-  size_t _i2p_hops_per_tunnel = 1;
+  size_t _i2p_hops_per_tunnel = 3;
 #endif // ifdef __EXPERIMENTAL__
   
 };

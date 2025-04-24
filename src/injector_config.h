@@ -14,6 +14,10 @@
 #include "bittorrent/bootstrap.h"
 
 namespace ouinet {
+  //TODO: move this to somewhere where both client and injector config has access to
+#ifdef __EXPERIMENTAL__
+#define _MAX_I2P_HOPS 8
+#endif // ifdef __EXPERIMENTAL__
 
 class InjectorConfig {
 public:
@@ -44,6 +48,11 @@ public:
 #ifdef __EXPERIMENTAL__
     bool listen_on_i2p() const
     { return _listen_on_i2p; }
+
+  size_t i2p_hops_per_tunnel() const {
+      return _i2p_hops_per_tunnel;
+    }
+
 #endif // ifdef __EXPERIMENTAL__
 
     std::string bep5_injector_swarm_name() const
@@ -112,6 +121,7 @@ private:
     boost::optional<size_t> _open_file_limit;
 #ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
+    size_t _i2p_hops_per_tunnel = 3;
 #endif // ifdef __EXPERIMENTAL__
     std::string _tls_ca_cert_store_path;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
@@ -170,6 +180,8 @@ InjectorConfig::options_description()
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
+      ("i2p-hops-per-tunnel", po::value<size_t>()
+       , "number intermediary hops to be used for I2P garlic routing.")
 #endif // ifdef __EXPERIMENTAL__
         // It always announces the TLS uTP endpoint since
         // a TLS certificate is always generated.
@@ -291,6 +303,28 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
         _listen_on_i2p = (value == "true");
     }
+
+    if (vm.count("i2p-hops-per-tunnel")) {
+        auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
+
+        if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
+            throw std::runtime_error(util::str(
+                "The '--i2p-hops-per-tunnel' argument expects an integer "
+                "between 1 and 8"
+                ));
+        }
+
+        if (!(//If we are not listening on i2p 
+              (_listen_on_i2p)))
+          {
+            throw std::runtime_error(
+                "The '--i2p-hops-per-tunnel' argument must be used with "
+                "'--listen-on-i2p option");
+          }
+
+        _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
+    }
+
 #endif // ifdef __EXPERIMENTAL__
 
     if (vm.count("listen-on-tcp")) {

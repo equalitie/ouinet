@@ -7,8 +7,9 @@ import os.path
 
 from twisted.internet import reactor, defer, task
 from twisted.internet.endpoints import TCP4ClientEndpoint
-# from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
+from twisted.web.client import ProxyAgent, readBody
 
 import socket
 
@@ -307,7 +308,9 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         # #injector
         i2pinjector_tunnel_ready = defer.Deferred()
-        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true", "--log-level", "DEBUG",
+        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true",
+                                             "--i2p-hops-per-tunnel", str(TestFixtures.I2P_NUMBER_TUNNEL_HOPS),
+                                             "--log-level", "DEBUG",
                                              ], i2pinjector_tunnel_ready) #"--disable-cache"
 
         #wait for the injector tunnel to be advertised
@@ -334,8 +337,9 @@ class OuinetTests(TestCase):
             self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
                                , [ "--disable-origin-access", "--disable-cache"
                                  , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                   , "--injector-ep", "i2p:" + injector_i2p_public_id,
-                                   "--log-level", "DEBUG",
+                                   , "--injector-ep", "i2p:" + injector_i2p_public_id
+                                   , "--i2p-hops-per-tunnel", str(TestFixtures.I2P_NUMBER_TUNNEL_HOPS)
+                                   , "--log-level", "DEBUG",
                                  ]
                                , i2pclient_tunnel_ready)
         

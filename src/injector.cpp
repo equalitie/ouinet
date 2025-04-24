@@ -1001,7 +1001,7 @@ int main(int argc, const char* argv[])
     }
 
     if (config.listen_on_i2p()) {
-        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ex);
+      auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();

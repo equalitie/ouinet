@@ -124,6 +124,7 @@ class OuinetProcess(object):
 
         self._proc_protocol.app_name = self.config.app_name
 
+        logging.debug("Spawning process " + " ".join(self.config.argv))        
         self._proc = reactor.spawnProcess(self._proc_protocol,
                                           self.config.argv[0],
                                           self.config.argv,

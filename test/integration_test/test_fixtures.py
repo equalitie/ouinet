@@ -50,6 +50,8 @@ class TestFixtures:
 
     I2P_CLIENT = {"name":"i2p_client", "port": 3888, "i2cp_port": 7454,}
     I2P_DISCOVERED_ID_ANNOUNCE_PORT = 8998
+
+    I2P_NUMBER_TUNNEL_HOPS = 3
     
     MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5

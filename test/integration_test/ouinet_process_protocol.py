@@ -55,6 +55,8 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         #    raise Exception("error")
 
     def check_next_level_got_ready(self, data):
+        # if re.match(TestFixtures.I2P_TUNNEL_READY_REGEX, data):
+        #     pdb.set_trace()
         if len(self._ready_benchmark_regexes) > self._got_ready_level + 1:
             return re.match(self._ready_benchmark_regexes[self._got_ready_level + 1], data)
 
