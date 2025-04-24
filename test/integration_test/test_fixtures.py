@@ -20,6 +20,7 @@ class TestFixtures:
     
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
+        "test_bep44_caching_of_i2p_served_content": I2P_TRANSPORT_TIMEOUT + BEP44_CACHE_TIMEOUT,
         "test_externally_discovered_i2p_injector": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_i2cp_server": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
@@ -51,7 +52,8 @@ class TestFixtures:
     I2P_CLIENT = {"name":"i2p_client", "port": 3888, "i2cp_port": 7454,}
     I2P_DISCOVERED_ID_ANNOUNCE_PORT = 8998
 
-    I2P_NUMBER_TUNNEL_HOPS = 3
+    I2P_ANON_TUNNEL_HOP_COUNT = 3
+    I2P_FAST_TUNNEL_HOP_COUNT = 1
     
     MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
