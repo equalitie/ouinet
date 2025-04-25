@@ -5,8 +5,8 @@ use crate::{
         request::{self, RequestId, RequestType},
         BootstrapId, IpVersion, Metrics,
     },
-    metrics_runner::{metrics_runner, MetricsRunnerError},
-    record_processor::{RecordProcessor, RecordProcessorError},
+    metrics_runner::metrics_runner,
+    record_processor::RecordProcessor,
     runtime,
     store::Store,
 };
@@ -179,16 +179,7 @@ impl Client {
                 let metrics = metrics.clone();
                 let device_id_rx = store.device_id.subscribe();
                 let job_handle = task::spawn(async move {
-                    if let Err(error) = metrics_runner(metrics, store, processor_rx).await {
-                        match error {
-                            MetricsRunnerError::RecordProcessor(
-                                RecordProcessorError::CxxDisconnected,
-                            ) => (),
-                            MetricsRunnerError::Io(error) => {
-                                log::error!("Metrics runner finished with an error: {error:?}")
-                            }
-                        }
-                    }
+                    metrics_runner(metrics, store, processor_rx).await;
                 });
 
                 (

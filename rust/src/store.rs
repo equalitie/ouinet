@@ -3,6 +3,7 @@ use crate::{
     constants,
     crypto::{self, EncryptionKey},
     device_id::DeviceId,
+    record_id::RecordId,
     record_number::RecordNumber,
 };
 use serde::{Deserialize, Serialize};
@@ -73,27 +74,18 @@ impl Store {
         }
     }
 
-    pub async fn oldest_non_current_record(&self) -> io::Result<Option<StoredRecord>> {
-        let current_device_id = self.device_id.get();
-        let current_record_number = self.record_number.get();
-
-        let record = self
-            .load_stored_records()
-            .await?
-            .into_iter()
-            .filter(|record| !record.is_current(current_device_id, current_record_number))
-            .min_by(|l, r| l.created.cmp(&r.created));
-
-        Ok(record)
+    pub fn current_record_id(&self) -> RecordId {
+        RecordId {
+            device_id: self.device_id.get(),
+            sequence_number: self.record_number.get(),
+        }
     }
 
     pub async fn store_record(&self, record_data: String) -> io::Result<()> {
         // TODO: Store into '.tmp' file first and then rename?
-        let device_id = self.device_id.get();
-        let record_number = self.record_number.get();
+        let current_record_id = self.current_record_id();
 
-        let record_name =
-            Self::build_record_name(constants::RECORD_VERSION, device_id, record_number);
+        let record_name = Self::build_record_name(constants::RECORD_VERSION, current_record_id);
         let record_path = self.records_dir_path.join(format!(
             "{record_name}.{}",
             constants::RECORD_FILE_EXTENSION
@@ -138,11 +130,16 @@ impl Store {
             };
 
             let Some((version, device_id, record_number)) = Self::parse_record_name(&name) else {
+                log::warn!("Failed to parse record name {name:?}, removing it");
                 fs::remove_file(&path).await?;
                 continue;
             };
 
             if version != constants::RECORD_VERSION {
+                log::warn!(
+                    "Record {name:?} has incompatible version {}, removing it",
+                    constants::RECORD_VERSION
+                );
                 fs::remove_file(&path).await?;
                 continue;
             }
@@ -153,20 +150,30 @@ impl Store {
                 continue;
             };
 
-            let delete = match created.elapsed() {
-                Ok(duration) => duration >= constants::DELETE_RECORDS_AFTER,
+            match created.elapsed() {
+                Ok(duration) => {
+                    if duration >= constants::DELETE_RECORDS_AFTER {
+                        log::warn!("Record {name:?} is too old ({duration:?}), removing it");
+                        fs::remove_file(&path).await?;
+                        continue;
+                    }
+                }
                 // System has moved time to prior to creating the record.
-                Err(_) => true,
+                Err(_) => {
+                    log::warn!(
+                        "Record {name:?} has invalid creation time (created:{created:?}, now:{:?}), removing it",
+                        SystemTime::now()
+                    );
+                    fs::remove_file(&path).await?;
+                    continue;
+                }
             };
 
-            if delete {
-                fs::remove_file(&path).await?;
-                continue;
-            }
-
             records.push(StoredRecord {
-                device_id,
-                record_number,
+                id: RecordId {
+                    device_id,
+                    sequence_number: record_number,
+                },
                 path,
                 created,
                 content,
@@ -189,8 +196,8 @@ impl Store {
         }
     }
 
-    fn build_record_name(version: u32, device_id: Uuid, record_number: u32) -> String {
-        format!("v{version}_{device_id}_{record_number}")
+    pub fn build_record_name(version: u32, record_id: RecordId) -> String {
+        format!("v{version}_{}", record_id.to_string())
     }
 
     fn parse_record_name(
@@ -260,8 +267,7 @@ impl Store {
 
 #[derive(Debug)]
 pub struct StoredRecord {
-    pub device_id: Uuid,
-    pub record_number: u32,
+    pub id: RecordId,
     pub path: PathBuf,
     pub created: SystemTime,
     pub content: Vec<u8>,
@@ -273,21 +279,12 @@ impl StoredRecord {
     }
 
     pub fn name(&self) -> String {
-        Store::build_record_name(
-            constants::RECORD_VERSION,
-            self.device_id,
-            self.record_number,
-        )
-    }
-
-    pub fn is_current(&self, device_id: Uuid, record_number: u32) -> bool {
-        self.device_id == device_id && self.record_number == record_number
+        Store::build_record_name(constants::RECORD_VERSION, self.id)
     }
 }
 
 #[derive(Serialize, Deserialize)]
 struct StoredRecordContent {
-    // TODO: Should we get this from file meta-data?
     created: SystemTime,
     #[serde(with = "serde_bytes")]
     data: Vec<u8>,

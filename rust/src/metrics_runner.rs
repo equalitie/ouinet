@@ -50,6 +50,43 @@ impl fmt::Debug for Event {
 
 pub async fn metrics_runner(
     metrics: Arc<Mutex<Metrics>>,
+    store: Store,
+    record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
+) {
+    log::debug!("Metrics runner started with initial state:");
+
+    log::debug!(
+        "  Current record ID: {}",
+        store.current_record_id().to_string()
+    );
+    match store.load_stored_records().await {
+        Ok(stored_records) => {
+            log::debug!(
+                "  Stored records: {:?}",
+                stored_records.iter().map(|r| r.name()).collect::<Vec<_>>()
+            );
+        }
+        Err(error) => {
+            log::error!("Failed to read stored records: {error:?}, Metrics runner finished");
+            return;
+        }
+    }
+
+    match metrics_runner_(metrics, store, record_processor_rx).await {
+        Ok(()) => {
+            log::debug!("Metrics runner finished with Ok")
+        }
+        Err(MetricsRunnerError::RecordProcessor(RecordProcessorError::CxxDisconnected)) => {
+            log::debug!("Metrics runner finished with CxxDisconnected")
+        }
+        Err(MetricsRunnerError::Io(error)) => {
+            log::error!("Metrics runner finished with an error: {error:?}")
+        }
+    }
+}
+
+pub async fn metrics_runner_(
+    metrics: Arc<Mutex<Metrics>>,
     mut store: Store,
     record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
 ) -> Result<(), MetricsRunnerError> {
@@ -94,7 +131,22 @@ impl EventHandler {
         match event {
             Event::ProcessOneRecord(record_processor) => {
                 if self.oldest_record.is_none() {
-                    self.oldest_record = store.oldest_non_current_record().await?;
+                    let current_record_id = store.current_record_id();
+                    let stored_records = store.load_stored_records().await?;
+
+                    log::debug!(
+                        "  Records on disk: {:?}, current: {:?}",
+                        stored_records.iter().map(|r| r.name()).collect::<Vec<_>>(),
+                        Store::build_record_name(
+                            crate::constants::RECORD_VERSION,
+                            current_record_id
+                        )
+                    );
+
+                    self.oldest_record = stored_records
+                        .into_iter()
+                        .filter(|record| record.id != current_record_id)
+                        .min_by(|l, r| l.created.cmp(&r.created));
                 }
 
                 let Some(record) = &self.oldest_record else {
@@ -115,11 +167,7 @@ impl EventHandler {
             }
             Event::MetricsModified { metrics_enabled } => {
                 if metrics_enabled {
-                    if store_record(store, metrics).await? {
-                        log::debug!("  stored");
-                    } else {
-                        log::debug!("  no new data");
-                    }
+                    store_record(store, metrics).await?;
                 }
             }
             Event::RotateDeviceId { metrics_enabled } => {
@@ -213,7 +261,7 @@ impl EventListener {
     }
 }
 
-async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<bool> {
+async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<()> {
     let record = metrics.lock().unwrap().collect();
 
     // Backoff may have stopped due to there being no records *or* because the one record that was
@@ -221,11 +269,17 @@ async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result
     store.backoff.resume();
 
     if let Some(record) = record {
+        log::debug!(
+            "  Storing record {:?}",
+            store.current_record_id().to_string()
+        );
         store.store_record(record).await?;
-        Ok(true)
+        log::debug!("  Done");
     } else {
-        Ok(false)
+        log::debug!("  No new data to store");
     }
+
+    Ok(())
 }
 
 enum EventResult {
@@ -247,16 +301,10 @@ mod tests {
     use crate::{
         crypto::{DecryptionKey, EncryptionKey},
         logger,
+        record_id::RecordId,
     };
     use std::collections::BTreeSet;
     use tmpdir::TmpDir;
-    use uuid::Uuid;
-
-    #[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
-    struct RecordId {
-        device_id: Uuid,
-        record_no: u32,
-    }
 
     struct Setup {
         _tmpdir: TmpDir,
@@ -298,17 +346,14 @@ mod tests {
                 .unwrap()
                 .iter()
                 .map(|rs| RecordId {
-                    device_id: rs.device_id,
-                    record_no: rs.record_number,
+                    device_id: rs.id.device_id,
+                    sequence_number: rs.id.sequence_number,
                 })
                 .collect()
         }
 
         fn current_record_id(&self) -> RecordId {
-            RecordId {
-                device_id: self.store.device_id.get(),
-                record_no: self.store.record_number.get(),
-            }
+            self.store.current_record_id()
         }
 
         async fn modify_metrics_and_process(&mut self) {
@@ -336,7 +381,7 @@ mod tests {
         assert!(setup.stored_record_ids().await.is_empty());
 
         let record0_id = setup.current_record_id();
-        assert_eq!(record0_id.record_no, 0);
+        assert_eq!(record0_id.sequence_number, 0);
 
         setup.modify_metrics_and_process().await;
 
@@ -362,7 +407,7 @@ mod tests {
         let record1_id = setup.current_record_id();
 
         assert_eq!(record0_id.device_id, record1_id.device_id);
-        assert_ne!(record0_id.record_no, record1_id.record_no);
+        assert_ne!(record0_id.sequence_number, record1_id.sequence_number);
 
         // Metrics hasn't been modified yet, so no new record has been created
         assert_eq!(
@@ -386,7 +431,7 @@ mod tests {
         let record2_id = setup.current_record_id();
 
         assert_ne!(record1_id.device_id, record2_id.device_id);
-        assert_eq!(record2_id.record_no, 0);
+        assert_eq!(record2_id.sequence_number, 0);
 
         // Nothing changes yet
         assert_eq!(
