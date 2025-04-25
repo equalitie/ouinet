@@ -3,7 +3,6 @@
 #include "../../ouiservice.h"
 
 #include "tunnel.h"
-#include <bits/stdint-uintn.h>
 
 namespace i2p { namespace data {
     class PrivateKeys;

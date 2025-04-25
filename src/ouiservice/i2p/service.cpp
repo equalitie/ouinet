@@ -1,8 +1,6 @@
 #include <map>
 #include <string>
 #include <algorithm>
-#include "service.h"
-#include "i2cp_server.h"
 
 //i2p stuff
 #include <I2CP.h>
@@ -13,16 +11,19 @@
 #include <AddressBook.h>
 #include <ClientContext.h>
 
+#include "service.h"
+#include "i2cp_server.h"
+#include "../../logger.h"
+
+//Includeding logger doesn't work for a reason I do not understand
+// #define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
+// #define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
+// #define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
+// #define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
+
 using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
-
-#include "../../logger.h"
-//Includeding logger doesn't work for a reason I do not understand
-#define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
 
 static const uint16_t i2cp_port = 7454;
 
