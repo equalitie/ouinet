@@ -10,9 +10,9 @@
 using namespace ouinet;
 
 #define _LOGPFX "DHT Groups: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _DEBUG(...) OUI_LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  OUI_LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) OUI_LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 using asio::yield_context;
 namespace file_io = util::file_io;

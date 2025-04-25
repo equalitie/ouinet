@@ -36,9 +36,9 @@ struct HandlerTracker::GlobalState {
                 return;
             }
 
-            LOG_DEBUG("HandlerTracker: Waiting for tracked coroutines to finish:");
+            OUI_LOG_DEBUG("HandlerTracker: Waiting for tracked coroutines to finish:");
             for (auto& e : list) {
-                LOG_DEBUG("HandlerTracker:    ", e.self->name());
+                OUI_LOG_DEBUG("HandlerTracker:    ", e.self->name());
             }
         }
 
@@ -63,12 +63,12 @@ struct HandlerTracker::GlobalState {
             {
                 lock_guard guard(mutex);
                 if (list.empty()) {
-                    LOG_DEBUG("HandlerTracker: Done waiting for tracked coroutines");
+                    OUI_LOG_DEBUG("HandlerTracker: Done waiting for tracked coroutines");
                 } else {
-                    LOG_WARN("HandlerTracker: Done waiting for tracked coroutines, "
-                             "but some coroutines are still running:");
+                    OUI_LOG_WARN("HandlerTracker: Done waiting for tracked coroutines, "
+                                 "but some coroutines are still running:");
                     for (auto& e : list) {
-                        LOG_WARN("HandlerTracker:    ", e.self->name());
+                        OUI_LOG_WARN("HandlerTracker:    ", e.self->name());
                     }
                 }
 
@@ -98,10 +98,10 @@ HandlerTracker::HandlerTracker(const char* name, bool after_stop)
 
     if (g.state >= State::stopped) {
         if (!after_stop) {
-            LOG_WARN("HandlerTracker: new coro started in stopped process");
-            LOG_WARN("HandlerTracker:    ", name);
+            OUI_LOG_WARN("HandlerTracker: new coro started in stopped process");
+            OUI_LOG_WARN("HandlerTracker:    ", name);
         } else {
-            LOG_DEBUG("HandlerTracker: new coroutine started: ", name);
+            OUI_LOG_DEBUG("HandlerTracker: new coroutine started: ", name);
         }
     }
 
@@ -114,9 +114,9 @@ HandlerTracker::~HandlerTracker() {
 
     if (g.state >= State::stopped) {
         if (g.state == State::stopped) {
-            LOG_DEBUG("HandlerTracker: stopped ", _name);
+            OUI_LOG_DEBUG("HandlerTracker: stopped ", _name);
         } else {
-            LOG_WARN("HandlerTracker: stopped ", _name);
+            OUI_LOG_WARN("HandlerTracker: stopped ", _name);
         }
     }
 }

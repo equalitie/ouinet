@@ -669,7 +669,7 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         sys::error_code ec;
         auto sz = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
         if (ec) {
-            LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
+            OUI_LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
         } else {
             response["local_cache_size"] = sz;
         }

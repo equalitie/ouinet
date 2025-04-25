@@ -40,7 +40,7 @@ public:
                     loop(exec, c, yield);
                 } catch (const std::exception& e) {
                     if (!c) {
-                        LOG_WARN("UPnP Loop has thrown an exception, will restart in 5s");
+                        OUI_LOG_WARN("UPnP Loop has thrown an exception, will restart in 5s");
                     }
                 }
                 async_sleep(exec, std::chrono::seconds(5), c, yield);
@@ -93,7 +93,7 @@ private:
 
             auto int_addr = util::get_local_ipv4_address();
             if (!int_addr) {
-                LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting ", get_local_ipv4_attempts);
+                OUI_LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting ", get_local_ipv4_attempts);
                 if ( ++get_local_ipv4_attempts >= 5) {
                     mapping_disabled();
                     async_sleep(exec, failure_wait_time, cancel, yield);
@@ -109,7 +109,7 @@ private:
             if (!r_igds) {
                 _is_available = false;
                 mapping_disabled();
-                LOG_DEBUG("UPnP: No IGDs found, waiting");
+                OUI_LOG_DEBUG("UPnP: No IGDs found, waiting");
                 async_sleep(exec, failure_wait_time, cancel, yield);
                 if (cancel) return;
                 continue;
@@ -118,7 +118,7 @@ private:
 
             auto igds = move(r_igds.value());
 
-            LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\"...");
+            OUI_LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\"...");
             size_t success_cnt = 0;
             auto ext_eps = std::make_unique<UdpEndpoints>();
             boost::optional<steady_clock::time_point> earlier_buggy_timeout;
@@ -135,30 +135,30 @@ private:
                                              , yield);
                 if (cancel) return;
                 if (!r) {
-                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " failed to add/update mapping \"", mapping_desc, "\""
-                             " for external port ", _external_port, ": ", r.error());
+                    OUI_LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                                 " failed to add/update mapping \"", mapping_desc, "\""
+                                 " for external port ", _external_port, ": ", r.error());
                     continue;  // failure, no buggy timeout
                 }
 
                 auto query_begin = steady_clock::now();
                 auto curr_duration = get_mapping_duration(igd, mapping_desc, *int_addr, cancel, yield);
                 if (!curr_duration) {
-                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " did not set mapping \"", mapping_desc, "\""
-                             " but reported no error"
-                             "; buggy IGD/router?");
+                    OUI_LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                                 " did not set mapping \"", mapping_desc, "\""
+                                 " but reported no error"
+                                 "; buggy IGD/router?");
                     continue;  // failure, no buggy timeout
                 }
                 if (curr_duration->count() > 0 && lease_duration >= *curr_duration + recent_margin) {
                     // Versions of MiniUPnPd before 2015-07-09 fail to update existing mappings,
                     // see <https://github.com/miniupnp/miniupnp/issues/131>,
                     // so check actual result and do not count if failed.
-                    LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
-                             " did not update mapping \"", mapping_desc, "\""
-                             " with duration=", curr_duration->count(), "s"
-                             " but reported no error"
-                             "; buggy IGD/router?");
+                    OUI_LOG_WARN("UPnP: IGD \"", igd.friendly_name(), "\""
+                                 " did not update mapping \"", mapping_desc, "\""
+                                 " with duration=", curr_duration->count(), "s"
+                                 " but reported no error"
+                                 "; buggy IGD/router?");
                     auto mapping_timeout = query_begin + *curr_duration;
                     if (!earlier_buggy_timeout || mapping_timeout < *earlier_buggy_timeout)
                         earlier_buggy_timeout = mapping_timeout;
@@ -168,13 +168,13 @@ private:
                    // Zero duration indicates a static port mapping,
                    // which should not happen for an entry created by the client.
                    || curr_duration->count() == 0) {
-                    LOG_WARN("UPnP: Reusing mapping from IGD \"", igd.friendly_name(), "\""
-                             " with excessive lease duration=", curr_duration->count(), "s"
-                             "; buggy IGD/router?");
+                    OUI_LOG_WARN("UPnP: Reusing mapping from IGD \"", igd.friendly_name(), "\""
+                                 " with excessive lease duration=", curr_duration->count(), "s"
+                                 "; buggy IGD/router?");
                     // The mapping has our config and it should be operational, though,
                     // so proceed normally.
                 }
-                LOG_DEBUG("UPnP: Successfully added/updated one mapping");
+                OUI_LOG_DEBUG("UPnP: Successfully added/updated one mapping");
                 success_cnt++;
 
                 // Note down the external endpoint for status repoting.
@@ -182,13 +182,13 @@ private:
                 if (r_ext_ep)
                     ext_eps->push_back(UdpEndpoint(r_ext_ep.value(), _external_port));
                 else
-                    LOG_WARN("UPnP: Failed to get external address"
-                             " from IGD \"", igd.friendly_name(), "\": ", r_ext_ep.error());
+                    OUI_LOG_WARN("UPnP: Failed to get external address"
+                                 " from IGD \"", igd.friendly_name(), "\": ", r_ext_ep.error());
 
                 mapping_enabled();
             }
             _external_endpoints = move(ext_eps);
-            LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\": done");
+            OUI_LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\": done");
 
             if (success_cnt == 0 && !earlier_buggy_timeout) mapping_disabled();
 
@@ -218,14 +218,14 @@ private:
 
     void mapping_enabled() {
         if (!_mapping_is_active) {
-            LOG_INFO("UPnP: Mapping enabled for UDP; ext_port=", _external_port
-                    , " int_port=", _internal_port);
+            OUI_LOG_INFO("UPnP: Mapping enabled for UDP; ext_port=", _external_port
+                        , " int_port=", _internal_port);
         }
         _mapping_is_active = true;
     }
     void mapping_disabled() {
         if (_mapping_is_active) {
-            LOG_WARN("UPnP: Mapping disabled");
+            OUI_LOG_WARN("UPnP: Mapping disabled");
         }
         _external_endpoints = nullptr;
         _mapping_is_active = false;
@@ -250,32 +250,32 @@ private:
             if (m.proto != upnp::igd::udp) continue;  // unrelated
 
             if (int_addr != m.int_client) {
-                LOG_WARN("UPnP: External port ", m.ext_port,
-                         " taken by client on internal IP address ", m.int_client);
+                OUI_LOG_WARN("UPnP: External port ", m.ext_port,
+                             " taken by client on internal IP address ", m.int_client);
                 break;
             }
 
             if (_internal_port != m.int_port) {
-                LOG_WARN("UPnP: External port ", m.ext_port,
-                         " taken by local client on UDP port ", m.int_port);
+                OUI_LOG_WARN("UPnP: External port ", m.ext_port,
+                             " taken by local client on UDP port ", m.int_port);
                 break;
             }
 
             // After this, the mapping is either ours or equivalent.
 
             if (!m.enabled) {
-                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
-                            " keeps equivalent disabled mapping \"", m.description, "\""
-                            " with duration=", m.lease_duration.count(), "s"
-                            "; buggy IGD/router?");
+                OUI_LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
+                                " keeps equivalent disabled mapping \"", m.description, "\""
+                                " with duration=", m.lease_duration.count(), "s"
+                                "; buggy IGD/router?");
                 continue;
             }
 
             if (desc != m.description)  // old but still useable
-                LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
-                            " keeps equivalent stale mapping \"", m.description, "\""
-                            " with duration=", m.lease_duration.count(), "s"
-                            "; buggy IGD/router?");
+                OUI_LOG_VERBOSE("UPnP: IGD \"", igd.friendly_name(), "\""
+                                " keeps equivalent stale mapping \"", m.description, "\""
+                                " with duration=", m.lease_duration.count(), "s"
+                                "; buggy IGD/router?");
 
             return m.lease_duration;
         }

@@ -33,11 +33,11 @@ using namespace ouinet::ouiservice::i2poui;
       sys::error_code ec;
 
       /// announce that we started listening on i2p port
-      LOG_DEBUG("I2P tunneller openning port..");
+      OUI_LOG_DEBUG("I2P tunneller openning port..");
 
       _tcp_acceptor.open(endpoint.protocol(), ec);
       if (ec) {
-        LOG_ERROR( "Error: " + ec.message());
+        OUI_LOG_ERROR( "Error: " + ec.message());
         return;
       }
 
@@ -46,18 +46,18 @@ using namespace ouinet::ouiservice::i2poui;
       _tcp_acceptor.bind(endpoint, ec);
       if (ec) {
         _tcp_acceptor.close();
-        LOG_ERROR( "Error: " + ec.message());
+        OUI_LOG_ERROR( "Error: " + ec.message());
         return;
       }
 
       _tcp_acceptor.listen(asio::socket_base::max_connections, ec);
-      LOG_DEBUG("I2P tunneller listening...");
+      OUI_LOG_DEBUG("I2P tunneller listening...");
 
       _tcp_acceptor.async_accept(_socket, [this](boost::system::error_code ec) {
           if (!ec) {
             read_socket_data();
           } else {
-            LOG_ERROR( "Error: " + ec.message());
+            OUI_LOG_ERROR( "Error: " + ec.message());
             _tcp_acceptor.close();
             return;
           }
@@ -83,7 +83,7 @@ using namespace ouinet::ouiservice::i2poui;
             std::string i2p_target_id;
             std::getline(is, i2p_target_id);
 
-            LOG_DEBUG("Received: I2P seeder " + i2p_target_id);
+            OUI_LOG_DEBUG("Received: I2P seeder " + i2p_target_id);
             //consider input as a destination address and start a client.
              _i2p_client = _service->build_client(i2p_target_id);
 
@@ -95,16 +95,16 @@ using namespace ouinet::ouiservice::i2poui;
 
               if (ec) {
                 //faild to establish tunnel
-                LOG_ERROR( "Error in starting i2p tunnel: " + ec.message());
+                OUI_LOG_ERROR( "Error in starting i2p tunnel: " + ec.message());
               } else {
 
                   for(int retry = 0; retry < 10; retry++) {
-                  LOG_DEBUG("try number " + std::to_string(retry));
+                  OUI_LOG_DEBUG("try number " + std::to_string(retry));
 
                   Cancel cancel;
                   auto i2p_seeder_stream = _i2p_client->connect(yield, cancel);
 
-                  LOG_DEBUG("connecting to I2P seeder done");
+                  OUI_LOG_DEBUG("connecting to I2P seeder done");
 
                   std::string request = "GET http://httpforver.com/ HTTP/1.1\r\nHost: httpforever.com\r\n\r\n";
 
@@ -127,7 +127,7 @@ using namespace ouinet::ouiservice::i2poui;
                   // raw_request += "\r\n";
                   // raw_request += req.body();
 
-                  LOG_DEBUG("Requesting payload directly: " + request);
+                  OUI_LOG_DEBUG("Requesting payload directly: " + request);
 
                   boost::asio::io_context io_context;
 
@@ -139,27 +139,27 @@ using namespace ouinet::ouiservice::i2poui;
 
                   boost::asio::write(socket, boost::asio::buffer(request));
 
-                  LOG_DEBUG("Requesting payload from : I2P seeder " + request);
+                  OUI_LOG_DEBUG("Requesting payload from : I2P seeder " + request);
                   //Write the http request in the tunnel.
 
                   asio::async_write(i2p_seeder_stream, boost::asio::buffer(request), yield[ec]);
 
                   if (ec) {
-                    LOG_ERROR( "Error in writing the request: " + ec.message());
+                    OUI_LOG_ERROR( "Error in writing the request: " + ec.message());
                   } else {
-                    LOG_DEBUG("Requested payload from : I2P seeder ");
+                    OUI_LOG_DEBUG("Requested payload from : I2P seeder ");
 
                     //yield[ec].tag("read_req").run([&] (auto y) {
                     //boost::asio::async_read(_i2p_seeder_stream, con_rbuf, [&](boost::system::error_code ec, std::size_t /*length*/) {
                     boost::beast::flat_buffer con_rbuf;
                     beast::http::response<http::string_body> response;
                   async_boost:beast::http::async_read(i2p_seeder_stream, con_rbuf, response, yield[ec]);
-                    LOG_DEBUG("Response from I2P seeder received");
+                    OUI_LOG_DEBUG("Response from I2P seeder received");
                   
                     if (ec) {
-                      LOG_ERROR( "Error in getting i2p seeder response: " + ec.message());
+                      OUI_LOG_ERROR( "Error in getting i2p seeder response: " + ec.message());
                     } else {
-                      LOG_DEBUG( "Finish reading " + std::to_string(con_rbuf.size()) + " Bytes");
+                      OUI_LOG_DEBUG( "Finish reading " + std::to_string(con_rbuf.size()) + " Bytes");
                       break;
                     }                  
                   }
@@ -171,7 +171,7 @@ using namespace ouinet::ouiservice::i2poui;
       }
     else
       {          
-          LOG_ERROR( "Error in getting new i2p seeder: " + error.message());
+          OUI_LOG_ERROR( "Error in getting new i2p seeder: " + error.message());
 
       }
 

@@ -408,7 +408,7 @@ private:
         }); \
         ec = compute_error_code(ec, cancel); \
         if (ec && ec != asio::error::operation_aborted) \
-            LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
+            OUI_LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
         return or_throw(yield, ec); \
     }
     DEF_WAIT_FOR(injector)
@@ -456,19 +456,19 @@ private:
         shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> upnps
     ){
         if (!local_ep.address().is_v4()) {
-            LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
+            OUI_LOG_WARN("Not setting up UPnP redirection because endpoint is not ipv4");
             return;
         }
 
         auto &p = (*upnps)[local_ep];
 
         if (p) {
-            LOG_WARN("UPnP redirection for ", local_ep, " is already set");
+            OUI_LOG_WARN("UPnP redirection for ", local_ep, " is already set");
             return;
         }
 
-        LOG_DEBUG("UPnP: Updater is starting with ",
-                 "local port ", local_ep.port(), " and external port ", ext_ep->port());
+        OUI_LOG_DEBUG("UPnP: Updater is starting with ",
+                      "local port ", local_ep.port(), " and external port ", ext_ep->port());
         p = make_unique<UPnPUpdater>(executor, ext_ep->port(), local_ep.port());
     }
 
@@ -493,7 +493,7 @@ private:
             _multi_utp_server->start_listen(yield[ec]);
 
             if (ec) {
-                LOG_ERROR("Failed to start accepting on multi uTP service; ec=", ec);
+                OUI_LOG_ERROR("Failed to start accepting on multi uTP service; ec=", ec);
                 return;
             }
 
@@ -503,7 +503,7 @@ private:
                 if (c) return;
                 if (ec == asio::error::operation_aborted) return;
                 if (ec) {
-                    LOG_WARN("Bep5Http: Failure to accept; ec=", ec);
+                    OUI_LOG_WARN("Bep5Http: Failure to accept; ec=", ec);
                     async_sleep(_ctx, 200ms, c, yield);
                     continue;
                 }
@@ -604,7 +604,7 @@ Client::State::serve_utp_request(GenericStream con, Yield yield)
 {
     assert(_cache);
     if (!_cache) {
-        LOG_WARN("Received uTP request, but cache is not initialized");
+        OUI_LOG_WARN("Received uTP request, but cache is not initialized");
         return;
     }
 
@@ -1327,7 +1327,7 @@ public:
 
         if (cancel) {
             assert(!cancel);
-            LOG_ERROR(__FILE__, ":", __LINE__, " Cancel already called");
+            OUI_LOG_ERROR(__FILE__, ":", __LINE__, " Cancel already called");
             return or_throw(yield, err::operation_aborted);
         }
 
@@ -1357,7 +1357,7 @@ public:
 
         if (cancel) {
             assert(!cancel);
-            LOG_ERROR(__FILE__, ":", __LINE__, " Cancel already called");
+            OUI_LOG_ERROR(__FILE__, ":", __LINE__, " Cancel already called");
             return or_throw(yield, err::operation_aborted);
         }
 
@@ -1476,7 +1476,7 @@ public:
     void origin_job_func( Transaction& tnx
                         , Cancel& cancel, Yield yield) {
         if (cancel) {
-            LOG_ERROR("origin_job_func received an already triggered cancel");
+            OUI_LOG_ERROR("origin_job_func received an already triggered cancel");
             return or_throw(yield, asio::error::operation_aborted);
         }
 
@@ -2140,7 +2140,7 @@ void Client::State::serve_request( GenericStream&& con
 {
     Cancel cancel(_shutdown_signal);
 
-    LOG_DEBUG("Request received ");
+    OUI_LOG_DEBUG("Request received ");
 
     namespace rr = request_route;
     using rr::fresh_channel;
@@ -2383,7 +2383,7 @@ void Client::State::serve_request( GenericStream&& con
           || ec == asio::error::operation_aborted) break;
 
         if (ec) {
-            LOG_WARN("Failed to read request; ec=", ec);
+            OUI_LOG_WARN("Failed to read request; ec=", ec);
             break;
         }
 
@@ -2506,7 +2506,7 @@ void Client::State::serve_request( GenericStream&& con
         }
     }
 
-    LOG_DEBUG(connection_idstr, " Done");
+    OUI_LOG_DEBUG(connection_idstr, " Done");
 }
 
 //------------------------------------------------------------------------------
@@ -2527,12 +2527,12 @@ void Client::State::setup_cache(asio::yield_context yield)
     });
 
     if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-      LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
+      OUI_LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
 #define fail_on_error(__msg) { \
     if (_shutdown_signal) ec = asio::error::operation_aborted; \
     if (ec && ec != asio::error::operation_aborted) \
-        LOG_ERROR(__msg "; ec=", ec); \
+        OUI_LOG_ERROR(__msg "; ec=", ec); \
     return_or_throw_on_error(yield, _shutdown_signal, ec); \
 }
 
@@ -2623,7 +2623,7 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
         throw runtime_error(util::str("Failed to 'listen' to service on TCP acceptor: ", service, "; ec=", ec));
     }
 
-    LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
+    OUI_LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
 
     return acceptor;
 }
@@ -2650,7 +2650,7 @@ void Client::State::listen_tcp
         if (ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
+            OUI_LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
 
             if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -2711,9 +2711,9 @@ void Client::State::start()
 
     if (!_config.tls_injector_cert_path().empty()) {
         if (fs::exists(fs::path(_config.tls_injector_cert_path()))) {
-            LOG_DEBUG("Loading injector certificate file...");
+            OUI_LOG_DEBUG("Loading injector certificate file...");
             inj_ctx.load_verify_file(_config.tls_injector_cert_path());
-            LOG_DEBUG("Loading injector certificate file: success");
+            OUI_LOG_DEBUG("Loading injector certificate file: success");
         } else {
             throw runtime_error(
                     util::str("Invalid path to Injector's TLS cert file: "
@@ -2747,7 +2747,7 @@ void Client::State::start()
         ] (asio::yield_context yield) mutable {
             if (was_stopped()) return;
 
-            LOG_INFO("Serving front end on ", acceptor.local_endpoint());
+            OUI_LOG_INFO("Serving front end on ", acceptor.local_endpoint());
 
             sys::error_code ec;
             listen_tcp( yield[ec]
@@ -2784,7 +2784,7 @@ void Client::State::start()
         setup_injector(yield[ec]);
 
         if (ec && ec != asio::error::operation_aborted)
-            LOG_ERROR("Failed to setup injector; ec=", ec);
+            OUI_LOG_ERROR("Failed to setup injector; ec=", ec);
     }));
 
     TRACK_SPAWN(_ctx, ([
@@ -2796,7 +2796,7 @@ void Client::State::start()
         setup_cache(yield[ec]);
 
         if (ec && ec != asio::error::operation_aborted)
-            LOG_ERROR("Failed to setup cache; ec=", ec);
+            OUI_LOG_ERROR("Failed to setup cache; ec=", ec);
     }));
 }
 
@@ -2807,7 +2807,7 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
     bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
 
     if (!enable_injector_tls) {
-        LOG_WARN("Connection to the injector shall not be encrypted");
+        OUI_LOG_WARN("Connection to the injector shall not be encrypted");
         return client;
     }
 
@@ -2832,7 +2832,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         return;
     }
 
-    LOG_INFO("Setting up injector: ", *injector_ep);
+    OUI_LOG_INFO("Setting up injector: ", *injector_ep);
 
     std::unique_ptr<OuiServiceImplementationClient> client;
 
@@ -2881,7 +2881,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
             if (ec != asio::error::operation_aborted) {
-                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);
+                OUI_LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);
             }
             return or_throw(yield, ec);
         }
@@ -2889,7 +2889,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         boost::optional<string> bridge_swarm_name = _config.bep5_bridge_swarm_name();
 
         if (!bridge_swarm_name) {
-            LOG_ERROR("Bridge swarm name has not been computed");
+            OUI_LOG_ERROR("Bridge swarm name has not been computed");
             return or_throw(yield, ec = asio::error::operation_not_supported);
         }
 
@@ -2902,7 +2902,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         idempotent_start_accepting_on_utp(yield[ec]);
 
         if (ec) {
-            LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
+            OUI_LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
             ec = {};
         }
     }
@@ -2971,12 +2971,12 @@ Client::RunningState Client::get_state() const noexcept {
 }
 
 void Client::charging_state_change(bool is_charging) {
-    LOG_DEBUG("Charging state changed, is charging: ", is_charging);
+    OUI_LOG_DEBUG("Charging state changed, is charging: ", is_charging);
     //TODO(peter) do something
 }
 
 void Client::wifi_state_change(bool is_wifi_connected) {
-    LOG_DEBUG("Wifi state changed, is connected: ", is_wifi_connected);
+    OUI_LOG_DEBUG("Wifi state changed, is connected: ", is_wifi_connected);
     //TODO(peter) do something
 }
 
@@ -3008,7 +3008,7 @@ int main(int argc, char* argv[])
     try {
         cfg = ClientConfig(argc, argv);
     } catch(std::exception const& e) {
-        LOG_ABORT(e.what());
+        OUI_LOG_ABORT(e.what());
         return 1;
     }
 
@@ -3028,7 +3028,7 @@ int main(int argc, char* argv[])
 
     signals.async_wait([&client, &signals, &force_exit]
                        (const sys::error_code& ec, int signal_number) {
-            LOG_INFO("GOT SIGNAL ", signal_number);
+            OUI_LOG_INFO("GOT SIGNAL ", signal_number);
             HandlerTracker::stopped();
             client.stop();
             signals.clear();
@@ -3038,13 +3038,13 @@ int main(int argc, char* argv[])
     try {
         client.start();
     } catch (std::exception& e) {
-        LOG_ABORT(e.what());
+        OUI_LOG_ABORT(e.what());
         return 1;
     }
 
     ctx.run();
 
-    LOG_INFO("Exiting gracefuly");
+    OUI_LOG_INFO("Exiting gracefuly");
 
     return EXIT_SUCCESS;
 }

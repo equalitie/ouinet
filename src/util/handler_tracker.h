@@ -49,8 +49,8 @@ private:
         try {\
             b(yield);\
         } catch (const std::exception& e) {\
-            LOG_ERROR("Uncaught exception from coroutine " \
-                      OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
+            OUI_LOG_ERROR("Uncaught exception from coroutine " \
+                          OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
         }\
     }, ##__VA_ARGS__)
 
@@ -60,7 +60,7 @@ private:
         try {\
             b(yield);\
         } catch (const std::exception& e) {\
-            LOG_ERROR("Uncaught exception from coroutine " \
-                      OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
+            OUI_LOG_ERROR("Uncaught exception from coroutine " \
+                          OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
         }\
     }, ##__VA_ARGS__)

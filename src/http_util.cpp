@@ -318,8 +318,8 @@ ouinet::util::detail::http_proto_version_check_trusted( boost::string_view proto
 
     auto proto_vn = *(parse::number<unsigned>(proto_vs));
     if (proto_vn > newest_proto_seen) {
-        LOG_WARN( "Found new protocol version in trusted source: "
-                , proto_vn, " > ", http_::protocol_version_current);
+        OUI_LOG_WARN( "Found new protocol version in trusted source: "
+                    , proto_vn, " > ", http_::protocol_version_current);
         newest_proto_seen = proto_vn;  // saw a newest protocol in the wild
     }
 

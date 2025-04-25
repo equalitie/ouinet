@@ -68,17 +68,17 @@ MultiUtpServer::MultiUtpServer( AsioExecutor ex
     : _accept_queue(ex)
 {
     if (endpoints.empty()) {
-        LOG_ERROR("MultiUtpServer: endpoint set is empty!");
+        OUI_LOG_ERROR("MultiUtpServer: endpoint set is empty!");
     }
 
     for (auto ep : endpoints) {
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep);
         if (ssl_context) {
-            LOG_INFO("Bep5: uTP/TLS Address: ", ep);
+            OUI_LOG_INFO("Bep5: uTP/TLS Address: ", ep);
             auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *ssl_context);
             _states.emplace_back(new State(ex, move(tls)));
         } else {
-            LOG_INFO("Bep5: uTP Address: ", ep);
+            OUI_LOG_INFO("Bep5: uTP Address: ", ep);
             _states.emplace_back(new State(ex, move(base)));
         }
     }
@@ -90,7 +90,7 @@ void MultiUtpServer::start_listen(asio::yield_context yield)
         sys::error_code ec;
         s->start(_accept_queue, _cancel, yield[ec]);
         if (ec) {
-            LOG_ERROR("MultiUtpServer: Failed to start listen; ec=", ec);
+            OUI_LOG_ERROR("MultiUtpServer: Failed to start listen; ec=", ec);
         }
     }
 }

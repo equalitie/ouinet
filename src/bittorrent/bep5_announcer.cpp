@@ -6,8 +6,8 @@
 #include <iostream>
 
 #define _LOGPFX "Bep5Announcer: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _DEBUG(...) OUI_LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _WARN(...) OUI_LOG_WARN(_LOGPFX, __VA_ARGS__)
 
 using namespace std;
 using namespace ouinet;

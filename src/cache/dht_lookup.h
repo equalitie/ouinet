@@ -73,7 +73,7 @@ public:
 
 #ifndef NDEBUG
         auto wd = watch_dog(_exec, timeout() + std::chrono::seconds(5), [&] {
-                LOG_ERROR("DHT BEP5 DhtLookup::get failed to time out");
+                OUI_LOG_ERROR("DHT BEP5 DhtLookup::get failed to time out");
             });
 #endif
 
@@ -117,7 +117,7 @@ private:
                 });
 
             auto wd = watch_dog(self->_exec, timeout(), [&] {
-                    LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
+                    OUI_LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
                     c();
                 });
 

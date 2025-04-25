@@ -91,7 +91,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
 {
     assert(_socket.is_open());
 
-    LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
+    OUI_LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
     asio::spawn(get_executor(), [this] (asio::yield_context yield) {

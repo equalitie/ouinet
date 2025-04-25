@@ -347,7 +347,7 @@ public:
             auto peer_eps = _peer_lookup->get(c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " Peer lookup result; ec=", ec, " eps=", peer_eps);
+                OUI_LOG_DEBUG(dbg_tag, " Peer lookup result; ec=", ec, " eps=", peer_eps);
             }
 
             if (c) return;
@@ -392,13 +392,13 @@ public:
             sys::error_code ec;
 
             if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " Fetching hash list from: ", ep);
+                OUI_LOG_DEBUG(dbg_tag, " Fetching hash list from: ", ep);
             }
 
             p->download_hash_list(ep, _lan_my_eps, _newest_proto_seen, c, y[ec]);
 
             if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " Done fetching hash list; ep=", ep
+                OUI_LOG_DEBUG(dbg_tag, " Done fetching hash list; ep=", ep
                          , " ec=", ec, " c=", bool(c));
             }
 

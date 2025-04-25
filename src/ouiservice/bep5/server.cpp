@@ -25,7 +25,7 @@ Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
     _multi_utp_server = make_unique<MultiUtpServer>(ex, endpoints, ssl_context);
 
     bt::NodeID infohash = util::sha1_digest(swarm_name);
-    LOG_INFO("Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());
+    OUI_LOG_INFO("Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());
 
     _announcer = make_unique<bt::Bep5PeriodicAnnouncer>(infohash, dht);
 }

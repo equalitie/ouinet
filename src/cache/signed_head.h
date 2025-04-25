@@ -251,25 +251,25 @@ SignedHead::verify(http::response_header<> rsh, const util::Ed25519PublicKey& pk
         auto hv = hdr.value();
         auto sig = HttpSignature::parse(hv);
         if (!sig) {
-            LOG_WARN("Malformed HTTP signature in header: ", hn);
+            OUI_LOG_WARN("Malformed HTTP signature in header: ", hn);
             continue;  // drop signature
         }
         if (sig->keyId != keyId) {
-            LOG_DEBUG("Unknown key for HTTP signature in header: ", hn);
+            OUI_LOG_DEBUG("Unknown key for HTTP signature in header: ", hn);
             keep_signature(hv);
             continue;
         }
         if (!(sig->algorithm.empty()) && sig->algorithm != SignedHead::sig_alg_hs2019()) {
-            LOG_WARN( "Unsupported algorithm \"", sig->algorithm
+            OUI_LOG_WARN( "Unsupported algorithm \"", sig->algorithm
                     , "\" for HTTP signature in header: ", hn);
             continue;  // drop signature
         }
         auto ret = sig->verify(to_verify, pk);
         if (!ret.first) {
-            LOG_WARN("Head does not match HTTP signature in header: ", hn);
+            OUI_LOG_WARN("Head does not match HTTP signature in header: ", hn);
             continue;  // drop signature
         }
-        LOG_DEBUG("Head matches HTTP signature: ", hn);
+        OUI_LOG_DEBUG("Head matches HTTP signature: ", hn);
         sig_ok = true;
         keep_signature(hv);
         for (auto ehit = extra.begin(); ehit != extra.end();)  // note extra headers
@@ -283,7 +283,7 @@ SignedHead::verify(http::response_header<> rsh, const util::Ed25519PublicKey& pk
         return boost::none;
 
     for (auto& eh : extra) {
-        LOG_WARN("Dropping header not in HTTP signatures: ", eh.name_string());
+        OUI_LOG_WARN("Dropping header not in HTTP signatures: ", eh.name_string());
         rsh.erase(eh.name_string());
     }
     return rsh;
@@ -306,23 +306,23 @@ SignedHead::create_from_trusted_source(http::response_header<> rsh)
     // Get and validate HTTP block signature parameters.
     auto bsh = rsh[http_::response_block_signatures_hdr];
     if (bsh.empty()) {
-        LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
+        OUI_LOG_WARN("Missing parameters for HTTP data block signatures; uri=", uri);
         return boost::none;
     }
     auto bs_params = cache::SignedHead::BlockSigs::parse(bsh);
     if (!bs_params) {
-        LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
+        OUI_LOG_WARN("Malformed parameters for HTTP data block signatures; uri=", uri);
         return boost::none;
     }
     if (bs_params->size > http_::response_data_block_max) {
-        LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
+        OUI_LOG_WARN("Size of signed HTTP data blocks is too large: ", bs_params->size, "; uri=", uri);
         return boost::none;
     }
     // The injection id is also needed to verify block signatures.
     std::string injection_id = util::http_injection_id(rsh).to_string();
 
     if (injection_id.empty()) {
-        LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
+        OUI_LOG_WARN("Missing injection identifier in HTTP head; uri=", uri);
         return boost::none;
     }
 
@@ -330,7 +330,7 @@ SignedHead::create_from_trusted_source(http::response_header<> rsh)
     auto injection_ts = parse::number<time_t>(tsh);
 
     if (!injection_ts) {
-        LOG_WARN("Failed to parse injection time stamp \"", tsh, "\"");
+        OUI_LOG_WARN("Failed to parse injection time stamp \"", tsh, "\"");
         return boost::none;
     }
 
@@ -347,7 +347,7 @@ SignedHead::BlockSigs::parse(boost::string_view bsigs)
 {
     // TODO: proper support for quoted strings
     if (has_comma_in_quotes(bsigs)) {
-        LOG_WARN("Commas in quoted arguments of block signatures HTTP header are not yet supported");
+        OUI_LOG_WARN("Commas in quoted arguments of block signatures HTTP header are not yet supported");
         return {};
     }
 
@@ -363,7 +363,7 @@ SignedHead::BlockSigs::parse(boost::string_view bsigs)
         }
         // Quoted values:
         if (value.size() < 2 || value[0] != '"' || value[value.size() - 1] != '"') {
-            LOG_WARN("Invalid quoting in block signatures HTTP header");
+            OUI_LOG_WARN("Invalid quoting in block signatures HTTP header");
             return {};
         }
         value.remove_prefix(1);
@@ -379,15 +379,15 @@ SignedHead::BlockSigs::parse(boost::string_view bsigs)
         return {};
     }
     if (!valid_pk) {
-        LOG_WARN("Missing or invalid key identifier in block signatures HTTP header");
+        OUI_LOG_WARN("Missing or invalid key identifier in block signatures HTTP header");
         return {};
     }
     if (hbs.algorithm != SignedHead::sig_alg_hs2019()) {
-        LOG_WARN("Missing or invalid algorithm in block signatures HTTP header");
+        OUI_LOG_WARN("Missing or invalid algorithm in block signatures HTTP header");
         return {};
     }
     if (hbs.size == 0) {
-        LOG_WARN("Missing or invalid size in block signatures HTTP header");
+        OUI_LOG_WARN("Missing or invalid size in block signatures HTTP header");
         return {};
     }
     return hbs;

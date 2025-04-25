@@ -46,10 +46,10 @@
 #include <iostream>
 
 #define _LOGPFX "BT DHT: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
-#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _DEBUG(...) OUI_LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  OUI_LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  OUI_LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) OUI_LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 namespace ouinet {
 namespace bittorrent {

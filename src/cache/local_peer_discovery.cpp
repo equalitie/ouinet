@@ -81,8 +81,8 @@ struct LocalPeerDiscovery::Impl {
         if (!ec) _socket.set_option(ip::multicast::join_group(multicast_ep.address()), ec);
 
         if (ec) {
-            LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket;"
-                      " ec=", ec);
+            OUI_LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket;"
+                          " ec=", ec);
             return;
         }
 
@@ -103,8 +103,8 @@ struct LocalPeerDiscovery::Impl {
                                  , ep
                                  , yield[ec]);
             if (ec && !cancel) {
-                LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query;"
-                          " ec=", ec, " ep=", ep);
+                OUI_LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query;"
+                              " ec=", ec, " ep=", ep);
             }
         }));
     }
@@ -139,8 +139,8 @@ struct LocalPeerDiscovery::Impl {
             if (cancel) break;
 
             if (ec) {
-                LOG_ERROR("LocalPeerDiscovery: failed to receive;"
-                          " ec=", ec);
+                OUI_LOG_ERROR("LocalPeerDiscovery: failed to receive;"
+                              " ec=", ec);
                 async_sleep(_ex, chrono::seconds(1), cancel, yield);
                 if (cancel) break;
                 continue;
@@ -230,7 +230,7 @@ struct LocalPeerDiscovery::Impl {
         if (logger.would_log(INFO)) {
             ostringstream ss;
             for (auto ep : i->second.advertised_eps) { ss << ep << ";"; }
-            LOG_INFO("LocalPeerDiscovery: Lost local ouinet peer(s) ", ss.str());
+            OUI_LOG_INFO("LocalPeerDiscovery: Lost local ouinet peer(s) ", ss.str());
         }
 
         _peers.erase(i);
@@ -241,7 +241,7 @@ struct LocalPeerDiscovery::Impl {
         if (logger.would_log(INFO)) {
             ostringstream ss;
             for (auto ep : eps) { ss << ep << ";"; }
-            LOG_INFO("LocalPeerDiscovery: Found local ouinet peer(s) ", ss.str());
+            OUI_LOG_INFO("LocalPeerDiscovery: Found local ouinet peer(s) ", ss.str());
         }
         _peers[peer_id] = {peer_ep, move(eps)};
     }

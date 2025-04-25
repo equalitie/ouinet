@@ -15,12 +15,6 @@
 #include "i2cp_server.h"
 #include "../../logger.h"
 
-//Includeding logger doesn't work for a reason I do not understand
-// #define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
-// #define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
-// #define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
-// #define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
-
 using namespace std;
 using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
@@ -34,7 +28,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
     //here we are going to read the config file and
     //set options based on those values for now we just
     //set it up by some default values;
-    LOG_INFO("Starting i2p tunnels");
+    OUI_LOG_INFO("Starting i2p tunnels");
 
     string datadir_arg = "--datadir=" + datadir;
 
@@ -50,7 +44,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
     //i2pd does not support more than 8 hops
     auto no_of_tunnel_hops_str = std::to_string(std::min(_number_of_hops_per_tunnel, (size_t)(8)));
 
-    LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be " + no_of_tunnel_hops_str);
+    OUI_LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be " + no_of_tunnel_hops_str);
     // we set ack delay to 20 ms, because this outnet is considered as low-latency
     std::map<std::string, std::string> params =
     {
@@ -105,16 +99,16 @@ void Service::load_known_hosts_to_address_book()
     if (f.is_open ())
       {
         _i2p_address_book->LoadHostsFromStream (f, false);
-        LOG_INFO("Pre-resolved host loaded!");
+        OUI_LOG_INFO("Pre-resolved host loaded!");
 
       }
     else
       {
-        LOG_WARN("Failed to load host resolver file!");
+        OUI_LOG_WARN("Failed to load host resolver file!");
       }
   } else {
     //inform then panic!
-    LOG_ABORT("address book has not been initiated before loading!");
+    OUI_LOG_ABORT("address book has not been initiated before loading!");
   }
     
 }

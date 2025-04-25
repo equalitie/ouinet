@@ -7,7 +7,7 @@ using namespace ouinet;
 using namespace ouinet::cache;
 
 #define _LOG_PFX "HashList: "
-#define _WARN(...) LOG_WARN(_LOG_PFX, __VA_ARGS__)
+#define _WARN(...) OUI_LOG_WARN(_LOG_PFX, __VA_ARGS__)
 
 static const size_t MAX_LINE_SIZE_BYTES = 512;
 

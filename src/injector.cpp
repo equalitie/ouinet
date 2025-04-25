@@ -750,7 +750,7 @@ void listen( InjectorConfig& config
     sys::error_code ec;
     proxy_server.start_listen(yield[ec]);
     if (ec) {
-        LOG_ERROR("Failed to setup ouiservice proxy server; ec=", ec);
+        OUI_LOG_ERROR("Failed to setup ouiservice proxy server; ec=", ec);
         return;
     }
 
@@ -808,7 +808,7 @@ void listen( InjectorConfig& config
             if (leaked_ec) {
                 // The convention is that `serve` does not throw errors,
                 // so complain otherwise but avoid crashing in production.
-                LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
+                OUI_LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
         }, attribs);
@@ -826,7 +826,7 @@ int main(int argc, const char* argv[])
         config = InjectorConfig(argc, argv);
     }
     catch(const exception& e) {
-        LOG_ABORT(e.what());
+        OUI_LOG_ABORT(e.what());
         return 1;
     }
 
@@ -867,15 +867,15 @@ int main(int argc, const char* argv[])
     };
 
     if (!config.is_proxy_enabled())
-        LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+        OUI_LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = config.target_rx())
-        LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
+        OUI_LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
 
     OuiServiceServer proxy_server(ex);
 
     if (config.tcp_endpoint()) {
         tcp::endpoint endpoint = *config.tcp_endpoint();
-        LOG_INFO("TCP address: ", endpoint);
+        OUI_LOG_INFO("TCP address: ", endpoint);
 
         util::create_state_file( config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
@@ -895,7 +895,7 @@ int main(int argc, const char* argv[])
         ssl_context = read_ssl_certs();
 
         tcp::endpoint endpoint = *config.tcp_tls_endpoint();
-        LOG_INFO("TCP/TLS address: ", endpoint);
+        OUI_LOG_INFO("TCP/TLS address: ", endpoint);
         util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
@@ -907,7 +907,7 @@ int main(int argc, const char* argv[])
     {
         if (config.utp_endpoint()) {
             udp::endpoint endpoint = *config.utp_endpoint();
-            LOG_INFO("uTP address: ", endpoint);
+            OUI_LOG_INFO("uTP address: ", endpoint);
 
             util::create_state_file( config.repo_root()/"endpoint-utp"
                                    , util::str(endpoint));
@@ -926,13 +926,13 @@ int main(int argc, const char* argv[])
             auto local_ep = base->local_endpoint();
 
             if (local_ep) {
-                LOG_INFO("uTP/TLS address: ", *local_ep);
+                OUI_LOG_INFO("uTP/TLS address: ", *local_ep);
                 util::create_state_file( config.repo_root()/"endpoint-utp-tls"
                                        , util::str(*local_ep));
                 proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
 
             } else {
-                LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
+                OUI_LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
             }
         }
 
@@ -941,7 +941,7 @@ int main(int argc, const char* argv[])
         assert(dht);
         assert(!dht->local_endpoints().empty());
         if (dht->local_endpoints().empty())
-            LOG_ERROR("Failed to bind the BitTorrent DHT to any local endpoint");
+            OUI_LOG_ERROR("Failed to bind the BitTorrent DHT to any local endpoint");
         proxy_server.add(make_unique<ouiservice::Bep5Server>
                 (move(dht), &ssl_context, config.bep5_injector_swarm_name()));
     }
@@ -955,7 +955,7 @@ int main(int argc, const char* argv[])
 
         unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
             make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, config.repo_root()/"lampshade-server");
-        LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
+        OUI_LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
 
         proxy_server.add(std::move(server));
     }
@@ -963,7 +963,7 @@ int main(int argc, const char* argv[])
 
     if (config.obfs2_endpoint()) {
         tcp::endpoint endpoint = *config.obfs2_endpoint();
-        LOG_INFO("obfs2 address: ", endpoint);
+        OUI_LOG_INFO("obfs2 address: ", endpoint);
         util::create_state_file( config.repo_root()/"endpoint-obfs2"
                                , util::str(endpoint));
 
@@ -972,7 +972,7 @@ int main(int argc, const char* argv[])
 
     if (config.obfs3_endpoint()) {
         tcp::endpoint endpoint = *config.obfs3_endpoint();
-        LOG_INFO("obfs3 address: ", endpoint);
+        OUI_LOG_INFO("obfs3 address: ", endpoint);
         util::create_state_file( config.repo_root()/"endpoint-obfs3"
                                , util::str(endpoint));
 
@@ -994,7 +994,7 @@ int main(int argc, const char* argv[])
             sys::error_code ec;
             obfs4->wait_for_running(yield[ec]);
             if (!ec) {
-                LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
+                OUI_LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
             }
         });
         proxy_server.add(std::move(server));
@@ -1005,14 +1005,14 @@ int main(int argc, const char* argv[])
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
-        LOG_INFO("I2P public ID: ", ep);
+        OUI_LOG_INFO("I2P public ID: ", ep);
         util::create_state_file(config.repo_root()/"endpoint-i2p", ep);
 
         proxy_server.add(std::move(i2p_server));
     }
 #endif // ifdef __EXPERIMENTAL__
 
-    LOG_INFO("HTTP signing public key (Ed25519): ", config.cache_private_key().public_key());
+    OUI_LOG_INFO("HTTP signing public key (Ed25519): ", config.cache_private_key().public_key());
 
     Cancel cancel;
 

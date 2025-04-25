@@ -31,11 +31,11 @@ namespace detail_create_udp_multiplexer {
         m.bind(ip::udp::endpoint(ip::address_v4::any(), port_bind.port), ec);
 
         if (!ec) {
-            LOG_INFO( "UDP multiplexer bound to ", port_bind.attempt_type
-                    , " port: ", m.local_endpoint().port());
+            OUI_LOG_INFO( "UDP multiplexer bound to ", port_bind.attempt_type
+                        , " port: ", m.local_endpoint().port());
         } else {
-            LOG_WARN( "Failed to bind UDP multiplexer to ", port_bind.attempt_type
-                    , " port: ", port_bind.port, "; ec=", ec);
+            OUI_LOG_WARN( "Failed to bind UDP multiplexer to ", port_bind.attempt_type
+                        , " port: ", port_bind.port, "; ec=", ec);
         }
     }
 
@@ -48,8 +48,8 @@ namespace detail_create_udp_multiplexer {
             if (file.is_open()) {
                 file >> port;
             } else {
-                LOG_WARN( "Failed to open file ", last_used_port_path, " "
-                        , " to reuse last used UDP port");
+                OUI_LOG_WARN( "Failed to open file ", last_used_port_path, " "
+                            , " to reuse last used UDP port");
             }
         }
         return port;
@@ -63,8 +63,8 @@ namespace detail_create_udp_multiplexer {
         if (file.is_open()) {
             file << port;
         } else {
-            LOG_WARN( "Failed to store UDP multiplexer port to file "
-                    , last_used_port_path, " for later reuse");
+            OUI_LOG_WARN( "Failed to store UDP multiplexer port to file "
+                        , last_used_port_path, " for later reuse");
         }
     }
 

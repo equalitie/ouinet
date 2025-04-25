@@ -166,7 +166,7 @@ public:
     {
         if (name != _host) return;  // unrelated answer, ignore
         auto ip4addr = asio::ip::make_address_v4(::ntohl(addr.s_addr));
-        LOG_DEBUG("DoH: ", name, " -> ", ip4addr);
+        OUI_LOG_DEBUG("DoH: ", name, " -> ", ip4addr);
         _answers.push_back(std::move(ip4addr));
     }
 
@@ -177,7 +177,7 @@ public:
         static_assert(addrb.size() == sizeof(addr.s6_addr), "Not an IPv6 address");
         std::memcpy(addrb.data(), addr.s6_addr, addrb.size());
         auto ip6addr = asio::ip::make_address_v6(addrb);
-        LOG_DEBUG("DoH: ", name, " -> ", ip6addr);
+        OUI_LOG_DEBUG("DoH: ", name, " -> ", ip6addr);
         _answers.push_back(std::move(ip6addr));
     }
 

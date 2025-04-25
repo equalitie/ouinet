@@ -15,10 +15,10 @@
 #include "../../util/handler_tracker.h"
 
 #define _LOGPFX "Bep5Client: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _VERBOSE(...)  LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
-#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _DEBUG(...) OUI_LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _VERBOSE(...)  OUI_LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  OUI_LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) OUI_LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 // It is ok to have many of these as a resort if injectors are not reachable,
 // as long as they are fresh in the DHT.

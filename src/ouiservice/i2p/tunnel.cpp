@@ -48,7 +48,7 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
 
   // Wait till we find a route to the service and tunnel is ready then try to
   // acutally connect and then unblock
-  LOG_DEBUG("Waiting for I2P tunnel to get established");
+  OUI_LOG_DEBUG("Waiting for I2P tunnel to get established");
   
   auto exec = _exec;
 
@@ -68,12 +68,12 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
   _ready_condition->wait(yield);
 
   if (ec == boost::asio::error::timed_out) {
-    LOG_ERROR("I2P Tunnel failed to be established in timely manner, trying again");
+    OUI_LOG_ERROR("I2P Tunnel failed to be established in timely manner, trying again");
     _has_timed_out = true;
   }
   
   if (!*wd) {
-      LOG_DEBUG("I2P Tunnel has been established");  // used by integration tests
+      OUI_LOG_DEBUG("I2P Tunnel has been established");  // used by integration tests
   }
   else {
       return or_throw(yield, asio::error::operation_aborted);

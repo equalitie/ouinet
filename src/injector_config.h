@@ -257,7 +257,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         if (!ll_o)
             throw std::runtime_error(util::str("Invalid log level: ", level));
         logger.set_threshold(*ll_o);
-        LOG_INFO("Log level set to: ", level);
+        OUI_LOG_INFO("Log level set to: ", level);
     }
 
     if (vm.count("bt-bootstrap-extra")) {

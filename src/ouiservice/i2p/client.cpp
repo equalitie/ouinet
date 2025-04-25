@@ -120,7 +120,7 @@ Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
         connection.close();
     });
 
-    LOG_DEBUG("Connecting to the i2p injector...");
+    OUI_LOG_DEBUG("Connecting to the i2p injector...");
 
     for (uint32_t i = 0;; ++i) {
         sys::error_code ec;
@@ -139,7 +139,7 @@ Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
             continue;
         }
 
-        LOG_DEBUG("Connection to the i2p injector is established");
+        OUI_LOG_DEBUG("Connection to the i2p injector is established");
 
         _client_tunnel->intrusive_add(connection);
 

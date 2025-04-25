@@ -249,9 +249,9 @@ void Yield::start_timing()
             if (!ts->self) return;
 
             auto notify = [&](Clock::duration d) {
-                LOG_WARN(ts->self->tag()
-                        , " is still working after "
-                        , Yield::duration_secs(d), " seconds");
+                OUI_LOG_WARN(ts->self->tag()
+                            , " is still working after "
+                            , Yield::duration_secs(d), " seconds");
             };
 
             boost::optional<Clock::duration> first_duration

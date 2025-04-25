@@ -517,7 +517,7 @@ void generate_key_pair_callback(
 ) {
     Keypair* buffer = reinterpret_cast<Keypair*>(arg);
     if (error) {
-        LOG_ERROR("Lampshade: ", error);
+        OUI_LOG_ERROR("Lampshade: ", error);
         buffer->ec = boost::system::errc::make_error_code(boost::system::errc::no_message);
     } else {
         buffer->ec = sys::error_code();

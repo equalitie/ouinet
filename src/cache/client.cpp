@@ -20,11 +20,11 @@
 #include <map>
 
 #define _LOGPFX "cache/client: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _VERBOSE(...) LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
-#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
-#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _DEBUG(...) OUI_LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _VERBOSE(...) OUI_LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
+#define _INFO(...)  OUI_LOG_INFO(_LOGPFX, __VA_ARGS__)
+#define _WARN(...)  OUI_LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) OUI_LOG_ERROR(_LOGPFX, __VA_ARGS__)
 #define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
 #define _YERROR(y, ...) do { if (logger.get_threshold() <= ERROR) y.log(ERROR, __VA_ARGS__); } while (false)
 
@@ -397,11 +397,11 @@ struct Client::Impl {
             auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
 
             if (!debug_tag.empty()) {
-                LOG_DEBUG(debug_tag, " DHT peer lookup:");
-                LOG_DEBUG(debug_tag, "    key=        ", key);
-                LOG_DEBUG(debug_tag, "    group=      ", group);
-                LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup_->swarm_name());
-                LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup_->infohash());
+                OUI_LOG_DEBUG(debug_tag, " DHT peer lookup:");
+                OUI_LOG_DEBUG(debug_tag, "    key=        ", key);
+                OUI_LOG_DEBUG(debug_tag, "    group=      ", group);
+                OUI_LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup_->swarm_name());
+                OUI_LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup_->infohash());
             };
 
             reader = std::make_unique<MultiPeerReader>

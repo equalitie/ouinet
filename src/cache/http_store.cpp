@@ -35,9 +35,9 @@
 #include "chain_hasher.h"
 
 #define _LOGPFX "HTTP store: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#define _DEBUG(...) OUI_LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _WARN(...) OUI_LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _ERROR(...) OUI_LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 namespace ouinet { namespace cache {
 

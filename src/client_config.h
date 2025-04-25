@@ -322,10 +322,10 @@ private:
 
         try {
             fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
-            LOG_DEBUG("Saving persistent options");
+            OUI_LOG_DEBUG("Saving persistent options");
             ofstream(ouinet_save_path.string(), fstream::out | fstream::trunc) << ss.str();
         } catch (const exception& e) {
-            LOG_ERROR("Failed to save persistent options: ", e.what());
+            OUI_LOG_ERROR("Failed to save persistent options: ", e.what());
         }
     }
 
@@ -388,7 +388,7 @@ private:
             : current_log_path;
 
         logger.log_to_file(ouinet_log_path);
-        LOG_INFO("Log file set to: ", ouinet_log_path);
+        OUI_LOG_INFO("Log file set to: ", ouinet_log_path);
     }
 
 private:
@@ -502,7 +502,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (!ll_o)
             throw std::runtime_error(util::str("Invalid log level: ", level));
         logger.set_threshold(*ll_o);
-        LOG_INFO("Log level set to: ", level);
+        OUI_LOG_INFO("Log level set to: ", level);
     }
 
     if (vm["enable-log-file"].as<bool>()) {
@@ -616,7 +616,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             // https://redmine.equalit.ie/issues/14920#note-1
             _cache_type = CacheType::Bep5Http;
 
-            LOG_DEBUG("Using bep5-http cache");
+            OUI_LOG_DEBUG("Using bep5-http cache");
 
             if (!_cache_http_pubkey) {
                 throw std::runtime_error(
@@ -640,7 +640,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         if (type_str == "bep3-http-over-i2p") {
             _cache_type = CacheType::Bep3HTTPOverI2P;
 
-            LOG_DEBUG("Using bep3-http cache over i2p");
+            OUI_LOG_DEBUG("Using bep3-http cache over i2p");
 
             if (!_cache_http_pubkey) {
                 throw std::runtime_error(
@@ -727,7 +727,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 #endif // ifdef __EXPERIMENTAL__ _i2p_hops_
 
     if (_cache_type == CacheType::None) {
-        LOG_WARN("Not using d-cache");
+        OUI_LOG_WARN("Not using d-cache");
     }
 
     if (is_cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {
@@ -741,7 +741,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 util::str("No such directory: ", _cache_static_content_path));
         if (!vm.count("cache-static-repo")) {
             _cache_static_path = _cache_static_content_path / default_static_cache_subdir;
-            LOG_INFO("No static cache repository given, assuming: ", _cache_static_path);
+            OUI_LOG_INFO("No static cache repository given, assuming: ", _cache_static_path);
         }
     }
     if (vm.count("cache-static-repo")) {

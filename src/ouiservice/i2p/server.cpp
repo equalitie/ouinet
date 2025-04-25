@@ -30,7 +30,7 @@ void Server::load_private_key(const string& key_file_name)
 {
     ifstream in_file(key_file_name);
     string keys_str;
-    LOG_DEBUG("Reading private key from" + key_file_name);
+    OUI_LOG_DEBUG("Reading private key from" + key_file_name);
     if (in_file.is_open()) {
         keys_str = string( istreambuf_iterator<char>(in_file)
                          , istreambuf_iterator<char>());
@@ -62,7 +62,7 @@ void Server::start_listen(asio::yield_context yield)
     sys::error_code ec;
 
     /// announce that we started listening on i2p port
-    LOG_DEBUG("I2P server openning port..");
+    OUI_LOG_DEBUG("I2P server openning port..");
 
     _tcp_acceptor.open(endpoint.protocol(), ec);
     if (ec) {

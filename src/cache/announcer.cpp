@@ -9,7 +9,7 @@
 #include <boost/utility/string_view.hpp>
 
 #define _LOGPFX "Announcer: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#define _DEBUG(...) OUI_LOG_DEBUG(_LOGPFX, __VA_ARGS__)
 
 using namespace std;
 using namespace ouinet;
