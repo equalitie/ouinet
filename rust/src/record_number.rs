@@ -16,12 +16,10 @@ impl RecordNumber {
     pub async fn load(file_path: PathBuf) -> io::Result<Self> {
         let number = match Store::read::<u32>(&file_path).await? {
             Some(number) => number + 1,
-            None => {
-                let number = 0;
-                Store::write(&file_path, &number).await?;
-                number
-            }
+            None => 0,
         };
+
+        Store::write(&file_path, &number).await?;
 
         Ok(Self {
             number,
