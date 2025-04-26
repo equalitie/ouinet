@@ -207,6 +207,36 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
     ctx.run();
 }
 
+BOOST_AUTO_TEST_CASE(test_http11_no_body_big_header) {
+    asio::io_context ctx;
+
+    task::spawn_detached(ctx, [&] (auto y) {
+        string rsp =
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 0\r\n"
+            "X-Long-Header: " + std::string(8 * 1024, 'x') + "\r\n"
+            "\r\n";
+
+        RR rr(stream(move(rsp), ctx, y));
+
+        Cancel c;
+        boost::optional<HR::Part> part;
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(rr.is_done());
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
+    });
+
+    ctx.run();
+}
+
 BOOST_AUTO_TEST_CASE(test_http11_body) {
     asio::io_context ctx;
 
