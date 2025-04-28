@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Increased Header size limit in the HTTP response reader.
+
 
 ## [v1.0.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.0.0) - 2025-04-14
 
