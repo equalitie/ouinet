@@ -196,6 +196,9 @@ void Reader::setup_parser()
     // Reads are both streamed and parts limited to `_buffer` size,
     // so remove the whole body size limit.
     _parser.body_limit((std::numeric_limits<std::size_t>::max)());
+    // Increase the header size limit to 16KB to fix the loading of sites
+    // with big headers.
+    _parser.header_limit(16*1024);
     _parser.on_chunk_header(_on_chunk_header);
     _parser.on_chunk_body(_on_chunk_body);
 }
