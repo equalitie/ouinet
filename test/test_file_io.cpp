@@ -1,4 +1,9 @@
 #define BOOST_TEST_MODULE Tests for file_io module
+
+#ifdef __MINGW32__
+#include <winsock2.h>
+#endif // __MINGW32__
+
 #include <boost/test/included/unit_test.hpp>
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
@@ -118,6 +123,48 @@ BOOST_AUTO_TEST_CASE(test_async_write)
         input >> current_string;
         BOOST_TEST(expected_string == current_string);
     }
+}
+
+// Check for Asio's iocp issue https://github.com/chriskohlhoff/asio/issues/1346
+// for which we made a patch
+BOOST_AUTO_TEST_CASE(test_multi_buffer)
+{
+    temp_file temp_file{test_id};
+
+    task::spawn_detached(ctx, [&] (auto yield) {
+        sys::error_code ec;
+
+        std::string bw0 = "01";
+        std::string bw1 = "23456";
+
+        // Write to a file
+        {
+            auto f = file_io::open_or_create(ctx.get_executor(), temp_file.get_name(), ec);
+            BOOST_TEST_REQUIRE(!ec, "Open file for writing: " << ec.message());
+
+            std::vector<asio::const_buffer> bs = { asio::buffer(bw0), asio::buffer(bw1) };
+
+            asio::async_write(f, bs, yield[ec]);
+            BOOST_TEST_REQUIRE(!ec, "Writing to file: " << ec.message());
+        }
+
+        // Read from the file and check
+        {
+            auto f = file_io::open_readonly(ctx.get_executor(), temp_file.get_name(), ec);
+            BOOST_TEST_REQUIRE(!ec, "Open file for reading: " << ec.message());
+
+            std::string br0 = "XXX";
+            std::string br1 = "XXXX";
+            std::vector<asio::mutable_buffer> bs = { asio::buffer(br0), asio::buffer(br1) };
+
+            asio::async_read(f, bs, yield[ec]);
+            BOOST_TEST_REQUIRE(!ec, "Reading from file: " << ec.message());
+
+            BOOST_REQUIRE_EQUAL(bw0 + bw1, br0 + br1);
+        }
+    });
+
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_read_only_operations)

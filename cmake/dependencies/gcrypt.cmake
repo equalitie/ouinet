@@ -156,8 +156,6 @@ else()
     )
 endif()
 
-
-
 externalproject_add(gpg_error
     URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
     URL_MD5 ef3d928a5a453fa701ecc3bb22be1c64
@@ -167,9 +165,11 @@ externalproject_add(gpg_error
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
+    BUILD_JOB_SERVER_AWARE YES
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
+    INSTALL_JOB_SERVER_AWARE YES
     INSTALL_COMMAND
            make install
         && ${GPGERROR_INSTALL}
@@ -186,9 +186,11 @@ externalproject_add(gcrypt
             ./configure ${HOST_CONFIG}
             --prefix=${GCRYPT_BUILD_DIRECTORY}
             --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
+    BUILD_JOB_SERVER_AWARE YES
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
+    INSTALL_JOB_SERVER_AWARE YES
     INSTALL_COMMAND
            make install
         && ${GCRYPT_INSTALL}

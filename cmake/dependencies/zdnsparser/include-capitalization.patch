@@ -1,0 +1,15 @@
+
+The header starts with a lower case "w" in MINGW and it won't matter on WIN32
+as it's case insensitive
+
+--- a/include/dnsparser.h
++++ b/include/dnsparser.h
+@@ -6,7 +6,7 @@
+ #include <string>
+ 
+ #ifdef WIN32
+-#include <Ws2tcpip.h>   // in_addr
++#include <ws2tcpip.h>   // in_addr
+ #else // WIN32
+ #include <netinet/in.h> // in_addr
+ #endif // WIN32
