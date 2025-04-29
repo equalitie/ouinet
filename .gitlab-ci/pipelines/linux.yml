@@ -14,7 +14,7 @@ linux / prepare-builder-image:
 
 linux / build:
   variables:
-    BOOST_VERSION: "1.79.0"
+    BOOST_VERSION: "1.87.0"
     TARGET_PLATFORM: 'linux'
   extends:
     .linux-build

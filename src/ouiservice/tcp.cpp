@@ -29,7 +29,7 @@ void TcpOuiServiceServer::start_listen(asio::yield_context yield)
         return or_throw(yield, ec);
     }
 
-    _acceptor.listen(asio::socket_base::max_connections, ec);
+    _acceptor.listen(asio::socket_base::max_listen_connections, ec);
     if (ec) {
         _acceptor.close();
         return or_throw(yield, ec);
@@ -81,7 +81,7 @@ static boost::optional<asio::ip::tcp::endpoint> parse_endpoint(std::string endpo
         return boost::none;
     }
     sys::error_code ec;
-    asio::ip::address address = asio::ip::address::from_string(endpoint.substr(0, pos), ec);
+    asio::ip::address address = asio::ip::make_address(endpoint.substr(0, pos), ec);
     if (ec) {
         return boost::none;
     }

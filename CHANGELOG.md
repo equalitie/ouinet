@@ -16,7 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Docker builder images for Android and Linux have now installed a Rust toolchain.
 - `file_io` component uses now `asio::stream_file` as its main backend
 in Windows.
 - Minor changes were applied to the injector and client sources to make
@@ -25,6 +24,15 @@ them work in Windows.
 ### Fixed
 
 - Unit tests are now bulding and passing in Windows.
+- Increased Header size limit in the HTTP response reader.
+
+
+## [v1.0.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.0.0) - 2025-04-14
+
+### Changed
+
+- The default Boost version used by Ouinet is now 1.87.0.
+- Docker builder images for Android and Linux have now installed a Rust toolchain.
 
 
 ## [v0.31.1](https://gitlab.com/equalitie/ouinet/-/releases/v0.31.1) - 2025-01-28

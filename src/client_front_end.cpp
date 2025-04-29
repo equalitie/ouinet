@@ -698,7 +698,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     util::url_match url;
     match_http_url(req.target(), url);
 
-    auto path = !url.path.empty() ? url.path : req.target().to_string();
+    auto path = !url.path.empty() ? url.path : std::string(req.target());
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);

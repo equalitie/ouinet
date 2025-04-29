@@ -32,7 +32,7 @@ vector<bootstrap::Address> bootstraps {
 };
 
 void init_without_bootstrapping(asio::io_context& ctx, DhtNode& dht_node) {
-    asio::spawn(ctx, [&](auto yield) {
+    task::spawn_detached(ctx, [&](auto yield) {
         sys::error_code ec;
         auto local_ep = udp::endpoint{asio::ip::make_address("0.0.0.0"), 0};
         auto m = asio_utp::udp_multiplexer(ctx);
@@ -46,13 +46,13 @@ void init_without_bootstrapping(asio::io_context& ctx, DhtNode& dht_node) {
         dht_node._next_transaction_id = 1;
     });
 
-    asio::spawn(ctx, [&](auto yield) {
+    task::spawn_detached(ctx, [&](auto yield) {
         dht_node.receive_loop(yield);
     });
 }
 
 void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
-    asio::spawn(ctx, [&](auto yield) {
+    task::spawn_detached(ctx, [&](auto yield) {
         size_t success{0};
 
         cout << "server\t"

@@ -2,6 +2,7 @@
 
 #include <boost/intrusive/list.hpp>
 #include <logger.h>
+#include "task.h"
 
 namespace ouinet {
 
@@ -44,7 +45,7 @@ private:
     HandlerTracker handler_tracker_instance(OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING(), false)
 
 #define TRACK_SPAWN(exec, body, ...)\
-    asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
+    task::spawn_detached(exec, [b = body] (asio::yield_context yield) mutable {\
         TRACK_HANDLER();\
         try {\
             b(yield);\
@@ -52,10 +53,10 @@ private:
             LOG_ERROR("Uncaught exception from coroutine " \
                       OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
         }\
-    }, ##__VA_ARGS__)
+    })
 
 #define TRACK_SPAWN_AFTER_STOP(exec, body, ...)\
-    asio::spawn(exec, [b = body] (asio::yield_context yield) mutable {\
+    task::spawn_detached(exec, [b = body] (asio::yield_context yield) mutable {\
         TRACK_HANDLER_AFTER_STOP();\
         try {\
             b(yield);\
@@ -63,4 +64,4 @@ private:
             LOG_ERROR("Uncaught exception from coroutine " \
                       OUINET_DETAIL_HANDLER_TRACKER_LOCATION_STRING() ": ", e.what()); \
         }\
-    }, ##__VA_ARGS__)
+    })

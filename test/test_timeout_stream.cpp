@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include <timeout_stream.h>
+#include <task.h>
 
 BOOST_AUTO_TEST_SUITE(ouinet_timeout_stream)
 
@@ -22,7 +23,7 @@ void async_sleep( asio::io_context& ioc
                 , asio::yield_context yield)
 {
     asio::steady_timer timer(ioc);
-    timer.expires_from_now(duration);
+    timer.expires_after(duration);
     sys::error_code ec;
     timer.async_wait(yield[ec]);
 }
@@ -50,7 +51,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
     tcp::acceptor acceptor(ioc, loopback_ep);
 
-    asio::spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         acceptor.async_accept(s, yield);
 
@@ -69,7 +70,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
         BOOST_REQUIRE_EQUAL(ec, asio::error::timed_out);
     });
 
-    spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         s.async_connect(acceptor.local_endpoint(), yield);
         async_sleep(ioc, 1s, yield);
@@ -84,7 +85,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
     tcp::acceptor acceptor(ioc, loopback_ep);
 
-    asio::spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         acceptor.async_accept(s, yield);
 
@@ -112,7 +113,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
         }
     });
 
-    spawn(ioc, [&](auto yield) {
+    task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         s.async_connect(acceptor.local_endpoint(), yield);
 

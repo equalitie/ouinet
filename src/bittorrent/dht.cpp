@@ -152,7 +152,7 @@ private:
     Stat& find_or_create(boost::string_view msg_type) {
         auto i = _per_msg_stat.find(msg_type);
         if (i == _per_msg_stat.end()) {
-            auto p = _per_msg_stat.insert(std::make_pair( msg_type.to_string()
+            auto p = _per_msg_stat.insert(std::make_pair( std::string(msg_type)
                                                         , Stat()));
             return p.first->second;
         }
@@ -684,7 +684,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
 
         MutableDataItem item {
             public_key,
-            salt.to_string(),
+            std::string(salt),
             response["v"],
             *sequence_number,
             util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature)
@@ -751,7 +751,7 @@ NodeID dht::DhtNode::data_put_mutable(
                 { "seq", data.sequence_number },
                 { "sig", util::bytes::to_string(data.signature) },
                 { "v", data.value },
-                { "token", put_token.to_string() }
+                { "token", std::string(put_token) }
             };
 
             if (!data.salt.empty()) {
@@ -1065,7 +1065,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     boost::optional<sys::error_code> first_error_code;
 
     asio::steady_timer timeout_timer(_exec);
-    timeout_timer.expires_from_now(timeout);
+    timeout_timer.expires_after(timeout);
 
     bool timer_handler_executed = false;
 
@@ -1177,7 +1177,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
             sender,
             BencodedMap {
                 { "y", "e" },
-                { "t", transaction.to_string() },
+                { "t", std::string(transaction) },
                 { "e", BencodedList{code, description} }
             }
         );
@@ -1194,7 +1194,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
                 // https://wiki.theory.org/BitTorrentSpecification
                 // http://www.bittorrent.org/beps/bep_0020.html
                 { "y", "r" },
-                { "t", transaction.to_string() },
+                { "t", std::string(transaction) },
                 { "r", std::move(reply) }
             }
         );
@@ -1583,14 +1583,13 @@ asio::ip::udp::endpoint resolve(
 ) {
     sys::error_code ec;
 
-    udp::resolver::query query(addr, port);
     udp::resolver resolver(exec);
 
     auto cancelled = cancel_signal.connect([&] {
         resolver.cancel();
     });
 
-    udp::resolver::iterator it = resolver.async_resolve(query, yield[ec]);
+    udp::resolver::results_type results = resolver.async_resolve(addr, port, yield[ec]);
 
     if (cancelled) ec = asio::error::operation_aborted;
 
@@ -1598,16 +1597,14 @@ asio::ip::udp::endpoint resolve(
         return or_throw<udp::endpoint>(yield, ec);
     }
 
-    while (it != udp::resolver::iterator()) {
-        auto ep = it->endpoint();
+    for (const auto& result : results) {
+        auto ep = result.endpoint();
 
         if (ep.address().is_v4() && ipv == udp::v4()) {
             return ep;
         } else if (ep.address().is_v6() && ipv == udp::v6()) {
             return ep;
         }
-
-        ++it;
     }
 
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
@@ -1639,8 +1636,8 @@ dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
             auto ep = resolve(
                 _exec,
                 _multiplexer->is_v4() ? udp::v4() : udp::v6(),
-                host.to_string(),
-                port.empty() ? util::str(bootstrap::default_port) : port.to_string(),
+                std::string(host),
+                port.empty() ? util::str(bootstrap::default_port) : std::string(port),
                 cancel,
                 yield[ec]
             );

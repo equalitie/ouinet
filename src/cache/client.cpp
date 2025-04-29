@@ -55,7 +55,7 @@ struct GarbageCollector {
 
     void start()
     {
-        asio::spawn(_executor, [&] (asio::yield_context yield) {
+        task::spawn_detached(_executor, [&] (asio::yield_context yield) {
             TRACK_HANDLER();
             Cancel cancel(_cancel);
 
@@ -304,7 +304,7 @@ struct Client::Impl {
             if (e) return false;
             auto key = hdr[http_::response_uri_hdr];
             if (key.empty()) return false;
-            unpublish_cache_entry(key.to_string());
+            unpublish_cache_entry(std::string(key));
             return false;  // remove all entries
         }, cancel, yield[ec]);
         if (ec) {
@@ -396,30 +396,41 @@ struct Client::Impl {
         if (_dht) {
             auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
 
+            auto local_peers = _local_peer_discovery.found_peers();
+
             if (!debug_tag.empty()) {
-                LOG_DEBUG(debug_tag, " DHT peer lookup:");
-                LOG_DEBUG(debug_tag, "    key=        ", key);
-                LOG_DEBUG(debug_tag, "    group=      ", group);
-                LOG_DEBUG(debug_tag, "    swarm_name= ", peer_lookup_->swarm_name());
-                LOG_DEBUG(debug_tag, "    infohash=   ", peer_lookup_->infohash());
+                LOG_DEBUG(debug_tag, " Peer lookup with DHT and local discovery:");
+                LOG_DEBUG(debug_tag, "    key=         ", key);
+                LOG_DEBUG(debug_tag, "    group=       ", group);
+                LOG_DEBUG(debug_tag, "    swarm_name=  ", peer_lookup_->swarm_name());
+                LOG_DEBUG(debug_tag, "    infohash=    ", peer_lookup_->infohash());
+                LOG_DEBUG(debug_tag, "    local_peers= ", local_peers);
             };
 
             reader = std::make_unique<MultiPeerReader>
                 ( _ex
                 , key
                 , _cache_pk
-                , _local_peer_discovery.found_peers()
+                , move(local_peers)
                 , _dht->local_endpoints()
                 , _dht->wan_endpoints()
                 , move(peer_lookup_)
                 , _newest_proto_seen
                 , debug_tag);
         } else {
+            auto local_peers = _local_peer_discovery.found_peers();
+
+            if (!debug_tag.empty()) {
+                LOG_DEBUG(debug_tag, " Peer lookup with local discovery only:");
+                LOG_DEBUG(debug_tag, "    key=         ", key);
+                LOG_DEBUG(debug_tag, "    local_peers= ", local_peers);
+            };
+
             reader = std::make_unique<MultiPeerReader>
                 ( _ex
                 , key
                 , _cache_pk
-                , _local_peer_discovery.found_peers()
+                , move(local_peers)
                 , _lan_my_endpoints
                 , _newest_proto_seen
                 , debug_tag);
@@ -563,7 +574,7 @@ struct Client::Impl {
             _DEBUG( "Cached response is too old; removing: "
                   , age, " > ", _max_cached_age
                   , "; uri=", key );
-            unpublish_cache_entry(key.to_string());
+            unpublish_cache_entry(std::string(key));
             return false;
         }
 

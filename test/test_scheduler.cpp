@@ -3,8 +3,11 @@
 
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/detached.hpp>
 #include <namespaces.h>
 #include <util/scheduler.h>
+#include <task.h>
 #include <defer.h>
 #include <iostream>
 
@@ -31,8 +34,8 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
     unsigned run_count = 0;
 
     for (unsigned i = 0; i < 20; ++i) {
-        spawn(ctx, [&ctx, &scheduler, &run_count, i](auto yield) {
-            ctx.post(yield);
+        task::spawn_detached(ctx, [&ctx, &scheduler, &run_count](auto yield) {
+            asio::post(ctx, yield);
 
             sys::error_code ec;
             auto slot = scheduler.wait_for_slot(yield[ec]);
@@ -44,7 +47,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
             BOOST_REQUIRE(run_count <= scheduler.max_running_jobs());
 
             Timer timer(ctx);
-            timer.expires_from_now(chrono::milliseconds(std::rand() % 500));
+            timer.expires_after(chrono::milliseconds(std::rand() % 500));
             timer.async_wait(yield[ec]);
 
             BOOST_REQUIRE(!ec);
@@ -59,10 +62,10 @@ BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
 
     Scheduler scheduler(ctx, 0);
 
-    spawn(ctx, [&ctx, &scheduler](auto yield) {
+    task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
         Cancel cancel;
-        spawn(ctx, [&ctx, &scheduler, &cancel](auto yield) {
-            ctx.post(yield);
+        task::spawn_detached(ctx, [&ctx, &cancel](auto yield) {
+            asio::post(ctx, yield);
             cancel();
         });
         sys::error_code ec;
@@ -78,9 +81,9 @@ BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
 
     auto scheduler = make_unique<Scheduler>(ctx, 0);
 
-    spawn(ctx, [&ctx, &scheduler](auto yield) {
-        spawn(ctx, [&ctx, &scheduler](auto yield) {
-            ctx.post(yield);
+    task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
+            task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
+            asio::post(ctx, yield);
             scheduler.reset();
         });
 

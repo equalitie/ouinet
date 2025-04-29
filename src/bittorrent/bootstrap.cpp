@@ -37,7 +37,7 @@ parse_address(boost::string_view addr) {
     }
 
     // Try to interpret host as IP address.
-    auto host = host_v.to_string();
+    auto host = std::string(host_v);
     {
         sys::error_code ec;
         auto ip_addr = asio::ip::make_address(host, ec);

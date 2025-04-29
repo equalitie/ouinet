@@ -6,6 +6,7 @@
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/optional/optional_io.hpp>
+#include "../src/task.h"
 #include "../src/or_throw.h"
 #include "../src/response_reader.h"
 #include "../src/util/wait_condition.h"
@@ -20,18 +21,18 @@ namespace HR = http_response;
 
 // TODO: There should be a more straight forward way to do this.
 tcp::socket
-stream(string response, asio::io_service& ios, asio::yield_context yield)
+stream(string response, asio::io_context& ctx, asio::yield_context yield)
 {
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor a(ios, loopback_ep);
-    tcp::socket s1(ios), s2(ios);
+    tcp::acceptor a(ctx, loopback_ep);
+    tcp::socket s1(ctx), s2(ctx);
 
     sys::error_code accept_ec;
     sys::error_code connect_ec;
 
-    WaitCondition wc(ios);
+    WaitCondition wc(ctx);
 
-    asio::spawn(ios, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+    task::spawn_detached(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
             a.async_accept(s2, yield[accept_ec]);
         });
 
@@ -41,7 +42,7 @@ stream(string response, asio::io_service& ios, asio::yield_context yield)
     if (accept_ec)  return or_throw(yield, accept_ec, move(s1));
     if (connect_ec) return or_throw(yield, connect_ec, move(s1));
 
-    asio::spawn(ios, [rsp = move(response), s = move(s2)]
+    task::spawn_detached(ctx, [rsp = move(response), s = move(s2)]
                      (asio::yield_context yield) mutable {
             asio::async_write(s, asio::buffer(rsp), yield);
         });
@@ -68,7 +69,7 @@ HR::Part chunk_body(boost::string_view s) {
 }
 
 HR::Part chunk_hdr(size_t size, boost::string_view s) {
-    return HR::ChunkHdr{size, s.to_string()};
+    return HR::ChunkHdr{size, std::string(s)};
 }
 
 HR::Part trailer(map<string, string> trailer) {
@@ -120,14 +121,14 @@ HR::Part read_full_body(RR& rr, Cancel& c, asio::yield_context y) {
 BOOST_AUTO_TEST_SUITE(ouinet_response_reader)
 
 BOOST_AUTO_TEST_CASE(test_http10_no_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.0 200 OK\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -142,19 +143,19 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.0 200 OK\r\n"
             "\r\n"
             "abcdef";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -175,13 +176,13 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_no_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -189,7 +190,7 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
             "Content-Length: 0\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -204,13 +205,13 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -219,7 +220,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             "\r\n"
             "0123456789";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -238,13 +239,13 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_chunk) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -256,7 +257,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             "0\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -291,13 +292,13 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_trailer) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -311,7 +312,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             "Hash: hash_of_1234\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -346,13 +347,13 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -368,7 +369,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             "\r\n"
             "abcde";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -404,13 +405,13 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
-    asio::io_service ios;
+    asio::io_context ctx;
 
-    asio::spawn(ios, [&] (auto y) {
+    task::spawn_detached(ctx, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -429,7 +430,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             "\r\n"
             "abcde";
 
-        RR rr(stream(move(rsp), ios, y));
+        RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -484,7 +485,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
         BOOST_REQUIRE(rr.is_done());
     });
 
-    ios.run();
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

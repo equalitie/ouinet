@@ -67,8 +67,13 @@ client_handshake( Stream&& con
 
     auto ssl_sock = make_unique<ssl::stream<Stream>>(move(con), ssl_context);
     bool check_host = host.length() > 0;
+
+    //if (check_host)
+    //    ssl_sock->set_verify_callback(ssl::rfc2818_verification(host));
+
+#warning "rfc2818_verification is no longer present in boost 1.87.0, check whether the below replacement is the correct one"
     if (check_host)
-        ssl_sock->set_verify_callback(ssl::rfc2818_verification(host));
+        ssl_sock->set_verify_callback(ssl::host_name_verification(host));
 
     // Set Server Name Indication (SNI).
     // As seen in ``http_client_async_ssl.cpp`` Boost Beast example.

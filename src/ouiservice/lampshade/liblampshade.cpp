@@ -250,7 +250,7 @@ class LampshadeStream
             });
         }
 
-        asio::spawn(_ex, [
+        task::spawn_detached(_ex, [
             this,
             buffer,
             callback = std::move(callback)
@@ -293,7 +293,7 @@ class LampshadeStream
             });
         }
 
-        asio::spawn(_ex, [
+        task::spawn_detached(_ex, [
             this,
             buffer,
             callback = std::move(callback)

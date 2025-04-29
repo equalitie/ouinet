@@ -37,7 +37,7 @@ namespace ouinet { namespace http_response {
     }
 
     std::ostream& operator<<(std::ostream& os, const Trailer& trailer) {
-        return os << static_cast<Trailer::Base>(trailer);
+        return os << static_cast<const Trailer::Base&>(trailer);
     }
 }} // namespace ouinet::http_response
 
@@ -194,7 +194,7 @@ static const array<string, 4> rs_chunk_ext{
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    asio::spawn(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
+    task::spawn_detached(ctx, [f = forward<F>(f)] (auto yield) {
             try {
                 f(yield);
             }
@@ -214,7 +214,7 @@ void store_response( const fs::path& tmpdir, bool complete
     WaitCondition wc(ctx);
 
     // Send signed response.
-    asio::spawn(ctx, [&signed_w, complete, lock = wc.lock()] (auto y) {
+    task::spawn_detached(ctx, [&signed_w, complete, lock = wc.lock()] (auto y) {
         // Head (raw).
         asio::async_write( signed_w
                          , asio::const_buffer(rs_head.data(), rs_head.size())
@@ -249,7 +249,7 @@ void store_response( const fs::path& tmpdir, bool complete
     });
 
     // Store response.
-    asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
+    task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
                      , &ctx, lock = wc.lock()] (auto y) mutable {
         Cancel c;
         sys::error_code e;
@@ -269,7 +269,7 @@ void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
     auto crpath = fs::path("foo/bar/data.dat");
     {
         auto cpath = tmpcdir / crpath;
-        fs::create_directories(cpath.branch_path());
+        fs::create_directories(cpath.parent_path());
         fs::rename(tmpdir / "body", cpath);
     }
     {
@@ -306,7 +306,7 @@ void store_empty_response( const fs::path& tmpdir
     WaitCondition wc(ctx);
 
     // Send signed response.
-    asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+    task::spawn_detached(ctx, [&signed_w, lock = wc.lock()] (auto y) {
         // Head (raw).
         asio::async_write( signed_w
                          , asio::const_buffer(rs_head.data(), rs_head.size())
@@ -322,7 +322,7 @@ void store_empty_response( const fs::path& tmpdir
     });
 
     // Store response.
-    asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+    task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tmpdir
                      , &ctx, lock = wc.lock()] (auto y) mutable {
         Cancel c;
         sys::error_code e;
@@ -343,7 +343,7 @@ void store_response_head( const fs::path& tmpdir, const string& head_s
     WaitCondition wc(ctx);
 
     // Send signed response.
-    asio::spawn(ctx, [&signed_w, &head_s, lock = wc.lock()] (auto y) {
+    task::spawn_detached(ctx, [&signed_w, &head_s, lock = wc.lock()] (auto y) {
         // Head (raw).
         asio::async_write( signed_w
                          , asio::const_buffer(head_s.data(), head_s.size())
@@ -352,7 +352,7 @@ void store_response_head( const fs::path& tmpdir, const string& head_s
     });
 
     // Store response.
-    asio::spawn(ctx, [ signed_r = std::move(signed_r), &tmpdir
+    task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tmpdir
                      , &ctx, lock = wc.lock()] (auto y) mutable {
         Cancel c;
         sys::error_code e;
@@ -513,7 +513,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
         WaitCondition wc(ctx);
 
         // Load response.
-        asio::spawn(ctx, [ &loaded_w, &tmpdir, complete
+        task::spawn_detached(ctx, [ &loaded_w, &tmpdir, complete
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
@@ -528,7 +528,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
         });
 
         // Check parts of the loaded response.
-        asio::spawn(ctx, [ loaded_r = std::move(loaded_r), complete
+        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r), complete
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
@@ -627,7 +627,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
         WaitCondition wc(ctx);
 
         // Load response.
-        asio::spawn(ctx, [ &loaded_w, &tmpdir, &tmpcdir
+        task::spawn_detached(ctx, [ &loaded_w, &tmpdir, &tmpcdir
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
@@ -642,7 +642,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
         });
 
         // Check parts of the loaded response.
-        asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
+        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
@@ -732,7 +732,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
         WaitCondition wc(ctx);
 
         // Load response.
-        asio::spawn(ctx, [ &loaded_w, &tmpdir
+        task::spawn_detached(ctx, [ &loaded_w, &tmpdir
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
@@ -747,7 +747,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
         });
 
         // Check parts of the loaded response.
-        asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
+        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
@@ -845,7 +845,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
         // when first and last blocks match.
         unsigned first_block, last_block;
         tie(first_block, last_block) = firstb_lastb;
-        asio::spawn(ctx, [ &loaded_w, &tmpdir
+        task::spawn_detached(ctx, [ &loaded_w, &tmpdir
                          , first_block, last_block
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
@@ -864,7 +864,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
         });
 
         // Check parts of the loaded response.
-        asio::spawn(ctx, [ loaded_r = std::move(loaded_r)
+        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
                          , first_block, last_block
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;

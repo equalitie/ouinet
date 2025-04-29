@@ -779,13 +779,7 @@ void listen( InjectorConfig& config
 
         uint64_t connection_id = next_connection_id++;
 
-        // Increase the size of the coroutine stack (we do same in client).
-        // Some interesing info:
-        // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
-        boost::coroutines::attributes attribs;
-        attribs.size *= 2;
-
-        asio::spawn(exec, [
+        task::spawn_detached(exec, [
             connection = std::move(connection),
             &ssl_ctx,
             &cancel,
@@ -810,7 +804,7 @@ void listen( InjectorConfig& config
                 LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
-        }, attribs);
+        });
     }
 }
 
@@ -987,7 +981,7 @@ int main(int argc, const char* argv[])
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
             make_unique<ouiservice::Obfs4OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs4-server");
-        asio::spawn(ex, [
+        task::spawn_detached(ex, [
             obfs4 = server.get(),
             endpoint
         ] (asio::yield_context yield) {
@@ -1016,8 +1010,7 @@ int main(int argc, const char* argv[])
 
     Cancel cancel;
 
-    asio::spawn(ex, [
-        &ex,
+    task::spawn_detached(ex, [
         &proxy_server,
         &config,
         &cancel

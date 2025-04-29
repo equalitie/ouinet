@@ -6,6 +6,7 @@
 #include <boost/intrusive/list.hpp>
 #include "signal.h"
 #include "executor.h"
+#include "unique_function.h"
 
 namespace ouinet {
 
@@ -20,7 +21,7 @@ class ConditionVariable {
 
     struct WaitEntry : IntrusiveHook {
         bool canceled = false;
-        std::function<Sig> handler;
+        util::unique_function<Sig> handler;
 
         void operator()(const sys::error_code& ec) {
             // Move to prevent destruction during execution.
@@ -83,9 +84,11 @@ void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
 
     WaitEntry entry;
 
-    boost::asio::async_completion<boost::asio::yield_context, Sig> init(yield);
-    entry.handler = std::move(init.completion_handler);
-    _on_notify.push_back(entry);
+    auto init = [&entry, this](auto completion_handler)
+    {
+        entry.handler = std::move(completion_handler);
+        _on_notify.push_back(entry);
+    };
 
     auto slot = cancel.connect([&] {
         entry.canceled = true;
@@ -109,7 +112,10 @@ void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
         });
     });
 
-    return init.result.get();
+    return boost::asio::async_initiate<
+        boost::asio::yield_context,
+        void(boost::system::error_code)
+      >(init, yield);
 }
 
 inline

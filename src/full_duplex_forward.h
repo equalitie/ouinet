@@ -64,13 +64,13 @@ full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
     WaitCondition wait_condition(c1.get_executor());
     std::size_t fwd_bytes_c1_c2 = 0, fwd_bytes_c2_c1 = 0;
 
-    asio::spawn
+    task::spawn_detached
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(c1, c2, fwd_bytes_c1_c2, wdog, yield);
           });
 
-    asio::spawn
+    task::spawn_detached
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(c2, c1, fwd_bytes_c2_c1, wdog, yield);
