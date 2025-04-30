@@ -75,15 +75,7 @@ struct Head : public http::response_header<> {
     void async_write(S& s, asio::yield_context yield) const
     {
         Head::writer headw(*this, Base::version(), Base::result_int());
-#ifdef _WIN32
-        // Needed in Windows as the buffer size was not properly set
-        // when writing `headw` directly and therefore writing null chars
-        // at the end of each line.
-        for (auto bf : headw.get())
-            asio::async_write(s, bf, yield);
-#else
         asio::async_write(s, headw.get(), yield);
-#endif
     }
 
     template<class S>
