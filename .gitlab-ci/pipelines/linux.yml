@@ -16,6 +16,7 @@ linux / build:
   variables:
     BOOST_VERSION: "1.87.0"
     TARGET_PLATFORM: 'linux'
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
   extends:
     .linux-build
   needs:
