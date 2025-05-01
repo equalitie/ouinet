@@ -2,11 +2,13 @@
 #include <boost/test/included/unit_test.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/optional.hpp>
+#include <boost/asio/readable_pipe.hpp>
+#include <boost/asio/writable_pipe.hpp>
+#include <boost/asio/connect_pipe.hpp>
 
 #include <cache_control.h>
 #include <http_util.h>
 #include <util.h>
-#include <util/file_io/async_file_handle.h>
 #include <or_throw.h>
 #include <session.h>
 #include <iostream>
@@ -24,7 +26,7 @@ using posix_time::seconds;
 using boost::optional;
 using beast::string_view;
 using ouinet::util::str;
-using stream = async_file_handle;
+using OuinetYield = ouinet::Yield;
 
 static const optional<string> dht_group("fake-dht-group");
 
@@ -42,7 +44,7 @@ static optional<string_view> get(const Request& rq, http::field f)
 template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
     task::spawn_detached(ctx, [&ctx, f = forward<F>(f)](auto yield) {
             try {
-                f(Yield(ctx, yield));
+                f(OuinetYield(ctx, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
@@ -67,16 +69,29 @@ BOOST_AUTO_TEST_CASE(test_parse_date)
     BOOST_CHECK_EQUAL(p(" Sunday, 06-Nov-94 08:49:37 GMT"), "2094-Nov-06 08:49:37");
 }
 
+/*
+ * This class implements an empty `async_write_some` method just to fulfill
+ * `GenericStream` requirements when passing an Asio pipe instead of a stream
+ * file object to the tests.
+ */
+class readable_pipe_patched : public asio::readable_pipe {
+public:
+    explicit readable_pipe_patched(asio::io_context &ctx) : asio::readable_pipe{ctx} {}
+
+    template <typename ConstBufferSequence, typename WriteHandler>
+    void async_write_some(const ConstBufferSequence& buffer, WriteHandler handler) { assert(false); }
+};
+
 struct Pipe {
-    stream source;
-    stream sink;
+    readable_pipe_patched source;
+    asio::writable_pipe sink;
 };
 
 Pipe make_pipe(asio::io_context& ctx) {
-    int fds[2];
-    auto s = ::pipe(fds);
-    BOOST_REQUIRE_NE(s, -1);
-    return { stream(ctx, fds[0]), stream(ctx, fds[1]) };
+    readable_pipe_patched p0{ctx};
+    asio::writable_pipe p1{ctx};
+    asio::connect_pipe(p0, p1);
+    return {std::move(p0), std::move(p1)};
 }
 
 Session make_session(
@@ -97,7 +112,7 @@ Session make_session(
 Session make_session(
         asio::io_context& ctx,
         Response rs,
-        Yield y)
+        OuinetYield y)
 {
     return make_session(ctx, move(rs), static_cast<asio::yield_context>(y));
 }
@@ -116,7 +131,7 @@ Entry make_entry(
         asio::io_context& ctx,
         posix_time::ptime created,
         Response rs,
-        Yield y)
+        OuinetYield y)
 {
     return make_entry(ctx, move(created), move(rs), static_cast<asio::yield_context>(y));
 }

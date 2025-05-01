@@ -48,7 +48,8 @@ unsigned ms(Clock::duration d) {
 BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
     asio::io_context ioc;
 
-    tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 0));
+    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
+    tcp::acceptor acceptor(ioc, loopback_ep);
 
     task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
@@ -81,7 +82,8 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
 BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
     asio::io_context ioc;
 
-    tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 0));
+    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
+    tcp::acceptor acceptor(ioc, loopback_ep);
 
     task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
@@ -128,4 +130,3 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

@@ -1,4 +1,9 @@
 #define BOOST_TEST_MODULE Tests for file_io module
+
+#ifdef __MINGW32__
+#include <winsock2.h>
+#endif // __MINGW32__
+
 #include <boost/test/included/unit_test.hpp>
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
@@ -71,12 +76,6 @@ BOOST_AUTO_TEST_CASE(test_cursor_operations, * ut::depends_on("suite_file_io/tes
                 temp_file.get_name(),
                 ec);
 
-#ifdef _WIN32
-        // Test end position
-        size_t current_position = file_io::end_position(aio_file, ec);
-        BOOST_TEST(expected_position == current_position);
-#endif
-
         // Test file size
         size_t expected_size = expected_string.size();
         size_t actual_size = file_io::file_size(aio_file, ec);
@@ -89,6 +88,11 @@ BOOST_AUTO_TEST_CASE(test_cursor_operations, * ut::depends_on("suite_file_io/tes
 
         // Test remaining size
         BOOST_TEST(3 == file_io::file_remaining_size(aio_file, ec));
+
+        // Read remaining chars
+        std::string data_in(3, '\0');
+        file_io::read(aio_file, asio::buffer(data_in), cancel, yield);
+        BOOST_TEST("789" == data_in);
     });
     ctx.run();
 }
@@ -119,6 +123,48 @@ BOOST_AUTO_TEST_CASE(test_async_write)
         input >> current_string;
         BOOST_TEST(expected_string == current_string);
     }
+}
+
+// Check for Asio's iocp issue https://github.com/chriskohlhoff/asio/issues/1346
+// for which we made a patch
+BOOST_AUTO_TEST_CASE(test_multi_buffer)
+{
+    temp_file temp_file{test_id};
+
+    task::spawn_detached(ctx, [&] (auto yield) {
+        sys::error_code ec;
+
+        std::string bw0 = "01";
+        std::string bw1 = "23456";
+
+        // Write to a file
+        {
+            auto f = file_io::open_or_create(ctx.get_executor(), temp_file.get_name(), ec);
+            BOOST_TEST_REQUIRE(!ec, "Open file for writing: " << ec.message());
+
+            std::vector<asio::const_buffer> bs = { asio::buffer(bw0), asio::buffer(bw1) };
+
+            asio::async_write(f, bs, yield[ec]);
+            BOOST_TEST_REQUIRE(!ec, "Writing to file: " << ec.message());
+        }
+
+        // Read from the file and check
+        {
+            auto f = file_io::open_readonly(ctx.get_executor(), temp_file.get_name(), ec);
+            BOOST_TEST_REQUIRE(!ec, "Open file for reading: " << ec.message());
+
+            std::string br0 = "XXX";
+            std::string br1 = "XXXX";
+            std::vector<asio::mutable_buffer> bs = { asio::buffer(br0), asio::buffer(br1) };
+
+            asio::async_read(f, bs, yield[ec]);
+            BOOST_TEST_REQUIRE(!ec, "Reading from file: " << ec.message());
+
+            BOOST_REQUIRE_EQUAL(bw0 + bw1, br0 + br1);
+        }
+    });
+
+    ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_read_only_operations)
@@ -177,8 +223,13 @@ BOOST_AUTO_TEST_CASE(test_read_only_operations)
     ctx.run();
 }
 
-BOOST_AUTO_TEST_CASE(test_dup_fd)
-{
+
+BOOST_AUTO_TEST_CASE(
+    test_dup_fd
+#ifdef _WIN32
+    , * ut::disabled() * ut::description("file_io::dup_fd not implemented yet for Windows")
+#endif
+){
     temp_file temp_file{test_id};
     std::string expected_string = "abcXYZ";
 
@@ -217,11 +268,15 @@ BOOST_AUTO_TEST_CASE(test_truncate_file)
                 ctx.get_executor(),
                 temp_file.get_name(),
                 ec);
-        file_io::write(aio_file, boost::asio::const_buffer("abcXYZ", 6), cancel, yield);
+        file_io::write(aio_file, boost::asio::const_buffer("xyz", 3), cancel, yield);
         asio::steady_timer timer{ctx};
         timer.expires_after(std::chrono::seconds(default_timer));
         timer.async_wait(yield);
-        file_io::truncate(aio_file, 3, ec);
+
+        file_io::truncate(aio_file, 0, ec);
+        file_io::write(aio_file, boost::asio::const_buffer("abc", 3), cancel, yield);
+        timer.expires_after(std::chrono::seconds(default_timer));
+        timer.async_wait(yield);
     });
     ctx.run();
 
@@ -284,6 +339,73 @@ BOOST_AUTO_TEST_CASE(test_read_and_write_numbers)
         auto actual_number = file_io::read_number<size_t>(aio_file, cancel, yield[ec]);
         BOOST_REQUIRE(!ec);
         BOOST_CHECK(expected_number == actual_number);
+    });
+    ctx.run();
+}
+
+std::string shrink(std::string str){
+    auto replace = [&str](const std::string& toReplace, const std::string& replacement){
+        size_t pos = str.find(toReplace);
+        while (pos != std::string::npos) {
+            str.replace(pos, toReplace.length(), replacement);
+            pos = str.find(toReplace, pos + replacement.length());
+        }
+    };
+
+    replace(std::string(16, 'x'), ".");
+    replace(std::string(16, '.'), "o");
+    replace(std::string(16, 'o'), "O");
+
+    replace(std::string(16, 'y'), ",");
+    replace(std::string(16, ','), "i");
+    replace(std::string(16, 'i'), "I");
+    return str;
+}
+
+BOOST_AUTO_TEST_CASE(test_read_files)
+{
+    temp_file temp_file{test_id};
+
+    // auto fill_count = 31 * 1024 + 1019;
+    auto fill_count = 63 * 1024 + 1019;
+    auto fill_char_1 = 'x';
+    auto fill_char_2 = 'y';
+    auto fill_1 = std::string(fill_count, fill_char_1);
+    auto fill_2 = std::string(fill_count, fill_char_2);
+
+    std::string expected{
+            "aaaa" + fill_1 +
+            "bbbb" + fill_2 +
+            "cccc" };
+    auto expected_size = expected.size();
+    std::string data_in(expected_size, '\0');
+
+    asio::spawn(ctx, [&](asio::yield_context yield) {
+        asio::steady_timer timer{ctx};
+
+        // Create test file and close it
+        async_file_handle aio_file_rw = file_io::open_or_create(
+                ctx.get_executor(),
+                temp_file.get_name(),
+                ec);
+        file_io::write(aio_file_rw, boost::asio::const_buffer(expected.data(), expected_size), cancel, yield);
+        aio_file_rw.close();
+
+        // Open the file again in read-only mode
+        timer.expires_after(std::chrono::seconds(default_timer));
+        timer.async_wait(yield);
+        async_file_handle aio_file_ro = file_io::open_readonly(
+                ctx.get_executor(),
+                temp_file.get_name(),
+                ec);
+
+        file_io::read(aio_file_ro, asio::buffer(data_in), cancel, yield);
+        //std::cout << shrink(expected) << std::endl;
+        //std::cout << shrink(data_in) << std::endl;
+
+        BOOST_TEST(shrink(expected) == shrink(data_in));
+        aio_file_ro.close();
+
     });
     ctx.run();
 }

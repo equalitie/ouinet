@@ -1,5 +1,15 @@
 cmake_minimum_required (VERSION 3.13)
 
+if(MINGW)
+    # Add `#include <winsock2.h>` to every cpp file.
+    # This gets rid of an error and a warning:
+    #   error: #error WinSock.h has already been included
+    #   warning: #warning Please include winsock2.h before windows.h
+    # TODO: Only add to targets where needed or patch the file where it's
+    # coming from (asio).
+    add_definitions(-include winsock2.h)
+endif()
+
 link_libraries(
     Boost::iostreams
     Boost::system
@@ -40,6 +50,7 @@ add_executable(test-response-writer
     "../src/response_part.cpp")
 
 ################################################################################
+if (NOT WIN32)
 add_executable(test-persistent-lru-cache
     "test_persistent_lru_cache.cpp"
     "../src/util/persistent_lru_cache.cpp"
@@ -50,6 +61,7 @@ add_executable(test-persistent-lru-cache
     "../src/util/temp_file.cpp"
 )
 target_link_libraries(test-persistent-lru-cache lib::gcrypt)
+endif ()
 
 ################################################################################
 file(GLOB bt_cpp_files
@@ -69,8 +81,10 @@ add_executable(test-bittorrent "test_bittorrent.cpp" ${bt_cpp_files})
 target_link_libraries(test-bittorrent lib::asio_utp lib::gcrypt lib::uri)
 
 ################################################################################
+if (NOT WIN32)
 add_executable(bt-bep44 "bt-bep44.cpp" ${bt_cpp_files})
 target_link_libraries(bt-bep44 lib::asio_utp lib::gcrypt lib::uri)
+endif ()
 
 ################################################################################
 add_executable(test-routing-table "test-routing-table.cpp" ${bt_cpp_files})
@@ -94,8 +108,10 @@ add_executable(test-util
     "../src/logger.cpp"
 )
 
-set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-target_link_libraries(test-util asan)
+if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
+    target_link_libraries(test-util asan)
+endif ()
 
 ######################################################################
 add_executable(test-logger "test_logger.cpp" "../src/logger.cpp")

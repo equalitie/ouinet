@@ -8,8 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Support in CMake files to build Ouinet for Windows.
+- New CI pipeline to build Ouinet and run the unit tests in Windows.
+- Docker files to generate Windows builder images.
+
+### Changed
+
+- `file_io` component uses now `asio::stream_file` as its main backend
+in Windows.
+- Minor changes were applied to the injector and client sources to make
+them work in Windows.
+- The default Boost version used by Ouinet is now 1.87.0.
+- Docker builder images for Android and Linux have now installed a Rust toolchain.
+
 ### Fixed
 
+- Unit tests are now bulding and passing in Windows.
 - Increased Header size limit in the HTTP response reader.
 
 

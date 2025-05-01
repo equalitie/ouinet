@@ -1,5 +1,11 @@
 include(ExternalProject)
 
+if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja")
+    # Ninja doesn't support these.
+    set(BUILD_JOB_SERVER_AWARE BUILD_JOB_SERVER_AWARE YES)
+    set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
+endif()
+
 set(GPGERROR_LIBRARY_BASE_FILENAME
     ${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
 )
@@ -26,6 +32,9 @@ set(GPG_ERROR_PATCHES
     ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat.patch
     # This avoids having to run `aclocal` and `automake` again.
     ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat-in.patch
+    # * src/gpgrt-int.h (_gpgrt_functions_w32_pollable): Declare with extern so
+    # that strict toolchains don't get confused. see <https://dev.gnupg.org/T4356>
+    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-extern-struct-gpgrt-functions-w32-pollable.patch
 )
 
 
@@ -66,6 +75,13 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     # value is right for android systems.
     set(UNDERSCORE_CONFIG "ac_cv_sys_symbol_underscore=no")
     set(VERSIONED_LIBRARIES 0)
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set(PATCH_COMMAND "true")
+    set(HOST_CONFIG "--host=x86_64-w64-mingw32")
+    set(VERSIONED_LIBRARIES 0)
+    set(GPGERROR_LIBRARY_BASE_FILENAME ${GPGERROR_LIBRARY_BASE_FILENAME}.a)
+    set(GCRYPT_LIBRARY_BASE_FILENAME ${GCRYPT_LIBRARY_BASE_FILENAME}.a)
+
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
@@ -146,8 +162,6 @@ else()
     )
 endif()
 
-
-
 externalproject_add(gpg_error
     URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
     URL_MD5 ef3d928a5a453fa701ecc3bb22be1c64
@@ -157,9 +171,11 @@ externalproject_add(gpg_error
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
+    ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
+    ${INSTALL_JOB_SERVER_AWARE}
     INSTALL_COMMAND
            make install
         && ${GPGERROR_INSTALL}
@@ -176,9 +192,11 @@ externalproject_add(gcrypt
             ./configure ${HOST_CONFIG}
             --prefix=${GCRYPT_BUILD_DIRECTORY}
             --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
+    ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
+    ${INSTALL_JOB_SERVER_AWARE}
     INSTALL_COMMAND
            make install
         && ${GCRYPT_INSTALL}

@@ -183,7 +183,7 @@ void Reader::setup_parser()
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
         assert(!_next_part);
-        _next_part = ChunkHdr{size, std::move(exts.to_string())};
+        _next_part = ChunkHdr{size, exts.to_string()};
     };
 
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {

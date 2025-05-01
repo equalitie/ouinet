@@ -28,8 +28,6 @@ void fseek(async_file_handle&, size_t pos, sys::error_code&);
 
 size_t current_position(async_file_handle&, sys::error_code&);
 
-size_t end_position(async_file_handle& f, sys::error_code& ec);
-
 size_t file_size(async_file_handle&, sys::error_code&);
 
 size_t file_remaining_size(async_file_handle&, sys::error_code&);

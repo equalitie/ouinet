@@ -26,12 +26,23 @@ endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options("-ggdb")
 endif()
+
 add_compile_options("-Wall")
 
+if(WIN32)
+    add_compile_options("-O1")
+    add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
+endif()
 
 ################################################################################
 project(ouinet)
 
+if(MINGW) # Note that MING gets defined only after `project(ouinet)`
+    # Fixes errors
+    #   "Fatal error: can't write 103 bytes to section .text of <CPP_FILE>.obj: 'file too big'"
+    # https://digitalkarabela.com/mingw-w64-how-to-fix-file-too-big-too-many-sections/
+    add_compile_options(-Wa,-mbig-obj)
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
@@ -60,6 +71,13 @@ target_link_libraries(ouinet_base
         # generic_stream.h needs openssl headers, but not the library.
         OpenSSL::headers
 )
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.72.0)
+    # explicitly link with bcrypt after Boost::filesystem
+    target_link_libraries(ouinet_base
+        INTERFACE
+          bcrypt
+    )
+endif()
 if (WITH_ASAN)
     # NOTE: https://stackoverflow.com/a/50163972
     target_link_libraries(ouinet_base

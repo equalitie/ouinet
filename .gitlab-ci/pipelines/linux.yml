@@ -4,14 +4,19 @@ include:
 
 variables:
   TARGET_PLATFORM: 'linux'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 linux / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .prepare-builder-image
 
 linux / build:
   variables:
+    TARGET_PLATFORM: 'linux'
     BOOST_VERSION: "1.87.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
   extends:
     .linux-build
   needs:
@@ -19,12 +24,16 @@ linux / build:
       optional: true
 
 linux / unit-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .linux-unit-test
   needs:
     ['linux / build']
 
 linux / integration-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .linux-integration-test
   needs:

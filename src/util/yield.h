@@ -1,5 +1,10 @@
 #pragma once
 
+#ifdef _WIN32
+#pragma push_macro("Yield")
+#undef Yield
+#endif
+
 #include <sstream>
 #include "../namespaces.h"
 #include "../util/executor.h"
@@ -358,3 +363,7 @@ public:
 };
 
 }} // boost::asio namespace
+
+#ifdef _WIN32
+#pragma pop_macro("Yield")
+#endif
