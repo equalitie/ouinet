@@ -1,5 +1,11 @@
 include(ExternalProject)
 
+if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja")
+    # Ninja doesn't support these.
+    set(BUILD_JOB_SERVER_AWARE BUILD_JOB_SERVER_AWARE YES)
+    set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
+endif()
+
 set(GPGERROR_LIBRARY_BASE_FILENAME
     ${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
 )
@@ -165,11 +171,11 @@ externalproject_add(gpg_error
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
-    BUILD_JOB_SERVER_AWARE YES
+    ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
-    INSTALL_JOB_SERVER_AWARE YES
+    ${INSTALL_JOB_SERVER_AWARE}
     INSTALL_COMMAND
            make install
         && ${GPGERROR_INSTALL}
@@ -186,11 +192,11 @@ externalproject_add(gcrypt
             ./configure ${HOST_CONFIG}
             --prefix=${GCRYPT_BUILD_DIRECTORY}
             --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
-    BUILD_JOB_SERVER_AWARE YES
+    ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
-    INSTALL_JOB_SERVER_AWARE YES
+    ${INSTALL_JOB_SERVER_AWARE}
     INSTALL_COMMAND
            make install
         && ${GCRYPT_INSTALL}
