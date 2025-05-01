@@ -36,6 +36,8 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
 
         self._logger = logging.getLogger()
 
+        self.ready_data = None #the data which has triggered current deferred to be access by the deferred
+
     def errReceived(self, data):
         """
         listen for the debugger output reacto to fatal errors and other clues
@@ -49,13 +51,14 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
 
         if self.check_next_level_got_ready(data):
             self._got_ready_level += 1
+            self.ready_data = data
             self._ready_deferred_fns[self._got_ready_level].callback(self)
 
-        #if self.check_error_received(data):
-        #    raise Exception("error")
+        if self.check_error_received(data):
+            raise Exception("error")
 
     def check_next_level_got_ready(self, data):
-        # if re.match(TestFixtures.I2P_TUNNEL_READY_REGEX, data):
+        # if re.match(TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data):
         #     pdb.set_trace()
         if len(self._ready_benchmark_regexes) > self._got_ready_level + 1:
             return re.match(self._ready_benchmark_regexes[self._got_ready_level + 1], data)
@@ -80,12 +83,11 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         if os.path.exists(process_pid_file):
             os.remove(process_pid_file)
 
-
 class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
         super(OuinetCacheProcessProtocol, self).__init__(proc_config,
-                benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
-                benchmark_deferreds[TestFixtures.READY_REGEX_INDEX])
+                                                         [benchmark_regexes[TestFixtures.READY_REGEX_INDEX]],
+                                                         [benchmark_deferreds[TestFixtures.READY_REGEX_INDEX]])
 
         self._index_ready_deferred = None
         self._request_cached_deferred = None

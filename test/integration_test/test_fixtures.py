@@ -74,17 +74,18 @@ class TestFixtures:
                          "port": 8075}
 
     CACHE_CLIENT = [{ "name": "cache_client_1",
-                         "port": 8074},
+                         "port": 8074, "front-end-port": 8072},
                       { "name": "cache_client_2",
-                         "port": 8073}]
+                         "port": 8073, "front-end-port": 8071} ]
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
-    BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*BEP44 Index: ([0-9A-Fa-f]+)[\s\S]*"
+    BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*HTTP signing public key \(Ed25519\): ([0-9A-Fa-f]+)[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*Resolving IPNS address: [\s\S]*'
     IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS ID has been resolved successfully[\s\S]*'
-    BEP44_CACHE_READY_REGEX = r'[\s\S]*BEP44 index: bootstrapped BitTorrent DHT[\s\S]*'
+    #BEP44_CACHE_READY_REGEX = r'[\s\S]*BEP44 index: bootstrapped BitTorrent DHT[\s\S]*'
+    BEP44_CACHE_READY_REGEX = r'[\s\S]*BT DHT: Successfully stored contacts[\s\S]*'
     IPFS_REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
     BEP44_REQUEST_CACHED_REGEX = r'[\s\S]*BEP44 index: inserted key[\s\S]*'
     BEP44_RESPONSE_CACHED_REGEX = r'[\s\S]*BEP44 index: insertion finished[\s\S]*'

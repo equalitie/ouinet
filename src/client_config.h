@@ -637,7 +637,7 @@ ClientConfig::ClientConfig(int argc, char* argv[])
             }
         }
 #ifdef __EXPERIMENTAL__
-        if (type_str == "bep3-http-over-i2p") {
+        else if (type_str == "bep3-http-over-i2p") {
             _cache_type = CacheType::Bep3HTTPOverI2P;
 
             LOG_DEBUG("Using bep3-http cache over i2p");

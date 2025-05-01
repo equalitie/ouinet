@@ -261,6 +261,10 @@ class OuinetI2PInjector(OuinetInjector):
         except:
             return None
 
+    def get_index_key(self):
+        return self._proc_protocol.BEP44_pubk
+
+
 class OuinetIPFSCacheInjector(OuinetInjector):
     """
     As above, but for the 'injector which cache data' with an IPNS index
