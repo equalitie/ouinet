@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.1.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.1.0) - 2025-05-01
+
 ### Added
 
 - Support in CMake files to build Ouinet for Windows.
 - New CI pipeline to build Ouinet and run the unit tests in Windows.
 - Docker files to generate Windows builder images.
+- Script to install a specific version of CMake in Linux builder images.
 
 ### Changed
 
@@ -20,8 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 in Windows.
 - Minor changes were applied to the injector and client sources to make
 them work in Windows.
-- The default Boost version used by Ouinet is now 1.87.0.
-- Docker builder images for Android and Linux have now installed a Rust toolchain.
+- CI Linux jobs are using now CMake 3.31.7 to build Ouinet.
 
 ### Fixed
 
