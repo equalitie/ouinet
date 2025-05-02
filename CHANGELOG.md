@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.1.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.1.1) - 2025-05-02
+
+### Fixed
+
+- Add conditionals to use `BUILD_JOB_SERVER_AWARE` only when CMake is equal or
+greater than v3.28.
+
+### Changed
+
+- Use CMake v3.31.7 to build Ouinet in the production Docker images.
+
+
 ## [v1.1.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.1.0) - 2025-05-01
 
 ### Added
