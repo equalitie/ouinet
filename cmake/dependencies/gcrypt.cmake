@@ -1,7 +1,8 @@
 include(ExternalProject)
 
-if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja")
+if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja" AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
     # Ninja doesn't support these.
+    # The job server options were introduced in CMake v3.28.0
     set(BUILD_JOB_SERVER_AWARE BUILD_JOB_SERVER_AWARE YES)
     set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
 endif()
