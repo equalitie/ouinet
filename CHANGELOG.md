@@ -1093,437 +1093,301 @@ available.
 - Other fixes for Android and asynchronous operations, timeouts and
 cancellations.
 
+# Appendix A: Git tags reference
+
+This section lists older tags in the repository as a reference to the changes
+released before adhering to any consistent release note format. A link to the
+comparison between the previous version and the listed version is provided to
+give some idea of the changes included in the version. 
+
 ## [v0.7.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.7.0) - 2020-03-24
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.6.1...v0.7.0](https://gitlab.com/equalitie/ouinet/-/compare/v0.6.1...v0.7.0)
 
 ## [v0.6.1](https://gitlab.com/equalitie/ouinet/-/tags/v0.6.1) - 2020-03-16
 
-### Changed
-- Enable logging to file using the CENO extension
+- See changes [v0.6.0...v0.6.1](https://gitlab.com/equalitie/ouinet/-/compare/v0.6.0...v0.6.1)
 
 ## [v0.6.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.6.0) - 2020-03-10
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.5.0...v0.6.0](https://gitlab.com/equalitie/ouinet/-/compare/v0.5.0...v0.6.0)
 
 ## [v0.5.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.5.0) - 2020-02-28
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.4.3...v0.5.0](https://gitlab.com/equalitie/ouinet/-/compare/v0.4.3...v0.5.0)
 
 ## [v0.4.3](https://gitlab.com/equalitie/ouinet/-/tags/v0.4.3) - 2020-01-16
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.4.2...v0.4.3](https://gitlab.com/equalitie/ouinet/-/compare/v0.4.2...v0.4.3)
 
 ## [v0.4.2](https://gitlab.com/equalitie/ouinet/-/tags/v0.4.2) - 2019-12-20
 
-### Added
-- Let users specify which swarm to use from Bep5Client::connect
-When constructing Bep5Client. This is mostly useful for debugging.
+- See changes [v0.4.1...v0.4.2](https://gitlab.com/equalitie/ouinet/-/compare/v0.4.1...v0.4.2)
 
 ## [v0.4.1](https://gitlab.com/equalitie/ouinet/-/tags/v0.4.1) - 2019-12-13
 
-### Changed
-- Merge work to have clients proxy requests to injectors
+- See changes [v0.4.0...v0.4.1](https://gitlab.com/equalitie/ouinet/-/compare/v0.4.0...v0.4.1)
 
 ## [v0.4.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.4.0) - 2019-12-02
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.3.7...v0.4.0](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.7...v0.4.0)
 
 ## [v0.3.7](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.7) - 2019-11-22
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.3.6...v0.3.7](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.6...v0.3.7)
 
 ## [v0.3.6](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.6) - 2019-11-21
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.3.5...v0.3.6](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.5...v0.3.6)
 
 ## [v0.3.5](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.5) - 2019-11-21
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.3.4...v0.3.5](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.4...v0.3.5)
 
 ## [v0.3.4](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.4) - 2019-11-18
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.3.3...v0.3.4](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.3...v0.3.4)
 
 ## [v0.3.3](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.3) - 2019-11-08
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.3.2...v0.3.3](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.2...v0.3.3)
 
 ## [v0.3.2](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.2) - 2019-11-06
 
-### Changed
-- Better human-readable client error message for injector errors.
-Also the function may get injector errors other than version incompatibility.
+- See changes [v0.3.1...v0.3.2](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.1...v0.3.2)
 
 ## [v0.3.1](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.1) - 2019-11-05
 
-### Changed
-- Have client check protocol version in BEP5/HTTP requests.
+- See changes [v0.3.0...v0.3.1](https://gitlab.com/equalitie/ouinet/-/compare/v0.3.0...v0.3.1)
 
 ## [v0.3.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.3.0) - 2019-11-05
 
-### Changed
-- Update HTTP signatures protocol version number to 2.
-No changes exist at all regarding version number 1.  This update just
-synchronizes the version number with the one sent by clients.
+- See changes [v0.2.0...v0.3.0](https://gitlab.com/equalitie/ouinet/-/compare/v0.2.0...v0.3.0)
 
 ## [v0.2.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.2.0) - 2019-10-28
 
-### Changed
-- Update signed HTTP head version to 1.
-- Update documents and tests.
+- See changes [v0.1.5...v0.2.0](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.5...v0.2.0)
 
 ## [v0.1.5](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.5) - 2019-10-28
 
-### Added
-- Add MD5 hash of JSON parsing library source.
+- See changes [v0.1.4...v0.1.5](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.4...v0.1.5)
 
 ## [v0.1.4](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.4) - 2019-10-25
 
-### Changed
-- Dockerfile: Retrieve Boost license from build directory.
+- See changes [v0.1.3...v0.1.4](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.3...v0.1.4)
 
 ## [v0.1.3](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.3) - 2019-08-28
 
-### Fixed
-- Fix Base64 decoding function dropping too many trailing null chars.
-The new implementation may not be bullet-proof for malformed encoded strings,
-but it should not break anything and still work as expected for well-formed
-encoded strings (i.e. having one or two trailing `=` characters).
+- See changes [v0.1.2...v0.1.3](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.2...v0.1.3)
 
 ## [v0.1.2](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.2) - 2019-08-27
 
-### Changed
-- Merge branch 'http-rolling-sigs'.
-This includes a couple of proposals for supporting rolling HTTP
-signatures, i.e. signatures on partial body data to allow verified streaming
-of cached content between clients.
+- See changes [v0.1.1...v0.1.2](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.1...v0.1.2)
 
 ## [v0.1.1](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.1) - 2019-08-07
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.1.0...v0.1.1](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.0...v0.1.1)
 
 ## [v0.1.1-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.1-docker1) - 2019-08-07
 
-### Fixed
-- Wrapper: missing line continuations.
+- See changes [v0.1.1...v0.1.1-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.1...v0.1.1-docker1)
 
 ## [v0.1.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.0) - 2019-07-24
 
-### Changed
-- Docker: include Boost ASIO and ASIO SSL libs from build tree.
+- See changes [v0.0.36...v0.1.0](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.36...v0.1.0)
 
 ## [v0.0.36](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.36) - 2019-04-29
 
-### Changed
-- Refactor Injector to not do any DHT operations
-It was making it very unresponsive
+- See changes [v0.0.35...v0.0.36](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.35...v0.0.36)
 
 ## [v0.0.35](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.35) - 2019-04-24
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.0.34...v0.0.35](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.34...v0.0.35)
 
 ## [v0.0.34](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.34) - 2019-04-18
 
-### Changed
-- Allow zero BEP44 index capacity. In this case, the BEP44 index does not
-even create an updater.  This is the default for the injector, to 
-generally avoid republishing entries whose data may no longer be seeded
-by the injector nor any client.
+- See changes [v0.0.33...v0.0.34](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.33...v0.0.34)
 
 ## [v0.0.34ilog](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.34ilog) - 2019-04-23
 
-### Added
-- Add logging in injector.cpp
+- See changes [v0.0.34...v0.0.34ilog](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.34...v0.0.34ilog)
 
 ## [v0.0.33](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.33) - 2019-04-08
 
-### Fixed
-- Fix function name in TODO message
+- See changes [v0.0.32...v0.0.33](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.32...v0.0.33)
 
 ## [v0.0.32](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.32) - 2019-03-29
 
-### Changed
-- Update BEP44 LRU entries even if they are still found in the DHT
-Otherwise we get stuck into checking the same entry until it vanishes from the
-DHT or is replaced by one with a greater sequence number.
+- See changes [v0.0.31...v0.0.32](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.31...v0.0.32)
 
 ## [v0.0.31](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.31) - 2019-03-26
 
-### Fixed
-- Fix reading from disk in PersistenLruCache
+- See changes [v0.0.30...v0.0.31](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.30...v0.0.31)
 
 ## [v0.0.30](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.30) - 2019-03-14
 
-### Added
-- Add `index-bep44-capacity` options both to client and injector to
-configure the capacity of the local part of the BEP44 index (both in memory
-and in persistent storage).
+- See changes [v0.0.29...v0.0.30](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.29...v0.0.30)
 
 ## [v0.0.29](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.29) - 2019-03-05
 
-### Changed
-- There is no `tls:` endpoint parsing, only `tcp:`
-Adjust help messages and Docker wrapper script.
+- See changes [v0.0.28...v0.0.29](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.28...v0.0.29)
 
 ## [v0.0.28](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.28) - 2019-03-01
 
-### Changed
-- Downgrade required C++ standard back to C++14
-The version of CMake in both Vagrant and Docker (i.e. Debian Stretch) does not
-accept the C++17 standard, so builds broke.  Using the C++14 standard instead
-results in a successful build without issues under those platforms, so I am
-downgrading it until a compelling reason is provided (and documented in the
-commit message) to require upgrading the aforementioned platforms.
+- See changes [v0.0.27...v0.0.28](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.27...v0.0.28)
 
 ## [v0.0.27](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.27) - 2019-02-14
 
-### Changed
-- Group related command-line options together
-It would be even better if Boost allowed to insert option grouping heading
-lines, but it seems it does not.
+- See changes [v0.0.26...v0.0.27](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.26...v0.0.27)
 
 ## [v0.0.26](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.26) - 2019-02-11
 
-### Fixed
-- Restore accidentally disabled B-tree index creation in injector
+- See changes [v0.0.25...v0.0.26](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.25...v0.0.26)
 
 ## [v0.0.26-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.26-docker1) - 2019-02-12
 
-### Fixed
-- Only copy from I2P backup key to i2pd's if the former exists
+- See changes [v0.0.26...v0.0.26-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.26...v0.0.26-docker1)
 
 ## [v0.0.25](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.25) - 2019-02-08
 
-### Added
-- Add optional memory limit to Docker Compose deployments
+- See changes [v0.0.24...v0.0.25](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24...v0.0.25)
 
 ## [v0.0.24](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24) - 2019-01-16
 
-### Changed
-- Some pending renames of "db" to "index". Basically in comments and 
-log messages, plus some file rename.
+- See changes [v0.0.23...v0.0.24](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.23...v0.0.24)
 
 ## [v0.0.24-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24-docker1) - 2019-01-17
 
-### Changed
-- Update version number in Dockerfile.
+- See changes [v0.0.24...v0.0.24-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24...v0.0.24-docker1)
 
 ## [v0.0.24-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24-docker2) - 2019-01-17
 
-### Changed
-- Fetch Git tags for checking out version in Docker file
-Previously one would need to use a commit reference (or a branch name, which
-should not be used for this).
+- See changes [v0.0.24-docker1...v0.0.24-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24-docker1...v0.0.24-docker2)
 
 ## [v0.0.23](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.23) - 2018-12-19
 
-### Changed
-- Merge branch 'external-ca-certs'
+- See changes [v0.0.22...v0.0.23](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.22...v0.0.23)
 
 ## [v0.0.22](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.22) - 2018-12-10
 
-### Changed
-- Merge branch 'key-vs-url'
-This tries to stablish a clear separation between URLs and db keys.
-Hopefully, URLs should be made canonical before attempting a lookup or
-insertion, and the formatting of the key in general should be easily
-changeable (instead of chasing all the places where a URL is used directly as
-a key.
-- URL canonicalization now takes place in `ouinet::util::canonical_url`, and key
-formatting in `ouinet::key_from_http_req`.
+- See changes [v0.0.21...v0.0.22](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.21...v0.0.22)
 
 ## [v0.0.21](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.21) - 2018-12-06
 
-### Changed
-- Update asio-ipfs module to throttle dht upload speed.
-For this to take effect in an existing builds. Delete the 
-"<build-dir>/modules/asio-ipfs/CMakeFiles/go-ipfs-complete" directory
+- See changes [v0.0.20...v0.0.21](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.20...v0.0.21)
 
 ## [v0.0.20](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.20) - 2018-11-28
 
-### Changed
-- Merge branch 'fix-conf-ports'
-This adds saner port defaults for Docker images, as well as enabling TLS at
-the injector and generating a random credential password.
-The readme and Docker Compose files are updated to reflect the changes, along
-with some instructions for hosts which do not support Docker host networking.
+- See changes [v0.0.19...v0.0.20](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.19...v0.0.20)
 
 ## [v0.0.19](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.19) - 2018-11-09
 
-### Changed
-- Disable origin access on Android temporarily, while the app is being tested
+- See changes [v0.0.18...v0.0.19](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.18...v0.0.19)
 
 ## [v0.0.18](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.18) - 2018-11-02
 
-### Changed
-- Remove PID file functionality
-It was not really useful since (i) neither the client nor injector processes
-do fork, (ii) Android and Docker have their own mechanisms for not running two
-instances concurrently, (iii) the exit codes (both from programs and Docker
-wrapper script) are quite reliable now, so auto-restarting with Docker or some
-monitor should work, and (iv) it made development testing quite uncomfortable.
+- See changes [v0.0.17...v0.0.18](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.17...v0.0.18)
 
 ## [v0.0.17](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.17) - 2018-11-01
 
-### Changed
-- Use HTTP access for I2PD Git repository
+- See changes [v0.0.16...v0.0.17](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.16...v0.0.17)
 
 ## [v0.0.16](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.16) - 2018-10-02
 
-### Changed
-- Build debug-enabled Docker image with `OUINET_DEBUG=yes` argument
-With that enabled, debugging symbols are left in binaries and the program is
-run under `gdb` with a backtrace dump on exit.
+- See changes [v0.0.15...v0.0.16](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.15...v0.0.16)
 
 ## [v0.0.15](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.15) - 2018-09-26
 
-### Fixed
-- Keep connections alive if `Connection: keep-alive` is present
+- See changes [v0.0.14...v0.0.15](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.14...v0.0.15)
 
 ## [v0.0.14](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.14) - 2018-09-20
 
-### Changed
-- Only seed body in client after receiving injected response
-The code was still seeding HTTP head+body after the head was moved into the
-descriptor.
+- See changes [v0.0.13-1...v0.0.14](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.13-1...v0.0.14)
 
 ## [v0.0.13-1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.13-1) - 2018-09-05
 
-### Fixed
-- Fix case of `network-uri` build options
+- See changes [v0.0.13...v0.0.13-1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.13...v0.0.13-1)
 
 ## [v0.0.13](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.13) - 2018-09-05
 
-### Added
-- Add a new API endpoint where one can send a GET request with a URI as a
-query argument and get back the corresponding URI descriptor in the cache, if
-present.
+- See changes [v0.0.12...v0.0.13](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.12...v0.0.13)
 
 ## [v0.0.12](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.12) - 2018-08-30
 
-### Fixed
-- Fix the assertion from inside Yield probably caused by trying to use a 
-"moved from" Yield by the coroutine spawned in the `start_timing` function.
+- See changes [v0.0.11...v0.0.12](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.11...v0.0.12)
 
 ## [v0.0.11](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.11) - 2018-08-29
 
-### Changed
-- Mostly better logging and timeout for fetch_http_* functions
+- See changes [v0.0.10-docker1...v0.0.11](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.10-docker1...v0.0.11)
 
 ## [v0.0.10-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.10-docker1) - 2018-07-31
 
-### Changed
-- Client: don't report ssl::error::stream_truncated from clients
-https://github.com/boostorg/beast/issues/915#issuecomment-348268391
+- See changes [v0.0.9-docker1...v0.0.10-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.9-docker1...v0.0.10-docker1)
 
 ## [v0.0.10-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.10-docker2) - 2018-08-22
 
-### Changed
-Update asio-ipfs module (bumped go-ipfs version)
+- See changes [v0.0.10-docker1...v0.0.10-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.10-docker1...v0.0.10-docker2)
 
 ## [v0.0.9-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.9-docker1) - 2018-07-09
 
-### Added
-- New example configuration using Origin and Proxy request mechanisms
-Instead of using the Injector mechanism with disabled caching of requests like
-HEAD, it uses the Origin and Proxy mechanisms.
-The Origin mechanism is disabled by default, and the Proxy mechanism is
-enabled by default, which is the configuration most similar to the previous
-one.
+- See changes [v0.0.8-docker1...v0.0.9-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.8-docker1...v0.0.9-docker1)
 
 ## [v0.0.8-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.8-docker1) - 2018-06-27
 
-### Changed
-- Do not move certificate chain into LRU cache
-It had no effect in any case but it was bad style since the chain was being
-used right after.
+- See changes [v0.0.7-docker1...v0.0.8-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.7-docker1...v0.0.8-docker1)
 
 ## [v0.0.7-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.7-docker1) - 2018-06-25
 
-### Changed
-- Use standard library regular expressions instead of Boost's
+- See changes [v0.0.6-docker1...v0.0.7-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.6-docker1...v0.0.7-docker1)
 
 ## [v0.0.6-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.6-docker1) - 2018-06-21
 
-### Changed
-- Increment min required Boost version 1.62 -> 1.67
+- See changes [v0.0.5-docker3...v0.0.6-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker1...v0.0.6-docker1)
 
 ## [v0.0.6-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.6-docker2) - 2018-06-21
 
-### Changed
-- Use anonymous HTTPS URL for ASIO-IPFS submodule
+- See changes [v0.0.6-docker1...v0.0.6-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.6-docker1...v0.0.6-docker2)
 
 ## [v0.0.5-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-android) - 2018-04-18
 
-### Added
-- Add debug output to the Client
+- See changes [v0.0.4-android...v0.0.5-android](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.4-android...v0.0.5-android)
 
 ## [v0.0.5-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker1) - 2018-05-03
 
-### Chaged
-- Change the name of the wrapper script to just ``ouinet`` (since it is
-not really dependent on Docker) and makes it executable from whatever
-directory.
+- See changes [v0.0.5-docker...v0.0.5-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker...v0.0.5-docker1)
 
 ## [v0.0.5-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker2) - 2018-05-03
 
-### Changed
-- Parse ``--repo`` arguments in wrapper script
-This allows the user to specify a different repository directory and have the
-wrapper script use it instead of the hardwired default one.
+- See changes [v0.0.5-docker1...v0.0.5-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker1...v0.0.5-docker2)
 
 ## [v0.0.5-docker3](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker3) - 2018-05-04
 
-### Changed
-- Check for ``--help`` argument in wrapper script
-To allow trivial usage to get help about command line without yet messing with
-repositories.
+- See changes [v0.0.5-docker2...v0.0.5-docker3](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker2...v0.0.5-docker3)
 
 ## [v0.0.5-docker](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker) - 2018-04-24
 
-### Changed
-- Ignore end_of_stream error when fetching a http page
-I tested and the patch resolves the issue now I get 200 and the correct body from the client.
+- See changes [v0.0.5-android...v0.0.5-docker](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-android...v0.0.5-docker1)
 
 ## [v0.0.4-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.4-android) - 2018-04-18
 
-### Changed
-- Client now starts seeding content when it receives it from the injector
-Until now, the client only started seeding a content when
-it obtained it from the cache.
+- See changes [v0.0.3-android...v0.0.4-android](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.3-android...v0.0.4-android)
 
 ## [v0.0.3-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.3-android) - 2018-04-18
 
-### Changed
-- Client now starts seeding content when it receives it from the injector
-Until now, the client only started seeding a content when
-it obtained it from the cache.
+- See changes [v0.0.2-android...v0.0.3-android](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.2-android...v0.0.3-android)
 
 ## [v0.0.2-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.2-android) - 2018-04-12
 
-### Changed
-- Update ipfs-cache submodule
-Contains a fix to a nasty ipfs-cache::injector bug.
+- See changes [v0.0.1-android...v0.0.2-android](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.1-android...v0.0.2-android)
 
 ## [v0.0.1-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.1-android) - 2018-04-10
 
-### Fixed
-- Minor fix to remove typedef
+- See changes [v0.0.0-android...v0.0.1-android](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.0-android...v0.0.1-android)
 
 ## [v0.0.0-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.0-android) - 2018-03-29
 
-### Changed
-- Move JNI related code out from MainActivity
+- See changes [01ed58...v0.0.0-android](https://gitlab.com/equalitie/ouinet/-/compare/01ed58...v0.0.0-android)
+
+## [01ed58](https://gitlab.com/equalitie/ouinet/-/commit/01ed585fedc22ed028cf44d4491f53285ba30666) - 2017-09-21
+
+- Initial commit
