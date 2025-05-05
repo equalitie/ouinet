@@ -719,6 +719,13 @@ and caches (as volumes, bind mounts, etc.), but the setup is incompatible
 with v0.11 containers with a static cache.  If you have such a container,
 you will need to re-create it.
 
+## [v0.11.3-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.11.3-docker1) - 2021-06-16
+
+### Changed
+- Change static cache directory. If it is a mount point (e.g. a bind 
+mount from the host) and the repo is too (e.g. a volume), files in the 
+repo are mangled.
+
 ## [v0.11.3](https://gitlab.com/equalitie/ouinet/-/tags/v0.11.3) - 2021-06-15
 
 ### Fixed
@@ -727,13 +734,6 @@ instead of `r` (reply).
 - Do reset error code after failed lookup in the local cache.
 - Do reset error code when computing available body size of local cache
 entry without a `body` file, when static cache is disabled.
-
-## [v0.11.3-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.11.3-docker1) - 2021-06-16
-
-### Changed
-- Change static cache directory. If it is a mount point (e.g. a bind 
-mount from the host) and the repo is too (e.g. a volume), files in the 
-repo are mangled.
 
 ## [v0.11.2](https://gitlab.com/equalitie/ouinet/-/tags/v0.11.2) - 2021-06-15
 
@@ -968,6 +968,23 @@ Please note that this affected redirections in the landing pages of some
 websites (e.g. `example.com -> https://www.example.com/`), which rendered
 the sites unfit for retrieval from other clients.
 
+## [v0.8.1-docker3](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.1-docker3) - 2020-11-10
+
+### Fixed
+- Docker: Fix dependency for `ping-swarm` script.
+- The OpenBSD version of Netcat is needed, which is *not* the default in Debian
+Buster.  Make the exact version explicit to ensure future operation.
+
+## [v0.8.1-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.1-docker2) - 2020-11-10
+
+### Fixed
+- Docker: Add missing dependency for `ping-swarm` script.
+
+## [v0.8.1-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.1-docker1) - 2020-11-10
+
+### Fixed
+- Docker: Fix silly syntax error.
+
 ## [v0.8.1](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.1) - 2020-11-10
 
 ### Added
@@ -980,23 +997,6 @@ testing tools under the `utils` directory.
 - With debugging on, log the actual peer (injector or bridge) used to reach
 an injector; also periodically report the number of injectors and bridges
 seen in their respective swarms (e.g. to detect blocking of BT traffic).
-
-## [v0.8.1-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.1-docker1) - 2020-11-10
-
-### Fixed
-- Docker: Fix silly syntax error.
-
-## [v0.8.1-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.1-docker2) - 2020-11-10
-
-### Fixed
-- Docker: Add missing dependency for `ping-swarm` script.
-
-## [v0.8.1-docker3](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.1-docker3) - 2020-11-10
-
-### Fixed
-- Docker: Fix dependency for `ping-swarm` script.
-- The OpenBSD version of Netcat is needed, which is *not* the default in Debian
-Buster.  Make the exact version explicit to ensure future operation.
 
 ## [v0.8.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.8.0) - 2020-09-15
 
@@ -1182,15 +1182,15 @@ give some idea of the changes included in the version.
 
 ## [v0.1.2](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.2) - 2019-08-27
 
-- See changes [v0.1.1...v0.1.2](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.1...v0.1.2)
-
-## [v0.1.1](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.1) - 2019-08-07
-
-- See changes [v0.1.0...v0.1.1](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.0...v0.1.1)
+- See changes [v0.1.1-docker1...v0.1.2](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.1-docker1...v0.1.2)
 
 ## [v0.1.1-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.1-docker1) - 2019-08-07
 
 - See changes [v0.1.1...v0.1.1-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.1...v0.1.1-docker1)
+
+## [v0.1.1](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.1) - 2019-08-07
+
+- See changes [v0.1.0...v0.1.1](https://gitlab.com/equalitie/ouinet/-/compare/v0.1.0...v0.1.1)
 
 ## [v0.1.0](https://gitlab.com/equalitie/ouinet/-/tags/v0.1.0) - 2019-07-24
 
@@ -1202,15 +1202,15 @@ give some idea of the changes included in the version.
 
 ## [v0.0.35](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.35) - 2019-04-24
 
-- See changes [v0.0.34...v0.0.35](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.34...v0.0.35)
-
-## [v0.0.34](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.34) - 2019-04-18
-
-- See changes [v0.0.33...v0.0.34](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.33...v0.0.34)
+- See changes [v0.0.34ilog...v0.0.35](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.34ilog...v0.0.35)
 
 ## [v0.0.34ilog](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.34ilog) - 2019-04-23
 
 - See changes [v0.0.34...v0.0.34ilog](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.34...v0.0.34ilog)
+
+## [v0.0.34](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.34) - 2019-04-18
+
+- See changes [v0.0.33...v0.0.34](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.33...v0.0.34)
 
 ## [v0.0.33](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.33) - 2019-04-08
 
@@ -1238,31 +1238,31 @@ give some idea of the changes included in the version.
 
 ## [v0.0.27](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.27) - 2019-02-14
 
-- See changes [v0.0.26...v0.0.27](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.26...v0.0.27)
-
-## [v0.0.26](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.26) - 2019-02-11
-
-- See changes [v0.0.25...v0.0.26](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.25...v0.0.26)
+- See changes [v0.0.26-docker1...v0.0.27](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.26-docker1...v0.0.27)
 
 ## [v0.0.26-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.26-docker1) - 2019-02-12
 
 - See changes [v0.0.26...v0.0.26-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.26...v0.0.26-docker1)
 
+## [v0.0.26](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.26) - 2019-02-11
+
+- See changes [v0.0.25...v0.0.26](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.25...v0.0.26)
+
 ## [v0.0.25](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.25) - 2019-02-08
 
-- See changes [v0.0.24...v0.0.25](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24...v0.0.25)
+- See changes [v0.0.24-docker2...v0.0.25](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24-docker2...v0.0.25)
 
-## [v0.0.24](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24) - 2019-01-16
+## [v0.0.24-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24-docker2) - 2019-01-17
 
-- See changes [v0.0.23...v0.0.24](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.23...v0.0.24)
+- See changes [v0.0.24-docker1...v0.0.24-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24-docker1...v0.0.24-docker2)
 
 ## [v0.0.24-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24-docker1) - 2019-01-17
 
 - See changes [v0.0.24...v0.0.24-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24...v0.0.24-docker1)
 
-## [v0.0.24-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24-docker2) - 2019-01-17
+## [v0.0.24](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.24) - 2019-01-16
 
-- See changes [v0.0.24-docker1...v0.0.24-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.24-docker1...v0.0.24-docker2)
+- See changes [v0.0.23...v0.0.24](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.23...v0.0.24)
 
 ## [v0.0.23](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.23) - 2018-12-19
 
@@ -1318,15 +1318,15 @@ give some idea of the changes included in the version.
 
 ## [v0.0.11](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.11) - 2018-08-29
 
-- See changes [v0.0.10-docker1...v0.0.11](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.10-docker1...v0.0.11)
-
-## [v0.0.10-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.10-docker1) - 2018-07-31
-
-- See changes [v0.0.9-docker1...v0.0.10-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.9-docker1...v0.0.10-docker1)
+- See changes [v0.0.10-docker2...v0.0.11](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.10-docker1...v0.0.11)
 
 ## [v0.0.10-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.10-docker2) - 2018-08-22
 
 - See changes [v0.0.10-docker1...v0.0.10-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.10-docker1...v0.0.10-docker2)
+
+## [v0.0.10-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.10-docker1) - 2018-07-31
+
+- See changes [v0.0.9-docker1...v0.0.10-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.9-docker1...v0.0.10-docker1)
 
 ## [v0.0.9-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.9-docker1) - 2018-07-09
 
@@ -1338,35 +1338,35 @@ give some idea of the changes included in the version.
 
 ## [v0.0.7-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.7-docker1) - 2018-06-25
 
-- See changes [v0.0.6-docker1...v0.0.7-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.6-docker1...v0.0.7-docker1)
-
-## [v0.0.6-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.6-docker1) - 2018-06-21
-
-- See changes [v0.0.5-docker3...v0.0.6-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker1...v0.0.6-docker1)
+- See changes [v0.0.6-docker2...v0.0.7-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.6-docker1...v0.0.7-docker1)
 
 ## [v0.0.6-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.6-docker2) - 2018-06-21
 
 - See changes [v0.0.6-docker1...v0.0.6-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.6-docker1...v0.0.6-docker2)
 
-## [v0.0.5-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-android) - 2018-04-18
+## [v0.0.6-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.6-docker1) - 2018-06-21
 
-- See changes [v0.0.4-android...v0.0.5-android](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.4-android...v0.0.5-android)
-
-## [v0.0.5-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker1) - 2018-05-03
-
-- See changes [v0.0.5-docker...v0.0.5-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker...v0.0.5-docker1)
-
-## [v0.0.5-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker2) - 2018-05-03
-
-- See changes [v0.0.5-docker1...v0.0.5-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker1...v0.0.5-docker2)
+- See changes [v0.0.5-docker3...v0.0.6-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker1...v0.0.6-docker1)
 
 ## [v0.0.5-docker3](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker3) - 2018-05-04
 
 - See changes [v0.0.5-docker2...v0.0.5-docker3](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker2...v0.0.5-docker3)
 
+## [v0.0.5-docker2](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker2) - 2018-05-03
+
+- See changes [v0.0.5-docker1...v0.0.5-docker2](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker1...v0.0.5-docker2)
+
+## [v0.0.5-docker1](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker1) - 2018-05-03
+
+- See changes [v0.0.5-docker...v0.0.5-docker1](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-docker...v0.0.5-docker1)
+
 ## [v0.0.5-docker](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-docker) - 2018-04-24
 
 - See changes [v0.0.5-android...v0.0.5-docker](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.5-android...v0.0.5-docker1)
+
+## [v0.0.5-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.5-android) - 2018-04-18
+
+- See changes [v0.0.4-android...v0.0.5-android](https://gitlab.com/equalitie/ouinet/-/compare/v0.0.4-android...v0.0.5-android)
 
 ## [v0.0.4-android](https://gitlab.com/equalitie/ouinet/-/tags/v0.0.4-android) - 2018-04-18
 
