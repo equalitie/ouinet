@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Obsolete sections of the Ouinet wrapper script were removed to prevent
+crashes when starting Docker clients.
+
 
 ## [v1.1.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.1.1) - 2025-05-02
 
