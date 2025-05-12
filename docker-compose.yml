@@ -22,7 +22,7 @@ services:
   shell:
     image: busybox
     volumes:
-      - data:/var/opt/ouinet
+      - "${OUINET_REPO_PATH:-data}:/var/opt/ouinet"
     network_mode: none
     # This leaves the user at the right place when running a shell.
     working_dir: /var/opt/ouinet
@@ -31,7 +31,7 @@ services:
   node:
     image: "equalitie/ouinet:${OUINET_VERSION:-latest}"
     volumes:
-      - data:/var/opt/ouinet
+      - "${OUINET_REPO_PATH:-data}:/var/opt/ouinet"
     # Uncomment the following lines to
     # mount a static cache root from the host.
     #
