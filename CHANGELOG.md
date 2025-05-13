@@ -8,10 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.1.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.1.2) - 2025-05-13
+
 ### Fixed
 
 - Obsolete sections of the Ouinet wrapper script were removed to prevent
 crashes when starting Docker clients.
+
+### Changed
+
+- Update gradle-nexus.publish-plugin to 2.0.0.
+- Add full example client config in repos directory.
+- Migrate old release notes to the new changelog format.
 
 
 ## [v1.1.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.1.1) - 2025-05-02
