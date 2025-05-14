@@ -26,7 +26,8 @@ namespace HR = http_response;
 // (or the socket is closed).
 tcp::socket
 stream(stringstream& outs, WaitCondition& outwc, asio::io_context& ctx, asio::yield_context yield) {
-    tcp::acceptor a(ctx, tcp::endpoint(tcp::v4(), 0));
+    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
+    tcp::acceptor a(ctx, loopback_ep);
     tcp::socket s1(ctx), s2(ctx);
 
     sys::error_code accept_ec;

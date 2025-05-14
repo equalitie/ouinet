@@ -24,7 +24,9 @@
 #include "generic_stream.h"
 #include "split_string.h"
 #include "async_sleep.h"
+#ifndef __WIN32
 #include "increase_open_file_limit.h"
+#endif
 #include "full_duplex_forward.h"
 #include "injector_config.h"
 #include "authenticate.h"
@@ -54,7 +56,6 @@
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
-#include "util/file_posix_with_offset.h"
 #include "util/yield.h"
 
 #include "logger.h"
@@ -77,8 +78,6 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
-using ResponseWithFileBody = http::response<http::basic_file_body<
-    util::file_posix_with_offset>>;
 using ouinet::util::AsioExecutor;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
@@ -840,9 +839,11 @@ int main(int argc, const char* argv[])
         return EXIT_SUCCESS;
     }
 
+#ifndef __WIN32
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());
     }
+#endif
 
     // Create or load the TLS certificate.
     auto tls_certificate = get_or_gen_tls_cert<EndCertificate>

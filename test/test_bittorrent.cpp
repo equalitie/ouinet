@@ -13,7 +13,9 @@
 #include <bittorrent/code.h>
 #include <util/hash.h>
 
-BOOST_AUTO_TEST_SUITE(bittorrent)
+namespace utf = boost::unit_test;
+
+BOOST_AUTO_TEST_SUITE(bittorrent, * utf::timeout(240))
 
 using namespace std;
 using namespace ouinet;
@@ -22,21 +24,25 @@ using Clock = chrono::steady_clock;
 
 using boost::optional;
 
-namespace utf = boost::unit_test;
-
 BOOST_AUTO_TEST_CASE(test_generate_node_id)
 {
     // The first test vector from here:
     // http://bittorrent.org/beps/bep_0042.html#node-id-restriction
     //
-    // Note though that the other test vectors differ very slightly.
-    // I think that is a bug in bittorrent's documentation because
-    // even their own reference implementation does differ.
+    // Note that the test vectors differ very slightly because bytes
+    // 22 to 24 are actually random.
 
     auto ip = boost::asio::ip::make_address_v4("124.31.75.21");
-    auto id = NodeID::generate(ip, 1).to_hex();
-    BOOST_REQUIRE_EQUAL(id.substr(0, 6), "5fbfbf");
-    BOOST_REQUIRE_EQUAL(id.substr(38), "01");
+    auto id = NodeID::generate(ip, 1);
+
+    // Setting bytes 22-24 to zero as according to BEP42 only the first
+    // 21 bits are expected to match in the resulting hash.
+    for (uint8_t b = 21; b < 24; ++b)
+        id.set_bit(b, false);
+    auto id_str = id.to_hex();
+
+    BOOST_REQUIRE_EQUAL(id_str.substr(0, 6), "5fbfb8");
+    BOOST_REQUIRE_EQUAL(id_str.substr(38), "01");
 }
 
 static
@@ -47,7 +53,8 @@ float seconds(Clock::duration d)
     return duration_cast<milliseconds>(d).count() / 1000.f;
 }
 
-BOOST_AUTO_TEST_CASE(test_bep_5)
+BOOST_AUTO_TEST_CASE(test_bep_5,
+                     * utf::timeout(240))
 {
     using namespace ouinet::bittorrent::dht;
 

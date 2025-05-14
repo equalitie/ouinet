@@ -1,0 +1,84 @@
+#
+# Dockerfile for building Windows Ouinet binaries on Linux
+#
+
+# Arguments:
+#
+# Optionally enable SSH access to the container
+#
+ARG with_sshd=no
+#
+# Optionally enable SSH access without password and with using ssh identity file
+#
+ARG with_ssh_authorized_key
+
+#
+# Optionally add environment for debugging
+#
+ARG with_debug=no
+
+#
+# Example usage
+#
+#     $ docker build \
+#            -t ouinet.mingw \
+#            --build-arg with_sshd=yes \
+#            --build-arg with_ssh_authorized_key="$(cat ~/.ssh/id_ed25519.pub)" \
+#            - < docker/Dockerfile.mingw-builder
+#
+#     $ docker run -it --rm -p 2022:22 ouinet.mingw
+#
+#     $ ssh localhost -p 2022
+#
+# Building
+#
+#     Once in the container obtain Ouinet sources (scp, rsync, git pull,...)
+#     into some directory, cd into the directory and invoke:
+#
+#     $ cmake -B build -DCMAKE_TOOLCHAIN_FILE=./cmake/toolchain-mingw64.cmake
+#     $ cmake --build build
+#
+
+FROM ubuntu:24.04 AS base
+    ENV LANG=C.UTF-8
+    
+    RUN apt-get update && apt-get upgrade -y
+    RUN apt-get install -y \
+          build-essential \
+          cmake \
+          mingw-w64-x86-64-dev g++-mingw-w64-x86-64 libz-mingw-w64-dev \
+          gettext \
+          locales \
+          git
+    
+    # Gets rid of some warnings during compilation
+    RUN locale-gen en_US.UTF-8
+
+FROM base as with-sshd-no
+FROM base as with-sshd-yes
+    ARG with_ssh_authorized_key
+
+    RUN apt-get install -y openssh-server rsync
+
+    RUN service ssh start
+
+    RUN if [ -n "$with_ssh_authorized_key" ]; then \
+            echo "$with_ssh_authorized_key" > /root/.ssh/authorized_keys && \
+            sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config && \
+            service ssh restart; \
+        fi
+
+    EXPOSE 22
+
+    ENTRYPOINT service ssh restart && bash
+
+FROM with-sshd-${with_sshd} as with-debug-no
+FROM with-sshd-${with_sshd} as with-debug-yes
+    RUN apt-get install -y wine64
+
+    # Convenience: tell wine where to look for dll files.  This will only work
+    # when running the executables from the ouinet root folder and the build
+    # folder is named `./build/`
+    RUN echo "export WINEPATH='./build;./build/gcrypt/out/bin;./build/gpg_error/out/bin;/usr/lib/gcc/x86_64-w64-mingw32/13-win32'" >> ~/.bashrc
+
+FROM with-debug-${with_debug} as final

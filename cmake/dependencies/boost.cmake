@@ -18,7 +18,8 @@ elseif (${BOOST_VERSION} EQUAL 1.87.0)
         add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
         add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
     endif()
-    set(BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
+    list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
+    list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
 
 set(BOOST_COMPONENTS
@@ -36,8 +37,11 @@ set(BOOST_COMPONENTS
 
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
+set(OUINET_BOOST_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost")
+set(OUINET_BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
+
 if(BOOST_VERSION LESS_EQUAL 1.72.0)
-    set(BOOST_PATCHES
+    list(APPEND BOOST_PATCHES
         ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
         ${CMAKE_CURRENT_LIST_DIR}/inline-boost/thread-pthread-stack-min-def-${BOOST_VERSION_FILENAME}.patch
     )
@@ -66,7 +70,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     endif()
 
     if(BOOST_VERSION LESS_EQUAL 1.77.0)
-      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
+        list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
     endif()
 
     set(BOOST_ENVIRONMENT
@@ -84,15 +88,44 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set(BOOST_ARCH_CONFIGURATION
+        address-model=64
+    )
 
+    # TODO: Use this on all platforms
+    if (CMAKE_BUILD_TYPE)
+        string(TOLOWER "${CMAKE_BUILD_TYPE}" BOOST_BUILD_TYPE)
+        list(APPEND BOOST_ARCH_CONFIGURATION variant=${BOOST_BUILD_TYPE})
+    else()
+        message(WARNING "No CMAKE_BUILD_TYPE provided, add '-DCMAKE_BUILD_TYPE={Debug,Release}' to cmake configuration phase")
+    endif()
+
+    if (MINGW)
+        set(OUINET_BOOST_USER_CONFIG_FILE ${OUINET_BOOST_PREFIX}/user-config-mingw.jam)
+        list(PREPEND OUINET_BOOST_CONFIGURE_COMMAND
+            echo "using gcc : mingw : ${CMAKE_CXX_COMPILER} $<SEMICOLON>" > ${OUINET_BOOST_USER_CONFIG_FILE} &&)
+
+        list(APPEND BOOST_ARCH_CONFIGURATION
+            target-os=windows
+            --user-config=${OUINET_BOOST_USER_CONFIG_FILE}
+            toolset=gcc-mingw
+            # https://lists.preview.boost.org/archives/list/boost@lists.preview.boost.org/thread/UEMVOSYBMS3MBQ77K3JGKOYRXSMSYLYC/
+            define=_WIN32_WINNT=0x0601
+            binary-format=pe
+            abi=ms
+        )
+    endif()
+
+    link_libraries(ws2_32 mswsock)
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
 endif()
 
 set(BUILT_BOOST_VERSION ${BOOST_VERSION})
-set(BUILT_BOOST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
-set(BUILT_BOOST_LIBRARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/lib)
+set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/install/include)
+set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/install/lib)
 set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
 
 function(_boost_library_filename component output_var)
@@ -114,29 +147,31 @@ foreach (component ${BOOST_DEPENDENT_COMPONENTS})
 endforeach()
 
 set(BOOST_PATCH_COMMAND
-    cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
+    cd ${OUINET_BOOST_PREFIX}/src/built_boost
 )
 foreach (patch ${BOOST_PATCHES})
     set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -p1 -i ${patch})
 endforeach()
 
+execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
+
 externalproject_add(built_boost
     URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=${BOOST_VERSION_HASH}
-    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
+    PREFIX ${OUINET_BOOST_PREFIX}
+    BUILD_IN_SOURCE 1
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
-    CONFIGURE_COMMAND
-           cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-        && ./bootstrap.sh
+    CONFIGURE_COMMAND ${OUINET_BOOST_CONFIGURE_COMMAND}
     BUILD_COMMAND
-           cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-        && ${BOOST_ENVIRONMENT} ./b2
+        ${BOOST_ENVIRONMENT} ./b2
             link=static
             threading=multi
-            -j2
+            -j${NPROC}
+            #--verbose -d2 # Output exact commands when building
             --layout=system
-            --prefix=${CMAKE_CURRENT_BINARY_DIR}/boost/install
+            --prefix=${OUINET_BOOST_PREFIX}/install
             --no-cmake-config
+            -q # Stop at first error
             ${ENABLE_BOOST_COMPONENTS}
             ${BOOST_ARCH_CONFIGURATION}
             install
@@ -185,6 +220,13 @@ target_link_libraries(boost_asio
     PRIVATE
         Boost::system
 )
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.77.0)
+    # explicitly link with bcrypt after Boost::filesystem
+    target_link_libraries(boost_asio
+        PUBLIC
+            crypt32
+            bcrypt)
+endif()
 target_compile_definitions(boost_asio
     PUBLIC
         -DBOOST_ASIO_DYN_LINK

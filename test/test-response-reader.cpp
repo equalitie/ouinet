@@ -23,7 +23,8 @@ namespace HR = http_response;
 tcp::socket
 stream(string response, asio::io_context& ctx, asio::yield_context yield)
 {
-    tcp::acceptor a(ctx, tcp::endpoint(tcp::v4(), 0));
+    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
+    tcp::acceptor a(ctx, loopback_ep);
     tcp::socket s1(ctx), s2(ctx);
 
     sys::error_code accept_ec;
@@ -187,6 +188,36 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
             "Content-Type: text/html\r\n"
             "Content-Length: 0\r\n"
+            "\r\n";
+
+        RR rr(stream(move(rsp), ctx, y));
+
+        Cancel c;
+        boost::optional<HR::Part> part;
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE(part->is_head());
+        BOOST_REQUIRE(rr.is_done());
+
+        part = rr.async_read_part(c, y);
+        BOOST_REQUIRE(!part);
+        BOOST_REQUIRE(rr.is_done());
+    });
+
+    ctx.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_http11_no_body_big_header) {
+    asio::io_context ctx;
+
+    task::spawn_detached(ctx, [&] (auto y) {
+        string rsp =
+            "HTTP/1.1 200 OK\r\n"
+            "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 0\r\n"
+            "X-Long-Header: " + std::string(8 * 1024, 'x') + "\r\n"
             "\r\n";
 
         RR rr(stream(move(rsp), ctx, y));
@@ -488,5 +519,3 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
-

@@ -1,5 +1,12 @@
 include(ExternalProject)
 
+if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja" AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+    # Ninja doesn't support these.
+    # The job server options were introduced in CMake v3.28.0
+    set(BUILD_JOB_SERVER_AWARE BUILD_JOB_SERVER_AWARE YES)
+    set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
+endif()
+
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(OPENSSL_VERSION "1.1.1q")
 
@@ -57,6 +64,50 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         INSTALL_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
+            && make install_dev
+    )
+
+    set(OpenSSL_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-openssl)
+    list(INSERT CMAKE_MODULE_PATH 0 ${OpenSSL_DIR})
+endif()
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set(OPENSSL_VERSION "3.4.1")
+    set(OPENSSL_TARGET "mingw64")
+
+    get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+
+    set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
+    set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
+    set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
+
+    externalproject_add(built_openssl
+            URL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
+            URL_HASH SHA256=002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3
+            PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
+            CONFIGURE_COMMAND
+                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+                && set PATH=${COMPILER_DIR};$ENV{PATH}
+                && export CC=${CMAKE_C_COMPILER}
+                && ./Configure
+                ${OPENSSL_TARGET}
+                    -no-shared -no-ssl3 -no-comp -no-engine
+                    --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
+                    --libdir=${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib
+            ${BUILD_JOB_SERVER_AWARE}
+            BUILD_COMMAND
+                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+                && set PATH=${COMPILER_DIR};$ENV{PATH}
+                && make depend
+                && make build_libs
+            BUILD_BYPRODUCTS
+                ${BUILT_OPENSSL_SSL_LIBRARY}
+                ${BUILT_OPENSSL_CRYPTO_LIBRARY}
+            ${INSTALL_JOB_SERVER_AWARE}
+            INSTALL_COMMAND
+            cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+            && set PATH=${COMPILER_DIR};$ENV{PATH}
             && make install_dev
     )
 

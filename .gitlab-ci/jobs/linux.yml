@@ -2,6 +2,7 @@ variables:
   TARGET_PLATFORM: 'linux'
   BUILD_PATH: 'build/$TARGET_PLATFORM'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  CMAKE_VERSION: "3.31.7-linux-x86_64"
 
 .linux-build:
   stage: build
@@ -24,10 +25,11 @@ variables:
       - $BUILD_PATH/modules/*/go-workspace
       - $BUILD_PATH/src/ouiservice/lampshade/go-workspace
   script:
-    - mkdir -p $BUILD_PATH
+    - source $CI_PROJECT_DIR/scripts/install-cmake.sh $CMAKE_VERSION
+    - mkdir -p $CI_PROJECT_DIR/$BUILD_PATH
     - cd $BUILD_PATH
-    - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION
-    - cmake --build . -j `nproc`
+    - cmake -S $CI_PROJECT_DIR -B $CI_PROJECT_DIR/$BUILD_PATH -DBOOST_VERSION=$BOOST_VERSION
+    - cmake --build $CI_PROJECT_DIR/$BUILD_PATH -- -j `nproc`
 
 .linux-unit-cpp-test:
   stage: test

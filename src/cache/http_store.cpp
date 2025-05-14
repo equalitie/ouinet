@@ -712,7 +712,7 @@ canonical_from_content_relpath( const fs::path& body_path_p
         return boost::none;
     }
     // Avoid symlinks in actual body path pointing out of content directory.
-    auto cdirp_pfx = cdirp / "/";
+    auto cdirp_pfx = cdirp / fs::path("/").make_preferred();
     if (body_cp.native().find(cdirp_pfx.native()) != 0) {
         _ERROR("Canonical path of static cache content file outside of content directory,"
                " possibly malicious file: ", body_rp);

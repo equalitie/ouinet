@@ -9,7 +9,9 @@
 #include <util/file_io.h>
 #include <task.h>
 
-BOOST_AUTO_TEST_SUITE(persistent_lru_cache)
+namespace utf = boost::unit_test;
+
+BOOST_AUTO_TEST_SUITE(persistent_lru_cache, * utf::timeout(2))
 
 using namespace std;
 using namespace ouinet;

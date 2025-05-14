@@ -4,7 +4,6 @@ ENV LANG=C.UTF-8
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y \
       build-essential \
-      cmake \
       git \
       libssl-dev \
       python3-twisted \
@@ -17,12 +16,15 @@ FROM base AS builder
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v1.0.0
+ARG OUINET_VERSION=v1.1.2
+ARG CMAKE_VERSION=3.31.7-linux-x86_64
 RUN git clone --recursive -b "$OUINET_VERSION" https://gitlab.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 # The C.UTF-8 locale (which is always available in Debian)
 # is needed to allow CMake to extract files in the Go language binary distribution
 # with UTF-8-encoded Unicode names.
+RUN /usr/local/src/ouinet/scripts/install-cmake.sh "$CMAKE_VERSION"
+ENV PATH="/opt/cmake/cmake-$CMAKE_VERSION/bin:$PATH"
 RUN cmake /usr/local/src/ouinet \
  && make -j $(nproc)
 RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
