@@ -72,7 +72,7 @@ target_link_libraries(ouinet_dependencies
 )
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.72.0)
     # explicitly link with bcrypt after Boost::filesystem
-    target_link_libraries(ouinet_base
+    target_link_libraries(ouinet_dependencies
         INTERFACE
           bcrypt
     )
