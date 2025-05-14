@@ -42,7 +42,7 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2022 AS base
       Invoke-Msys 'pacman --noconfirm -Syuu'; \
       Invoke-Msys 'pacman --noconfirm -Syuu'; \
       Invoke-Msys 'pacman --noconfirm -Scc'; \
-      Invoke-Msys 'pacman --noconfirm -S mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc git make patch';
+      Invoke-Msys 'pacman --noconfirm -S mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc git make patch mingw-w64-x86_64-rust';
 
     # Add msys2 binaries to the windows path
     RUN \
