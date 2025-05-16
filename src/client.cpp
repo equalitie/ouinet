@@ -100,6 +100,7 @@ using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
 using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
 using ouinet::util::AsioExecutor;
+using OuinetYield = ouinet::Yield;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
@@ -372,10 +373,10 @@ public:
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
-                Yield yield(client->_ctx, yield_, "metrics");
+                OuinetYield yield(client->_ctx, yield_, "metrics");
 
                 try {
-                    client->send_metrics_record(record_name, record_content, *cancel, Yield(move(yield)));
+                    client->send_metrics_record(record_name, record_content, *cancel, OuinetYield(move(yield)));
                 } catch (std::exception& e) {
                     LOG_WARN("Failed to send statistics: ", e.what());
                     throw;
@@ -403,12 +404,12 @@ private:
                           , const request_route::Config& request_config
                           , const std::string& dht_group
                           , Cancel& cancel
-                          , Yield yield);
+                          , OuinetYield yield);
 
     template<class Rq>
-    Session fetch_via_self(Rq, const UserAgentMetaData&, Cancel&, Yield);
+    Session fetch_via_self(Rq, const UserAgentMetaData&, Cancel&, OuinetYield);
 
-    Response fetch_fresh_from_front_end(const Request&, Yield);
+    Response fetch_fresh_from_front_end(const Request&, OuinetYield);
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
@@ -417,7 +418,7 @@ private:
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
                                    , std::optional<metrics::Request> metrics
-                                   , Cancel, Yield);
+                                   , Cancel, OuinetYield);
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
@@ -426,19 +427,19 @@ private:
                                              , asio::ssl::context&
                                              , std::optional<metrics::Request>
                                              , Cancel&
-                                             , Yield);
+                                             , OuinetYield);
 
     Session fetch_fresh_through_simple_proxy( Request
                                             , const CacheEntry* cached
                                             , bool can_inject
                                             , metrics::Request
                                             , Cancel& cancel
-                                            , Yield);
+                                            , OuinetYield);
 
     void send_metrics_record( std::string_view record_name
                             , asio::const_buffer record_content
                             , Cancel& cancel
-                            , Yield);
+                            , OuinetYield);
 
     template<class Resp>
     void maybe_add_proto_version_warning(Resp& res) const {
@@ -467,7 +468,7 @@ private:
     }
 
 #define DEF_WAIT_FOR(WHAT) \
-    void wait_for_##WHAT(Cancel& cancel, Yield yield) { \
+    void wait_for_##WHAT(Cancel& cancel, OuinetYield yield) { \
         if (!_##WHAT##_starting) \
             return or_throw(yield, _##WHAT##_start_ec); \
         \
@@ -497,27 +498,27 @@ private:
     bool maybe_handle_websocket_upgrade( GenericStream&
                                        , beast::string_view connect_host_port
                                        , Request&
-                                       , Yield);
+                                       , OuinetYield);
 
     // Resolve host and port strings.
     TcpLookup resolve_tcp_dns( const std::string&, const std::string&
-                             , Cancel&, Yield);
+                             , Cancel&, OuinetYield);
     TcpLookup resolve_tcp_doh( const std::string&, const std::string&
                              , const UserAgentMetaData&
                              , const doh::Endpoint&
-                             , Cancel&, Yield);
+                             , Cancel&, OuinetYield);
 
     GenericStream connect_to_origin( const http::request_header<>&
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
-                                   , Cancel&, Yield);
+                                   , Cancel&, OuinetYield);
 
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
     cache::Client* get_cache() const { return _cache.get(); }
 
-    void serve_utp_request(GenericStream, Yield);
+    void serve_utp_request(GenericStream, OuinetYield);
 
     static void setup_upnp(
         AsioExecutor executor,
@@ -581,7 +582,7 @@ private:
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
                     // Do not log other users' addresses unless debugging.
-                    Yield y( _ctx, yield
+                    OuinetYield y( _ctx, yield
                            , (logger.get_threshold() <= DEBUG)
                              ? "uTPAccept(" + con.remote_endpoint() + ")"
                              : "uTPAccept");
@@ -642,7 +643,7 @@ template<class Resp>
 static
 void handle_http_error( GenericStream& con
                       , Resp& res
-                      , Yield yield)
+                      , OuinetYield yield)
 {
     _YDEBUG(yield, "=== Sending back response ===");
     _YDEBUG(yield, res);
@@ -655,7 +656,7 @@ static
 void handle_bad_request( GenericStream& con
                        , const http::request<ReqBody>& req
                        , const string& message
-                       , Yield yield)
+                       , OuinetYield yield)
 {
     auto res = util::http_error( req, http::status::bad_request
                                , OUINET_CLIENT_SERVER_STRING
@@ -665,7 +666,7 @@ void handle_bad_request( GenericStream& con
 
 //------------------------------------------------------------------------------
 void
-Client::State::serve_utp_request(GenericStream con, Yield yield)
+Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
 {
     assert(_cache);
     if (!_cache) {
@@ -785,7 +786,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
                                      , const request_route::Config& request_config
                                      , const std::string& dht_group
                                      , Cancel& cancel
-                                     , Yield yield)
+                                     , OuinetYield yield)
 {
     Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
@@ -843,7 +844,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
 template<class Rq>
 Session
 Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
-                             , Cancel& cancel, Yield yield)
+                             , Cancel& cancel, OuinetYield yield)
 {
     sys::error_code ec;
 
@@ -948,7 +949,7 @@ Client::State::resolve_tcp_doh( const std::string& host
                               , const UserAgentMetaData& meta
                               , const doh::Endpoint& ep
                               , Cancel& cancel
-                              , Yield yield)
+                              , OuinetYield yield)
 {
     using TcpEndpoint = typename TcpLookup::endpoint_type;
 
@@ -1022,7 +1023,7 @@ TcpLookup
 Client::State::resolve_tcp_dns( const std::string& host
                               , const std::string& port
                               , Cancel& cancel
-                              , Yield yield)
+                              , OuinetYield yield)
 {
     return util::tcp_async_resolve( host, port
                                   , _ctx.get_executor()
@@ -1035,7 +1036,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
                                 , const UserAgentMetaData& meta
                                 , asio::ssl::context& tls_ctx
                                 , Cancel& cancel
-                                , Yield yield)
+                                , OuinetYield yield)
 {
     std::string host, port;
     std::tie(host, port) = util::get_host_port(rq);
@@ -1075,7 +1076,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     return stream;
 }
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_from_front_end(const Request& rq, Yield yield)
+Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYield yield)
 {
     Cancel cancel = _shutdown_signal;
 
@@ -1137,7 +1138,7 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
                                               , const UserAgentMetaData& meta
                                               , asio::ssl::context& tls_ctx
                                               , std::optional<metrics::Request> metrics
-                                              , Cancel cancel, Yield yield)
+                                              , Cancel cancel, OuinetYield yield)
 {
     Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
@@ -1204,7 +1205,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
                                                         , asio::ssl::context& tls_ctx
                                                         , std::optional<metrics::Request> metrics
                                                         , Cancel& cancel
-                                                        , Yield yield)
+                                                        , OuinetYield yield)
 {
     // TODO: We're not re-using connections here. It's because the
     // ConnectionPool as it is right now can only work with http requests
@@ -1363,7 +1364,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         , bool can_inject
         , metrics::Request metrics
         , Cancel& cancel
-        , Yield yield)
+        , OuinetYield yield)
 {
     Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
@@ -1491,7 +1492,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     return session;
 }
 
-void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, Yield yield) {
+void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, OuinetYield yield) {
     auto metrics_conf = _config.metrics();
 
     if (!metrics_conf) {
@@ -1537,7 +1538,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     // We're only interested in the header of the response. We use this to read
     // and ignore the rest of the response so the connection can potentially be
     // reused.
-    auto ignore_rest = [](Session& session, Cancel& cancel, Yield yield) {
+    auto ignore_rest = [](Session& session, Cancel& cancel, OuinetYield yield) {
         yield.run([&] (auto yield) {
             session.flush_response(cancel, yield, [](auto part, auto cancel, auto yield) {}, 60s);
         });
@@ -1673,7 +1674,7 @@ public:
         //------------------------------------------------------------
         cc.fetch_fresh = [&] ( const Request& rq
                              , const CacheEntry* cached
-                             , Cancel& cancel, Yield yield_) {
+                             , Cancel& cancel, OuinetYield yield_) {
             auto yield = yield_.tag("injector");
 
             namespace err = asio::error;
@@ -1705,7 +1706,7 @@ public:
         };
 
         //------------------------------------------------------------
-        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, Yield yield_) {
+        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, OuinetYield yield_) {
             auto yield = yield_.tag("cache");
 
             _YDEBUG(yield, "Start");
@@ -1731,7 +1732,7 @@ public:
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    void front_end_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+    void front_end_job_func(Transaction& tnx, Cancel& cancel, OuinetYield yield) {
         sys::error_code ec;
         Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield[ec]);
         ec = compute_error_code(ec, cancel);
@@ -1740,7 +1741,7 @@ public:
     }
 
     void origin_job_func( Transaction& tnx
-                        , Cancel& cancel, Yield yield) {
+                        , Cancel& cancel, OuinetYield yield) {
         if (cancel) {
             LOG_ERROR("origin_job_func received an already triggered cancel");
             return or_throw(yield, asio::error::operation_aborted);
@@ -1771,7 +1772,7 @@ public:
         return or_throw(yield, ec);
     }
 
-    void proxy_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+    void proxy_job_func(Transaction& tnx, Cancel& cancel, OuinetYield yield) {
         sys::error_code ec;
 
         _YDEBUG(yield, "Start");
@@ -1804,7 +1805,7 @@ public:
         return or_throw(yield, ec);
     }
 
-    void injector_job_func(Transaction& tnx, Cancel& cancel, Yield yield) {
+    void injector_job_func(Transaction& tnx, Cancel& cancel, OuinetYield yield) {
         namespace err = asio::error;
 
         sys::error_code ec;
@@ -2014,7 +2015,7 @@ public:
             return std::distance(jobs.begin(), jobs.end());
         }
 
-        void sleep_before_job(Type job_type, Cancel& cancel, Yield& yield) {
+        void sleep_before_job(Type job_type, Cancel& cancel, OuinetYield& yield) {
             size_t n = count_running();
 
             // 'n' includes "this" job, and we don't need to wait for that.
@@ -2072,7 +2073,7 @@ public:
     // If an error is reported but the connection was not yet written to,
     // a response may still be sent to it
     // (please check `tnx.user_agent_was_written_to()`).
-    void mixed_fetch(Transaction& tnx, Yield yield)
+    void mixed_fetch(Transaction& tnx, OuinetYield yield)
     {
         Cancel cancel(client_state._shutdown_signal);
 
@@ -2292,7 +2293,7 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
                                                   , beast::string_view connect_hp
                                                   , Request& rq
-                                                  , Yield yield)
+                                                  , OuinetYield yield)
 {
     sys::error_code ec;
 
@@ -2654,7 +2655,7 @@ void Client::State::serve_request( GenericStream&& con
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests
         // until the later desires to close it.
-        Yield yield(_ctx.get_executor(), yield_, connection_idstr);
+        OuinetYield yield(_ctx.get_executor(), yield_, connection_idstr);
         yield[ec].tag("read_req").run([&] (auto y) {
             http::async_read(con, con_rbuf, reqhp, y);
         });
@@ -3004,7 +3005,7 @@ void Client::State::start()
                       , move(acceptor)
                       , [this, self]
                         (GenericStream c, asio::yield_context yield_) {
-                  Yield yield(_ctx, yield_, "frontend");
+                  OuinetYield yield(_ctx, yield_, "frontend");
                   sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
