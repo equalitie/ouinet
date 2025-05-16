@@ -100,9 +100,11 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         }
     }
 
+#ifndef __WIN32
     if (auto opt = as_optional<unsigned int>(vm, "open-file-limit")) {
         increase_open_file_limit(*opt);
     }
+#endif
 
     if (auto opt = as_optional<int>(vm, "max-cached-age")) {
         _max_cached_age = boost::posix_time::seconds(*opt);
