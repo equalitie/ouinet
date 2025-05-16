@@ -131,7 +131,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Corrosion)
 
 corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml)
-corrosion_set_env_vars(ouinet_rs CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
+corrosion_set_env_vars(ouinet_rs
+    "CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include -I${CMAKE_CURRENT_SOURCE_DIR}/rust")
 add_dependencies(cargo-prebuild_ouinet_rs built_boost)
 
 # This is not necessry to build the ouinet_rs library, but using it
