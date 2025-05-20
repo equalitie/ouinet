@@ -18,6 +18,7 @@ elseif (${BOOST_VERSION} EQUAL 1.87.0)
         add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
         add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
     endif()
+    list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
     list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
 
@@ -48,10 +49,8 @@ endif()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-    get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
-    string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
-    # This is the same as COMPILER_HOSTTRIPLE, _except_ on arm32.
-    set(COMPILER_CC_PREFIX ${COMPILER_HOSTTRIPLE})
+    # This is the same as CMAKE_LIBRARY_ARCHITECTURE, _except_ on arm32.
+    set(COMPILER_CC_PREFIX ${CMAKE_LIBRARY_ARCHITECTURE})
 
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
         set(COMPILER_CC_PREFIX "armv7a-linux-androideabi")

@@ -23,11 +23,21 @@
 namespace ouinet { namespace util {
 
 struct url_match {
+    // Uniform Resource Identifier (URI): Generic Syntax
+    // https://www.ietf.org/rfc/rfc3986.txt
+
+    //      foo://example.com:8042/over/there?name=ferret#nose
+    //      \_/   \______________/\_________/ \_________/ \__/
+    //       |           |            |            |        |
+    //    scheme     authority       path        query   fragment
+    //
+    // authority = [ userinfo "@" ] host [ ":" port ]
+
     std::string scheme;
     std::string host;
-    std::string port;  // maybe empty
-    std::string path;
-    std::string query;  // maybe empty
+    std::string port;      // maybe empty
+    std::string path;      // maybe empty
+    std::string query;     // maybe empty
     std::string fragment;  // maybe empty
 
     // Rebuild the URL, dropping port, query and fragment if empty.
@@ -40,31 +50,19 @@ struct url_match {
             % (fragment.empty() ? "" : '#' + fragment);
         return url.str();
     }
+
+    std::string host_and_port() const {
+        if (port.empty()) {
+            return host;
+        } else {
+            return host + ':' + port;
+        }
+    }
 };
 
 // Parse the HTTP URL to tell the different components.
 // If successful, the `match` is updated.
-inline
-bool match_http_url(const boost::string_view url, url_match& match) {
-    static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
-                                     "([-\\.a-z0-9]+|\\[[:0-9a-f]+\\])"  // 2: host
-                                     "(:[0-9]{1,5})?"  // 3: :port (or empty)
-                                     "(/[^?#]*)"  // 4: /path
-                                     "(\\?[^#]*)?"  // 5: ?query (or empty)
-                                     "(#.*)?"  // 6: #fragment (or empty)
-                                   , boost::regex::normal | boost::regex::icase);
-    boost::cmatch m;
-    if (!boost::regex_match(url.begin(), url.end(), m, urlrx))
-        return false;
-    match = { m[1]
-            , m[2]
-            , m[3].length() > 0 ? std::string(m[3], 1) : ""  // drop colon
-            , m[4]
-            , m[5].length() > 0 ? std::string(m[5], 1) : ""  // drop qmark
-            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop hash
-    };
-    return true;
-}
+bool match_http_url(const boost::string_view url, url_match& match);
 
 // Return the canonical version of the given HTTP(S) URL
 // whose match components are in `urlm`.
@@ -248,6 +246,11 @@ boost::string_view to_boost(boost::beast::string_view str) {
 
 inline
 boost::beast::string_view to_beast(boost::string_view str) {
+    return boost::beast::string_view(str.data(), str.size());
+}
+
+inline
+boost::beast::string_view to_beast(std::string_view str) {
     return boost::beast::string_view(str.data(), str.size());
 }
 

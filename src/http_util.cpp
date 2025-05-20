@@ -17,7 +17,7 @@ namespace posix_time = boost::posix_time;
 
 
 pair<string, string>
-ouinet::util::get_host_port(const http::request<http::string_body>& req)
+ouinet::util::get_host_port(const http::request_header<>& req)
 {
     auto target = req.target();
     auto defport = (target.starts_with("https:") || target.starts_with("wss:"))

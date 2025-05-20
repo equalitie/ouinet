@@ -1,10 +1,6 @@
 include:
   - .gitlab-ci/jobs/common/prepare-builder-image.yml
 
-variables:
-  TARGET_PLATFORM: 'android'
-  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
-
 android / prepare-builder-image:
   variables:
     TARGET_PLATFORM: 'android'
@@ -17,6 +13,7 @@ android / prepare-builder-image:
 android / build:
   variables:
     TARGET_PLATFORM: 'android'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   stage: build
   tags:
     - docker

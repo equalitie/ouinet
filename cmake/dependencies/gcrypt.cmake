@@ -17,35 +17,19 @@ set(GCRYPT_LIBRARY_BASE_FILENAME
 # The order of these lists is important.
 # The first entry is a regular file, the remainder are symlinks.
 set(GPGERROR_LIBRARY_VERSION_FILENAMES
-    ${GPGERROR_LIBRARY_BASE_FILENAME}.0.24.3
+    ${GPGERROR_LIBRARY_BASE_FILENAME}.0.38.0
     ${GPGERROR_LIBRARY_BASE_FILENAME}.0
     ${GPGERROR_LIBRARY_BASE_FILENAME}
 )
 set(GCRYPT_LIBRARY_VERSION_FILENAMES
-    ${GCRYPT_LIBRARY_BASE_FILENAME}.20.2.3
+    ${GCRYPT_LIBRARY_BASE_FILENAME}.20.5.0
     ${GCRYPT_LIBRARY_BASE_FILENAME}.20
     ${GCRYPT_LIBRARY_BASE_FILENAME}
 )
 
-set(GPG_ERROR_PATCHES
-    # This will not be needed once a released version supports gawk 5,
-    # see <https://dev.gnupg.org/T4459> and <https://dev.gnupg.org/T4469>
-    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat.patch
-    # This avoids having to run `aclocal` and `automake` again.
-    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat-in.patch
-    # * src/gpgrt-int.h (_gpgrt_functions_w32_pollable): Declare with extern so
-    # that strict toolchains don't get confused. see <https://dev.gnupg.org/T4356>
-    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-extern-struct-gpgrt-functions-w32-pollable.patch
-)
-
-
-
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-    get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
-    string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
-    # This is the same as COMPILER_HOSTTRIPLE, _except_ on arm32.
-    set(COMPILER_CC_PREFIX ${COMPILER_HOSTTRIPLE})
+    set(COMPILER_CC_PREFIX ${CMAKE_LIBRARY_ARCHITECTURE})
 
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
         set(COMPILER_CC_PREFIX "armv7a-linux-androideabi")
@@ -70,7 +54,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(PATCH_COMMAND
         cp ${GPG_ERROR_CONFIG} ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.linux-android.h
     )
-    set(HOST_CONFIG "--host=${COMPILER_HOSTTRIPLE}")
+    set(HOST_CONFIG "--host=${CMAKE_LIBRARY_ARCHITECTURE}")
     # For cross builds, gcrypt guesses an important toolchain characteristic
     # that it can't test for. Unfortunately, this guess is often wrong. This
     # value is right for android systems.
@@ -95,11 +79,6 @@ endif()
 set(PATCH_COMMAND
     ${PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error
 )
-foreach (patch ${GPG_ERROR_PATCHES})
-    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
-endforeach()
-
-
 
 if (CMAKE_LIBRARY_OUTPUT_DIRECTORY)
     set(GCRYPT_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
@@ -164,14 +143,15 @@ else()
 endif()
 
 externalproject_add(gpg_error
-    URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
-    URL_MD5 ef3d928a5a453fa701ecc3bb22be1c64
+    URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.51.tar.bz2
+    URL_HASH SHA256=be0f1b2db6b93eed55369cdf79f19f72750c8c7c39fc20b577e724545427e6b2
     PATCH_COMMAND
         "${PATCH_COMMAND}"
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
+            --enable-install-gpg-error-config
     ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
@@ -185,14 +165,16 @@ externalproject_add(gpg_error
 
 externalproject_add(gcrypt
     DEPENDS gpg_error
-    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
-    URL_MD5 3139c2402e844985a67fb288a930534d
+    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.0.tar.bz2
+    URL_HASH SHA256=09120c9867ce7f2081d6aaa1775386b98c2f2f246135761aae47d81f58685b9c
     CONFIGURE_COMMAND
         CC=${GCRYPT_CC}
+        GPGRT_CONFIG=${GPGERROR_BUILD_DIRECTORY}/bin/gpgrt-config
         ${UNDERSCORE_CONFIG}
             ./configure ${HOST_CONFIG}
             --prefix=${GCRYPT_BUILD_DIRECTORY}
             --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
+            --disable-doc
     ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1

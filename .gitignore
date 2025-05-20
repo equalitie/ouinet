@@ -15,3 +15,6 @@ android/local.properties
 
 #python byte codes
 *.pyc
+
+# When running rust tests with `cargo test --manifest-path=./rust/Cargo.toml`
+rust/target/

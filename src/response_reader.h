@@ -271,7 +271,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
 
         ec = compute_error_code(ec, cancel);
         assert(ec != http::error::end_of_stream);
-        if (ec == http::error::need_buffer) ec = sys::error_code();
+        if (ec == http::error::need_buffer) ec = {};
         if (ec) return or_throw(yield, ec, boost::none);
 
         size_t s = sizeof(buf) - _parser.get().body().size;

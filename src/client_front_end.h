@@ -27,6 +27,14 @@ namespace bittorrent {
 class MainlineDht;
 }
 
+class ClientFrontEndMetricsController {
+public:
+    virtual void enable() = 0;
+    virtual void disable() = 0;
+    virtual bool is_enabled() const = 0;
+    virtual ~ClientFrontEndMetricsController() = default;
+};
+
 class ClientFrontEnd {
     template<typename E> struct Input;
 
@@ -82,6 +90,8 @@ public:
                   , const UPnPs&
                   , const bittorrent::MainlineDht* dht
                   , const util::UdpServerReachabilityAnalysis*
+                  , ClientFrontEndMetricsController&
+                  , Cancel
                   , Yield yield);
 
     Task notify_task(const std::string& task_name)
@@ -124,6 +134,8 @@ private:
                       , Response&
                       , std::ostringstream&
                       , cache::Client*
+                      , ClientFrontEndMetricsController& metrics
+                      , Cancel cancel
                       , Yield);
 
     void handle_status( ClientConfig&
@@ -136,6 +148,8 @@ private:
                       , Response&
                       , std::ostringstream&
                       , cache::Client*
+                      , ClientFrontEndMetricsController& metrics
+                      , Cancel cancel
                       , Yield);
 
     // Enabling the log file also enables debugging temporarily.

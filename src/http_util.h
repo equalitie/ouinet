@@ -29,7 +29,7 @@ namespace util {
 // either from the ``Host:`` header or from the target URI.
 // IPv6 addresses are returned without brackets.
 std::pair<std::string, std::string>
-get_host_port(const http::request<http::string_body>&);
+get_host_port(const http::request_header<>&);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helps parsing and printing contents of `Content-Range` headers.
@@ -370,7 +370,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     auto absolute_target = absolute_req.target();
 
     if (!match_http_url(absolute_target, url)) {
-        assert(0 && "Failed to parse url");
+        // It's already in origin form
         return absolute_req;
     }
 

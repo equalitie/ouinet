@@ -1,4 +1,4 @@
-FROM debian:bookworm AS base
+FROM rust:slim-bookworm AS base
 ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get upgrade -y
@@ -46,7 +46,7 @@ RUN cd /usr/local/src/ouinet \
 # Populate the licenses directory (avoid version numbers in source paths).
 RUN /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
-FROM debian:bookworm
+FROM debian:bookworm-slim
 # To get the list of system library packages to install,
 # enter the build directory and execute:
 #
@@ -74,7 +74,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /opt/ouinet
 # Copy locally built libraries (all placed along binaries).
 RUN mkdir /opt/ouinet/lib
-COPY --from=builder /opt/ouinet/lib*.so /opt/ouinet/lib
+COPY --from=builder /opt/ouinet/lib* /opt/ouinet/lib
 # Update the dynamic linker cache after all non-system libraries have been copied.
 # This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig

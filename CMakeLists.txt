@@ -50,15 +50,14 @@ include(BuildVersion)
 
 
 # This target needs to be linked by all code that includes ouinet headers.
-add_library(ouinet_base INTERFACE)
-add_library(ouinet::base ALIAS ouinet_base)
-target_compile_options(ouinet_base
+add_library(ouinet_dependencies INTERFACE)
+target_compile_options(ouinet_dependencies
     INTERFACE -std=c++20
 )
-target_include_directories(ouinet_base
+target_include_directories(ouinet_dependencies
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_link_libraries(ouinet_base
+target_link_libraries(ouinet_dependencies
     INTERFACE
         Boost::asio
         Boost::boost
@@ -73,14 +72,14 @@ target_link_libraries(ouinet_base
 )
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.72.0)
     # explicitly link with bcrypt after Boost::filesystem
-    target_link_libraries(ouinet_base
+    target_link_libraries(ouinet_dependencies
         INTERFACE
           bcrypt
     )
 endif()
 if (WITH_ASAN)
     # NOTE: https://stackoverflow.com/a/50163972
-    target_link_libraries(ouinet_base
+    target_link_libraries(ouinet_dependencies
         INTERFACE -fsanitize=address
     )
 endif()
@@ -96,10 +95,11 @@ add_library(lib::asio_utp ALIAS asio_utp)
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
+target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
 if(WITH_EXPERIMENTAL)
-    target_compile_definitions(ouinet_base
+    target_compile_definitions(ouinet_dependencies
             INTERFACE -D__EXPERIMENTAL__
     )
     add_subdirectory(./src/ouiservice/i2p)
@@ -119,42 +119,96 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
-file(GLOB client_sources
-    "./src/client.cpp"
+# ouinet-rs (ouinet components written in rust)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5.1
+)
+FetchContent_MakeAvailable(Corrosion)
+
+corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml)
+corrosion_set_env_vars(ouinet_rs
+    "CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include -I${CMAKE_CURRENT_SOURCE_DIR}/rust")
+add_dependencies(cargo-prebuild_ouinet_rs built_boost)
+
+# This is not necessry to build the ouinet_rs library, but using it
+# automatically adds the include directories to every target that has ouinet_rs
+# as dependency.
+target_include_directories(ouinet_rs
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rust
+    # XXX: Isn't there a better way to obtain the cargo target directory?
+    ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+
+################################################################################
+
+file(GLOB ouinet_common_sources
+    "./src/logger.cpp"
     "./src/connect_to_host.cpp"
-    "./src/client_front_end.cpp"
-    "./src/endpoint.cpp"
-    "./src/cache_control.cpp"
-    "./src/request_routing.cpp"
-    "./src/ouiservice.cpp"
     "./src/response_part.cpp"
-    "./src/bep5_swarms.cpp"
+    "./src/util.cpp"
+    "./src/util/atomic_file.cpp"
+    "./src/util/random.cpp"
+    "./src/util/handler_tracker.cpp"
+    "./src/util/crypto.cpp"
+    "./src/util/file_io.cpp"
+    "./src/util/temp_file.cpp"
+    "./src/util/hash.cpp"
     "./src/ssl/ca_certificate.cpp"
-    "./src/ssl/dummy_certificate.cpp"
+    "./src/bittorrent/*.cpp"
+    "./src/bep5_swarms.cpp"
+    "./src/ouiservice.cpp"
     "./src/ouiservice/tcp.cpp"
     "./src/ouiservice/utp.cpp"
     "./src/ouiservice/tls.cpp"
-    "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/multi_utp_server.cpp"
-    "./src/ouiservice/connect_proxy.cpp"
-    "./src/logger.cpp"
-    "./src/cache/*.cpp"
-    "./src/bittorrent/*.cpp"
-    "./src/util/atomic_dir.cpp"
-    "./src/util/atomic_file.cpp"
     "./src/util/persistent_lru_cache.cpp"
-    "./src/util/crypto.cpp"
-    "./src/util/random.cpp"
-    "./src/util/file_io.cpp"
-    "./src/util/temp_dir.cpp"
-    "./src/util/temp_file.cpp"
-    "./src/util/hash.cpp"
-    "./src/util/reachability.cpp"
-    "./src/util.cpp"
-    "./src/util/handler_tracker.cpp"
-    "./src/doh.cpp"
+    "./src/endpoint.cpp"
+    "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     ${EXPERIMENTAL_SOURCES}
+)
+
+add_library(ouinet_common STATIC ${ouinet_common_sources})
+
+target_link_libraries(ouinet_common
+    PRIVATE
+        ouinet_dependencies
+        lib::uri
+        OpenSSL::Crypto
+        ${EXPERIMENTAL_LIBRARIES}
+    PUBLIC
+        Boost::iostreams
+        lib::gcrypt
+        lib::json
+        lib::asio_utp
+        ouinet_rs
+        # Boost::asio_ssl is public for Android because the ClientConfig used
+        # in native-lib.cpp contains ssl::context and we need its move
+        # constructor and destructor implementations.
+        Boost::asio_ssl
+)
+
+target_include_directories(ouinet_common PUBLIC "src")
+
+################################################################################
+file(GLOB client_sources
+    "./src/client.cpp"
+    "./src/client_config.cpp"
+    "./src/client_front_end.cpp"
+    "./src/cache_control.cpp"
+    "./src/request_routing.cpp"
+    "./src/ssl/dummy_certificate.cpp"
+    "./src/ouiservice/bep5/client.cpp"
+    "./src/ouiservice/connect_proxy.cpp"
+    "./src/cache/*.cpp"
+    "./src/util/atomic_dir.cpp"
+    "./src/util/temp_dir.cpp"
+    "./src/util/reachability.cpp"
+    "./src/doh.cpp"
     ${VERSION_CPP}
 )
 
@@ -168,66 +222,29 @@ else()
 endif()
 
 target_link_libraries(client
-    PRIVATE
-        Boost::asio_ssl
-        Boost::iostreams
-        lib::asio_utp
-        cpp_upnp
-        lib::zdnsparser
-        lib::gcrypt
-        lib::json
-        lib::uri
-        OpenSSL::Crypto
-        ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
-        ouinet::base
+        ouinet_common
+        cpp_upnp
+    PRIVATE
+        lib::zdnsparser
 )
 
 ################################################################################
 if (WITH_INJECTOR)
     file(GLOB injector_sources
         "./src/injector.cpp"
-        "./src/connect_to_host.cpp"
-        "./src/ouiservice.cpp"
-        "./src/response_part.cpp"
-        "./src/bep5_swarms.cpp"
-        "./src/ouiservice/tcp.cpp"
-        "./src/ouiservice/utp.cpp"
-        "./src/ouiservice/tls.cpp"
         "./src/ouiservice/bep5/server.cpp"
-        "./src/ouiservice/multi_utp_server.cpp"
-        "./src/ssl/ca_certificate.cpp"
-        "./src/logger.cpp"
         "./src/endpoint.cpp"
         "./src/cache/http_sign.cpp"
-        "./src/bittorrent/*.cpp"
-        "./src/util/atomic_file.cpp"
-        "./src/util/persistent_lru_cache.cpp"
-        "./src/util/crypto.cpp"
-        "./src/util/random.cpp"
-        "./src/util/file_io.cpp"
-        "./src/util/temp_file.cpp"
-        "./src/util/hash.cpp"
-        "./src/util/handler_tracker.cpp"
-        "./src/util.cpp"
-        "./src/http_util.cpp"
+        "./src/http_logger.cpp"
         ${EXPERIMENTAL_SOURCES}
     )
 
     add_executable(injector ${injector_sources})
+    target_link_libraries(injector ouinet_common)
 
-    target_link_libraries(injector
-        Boost::asio_ssl
-        Boost::iostreams
-        lib::asio_utp
-        lib::gcrypt
-        lib::json
-        lib::uri
-        OpenSSL::Crypto
-        ouinet::base
-        ${EXPERIMENTAL_LIBRARIES}
-    )
 endif() # if WITH_INJECTOR
+
 
 ################################################################################
 # Config file directory

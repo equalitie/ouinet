@@ -202,13 +202,15 @@ static bool read_nodes( bool is_v4
 }
 
 dht::DhtNode::DhtNode( const AsioExecutor& exec
+                     , metrics::DhtNode metrics
                      , fs::path storage_dir
                      , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
     _storage_dir(std::move(storage_dir)),
-    _extra_bs(std::move(extra_bs))
+    _extra_bs(std::move(extra_bs)),
+    _metrics(std::move(metrics))
 {
 }
 
@@ -941,18 +943,20 @@ void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
     fs::path path = stored_contacts_path();
     if (path == fs::path()) return;
 
+    Cancel cancel(_cancel);
+
     while (true) {
         if (!_routing_table) return;
         auto contacts = _routing_table->dump_contacts();
 
         sys::error_code ignored_ec;
-        write_stored_contacts(_exec, move(contacts), path, _cancel, yield[ignored_ec]);
-        if (_cancel) return;
+        write_stored_contacts(_exec, move(contacts), path, cancel, yield[ignored_ec]);
+        if (cancel) return;
 
         sys::error_code ec;
-        async_sleep(_exec, std::chrono::minutes(6), _cancel, yield[ec]);
-        if (_cancel) return;
-        return_or_throw_on_error(yield, _cancel, ec);
+        async_sleep(_exec, std::chrono::minutes(6), cancel, yield[ec]);
+        if (cancel) return;
+        return_or_throw_on_error(yield, cancel, ec);
     }
 }
 
@@ -1702,6 +1706,8 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
     // Create on stack so that the member one isn't used after ~DhtNode
     Cancel cancel(_cancel);
 
+    auto metrics = _metrics.bootstrap();
+
     sys::error_code ec;
     sys::error_code ignored_ec;
 
@@ -1885,6 +1891,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * necessary for implementing queries.
      */
     _ready = true;
+    metrics.mark_success();
 }
 
 
@@ -2528,11 +2535,13 @@ void dht::DhtNode::tracker_do_search_peers(
 
 
 MainlineDht::MainlineDht( const AsioExecutor& exec
+                        , metrics::MainlineDht metrics
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)
     , _storage_dir(std::move(storage_dir))
     , _extra_bs(std::move(extra_bs))
+    , _metrics(std::move(metrics))
 {
 }
 
@@ -2565,6 +2574,15 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
     }
 }
 
+metrics::DhtNode metrics_dht_node_for(metrics::MainlineDht& metrics, const asio::ip::address& addr) {
+    if (addr.is_v4()) {
+        return metrics.dht_node_ipv4();
+    } else {
+        assert(addr.is_v6());
+        return metrics.dht_node_ipv6();
+    }
+}
+
 void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
@@ -2576,7 +2594,7 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         }
     }
 
-    _nodes[local_ep] = make_unique<dht::DhtNode>(_exec, _storage_dir);
+    _nodes[local_ep] = make_unique<dht::DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir);
 
     TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();
@@ -2601,7 +2619,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
         }
     }
 
-    auto node = make_unique<dht::DhtNode>(_exec, _storage_dir, _extra_bs);
+    auto node = make_unique<dht::DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir, _extra_bs);
 
     auto cc = _cancel.connect([&] { node = nullptr; });
 
