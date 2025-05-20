@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.2.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.2.0) - 2025-05-20
+
+### Added
+
+- Privacy-respect metrics collection on the client side.
+- Logging capabilities on the injector side.
+
+### Changed
+
+- Docker files use now `rust:slim-bookworm` for builder and `debian:slim-bookworm`
+for production images.
+
+### Fixed
+
+- Use of destroyed `_cancel` after yield in `bittorrent/dht`.
+
+
 ## [v1.1.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.1.2) - 2025-05-13
 
 ### Fixed
