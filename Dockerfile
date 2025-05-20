@@ -74,7 +74,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /opt/ouinet
 # Copy locally built libraries (all placed along binaries).
 RUN mkdir /opt/ouinet/lib
-COPY --from=builder /opt/ouinet/lib*.so /opt/ouinet/lib
+COPY --from=builder /opt/ouinet/lib* /opt/ouinet/lib
 # Update the dynamic linker cache after all non-system libraries have been copied.
 # This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig
