@@ -7,6 +7,7 @@ import time
 import logging
 
 from test_fixtures import TestFixtures
+
 class TestPage(Resource):
     isLeaf = True
     def render_GET(self, request):
@@ -16,6 +17,9 @@ class TestPage(Resource):
         logging.debug(f"Client IP: {request.getClientIP()}")
         if b"content" in request.args:
             return request.args[b"content"][0]
+        elif b"content_size" in request.args:
+            content_size_in_bytes =  request.args[b"content_size"][0]
+            return os.urandom(content_size_in_bytes)
         else:
             return TestFixtures.TEST_PAGE_BODY
 

@@ -11,6 +11,7 @@ from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import TestCase
 from twisted.web.client import ProxyAgent, readBody
+from twisted.web.http_headers import Headers
 
 import socket
 
@@ -172,7 +173,7 @@ class OuinetTests(TestCase):
         )
         return self.request_url(port, url)
 
-    def request_page(self, port, page_url):
+    def request_page(self, port, page_url, cachable = False):
         """
         Send a get request to request test content as a page on a specific sub url
         """
@@ -181,10 +182,11 @@ class OuinetTests(TestCase):
         )
         return self.request_url(port, url)
     
-    def request_url(self, port, url):
+    def request_url(self, port, url, cachable = True):
         ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
         agent = ProxyAgent(ouinet_client_endpoint)
-        return agent.request(b"GET", url.encode())
+        headers = cachable and Headers({b"X-Ouinet-Group": [b"1"] }) or None
+        return agent.request(b"GET", url.encode(), headers)
 
     def try_to_connect_to_tcp_port(self, port):
         success = False
@@ -310,8 +312,14 @@ class OuinetTests(TestCase):
 
         self.assertTrue(success)
 
-    @inlineCallbacks
     def test_i2p_transport(self):
+        self._test_i2p_transport(self)
+
+    def test_i2p_transport_speed_1MB(self):
+        self._test_i2p_transport(self, 1024 * 1024)
+
+    @inlineCallbacks
+    def _test_i2p_transport(self, size_of_transported_blob = None):
         """
         Starts an echoing http server, an injector and a client and send a unique http 
         request to the echoing http server through the client --i2p--> injector -> http server
@@ -364,7 +372,11 @@ class OuinetTests(TestCase):
             content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
             for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
                 logging.debug("request attempt no " + str(i+1) + "...")
-                defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
+
+                if (size_of_tranported_blob == None):
+                    defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
+                else:
+                    defered_response = yield  self.request_sized_content(TestFixtures.I2P_CLIENT["port"], size_of_transported_blob)
                 if defered_response.code == 200:
                     response_body = yield readBody(defered_response)
                     self.assertEquals(response_body.decode(), content)
@@ -438,7 +450,6 @@ class OuinetTests(TestCase):
 
         #client
 
-
         content_delivered_over_i2p = False
         for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
             i2pclient_tunnel_ready = defer.Deferred()
@@ -462,7 +473,7 @@ class OuinetTests(TestCase):
             content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
             for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
                 logging.debug("request attempt no " + str(i+1) + "...")
-                defered_response = yield  self.request_page(TestFixtures.I2P_CLIENT["port"], content)
+                defered_response = yield  self.request_page(TestFixtures.I2P_CLIENT["port"], content, cachable=True)
                 if defered_response.code == 200:
                     response_body = yield readBody(defered_response)
                     self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
