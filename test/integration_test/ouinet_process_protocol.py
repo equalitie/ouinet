@@ -58,7 +58,7 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
             raise Exception("error")
 
     def check_next_level_got_ready(self, data):
-        # if re.match(TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data):
+        # if re.match(TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, data):
         #     pdb.set_trace()
         if len(self._ready_benchmark_regexes) > self._got_ready_level + 1:
             return re.match(self._ready_benchmark_regexes[self._got_ready_level + 1], data)
@@ -161,18 +161,18 @@ class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
             self.IPNS_resolution_start_time = time.time()
 
 
-class OuinetBEP44CacheProcessProtocol(OuinetCacheProcessProtocol, object):
+class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
-        super(OuinetBEP44CacheProcessProtocol, self).__init__(
+        super(OuinetBEP5CacheProcessProtocol, self).__init__(
             proc_config, benchmark_regexes, benchmark_deferreds)
-        self.BEP44_pubk = ""
+        self.BEP5_pubk = ""
 
     def errReceived(self, data):
         data, rdata = data.decode(), data
-        self.look_for_BEP44_pubk(data)
-        super(OuinetBEP44CacheProcessProtocol, self).errReceived(rdata)
+        self.look_for_BEP5_pubk(data)
+        super(OuinetBEP5CacheProcessProtocol, self).errReceived(rdata)
 
-    def look_for_BEP44_pubk(self, data):
-        BEP44_pubk_search_result = re.match(TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data)
-        if BEP44_pubk_search_result:
-            self.BEP44_pubk = BEP44_pubk_search_result.group(1)
+    def look_for_BEP5_pubk(self, data):
+        BEP5_pubk_search_result = re.match(TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, data)
+        if BEP5_pubk_search_result:
+            self.BEP5_pubk = BEP5_pubk_search_result.group(1)

@@ -16,18 +16,18 @@ class TestFixtures:
     I2P_TRANSPORT_TIMEOUT = 600
     I2P_BROWSER_TEST_TIMEOUT = 3600 * 24
     IPFS_CACHE_TIMEOUT = 900
-    BEP44_CACHE_TIMEOUT = 900
+    BEP5_CACHE_TIMEOUT = 900
     
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
-        "test_bep44_caching_of_i2p_served_content": I2P_TRANSPORT_TIMEOUT + BEP44_CACHE_TIMEOUT,
+        "test_bep5_caching_of_i2p_served_content": I2P_TRANSPORT_TIMEOUT + BEP5_CACHE_TIMEOUT,
         "test_externally_discovered_i2p_injector": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_i2cp_server": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
         "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
         "test_ipfs_cache": IPFS_CACHE_TIMEOUT,
-        "test_bep44_cache": BEP44_CACHE_TIMEOUT,
-        "test_bep44_seed": BEP44_CACHE_TIMEOUT}
+        "test_bep5_cache": BEP5_CACHE_TIMEOUT,
+        "test_bep5_seed": BEP5_CACHE_TIMEOUT}
 
     #BENCHMARK REGEX INDICES
     READY_REGEX_INDEX = 0
@@ -81,14 +81,14 @@ class TestFixtures:
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
-    BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*HTTP signing public key \(Ed25519\): ([0-9A-Fa-f]+)[\s\S]*"
+    BEP5_PUBK_ANNOUNCE_REGEX = "[\s\S]*HTTP signing public key \(Ed25519\): ([0-9A-Fa-f]+)[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r'[\s\S]*Resolving IPNS address: [\s\S]*'
     IPFS_CACHE_READY_REGEX = r'[\s\S]*IPNS ID has been resolved successfully[\s\S]*'
-    #BEP44_CACHE_READY_REGEX = r'[\s\S]*BEP44 index: bootstrapped BitTorrent DHT[\s\S]*'
-    BEP44_CACHE_READY_REGEX = r'[\s\S]*BT DHT: Successfully stored contacts[\s\S]*'
+    #BEP5_CACHE_READY_REGEX = r'[\s\S]*BEP5 index: bootstrapped BitTorrent DHT[\s\S]*'
+    BEP5_CACHE_READY_REGEX = r'[\s\S]*BT DHT: Successfully stored contacts[\s\S]*'
     IPFS_REQUEST_CACHED_REGEX = r'[\s\S]*Request was successfully published to cache[\s\S]*'
-    BEP44_REQUEST_CACHED_REGEX = r'[\s\S]*BEP44 index: inserted key[\s\S]*'
-    BEP44_RESPONSE_CACHED_REGEX = r'[\s\S]*BEP44 index: insertion finished[\s\S]*'
+    BEP5_REQUEST_CACHED_REGEX = r'[\s\S]*BEP5 index: inserted key[\s\S]*'
+    BEP5_RESPONSE_CACHED_REGEX = r'[\s\S]*BEP5 index: insertion finished[\s\S]*'
     NO_OF_CACHED_MESSAGES_REQUIRED = 1
     RETRIEVED_FROM_CACHE_REGEX = r'[\s\S]*Response was retrieved from cache[\s\S]*'
     MAX_NO_OF_TRIAL_CACHE_REQUESTS = 3

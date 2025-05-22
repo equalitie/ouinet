@@ -18,7 +18,7 @@ from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import (
     OuinetProcessProtocol,
     OuinetIPFSCacheProcessProtocol,
-    OuinetBEP44CacheProcessProtocol)
+    OuinetBEP5CacheProcessProtocol)
 
 ouinet_env = {}
 ouinet_env.update(os.environ)
@@ -200,11 +200,11 @@ class OuinetIPFSClient(OuinetCacheClient):
 
         return 0
 
-class OuinetBEP44Client(OuinetCacheClient):
+class OuinetBEP5Client(OuinetCacheClient):
     def __init__(self, client_config, deferred_events):
-        super(OuinetBEP44Client, self).__init__(client_config, deferred_events)
+        super(OuinetBEP5Client, self).__init__(client_config, deferred_events)
 
-        self.set_process_protocol(OuinetBEP44CacheProcessProtocol(
+        self.set_process_protocol(OuinetBEP5CacheProcessProtocol(
             proc_config=self.config,
             benchmark_regexes=client_config.benchmark_regexes,
             benchmark_deferreds=deferred_events))
@@ -262,7 +262,7 @@ class OuinetI2PInjector(OuinetInjector):
             return None
 
     def get_index_key(self):
-        return self._proc_protocol.BEP44_pubk
+        return self._proc_protocol.BEP5_pubk
 
 
 class OuinetIPFSCacheInjector(OuinetInjector):
@@ -287,16 +287,16 @@ class OuinetIPFSCacheInjector(OuinetInjector):
     #         print json.dumps(TestFixtures.IPFS_CONFIG_DIC)
     #         ipfs_config_file.write(json.dumps(TestFixtures.IPFS_CACHE_READY_REGEX))
 
-class OuinetBEP44CacheInjector(OuinetInjector):
+class OuinetBEP5CacheInjector(OuinetInjector):
     """
-    As above, but for the 'injector which cache data' with a BEP44 index
+    As above, but for the 'injector which cache data' with a BEP5 index
     """
     def __init__(self, injector_config, deferred_events):
-        super(OuinetBEP44CacheInjector, self).__init__(injector_config, deferred_events)
-        self.set_process_protocol(OuinetBEP44CacheProcessProtocol(
+        super(OuinetBEP5CacheInjector, self).__init__(injector_config, deferred_events)
+        self.set_process_protocol(OuinetBEP5CacheProcessProtocol(
             proc_config=self.config,
             benchmark_regexes=injector_config.benchmark_regexes,
             benchmark_deferreds=deferred_events))
 
     def get_index_key(self):
-        return self._proc_protocol.BEP44_pubk
+        return self._proc_protocol.BEP5_pubk

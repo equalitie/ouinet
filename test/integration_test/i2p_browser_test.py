@@ -5,7 +5,7 @@ from twisted.internet import reactor, defer, task
 from twisted.internet.protocol import ProcessProtocol
 
 from test_fixtures import TestFixtures
-from ouinet_process_controler import OuinetInjector, OuinetI2PInjector, OuinetClient, OuinetIPFSCacheInjector, OuinetBEP44CacheInjector, OuinetConfig
+from ouinet_process_controler import OuinetInjector, OuinetI2PInjector, OuinetClient, OuinetIPFSCacheInjector, OuinetBEP5CacheInjector, OuinetConfig
 
 import pdb
 class I2PProcessProtocoltest():
