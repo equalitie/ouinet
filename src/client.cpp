@@ -2461,7 +2461,7 @@ void Client::State::serve_request( GenericStream&& con
 
         // Ensure that the request is proxy-like.
         if (!(target.starts_with("https://") || target.starts_with("http://"))) {
-            if (mitm) {
+            //if (mitm) {
                 // Requests in the encrypted channel are usually not proxy-like
                 // so the target is not "http://example.com/foo" but just "/foo".
                 // We expand the target again with the ``Host:`` header
@@ -2476,6 +2476,7 @@ void Client::State::serve_request( GenericStream&& con
                           + host.to_string()
                           + target.to_string());
                 target = req.target();
+            /*
             } else {
                 // TODO: Maybe later we want to support front-end and API calls
                 // as plain HTTP requests (as if we were a plain HTTP server)
@@ -2485,6 +2486,7 @@ void Client::State::serve_request( GenericStream&& con
                 if (req.keep_alive()) continue;
                 else break;
             }
+            */
         }
         // Ensure that the request has a `Host:` header
         // (to ease request routing check and later operations on the head).
