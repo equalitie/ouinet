@@ -49,6 +49,22 @@ linux / integration-test:
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
+linux / build-asan:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
+    BOOST_VERSION: "1.87.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "ON"
+  extends:
+    .linux-build
+  needs:
+    - job: 'linux / build'
+      optional: true
+  when: manual
+  allow_failure: true
+
+
 linux / build-prod-image:
   stage: release
   tags:
