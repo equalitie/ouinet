@@ -64,6 +64,15 @@ linux / build-asan:
   when: manual
   allow_failure: true
 
+linux / unit-cpp-asan-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
+  extends:
+    .linux-unit-cpp-test
+  needs:
+    ['linux / build-asan']
+  allow_failure: true
 
 linux / build-prod-image:
   stage: release
