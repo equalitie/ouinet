@@ -1,0 +1,16 @@
+def loadCmakeArgs() {
+    def envVarPrefix = "CMAKE_"
+    def allowedArguments = ['WITH_ASAN', 'WITH_EXPERIMENTAL']
+
+    def cmakeArgs = []
+    for (envVarName in allowedArguments) {
+        def envVarValue = System.getenv(envVarPrefix + envVarName)
+        if (envVarValue && envVarValue != "") {
+            def cmakeArgName = envVarName.replaceFirst("^${envVarPrefix}", "")
+            cmakeArgs.add("-D${cmakeArgName}=${envVarValue}")
+        }
+    }
+    cmakeArgs
+}
+
+ext.cmakeExtraArguments = loadCmakeArgs()
