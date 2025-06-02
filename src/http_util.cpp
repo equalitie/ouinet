@@ -2,7 +2,7 @@
 
 #include <boost/asio/error.hpp>
 #include <boost/regex.hpp>
-#include <network/uri.hpp>
+#include <skyr/url.hpp>
 
 #include "logger.h"
 #include "parse/number.h"
@@ -29,10 +29,10 @@ ouinet::util::get_host_port(const http::request_header<>& req)
             : req[http::field::host];
 
     if (hp.empty() && req.version() == 10) {
-        // HTTP/1.0 proxy client with no ``Host:``, use URI.
-        network::uri uri{std::string(target)};
-        return make_pair( uri.host().to_string()
-                        , (uri.has_port() ? uri.port().to_string() : defport));
+        // HTTP/1.0 proxy client with no ``Host:``, use URL.
+        skyr::url url{std::string(target)};
+        return make_pair( url.hostname()
+                        , (url.port().empty() ? defport : url.port()));
     }
 
     auto host_port = util::split_ep(hp);
