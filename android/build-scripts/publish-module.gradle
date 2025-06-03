@@ -58,8 +58,8 @@ afterEvaluate {
 }
 
 signing {
-    if (signingKey) {
-        useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+    if (signing.key) {
+        useInMemoryPgpKeys(signing.keyId, signing.key, signing.password)
     }
     sign publishing.publications
 }
