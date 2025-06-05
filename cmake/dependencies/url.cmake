@@ -21,8 +21,8 @@ add_dependencies(lib_expected expected)
 add_library(lib::expected ALIAS lib_expected)
 
 externalproject_add(range_v3
-        URL https://github.com/ericniebler/range-v3/archive/0.11.0.tar.gz
-        URL_MD5 97ab1653f3aa5f9e3d8200ee2a4911d3
+        URL https://github.com/ericniebler/range-v3/archive/0.12.0.tar.gz
+        URL_MD5 373a795e450fd1c8251df624be784710
         UPDATE_COMMAND ""
         CMAKE_ARGS
             -DRANGE_V3_DOCS=OFF
