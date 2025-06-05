@@ -6,7 +6,7 @@ set(URL_FILENAME
 
 externalproject_add(expected
         URL https://github.com/TartanLlama/expected/archive/v1.1.0.tar.gz
-        URL_MD5 14007ef4e5bb276c66bb9f5e218d9319
+        URL_HASH SHA256=1db357f46dd2b24447156aaf970c4c40a793ef12a8a9c2ad9e096d9801368df6
         UPDATE_COMMAND ""
         CMAKE_ARGS
             -DEXPECTED_BUILD_TESTS=OFF
@@ -22,7 +22,7 @@ add_library(lib::expected ALIAS lib_expected)
 
 externalproject_add(range_v3
         URL https://github.com/ericniebler/range-v3/archive/0.12.0.tar.gz
-        URL_MD5 373a795e450fd1c8251df624be784710
+        URL_HASH SHA256=015adb2300a98edfceaf0725beec3337f542af4915cec4d0b89fa0886f4ba9cb
         UPDATE_COMMAND ""
         CMAKE_ARGS
             -DRANGE_V3_DOCS=OFF
