@@ -11,7 +11,7 @@
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 
-#include <network/uri.hpp>
+#include <skyr/percent_encoding/percent_decode.hpp>
 
 #include "util/iterators/base32_from_binary.hpp"
 #include "util/iterators/binary_from_base32.hpp"
@@ -178,15 +178,11 @@ bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out
     return size == out_size;
 }
 
-std::string ouinet::util::percent_decode(const boost::string_view in) {
+string ouinet::util::percent_decode(const boost::string_view in) {
     if (in.empty()) return {};
-
-    std::string ret;
     try {
-        network::uri::decode( in.cbegin(), in.cend()
-                            , std::back_inserter(ret));
-    } catch (const network::percent_decoding_error&) {
+        return skyr::percent_decode(string_view(in.data(), in.size())).value();
+    } catch (const skyr::percent_encoding::percent_encode_errc&) {
         return {};
     }
-    return ret;
 }

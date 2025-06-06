@@ -183,7 +183,7 @@ add_library(ouinet_common STATIC ${ouinet_common_sources})
 target_link_libraries(ouinet_common
     PRIVATE
         ouinet_dependencies
-        lib::uri
+        lib::url
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
