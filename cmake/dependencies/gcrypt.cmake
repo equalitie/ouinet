@@ -151,6 +151,7 @@ externalproject_add(gpg_error
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
+            --disable-doc
             --enable-install-gpg-error-config
     ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
