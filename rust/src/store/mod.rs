@@ -1,11 +1,15 @@
+mod backoff;
+mod device_id;
+mod record_number;
+
 use crate::{
-    backoff::Backoff,
     constants,
     crypto::{self, EncryptionKey},
-    device_id::DeviceId,
     record_id::RecordId,
-    record_number::RecordNumber,
 };
+use backoff::Backoff;
+use device_id::DeviceId;
+use record_number::RecordNumber;
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
