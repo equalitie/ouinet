@@ -40,14 +40,15 @@ mod ffi {
         fn new_cache_out_request(self: &Client) -> Box<Request>;
         fn bridge_transfer_i2c(self: &Client, byte_count: usize);
         fn bridge_transfer_c2i(self: &Client, byte_count: usize);
-        fn set_aux_key_value(self: &Client, key: String, value: String);
+        fn set_aux_key_value(self: &Client, record_id: String, key: String, value: String) -> bool;
 
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
         // processor is set eventually, the metrics from this runtime can be collected.
         fn set_processor(self: &Client, processor: UniquePtr<CxxRecordProcessor>);
 
-        fn device_id(self: &Client) -> String;
+        fn current_device_id(self: &Client) -> String;
+        fn current_record_id(self: &Client) -> String;
 
         //------------------------------------------------------------
         type MainlineDht;
@@ -249,8 +250,12 @@ impl Client {
         })
     }
 
-    fn device_id(&self) -> String {
+    fn current_device_id(&self) -> String {
         self.inner.record_id_rx.borrow().device_id.to_string()
+    }
+
+    fn current_record_id(&self) -> String {
+        self.inner.record_id_rx.borrow().to_string()
     }
 
     fn bridge_transfer_i2c(&self, byte_count: usize) {
@@ -263,9 +268,14 @@ impl Client {
         metrics.bridge_transfer_c2i(byte_count);
     }
 
-    fn set_aux_key_value(&self, key: String, value: String) {
+    fn set_aux_key_value(&self, record_id: String, key: String, value: String) -> bool {
         let mut metrics = self.inner.metrics.lock().unwrap();
-        metrics.set_aux_key_value(key, value);
+        if record_id == self.current_record_id() {
+            metrics.set_aux_key_value(key, value);
+            true
+        } else {
+            false
+        }
     }
 }
 

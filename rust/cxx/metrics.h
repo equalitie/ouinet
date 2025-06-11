@@ -21,6 +21,12 @@ class EncryptionKey;
 template<typename T>
 using OptBox = std::optional<rust::Box<T>>;
 
+enum class SetAuxResult {
+    Ok = 0,
+    BadRecordId,
+    Noop,
+};
+
 class Client {
 public:
     // Creates a metrics client which does nothing.
@@ -47,9 +53,10 @@ public:
     void bridge_transfer_c2i(size_t);
 
     // Returns `false` if this is a `noop` client.
-    bool set_aux_key_value(std::string_view key, std::string_view value);
+    SetAuxResult set_aux_key_value(std::string_view record_id, std::string_view key, std::string_view value);
 
     std::optional<std::string> current_device_id() const;
+    std::optional<std::string> current_record_id() const;
 
 private:
     Client() = default;

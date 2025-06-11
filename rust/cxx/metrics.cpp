@@ -74,7 +74,13 @@ Request Client::new_cache_out_request() {
 
 std::optional<std::string> Client::current_device_id() const {
     if (!_impl) return {};
-    rust::String str = (*_impl)->device_id();
+    rust::String str = (*_impl)->current_device_id();
+    return std::string(str.data(), str.size());
+}
+
+std::optional<std::string> Client::current_record_id() const {
+    if (!_impl) return {};
+    rust::String str = (*_impl)->current_record_id();
     return std::string(str.data(), str.size());
 }
 
@@ -88,12 +94,15 @@ void Client::bridge_transfer_c2i(size_t byte_count) {
     (*_impl)->bridge_transfer_c2i(byte_count);
 }
 
-bool Client::set_aux_key_value(std::string_view key, std::string_view value) {
-    if (!_impl) return false;
-    (*_impl)->set_aux_key_value(
+SetAuxResult Client::set_aux_key_value(std::string_view record_id, std::string_view key, std::string_view value) {
+    if (!_impl) return SetAuxResult::Noop;
+
+    bool ok = (*_impl)->set_aux_key_value(
+            rust::String(record_id.data(), record_id.size()),
             rust::String(key.data(), key.size()),
             rust::String(value.data(), value.size()));
-    return true;
+
+    return ok ? SetAuxResult::Ok : SetAuxResult::BadRecordId;
 }
 
 //--------------------------------------------------------------------

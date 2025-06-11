@@ -2,7 +2,7 @@ use crate::{constants, store::Store};
 use std::{io, path::PathBuf};
 use tokio::time::Instant;
 
-/// We can have multiple records with the same DeviceId and RecordNumber is used to disambiguate
+/// We can have multiple records with the same DeviceId, and RecordNumber is used to disambiguate
 /// between them. RecordNumber is incremented on app restart or after
 /// INCREMENT_RECORD_VERSION_AFTER duration elapses. It is reset back to zero when DeviceId
 /// changes.
