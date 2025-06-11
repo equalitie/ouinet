@@ -2,8 +2,27 @@
 
 ## Content
 
-The metrics records are formated with JSON. TODO: Describe the record fields and/or provide an
-example record.
+The metrics records are formated with JSON.
+
+```json
+{
+    "os": <string>,
+    "start": <string>
+    "record_start": <string>,
+    // When acting as a bridge, how many bytes have been transferred from other clients to the injector
+    "bridge_c2i": <number>,
+    // When acting as a bridge, how many bytes have been transferred from the injector to other clients
+    "bridge_i2c": <number>,
+    "bootstraps": {
+        TODO...
+    },
+    "requests": {
+        TODO...
+    },
+}
+```
+
+The `"os"` string may be any of [these](https://doc.rust-lang.org/std/env/consts/constant.OS.html).
 
 ## Encryption
 
