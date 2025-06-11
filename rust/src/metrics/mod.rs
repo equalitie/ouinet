@@ -82,6 +82,8 @@ impl Metrics {
             "os": std::env::consts::OS,
             "start": format!("{}", self.start.format(DAY_TIME_FORMAT)),
             "record_start": format!("{}", self.record_start.format(DAY_TIME_FORMAT)),
+            "bridge_i2c": self.bridge.transfer_injector_to_client,
+            "bridge_c2i": self.bridge.transfer_injector_to_client,
             "bootstraps": self.bootstraps,
             "requests": self.requests,
         })
