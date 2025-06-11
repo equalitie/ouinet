@@ -88,6 +88,14 @@ void Client::bridge_transfer_c2i(size_t byte_count) {
     (*_impl)->bridge_transfer_c2i(byte_count);
 }
 
+bool Client::set_aux_key_value(std::string_view key, std::string_view value) {
+    if (!_impl) return false;
+    (*_impl)->set_aux_key_value(
+            rust::String(key.data(), key.size()),
+            rust::String(value.data(), value.size()));
+    return true;
+}
+
 //--------------------------------------------------------------------
 
 DhtNode MainlineDht::dht_node_ipv4() {

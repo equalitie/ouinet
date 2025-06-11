@@ -1,3 +1,4 @@
+mod auxiliary;
 mod bootstrap;
 pub mod request;
 
@@ -5,6 +6,7 @@ use crate::{
     backoff_watch::{ConstantBackoffWatchReceiver, ConstantBackoffWatchSender},
     constants,
 };
+use auxiliary::Auxiliary;
 pub use bootstrap::{BootstrapId, Bootstraps};
 use chrono::{offset::Utc, DateTime};
 pub use request::Requests;
@@ -26,6 +28,7 @@ pub struct Metrics {
     bootstraps: Bootstraps,
     bridge: Bridge,
     pub requests: Requests,
+    aux: Auxiliary,
     has_new_data: bool,
 }
 
@@ -44,7 +47,14 @@ impl Metrics {
             bootstraps: Bootstraps::new(),
             bridge: Default::default(),
             requests: Requests::new(on_modify_tx),
+            aux: Auxiliary::new(),
             has_new_data: false,
+        }
+    }
+
+    pub fn set_aux_key_value(&mut self, key: String, value: String) {
+        if self.aux.set(key, value) {
+            self.mark_modified(true);
         }
     }
 
@@ -86,6 +96,7 @@ impl Metrics {
             "bridge_c2i": self.bridge.transfer_injector_to_client,
             "bootstraps": self.bootstraps,
             "requests": self.requests,
+            "aux": self.aux,
         })
         .to_string();
 
@@ -102,6 +113,7 @@ impl Metrics {
         self.bootstraps.clear();
         self.requests.clear();
         self.bridge.clear();
+        self.aux.clear();
         self.mark_modified(false);
     }
 
@@ -111,6 +123,7 @@ impl Metrics {
         self.bootstraps.clear_finished();
         self.requests.clear_finished();
         self.bridge.clear_finished();
+        self.aux.clear_finished();
         self.mark_modified(false);
     }
 
@@ -129,7 +142,7 @@ impl Metrics {
     }
 
     pub fn has_new_data(&self) -> bool {
-        self.has_new_data || self.requests.has_new_data()
+        self.has_new_data || self.requests.has_new_data() || self.aux.has_new_data()
     }
 }
 

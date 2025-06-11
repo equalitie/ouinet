@@ -6,8 +6,12 @@ The metrics records are formated with JSON.
 
 ```json
 {
+    // See for possible values:
+    // https://doc.rust-lang.org/std/env/consts/constant.OS.html
     "os": <string>,
-    "start": <string>
+    // Time when metrics were started (usually on app start) OR on DeviceID rotation
+    "start": <string>,
+    // Time when a this record started collecting
     "record_start": <string>,
     // When acting as a bridge, how many bytes have been transferred from other clients to the injector
     "bridge_c2i": <number>,
@@ -19,10 +23,11 @@ The metrics records are formated with JSON.
     "requests": {
         TODO...
     },
+    "aux": {
+        TODO...
+    },
 }
 ```
-
-The `"os"` string may be any of [these](https://doc.rust-lang.org/std/env/consts/constant.OS.html).
 
 ## Encryption
 

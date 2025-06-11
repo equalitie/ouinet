@@ -46,6 +46,9 @@ public:
     void bridge_transfer_i2c(size_t);
     void bridge_transfer_c2i(size_t);
 
+    // Returns `false` if this is a `noop` client.
+    bool set_aux_key_value(std::string_view key, std::string_view value);
+
     std::optional<std::string> current_device_id() const;
 
 private:

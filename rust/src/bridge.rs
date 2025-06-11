@@ -40,6 +40,7 @@ mod ffi {
         fn new_cache_out_request(self: &Client) -> Box<Request>;
         fn bridge_transfer_i2c(self: &Client, byte_count: usize);
         fn bridge_transfer_c2i(self: &Client, byte_count: usize);
+        fn set_aux_key_value(self: &Client, key: String, value: String);
 
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
@@ -260,6 +261,11 @@ impl Client {
     fn bridge_transfer_c2i(&self, byte_count: usize) {
         let mut metrics = self.inner.metrics.lock().unwrap();
         metrics.bridge_transfer_c2i(byte_count);
+    }
+
+    fn set_aux_key_value(&self, key: String, value: String) {
+        let mut metrics = self.inner.metrics.lock().unwrap();
+        metrics.set_aux_key_value(key, value);
     }
 }
 
