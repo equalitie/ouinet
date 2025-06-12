@@ -24,10 +24,13 @@ class TestFixtures:
         "test_externally_discovered_i2p_injector": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_i2cp_server": I2P_TRANSPORT_TIMEOUT,
         "test_i2p_transport": I2P_TRANSPORT_TIMEOUT,
+        "test_i2p_transport_speed_1KB": I2P_TRANSPORT_TIMEOUT,
+        "test_i2p_transport_speed_1MB": I2P_TRANSPORT_TIMEOUT,
         "test_tcp_transport": TCP_TRANSPORT_TIMEOUT,
         "test_ipfs_cache": IPFS_CACHE_TIMEOUT,
         "test_bep5_cache": BEP5_CACHE_TIMEOUT,
-        "test_bep5_seed": BEP5_CACHE_TIMEOUT}
+        "test_bep5_seed": BEP5_CACHE_TIMEOUT
+    }
 
     #BENCHMARK REGEX INDICES
     READY_REGEX_INDEX = 0

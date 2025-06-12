@@ -31,6 +31,7 @@ from test_http_server import TestHttpServer
 
 import sys
 import logging
+import time
 
 class OuinetTests(TestCase):
     @classmethod
@@ -70,7 +71,7 @@ class OuinetTests(TestCase):
         return injector
 
     def run_i2p_injector(self, injector_args, deferred_i2p_ready):
-        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME + "_i2p", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
+        injector = OuinetI2PInjector(OuinetConfig(TestFixtures.I2P_INJECTOR_NAME + "_i2p", TestFixtures.I2P_TRANSPORT_TIMEOUT, injector_args, benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX]), [deferred_i2p_ready])
         injector.start()
         self.proc_list.append(injector)
 
@@ -173,6 +174,15 @@ class OuinetTests(TestCase):
         )
         return self.request_url(port, url)
 
+    def request_sized_content(self, port, content_size):
+        """
+        Send a get request to request the test server to send a random content of a specific size
+        """
+        url = "http://%s:%d/?content_size=%s" % (
+            self.get_nonloopback_ip(), TestFixtures.TEST_HTTP_SERVER_PORT, str(content_size)
+        )
+        return self.request_url(port, url)
+
     def request_page(self, port, page_url, cachable = False):
         """
         Send a get request to request test content as a page on a specific sub url
@@ -181,12 +191,13 @@ class OuinetTests(TestCase):
             self.get_nonloopback_ip(), TestFixtures.TEST_HTTP_SERVER_PORT, page_url
         )
         return self.request_url(port, url)
-    
+
     def request_url(self, port, url, cachable = True):
         ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
         agent = ProxyAgent(ouinet_client_endpoint)
-        headers = cachable and Headers({b"X-Ouinet-Group": [b"1"] }) or None
+        headers = cachable and Headers({b"X-Ouinet-Group": [self.get_nonloopback_ip()] }) or None
         return agent.request(b"GET", url.encode(), headers)
+
 
     def try_to_connect_to_tcp_port(self, port):
         success = False
@@ -312,13 +323,18 @@ class OuinetTests(TestCase):
 
         self.assertTrue(success)
 
+    @inlineCallbacks
     def test_i2p_transport(self):
-        self._test_i2p_transport(self)
-
-    def test_i2p_transport_speed_1MB(self):
-        self._test_i2p_transport(self, 1024 * 1024)
+        self._test_i2p_transport(None)
 
     @inlineCallbacks
+    def test_i2p_transport_speed_1MB(self):
+        self._test_i2p_transport(size_of_transported_blob = 1024 * 1024)
+
+    @inlineCallbacks
+    def test_i2p_transport_speed_1KB(self):
+        self._test_i2p_transport(size_of_transported_blob = 1024)
+
     def _test_i2p_transport(self, size_of_transported_blob = None):
         """
         Starts an echoing http server, an injector and a client and send a unique http 
@@ -329,19 +345,21 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         logging.debug("test_i2p_transport");
         logging.debug("################################################")
-        # #injector
+        # injector events
         i2pinjector_tunnel_ready = defer.Deferred()
+
         i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true",
                                              "--i2p-hops-per-tunnel", str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
                                              "--log-level", "DEBUG",
-                                             ], i2pinjector_tunnel_ready) #"--disable-cache"
+                                             ], i2pinjector_tunnel_ready,) #"--disable-cache"
+
 
         #wait for the injector tunnel to be advertised
         success = yield i2pinjector_tunnel_ready
 
         #we only can request that after injector is ready
         injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
-        # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
+        # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID #fake injector
         self.assert_(injector_i2p_public_id) #empty public id means injector coludn't read the endpoint file
 
         #wait so the injector id gets advertised on the DHT
@@ -353,6 +371,8 @@ class OuinetTests(TestCase):
 
         #client
         test_passed = False
+        request_start = None
+        response_end = None
         for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
             i2pclient_tunnel_ready = defer.Deferred()
 
@@ -373,16 +393,25 @@ class OuinetTests(TestCase):
             for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
                 logging.debug("request attempt no " + str(i+1) + "...")
 
-                if (size_of_tranported_blob == None):
+                request_start = time.time()
+                if (size_of_transported_blob == None):
                     defered_response = yield  self.request_echo(TestFixtures.I2P_CLIENT["port"], content)
                 else:
                     defered_response = yield  self.request_sized_content(TestFixtures.I2P_CLIENT["port"], size_of_transported_blob)
                 if defered_response.code == 200:
                     response_body = yield readBody(defered_response)
-                    self.assertEquals(response_body.decode(), content)
+                    response_end = time.time()
+                    actual_response_length = TestFixtures.RESPONSE_LENGTH
+                    if size_of_transported_blob == None:
+                        self.assertEquals(response_body.decode(), content)
+                    else:
+                        actual_response_length = size_of_transported_blob
+
+                    print(f"Retrieving %.3e bytes through I2P tunnel took %f seconds." % (actual_response_length, response_end - request_start))
+
                     test_passed = True
                     break
-                
+
                 else:
                     logging.debug("request attempt no " + str(i+1) + " failed. with code " + str(defered_response.code))
                     yield task.deferLater(reactor, TestFixtures.I2P_TUNNEL_HEALING_PERIOD, lambda: None)
@@ -432,7 +461,7 @@ class OuinetTests(TestCase):
 
         success = yield i2pinjector_cache_key_announced        
         index_key = i2pinjector.get_index_key()
-        print("Index key is: " + index_key)
+        logging.debug("Index key is: " + index_key)
         #wait for the injector tunnel to be advertised
         success = yield i2pinjector_tunnel_ready
 
@@ -627,7 +656,7 @@ class OuinetTests(TestCase):
         index_key = cache_injector.get_index_key()
         assert(len(index_key) > 0);
         
-        print("Index key is: " + index_key)
+        logging.debug("Index key is: " + index_key)
 
         #injector client, use only Injector mechanism
         client_ready = defer.Deferred()
