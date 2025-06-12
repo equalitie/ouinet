@@ -6,6 +6,7 @@ use crate::{
         BootstrapId, IpVersion, Metrics,
     },
     metrics_runner::metrics_runner,
+    record_id::RecordId,
     record_processor::RecordProcessor,
     runtime,
     store::Store,
@@ -22,7 +23,6 @@ use tokio::{
     task::{self, JoinHandle},
     time::{sleep, Duration},
 };
-use uuid::Uuid;
 
 #[cxx::bridge]
 mod ffi {
@@ -175,10 +175,10 @@ impl Client {
         let metrics = Arc::new(Mutex::new(Metrics::new()));
         let store = runtime.block_on(Store::new(store_path, encryption_key));
 
-        let (runner, device_id_rx) = match store {
+        let (runner, record_id_rx) = match store {
             Ok(store) => {
                 let metrics = metrics.clone();
-                let device_id_rx = store.record_id.device_id().subscribe();
+                let record_id_rx = store.record_id.subscribe();
                 let job_handle = task::spawn(async move {
                     metrics_runner(metrics, store, processor_rx).await;
                 });
@@ -189,14 +189,14 @@ impl Client {
                         processor_tx,
                         job_handle,
                     }),
-                    device_id_rx,
+                    record_id_rx,
                 )
             }
             Err(error) => {
                 log::error!("Failed to initialize metrics store: {error:?}");
 
                 // Dummy device id receiver that always returns `Uuid::nil()`
-                (None, watch::channel(Uuid::nil()).1)
+                (None, watch::channel(RecordId::nil()).1)
             }
         };
 
@@ -204,7 +204,7 @@ impl Client {
             inner: Arc::new(ClientInner {
                 runner: Mutex::new(runner),
                 metrics,
-                device_id_rx,
+                record_id_rx,
             }),
         }
     }
@@ -250,7 +250,7 @@ impl Client {
     }
 
     fn device_id(&self) -> String {
-        self.inner.device_id_rx.borrow().to_string()
+        self.inner.record_id_rx.borrow().device_id.to_string()
     }
 
     fn bridge_transfer_i2c(&self, byte_count: usize) {
@@ -272,7 +272,7 @@ impl Client {
 struct ClientInner {
     runner: Mutex<Option<Runner>>,
     metrics: Arc<Mutex<Metrics>>,
-    device_id_rx: watch::Receiver<Uuid>,
+    record_id_rx: watch::Receiver<RecordId>,
 }
 
 struct Runner {

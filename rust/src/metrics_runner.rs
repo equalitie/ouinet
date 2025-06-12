@@ -176,15 +176,14 @@ impl EventHandler {
                 }
 
                 metrics.lock().unwrap().clear();
-                store.record_id.sequence_number_reset().await?;
-                store.record_id.device_id_rotate().await?;
+                store.record_id.rotate().await?;
             }
             Event::IncrementRecordNumber { metrics_enabled } => {
                 if metrics_enabled {
                     store_record(store, metrics).await?;
                 }
 
-                store.record_id.sequence_number_increment().await?;
+                store.record_id.increment().await?;
             }
             Event::Purge => {
                 store.delete_stored_records().await?;

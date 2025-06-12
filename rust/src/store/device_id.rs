@@ -5,11 +5,11 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
-use tokio::{fs, sync::watch};
+use tokio::fs;
 use uuid::Uuid;
 
 pub struct DeviceId {
-    changed_tx: watch::Sender<Uuid>,
+    current: Uuid,
     created: SystemTime,
     file_path: PathBuf,
     rotate_after: Duration,
@@ -22,10 +22,8 @@ impl DeviceId {
             None => Self::create_and_store(&file_path).await?,
         };
 
-        let changed_tx = watch::Sender::new(value);
-
         Ok(Self {
-            changed_tx,
+            current: value,
             created,
             file_path,
             rotate_after,
@@ -33,17 +31,13 @@ impl DeviceId {
     }
 
     pub fn get(&self) -> Uuid {
-        *self.changed_tx.borrow()
+        self.current
     }
 
-    pub fn subscribe(&self) -> watch::Receiver<Uuid> {
-        self.changed_tx.subscribe()
-    }
-
-    pub async fn rotate(&mut self) -> io::Result<()> {
+    pub(super) async fn rotate(&mut self) -> io::Result<()> {
         let (new_value, created) = Self::create_and_store(&self.file_path).await?;
 
-        self.changed_tx.send_replace(new_value);
+        self.current = new_value;
         self.created = created;
 
         Ok(())

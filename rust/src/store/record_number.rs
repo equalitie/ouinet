@@ -32,13 +32,13 @@ impl RecordNumber {
         self.number
     }
 
-    pub async fn increment(&mut self) -> io::Result<()> {
+    pub(super) async fn increment(&mut self) -> io::Result<()> {
         self.number += 1;
         self.time = Instant::now();
         self.store().await
     }
 
-    pub async fn reset(&mut self) -> io::Result<()> {
+    pub(super) async fn reset(&mut self) -> io::Result<()> {
         self.number = 0;
         self.time = Instant::now();
         self.store().await
