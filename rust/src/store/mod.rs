@@ -1,5 +1,6 @@
 mod backoff;
 mod device_id;
+mod record_id;
 mod record_number;
 
 use crate::{
@@ -8,8 +9,7 @@ use crate::{
     record_id::RecordId,
 };
 use backoff::Backoff;
-use device_id::DeviceId;
-use record_number::RecordNumber;
+use record_id::RecordIdStore;
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
@@ -23,9 +23,8 @@ use uuid::Uuid;
 pub struct Store {
     records_dir_path: PathBuf,
     encryption_key: EncryptionKey,
-    pub record_number: RecordNumber,
+    pub record_id: RecordIdStore,
     pub backoff: Backoff,
-    pub device_id: DeviceId,
 }
 
 impl Store {
@@ -35,16 +34,14 @@ impl Store {
         let record_number_path = root_path.join("record_number.json");
         let backoff_path = root_path.join("backoff.json");
 
-        let record_number = RecordNumber::load(record_number_path).await?;
-        let device_id = DeviceId::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
+        let record_id = RecordIdStore::new(device_id_path, record_number_path).await?;
         let backoff = Backoff::new(backoff_path).await?;
 
         Ok(Self {
             records_dir_path,
             encryption_key,
-            record_number,
+            record_id,
             backoff,
-            device_id,
         })
     }
 
@@ -80,8 +77,8 @@ impl Store {
 
     pub fn current_record_id(&self) -> RecordId {
         RecordId {
-            device_id: self.device_id.get(),
-            sequence_number: self.record_number.get(),
+            device_id: self.record_id.device_id().get(),
+            sequence_number: self.record_id.sequence_number().get(),
         }
     }
 

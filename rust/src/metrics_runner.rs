@@ -176,15 +176,15 @@ impl EventHandler {
                 }
 
                 metrics.lock().unwrap().clear();
-                store.record_number.reset().await?;
-                store.device_id.rotate().await?;
+                store.record_id.sequence_number_reset().await?;
+                store.record_id.device_id_rotate().await?;
             }
             Event::IncrementRecordNumber { metrics_enabled } => {
                 if metrics_enabled {
                     store_record(store, metrics).await?;
                 }
 
-                store.record_number.increment().await?;
+                store.record_id.sequence_number_increment().await?;
             }
             Event::Purge => {
                 store.delete_stored_records().await?;
@@ -254,8 +254,8 @@ impl EventListener {
                         None => break Event::Exit { metrics_enabled },
                     }
                 }
-                () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber { metrics_enabled },
-                () = time::sleep(store.device_id.rotate_after()) => break Event::RotateDeviceId { metrics_enabled },
+                () = time::sleep_until(store.record_id.sequence_number().increment_at()) => break Event::IncrementRecordNumber { metrics_enabled },
+                () = time::sleep(store.record_id.device_id().rotate_after()) => break Event::RotateDeviceId { metrics_enabled },
             }
         }
     }

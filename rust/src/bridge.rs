@@ -178,7 +178,7 @@ impl Client {
         let (runner, device_id_rx) = match store {
             Ok(store) => {
                 let metrics = metrics.clone();
-                let device_id_rx = store.device_id.subscribe();
+                let device_id_rx = store.record_id.device_id().subscribe();
                 let job_handle = task::spawn(async move {
                     metrics_runner(metrics, store, processor_rx).await;
                 });
