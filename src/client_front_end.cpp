@@ -462,7 +462,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     auto query = get_query(target);
 
-    bool handled_query = false;
+    bool query_handled = false;
 
     std::map<std::string_view, std::function<void (bool)>> bool_handlers = {
         { "origin_access",     [&](bool enable) { config.is_origin_access_enabled(enable);                           } },
@@ -479,11 +479,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             auto enable = parse_enable(it->second);
             if (!enable.has_value()) {
                 res.result(http::status::bad_request);
-                ss << it->first << " only accepts {enable,disable} values (" << it->second << ")";
+                ss << it->first << " accepts {enable,disable}, given \"" << it->second << "\"";
                 return;
             }
             handler(*enable);
-            handled_query = true;
+            query_handled = true;
         }
     }
 
@@ -493,16 +493,53 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
         if (!ec && cancel) ec = asio::error::operation_aborted;
         if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
-        handled_query = true;
+        query_handled = true;
     }
 
     if (auto it = query.find("bt_extra_bootstrap"); it != query.end() && cache_client) {
         auto eqpos = target.rfind('=');
         set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
-        handled_query = true;
+        query_handled = true;
     }
 
-    if (handled_query) {
+    // Handle setting key/value pairs in metrics
+    {
+        auto rec_it = query.find("set_metrics_record_id");
+        auto key_it = query.find("set_metrics_key");
+        auto val_it = query.find("set_metrics_value");
+
+        if (rec_it != query.end()) {
+            bool missing = false;
+
+            if (key_it == query.end()) missing = true;
+            if (val_it == query.end()) missing = true;
+
+            if (missing) {
+                res.result(http::status::bad_request);
+                ss << "set_metrics_record_id requires both \"set_metrics_key\" and \"set_metrics_value\"";
+                return;
+            }
+
+            auto result = metrics.set_aux_key_value(rec_it->second, key_it->second, val_it->second);
+
+            switch (result) {
+                case metrics::SetAuxResult::Ok:
+                    break; // all good
+                case metrics::SetAuxResult::BadRecordId:
+                    res.result(http::status::conflict);
+                    ss << "invalid record ID, get a new one";
+                    return;
+                case metrics::SetAuxResult::Noop:
+                    res.result(http::status::bad_request);
+                    ss << "metrics not enabled";
+                    return;
+            }
+
+            query_handled = true;
+        }
+    }
+
+    if (query_handled) {
         // Redirect back to the portal.
         ss << "<!DOCTYPE html>\n"
                "<html>\n"
@@ -722,6 +759,10 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     response["bt_extra_bootstraps"] = bt_extra_bootstraps(config);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
+
+    if (auto record_id = metrics.current_record_id(); record_id.has_value()) {
+        response["current_metrics_record_id"] = *record_id;
+    }
 
     if (cache_client) {
         sys::error_code ec;

@@ -49,8 +49,6 @@
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
 
-#include "cxx/metrics.h"
-
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
 #endif // ifndef __ANDROID__
@@ -1100,6 +1098,17 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYiel
 
         bool is_enabled() const override {
             return client->_metrics.is_enabled();
+        }
+
+        std::optional<std::string> current_record_id() const override {
+            return client->_metrics.current_record_id();
+        }
+
+        metrics::SetAuxResult set_aux_key_value(
+                std::string_view record_id,
+                std::string_view key,
+                std::string_view value) override {
+            return client->_metrics.set_aux_key_value(record_id, key, value);
         }
 
       private:

@@ -12,6 +12,7 @@
 #include "util/reachability.h"
 #include "util/yield.h"
 #include "logger.h"
+#include "cxx/metrics.h"
 
 namespace ouinet { namespace cache {
     class Client;
@@ -32,6 +33,14 @@ public:
     virtual void enable() = 0;
     virtual void disable() = 0;
     virtual bool is_enabled() const = 0;
+
+    virtual std::optional<std::string> current_record_id() const = 0;
+
+    virtual metrics::SetAuxResult set_aux_key_value(
+            std::string_view record_id,
+            std::string_view key,
+            std::string_view value) = 0;
+
     virtual ~ClientFrontEndMetricsController() = default;
 };
 
