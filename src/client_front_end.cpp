@@ -387,6 +387,57 @@ void ClientFrontEnd::handle_group_list( const Request&
         ss << g << std::endl;
 }
 
+std::map<std::string, std::string, std::less<>> get_query(std::string_view target) {
+
+    auto separator = target.find('?');
+
+    std::map<std::string, std::string, std::less<>> query;
+    auto npos = std::string_view::npos;
+
+    if (separator == npos) {
+        return query;
+    }
+
+    target = target.substr(separator + 1);
+
+    while (!target.empty()) {
+        separator = target.find('&');
+
+        std::string_view entry = target.substr(0, separator);
+
+        if (separator != npos) {
+            target = target.substr(separator + 1);
+        } else {
+            target = target.substr(target.size());
+        }
+
+        separator = entry.find('=');
+
+        if (separator == npos) {
+            continue;
+        }
+
+        std::string_view key = entry.substr(0, separator);
+        std::string_view val = entry.substr(separator + 1);
+
+        if (key.empty()) continue;
+
+        query[std::string(key)] = std::string(val);
+    }
+
+    return query;
+}
+
+std::optional<bool> parse_enable(std::string& str) {
+    if (str == "enable") {
+        return true;
+    } else if (str == "disable") {
+        return false;
+    } else {
+        return {};
+    }
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
@@ -409,62 +460,49 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             _log_level_no_file = _log_level_input->current_value;
     }
 
-    if (target.find('?') != string::npos) {
-        // XXX: Extra primitive value parsing.
-        if (target.find("?origin_access=enable") != string::npos) {
-            config.is_origin_access_enabled(true);
-        }
-        else if (target.find("?origin_access=disable") != string::npos) {
-            config.is_origin_access_enabled(false);
-        }
-        else if (target.find("?proxy_access=enable") != string::npos) {
-            config.is_proxy_access_enabled(true);
-        }
-        else if (target.find("?proxy_access=disable") != string::npos) {
-            config.is_proxy_access_enabled(false);
-        }
-        else if (target.find("?injector_access=enable") != string::npos) {
-            config.is_injector_access_enabled(true);
-        }
-        else if (target.find("?injector_access=disable") != string::npos) {
-            config.is_injector_access_enabled(false);
-        }
-        else if (target.find("?auto_refresh=enable") != string::npos) {
-            _auto_refresh_enabled = true;
-        }
-        else if (target.find("?auto_refresh=disable") != string::npos) {
-            _auto_refresh_enabled = false;
-        }
-        else if (target.find("?distributed_cache=enable") != string::npos) {
-            config.is_cache_access_enabled(true);
-        }
-        else if (target.find("?distributed_cache=disable") != string::npos) {
-            config.is_cache_access_enabled(false);
-        }
-        else if (target.find("?logfile=enable") != string::npos) {
-            enable_log_to_file(config);
-        }
-        else if (target.find("?logfile=disable") != string::npos) {
-            disable_log_to_file(config);
-        }
-        else if (target.find("?metrics=enable") != string::npos) {
-            metrics.enable();
-        }
-        else if (target.find("?metrics=disable") != string::npos) {
-            metrics.disable();
-        }
-        else if (target.find("?purge_cache=") != string::npos && cache_client) {
-            sys::error_code ec;
-            auto yield_ = static_cast<asio::yield_context>(yield);
-            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
-            if (!ec && cancel) ec = asio::error::operation_aborted;
-            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
-        }
-        else if (target.find("?bt_extra_bootstraps=") != string::npos) {
-            auto eqpos = target.rfind('=');
-            set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
-        }
+    auto query = get_query(target);
 
+    bool handled_query = false;
+
+    std::map<std::string_view, std::function<void (bool)>> bool_handlers = {
+        { "origin_access",     [&](bool enable) { config.is_origin_access_enabled(enable);                           } },
+        { "proxy_access",      [&](bool enable) { config.is_proxy_access_enabled(enable);                            } },
+        { "injector_access",   [&](bool enable) { config.is_injector_access_enabled(enable);                         } },
+        { "distributed_cache", [&](bool enable) { config.is_cache_access_enabled(enable);                            } },
+        { "auto_refresh",      [&](bool enable) { _auto_refresh_enabled = enable;                                    } },
+        { "logfile",           [&](bool enable) { enable ? enable_log_to_file(config) : disable_log_to_file(config); } },
+        { "metrics",           [&](bool enable) { enable ? metrics.enable() : metrics.disable();                     } },
+    };
+
+    for (auto [name, handler] : bool_handlers) {
+        if (auto it = query.find(name); it != query.end()) {
+            auto enable = parse_enable(it->second);
+            if (!enable.has_value()) {
+                res.result(http::status::bad_request);
+                ss << it->first << " only accepts {enable,disable} values (" << it->second << ")";
+                return;
+            }
+            handler(*enable);
+            handled_query = true;
+        }
+    }
+
+    if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
+        sys::error_code ec;
+        auto yield_ = static_cast<asio::yield_context>(yield);
+        cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
+        if (!ec && cancel) ec = asio::error::operation_aborted;
+        if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
+        handled_query = true;
+    }
+
+    if (auto it = query.find("bt_extra_bootstrap"); it != query.end() && cache_client) {
+        auto eqpos = target.rfind('=');
+        set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
+        handled_query = true;
+    }
+
+    if (handled_query) {
         // Redirect back to the portal.
         ss << "<!DOCTYPE html>\n"
                "<html>\n"
