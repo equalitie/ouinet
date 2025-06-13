@@ -34,6 +34,8 @@ impl Store {
         let record_number_path = root_path.join("record_number.json");
         let backoff_path = root_path.join("backoff.json");
 
+        fs::create_dir_all(&records_dir_path).await?;
+
         let record_id = RecordIdStore::new(device_id_path, record_number_path).await?;
         let backoff = Backoff::new(backoff_path).await?;
 
@@ -47,10 +49,6 @@ impl Store {
 
     pub async fn write<D: Serialize>(path: &Path, data: &D) -> io::Result<()> {
         let content = serde_json::to_vec(data)?;
-
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await?;
-        }
 
         fs::write(path, &content).await
     }
