@@ -21,6 +21,9 @@ using sys::errc::make_error_code;
 // https://stackoverflow.com/a/417184/273348
 #define MAX_URL_SIZE 2000
 
+// Name of the file used to indicate that a group is pinned
+constexpr std::string group_pin="pinned";
+
 class DhtGroupsImpl {
 public:
     using GroupName = BaseDhtGroups::GroupName;
@@ -38,13 +41,19 @@ public:
     { return load(std::move(root_dir), false, std::move(ex), c, std::move(y)); }
 
     std::set<GroupName> groups() const;
+    std::set<DhtGroups::GroupName> pinned_groups();
     std::set<ItemName> items(const GroupName&) const;
 
     void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context);
 
     std::set<GroupName> remove(const ItemName&);
+    std::set<GroupName> remove(const ItemName&, bool&);
 
     void remove_group(const GroupName&);
+
+    bool is_pinned(const GroupName&);
+    void pin_group(const GroupName&);
+    void unpin_group(const GroupName&);
 
 private:
     using Group  = std::pair<GroupName, std::set<ItemName>>;
@@ -186,6 +195,21 @@ std::set<DhtGroups::GroupName> DhtGroupsImpl::groups() const
     return ret;
 }
 
+std::set<DhtGroups::GroupName> DhtGroupsImpl::pinned_groups()
+{
+    std::set<DhtGroups::GroupName> ret;
+
+    for (auto& group : _groups) {
+        GroupName group_name = group.first;
+        if (is_pinned(group_name))
+        {
+            ret.insert(group_name);
+        }
+    }
+
+    return ret;
+}
+
 std::set<DhtGroups::ItemName> DhtGroupsImpl::items(const GroupName& gn) const
 {
     std::set<DhtGroups::ItemName> ret;
@@ -270,6 +294,57 @@ fs::path
 DhtGroupsImpl::item_path(const GroupName& group_name, const ItemName& item_name)
 {
     return items_path(group_name) / sha1_hex_digest(item_name);
+}
+
+bool
+DhtGroupsImpl::is_pinned(const GroupName& group_name)
+{
+    fs::path group_p = group_path(group_name);
+    if (!exists(group_p))
+    {
+        _ERROR("The group path doesn't exist: ", group_p);
+        return false;
+    }
+    return fs::exists(group_path(group_name) / group_pin);
+}
+
+void
+DhtGroupsImpl::pin_group(const GroupName& group_name)
+{
+    _DEBUG("Pinning ", group_name);
+
+    fs::path group_p = group_path(group_name);
+    if (!exists(group_p))
+        _ERROR("Pinning failed ", group_name,
+               " path doesn't exist ", group_p);
+
+    fs::path pin_path = group_p / group_pin;
+    sys::error_code ec;
+    file_io::open_or_create(_ex, pin_path, ec);
+    if (ec)
+    {
+        _ERROR("Pinning failed ", group_name, "; ec=", ec);
+    }
+}
+
+void
+DhtGroupsImpl::unpin_group(const GroupName& group_name)
+{
+    _DEBUG("Unpinning ", group_name);
+
+    if (!is_pinned(group_name))
+    {
+       _WARN("Unpinning ", group_name, " was already unpinned");
+    }
+
+    fs::path group_p = group_path(group_name);
+    fs::path pin_path = group_p / group_pin;
+    sys::error_code ec;
+    file_io::remove_file(pin_path, ec);
+    if (ec)
+    {
+        _ERROR("Unpinning failed ", group_name, "; ec=", ec);
+    }
 }
 
 void DhtGroupsImpl::add( const GroupName& group_name
@@ -360,6 +435,12 @@ void DhtGroupsImpl::add( const GroupName& group_name
 
 std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ItemName& item_name)
 {
+    bool _ = false;
+    return remove(item_name, _);
+}
+
+std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ItemName& item_name, bool& group_pinned)
+{
     std::set<GroupName> erased_groups;
 
     for (auto j = _groups.begin(); j != _groups.end();) {
@@ -378,6 +459,12 @@ std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ItemName& item_name)
 
         auto i = items.find(item_name);
         if (i == items.end()) continue;
+
+        if (is_pinned(group_name))
+        {
+            group_pinned = true;
+            continue;
+        }
 
         items.erase(i);
         try_remove(item_path(group_name, item_name));
@@ -415,6 +502,9 @@ public:
     std::set<GroupName> groups() const override
     { return _impl->groups(); }
 
+    std::set<GroupName> pinned_groups() const override
+    { return _impl->pinned_groups(); }
+
     std::set<ItemName> items(const GroupName& gn) const override
     { return _impl->items(gn); }
 
@@ -444,6 +534,9 @@ public:
     std::set<GroupName> groups() const override
     { return _impl->groups(); }
 
+    std::set<GroupName> pinned_groups() const override
+    { return _impl->pinned_groups(); }
+
     std::set<ItemName> items(const GroupName& gn) const override
     { return _impl->items(gn); }
 
@@ -453,8 +546,20 @@ public:
     std::set<GroupName> remove(const ItemName& in) override
     { return _impl->remove(in); }
 
+    std::set<GroupName> remove(const ItemName& in, bool& group_pinned) override
+    { return _impl->remove(in, group_pinned); }
+
     void remove_group(const GroupName& gn) override
     { _impl->remove_group(gn); }
+
+    bool is_pinned(const GroupName& gn) override
+    { return _impl->is_pinned(gn); }
+
+    void pin_group(const GroupName& gn) override
+    { return _impl->pin_group(gn); }
+
+    void unpin_group(const GroupName& gn) override
+    { return _impl->unpin_group(gn); }
 
 private:
     std::unique_ptr<DhtGroupsImpl> _impl;
