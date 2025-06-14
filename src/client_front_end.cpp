@@ -387,6 +387,19 @@ void ClientFrontEnd::handle_group_list( const Request&
         ss << g << std::endl;
 }
 
+void ClientFrontEnd::handle_pinned_list( const Request&
+                                       , Response& res
+                                       , std::ostringstream& ss
+                                       , cache::Client* cache_client)
+{
+    res.set(http::field::content_type, "text/plain");
+
+    if (!cache_client) return;
+
+    for (const auto& g : cache_client->get_pinned_groups())
+        ss << g << std::endl;
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
@@ -463,6 +476,22 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?bt_extra_bootstraps=") != string::npos) {
             auto eqpos = target.rfind('=');
             set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
+        }
+        else if (target.find("?pin_group=") != string::npos) {
+            sys::error_code ec;
+            auto yield_ = static_cast<asio::yield_context>(yield);
+            auto eqpos = target.rfind('=');
+            cache_client->pin_group(target.substr(eqpos + 1));
+            if (!ec && cancel) ec = asio::error::operation_aborted;
+            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
+        }
+        else if (target.find("?unpin_group=") != string::npos) {
+            sys::error_code ec;
+            auto yield_ = static_cast<asio::yield_context>(yield);
+            auto eqpos = target.rfind('=');
+            cache_client->unpin_group(target.substr(eqpos + 1));
+            if (!ec && cancel) ec = asio::error::operation_aborted;
+            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
         }
 
         // Redirect back to the portal.
@@ -615,9 +644,15 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                          "name=\"purge_cache\" id=\"input-purge_cache\" "
                          "value=\"Purge cache now\"/>\n"
               "</form>\n";
-        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
-
         ss << "<br>\n";
+
+        ss << "See DHT groups: \n";
+        ss << "<ul>\n";
+        ss << "<li><a href=\"" << group_list_apath << "\">Announced</a><br></li>\n";
+        ss << "<li><a href=\"" << pinned_list_apath << "\">Pinned</a><br></li>\n";
+        ss << "</ul>\n";
+        ss << "<br>\n";
+
         if (config.cache_static_path().empty()) {
             ss << "Static cache is not enabled.<br>\n";
         } else {
@@ -752,6 +787,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
         load_log_file(config, ss);
     } else if (path == group_list_apath) {
         handle_group_list(req, res, ss, cache_client);
+    } else if (path == pinned_list_apath) {
+        handle_pinned_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {
         sys::error_code e;
         handle_status( config, client_state, local_ep, upnps, dht, reachability
