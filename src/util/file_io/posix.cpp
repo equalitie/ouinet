@@ -186,4 +186,13 @@ remove_file(const fs::path& p)
     fs::remove(p, ignored_ec);
 }
 
+void
+remove_file(const fs::path& p, sys::error_code& ec)
+{
+    if (!exists(p)) return;
+    assert(is_regular_file(p));
+    if (!is_regular_file(p)) return;
+    fs::remove(p, ec);
+}
+
 }}} // namespaces
