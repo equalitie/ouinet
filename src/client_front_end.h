@@ -147,7 +147,7 @@ private:
                       , Cancel cancel
                       , Yield);
 
-    void handle_status( ClientConfig&
+    void handle_api_status( ClientConfig&
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
@@ -160,6 +160,14 @@ private:
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
                       , Yield);
+
+    void handle_api_metrics( std::string_view sub_path
+                           , const Request&
+                           , Response&
+                           , std::ostringstream&
+                           , ClientFrontEndMetricsController& metrics
+                           , Cancel cancel
+                           , Yield);
 
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);

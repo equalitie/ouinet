@@ -502,43 +502,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         query_handled = true;
     }
 
-    // Handle setting key/value pairs in metrics
-    {
-        auto rec_it = query.find("set_metrics_record_id");
-        auto key_it = query.find("set_metrics_key");
-        auto val_it = query.find("set_metrics_value");
-
-        if (rec_it != query.end()) {
-            bool missing = false;
-
-            if (key_it == query.end()) missing = true;
-            if (val_it == query.end()) missing = true;
-
-            if (missing) {
-                res.result(http::status::bad_request);
-                ss << "set_metrics_record_id requires both \"set_metrics_key\" and \"set_metrics_value\"";
-                return;
-            }
-
-            auto result = metrics.set_aux_key_value(rec_it->second, key_it->second, val_it->second);
-
-            switch (result) {
-                case metrics::SetAuxResult::Ok:
-                    break; // all good
-                case metrics::SetAuxResult::BadRecordId:
-                    res.result(http::status::conflict);
-                    ss << "invalid record ID, get a new one";
-                    return;
-                case metrics::SetAuxResult::Noop:
-                    res.result(http::status::bad_request);
-                    ss << "metrics not enabled";
-                    return;
-            }
-
-            query_handled = true;
-        }
-    }
-
     if (query_handled) {
         // Redirect back to the portal.
         ss << "<!DOCTYPE html>\n"
@@ -717,17 +680,17 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
-void ClientFrontEnd::handle_status( ClientConfig& config
-                                  , Client::RunningState cstate
-                                  , boost::optional<UdpEndpoint> local_ep
-                                  , const UPnPs& upnps
-                                  , const bittorrent::MainlineDht* dht
-                                  , const util::UdpServerReachabilityAnalysis* reachability
-                                  , const Request& req, Response& res, ostringstream& ss
-                                  , cache::Client* cache_client
-                                  , ClientFrontEndMetricsController& metrics
-                                  , Cancel cancel
-                                  , Yield yield)
+void ClientFrontEnd::handle_api_status( ClientConfig& config
+                                      , Client::RunningState cstate
+                                      , boost::optional<UdpEndpoint> local_ep
+                                      , const UPnPs& upnps
+                                      , const bittorrent::MainlineDht* dht
+                                      , const util::UdpServerReachabilityAnalysis* reachability
+                                      , const Request& req, Response& res, ostringstream& ss
+                                      , cache::Client* cache_client
+                                      , ClientFrontEndMetricsController& metrics
+                                      , Cancel cancel
+                                      , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -780,6 +743,53 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     ss << response;
 }
 
+void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
+                                       , const Request& req, Response& res, ostringstream& ss
+                                       , ClientFrontEndMetricsController& metrics
+                                       , Cancel cancel
+                                       , Yield yield)
+{
+    res.set(http::field::content_type, "text/html");
+
+    if (sub_path.starts_with("/set_key_value")) {
+        auto query = get_query(req.target());
+
+        auto rec_it = query.find("record_id");
+        auto key_it = query.find("key");
+        auto val_it = query.find("value");
+
+        bool missing = false;
+
+        if (rec_it == query.end()) missing = true;
+        if (key_it == query.end()) missing = true;
+        if (val_it == query.end()) missing = true;
+
+        if (missing) {
+            res.result(http::status::bad_request);
+            ss << "set_key_value requires \"record_id\", \"key\" and \"value\" arguments\n";
+            return;
+        }
+
+        auto result = metrics.set_aux_key_value(rec_it->second, key_it->second, val_it->second);
+
+        switch (result) {
+            case metrics::SetAuxResult::Ok:
+                return; // all good
+            case metrics::SetAuxResult::BadRecordId:
+                res.result(http::status::conflict);
+                ss << "invalid or old record ID, get a new one from /api/status\n";
+                return;
+            case metrics::SetAuxResult::Noop:
+                res.result(http::status::bad_request);
+                ss << "metrics not enabled\n";
+                return;
+        }
+    }
+
+    ss << "invalid API command to metrics (" << sub_path << ")\n";
+    res.result(http::status::bad_request);
+}
+
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , Client::RunningState client_state
@@ -822,7 +832,11 @@ Response ClientFrontEnd::serve( ClientConfig& config
     util::url_match url;
     match_http_url(req.target(), url);
 
-    auto path = !url.path.empty() ? url.path : std::string(req.target());
+    auto path_str = !url.path.empty() ? url.path : std::string(req.target());
+    std::string_view path(path_str);
+
+    std::string_view status_api_path = "/api/status";
+    std::string_view metrics_api_path = "/api/metrics";
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
@@ -831,11 +845,15 @@ Response ClientFrontEnd::serve( ClientConfig& config
         load_log_file(config, ss);
     } else if (path == group_list_apath) {
         handle_group_list(req, res, ss, cache_client);
-    } else if (path == "/api/status") {
+    } else if (path == status_api_path) {
         sys::error_code e;
-        handle_status( config, client_state, local_ep, upnps, dht, reachability
-                     , req, res, ss, cache_client, metrics, cancel
-                     , yield[e]);
+        handle_api_status( config, client_state, local_ep, upnps, dht, reachability
+                         , req, res, ss, cache_client, metrics, cancel
+                         , yield[e]);
+    } else if (path.starts_with(metrics_api_path)) {
+        path.remove_prefix(metrics_api_path.size());
+        sys::error_code e;
+        handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps, dht, reachability
