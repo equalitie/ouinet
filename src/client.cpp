@@ -376,7 +376,7 @@ public:
                 try {
                     client->send_metrics_record(record_name, record_content, *cancel, OuinetYield(move(yield)));
                 } catch (std::exception& e) {
-                    LOG_WARN("Failed to send statistics: ", e.what());
+                    LOG_WARN("Failed to send metrics: ", e.what());
                     throw;
                 }
             });

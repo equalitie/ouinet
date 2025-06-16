@@ -175,8 +175,8 @@ impl EventHandler {
                     store_record(store, metrics).await?;
                 }
 
-                metrics.lock().unwrap().clear();
                 store.record_id.rotate().await?;
+                metrics.lock().unwrap().on_device_id_changed();
             }
             Event::IncrementRecordNumber { metrics_enabled } => {
                 if metrics_enabled {
@@ -184,6 +184,7 @@ impl EventHandler {
                 }
 
                 store.record_id.increment().await?;
+                metrics.lock().unwrap().on_record_sequence_number_changed();
             }
             Event::Purge => {
                 store.delete_stored_records().await?;

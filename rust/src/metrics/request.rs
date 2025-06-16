@@ -62,13 +62,13 @@ impl Requests {
         self.mark_modified(true);
     }
 
-    pub fn clear(&mut self) {
+    pub fn on_device_id_changed(&mut self) {
         self.active.clear();
         self.summary.clear();
         self.mark_modified(false);
     }
 
-    pub fn clear_finished(&mut self) {
+    pub fn on_record_sequence_number_changed(&mut self) {
         self.summary.clear();
         self.mark_modified(false);
     }

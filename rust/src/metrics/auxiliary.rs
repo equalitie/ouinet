@@ -40,13 +40,17 @@ impl Auxiliary {
         self.has_new_data
     }
 
-    pub fn clear(&mut self) {
-        self.has_new_data = false;
-        self.map.clear();
+    pub fn on_device_id_changed(&mut self) {
+        self.clear();
     }
 
-    pub fn clear_finished(&mut self) {
+    pub fn on_record_sequence_number_changed(&mut self) {
         self.clear();
+    }
+
+    fn clear(&mut self) {
+        self.has_new_data = false;
+        self.map.clear();
     }
 }
 

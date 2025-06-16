@@ -100,30 +100,28 @@ impl Metrics {
         })
         .to_string();
 
-        self.clear_finished();
-
         Some(data)
     }
 
     // Called when the device_id changes to not leak more data into the next record
-    pub fn clear(&mut self) {
+    pub fn on_device_id_changed(&mut self) {
         let now = SystemTime::now().into();
         self.start = now;
         self.record_start = now;
-        self.bootstraps.clear();
-        self.requests.clear();
-        self.bridge.clear();
-        self.aux.clear();
+        self.bootstraps.on_device_id_changed();
+        self.requests.on_device_id_changed();
+        self.bridge.on_device_id_changed();
+        self.aux.on_device_id_changed();
         self.mark_modified(false);
     }
 
     // Clear whatever metrics have started and finished, leave the unfinished records.
-    fn clear_finished(&mut self) {
+    pub fn on_record_sequence_number_changed(&mut self) {
         self.record_start = SystemTime::now().into();
-        self.bootstraps.clear_finished();
-        self.requests.clear_finished();
-        self.bridge.clear_finished();
-        self.aux.clear_finished();
+        self.bootstraps.on_record_sequence_number_changed();
+        self.requests.on_record_sequence_number_changed();
+        self.bridge.on_record_sequence_number_changed();
+        self.aux.on_record_sequence_number_changed();
         self.mark_modified(false);
     }
 
@@ -153,12 +151,16 @@ struct Bridge {
 }
 
 impl Bridge {
+    fn on_device_id_changed(&mut self) {
+        self.clear();
+    }
+
+    fn on_record_sequence_number_changed(&mut self) {
+        self.clear();
+    }
+
     fn clear(&mut self) {
         self.transfer_injector_to_client = 0;
         self.transfer_client_to_injector = 0;
-    }
-
-    fn clear_finished(&mut self) {
-        self.clear();
     }
 }
