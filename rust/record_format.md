@@ -38,8 +38,9 @@ The `"aux"` object may store key/value string pairs provided by an app
 utilizing Ouinet. The pair can be set using the front end IP and PORT as such:
 
 ```bash
-record_id=$(get_status | jq -r '.current_metrics_record_id')
-curl --silent --show-error "http://<FRONT_END_IP>:<FRONT_END_PORT>/api/metrics/set_key_value?record_id=$record_id&key=$key&value=$value"
+front_end_ep="<FRONT_END_IP>:<FRONT_END_PORT>"
+record_id=$(curl --fail --silent --show-error http://$front_end_ep/api/status | jq -r '.current_metrics_record_id')
+curl --silent --show-error "http://$front_end_ep/api/metrics/set_key_value?record_id=$record_id&key=$key&value=$value"
 ```
 
 The above command will succeed (with `HTTP 200 OK`) when metrics are enabled and
