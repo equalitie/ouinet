@@ -2,9 +2,9 @@
 
 ## Content
 
-The metrics records are formated with JSON.
+The metrics records are formated with JSON (comments not included).
 
-```json
+```javascript
 {
     // See for possible values:
     // https://doc.rust-lang.org/std/env/consts/constant.OS.html
