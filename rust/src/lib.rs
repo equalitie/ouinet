@@ -6,6 +6,7 @@ mod crypto;
 mod logger;
 mod metrics;
 mod metrics_runner;
+mod period;
 mod record_id;
 mod record_processor;
 mod runtime;

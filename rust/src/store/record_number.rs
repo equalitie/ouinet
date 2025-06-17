@@ -1,6 +1,6 @@
 use crate::{constants, store::Store};
 use std::{io, path::PathBuf};
-use tokio::time::Instant;
+use tokio::time::{Duration, Instant};
 
 /// We can have multiple records with the same DeviceId, and RecordNumber is used to disambiguate
 /// between them. RecordNumber is incremented on app restart or after
@@ -44,8 +44,14 @@ impl RecordNumber {
         self.store().await
     }
 
-    pub fn increment_at(&self) -> Instant {
-        self.time + constants::INCREMENT_RECORD_VERSION_AFTER
+    pub fn increment_after(&self) -> Duration {
+        let now = Instant::now();
+        let end = self.time + constants::INCREMENT_RECORD_VERSION_AFTER;
+        if now <= end {
+            end.duration_since(now)
+        } else {
+            Duration::ZERO
+        }
     }
 
     async fn store(&self) -> io::Result<()> {

@@ -254,7 +254,7 @@ impl EventListener {
                         None => break Event::Exit { metrics_enabled },
                     }
                 }
-                () = time::sleep_until(store.record_id.sequence_number().increment_at()) => break Event::IncrementRecordNumber { metrics_enabled },
+                () = time::sleep(store.record_id.sequence_number().increment_after()) => break Event::IncrementRecordNumber { metrics_enabled },
                 () = time::sleep(store.record_id.device_id().rotate_after()) => break Event::RotateDeviceId { metrics_enabled },
             }
         }
