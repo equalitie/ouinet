@@ -111,6 +111,7 @@ public:
                     , asio::yield_context);
     void pin_group(const std::string& group_name);
     void unpin_group(const std::string& group_name);
+    bool is_pinned_group(const std::string& group_name);
 
     // Get the newest protocol version that has been seen in the network
     // (e.g. to warn about potential upgrades).

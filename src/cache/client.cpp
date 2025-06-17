@@ -338,6 +338,11 @@ struct Client::Impl {
         _groups->unpin_group(group_name);
     }
 
+    bool is_pinned_group(const GroupName& group_name)
+    {
+        return _groups->is_pinned(group_name);
+    }
+
     void handle_http_error( GenericStream& con
                           , const http::request<http::empty_body>& req
                           , http::status status
@@ -825,6 +830,11 @@ void Client::pin_group(const GroupName& group_name)
 void Client::unpin_group(const GroupName& group_name)
 {
     _impl->unpin_group(group_name);
+}
+
+bool Client::is_pinned_group(const GroupName& group_name)
+{
+    return _impl->is_pinned_group(group_name);
 }
 
 unsigned Client::get_newest_proto_version() const
