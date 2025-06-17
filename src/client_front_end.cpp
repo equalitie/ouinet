@@ -477,7 +477,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             auto eqpos = target.rfind('=');
             set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
         }
-        else if (target.find("?pin_group=") != string::npos) {
+        else if (target.find("?pin_group=") != string::npos && cache_client) {
             sys::error_code ec;
             auto yield_ = static_cast<asio::yield_context>(yield);
             auto eqpos = target.rfind('=');
@@ -485,7 +485,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             if (!ec && cancel) ec = asio::error::operation_aborted;
             if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
         }
-        else if (target.find("?unpin_group=") != string::npos) {
+        else if (target.find("?unpin_group=") != string::npos && cache_client) {
             sys::error_code ec;
             auto yield_ = static_cast<asio::yield_context>(yield);
             auto eqpos = target.rfind('=');
