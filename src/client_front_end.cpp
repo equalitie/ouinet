@@ -400,6 +400,72 @@ void ClientFrontEnd::handle_pinned_list( const Request&
         ss << g << std::endl;
 }
 
+void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringstream& ss
+                                  , cache::Client* cache_client
+                                  , Cancel cancel
+                                  , Yield yield)
+{
+    res.set(http::field::content_type, "application/json");
+
+    auto target = req.target().substr(groups_api_path.length());
+
+    sys::error_code ec;
+    json response{};
+
+    string group_name{""};
+    auto eqpos = target.rfind('=');
+    if (eqpos != string::npos)
+    {
+        group_name = target.substr(eqpos + 1);
+        response["name"] = group_name;
+    }
+
+    if (cache_client)
+    {
+        if (target == "/" || target == "")
+        {
+            response["groups"] = json::array();
+            for (const auto& g : cache_client->get_groups())
+                response["groups"].push_back(g);
+        }
+        else if (target.starts_with("/pin/"))
+        {
+            // TODO: validate group not found errors and others ec
+            cache_client->pin_group(group_name);
+            // TODO: Remove redundant check `is_pinned` the value should be returned by the pin/unpin methods
+            response["pinned"] = cache_client->is_pinned_group(group_name);
+        }
+        else if (target.starts_with("/unpin/"))
+        {
+            cache_client->unpin_group(group_name);
+            response["pinned"] = cache_client->is_pinned_group(group_name);
+        }
+        else if (target.starts_with("/pinned"))
+        {
+            if (group_name != "")
+            {
+                response["pinned"] = cache_client->is_pinned_group(group_name);
+            }
+            else
+            {
+                for (const auto& g : cache_client->get_pinned_groups())
+                    response["pinned_groups"].push_back(g);
+            }
+        }
+        else
+        {
+            response["status"] = "error";
+            response["message"] = "Undefined action";
+        }
+    } else
+    {
+        response["status"] = "error";
+        response["message"] = "Cache client error";
+    }
+
+    ss << response;
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
@@ -477,35 +543,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             auto eqpos = target.rfind('=');
             set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
         }
-        else if (target.find("?pin_group=") != string::npos && cache_client) {
-            sys::error_code ec;
-            auto yield_ = static_cast<asio::yield_context>(yield);
-            auto eqpos = target.rfind('=');
-            cache_client->pin_group(target.substr(eqpos + 1));
-            if (!ec && cancel) ec = asio::error::operation_aborted;
-            if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
-        }
-        else if (target.find("?unpin_group=") != string::npos && cache_client) {
-            sys::error_code ec;
-            auto yield_ = static_cast<asio::yield_context>(yield);
-            auto eqpos = target.rfind('=');
-            cache_client->unpin_group(target.substr(eqpos + 1));
-            if (!ec && cancel) ec = asio::error::operation_aborted;
-            if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
-        }
-        else if (target.find("?is_pinned=") != string::npos && cache_client) {
-            res.set(http::field::content_type, "application/json");
-            sys::error_code ec;
-            auto yield_ = static_cast<asio::yield_context>(yield);
-            auto eqpos = target.rfind('=');
-            bool is_pinned = cache_client->is_pinned_group(target.substr(eqpos + 1));
-            ss << std::boolalpha;
-            ss << is_pinned;
-            if (!ec && cancel) ec = asio::error::operation_aborted;
-            if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
-            return;
-        }
-
         // Redirect back to the portal.
         ss << "<!DOCTYPE html>\n"
                "<html>\n"
@@ -806,6 +843,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_status( config, client_state, local_ep, upnps, dht, reachability
                      , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
+    } else if (path.starts_with(groups_api_path)) {
+        sys::error_code e;
+        handle_groups( req, res, ss, cache_client, cancel, yield[e]);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps, dht, reachability
