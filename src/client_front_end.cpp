@@ -491,7 +491,19 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             auto eqpos = target.rfind('=');
             cache_client->unpin_group(target.substr(eqpos + 1));
             if (!ec && cancel) ec = asio::error::operation_aborted;
-            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
+            if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
+        }
+        else if (target.find("?is_pinned=") != string::npos && cache_client) {
+            res.set(http::field::content_type, "application/json");
+            sys::error_code ec;
+            auto yield_ = static_cast<asio::yield_context>(yield);
+            auto eqpos = target.rfind('=');
+            bool is_pinned = cache_client->is_pinned_group(target.substr(eqpos + 1));
+            ss << std::boolalpha;
+            ss << is_pinned;
+            if (!ec && cancel) ec = asio::error::operation_aborted;
+            if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
+            return;
         }
 
         // Redirect back to the portal.
