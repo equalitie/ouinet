@@ -483,7 +483,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             auto eqpos = target.rfind('=');
             cache_client->pin_group(target.substr(eqpos + 1));
             if (!ec && cancel) ec = asio::error::operation_aborted;
-            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
+            if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
         }
         else if (target.find("?unpin_group=") != string::npos && cache_client) {
             sys::error_code ec;
