@@ -407,7 +407,7 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
 {
     res.set(http::field::content_type, "application/json");
 
-    auto target = req.target().substr(groups_api_path.length());
+    auto target = req.target().substr(strlen(groups_api_path));
 
     sys::error_code ec;
     json response{};
