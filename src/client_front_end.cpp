@@ -448,6 +448,7 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
             }
             else
             {
+                response["pinned_groups"] = json::array();
                 for (const auto& g : cache_client->get_pinned_groups())
                     response["pinned_groups"].push_back(g);
             }
