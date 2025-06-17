@@ -328,19 +328,19 @@ struct Client::Impl {
         _DEBUG("Purging local cache: done");
     }
 
-    void pin_group(const GroupName& group_name)
+    void pin_group(const GroupName& group_name, sys::error_code& ec)
     {
-        _groups->pin_group(group_name);
+        _groups->pin_group(group_name, ec);
     }
 
-    void unpin_group(const GroupName& group_name)
+    void unpin_group(const GroupName& group_name, sys::error_code& ec)
     {
-        _groups->unpin_group(group_name);
+        _groups->unpin_group(group_name, ec);
     }
 
-    bool is_pinned_group(const GroupName& group_name)
+    bool is_pinned_group(const GroupName& group_name, sys::error_code& ec)
     {
-        return _groups->is_pinned(group_name);
+        return _groups->is_pinned(group_name, ec);
     }
 
     void handle_http_error( GenericStream& con
@@ -822,19 +822,19 @@ void Client::local_purge( Cancel cancel
     _impl->local_purge(cancel, yield);
 }
 
-void Client::pin_group(const GroupName& group_name)
+void Client::pin_group(const GroupName& group_name, sys::error_code& ec)
 {
-    _impl->pin_group(group_name);
+    _impl->pin_group(group_name, ec);
 }
 
-void Client::unpin_group(const GroupName& group_name)
+void Client::unpin_group(const GroupName& group_name, sys::error_code& ec)
 {
-    _impl->unpin_group(group_name);
+    _impl->unpin_group(group_name, ec);
 }
 
-bool Client::is_pinned_group(const GroupName& group_name)
+bool Client::is_pinned_group(const GroupName& group_name, sys::error_code& ec)
 {
-    return _impl->is_pinned_group(group_name);
+    return _impl->is_pinned_group(group_name, ec);
 }
 
 unsigned Client::get_newest_proto_version() const

@@ -109,9 +109,9 @@ public:
 
     void local_purge( Cancel
                     , asio::yield_context);
-    void pin_group(const std::string& group_name);
-    void unpin_group(const std::string& group_name);
-    bool is_pinned_group(const std::string& group_name);
+    void pin_group(const std::string& group_name, sys::error_code& ec);
+    void unpin_group(const std::string& group_name, sys::error_code&);
+    bool is_pinned_group(const std::string& group_name, sys::error_code&);
 
     // Get the newest protocol version that has been seen in the network
     // (e.g. to warn about potential upgrades).

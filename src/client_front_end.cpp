@@ -430,21 +430,20 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
         }
         else if (target.starts_with("/pin/"))
         {
-            // TODO: validate group not found errors and others ec
-            cache_client->pin_group(group_name);
+            cache_client->pin_group(group_name, ec);
             // TODO: Remove redundant check `is_pinned` the value should be returned by the pin/unpin methods
-            response["pinned"] = cache_client->is_pinned_group(group_name);
+            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
         }
         else if (target.starts_with("/unpin/"))
         {
-            cache_client->unpin_group(group_name);
-            response["pinned"] = cache_client->is_pinned_group(group_name);
+            cache_client->unpin_group(group_name, ec);
+            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
         }
         else if (target.starts_with("/pinned"))
         {
             if (group_name != "")
             {
-                response["pinned"] = cache_client->is_pinned_group(group_name);
+                response["pinned"] = cache_client->is_pinned_group(group_name, ec);
             }
             else
             {
@@ -463,6 +462,9 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
         response["status"] = "error";
         response["message"] = "Cache client error";
     }
+
+    if (ec)
+       response = {{"status", "error"}, {"message", ec.message()}};
 
     ss << response;
 }

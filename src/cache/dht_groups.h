@@ -41,9 +41,9 @@ public:
 
     // Exclude groups that are explicitly marked as pinned.
     virtual std::set<GroupName> remove(const ItemName&, bool&) = 0;
-    virtual bool is_pinned(const GroupName&) = 0;
-    virtual void pin_group(const GroupName&) = 0;
-    virtual void unpin_group(const GroupName&) = 0;
+    virtual bool is_pinned(const GroupName&, sys::error_code&) = 0;
+    virtual void pin_group(const GroupName&, sys::error_code&) = 0;
+    virtual void unpin_group(const GroupName&, sys::error_code&) = 0;
 
     // Do nothing if the group does not exist.
     virtual void remove_group(const GroupName&) = 0;
