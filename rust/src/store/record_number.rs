@@ -46,21 +46,7 @@ impl RecordNumber {
     }
 
     pub fn increment_after(&self) -> Duration {
-        let now = Utc::now();
-        let start = self.interval.start();
-        let Some(end) = self.interval.end() else {
-            log::warn!("RecordID's interval has overflown");
-            return Duration::MAX;
-        };
-        if now < start {
-            log::warn!("RecordID's interval starts before `now`");
-            return Duration::ZERO;
-        }
-        let Ok(delta_ms) = end.signed_duration_since(now).num_milliseconds().try_into() else {
-            // `now > end`
-            return Duration::ZERO;
-        };
-        Duration::from_millis(delta_ms)
+        crate::period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
     }
 
     async fn store(&self) -> io::Result<()> {

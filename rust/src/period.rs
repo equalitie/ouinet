@@ -1,7 +1,8 @@
 use chrono::{DateTime, Datelike, Days, TimeDelta, TimeZone, Timelike, Utc};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
-struct WholeWeek {
+pub struct WholeWeek {
     year: i32,
     // Week of the year, counting from zero, the zeroth week may start in previous year
     week0: u32,
@@ -10,7 +11,7 @@ struct WholeWeek {
 }
 
 impl WholeWeek {
-    fn start(&self) -> DateTime<Utc> {
+    pub fn start(&self) -> DateTime<Utc> {
         // Unwrap: the fields are constructed using a valid DateTime
         Utc.with_ymd_and_hms(self.year, 1, 1, 0, 0, 0)
             .unwrap()
@@ -21,12 +22,12 @@ impl WholeWeek {
     }
 
     // Returns None when out of range
-    fn end(&self) -> Option<DateTime<Utc>> {
+    pub fn end(&self) -> Option<DateTime<Utc>> {
         self.start().checked_add_days(Days::new(7))
     }
 
     // TODO: Unwrap
-    fn next(&self) -> Self {
+    pub fn next(&self) -> Self {
         Self::from(self.end().unwrap())
     }
 }
@@ -106,6 +107,33 @@ impl From<DateTime<Utc>> for WholeHour {
             hour: date.hour(),
         }
     }
+}
+
+// A bit of a misnomer for this function because it returns ZERO when `from < start`, but that's
+// generally how we want to use it: we rotate device_id and record sequence numbers right a way
+// when the creation time no longer fits into their intervals.
+pub fn duration_to_end(
+    from: DateTime<Utc>,
+    start: DateTime<Utc>,
+    end: Option<DateTime<Utc>>,
+) -> Duration {
+    let Some(end) = end else {
+        log::warn!("RecordID's interval has overflown");
+        return Duration::MAX;
+    };
+    if from < start {
+        log::warn!("RecordID's interval starts before `from`");
+        return Duration::ZERO;
+    }
+    let Ok(delta_ms) = end
+        .signed_duration_since(from)
+        .num_milliseconds()
+        .try_into()
+    else {
+        // `now > end`
+        return Duration::ZERO;
+    };
+    Duration::from_millis(delta_ms)
 }
 
 #[cfg(test)]
