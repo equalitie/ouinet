@@ -72,7 +72,7 @@ fn week_ends_next_year(date: DateTime<Utc>) -> bool {
 }
 
 #[derive(Debug)]
-struct WholeHour {
+pub struct WholeHour {
     year: i32,
     month0: u32,
     day0: u32,
@@ -80,19 +80,19 @@ struct WholeHour {
 }
 
 impl WholeHour {
-    fn start(&self) -> DateTime<Utc> {
+    pub fn start(&self) -> DateTime<Utc> {
         // Unwrap: the fields are constructed using a valid DateTime
         Utc.with_ymd_and_hms(self.year, self.month0 + 1, self.day0 + 1, self.hour, 0, 0)
             .unwrap()
     }
 
     // Returns None when out of range
-    fn end(&self) -> Option<DateTime<Utc>> {
+    pub fn end(&self) -> Option<DateTime<Utc>> {
         self.start().checked_add_signed(TimeDelta::hours(1))
     }
 
     // TODO: Unwrap
-    fn next(&self) -> Self {
+    pub fn next(&self) -> Self {
         Self::from(self.end().unwrap())
     }
 }
