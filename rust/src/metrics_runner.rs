@@ -275,7 +275,10 @@ impl EventListener {
 }
 
 async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<()> {
-    let record = metrics.lock().unwrap().collect();
+    let id_interval = store.record_id.device_id().interval();
+    let sq_interval = store.record_id.sequence_number().interval();
+
+    let record = metrics.lock().unwrap().collect(id_interval, sq_interval);
 
     // Backoff may have stopped due to there being no records *or* because the one record that was
     // there was "current". So resume it.

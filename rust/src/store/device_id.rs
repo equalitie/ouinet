@@ -48,6 +48,10 @@ impl DeviceId {
         self.current
     }
 
+    pub fn interval(&self) -> WholeWeek {
+        self.interval
+    }
+
     pub(super) async fn rotate(&mut self) -> io::Result<()> {
         let (new_value, created) = Self::create_and_store(&self.file_path).await?;
 

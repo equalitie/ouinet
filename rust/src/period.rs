@@ -35,7 +35,7 @@ impl TryFrom<DateTime<Utc>> for WholeWeek {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct WholeHour {
     start: DateTime<Utc>,
     end: DateTime<Utc>,

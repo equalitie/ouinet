@@ -44,6 +44,10 @@ impl RecordNumber {
         self.number
     }
 
+    pub fn interval(&self) -> WholeHour {
+        self.interval
+    }
+
     pub(super) async fn increment(&mut self) -> io::Result<()> {
         let now = Utc::now();
         self.number += 1;
