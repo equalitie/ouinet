@@ -1,75 +1,90 @@
-use chrono::{DateTime, Datelike, Days, TimeDelta, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Days, MappedLocalTime, TimeDelta, TimeZone, Timelike, Utc};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
 pub struct WholeWeek {
-    year: i32,
-    // Week of the year, counting from zero, the zeroth week may start in previous year
-    week0: u32,
-    // How many days from the last year we've counted into the zeroth week
-    offset: u32,
+    // `start.year` may be one before the one in the date `self` was derived from
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    // days since `start`
+    days: u32,
 }
 
 impl WholeWeek {
     pub fn start(&self) -> DateTime<Utc> {
-        // Unwrap: the fields are constructed using a valid DateTime
-        Utc.with_ymd_and_hms(self.year, 1, 1, 0, 0, 0)
-            .unwrap()
-            .checked_add_days(Days::new((self.week0 * 7) as u64))
-            .unwrap()
-            .checked_sub_days(Days::new(self.offset as u64))
-            .unwrap()
+        self.start
     }
 
-    // Returns None when out of range
-    pub fn end(&self) -> Option<DateTime<Utc>> {
-        self.start().checked_add_days(Days::new(7))
+    pub fn end(&self) -> DateTime<Utc> {
+        self.end
     }
 
-    // TODO: Unwrap
-    pub fn next(&self) -> Self {
-        Self::from(self.end().unwrap())
+    pub fn year(&self) -> i32 {
+        self.end.year()
+    }
+
+    pub fn week0(&self) -> u32 {
+        self.days / 7
     }
 }
 
-impl From<DateTime<Utc>> for WholeWeek {
-    fn from(mut date: DateTime<Utc>) -> Self {
-        if week_ends_next_year(date) {
-            date = Utc
-                .with_ymd_and_hms(date.year() + 1, 1, 1, 0, 0, 0)
-                .unwrap();
+impl TryFrom<DateTime<Utc>> for WholeWeek {
+    type Error = &'static str;
+
+    fn try_from(mut date: DateTime<Utc>) -> Result<Self, Self::Error> {
+        if week_ends_next_year(date)? {
+            date = match Utc.with_ymd_and_hms(date.year() + 1, 1, 1, 0, 0, 0) {
+                MappedLocalTime::Single(date) => date,
+                MappedLocalTime::Ambiguous(_, _) => return Err("next year ambiguous"),
+                MappedLocalTime::None => return Err("next year is out of range"),
+            }
         }
-        let year_start = Utc.with_ymd_and_hms(date.year(), 1, 1, 0, 0, 0).unwrap();
+
+        let year_start = match Utc.with_ymd_and_hms(date.year(), 1, 1, 0, 0, 0) {
+            MappedLocalTime::Single(date) => date,
+            MappedLocalTime::Ambiguous(_, _) => return Err("start year ambiguous"),
+            MappedLocalTime::None => return Err("start year is out of range"),
+        };
+
         let offset = year_start.weekday().num_days_from_monday();
-        let days = days_up_to(date) + offset;
-        Self {
-            year: date.year(),
-            week0: days / 7,
-            offset,
-        }
+        let days = days_up_to(date)? + offset;
+
+        let week0 = days / 7;
+        let start = year_start
+            .checked_add_days(Days::new((week0 * 7) as u64))
+            .and_then(|date| date.checked_sub_days(Days::new(offset as u64)))
+            .ok_or("failed to calculate start")?;
+
+        let end = start
+            .checked_add_days(Days::new(7))
+            .ok_or("failed to calculate end")?;
+
+        Ok(Self { start, end, days })
     }
 }
 
 // Count number of days up to `date` (not including).
-fn days_up_to(date: DateTime<Utc>) -> u32 {
+fn days_up_to(date: DateTime<Utc>) -> Result<u32, &'static str> {
     use chrono::NaiveDate;
     let mut count: u32 = 0;
     for month in 1..date.month() {
         count += NaiveDate::from_ymd_opt(date.year(), month, 1)
-            .unwrap()
+            .ok_or("days_up_to: invalid date")?
             .num_days_in_month() as u32;
     }
-    count + date.day0()
+    Ok(count + date.day0())
 }
 
-fn week_ends_next_year(date: DateTime<Utc>) -> bool {
+fn week_ends_next_year(date: DateTime<Utc>) -> Result<bool, &'static str> {
     let days_left = 7 - date.weekday().num_days_from_monday();
-    let end = Utc
-        .with_ymd_and_hms(date.year(), date.month(), date.day(), 0, 0, 0)
-        .unwrap()
-        .checked_add_days(Days::new(days_left as u64))
-        .unwrap();
-    date.year() != end.year()
+    let end = match Utc.with_ymd_and_hms(date.year(), date.month(), date.day(), 0, 0, 0) {
+        MappedLocalTime::Single(date) => date
+            .checked_add_days(Days::new(days_left as u64))
+            .ok_or("week_ends_next_year: can't add")?,
+        MappedLocalTime::Ambiguous(_, _) => return Err("week_ends_next_year: ambiguous"),
+        MappedLocalTime::None => return Err("week_ends_next_year: none"),
+    };
+    Ok(date.year() != end.year())
 }
 
 #[derive(Debug)]
@@ -147,48 +162,49 @@ mod test {
     #[test]
     fn construct_whole_week() {
         let date = make_date(2025, 6, 17);
-        let week = WholeWeek::from(date);
-        assert_eq!(week.year, 2025);
-        assert_eq!(week.week0, 24);
+        let week = WholeWeek::try_from(date).unwrap();
+        assert_eq!(week.year(), 2025);
+        assert_eq!(week.week0(), 24);
         assert_eq!(week.start(), make_date(2025, 6, 16));
 
         let date = make_date(2024, 12, 31);
-        let week = WholeWeek::from(date);
-        assert_eq!(week.year, 2025);
-        assert_eq!(week.week0, 0);
+        let week = WholeWeek::try_from(date).unwrap();
+        assert_eq!(week.year(), 2025);
+        assert_eq!(week.week0(), 0);
         assert_eq!(week.start(), make_date(2024, 12, 30));
 
         let date = make_date(2025, 1, 1);
-        let week = WholeWeek::from(date);
-        assert_eq!(week.year, 2025);
-        assert_eq!(week.week0, 0);
+        let week = WholeWeek::try_from(date).unwrap();
+        assert_eq!(week.year(), 2025);
+        assert_eq!(week.week0(), 0);
         assert_eq!(week.start(), make_date(2024, 12, 30));
     }
 
     #[test]
     fn test_days_up_to() {
         let date = make_date(2025, 1, 1);
-        assert_eq!(days_up_to(date), 0);
+        assert_eq!(days_up_to(date).unwrap(), 0);
         let date = make_date(2025, 1, 2);
-        assert_eq!(days_up_to(date), 1);
+        assert_eq!(days_up_to(date).unwrap(), 1);
         let date = make_date(2025, 2, 1);
-        assert_eq!(days_up_to(date), 31);
+        assert_eq!(days_up_to(date).unwrap(), 31);
     }
 
     #[test]
     fn test_week_ends_next_year() {
-        assert!(!week_ends_next_year(make_date(2025, 12, 27)));
-        assert!(!week_ends_next_year(make_date(2025, 12, 28)));
-        assert!(week_ends_next_year(make_date(2025, 12, 29)));
-        assert!(week_ends_next_year(make_date(2025, 12, 30)));
-        assert!(week_ends_next_year(make_date(2025, 12, 31)));
+        assert!(!week_ends_next_year(make_date(2025, 12, 27)).unwrap());
+        assert!(!week_ends_next_year(make_date(2025, 12, 28)).unwrap());
+        assert!(week_ends_next_year(make_date(2025, 12, 29)).unwrap());
+        assert!(week_ends_next_year(make_date(2025, 12, 30)).unwrap());
+        assert!(week_ends_next_year(make_date(2025, 12, 31)).unwrap());
     }
 
     #[test]
     fn next_week() {
-        let week = WholeWeek::from(Utc.with_ymd_and_hms(2026, 6, 15, 12, 20, 0).unwrap());
-        let next_week = week.next();
-        assert_eq!(week.week0 + 1, next_week.week0);
+        let week =
+            WholeWeek::try_from(Utc.with_ymd_and_hms(2026, 6, 15, 12, 20, 0).unwrap()).unwrap();
+        let next_week = WholeWeek::try_from(week.end()).unwrap();
+        assert_eq!(week.week0() + 1, next_week.week0());
     }
 
     #[test]

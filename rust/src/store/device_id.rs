@@ -22,9 +22,18 @@ impl DeviceId {
             None => Self::create_and_store(&file_path).await?,
         };
 
+        let interval = match WholeWeek::try_from(created) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "DeviceId::new failed to construct WholeWeek from {created:?}: {error:?}"
+                )))
+            }
+        };
+
         let mut this = Self {
             current: value,
-            interval: WholeWeek::from(created),
+            interval,
             file_path,
         };
 
@@ -43,13 +52,20 @@ impl DeviceId {
         let (new_value, created) = Self::create_and_store(&self.file_path).await?;
 
         self.current = new_value;
-        self.interval = WholeWeek::from(created);
+        self.interval = match WholeWeek::try_from(created) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "DeviceId::rotate failed to construct WholeWeek from {created:?}: {error:?}"
+                )))
+            }
+        };
 
         Ok(())
     }
 
     pub fn rotate_after(&self) -> Duration {
-        crate::period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
+        crate::period::duration_to_end(Utc::now(), self.interval.start(), Some(self.interval.end()))
     }
 
     async fn create_and_store(file_path: &Path) -> io::Result<(Uuid, DateTime<Utc>)> {
