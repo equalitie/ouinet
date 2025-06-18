@@ -1,6 +1,7 @@
-use crate::{constants, store::Store};
+use crate::{period::WholeHour, store::Store};
+use chrono::Utc;
 use std::{io, path::PathBuf};
-use tokio::time::Instant;
+use tokio::time::Duration;
 
 /// We can have multiple records with the same DeviceId, and RecordNumber is used to disambiguate
 /// between them. RecordNumber is incremented on app restart or after
@@ -8,7 +9,7 @@ use tokio::time::Instant;
 /// changes.
 pub struct RecordNumber {
     number: u32,
-    time: Instant,
+    interval: WholeHour,
     file_path: PathBuf,
 }
 
@@ -21,9 +22,20 @@ impl RecordNumber {
 
         Store::write(&file_path, &number).await?;
 
+        let now = Utc::now();
+
+        let interval = match WholeHour::try_from(now) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "RecordNumber::new failed to construct WholeHour from {now:?}: {error:?}"
+                )))
+            }
+        };
+
         Ok(Self {
             number,
-            time: Instant::now(),
+            interval,
             file_path,
         })
     }
@@ -32,20 +44,40 @@ impl RecordNumber {
         self.number
     }
 
+    pub fn interval(&self) -> WholeHour {
+        self.interval
+    }
+
     pub(super) async fn increment(&mut self) -> io::Result<()> {
+        let now = Utc::now();
         self.number += 1;
-        self.time = Instant::now();
+        self.interval = match WholeHour::try_from(now) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "RecordNumber::increment failed to construct WholeHour from {now:?}: {error:?}"
+                )))
+            }
+        };
         self.store().await
     }
 
     pub(super) async fn reset(&mut self) -> io::Result<()> {
+        let now = Utc::now();
         self.number = 0;
-        self.time = Instant::now();
+        self.interval = match WholeHour::try_from(now) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "RecordNumber::reset failed to construct WholeHour from {now:?}: {error:?}"
+                )))
+            }
+        };
         self.store().await
     }
 
-    pub fn increment_at(&self) -> Instant {
-        self.time + constants::INCREMENT_RECORD_VERSION_AFTER
+    pub fn increment_after(&self) -> Duration {
+        crate::period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
     }
 
     async fn store(&self) -> io::Result<()> {

@@ -9,10 +9,12 @@ The metrics records are formated with JSON (comments not included).
     // See for possible values:
     // https://doc.rust-lang.org/std/env/consts/constant.OS.html
     "os": <string>,
-    // Time when metrics were started (usually on app start) OR on DeviceID rotation
-    "start": <string>,
-    // Time when a this record started collecting
-    "record_start": <string>,
+    // Hour when this record was collecting data
+    // YYYY: Year
+    // WW:   Week of the year (ISO 8601), starts from 1
+    // DD:   Day of the week, starts from 1
+    // HH:   Hour of the day, starts from 0
+    "interval": "YYYY:WW:DD:HH",
     // When acting as a bridge, how many bytes have been transferred from other clients to the injector
     "bridge_c2i": <number>,
     // When acting as a bridge, how many bytes have been transferred from the injector to other clients
@@ -35,7 +37,7 @@ The metrics records are formated with JSON (comments not included).
 ### Writing key/value pairs to metric records
 
 The `"aux"` object may store key/value string pairs provided by an app
-utilizing Ouinet. The pair can be set using the front end IP and PORT as such:
+utilizing Ouinet. The pair can be set using the front end as such:
 
 ```bash
 front_end_ep="<FRONT_END_IP>:<FRONT_END_PORT>"
@@ -43,15 +45,15 @@ record_id=$(curl --fail --silent --show-error http://$front_end_ep/api/status | 
 curl --silent --show-error "http://$front_end_ep/api/metrics/set_key_value?record_id=$record_id&key=$key&value=$value"
 ```
 
-The above command will succeed (with `HTTP 200 OK`) when metrics are enabled and
+The above command will succeed with `HTTP 200 OK` when metrics are enabled and
 `record_id` is the ID of the record currently collecting metrics.
 
 The `record_id` of the current record changes in predefined time intervals.
-When the `record_id` is no longer (or never was) valid `HTTP 409 Conflict`
+When the `record_id` is no longer (or never was) valid the `HTTP 409 Conflict`
 status code is returned.
 
-Whenever the current record changes, the previously stored key/value pairs are not
-copied to the new current record.
+Whenever the current record changes, the previously stored key/value pairs are
+_not_ copied to the new current record.
 
 ## Encryption
 

@@ -1,5 +1,6 @@
 use crate::{
-    constants, record_id::RecordId, store::device_id::DeviceId, store::record_number::RecordNumber,
+    record_id::RecordId,
+    store::{device_id::DeviceId, record_number::RecordNumber},
 };
 use std::{io, path::PathBuf};
 use tokio::sync::watch;
@@ -12,7 +13,7 @@ pub struct RecordIdStore {
 
 impl RecordIdStore {
     pub async fn new(device_id_path: PathBuf, sequence_number_path: PathBuf) -> io::Result<Self> {
-        let device_id = DeviceId::new(device_id_path, constants::ROTATE_DEVICE_ID_AFTER).await?;
+        let device_id = DeviceId::new(device_id_path).await?;
         let sequence_number = RecordNumber::load(sequence_number_path).await?;
 
         let changed_tx = watch::Sender::new(RecordId {
