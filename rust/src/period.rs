@@ -1,4 +1,6 @@
-use chrono::{DateTime, Datelike, Days, MappedLocalTime, TimeDelta, TimeZone, Timelike, Utc};
+use chrono::{
+    DateTime, Datelike, Days, MappedLocalTime, NaiveTime, TimeDelta, TimeZone, Timelike, Utc,
+};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
@@ -21,6 +23,12 @@ impl TryFrom<DateTime<Utc>> for WholeWeek {
     type Error = &'static str;
 
     fn try_from(date: DateTime<Utc>) -> Result<Self, Self::Error> {
+        let date = match date.with_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap()) {
+            MappedLocalTime::Single(date) => date,
+            MappedLocalTime::Ambiguous(_, _) => return Err("start at zero hour is ambiguous"),
+            MappedLocalTime::None => return Err("start at zero hour is none"),
+        };
+
         let offset = date.weekday().num_days_from_monday();
 
         let start = date
