@@ -222,7 +222,7 @@ impl EventListener {
 
     async fn on_event(&mut self, store: &Store) -> Event {
         loop {
-            let processing_backoff = async {
+            let on_backoff = async {
                 store.backoff.sleep().await;
                 match self.record_processor.as_ref() {
                     Some(record_processor) => record_processor.clone(),
@@ -232,8 +232,22 @@ impl EventListener {
 
             let metrics_enabled = self.record_processor.is_some();
 
+            let on_id_rotation = async {
+                let id_delay = store.record_id.device_id().rotate_after();
+                let sq_delay = store.record_id.sequence_number().increment_after();
+
+                // Prefer ID rotation over sequence number increment when equal
+                if id_delay >= sq_delay {
+                    time::sleep(id_delay).await;
+                    Event::RotateDeviceId { metrics_enabled }
+                } else {
+                    time::sleep(sq_delay).await;
+                    Event::IncrementRecordNumber { metrics_enabled }
+                }
+            };
+
             select! {
-                record_processor = processing_backoff =>
+                record_processor = on_backoff =>
                     break Event::ProcessOneRecord(record_processor),
                 result = self.on_metrics_modified_rx.changed() => {
                     match result {
@@ -254,8 +268,7 @@ impl EventListener {
                         None => break Event::Exit { metrics_enabled },
                     }
                 }
-                () = time::sleep(store.record_id.sequence_number().increment_after()) => break Event::IncrementRecordNumber { metrics_enabled },
-                () = time::sleep(store.record_id.device_id().rotate_after()) => break Event::RotateDeviceId { metrics_enabled },
+                event = on_id_rotation => break event,
             }
         }
     }
