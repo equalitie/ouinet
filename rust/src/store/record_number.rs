@@ -24,7 +24,7 @@ impl RecordNumber {
 
         let now = Utc::now();
 
-        let interval = match WholeHour::try_from(Utc::now()) {
+        let interval = match WholeHour::try_from(now) {
             Ok(interval) => interval,
             Err(error) => {
                 return Err(io::Error::other(format!(
