@@ -65,7 +65,7 @@ impl DeviceId {
     }
 
     pub fn rotate_after(&self) -> Duration {
-        crate::period::duration_to_end(Utc::now(), self.interval.start(), Some(self.interval.end()))
+        crate::period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
     }
 
     async fn create_and_store(file_path: &Path) -> io::Result<(Uuid, DateTime<Utc>)> {

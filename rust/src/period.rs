@@ -89,53 +89,43 @@ fn week_ends_next_year(date: DateTime<Utc>) -> Result<bool, &'static str> {
 
 #[derive(Debug)]
 pub struct WholeHour {
-    year: i32,
-    month0: u32,
-    day0: u32,
-    hour: u32,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
 }
 
 impl WholeHour {
     pub fn start(&self) -> DateTime<Utc> {
-        // Unwrap: the fields are constructed using a valid DateTime
-        Utc.with_ymd_and_hms(self.year, self.month0 + 1, self.day0 + 1, self.hour, 0, 0)
-            .unwrap()
+        self.start
     }
 
-    // Returns None when out of range
-    pub fn end(&self) -> Option<DateTime<Utc>> {
-        self.start().checked_add_signed(TimeDelta::hours(1))
-    }
-
-    // TODO: Unwrap
-    pub fn next(&self) -> Self {
-        Self::from(self.end().unwrap())
+    pub fn end(&self) -> DateTime<Utc> {
+        self.end
     }
 }
 
-impl From<DateTime<Utc>> for WholeHour {
-    fn from(date: DateTime<Utc>) -> Self {
-        Self {
-            year: date.year(),
-            month0: date.month0(),
-            day0: date.day0(),
-            hour: date.hour(),
-        }
+impl TryFrom<DateTime<Utc>> for WholeHour {
+    type Error = &'static str;
+
+    fn try_from(date: DateTime<Utc>) -> Result<Self, Self::Error> {
+        let start =
+            match Utc.with_ymd_and_hms(date.year(), date.month(), date.day(), date.hour(), 0, 0) {
+                MappedLocalTime::Single(date) => date,
+                MappedLocalTime::Ambiguous(_, _) => return Err("start is ambiguous"),
+                MappedLocalTime::None => return Err("start is none"),
+            };
+
+        let end = start
+            .checked_add_signed(TimeDelta::hours(1))
+            .ok_or("can't calculate end")?;
+
+        Ok(Self { start, end })
     }
 }
 
 // A bit of a misnomer for this function because it returns ZERO when `from < start`, but that's
 // generally how we want to use it: we rotate device_id and record sequence numbers right a way
 // when the creation time no longer fits into their intervals.
-pub fn duration_to_end(
-    from: DateTime<Utc>,
-    start: DateTime<Utc>,
-    end: Option<DateTime<Utc>>,
-) -> Duration {
-    let Some(end) = end else {
-        log::warn!("RecordID's interval has overflown");
-        return Duration::MAX;
-    };
+pub fn duration_to_end(from: DateTime<Utc>, start: DateTime<Utc>, end: DateTime<Utc>) -> Duration {
     if from < start {
         log::warn!("RecordID's interval starts before `from`");
         return Duration::ZERO;
@@ -201,17 +191,17 @@ mod test {
 
     #[test]
     fn next_week() {
-        let week =
+        let interval =
             WholeWeek::try_from(Utc.with_ymd_and_hms(2026, 6, 15, 12, 20, 0).unwrap()).unwrap();
-        let next_week = WholeWeek::try_from(week.end()).unwrap();
-        assert_eq!(week.week0() + 1, next_week.week0());
+        let next_interval = WholeWeek::try_from(interval.end()).unwrap();
+        assert_eq!(interval.week0() + 1, next_interval.week0());
     }
 
     #[test]
     fn next_hour() {
         let date = Utc.with_ymd_and_hms(2026, 6, 17, 12, 20, 0).unwrap();
-        let hour = WholeHour::from(date);
-        let next_hour = hour.next();
-        assert_eq!(hour.hour + 1, next_hour.hour);
+        let interval = WholeHour::try_from(date).unwrap();
+        let next_interval = WholeHour::try_from(interval.end()).unwrap();
+        assert_eq!(interval.start().hour() + 1, next_interval.start().hour());
     }
 }

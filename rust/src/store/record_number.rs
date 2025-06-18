@@ -22,9 +22,20 @@ impl RecordNumber {
 
         Store::write(&file_path, &number).await?;
 
+        let now = Utc::now();
+
+        let interval = match WholeHour::try_from(Utc::now()) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "RecordNumber::new failed to construct WholeHour from {now:?}: {error:?}"
+                )))
+            }
+        };
+
         Ok(Self {
             number,
-            interval: WholeHour::from(Utc::now()),
+            interval,
             file_path,
         })
     }
@@ -34,14 +45,30 @@ impl RecordNumber {
     }
 
     pub(super) async fn increment(&mut self) -> io::Result<()> {
+        let now = Utc::now();
         self.number += 1;
-        self.interval = self.interval.next();
+        self.interval = match WholeHour::try_from(now) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "RecordNumber::increment failed to construct WholeHour from {now:?}: {error:?}"
+                )))
+            }
+        };
         self.store().await
     }
 
     pub(super) async fn reset(&mut self) -> io::Result<()> {
+        let now = Utc::now();
         self.number = 0;
-        self.interval = WholeHour::from(Utc::now());
+        self.interval = match WholeHour::try_from(now) {
+            Ok(interval) => interval,
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "RecordNumber::reset failed to construct WholeHour from {now:?}: {error:?}"
+                )))
+            }
+        };
         self.store().await
     }
 
