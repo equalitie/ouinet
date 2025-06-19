@@ -616,6 +616,13 @@ struct Client::Impl {
             _DEBUG( "Cached response is too old; removing: "
                   , age, " > ", _max_cached_age
                   , "; uri=", key );
+
+            if (sys::error_code pin_ec; is_pinned_group(std::string(key), pin_ec) && !ec)
+            {
+                _DEBUG("Keep ", key, " even if it is old because it is pinned");
+                return true;
+            }
+
             unpublish_cache_entry(std::string(key));
             return false;
         }
