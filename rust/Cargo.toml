@@ -8,7 +8,7 @@ crate-type = ["staticlib"]
 
 [dependencies]
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes"] }
-chrono = "0.4.40"
+chrono = { version = "0.4.40", default-features = false, features = ["std"] }
 cxx = "1.0.143"
 env_logger = "0.11.6"
 log = "0"

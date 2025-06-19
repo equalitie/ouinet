@@ -144,10 +144,15 @@ add_dependencies(cargo-prebuild_ouinet_rs built_boost)
 # This is not necessry to build the ouinet_rs library, but using it
 # automatically adds the include directories to every target that has ouinet_rs
 # as dependency.
+# XXX: Isn't there a better way to obtain the cargo target directory?
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+else()
+    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+endif()
 target_include_directories(ouinet_rs
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rust
-    # XXX: Isn't there a better way to obtain the cargo target directory?
-    ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+    ${RUST_BRIDGE_PATH})
 
 ################################################################################
 
