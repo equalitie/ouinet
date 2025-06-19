@@ -348,7 +348,7 @@ DhtGroupsImpl::unpin_group(const GroupName& group_name, sys::error_code& ec)
     if (!is_pinned(group_name,ec))
     {
         _DEBUG("Unpinning skipped; ", group_name, " was already unpinned");
-        return false;
+        return true;
     }
 
     fs::path pin_path = group_p / group_pin;
