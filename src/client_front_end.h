@@ -131,12 +131,11 @@ private:
                           , std::ostringstream&
                           , cache::Client*);
 
-    void handle_groups( const Request&
-                      , Response&
-                      , std::ostringstream&
-                      , cache::Client*
-                      , Cancel cancel
-                      , Yield);
+    void handle_groups(const Request&
+                       , Response&
+                       , std::ostringstream&
+                       , cache::Client*
+    );
 
     void handle_portal( ClientConfig&
                       , Client::RunningState

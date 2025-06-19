@@ -347,7 +347,7 @@ DhtGroupsImpl::unpin_group(const GroupName& group_name, sys::error_code& ec)
 
     if (!is_pinned(group_name,ec))
     {
-        _WARN("Unpinning skipped; ", group_name, " was already unpinned");
+        _DEBUG("Unpinning skipped; ", group_name, " was already unpinned");
         return false;
     }
 

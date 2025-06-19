@@ -402,8 +402,7 @@ void ClientFrontEnd::handle_pinned_list( const Request&
 
 void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
-                                  , Cancel cancel
-                                  , Yield yield)
+)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -412,7 +411,7 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
     sys::error_code ec;
     json response{};
 
-    string group_name{""};
+    string group_name;
     auto eqpos = target.rfind('=');
     if (eqpos != string::npos)
     {
@@ -420,50 +419,47 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
         response["name"] = group_name;
     }
 
-    if (cache_client)
+    if (!cache_client)
     {
-        if (target == "/" || target.empty())
+        response = {{"status", "error"}, {"Cache client error"}};
+        ss << response;
+        return;
+    }
+
+    if (target == "/" || target.empty())
+    {
+        response["groups"] = json::array();
+        for (const auto& g : cache_client->get_groups())
+            response["groups"].push_back(g);
+    }
+    else if (target.starts_with("/pin/"))
+    {
+        response["pinned"] = cache_client->pin_group(group_name, ec);
+    }
+    else if (target.starts_with("/unpin/"))
+    {
+        bool unpinned = cache_client->unpin_group(group_name, ec);
+        response["pinned"] = !unpinned;
+    }
+    else if (target.starts_with("/pinned"))
+    {
+        if (group_name.empty())
         {
-            response["groups"] = json::array();
-            for (const auto& g : cache_client->get_groups())
-                response["groups"].push_back(g);
-        }
-        else if (target.starts_with("/pin/"))
-        {
-            response["pinned"] = cache_client->pin_group(group_name, ec);
-        }
-        else if (target.starts_with("/unpin/"))
-        {
-            bool unpinned = cache_client->unpin_group(group_name, ec);
-            response["pinned"] = !unpinned;
-        }
-        else if (target.starts_with("/pinned"))
-        {
-            if (!group_name.empty())
-            {
-                response["pinned"] = cache_client->is_pinned_group(group_name, ec);
-            }
-            else
-            {
-                response["pinned_groups"] = json::array();
-                for (const auto& g : cache_client->get_pinned_groups())
-                    response["pinned_groups"].push_back(g);
-            }
+            response["pinned_groups"] = json::array();
+            for (const auto& g : cache_client->get_pinned_groups())
+                response["pinned_groups"].push_back(g);
         }
         else
         {
-            response["status"] = "error";
-            response["message"] = "Undefined action";
+            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
         }
-    } else
+    }
+    else
     {
-        response["status"] = "error";
-        response["message"] = "Cache client error";
+        response = {{"status", "error"}, {"Undefined action"}};
     }
 
-    if (ec)
-       response = {{"status", "error"}, {"message", ec.message()}};
-
+    if (ec) response = {{"status", "error"}, {"message", ec.message()}};
     ss << response;
 }
 
@@ -846,7 +842,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                      , yield[e]);
     } else if (path.starts_with(groups_api_path)) {
         sys::error_code e;
-        handle_groups( req, res, ss, cache_client, cancel, yield[e]);
+        handle_groups( req, res, ss, cache_client);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps, dht, reachability
