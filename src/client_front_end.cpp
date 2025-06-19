@@ -422,7 +422,7 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
 
     if (cache_client)
     {
-        if (target == "/" || target == "")
+        if (target == "/" || target.empty())
         {
             response["groups"] = json::array();
             for (const auto& g : cache_client->get_groups())
@@ -441,7 +441,7 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
         }
         else if (target.starts_with("/pinned"))
         {
-            if (group_name != "")
+            if (!group_name.empty())
             {
                 response["pinned"] = cache_client->is_pinned_group(group_name, ec);
             }
