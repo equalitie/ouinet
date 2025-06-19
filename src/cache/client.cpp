@@ -328,14 +328,14 @@ struct Client::Impl {
         _DEBUG("Purging local cache: done");
     }
 
-    void pin_group(const GroupName& group_name, sys::error_code& ec)
+    bool pin_group(const GroupName& group_name, sys::error_code& ec)
     {
-        _groups->pin_group(group_name, ec);
+        return _groups->pin_group(group_name, ec);
     }
 
-    void unpin_group(const GroupName& group_name, sys::error_code& ec)
+    bool unpin_group(const GroupName& group_name, sys::error_code& ec)
     {
-        _groups->unpin_group(group_name, ec);
+        return _groups->unpin_group(group_name, ec);
     }
 
     bool is_pinned_group(const GroupName& group_name, sys::error_code& ec)
@@ -822,14 +822,14 @@ void Client::local_purge( Cancel cancel
     _impl->local_purge(cancel, yield);
 }
 
-void Client::pin_group(const GroupName& group_name, sys::error_code& ec)
+bool Client::pin_group(const GroupName& group_name, sys::error_code& ec)
 {
-    _impl->pin_group(group_name, ec);
+    return _impl->pin_group(group_name, ec);
 }
 
-void Client::unpin_group(const GroupName& group_name, sys::error_code& ec)
+bool Client::unpin_group(const GroupName& group_name, sys::error_code& ec)
 {
-    _impl->unpin_group(group_name, ec);
+    return _impl->unpin_group(group_name, ec);
 }
 
 bool Client::is_pinned_group(const GroupName& group_name, sys::error_code& ec)
