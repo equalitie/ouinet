@@ -76,5 +76,6 @@ void write_number( async_file_handle& f
 }
 
 void remove_file(const fs::path& p);
+void remove_file(const fs::path& p, sys::error_code&);
 
 }}} // namespaces

@@ -52,6 +52,8 @@ public:
     // Absolute paths of allowed URLs.
     static constexpr const char* log_file_apath = "/logfile.txt";
     static constexpr const char* group_list_apath = "/groups.txt";
+    static constexpr const char* groups_api_path = "/api/groups";
+    static constexpr const char* pinned_list_apath = "/pinned-groups.txt";
 
 public:
     using Request = http::request<http::string_body>;
@@ -123,6 +125,17 @@ private:
                           , Response&
                           , std::ostringstream&
                           , cache::Client*);
+
+    void handle_pinned_list( const Request&
+                          , Response&
+                          , std::ostringstream&
+                          , cache::Client*);
+
+    void handle_groups(const Request&
+                       , Response&
+                       , std::ostringstream&
+                       , cache::Client*
+    );
 
     void handle_portal( ClientConfig&
                       , Client::RunningState
