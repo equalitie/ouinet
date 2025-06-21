@@ -33,7 +33,7 @@ using boost::string_view;
 
 udp::endpoint endpoint(const string& ip, uint16_t port)
 {
-    return udp::endpoint(asio::ip::address::from_string(ip), port);
+    return udp::endpoint(asio::ip::make_address(ip), port);
 }
 
 template<class T>

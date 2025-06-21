@@ -10,6 +10,8 @@ android/gradlew
 android/gradlew.bat
 android/ouinet/ouinet.iml
 android/ouinet/data
+android/ouinet/src/debug/jniLibs
+android/ouinet/src/debug/resources
 
 android/local.properties
 
@@ -17,3 +19,8 @@ android/local.properties
 *.pyc
 # python tests temp dir
 test/integration_test/_trial_temp/
+
+# When running rust tests with `cargo test --manifest-path=./rust/Cargo.toml`
+rust/target/
+
+build-macos/

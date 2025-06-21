@@ -4,6 +4,7 @@
 #include <sstream>
 #include <vector>
 
+#include <boost/asio/ssl/context.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -15,11 +16,14 @@
 #include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"
+#ifndef __WIN32
 #include "increase_open_file_limit.h"
+#endif
 #include "endpoint.h"
 #include "logger.h"
 #include "constants.h"
 #include "bep5_swarms.h"
+#include "util.h"
 #include "bittorrent/bootstrap.h"
 
 namespace ouinet {
@@ -34,17 +38,30 @@ static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 #define _MAX_I2P_HOPS 8
 #endif // ifdef __EXPERIMENTAL__
 
+struct MetricsConfig {
+    bool enable_on_start = false;
+    util::url_match server_url;
+    boost::optional<std::string> server_token;
+    boost::optional<asio::ssl::context> server_cacert;
+    metrics::EncryptionKey encryption_key;
+
+    static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
+};
+
 class ClientConfig {
 public:
   enum class CacheType { None, Bep5Http, Bep3HTTPOverI2P };
 
-    ClientConfig();
+    ClientConfig() = default;
 
     // Throws on error
     ClientConfig(int argc, char* argv[]);
 
-    ClientConfig(const ClientConfig&) = default;
-    ClientConfig& operator=(const ClientConfig&) = default;
+    ClientConfig(ClientConfig&&) = default;
+    ClientConfig& operator=(ClientConfig&&) = default;
+
+    ClientConfig(const ClientConfig&) = delete;
+    ClientConfig& operator=(const ClientConfig&) = delete;
 
     const fs::path& repo_root() const {
         return _repo_root;
@@ -121,6 +138,10 @@ public:
         return _front_end_endpoint;
     }
 
+    const boost::optional<std::string>& front_end_access_token() const {
+        return _front_end_access_token;
+    }
+
     boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
         return _cache_http_pubkey;
     }
@@ -137,6 +158,16 @@ public:
 
     auto description() {
         return description_full();
+    }
+
+    // Is `nullptr` if metrics is disabled
+    const MetricsConfig* metrics() const {
+        return _metrics.get();
+    }
+
+    // Is `nullptr` if metrics is disabled
+    MetricsConfig* metrics() {
+        return _metrics.get();
     }
 
 private:
@@ -164,9 +195,11 @@ private:
               "to start the DHT (can be used several times). "
               "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
               "This option is persistent.")
+#ifndef __WIN32
            ("open-file-limit"
             , po::value<unsigned int>()
             , "To increase the maximum number of open files")
+#endif
            ;
 
         po::options_description services("Service options");
@@ -184,6 +217,10 @@ private:
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ("front-end-access-token"
+            , po::value<string>()
+            , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
+              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
            ("disable-bridge-announcement"
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
             , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
@@ -271,13 +308,36 @@ private:
               "the \"dns=...\" query argument will be added for the GET request.")
            ;
 
+        po::options_description metrics("Metrics options");
+        metrics.add_options()
+           ("metrics-enable-on-start", po::bool_switch()->default_value(false)
+            , "Enable metrics at startup. Must be used with --metrics-server-url")
+           ("metrics-server-url", po::value<string>()
+            , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
+           ("metrics-server-token", po::value<string>()
+            , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
+           ("metrics-server-cacert", po::value<string>()
+            , "Tls CA certificate for the metrics server")
+           ("metrics-server-cacert-file", po::value<string>()
+            , "File containing the CA certificate for the metrics server")
+           ("metrics-encryption-key", po::value<string>()
+            , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
+              "the following. \n"
+              "   First generate the private key:\n"
+              "     `openssl genpkey -algorithm x25519 -out private_key.pem`\n"
+              "   Then get the public encryption key:\n"
+              "     `openssl pkey -in private_key.pem -pubout -out public_key.pem`"
+              )
+           ;
+
         po::options_description desc;
         desc
             .add(general)
             .add(services)
             .add(injector)
             .add(cache)
-            .add(requests);
+            .add(requests)
+            .add(metrics);
         return desc;
     }
 
@@ -402,6 +462,7 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    boost::optional<std::string> _front_end_access_token;
     bool _disable_bridge_announcement = false;
 
     boost::posix_time::time_duration _max_cached_age
@@ -423,351 +484,9 @@ private:
 #ifdef __EXPERIMENTAL__
   size_t _i2p_hops_per_tunnel = 1;
 #endif // ifdef __EXPERIMENTAL__
-  
+
+    std::unique_ptr<MetricsConfig> _metrics;
 };
-
-inline
-ClientConfig::ClientConfig() { }
-
-inline
-ClientConfig::ClientConfig(int argc, char* argv[])
-{
-    using namespace std;
-    namespace po = boost::program_options;
-    namespace fs = boost::filesystem;
-
-    auto desc = description_full();
-
-    po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-    po::notify(vm);
-
-    if (vm.count("help")) {
-        _is_help = true;
-        return;
-    }
-
-    if (!vm.count("repo")) {
-        throw std::runtime_error(
-                util::str("The '--repo' option is missing"));
-    }
-
-    _repo_root = fs::path(vm["repo"].as<string>());
-
-    if (!fs::exists(_repo_root)) {
-        throw std::runtime_error(
-                util::str("No such directory: ", _repo_root));
-    }
-
-    if (!fs::is_directory(_repo_root)) {
-        throw std::runtime_error(
-                util::str("The path is not a directory: ", _repo_root));
-    }
-
-    // Load the file with saved configuration options, if it exists
-    // (or remove it if requested).
-    {
-        po::options_description desc_save = description_saved();
-        fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
-        if (vm["drop-saved-opts"].as<bool>()) {
-            sys::error_code ignored_ec;
-            fs::remove(ouinet_save_path, ignored_ec);
-        } else if (fs::is_regular_file(ouinet_save_path)) {
-            ifstream ouinet_conf(ouinet_save_path.string());
-            po::store(po::parse_config_file(ouinet_conf, desc_save), vm);
-            po::notify(vm);
-        }
-    }
-
-    {
-        fs::path ouinet_conf_path = _repo_root/_ouinet_conf_file;
-        if (!fs::is_regular_file(ouinet_conf_path)) {
-            throw std::runtime_error(
-                    util::str("The path ", _repo_root, " does not contain the "
-                             , _ouinet_conf_file, " configuration file"));
-        }
-        ifstream ouinet_conf(ouinet_conf_path.string());
-        po::store(po::parse_config_file(ouinet_conf, desc), vm);
-        po::notify(vm);
-    }
-
-    if (vm.count("log-level")) {
-        auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
-        auto ll_o = log_level_from_string(level);
-        if (!ll_o)
-            throw std::runtime_error(util::str("Invalid log level: ", level));
-        logger.set_threshold(*ll_o);
-        LOG_INFO("Log level set to: ", level);
-    }
-
-    if (vm["enable-log-file"].as<bool>()) {
-        _is_log_file_enabled(true);
-    }
-
-    if (vm.count("bt-bootstrap-extra")) {
-        for (const auto& btbsx : vm["bt-bootstrap-extra"].as<vector<string>>()) {
-            // Better processing will take place later on, just very basic checking here.
-            auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
-            if (!btbs_addr)
-                throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
-            _bt_bootstrap_extras.insert(*btbs_addr);
-        }
-    }
-
-    if (vm.count("open-file-limit")) {
-        increase_open_file_limit(vm["open-file-limit"].as<unsigned int>());
-    }
-
-    if (vm.count("max-cached-age")) {
-        _max_cached_age = boost::posix_time::seconds(vm["max-cached-age"].as<int>());
-    }
-
-    if (vm.count("max-simultaneous-announcements")) {
-        _max_simultaneous_announcements = vm["max-simultaneous-announcements"].as<int>();
-    }
-
-    assert(vm.count("listen-on-tcp"));
-    {
-        auto opt_local_ep = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
-        if (!opt_local_ep) {
-            throw std::runtime_error("Failed to parse '--listen-on-tcp' argument");
-        }
-        _local_ep = *opt_local_ep;
-    }
-
-    if (vm.count("udp-mux-port")) {
-        _udp_mux_port = vm["udp-mux-port"].as<uint16_t>();
-    }
-
-    if (vm.count("injector-ep")) {
-        auto injector_ep_str = vm["injector-ep"].as<string>();
-
-        if (!injector_ep_str.empty()) {
-            auto opt = parse_endpoint(injector_ep_str);
-
-            if (!opt) {
-                throw std::runtime_error(util::str(
-                        "Failed to parse endpoint: ", injector_ep_str));
-            }
-
-            _injector_ep = *opt;
-        }
-    }
-
-    assert(vm.count("front-end-ep"));
-    {
-        auto opt_fe_ep = parse::endpoint<asio::ip::tcp>(vm["front-end-ep"].as<string>());
-        if (!opt_fe_ep) {
-            throw std::runtime_error("Failed to parse '--front-end-ep' argument");
-        }
-        _front_end_endpoint = *opt_fe_ep;
-    }
-
-    if (vm.count("disable-bridge-announcement")) {
-        _disable_bridge_announcement = vm["disable-bridge-announcement"].as<bool>();
-    }
-
-    if (vm.count("client-credentials")) {
-        auto cred = vm["client-credentials"].as<string>();
-
-        if (!cred.empty() && cred.find(':') == string::npos) {
-            throw std::runtime_error(util::str(
-                "The '--client-credentials' argument expects a string "
-                "in the format <username>:<password>, but the provided "
-                "string is missing a colon: ", cred));
-        }
-
-        _client_credentials = move(cred);
-    }
-
-    auto maybe_set_pk = [&] (const string& opt, auto& pk) {
-        if (vm.count(opt)) {
-            string value = vm[opt].as<string>();
-
-            using PubKey = util::Ed25519PublicKey;
-            pk = PubKey::from_hex(value);
-
-            if (!pk) {  // attempt decoding from Base32
-                auto pk_s = util::base32_decode(value);
-                if (pk_s.size() == PubKey::key_size) {
-                    auto pk_a = util::bytes::to_array<uint8_t, PubKey::key_size>(pk_s);
-                    pk = PubKey(std::move(pk_a));
-                }
-            }
-
-            if (!pk) {
-                throw std::runtime_error(
-                        util::str("Failed to parse Ed25519 public key: ", value));
-            }
-        }
-    };
-
-    maybe_set_pk("cache-http-public-key", _cache_http_pubkey);
-
-    if (vm.count("cache-type")) {
-        auto type_str = vm["cache-type"].as<string>();
-
-        if (type_str == "bep5-http") {
-            // https://redmine.equalit.ie/issues/14920#note-1
-            _cache_type = CacheType::Bep5Http;
-
-            LOG_DEBUG("Using bep5-http cache");
-
-            if (!_cache_http_pubkey) {
-                throw std::runtime_error(
-                    "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
-            }
-
-            if (_injector_ep && _injector_ep->type == Endpoint::Bep5Endpoint) {
-                throw std::runtime_error(
-                    util::str("A BEP5 injector endpoint is derived implicitly"
-                        " when using '--cache-type=bep5-http',"
-                        " but it is already set to: ", *_injector_ep));
-            }
-            if (!_injector_ep) {
-                _injector_ep = Endpoint{
-                    Endpoint::Bep5Endpoint,
-                    bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-                };
-            }
-        }
-#ifdef __EXPERIMENTAL__
-        if (type_str == "bep3-http-over-i2p") {
-            _cache_type = CacheType::Bep3HTTPOverI2P;
-
-            LOG_DEBUG("Using bep3-http cache over i2p");
-
-            if (!_cache_http_pubkey) {
-                throw std::runtime_error(
-                    "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
-            }
-
-            // An injector can be explicitly set but it should always be an I2P endpoint
-            if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
-                throw std::runtime_error(
-                    util::str("A BEP3-I2P injector is derived implicitly"
-                              " when using '--cache-type=bep3-http-over-i2p',"
-                              " but it is already set to a non I2P endpoint: ",
-                              *_injector_ep));
-            }
-
-            /*
-             * We use an I2P endpoint here as the discovery is performed using BEP3, to support
-             * BEP5 the endpoint should be something different in order to manage multiple
-             * connections when performing the discovery of peers using a DHT.
-             */
-            if (!_injector_ep) {
-                _injector_ep = Endpoint{
-                   Endpoint::I2pEndpoint,
-                   bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-               };
-            }
-        }
-#endif // ifdef __EXPERIMENTAL__
-
-        else if (type_str == "none" || type_str == "") {
-            _cache_type = CacheType::None;
-        }
-        else {
-            throw std::runtime_error(
-                    util::str("Unknown '--cache-type' argument: ", type_str));
-        }
-
-    }
-
-    if (vm.count("injector-credentials")) {
-        auto cred = vm["injector-credentials"].as<string>();
-
-        if (!cred.empty()
-          && cred.find(':') == string::npos) {
-            throw std::runtime_error(util::str(
-                "The '--injector-credentials' argument expects a string "
-                "in the format <username>:<password>, but the provided "
-                "string is missing a colon: ", cred));
-        }
-
-        if (!_injector_ep) {
-            throw std::runtime_error(
-                "The '--injector-credentials' argument must be used with "
-                "'--injector-ep'");
-        }
-
-        _injector_credentials[*_injector_ep] = cred;
-    }
-
-#ifdef __EXPERIMENTAL__
-        if (vm.count("i2p-hops-per-tunnel")) {
-        auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
-
-        if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
-            throw std::runtime_error(util::str(
-                "The '--i2p-hops-per-tunnel' argument expects an integer "
-                "between 1 and 8"
-                ));
-        }
-
-        if (!(//If we neither connecting for an i2p injector 
-            (_injector_ep && _injector_ep->type == Endpoint::I2pEndpoint) ||
-            //nor we are not  running a Bep5 over i2p cache
-            (_cache_type == CacheType::Bep3HTTPOverI2P)))
-          {
-            throw std::runtime_error(
-                "The '--i2p-hops-per-tunnel' argument must be used with "
-                "'--injector-ep' with an i2p injector or with "
-                "--cache-type=bep5-http-over-i2p ");
-          }
-
-        _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
-    }
-#endif // ifdef __EXPERIMENTAL__ _i2p_hops_
-
-    if (_cache_type == CacheType::None) {
-        LOG_WARN("Not using d-cache");
-    }
-
-    if (is_cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {
-        throw std::runtime_error("BEP5/HTTP cache selected but no injector HTTP public key specified");
-    }
-
-    if (vm.count("cache-static-root")) {
-        _cache_static_content_path = vm["cache-static-root"].as<string>();
-        if (!fs::is_directory(_cache_static_content_path))
-            throw std::runtime_error(
-                util::str("No such directory: ", _cache_static_content_path));
-        if (!vm.count("cache-static-repo")) {
-            _cache_static_path = _cache_static_content_path / default_static_cache_subdir;
-            LOG_INFO("No static cache repository given, assuming: ", _cache_static_path);
-        }
-    }
-    if (vm.count("cache-static-repo")) {
-        _cache_static_path = vm["cache-static-repo"].as<string>();
-        if (!vm.count("cache-static-root"))
-            throw std::runtime_error("'--cache-static-root' must be explicity given when using a static cache");
-    }
-    if (!_cache_static_path.empty() && !fs::is_directory(_cache_static_path))
-        throw std::runtime_error(
-            util::str("No such directory: ", _cache_static_path));
-
-    if (vm.count("local-domain")) {
-        auto tld_rx = boost::regex("[-0-9a-zA-Z]+");
-        auto local_domain = vm["local-domain"].as<string>();
-        if (!boost::regex_match(local_domain, tld_rx)) {
-            throw std::runtime_error(util::str(
-                    "Invalid TLD for '--local-domain': ", local_domain));
-        }
-        _local_domain = boost::algorithm::to_lower_copy(local_domain);
-    }
-
-    if (vm.count("origin-doh-base")) {
-        auto doh_base = vm["origin-doh-base"].as<string>();
-        _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
-        if (!_origin_doh_endpoint)
-            throw std::runtime_error(util::str(
-                    "Invalid URL for '--origin-doh-base': ", doh_base));
-    }
-
-    save_persistent();  // only if no errors happened
-}
 
 #undef _LOG_FILE_NAME
 #undef _DEFAULT_STATIC_CACHE_SUBDIR

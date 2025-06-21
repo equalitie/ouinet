@@ -44,6 +44,7 @@ BOOST_AUTO_TEST_SUITE(ouinet_http_sign)
 
 using namespace std;
 using namespace ouinet;
+using OuinetYield = ouinet::Yield;
 
 static const string rq_target = "https://example.com/foo";  // proxy-like
 static const string rq_host = "example.com";
@@ -219,9 +220,9 @@ static const auto rs_chunk_ext_empty = rs_block_sig_cx_empty;
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    asio::spawn(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
+    task::spawn_detached(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
             try {
-                f(Yield(ctx, yield));
+                f(OuinetYield(ctx, yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
@@ -364,7 +365,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
     rs_head_signed.set("X-Foo", "bar");
     // Move a header, keeping the same value.
     // It should not break signature verification.
-    auto date = rs_head_signed[http::field::date].to_string();
+    auto date = std::string(rs_head_signed[http::field::date]);
     rs_head_signed.erase(http::field::date);
     rs_head_signed.set(http::field::date, date);
 
@@ -375,7 +376,7 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 
     // Add a bad third signature (by altering the second one).
     // It should not break signature verification, but it should be removed from its output.
-    auto sig1_copy = rs_head_signed["X-Ouinet-Sig1"].to_string();
+    auto sig1_copy = std::string(rs_head_signed["X-Ouinet-Sig1"]);
     string sstart(",signature=\"");
     auto spos = sig1_copy.find(sstart);
     BOOST_REQUIRE(spos != string::npos);
@@ -420,7 +421,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
             const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
@@ -436,7 +437,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         });
 
         // Sign origin response.
-        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -452,7 +453,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         });
 
         // Test signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
@@ -491,7 +492,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -521,7 +522,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
             const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
@@ -537,7 +538,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Sign origin response.
-        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -553,7 +554,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Verify signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -568,8 +569,8 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Check generation of chained hashes.
-        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
-                         , &ctx, lock = wc.lock()](auto y) mutable {
+        task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
+                         , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
             sys::error_code e;
@@ -600,7 +601,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -630,7 +631,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send raw origin response.
-        asio::spawn(ctx, [&origin_w, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -644,7 +645,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Sign origin response.
-        asio::spawn(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -660,7 +661,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Forge (alter) signed output.
-        asio::spawn(ctx, [ &signed_r, &forged_w
+        task::spawn_detached(ctx, [ &signed_r, &forged_w
                          , lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
@@ -686,7 +687,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Verify forged output.
-        asio::spawn(ctx, [ forged_r = std::move(forged_r), &tested_w
+        task::spawn_detached(ctx, [ forged_r = std::move(forged_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -701,7 +702,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -731,7 +732,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
 
         // Send signed response.
-        asio::spawn(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&signed_w, lock = wc.lock()] (auto y) {
             // Head (raw).  With trailers as normal headers.
             auto trh_start = rs_head_signed_s.find("Trailer:");
             BOOST_REQUIRE(trh_start != string::npos);
@@ -763,7 +764,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         });
 
         // Verify signed output.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &hashed_w
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -778,8 +779,8 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         });
 
         // Check generation of chained hashes.
-        asio::spawn(ctx, [ hashed_r = std::move(hashed_r), &tested_w
-                         , &ctx, lock = wc.lock()](auto y) mutable {
+        task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w
+                         , lock = wc.lock()](auto y) mutable {
             int xidx = 0;
             Cancel cancel;
             sys::error_code e;
@@ -802,7 +803,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -875,7 +876,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         tie(first_block, last_block) = firstb_lastb;
 
         // Send partial response.
-        asio::spawn(ctx, [ &signed_w
+        task::spawn_detached(ctx, [ &signed_w
                          , first_block, last_block
                          , lock = wc.lock()] (auto y) {
             // Head (raw).
@@ -907,7 +908,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         });
 
         // Test the loaded response.
-        asio::spawn(ctx, [ signed_r = std::move(signed_r), &tested_w
+        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -916,14 +917,14 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
                 ( move(signed_r), pk
                 , cache::VerifyingReader::status_set{http::status::partial_content});
             auto signed_rs = Session::create(move(signed_rvr), false, cancel, y[e]);
-            BOOST_REQUIRE_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE_EQUAL(e.value(), sys::errc::success);
             signed_rs.flush_response(tested_w, cancel, y[e]);
-            BOOST_CHECK_EQUAL(e.message(), "Success");
+            BOOST_REQUIRE_EQUAL(e.value(), sys::errc::success);
             tested_w.close();
         });
 
         // Black hole.
-        asio::spawn(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 

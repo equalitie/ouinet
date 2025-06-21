@@ -124,6 +124,7 @@ truncate( async_file_handle& f
         ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
     }
+    fseek(f, new_length, ec);
 }
 
 bool
@@ -183,6 +184,15 @@ remove_file(const fs::path& p)
     if (!is_regular_file(p)) return;
     sys::error_code ignored_ec;
     fs::remove(p, ignored_ec);
+}
+
+void
+remove_file(const fs::path& p, sys::error_code& ec)
+{
+    if (!exists(p)) return;
+    assert(is_regular_file(p));
+    if (!is_regular_file(p)) return;
+    fs::remove(p, ec);
 }
 
 }}} // namespaces

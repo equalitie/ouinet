@@ -24,12 +24,15 @@
 #include "generic_stream.h"
 #include "split_string.h"
 #include "async_sleep.h"
+#ifndef __WIN32
 #include "increase_open_file_limit.h"
+#endif
 #include "full_duplex_forward.h"
 #include "injector_config.h"
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
 #include "http_util.h"
+#include "http_logger.h"
 #include "origin_pools.h"
 #include "session.h"
 
@@ -53,12 +56,13 @@
 #include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
-#include "util/file_posix_with_offset.h"
 #include "util/yield.h"
 
 #include "logger.h"
 #include "defer.h"
 #include "http_util.h"
+
+#include "cxx/metrics.h"
 
 using namespace std;
 using namespace ouinet;
@@ -74,14 +78,11 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using TcpLookup   = asio::ip::tcp::resolver::results_type;
-using ResponseWithFileBody = http::response<http::basic_file_body<
-    util::file_posix_with_offset>>;
 using ouinet::util::AsioExecutor;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
-
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -434,6 +435,8 @@ private:
         if (ec = compute_error_code(ec, cancel, overlong_wd)) {
             yield.log("Failed to process response; ec=", ec);
             return or_throw(yield, ec);
+        } else {
+            http_logger.log(druid, cache_rq, orig_sess, fwd_bytes);
         }
 
         keep_connection_if(move(orig_sess), rs_keep_alive);
@@ -447,6 +450,11 @@ public:
     {
         sys::error_code ec;
         bool rq_keep_alive = rq.keep_alive();
+
+        // Get DRUID before the Ouinet headers are removed.
+        auto dr_it = rq.find(http_::request_druid_hdr);
+        if (dr_it != rq.end())
+            druid = std::string(dr_it->value());
 
         // Sanitize and pop out Ouinet internal HTTP headers.
         auto crq = util::to_cache_request(move(rq));
@@ -492,6 +500,7 @@ private:
     const InjectorConfig& config;
     uuid_generator& genuuid;
     OriginPools& origin_pools;
+    string druid{"-"};
 };
 
 //------------------------------------------------------------------------------
@@ -780,13 +789,7 @@ void listen( InjectorConfig& config
 
         uint64_t connection_id = next_connection_id++;
 
-        // Increase the size of the coroutine stack (we do same in client).
-        // Some interesing info:
-        // https://lists.ceph.io/hyperkitty/list/dev@ceph.io/thread/6LBFZIFUPTJQ3SNTLVKSQMVITJWVWTZ6/
-        boost::coroutines::attributes attribs;
-        attribs.size *= 2;
-
-        asio::spawn(exec, [
+        task::spawn_detached(exec, [
             connection = std::move(connection),
             &ssl_ctx,
             &cancel,
@@ -811,7 +814,7 @@ void listen( InjectorConfig& config
                 LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
-        }, attribs);
+        });
     }
 }
 
@@ -836,9 +839,11 @@ int main(int argc, const char* argv[])
         return EXIT_SUCCESS;
     }
 
+#ifndef __WIN32
     if (config.open_file_limit()) {
         increase_open_file_limit(*config.open_file_limit());
     }
+#endif
 
     // Create or load the TLS certificate.
     auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
@@ -859,8 +864,13 @@ int main(int argc, const char* argv[])
         // without connectivity restrictions,
         // using extra BT bootstrap servers may be useful
         // in environments like isolated LANs or community networks.
+
         bt_dht_ptr = std::make_shared<bt::MainlineDht>
-            (ex, fs::path{}, config.bt_bootstrap_extras());  // default storage dir
+            ( ex
+            , metrics::Client::noop().mainline_dht()
+            , fs::path{}
+            , config.bt_bootstrap_extras());  // default storage dir
+                                              //
         bt_dht_ptr->set_endpoints({config.bittorrent_endpoint()});
         assert(!bt_dht_ptr->local_endpoints().empty());
         return bt_dht_ptr;
@@ -987,7 +997,7 @@ int main(int argc, const char* argv[])
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
             make_unique<ouiservice::Obfs4OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs4-server");
-        asio::spawn(ex, [
+        task::spawn_detached(ex, [
             obfs4 = server.get(),
             endpoint
         ] (asio::yield_context yield) {
@@ -1016,8 +1026,7 @@ int main(int argc, const char* argv[])
 
     Cancel cancel;
 
-    asio::spawn(ex, [
-        &ex,
+    task::spawn_detached(ex, [
         &proxy_server,
         &config,
         &cancel

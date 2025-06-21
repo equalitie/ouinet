@@ -152,7 +152,7 @@ private:
     Stat& find_or_create(boost::string_view msg_type) {
         auto i = _per_msg_stat.find(msg_type);
         if (i == _per_msg_stat.end()) {
-            auto p = _per_msg_stat.insert(std::make_pair( msg_type.to_string()
+            auto p = _per_msg_stat.insert(std::make_pair( std::string(msg_type)
                                                         , Stat()));
             return p.first->second;
         }
@@ -202,13 +202,15 @@ static bool read_nodes( bool is_v4
 }
 
 dht::DhtNode::DhtNode( const AsioExecutor& exec
+                     , metrics::DhtNode metrics
                      , fs::path storage_dir
                      , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
     _storage_dir(std::move(storage_dir)),
-    _extra_bs(std::move(extra_bs))
+    _extra_bs(std::move(extra_bs)),
+    _metrics(std::move(metrics))
 {
 }
 
@@ -684,7 +686,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
 
         MutableDataItem item {
             public_key,
-            salt.to_string(),
+            std::string(salt),
             response["v"],
             *sequence_number,
             util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature)
@@ -751,7 +753,7 @@ NodeID dht::DhtNode::data_put_mutable(
                 { "seq", data.sequence_number },
                 { "sig", util::bytes::to_string(data.signature) },
                 { "v", data.value },
-                { "token", put_token.to_string() }
+                { "token", std::string(put_token) }
             };
 
             if (!data.salt.empty()) {
@@ -941,18 +943,20 @@ void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
     fs::path path = stored_contacts_path();
     if (path == fs::path()) return;
 
+    Cancel cancel(_cancel);
+
     while (true) {
         if (!_routing_table) return;
         auto contacts = _routing_table->dump_contacts();
 
         sys::error_code ignored_ec;
-        write_stored_contacts(_exec, move(contacts), path, _cancel, yield[ignored_ec]);
-        if (_cancel) return;
+        write_stored_contacts(_exec, move(contacts), path, cancel, yield[ignored_ec]);
+        if (cancel) return;
 
         sys::error_code ec;
-        async_sleep(_exec, std::chrono::minutes(6), _cancel, yield[ec]);
-        if (_cancel) return;
-        return_or_throw_on_error(yield, _cancel, ec);
+        async_sleep(_exec, std::chrono::minutes(6), cancel, yield[ec]);
+        if (cancel) return;
+        return_or_throw_on_error(yield, cancel, ec);
     }
 }
 
@@ -1065,7 +1069,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     boost::optional<sys::error_code> first_error_code;
 
     asio::steady_timer timeout_timer(_exec);
-    timeout_timer.expires_from_now(timeout);
+    timeout_timer.expires_after(timeout);
 
     bool timer_handler_executed = false;
 
@@ -1177,7 +1181,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
             sender,
             BencodedMap {
                 { "y", "e" },
-                { "t", transaction.to_string() },
+                { "t", std::string(transaction) },
                 { "e", BencodedList{code, description} }
             }
         );
@@ -1194,7 +1198,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
                 // https://wiki.theory.org/BitTorrentSpecification
                 // http://www.bittorrent.org/beps/bep_0020.html
                 { "y", "r" },
-                { "t", transaction.to_string() },
+                { "t", std::string(transaction) },
                 { "r", std::move(reply) }
             }
         );
@@ -1583,14 +1587,13 @@ asio::ip::udp::endpoint resolve(
 ) {
     sys::error_code ec;
 
-    udp::resolver::query query(addr, port);
     udp::resolver resolver(exec);
 
     auto cancelled = cancel_signal.connect([&] {
         resolver.cancel();
     });
 
-    udp::resolver::iterator it = resolver.async_resolve(query, yield[ec]);
+    udp::resolver::results_type results = resolver.async_resolve(addr, port, yield[ec]);
 
     if (cancelled) ec = asio::error::operation_aborted;
 
@@ -1598,16 +1601,14 @@ asio::ip::udp::endpoint resolve(
         return or_throw<udp::endpoint>(yield, ec);
     }
 
-    while (it != udp::resolver::iterator()) {
-        auto ep = it->endpoint();
+    for (const auto& result : results) {
+        auto ep = result.endpoint();
 
         if (ep.address().is_v4() && ipv == udp::v4()) {
             return ep;
         } else if (ep.address().is_v6() && ipv == udp::v6()) {
             return ep;
         }
-
-        ++it;
     }
 
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
@@ -1639,8 +1640,8 @@ dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
             auto ep = resolve(
                 _exec,
                 _multiplexer->is_v4() ? udp::v4() : udp::v6(),
-                host.to_string(),
-                port.empty() ? util::str(bootstrap::default_port) : port.to_string(),
+                std::string(host),
+                port.empty() ? util::str(bootstrap::default_port) : std::string(port),
                 cancel,
                 yield[ec]
             );
@@ -1704,6 +1705,8 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 {
     // Create on stack so that the member one isn't used after ~DhtNode
     Cancel cancel(_cancel);
+
+    auto metrics = _metrics.bootstrap();
 
     sys::error_code ec;
     sys::error_code ignored_ec;
@@ -1888,6 +1891,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
      * necessary for implementing queries.
      */
     _ready = true;
+    metrics.mark_success();
 }
 
 
@@ -2531,11 +2535,13 @@ void dht::DhtNode::tracker_do_search_peers(
 
 
 MainlineDht::MainlineDht( const AsioExecutor& exec
+                        , metrics::MainlineDht metrics
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)
     , _storage_dir(std::move(storage_dir))
     , _extra_bs(std::move(extra_bs))
+    , _metrics(std::move(metrics))
 {
 }
 
@@ -2568,6 +2574,15 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
     }
 }
 
+metrics::DhtNode metrics_dht_node_for(metrics::MainlineDht& metrics, const asio::ip::address& addr) {
+    if (addr.is_v4()) {
+        return metrics.dht_node_ipv4();
+    } else {
+        assert(addr.is_v6());
+        return metrics.dht_node_ipv6();
+    }
+}
+
 void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
@@ -2579,7 +2594,7 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         }
     }
 
-    _nodes[local_ep] = make_unique<dht::DhtNode>(_exec, _storage_dir);
+    _nodes[local_ep] = make_unique<dht::DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir);
 
     TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();
@@ -2604,7 +2619,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
         }
     }
 
-    auto node = make_unique<dht::DhtNode>(_exec, _storage_dir, _extra_bs);
+    auto node = make_unique<dht::DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir, _extra_bs);
 
     auto cc = _cancel.connect([&] { node = nullptr; });
 

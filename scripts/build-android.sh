@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -e
-set -x
+# set -x
 
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
@@ -243,6 +243,7 @@ function build_ouinet_aar {
         --project-dir="${ROOT}"/android \
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
+        --info \
         --console plain \
         --no-daemon
     )

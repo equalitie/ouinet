@@ -5,8 +5,9 @@
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
-#include "upnp.h"
+#include "upnp_updater.h"
 #include "split_string.h"
+#include "or_throw.h"
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
@@ -386,6 +387,82 @@ void ClientFrontEnd::handle_group_list( const Request&
         ss << g << std::endl;
 }
 
+void ClientFrontEnd::handle_pinned_list( const Request&
+                                       , Response& res
+                                       , std::ostringstream& ss
+                                       , cache::Client* cache_client)
+{
+    res.set(http::field::content_type, "text/plain");
+
+    if (!cache_client) return;
+
+    for (const auto& g : cache_client->get_pinned_groups())
+        ss << g << std::endl;
+}
+
+void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringstream& ss
+                                  , cache::Client* cache_client
+)
+{
+    res.set(http::field::content_type, "application/json");
+
+    auto target = req.target().substr(strlen(groups_api_path));
+
+    sys::error_code ec;
+    json response{};
+
+    string group_name;
+    auto eqpos = target.rfind('=');
+    if (eqpos != string::npos)
+    {
+        group_name = target.substr(eqpos + 1);
+        response["name"] = group_name;
+    }
+
+    if (!cache_client)
+    {
+        response = {{"status", "error"}, {"Cache client error"}};
+        ss << response;
+        return;
+    }
+
+    if (target == "/" || target.empty())
+    {
+        response["groups"] = json::array();
+        for (const auto& g : cache_client->get_groups())
+            response["groups"].push_back(g);
+    }
+    else if (target.starts_with("/pin/"))
+    {
+        response["pinned"] = cache_client->pin_group(group_name, ec);
+    }
+    else if (target.starts_with("/unpin/"))
+    {
+        bool unpinned = cache_client->unpin_group(group_name, ec);
+        response["pinned"] = !unpinned;
+    }
+    else if (target.starts_with("/pinned"))
+    {
+        if (group_name.empty())
+        {
+            response["pinned_groups"] = json::array();
+            for (const auto& g : cache_client->get_pinned_groups())
+                response["pinned_groups"].push_back(g);
+        }
+        else
+        {
+            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
+        }
+    }
+    else
+    {
+        response = {{"status", "error"}, {"Undefined action"}};
+    }
+
+    if (ec) response = {{"status", "error"}, {"message", ec.message()}};
+    ss << response;
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
@@ -394,6 +471,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
+                                  , ClientFrontEndMetricsController& metrics
+                                  , Cancel cancel
                                   , Yield yield)
 {
     res.set(http::field::content_type, "text/html");
@@ -444,16 +523,23 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         else if (target.find("?logfile=disable") != string::npos) {
             disable_log_to_file(config);
         }
+        else if (target.find("?metrics=enable") != string::npos) {
+            metrics.enable();
+        }
+        else if (target.find("?metrics=disable") != string::npos) {
+            metrics.disable();
+        }
         else if (target.find("?purge_cache=") != string::npos && cache_client) {
-            Cancel cancel;
             sys::error_code ec;
-            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield[ec]));
+            auto yield_ = static_cast<asio::yield_context>(yield);
+            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
+            if (!ec && cancel) ec = asio::error::operation_aborted;
+            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
         }
         else if (target.find("?bt_extra_bootstraps=") != string::npos) {
             auto eqpos = target.rfind('=');
             set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
         }
-
         // Redirect back to the portal.
         ss << "<!DOCTYPE html>\n"
                "<html>\n"
@@ -588,9 +674,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                               " (i.e. not older than %s).<br>\n")
               % max_age.total_seconds() % past_as_string(max_age));
 
-        Cancel cancel;
         sys::error_code ec;
-        auto local_size = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto local_size = cache_client->local_size(cancel, yield_[ec]);
+        if (!ec && cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
+
         ss << "Approximate size of content cached locally: ";
         if (ec) ss << "(unknown)";
         else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
@@ -601,9 +690,15 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                          "name=\"purge_cache\" id=\"input-purge_cache\" "
                          "value=\"Purge cache now\"/>\n"
               "</form>\n";
-        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
-
         ss << "<br>\n";
+
+        ss << "See DHT groups: \n";
+        ss << "<ul>\n";
+        ss << "<li><a href=\"" << group_list_apath << "\">Announced</a><br></li>\n";
+        ss << "<li><a href=\"" << pinned_list_apath << "\">Pinned</a><br></li>\n";
+        ss << "</ul>\n";
+        ss << "<br>\n";
+
         if (config.cache_static_path().empty()) {
             ss << "Static cache is not enabled.<br>\n";
         } else {
@@ -614,6 +709,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             ss << "</ul>\n";
         }
     }
+
+    // Metrics
+    ss << "<h2>Metrics</h2>\n";
+    ss << ToggleInput{"<u>M</u>etrics",'m', "metrics", metrics.is_enabled()};
 
     // Highlight the label/form containing the input selected via the URL fragment.
     ss << "<script>var eid = window.location.hash.substr(1); "
@@ -632,6 +731,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
+                                  , ClientFrontEndMetricsController& metrics
+                                  , Cancel cancel
                                   , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
@@ -648,7 +749,8 @@ void ClientFrontEnd::handle_status( ClientConfig& config
         {"ouinet_protocol", http_::protocol_version_current},
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
-        {"bridge_announcement", config.is_bridge_announcement_enabled()}
+        {"bridge_announcement", config.is_bridge_announcement_enabled()},
+        {"metrics_enabled", metrics.is_enabled()}
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
@@ -665,9 +767,11 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
     if (cache_client) {
-        Cancel cancel;
         sys::error_code ec;
-        auto sz = cache_client->local_size(cancel, static_cast<asio::yield_context>(yield[ec]));
+        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto sz = cache_client->local_size(cancel, yield_[ec]);
+        if (!ec && cancel) ec = asio::error::operation_aborted;
+        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
         if (ec) {
             LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
         } else {
@@ -687,8 +791,30 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const UPnPs& upnps
                               , const bittorrent::MainlineDht* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
+                              , ClientFrontEndMetricsController& metrics
+                              , Cancel cancel
                               , Yield yield)
 {
+    if (auto& token = config.front_end_access_token()) {
+        std::string_view header_key = "X-Ouinet-Front-End-Token";
+        if (*token != req[header_key]) {
+            Response res{http::status::forbidden, req.version()};
+            res.keep_alive(false);
+
+            auto body = std::string("The request is missing a valid ")
+                      + std::string(header_key)
+                      + " HTTP header\n";
+
+            Response::body_type::reader reader(res, res.body());
+            sys::error_code ec;
+            reader.put(asio::buffer(body), ec);
+            assert(!ec);
+
+            res.prepare_payload();
+            return res;
+        }
+    }
+
     Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.keep_alive(false);
@@ -698,7 +824,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     util::url_match url;
     match_http_url(req.target(), url);
 
-    auto path = !url.path.empty() ? url.path : req.target().to_string();
+    auto path = !url.path.empty() ? url.path : std::string(req.target());
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
@@ -707,15 +833,20 @@ Response ClientFrontEnd::serve( ClientConfig& config
         load_log_file(config, ss);
     } else if (path == group_list_apath) {
         handle_group_list(req, res, ss, cache_client);
+    } else if (path == pinned_list_apath) {
+        handle_pinned_list(req, res, ss, cache_client);
     } else if (path == "/api/status") {
         sys::error_code e;
         handle_status( config, client_state, local_ep, upnps, dht, reachability
-                     , req, res, ss, cache_client
+                     , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
+    } else if (path.starts_with(groups_api_path)) {
+        sys::error_code e;
+        handle_groups( req, res, ss, cache_client);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps, dht, reachability
-                     , req, res, ss, cache_client
+                     , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
     }
 

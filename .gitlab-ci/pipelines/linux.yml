@@ -4,14 +4,19 @@ include:
 
 variables:
   TARGET_PLATFORM: 'linux'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 linux / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .prepare-builder-image
 
 linux / build:
   variables:
-    BOOST_VERSION: "1.79.0"
+    TARGET_PLATFORM: 'linux'
+    BOOST_VERSION: "1.87.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
   extends:
     .linux-build
   needs:
@@ -29,9 +34,19 @@ linux / build-experimental:
       optional: true
   allow_failure: true
 
-linux / unit-test:
+linux / unit-cpp-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
-    .linux-unit-test
+    .linux-unit-cpp-test
+  needs:
+    ['linux / build']
+
+linux / unit-rust-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
+  extends:
+    .linux-unit-rust-test
   needs:
     ['linux / build']
 
@@ -45,10 +60,12 @@ linux / unit-test-experimental:
   allow_failure: true
 
 linux / integration-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .linux-integration-test
   needs:
-    ['linux / unit-test']
+    ['linux / unit-rust-test', 'linux / unit-cpp-test']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
@@ -61,6 +78,31 @@ linux / integration-test-experimental:
     ['linux / unit-test-experimental']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
+  allow_failure: true
+
+linux / build-asan:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
+    BOOST_VERSION: "1.87.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "ON"
+  extends:
+    .linux-build
+  needs:
+    - job: 'linux / build'
+      optional: true
+  when: manual
+  allow_failure: true
+
+linux / unit-cpp-asan-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
+  extends:
+    .linux-unit-cpp-test
+  needs:
+    ['linux / build-asan']
   allow_failure: true
 
 linux / build-prod-image:

@@ -13,7 +13,9 @@
 #include <bittorrent/code.h>
 #include <util/hash.h>
 
-BOOST_AUTO_TEST_SUITE(bittorrent)
+namespace utf = boost::unit_test;
+
+BOOST_AUTO_TEST_SUITE(bittorrent, * utf::timeout(240))
 
 using namespace std;
 using namespace ouinet;
@@ -22,21 +24,25 @@ using Clock = chrono::steady_clock;
 
 using boost::optional;
 
-namespace utf = boost::unit_test;
-
 BOOST_AUTO_TEST_CASE(test_generate_node_id)
 {
     // The first test vector from here:
     // http://bittorrent.org/beps/bep_0042.html#node-id-restriction
     //
-    // Note though that the other test vectors differ very slightly.
-    // I think that is a bug in bittorrent's documentation because
-    // even their own reference implementation does differ.
+    // Note that the test vectors differ very slightly because bytes
+    // 22 to 24 are actually random.
 
-    auto ip = boost::asio::ip::address_v4::from_string("124.31.75.21");
-    auto id = NodeID::generate(ip, 1).to_hex();
-    BOOST_REQUIRE_EQUAL(id.substr(0, 6), "5fbfbf");
-    BOOST_REQUIRE_EQUAL(id.substr(38), "01");
+    auto ip = boost::asio::ip::make_address_v4("124.31.75.21");
+    auto id = NodeID::generate(ip, 1);
+
+    // Setting bytes 22-24 to zero as according to BEP42 only the first
+    // 21 bits are expected to match in the resulting hash.
+    for (uint8_t b = 21; b < 24; ++b)
+        id.set_bit(b, false);
+    auto id_str = id.to_hex();
+
+    BOOST_REQUIRE_EQUAL(id_str.substr(0, 6), "5fbfb8");
+    BOOST_REQUIRE_EQUAL(id_str.substr(38), "01");
 }
 
 static
@@ -47,15 +53,19 @@ float seconds(Clock::duration d)
     return duration_cast<milliseconds>(d).count() / 1000.f;
 }
 
-BOOST_AUTO_TEST_CASE(test_bep_5)
+BOOST_AUTO_TEST_CASE(test_bep_5,
+                     * utf::timeout(240))
 {
     using namespace ouinet::bittorrent::dht;
 
     asio::io_context ctx;
 
-    DhtNode dht(ctx);
+    auto metrics_client = metrics::Client();
+    auto metrics_dht = metrics_client.mainline_dht();
 
-    asio::spawn(ctx, [&] (auto yield) {
+    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
+
+    task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
@@ -65,7 +75,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5)
 
         asio::steady_timer timer(dht.get_executor());
         while (!ec && !dht.ready()) {
-            timer.expires_from_now(chrono::milliseconds(200));
+            timer.expires_after(chrono::milliseconds(200));
             timer.async_wait(yield[ec]);
         }
         BOOST_REQUIRE(!ec);
@@ -92,7 +102,10 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     asio::io_context ctx;
 
-    DhtNode dht(ctx);
+    auto metrics_client = metrics::Client();
+    auto metrics_dht = metrics_client.mainline_dht();
+
+    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
 
     auto mutable_data = []( const string& value
                           , const string& salt
@@ -119,7 +132,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     size_t push_get_count = 8;
     size_t success_count = 0;
 
-    asio::spawn(ctx, [&] (auto yield) {
+    task::spawn_detached(ctx, [&] (auto yield) {
         dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
 
         BOOST_REQUIRE(!ec);
@@ -128,7 +141,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
         WaitCondition wc(ctx);
 
         for (size_t i = 0; i < push_get_count; i++) {
-            asio::spawn(ctx, [&, lock = wc.lock(), i] (auto yield) {
+        task::spawn_detached(ctx, [&, lock = wc.lock(), i] (auto yield) {
                 BOOST_REQUIRE(!ec);
 
                 stringstream salt;
