@@ -47,6 +47,7 @@ public class Config implements Parcelable {
         private Set<String> btBootstrapExtras = null;
         private String cacheHttpPubKey;
         private String injectorCredentials;
+        private String injectorEndpoint;
         private String injectorTlsCert;
         private String tlsCaCertStorePath;
         private String errorPagePath;
@@ -106,6 +107,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setInjectorCredentials(String injectorCredentials){
             this.injectorCredentials = injectorCredentials;
+            return this;
+        }
+        public ConfigBuilder setInjectorEndpoint(String injectorEndpoint){
+            this.injectorEndpoint = injectorEndpoint;
             return this;
         }
         public ConfigBuilder setInjectorTlsCert(String injectorTlsCert){
@@ -384,6 +389,7 @@ public class Config implements Parcelable {
                     btBootstrapExtras,
                     cacheHttpPubKey,
                     injectorCredentials,
+                    injectorEndpoint,
                     setupInjectorTlsCert(ouinetDirectory),
                     setupTlsCaCertStore(ouinetDirectory),
                     setupErrorPage(ouinetDirectory),
@@ -420,6 +426,7 @@ public class Config implements Parcelable {
     private Set<String> btBootstrapExtras;
     private String cacheHttpPubKey;
     private String injectorCredentials;
+    private String injectorEndpoint;
     private String injectorTlsCertPath;
     private String tlsCaCertStorePath;
     private String errorPagePath;
@@ -454,6 +461,7 @@ public class Config implements Parcelable {
                   Set<String> btBootstrapExtras,
                   String cacheHttpPubKey,
                   String injectorCredentials,
+                  String injectorEndpoint,
                   String injectorTlsCertPath,
                   String tlsCaCertStorePath,
                   String errorPagePath,
@@ -487,6 +495,7 @@ public class Config implements Parcelable {
         this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
+        this.injectorEndpoint = injectorEndpoint;
         this.injectorTlsCertPath = injectorTlsCertPath;
         this.tlsCaCertStorePath = tlsCaCertStorePath;
         this.errorPagePath = errorPagePath;
@@ -528,6 +537,9 @@ public class Config implements Parcelable {
     }
     public String getInjectorCredentials() {
         return injectorCredentials;
+    }
+    public String getInjectorEndpoint() {
+        return injectorEndpoint;
     }
     public String getInjectorTlsCertPath() {
         return injectorTlsCertPath;
@@ -639,6 +651,7 @@ public class Config implements Parcelable {
         out.writeStringArray(btBootstrapExtras == null ? null : btBootstrapExtras.toArray(new String[0]));
         out.writeString(cacheHttpPubKey);
         out.writeString(injectorCredentials);
+        out.writeString(injectorEndpoint);
         out.writeString(injectorTlsCertPath);
         out.writeString(tlsCaCertStorePath);
         out.writeString(errorPagePath);
@@ -683,6 +696,7 @@ public class Config implements Parcelable {
 
         cacheHttpPubKey = in.readString();
         injectorCredentials = in.readString();
+        injectorEndpoint = in.readString();
         injectorTlsCertPath = in.readString();
         tlsCaCertStorePath = in.readString();
         errorPagePath = in.readString();

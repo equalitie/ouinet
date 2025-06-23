@@ -125,6 +125,7 @@ public class Ouinet {
         maybeAdd(args, "--origin-doh-base",        config.getOriginDohBase());
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
+        maybeAdd(args, "--injector-ep",            config.getInjectorEndpoint());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
         maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
         maybeAdd(args, "--injector-tls-cert-file", config.getInjectorTlsCertPath());
