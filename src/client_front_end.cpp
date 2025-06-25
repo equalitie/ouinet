@@ -387,6 +387,82 @@ void ClientFrontEnd::handle_group_list( const Request&
         ss << g << std::endl;
 }
 
+void ClientFrontEnd::handle_pinned_list( const Request&
+                                       , Response& res
+                                       , std::ostringstream& ss
+                                       , cache::Client* cache_client)
+{
+    res.set(http::field::content_type, "text/plain");
+
+    if (!cache_client) return;
+
+    for (const auto& g : cache_client->get_pinned_groups())
+        ss << g << std::endl;
+}
+
+void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringstream& ss
+                                  , cache::Client* cache_client
+)
+{
+    res.set(http::field::content_type, "application/json");
+
+    auto target = req.target().substr(strlen(groups_api_path));
+
+    sys::error_code ec;
+    json response{};
+
+    string group_name;
+    auto eqpos = target.rfind('=');
+    if (eqpos != string::npos)
+    {
+        group_name = target.substr(eqpos + 1);
+        response["name"] = group_name;
+    }
+
+    if (!cache_client)
+    {
+        response = {{"status", "error"}, {"Cache client error"}};
+        ss << response;
+        return;
+    }
+
+    if (target == "/" || target.empty())
+    {
+        response["groups"] = json::array();
+        for (const auto& g : cache_client->get_groups())
+            response["groups"].push_back(g);
+    }
+    else if (target.starts_with("/pin/"))
+    {
+        response["pinned"] = cache_client->pin_group(group_name, ec);
+    }
+    else if (target.starts_with("/unpin/"))
+    {
+        bool unpinned = cache_client->unpin_group(group_name, ec);
+        response["pinned"] = !unpinned;
+    }
+    else if (target.starts_with("/pinned"))
+    {
+        if (group_name.empty())
+        {
+            response["pinned_groups"] = json::array();
+            for (const auto& g : cache_client->get_pinned_groups())
+                response["pinned_groups"].push_back(g);
+        }
+        else
+        {
+            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
+        }
+    }
+    else
+    {
+        response = {{"status", "error"}, {"Undefined action"}};
+    }
+
+    if (ec) response = {{"status", "error"}, {"message", ec.message()}};
+    ss << response;
+}
+
 std::map<std::string, std::string, std::less<>> get_query(std::string_view target) {
 
     auto separator = target.find('?');
@@ -653,9 +729,15 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                          "name=\"purge_cache\" id=\"input-purge_cache\" "
                          "value=\"Purge cache now\"/>\n"
               "</form>\n";
-        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
-
         ss << "<br>\n";
+
+        ss << "See DHT groups: \n";
+        ss << "<ul>\n";
+        ss << "<li><a href=\"" << group_list_apath << "\">Announced</a><br></li>\n";
+        ss << "<li><a href=\"" << pinned_list_apath << "\">Pinned</a><br></li>\n";
+        ss << "</ul>\n";
+        ss << "<br>\n";
+
         if (config.cache_static_path().empty()) {
             ss << "Static cache is not enabled.<br>\n";
         } else {
@@ -845,6 +927,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
         load_log_file(config, ss);
     } else if (path == group_list_apath) {
         handle_group_list(req, res, ss, cache_client);
+    } else if (path == pinned_list_apath) {
+        handle_pinned_list(req, res, ss, cache_client);
     } else if (path == status_api_path) {
         sys::error_code e;
         handle_api_status( config, client_state, local_ep, upnps, dht, reachability
@@ -854,6 +938,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
         path.remove_prefix(metrics_api_path.size());
         sys::error_code e;
         handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
+    } else if (path.starts_with(groups_api_path)) {
+        sys::error_code e;
+        handle_groups( req, res, ss, cache_client);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps, dht, reachability

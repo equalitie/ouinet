@@ -306,8 +306,18 @@ struct Client::Impl {
             if (e) return false;
             auto key = hdr[http_::response_uri_hdr];
             if (key.empty()) return false;
-            unpublish_cache_entry(std::string(key));
-            return false;  // remove all entries
+
+            /*
+             * `group_pinned` is passed by reference to `unpublished_cache_entry`
+             * and then is passed again to `ouinet::DhtGroups::remove` just to
+             * avoid traversing the whole file structure twice when checking if
+             * a group is pinned or not.
+             */
+            bool group_pinned = false;
+            unpublish_cache_entry(std::string(key), group_pinned);
+            if (group_pinned) return true; // keep entries of pinned groups
+
+            return false;  // remove entries that are not pinned
         }, cancel, yield[ec]);
         if (ec) {
             _ERROR("Purging local cache: failed;"
@@ -316,6 +326,21 @@ struct Client::Impl {
         }
 
         _DEBUG("Purging local cache: done");
+    }
+
+    bool pin_group(const GroupName& group_name, sys::error_code& ec)
+    {
+        return _groups->pin_group(group_name, ec);
+    }
+
+    bool unpin_group(const GroupName& group_name, sys::error_code& ec)
+    {
+        return _groups->unpin_group(group_name, ec);
+    }
+
+    bool is_pinned_group(const GroupName& group_name, sys::error_code& ec)
+    {
+        return _groups->is_pinned(group_name, ec);
     }
 
     void handle_http_error( GenericStream& con
@@ -545,9 +570,15 @@ struct Client::Impl {
     inline
     void unpublish_cache_entry(const std::string& key)
     {
-        auto empty_groups = _groups->remove(key);
+        bool _ = false; // pinned group checks are not needed here
+        unpublish_cache_entry(key, _);
+    }
 
-        if (!_announcer) return;
+    inline
+    void unpublish_cache_entry(const std::string& key, bool& group_pinned)
+    {
+        auto empty_groups = _groups->remove(key, group_pinned);
+        if (!_announcer || group_pinned) return;
         for (const auto& eg : empty_groups)
             if (_announcer->remove(compute_swarm_name(eg)))
                 _VERBOSE("Stop announcing group: ", eg);;
@@ -585,6 +616,13 @@ struct Client::Impl {
             _DEBUG( "Cached response is too old; removing: "
                   , age, " > ", _max_cached_age
                   , "; uri=", key );
+
+            if (sys::error_code pin_ec; is_pinned_group(std::string(key), pin_ec) && !ec)
+            {
+                _DEBUG("Keep ", key, " even if it is old because it is pinned");
+                return true;
+            }
+
             unpublish_cache_entry(std::string(key));
             return false;
         }
@@ -661,6 +699,10 @@ struct Client::Impl {
 
     std::set<GroupName> get_groups() const {
         return _groups->groups();
+    }
+
+    std::set<GroupName> get_pinned_groups() const {
+        return _groups->pinned_groups();
     }
 };
 
@@ -787,6 +829,21 @@ void Client::local_purge( Cancel cancel
     _impl->local_purge(cancel, yield);
 }
 
+bool Client::pin_group(const GroupName& group_name, sys::error_code& ec)
+{
+    return _impl->pin_group(group_name, ec);
+}
+
+bool Client::unpin_group(const GroupName& group_name, sys::error_code& ec)
+{
+    return _impl->unpin_group(group_name, ec);
+}
+
+bool Client::is_pinned_group(const GroupName& group_name, sys::error_code& ec)
+{
+    return _impl->is_pinned_group(group_name, ec);
+}
+
 unsigned Client::get_newest_proto_version() const
 {
     return _impl->get_newest_proto_version();
@@ -795,6 +852,11 @@ unsigned Client::get_newest_proto_version() const
 std::set<Client::GroupName> Client::get_groups() const
 {
     return _impl->get_groups();
+}
+
+std::set<Client::GroupName> Client::get_pinned_groups()
+{
+    return _impl->get_pinned_groups();
 }
 
 Client::~Client()

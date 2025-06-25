@@ -32,6 +32,30 @@ android / build:
       - build.android/build-android-*/ouinet/outputs/apk/*.apk
     expire_in: 6h
 
+android / build-asan:
+  variables:
+    TARGET_PLATFORM: 'android'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  stage: build
+  tags:
+    - docker
+  needs:
+    - job: 'android / prepare-builder-image'
+      optional: true
+    - job: 'linux / build-asan'
+  image: $BUILDER_IMAGE
+  script:
+    - mkdir -p build.android-asan
+    - cd build.android-asan
+    - env WITH_ASAN=ON ../scripts/build-android.sh
+  artifacts:
+    paths:
+      - build.android-asan/build-android-*/ouinet/outputs/aar/*.aar
+      - build.android-asan/build-android-*/ouinet/outputs/apk/*.apk
+    expire_in: 6h
+  when: manual
+  allow_failure: true
+
 # TODO: Remove this job when the builder image created by prepare-builder-image
 #       is stable enough to build a production Ouinet AAR.
 android / build-prod-image:

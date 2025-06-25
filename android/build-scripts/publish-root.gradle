@@ -1,7 +1,7 @@
 // Create variables with empty default values
-ext["signingKey"] = ''
-ext["signing.keyId"] = ''
-ext["signing.password"] = ''
+ext["pgpId"] = ''
+ext["pgpKey"] = ''
+ext["pgpPassword"] = ''
 ext["signing.secretKeyRingFile"] = ''
 ext["ossrhUsername"] = ''
 ext["ossrhPassword"] = ''
@@ -18,9 +18,9 @@ if (secretPropsFile.exists()) {
     ext["ossrhUsername"] = System.getenv('OSSRH_USERNAME')
     ext["ossrhPassword"] = System.getenv('OSSRH_PASSWORD')
     ext["sonatypeStagingProfileId"] = System.getenv('SONATYPE_STAGING_PROFILE_ID')
-    ext["signingKey"] = System.getenv('SIGNING_KEY')
-    ext["signingKeyId"] = System.getenv('SIGNING_KEY_ID')
-    ext["signingPassword"] = System.getenv('SIGNING_PASSWORD')
+    ext["pgpId"] = System.getenv('SIGNING_KEY_ID')
+    ext["pgpKey"] = System.getenv('SIGNING_KEY')
+    ext["pgpPassword"] = System.getenv('SIGNING_PASSWORD')
 }
 
 // Set up Sonatype repository
@@ -30,8 +30,8 @@ nexusPublishing {
             stagingProfileId = sonatypeStagingProfileId
             username = ossrhUsername
             password = ossrhPassword
-            nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
-            snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
+            nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
+            snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
         }
     }
 }
