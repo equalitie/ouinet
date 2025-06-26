@@ -97,7 +97,7 @@ public:
         , _asio_yield(y._asio_yield)
         , _ignored_error(std::move(y._ignored_error))
         , _tag(std::move(y._tag))
-        , _parent(&y)
+        , _parent(y._parent)
         , _timeout_state(std::move(y._timeout_state))
         , _start_time(y._start_time)
     {
