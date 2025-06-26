@@ -374,7 +374,7 @@ public:
                 OuinetYield yield(client->_ctx, yield_, "metrics");
 
                 try {
-                    client->send_metrics_record(record_name, record_content, *cancel, OuinetYield(move(yield)));
+                    client->send_metrics_record(record_name, record_content, *cancel, move(yield));
                 } catch (std::exception& e) {
                     LOG_WARN("Failed to send metrics: ", e.what());
                     throw;
