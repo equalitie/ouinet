@@ -374,7 +374,7 @@ public:
                 OuinetYield yield(client->_ctx, yield_, "metrics");
 
                 try {
-                    client->send_metrics_record(record_name, record_content, *cancel, OuinetYield(move(yield)));
+                    client->send_metrics_record(record_name, record_content, *cancel, move(yield));
                 } catch (std::exception& e) {
                     LOG_WARN("Failed to send metrics: ", e.what());
                     throw;
@@ -1504,15 +1504,20 @@ Session Client::State::fetch_fresh_through_simple_proxy
 void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, OuinetYield yield) {
     auto metrics_conf = _config.metrics();
 
+    std::cout << "---------- " << __LINE__ << "\n";
+    std::cout << "---------- " << __LINE__ << " " << yield.tag() << "\n";
+    std::cout << "---------- " << __LINE__ << "\n";
     if (!metrics_conf) {
         // User did not enable record sending.
         throw_error(asio::error::invalid_argument);
     }
 
+    std::cout << "---------- " << __LINE__ << "\n";
     const util::url_match& server_url = metrics_conf->server_url;
 
     http::request<http::buffer_body> req;
 
+    std::cout << "---------- " << __LINE__ << "\n";
     req.version(11);
     req.method(http::verb::post);
     req.target(server_url.reassemble());
@@ -1525,6 +1530,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
         req.set("X-Ouinet-Metrics-Server-Token", *metrics_conf->server_token);
     }
 
+    std::cout << "---------- " << __LINE__ << "\n";
     req.body().data = const_cast<void*>(record_content.data());
     req.body().size = record_content.size();
     req.body().more = false;
@@ -1535,6 +1541,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
                   : pub_ctx;
 
     sys::error_code direct_ec;
+    std::cout << "---------- " << __LINE__ << "\n";
 
     // Try sending the record to the origin directly.
     auto direct_session = fetch_fresh_from_origin( req
@@ -1544,10 +1551,12 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
                                                  , cancel
                                                  , yield[direct_ec]);
 
+    std::cout << "---------- " << __LINE__ << "\n";
     // We're only interested in the header of the response. We use this to read
     // and ignore the rest of the response so the connection can potentially be
     // reused.
     auto ignore_rest = [](Session& session, Cancel& cancel, OuinetYield yield) {
+        std::cout << "---------- " << __LINE__ << "\n";
         yield.run([&] (auto yield) {
             session.flush_response(cancel, yield, [](auto part, auto cancel, auto yield) {}, 60s);
         });
@@ -1556,11 +1565,15 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     LOG_DEBUG("Metrics direct: ec:\"", direct_ec.message(), "\" result:", direct_session.response_header().result());
 
     if (!direct_ec) {
+        std::cout << "---------- " << __LINE__ << "\n";
         ignore_rest(direct_session, cancel, yield);
 
+        std::cout << "---------- " << __LINE__ << "\n";
         if (direct_session.response_header().result() == http::status::ok) {
+            std::cout << "---------- " << __LINE__ << "\n";
             return;
         } else {
+            std::cout << "---------- " << __LINE__ << "\n";
             // No point in trying through the injector because we connected to
             // the origin, but it failed to process our message.
             throw_error(asio::error::invalid_argument);
@@ -1569,20 +1582,26 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
 
     sys::error_code injector_ec;
 
+    std::cout << "---------- " << __LINE__ << "\n";
     // Sending directly failed, try sending through the injector.
     auto injector_session = fetch_fresh_through_connect_proxy(req, tls_ctx, {}, cancel, yield[injector_ec]);
 
     LOG_DEBUG("Metrics injector: ec:\"", injector_ec.message(), "\" result:", injector_session.response_header().result());
 
+    std::cout << "---------- " << __LINE__ << "\n";
     if (injector_ec) {
+        std::cout << "---------- " << __LINE__ << "\n";
         throw_error(injector_ec);
     }
 
+    std::cout << "---------- " << __LINE__ << "\n";
     ignore_rest(injector_session, cancel, yield);
 
     if (injector_session.response_header().result() != http::status::ok) {
+        std::cout << "---------- " << __LINE__ << "\n";
         throw_error(asio::error::invalid_argument);
     }
+    std::cout << "---------- " << __LINE__ << "\n";
 }
 
 //------------------------------------------------------------------------------
