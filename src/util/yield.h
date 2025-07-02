@@ -105,7 +105,10 @@ public:
             _timeout_state->self = this;
         }
 
-        y._children.push_back(*this);
+        if (_parent)
+        {
+            _parent->_children.push_back(*this);
+        }
     }
 
     Yield tag(std::string t)
