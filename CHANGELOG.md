@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.2.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.2.1) - 2025-06-06
+
+### Added
+
+- Support for building Android and Linux binaries with ASan (address
+sanitizer) capabilities.
+
+### Changed
+
+- Updated Nexus publishing URLs to point to Central Sonatype.
+- Minor changes to the Ouinet CMake scripts to make them more compatible
+with other operating systems.
+- Upgrades Ouinet from depending on `cpp-netlib/uri` to the recommended
+replacement, `cpp-netlib/url`.
+
+
 ## [v1.2.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.2.0) - 2025-05-20
 
 ### Added

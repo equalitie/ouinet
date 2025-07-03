@@ -43,7 +43,9 @@ add_executable(test-persistent-lru-cache "test_persistent_lru_cache.cpp")
 endif ()
 
 ################################################################################
-add_executable(test-bittorrent "test_bittorrent.cpp")
+if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+    add_executable(test-bittorrent "test_bittorrent.cpp")
+endif()
 
 ################################################################################
 if (NOT WIN32)
@@ -51,7 +53,9 @@ add_executable(bt-bep44 "bt-bep44.cpp")
 endif ()
 
 ################################################################################
-add_executable(test-routing-table "test-routing-table.cpp")
+if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+    add_executable(test-routing-table "test-routing-table.cpp")
+endif()
 
 ################################################################################
 add_executable(bt-bep5 "bt-bep5.cpp")
@@ -64,7 +68,11 @@ add_executable(test-util "test-util.cpp")
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-    target_link_libraries(test-util asan)
+    if(${CMAKE_GENERATOR} STREQUAL "Xcode")
+        set_target_properties(test-util PROPERTIES LINK_FLAGS "-fsanitize=address")
+    else()
+        target_link_libraries(test-util asan)
+    endif()
 endif ()
 
 ######################################################################
@@ -106,9 +114,11 @@ add_executable(test-atomic-temp
 )
 
 ######################################################################
-add_executable(test-cache-announcer
-    "performance_test/test_cache_announcer.cpp"
-    "../test/util/bittorrent_utils.cpp")
+if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+    add_executable(test-cache-announcer
+        "performance_test/test_cache_announcer.cpp"
+        "../test/util/bittorrent_utils.cpp")
+endif()
 
 add_executable(test-bencoding
     "test_bencoding.cpp"
@@ -121,7 +131,9 @@ add_executable(test-file-io
 )
 
 ######################################################################
-add_executable(test-dht "test_dht.cpp")
+if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+    add_executable(test-dht "test_dht.cpp")
+endif()
 
 ######################################################################
 add_executable(test-metrics "test-metrics.cpp")

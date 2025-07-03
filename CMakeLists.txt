@@ -6,6 +6,11 @@ else()
     cmake_minimum_required (VERSION 3.5)
 endif()
 
+# Set cmake policies to avoid warnings in newer versions of cmake
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
+    cmake_policy(SET CMP0114 NEW)
+endif()
+
 ################################################################################
 # Configurable options
 option(WITH_INJECTOR "Compile injector" ON)
@@ -22,6 +27,7 @@ option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 # Global build flags
 if (WITH_ASAN)
     add_compile_options("-fsanitize=address" "-fno-omit-frame-pointer")
+    link_libraries(-fsanitize=address)
 endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options("-ggdb")
@@ -138,10 +144,15 @@ add_dependencies(cargo-prebuild_ouinet_rs built_boost)
 # This is not necessry to build the ouinet_rs library, but using it
 # automatically adds the include directories to every target that has ouinet_rs
 # as dependency.
+# XXX: Isn't there a better way to obtain the cargo target directory?
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+else()
+    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+endif()
 target_include_directories(ouinet_rs
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rust
-    # XXX: Isn't there a better way to obtain the cargo target directory?
-    ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+    ${RUST_BRIDGE_PATH})
 
 ################################################################################
 
@@ -177,7 +188,7 @@ add_library(ouinet_common STATIC ${ouinet_common_sources})
 target_link_libraries(ouinet_common
     PRIVATE
         ouinet_dependencies
-        lib::uri
+        lib::url
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
