@@ -36,8 +36,14 @@ impl Backoff {
 
     pub async fn sleep(&self) {
         match self.sleep_for() {
-            SleepFor::Forever => std::future::pending().await,
-            SleepFor::Duration(duration) => time::sleep(duration).await,
+            SleepFor::Forever => {
+                log::debug!("Backoff: sleep until awaken");
+                std::future::pending().await
+            }
+            SleepFor::Duration(duration) => {
+                log::debug!("Backoff: sleep for {duration:?}");
+                time::sleep(duration).await
+            }
         }
     }
 

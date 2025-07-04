@@ -82,8 +82,7 @@ impl Bootstraps {
         };
 
         let Some(bootstrap) = bootstrap else {
-            // This could happen when the bootstrap started and the `clear` function was called
-            // because the `device_id` has rotated.
+            // This could happen when the bootstrap started and then `on_device_id_changed` was called.
             return;
         };
 
@@ -100,12 +99,12 @@ impl Bootstraps {
         }
     }
 
-    pub fn clear_finished(&mut self) {
+    pub fn on_record_sequence_number_changed(&mut self) {
         self.v4.retain(|_, state| !state.is_finished());
         self.v6.retain(|_, state| !state.is_finished());
     }
 
-    pub fn clear(&mut self) {
+    pub fn on_device_id_changed(&mut self) {
         self.v4.clear();
         self.v6.clear();
     }
