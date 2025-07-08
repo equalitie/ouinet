@@ -772,6 +772,13 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
 
     sys::error_code ec;
     json response{};
+    auto error_response = [&res, &response, &ss]( const std::string& error_message
+                                                , const http::status& status)
+    {
+        res.result(status);
+        response = {{"status", "error"}, {"message", error_message}};
+        ss << response;
+    };
 
     auto query = get_query(req.target());
 
@@ -784,8 +791,8 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
 
     if (!cache_client)
     {
-        response = {{"status", "error"}, {"Cache client error"}};
-        ss << response;
+        error_response( "Cache client error"
+                      , http::status::internal_server_error);
         return;
     }
 
@@ -819,10 +826,20 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
     }
     else
     {
-        response = {{"status", "error"}, {"Undefined action"}};
+        error_response( "Undefined action"
+                      , http::status::not_found);
+        return;
     }
 
-    if (ec) response = {{"status", "error"}, {"message", ec.message()}};
+    if (ec)
+    {
+        auto status = http::status::internal_server_error;
+        if (ec.value() == sys::errc::no_such_file_or_directory)
+            status = http::status::not_found;
+        error_response(ec.message(), status);
+        return;
+    }
+
     ss << response;
 }
 
