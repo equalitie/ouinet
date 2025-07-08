@@ -61,7 +61,6 @@ public:
     // Absolute paths of allowed URLs.
     static constexpr const char* log_file_apath = "/logfile.txt";
     static constexpr const char* group_list_apath = "/groups.txt";
-    static constexpr const char* groups_api_path = "/api/groups";
     static constexpr const char* pinned_list_apath = "/pinned-groups.txt";
 
 public:
@@ -140,7 +139,7 @@ private:
                           , std::ostringstream&
                           , cache::Client*);
 
-    void handle_groups(const Request&
+    void handle_api_groups(std::string_view, const Request&
                        , Response&
                        , std::ostringstream&
                        , cache::Client*

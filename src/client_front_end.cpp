@@ -400,22 +400,22 @@ void ClientFrontEnd::handle_pinned_list( const Request&
         ss << g << std::endl;
 }
 
-void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringstream& ss
-                                  , cache::Client* cache_client
-)
+void ClientFrontEnd::handle_api_groups(std::string_view sub_path
+                                      , const Request& req
+                                      , Response& res
+                                      , ostringstream& ss
+                                      , cache::Client* cache_client)
 {
     res.set(http::field::content_type, "application/json");
-
-    auto target = req.target().substr(strlen(groups_api_path));
 
     sys::error_code ec;
     json response{};
 
     string group_name;
-    auto eqpos = target.rfind('=');
+    auto eqpos = sub_path.rfind('=');
     if (eqpos != string::npos)
     {
-        group_name = target.substr(eqpos + 1);
+        group_name = sub_path.substr(eqpos + 1);
         response["name"] = group_name;
     }
 
@@ -426,22 +426,22 @@ void ClientFrontEnd::handle_groups( const Request& req, Response& res, ostringst
         return;
     }
 
-    if (target == "/" || target.empty())
+    if (sub_path == "/" || sub_path.empty())
     {
         response["groups"] = json::array();
         for (const auto& g : cache_client->get_groups())
             response["groups"].push_back(g);
     }
-    else if (target.starts_with("/pin/"))
+    else if (sub_path.starts_with("/pin/"))
     {
         response["pinned"] = cache_client->pin_group(group_name, ec);
     }
-    else if (target.starts_with("/unpin/"))
+    else if (sub_path.starts_with("/unpin/"))
     {
         bool unpinned = cache_client->unpin_group(group_name, ec);
         response["pinned"] = !unpinned;
     }
-    else if (target.starts_with("/pinned"))
+    else if (sub_path.starts_with("/pinned"))
     {
         if (group_name.empty())
         {
@@ -917,8 +917,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
     auto path_str = !url.path.empty() ? url.path : std::string(req.target());
     std::string_view path(path_str);
 
-    std::string_view status_api_path = "/api/status";
+    std::string_view groups_api_path = "/api/groups";
     std::string_view metrics_api_path = "/api/metrics";
+    std::string_view status_api_path = "/api/status";
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
@@ -935,8 +936,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
                          , req, res, ss, cache_client, metrics, cancel
                          , yield[e]);
     } else if (path.starts_with(groups_api_path)) {
-        sys::error_code e;
-        handle_groups( req, res, ss, cache_client);
+        path.remove_prefix(groups_api_path.size());
+        handle_api_groups(path, req, res, ss, cache_client);
     } else if (path.starts_with(metrics_api_path)) {
         path.remove_prefix(metrics_api_path.size());
         sys::error_code e;
