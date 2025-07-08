@@ -773,11 +773,12 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
     sys::error_code ec;
     json response{};
 
+    auto query = get_query(req.target());
+
     string group_name;
-    auto eqpos = sub_path.rfind('=');
-    if (eqpos != string::npos)
+    if (const auto name = query.find("name"); name != query.end())
     {
-        group_name = sub_path.substr(eqpos + 1);
+        group_name = name->second;
         response["name"] = group_name;
     }
 
@@ -794,15 +795,6 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
         for (const auto& g : cache_client->get_groups())
             response["groups"].push_back(g);
     }
-    else if (sub_path.starts_with("/pin/"))
-    {
-        response["pinned"] = cache_client->pin_group(group_name, ec);
-    }
-    else if (sub_path.starts_with("/unpin/"))
-    {
-        bool unpinned = cache_client->unpin_group(group_name, ec);
-        response["pinned"] = !unpinned;
-    }
     else if (sub_path.starts_with("/pinned"))
     {
         if (group_name.empty())
@@ -815,6 +807,15 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
         {
             response["pinned"] = cache_client->is_pinned_group(group_name, ec);
         }
+    }
+    else if (sub_path.starts_with("/pin"))
+    {
+        response["pinned"] = cache_client->pin_group(group_name, ec);
+    }
+    else if (sub_path.starts_with("/unpin"))
+    {
+        bool unpinned = cache_client->unpin_group(group_name, ec);
+        response["pinned"] = !unpinned;
     }
     else
     {
