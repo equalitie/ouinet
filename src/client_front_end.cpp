@@ -400,69 +400,6 @@ void ClientFrontEnd::handle_pinned_list( const Request&
         ss << g << std::endl;
 }
 
-void ClientFrontEnd::handle_api_groups(std::string_view sub_path
-                                      , const Request& req
-                                      , Response& res
-                                      , ostringstream& ss
-                                      , cache::Client* cache_client)
-{
-    res.set(http::field::content_type, "application/json");
-
-    sys::error_code ec;
-    json response{};
-
-    string group_name;
-    auto eqpos = sub_path.rfind('=');
-    if (eqpos != string::npos)
-    {
-        group_name = sub_path.substr(eqpos + 1);
-        response["name"] = group_name;
-    }
-
-    if (!cache_client)
-    {
-        response = {{"status", "error"}, {"Cache client error"}};
-        ss << response;
-        return;
-    }
-
-    if (sub_path == "/" || sub_path.empty())
-    {
-        response["groups"] = json::array();
-        for (const auto& g : cache_client->get_groups())
-            response["groups"].push_back(g);
-    }
-    else if (sub_path.starts_with("/pin/"))
-    {
-        response["pinned"] = cache_client->pin_group(group_name, ec);
-    }
-    else if (sub_path.starts_with("/unpin/"))
-    {
-        bool unpinned = cache_client->unpin_group(group_name, ec);
-        response["pinned"] = !unpinned;
-    }
-    else if (sub_path.starts_with("/pinned"))
-    {
-        if (group_name.empty())
-        {
-            response["pinned_groups"] = json::array();
-            for (const auto& g : cache_client->get_pinned_groups())
-                response["pinned_groups"].push_back(g);
-        }
-        else
-        {
-            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
-        }
-    }
-    else
-    {
-        response = {{"status", "error"}, {"Undefined action"}};
-    }
-
-    if (ec) response = {{"status", "error"}, {"message", ec.message()}};
-    ss << response;
-}
-
 std::map<std::string, std::string, std::less<>> get_query(std::string_view target) {
 
     auto separator = target.find('?');
@@ -822,6 +759,69 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         }
     }
 
+    ss << response;
+}
+
+void ClientFrontEnd::handle_api_groups(std::string_view sub_path
+                                      , const Request& req
+                                      , Response& res
+                                      , ostringstream& ss
+                                      , cache::Client* cache_client)
+{
+    res.set(http::field::content_type, "application/json");
+
+    sys::error_code ec;
+    json response{};
+
+    string group_name;
+    auto eqpos = sub_path.rfind('=');
+    if (eqpos != string::npos)
+    {
+        group_name = sub_path.substr(eqpos + 1);
+        response["name"] = group_name;
+    }
+
+    if (!cache_client)
+    {
+        response = {{"status", "error"}, {"Cache client error"}};
+        ss << response;
+        return;
+    }
+
+    if (sub_path == "/" || sub_path.empty())
+    {
+        response["groups"] = json::array();
+        for (const auto& g : cache_client->get_groups())
+            response["groups"].push_back(g);
+    }
+    else if (sub_path.starts_with("/pin/"))
+    {
+        response["pinned"] = cache_client->pin_group(group_name, ec);
+    }
+    else if (sub_path.starts_with("/unpin/"))
+    {
+        bool unpinned = cache_client->unpin_group(group_name, ec);
+        response["pinned"] = !unpinned;
+    }
+    else if (sub_path.starts_with("/pinned"))
+    {
+        if (group_name.empty())
+        {
+            response["pinned_groups"] = json::array();
+            for (const auto& g : cache_client->get_pinned_groups())
+                response["pinned_groups"].push_back(g);
+        }
+        else
+        {
+            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
+        }
+    }
+    else
+    {
+        response = {{"status", "error"}, {"Undefined action"}};
+    }
+
+    if (ec) response = {{"status", "error"}, {"message", ec.message()}};
     ss << response;
 }
 
