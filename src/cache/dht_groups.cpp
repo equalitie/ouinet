@@ -303,7 +303,8 @@ DhtGroupsImpl::is_pinned(const GroupName& group_name, sys::error_code& ec)
     fs::path group_p = group_path(group_name);
     if (!exists(group_p, ec))
     {
-        _ERROR("The group path doesn't exist: ", group_p);
+        _ERROR("is_pinned failed; ", group_name,
+               " path doesn't exist ", group_p);
         return false;
     }
     return fs::exists(group_path(group_name) / group_pin);
