@@ -135,15 +135,15 @@ private:
                           , cache::Client*);
 
     void handle_pinned_list( const Request&
+                           , Response&
+                           , std::ostringstream&
+                           , cache::Client*);
+
+    void handle_api_groups( std::string_view
+                          , const Request&
                           , Response&
                           , std::ostringstream&
                           , cache::Client*);
-
-    void handle_api_groups(std::string_view, const Request&
-                       , Response&
-                       , std::ostringstream&
-                       , cache::Client*
-    );
 
     void handle_portal( ClientConfig&
                       , Client::RunningState
