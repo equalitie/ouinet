@@ -38,7 +38,26 @@ The metrics records are formated with JSON (comments not included).
         "max": <number>,
     },
     "requests": {
-        TODO...
+        "origin": {
+            // Count of successful HTTP resource retrieval
+            "success_count": <number>,
+            // Count HTTP resource retrieval failures
+            "failure_count": <number>,
+            // Cumulative size of HTTP resource body transferred in bytes
+            "transferred": <number>
+        },
+        "injector_private": {
+            // ... As above
+        },
+        "injector_public": {
+            // ... As above
+        },
+        "cache_in": {
+            // ... As above
+        },
+        "cache_out": {
+            // ... As above
+        }
     },
     // Key/value pairs
     "aux": {
