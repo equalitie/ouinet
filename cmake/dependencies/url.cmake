@@ -1,30 +1,24 @@
 include(ExternalProject)
 
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-        set(skyr_LIBRARY_SUFFIX "d${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    else()
-        set(skyr_LIBRARY_SUFFIX "${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    endif()
-    set(URL_FILENAME
-        "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${skyr_LIBRARY_SUFFIX}"
-    )
-elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+set(skyr_LIBRARY_PREFIX "${CMAKE_STATIC_LIBRARY_PREFIX}")
+set(skyr_LIBRARY_SUFFIX "${CMAKE_STATIC_LIBRARY_SUFFIX}")
+if (${CMAKE_GENERATOR} STREQUAL "Xcode")
     if (${PLATFORM} STREQUAL "OS64")
-        set(URL_FILENAME
-            "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_BUILD_TYPE}-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
-        )
+        set(skyr_LIBRARY_PREFIX ${CMAKE_BUILD_TYPE}-iphoneos/${CMAKE_STATIC_LIBRARY_PREFIX})
+    elseif (${PLATFORM} STREQUAL "SIMULATORARM64")
+        set(skyr_LIBRARY_PREFIX ${CMAKE_BUILD_TYPE}-iphonesimulator/${CMAKE_STATIC_LIBRARY_PREFIX})
     else()
-        set(URL_FILENAME
-            "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_BUILD_TYPE}-iphonesimulator/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
-        )
+        set(skyr_LIBRARY_PREFIX ${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX})
     endif()
 
-else()
-    set(URL_FILENAME
-        "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${CMAKE_STATIC_LIBRARY_PREFIX}skyr-url${CMAKE_STATIC_LIBRARY_SUFFIX}"
-    )
+    if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+        set(skyr_LIBRARY_SUFFIX "d${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    endif()
 endif()
+
+set(URL_FILENAME
+    "${CMAKE_CURRENT_BINARY_DIR}/url/src/url-build/src/${skyr_LIBRARY_PREFIX}skyr-url${skyr_LIBRARY_SUFFIX}"
+)
 
 externalproject_add(expected
         URL https://github.com/TartanLlama/expected/archive/v1.1.0.tar.gz
@@ -81,6 +75,7 @@ externalproject_add(url
         -Dnlohmann_json_DIR=${CMAKE_CURRENT_BINARY_DIR}/json/src/json-build
         -Drange-v3_DIR=${CMAKE_CURRENT_BINARY_DIR}/range_v3/install/lib/cmake/range-v3
         -Dtl-expected_DIR=${CMAKE_CURRENT_BINARY_DIR}/expected/install/share/cmake/tl-expected
+        -DPLATFORM=${PLATFORM}
     BUILD_BYPRODUCTS ${URL_FILENAME}
     PREFIX "url"
 )
