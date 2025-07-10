@@ -19,8 +19,23 @@ The metrics records are formated with JSON (comments not included).
     "bridge_c2i": <number>,
     // When acting as a bridge, how many bytes have been transferred from the injector to other clients
     "bridge_i2c": <number>,
+    // Information about DHT bootstrapping.
     "bootstraps": {
-        TODO...
+        "histogram": {
+            // Duration length of the first bucket in milliseconds
+            "scale": <number>,
+            // The key `i ∈ {0, ..., 9}` represents a duration interval `[(2^i - 1) * scale, (2^(i+1) - 1)  * scale)`
+            // The value represents number of successful bootstraps withint the duration interval
+            "buckets": Map<number, number>,
+            // Count of bootstrap durations which did not fit into `buckets`
+            "more": <number>
+        },
+        // Number of bootstrap attempts that have not finished yet
+        "unfinished": <number>,
+        // Minimum duration it took to bootstrap in milliseconds
+        "min": <number>,
+        // Maximum duration it took to bootstrap in milliseconds
+        "max": <number>,
     },
     "requests": {
         TODO...
