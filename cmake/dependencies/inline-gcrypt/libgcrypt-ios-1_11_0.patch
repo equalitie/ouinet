@@ -1,0 +1,145 @@
+diff --color -Nur libgcrypt-1.11.0.orig/Makefile.in libgcrypt-1.11.0/Makefile.in
+--- libgcrypt-1.11.0.orig/Makefile.in	2024-06-19 05:29:30
++++ libgcrypt-1.11.0/Makefile.in	2025-06-09 17:37:13
+@@ -308,6 +308,7 @@
+ LIPO = @LIPO@
+ LN_S = @LN_S@
+ LTLIBOBJS = @LTLIBOBJS@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+diff --color -Nur libgcrypt-1.11.0.orig/cipher/Makefile.am libgcrypt-1.11.0/cipher/Makefile.am
+--- libgcrypt-1.11.0.orig/cipher/Makefile.am	2024-06-19 05:23:16
++++ libgcrypt-1.11.0/cipher/Makefile.am	2025-06-09 17:38:31
+@@ -164,8 +164,7 @@
+ 	./gost-s-box$(EXEEXT_FOR_BUILD) $@
+ 
+ gost-s-box$(EXEEXT_FOR_BUILD): gost-s-box.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	    $(CPPFLAGS_FOR_BUILD) -o $@ $(srcdir)/gost-s-box.c
++	cp $(MACOS_BUILD_ROOT)/gcrypt/src/gcrypt/cipher/gost-s-box $@
+ 
+ 
+ if ENABLE_O_FLAG_MUNGING
+diff --color -Nur libgcrypt-1.11.0.orig/cipher/Makefile.in libgcrypt-1.11.0/cipher/Makefile.in
+--- libgcrypt-1.11.0.orig/cipher/Makefile.in	2024-06-19 05:29:30
++++ libgcrypt-1.11.0/cipher/Makefile.in	2025-06-09 17:39:06
+@@ -419,6 +419,7 @@
+ LIPO = @LIPO@
+ LN_S = @LN_S@
+ LTLIBOBJS = @LTLIBOBJS@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+@@ -1543,8 +1544,7 @@
+ 	./gost-s-box$(EXEEXT_FOR_BUILD) $@
+ 
+ gost-s-box$(EXEEXT_FOR_BUILD): gost-s-box.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	    $(CPPFLAGS_FOR_BUILD) -o $@ $(srcdir)/gost-s-box.c
++	cp $(MACOS_BUILD_ROOT)/gcrypt/src/gcrypt/cipher/gost-s-box $@
+ 
+ # We need to lower the optimization for this module.
+ tiger.o: $(srcdir)/tiger.c Makefile
+diff --color -Nur libgcrypt-1.11.0.orig/configure libgcrypt-1.11.0/configure
+--- libgcrypt-1.11.0.orig/configure	2024-06-19 05:29:31
++++ libgcrypt-1.11.0/configure	2025-06-09 17:37:13
+@@ -791,6 +791,7 @@
+ AS
+ EXEEXT_FOR_BUILD
+ CC_FOR_BUILD
++MACOS_BUILD_ROOT
+ VERSION_NUMBER
+ LDADD_FOR_TESTS_KLUDGE
+ FGREP
+@@ -5297,6 +5298,7 @@
+ 
+ 
+ 
++MACOS_BUILD_ROOT="$MACOS_BUILD_ROOT"
+ 
+ ######################
+ ##  Basic checks.  ### (we need some results later on (e.g. $GCC)
+diff --color -Nur libgcrypt-1.11.0.orig/configure.ac libgcrypt-1.11.0/configure.ac
+--- libgcrypt-1.11.0.orig/configure.ac	2024-06-19 05:12:13
++++ libgcrypt-1.11.0/configure.ac	2025-06-09 17:37:13
+@@ -193,6 +193,7 @@
+ 
+ # We need to compile and run a program on the build machine.
+ AX_CC_FOR_BUILD
++AX_MACOS_BUILD_ROOT
+ 
+ 
+ LT_PREREQ([2.2.6])
+diff --color -Nur libgcrypt-1.11.0.orig/doc/Makefile.am libgcrypt-1.11.0/doc/Makefile.am
+--- libgcrypt-1.11.0.orig/doc/Makefile.am	2024-03-28 06:07:27
++++ libgcrypt-1.11.0/doc/Makefile.am	2025-06-09 17:39:37
+@@ -40,8 +40,7 @@
+ man_MANS = $(myman_pages)
+ 
+ yat2m$(EXEEXT_FOR_BUILD): yat2m.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	    $(CPPFLAGS_FOR_BUILD) -o $@ $(srcdir)/yat2m.c
++	cp $(MACOS_BUILD_ROOT)/gcrypt/src/gcrypt/doc/yat2m $@
+ 
+ .fig.png:
+ 	fig2dev -L png `test -f '$<' || echo '$(srcdir)/'`$< $@
+diff --color -Nur libgcrypt-1.11.0.orig/doc/Makefile.in libgcrypt-1.11.0/doc/Makefile.in
+--- libgcrypt-1.11.0.orig/doc/Makefile.in	2024-06-19 05:29:30
++++ libgcrypt-1.11.0/doc/Makefile.in	2025-06-09 17:40:10
+@@ -295,6 +295,7 @@
+ LIPO = @LIPO@
+ LN_S = @LN_S@
+ LTLIBOBJS = @LTLIBOBJS@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+@@ -914,8 +915,7 @@
+ 
+ 
+ yat2m$(EXEEXT_FOR_BUILD): yat2m.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	    $(CPPFLAGS_FOR_BUILD) -o $@ $(srcdir)/yat2m.c
++	cp $(MACOS_BUILD_ROOT)/gcrypt/src/gcrypt/doc/yat2m $@
+ 
+ .fig.png:
+ 	fig2dev -L png `test -f '$<' || echo '$(srcdir)/'`$< $@
+diff --color -Nur libgcrypt-1.11.0.orig/tests/Makefile.am libgcrypt-1.11.0/tests/Makefile.am
+--- libgcrypt-1.11.0.orig/tests/Makefile.am	2024-03-28 06:07:27
++++ libgcrypt-1.11.0/tests/Makefile.am	2025-06-09 17:37:13
+@@ -98,9 +98,7 @@
+ 
+ # Build a version of the test driver for the build platform.
+ testdrv-build: testdrv.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	  $(CPPFLAGS_FOR_BUILD) -DTESTDRV_EXEEXT=\"$(EXEEXT)\" \
+-          -o $@ $(srcdir)/testdrv.c
++	cp $(MACOS_BUILD_ROOT)/gcrypt/src/gcrypt/tests/testdrv-build $@
+ 
+ if HAVE_W32_SYSTEM
+ xtestsuite_libs = ../src/.libs/libgcrypt-20.dll \
+diff --color -Nur libgcrypt-1.11.0.orig/tests/Makefile.in libgcrypt-1.11.0/tests/Makefile.in
+--- libgcrypt-1.11.0.orig/tests/Makefile.in	2024-06-19 05:29:30
++++ libgcrypt-1.11.0/tests/Makefile.in	2025-06-09 17:37:13
+@@ -521,6 +521,7 @@
+ LIPO = @LIPO@
+ LN_S = @LN_S@
+ LTLIBOBJS = @LTLIBOBJS@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+@@ -1380,9 +1381,7 @@
+ 
+ # Build a version of the test driver for the build platform.
+ testdrv-build: testdrv.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	  $(CPPFLAGS_FOR_BUILD) -DTESTDRV_EXEEXT=\"$(EXEEXT)\" \
+-          -o $@ $(srcdir)/testdrv.c
++	cp $(MACOS_BUILD_ROOT)/gcrypt/src/gcrypt/tests/testdrv-build $@
+ 
+ # xcheck uses our new testdrv instead of the automake test runner.
+ .PHONY: xcheck xtestsuite

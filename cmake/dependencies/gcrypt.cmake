@@ -103,11 +103,11 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     )
     # These patches force build-time executables to be copied from $MACOS_BUILD_ROOT
     set(GPG_ERROR_PATCHES ${GPG_ERROR_PATCHES}
-        ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-ios-1_32.patch
+        ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-ios-1_51.patch
     )
     set(GCRYPT_PATCH_COMMAND "true")
     set(GCRYPT_PATCHES ${GCRYPT_PATCHES}
-        ${CMAKE_CURRENT_LIST_DIR}/inline-gcrypt/libgcrypt-ios-1_9_3.patch
+        ${CMAKE_CURRENT_LIST_DIR}/inline-gcrypt/libgcrypt-ios-1_11_0.patch
     )
     set(CONFIG_ENVIRONMENT
         export MACOS_BUILD_ROOT=${MACOS_BUILD_ROOT}
