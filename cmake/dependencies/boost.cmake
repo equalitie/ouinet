@@ -136,7 +136,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     if(BOOST_VERSION EQUAL 1.79.0)
       set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
     endif()
-    set(CONFIG_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
+    set(OUINET_BOOST_CONFIGURE_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
     # Unary function is deprecated in clang 16, this definition avoids using it
     set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
     set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
