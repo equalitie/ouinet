@@ -74,6 +74,31 @@ linux / unit-cpp-asan-test:
     ['linux / build-asan']
   allow_failure: true
 
+linux / build-release:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
+    BUILD_TYPE: "Release"
+    BOOST_VERSION: "1.87.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+  extends:
+    .linux-build
+  needs:
+    - job: 'linux / build'
+      optional: true
+  when: manual
+  allow_failure: true
+
+linux / unit-cpp-release-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
+  extends:
+    .linux-unit-cpp-test
+  needs:
+    ['linux / build-release']
+  allow_failure: true
+
 linux / build-prod-image:
   stage: release
   tags:
