@@ -27,14 +27,18 @@ RUN /usr/local/src/ouinet/scripts/install-cmake.sh "$CMAKE_VERSION"
 ENV PATH="/opt/cmake/cmake-$CMAKE_VERSION/bin:$PATH"
 ARG OUINET_DEBUG=no
 RUN \
-if [ $OUINET_DEBUG == yes ]; then \
-    export CMAKE_RELEASE_TYPE="Debug"; \
+if [ $OUINET_DEBUG = yes ]; then \
+    cmake /usr/local/src/ouinet -DCMAKE_BUILD_TYPE=Debug && make -j $(nproc); \
 else \
-    export CMAKE_RELEASE_TYPE="Release"; \
+    cmake /usr/local/src/ouinet && make -j $(nproc); \
 fi
-RUN cmake /usr/local/src/ouinet -DCMAKE_RELEASE_TYPE=$CMAKE_RELEASE_TYPE \
- && make -j $(nproc)
 RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
+RUN \
+if [ $OUINET_DEBUG != yes ]; then \
+    strip injector client test/bt-* test/oui-* \
+        && find . -name '*.so' -exec strip '{}' + \
+        && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
+fi
 # Setting this to a different version than `OUINET_VERSION` allows to
 # use that version's Docker-specific files (e.g. wrapper scripts)
 # without having to rebuild source.
