@@ -243,7 +243,6 @@ function build_ouinet_aar {
         --project-dir="${ROOT}"/android \
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
-        --info \
         --console plain \
         --no-daemon
     )
