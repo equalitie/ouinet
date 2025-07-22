@@ -53,7 +53,7 @@ linux / build-asan:
   variables:
     TARGET_PLATFORM: 'linux'
     BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
-    BOOST_VERSION: "1.87.0"
+    BOOST_VERSION: "1.88.0"
     CMAKE_VERSION: "3.31.7-linux-x86_64"
     WITH_ASAN: "ON"
   extends:
@@ -79,7 +79,7 @@ linux / build-release:
     TARGET_PLATFORM: 'linux'
     BUILD_PATH: 'build/$TARGET_PLATFORM-release'
     BUILD_TYPE: "Release"
-    BOOST_VERSION: "1.87.0"
+    BOOST_VERSION: "1.88.0"
     CMAKE_VERSION: "3.31.7-linux-x86_64"
     WITH_ASAN: "OFF"
   extends:
