@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Groups and metrics API structure is now unified.
+- Linux and Android releases are built with level 3 of compiler optimizations.
+
+
 ## [v1.3.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.3.0) - 2025-07-07
 
 ### Added
