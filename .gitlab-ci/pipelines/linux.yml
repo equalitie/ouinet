@@ -17,6 +17,7 @@ linux / build:
     TARGET_PLATFORM: 'linux'
     BOOST_VERSION: "1.88.0"
     CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "OFF"
   extends:
     .linux-build
   needs:
