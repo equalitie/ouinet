@@ -175,16 +175,16 @@ impl EventHandler {
                     store_record(store, metrics).await?;
                 }
 
-                metrics.lock().unwrap().clear();
-                store.record_number.reset().await?;
-                store.device_id.rotate().await?;
+                store.record_id.rotate().await?;
+                metrics.lock().unwrap().on_device_id_changed();
             }
             Event::IncrementRecordNumber { metrics_enabled } => {
                 if metrics_enabled {
                     store_record(store, metrics).await?;
                 }
 
-                store.record_number.increment().await?;
+                store.record_id.increment().await?;
+                metrics.lock().unwrap().on_record_sequence_number_changed();
             }
             Event::Purge => {
                 store.delete_stored_records().await?;
@@ -222,7 +222,7 @@ impl EventListener {
 
     async fn on_event(&mut self, store: &Store) -> Event {
         loop {
-            let processing_backoff = async {
+            let on_backoff = async {
                 store.backoff.sleep().await;
                 match self.record_processor.as_ref() {
                     Some(record_processor) => record_processor.clone(),
@@ -232,8 +232,22 @@ impl EventListener {
 
             let metrics_enabled = self.record_processor.is_some();
 
+            let on_id_rotation = async {
+                let id_delay = store.record_id.device_id().rotate_after();
+                let sq_delay = store.record_id.sequence_number().increment_after();
+
+                // Prefer ID rotation over sequence number increment when equal
+                if id_delay >= sq_delay {
+                    time::sleep(id_delay).await;
+                    Event::RotateDeviceId { metrics_enabled }
+                } else {
+                    time::sleep(sq_delay).await;
+                    Event::IncrementRecordNumber { metrics_enabled }
+                }
+            };
+
             select! {
-                record_processor = processing_backoff =>
+                record_processor = on_backoff =>
                     break Event::ProcessOneRecord(record_processor),
                 result = self.on_metrics_modified_rx.changed() => {
                     match result {
@@ -254,15 +268,17 @@ impl EventListener {
                         None => break Event::Exit { metrics_enabled },
                     }
                 }
-                () = time::sleep_until(store.record_number.increment_at()) => break Event::IncrementRecordNumber { metrics_enabled },
-                () = time::sleep(store.device_id.rotate_after()) => break Event::RotateDeviceId { metrics_enabled },
+                event = on_id_rotation => break event,
             }
         }
     }
 }
 
 async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<()> {
-    let record = metrics.lock().unwrap().collect();
+    let id_interval = store.record_id.device_id().interval();
+    let sq_interval = store.record_id.sequence_number().interval();
+
+    let record = metrics.lock().unwrap().collect(id_interval, sq_interval);
 
     // Backoff may have stopped due to there being no records *or* because the one record that was
     // there was "current". So resume it.

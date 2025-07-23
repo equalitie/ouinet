@@ -16,7 +16,7 @@ FROM base AS builder
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v1.2.1
+ARG OUINET_VERSION=v1.3.0
 ARG CMAKE_VERSION=3.31.7-linux-x86_64
 RUN git clone --recursive -b "$OUINET_VERSION" https://gitlab.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
@@ -25,10 +25,14 @@ WORKDIR /opt/ouinet
 # with UTF-8-encoded Unicode names.
 RUN /usr/local/src/ouinet/scripts/install-cmake.sh "$CMAKE_VERSION"
 ENV PATH="/opt/cmake/cmake-$CMAKE_VERSION/bin:$PATH"
-RUN cmake /usr/local/src/ouinet \
- && make -j $(nproc)
-RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 ARG OUINET_DEBUG=no
+RUN \
+if [ $OUINET_DEBUG = yes ]; then \
+    cmake /usr/local/src/ouinet -DCMAKE_BUILD_TYPE=Debug && make -j $(nproc); \
+else \
+    cmake /usr/local/src/ouinet && make -j $(nproc); \
+fi
+RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
     strip injector client test/bt-* test/oui-* \

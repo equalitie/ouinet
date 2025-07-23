@@ -387,6 +387,70 @@ void ClientFrontEnd::handle_group_list( const Request&
         ss << g << std::endl;
 }
 
+void ClientFrontEnd::handle_pinned_list( const Request&
+                                       , Response& res
+                                       , std::ostringstream& ss
+                                       , cache::Client* cache_client)
+{
+    res.set(http::field::content_type, "text/plain");
+
+    if (!cache_client) return;
+
+    for (const auto& g : cache_client->get_pinned_groups())
+        ss << g << std::endl;
+}
+
+std::map<std::string, std::string, std::less<>> get_query(std::string_view target) {
+
+    auto separator = target.find('?');
+
+    std::map<std::string, std::string, std::less<>> query;
+    auto npos = std::string_view::npos;
+
+    if (separator == npos) {
+        return query;
+    }
+
+    target = target.substr(separator + 1);
+
+    while (!target.empty()) {
+        separator = target.find('&');
+
+        std::string_view entry = target.substr(0, separator);
+
+        if (separator != npos) {
+            target = target.substr(separator + 1);
+        } else {
+            target = target.substr(target.size());
+        }
+
+        separator = entry.find('=');
+
+        if (separator == npos) {
+            continue;
+        }
+
+        std::string_view key = entry.substr(0, separator);
+        std::string_view val = entry.substr(separator + 1);
+
+        if (key.empty()) continue;
+
+        query[std::string(key)] = std::string(val);
+    }
+
+    return query;
+}
+
+std::optional<bool> parse_enable(std::string& str) {
+    if (str == "enable") {
+        return true;
+    } else if (str == "disable") {
+        return false;
+    } else {
+        return {};
+    }
+}
+
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
@@ -409,62 +473,49 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             _log_level_no_file = _log_level_input->current_value;
     }
 
-    if (target.find('?') != string::npos) {
-        // XXX: Extra primitive value parsing.
-        if (target.find("?origin_access=enable") != string::npos) {
-            config.is_origin_access_enabled(true);
-        }
-        else if (target.find("?origin_access=disable") != string::npos) {
-            config.is_origin_access_enabled(false);
-        }
-        else if (target.find("?proxy_access=enable") != string::npos) {
-            config.is_proxy_access_enabled(true);
-        }
-        else if (target.find("?proxy_access=disable") != string::npos) {
-            config.is_proxy_access_enabled(false);
-        }
-        else if (target.find("?injector_access=enable") != string::npos) {
-            config.is_injector_access_enabled(true);
-        }
-        else if (target.find("?injector_access=disable") != string::npos) {
-            config.is_injector_access_enabled(false);
-        }
-        else if (target.find("?auto_refresh=enable") != string::npos) {
-            _auto_refresh_enabled = true;
-        }
-        else if (target.find("?auto_refresh=disable") != string::npos) {
-            _auto_refresh_enabled = false;
-        }
-        else if (target.find("?distributed_cache=enable") != string::npos) {
-            config.is_cache_access_enabled(true);
-        }
-        else if (target.find("?distributed_cache=disable") != string::npos) {
-            config.is_cache_access_enabled(false);
-        }
-        else if (target.find("?logfile=enable") != string::npos) {
-            enable_log_to_file(config);
-        }
-        else if (target.find("?logfile=disable") != string::npos) {
-            disable_log_to_file(config);
-        }
-        else if (target.find("?metrics=enable") != string::npos) {
-            metrics.enable();
-        }
-        else if (target.find("?metrics=disable") != string::npos) {
-            metrics.disable();
-        }
-        else if (target.find("?purge_cache=") != string::npos && cache_client) {
-            sys::error_code ec;
-            auto yield_ = static_cast<asio::yield_context>(yield);
-            cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
-            if (!ec && cancel) ec = asio::error::operation_aborted;
-            if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
-        }
-        else if (target.find("?bt_extra_bootstraps=") != string::npos) {
-            auto eqpos = target.rfind('=');
-            set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
-        }
+    auto query = get_query(target);
 
+    bool query_handled = false;
+
+    std::map<std::string_view, std::function<void (bool)>> bool_handlers = {
+        { "origin_access",     [&](bool enable) { config.is_origin_access_enabled(enable);                           } },
+        { "proxy_access",      [&](bool enable) { config.is_proxy_access_enabled(enable);                            } },
+        { "injector_access",   [&](bool enable) { config.is_injector_access_enabled(enable);                         } },
+        { "distributed_cache", [&](bool enable) { config.is_cache_access_enabled(enable);                            } },
+        { "auto_refresh",      [&](bool enable) { _auto_refresh_enabled = enable;                                    } },
+        { "logfile",           [&](bool enable) { enable ? enable_log_to_file(config) : disable_log_to_file(config); } },
+        { "metrics",           [&](bool enable) { enable ? metrics.enable() : metrics.disable();                     } },
+    };
+
+    for (auto [name, handler] : bool_handlers) {
+        if (auto it = query.find(name); it != query.end()) {
+            auto enable = parse_enable(it->second);
+            if (!enable.has_value()) {
+                res.result(http::status::bad_request);
+                ss << it->first << " accepts {enable,disable}, given \"" << it->second << "\"";
+                return;
+            }
+            handler(*enable);
+            query_handled = true;
+        }
+    }
+
+    if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
+        sys::error_code ec;
+        auto yield_ = static_cast<asio::yield_context>(yield);
+        cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
+        if (!ec && cancel) ec = asio::error::operation_aborted;
+        if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
+        query_handled = true;
+    }
+
+    if (auto it = query.find("bt_extra_bootstrap"); it != query.end() && cache_client) {
+        auto eqpos = target.rfind('=');
+        set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
+        query_handled = true;
+    }
+
+    if (query_handled) {
         // Redirect back to the portal.
         ss << "<!DOCTYPE html>\n"
                "<html>\n"
@@ -615,9 +666,15 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                          "name=\"purge_cache\" id=\"input-purge_cache\" "
                          "value=\"Purge cache now\"/>\n"
               "</form>\n";
-        ss << "<a href=\"" << group_list_apath << "\">See announced groups</a><br>\n";
-
         ss << "<br>\n";
+
+        ss << "See DHT groups: \n";
+        ss << "<ul>\n";
+        ss << "<li><a href=\"" << group_list_apath << "\">Announced</a><br></li>\n";
+        ss << "<li><a href=\"" << pinned_list_apath << "\">Pinned</a><br></li>\n";
+        ss << "</ul>\n";
+        ss << "<br>\n";
+
         if (config.cache_static_path().empty()) {
             ss << "Static cache is not enabled.<br>\n";
         } else {
@@ -642,17 +699,17 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
-void ClientFrontEnd::handle_status( ClientConfig& config
-                                  , Client::RunningState cstate
-                                  , boost::optional<UdpEndpoint> local_ep
-                                  , const UPnPs& upnps
-                                  , const bittorrent::MainlineDht* dht
-                                  , const util::UdpServerReachabilityAnalysis* reachability
-                                  , const Request& req, Response& res, ostringstream& ss
-                                  , cache::Client* cache_client
-                                  , ClientFrontEndMetricsController& metrics
-                                  , Cancel cancel
-                                  , Yield yield)
+void ClientFrontEnd::handle_api_status( ClientConfig& config
+                                      , Client::RunningState cstate
+                                      , boost::optional<UdpEndpoint> local_ep
+                                      , const UPnPs& upnps
+                                      , const bittorrent::MainlineDht* dht
+                                      , const util::UdpServerReachabilityAnalysis* reachability
+                                      , const Request& req, Response& res, ostringstream& ss
+                                      , cache::Client* cache_client
+                                      , ClientFrontEndMetricsController& metrics
+                                      , Cancel cancel
+                                      , Yield yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -685,6 +742,10 @@ void ClientFrontEnd::handle_status( ClientConfig& config
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
+    if (auto record_id = metrics.current_record_id(); record_id.has_value()) {
+        response["current_metrics_record_id"] = *record_id;
+    }
+
     if (cache_client) {
         sys::error_code ec;
         auto yield_ = static_cast<asio::yield_context>(yield);
@@ -699,6 +760,134 @@ void ClientFrontEnd::handle_status( ClientConfig& config
     }
 
     ss << response;
+}
+
+void ClientFrontEnd::handle_api_groups(std::string_view sub_path
+                                      , const Request& req
+                                      , Response& res
+                                      , ostringstream& ss
+                                      , cache::Client* cache_client)
+{
+    res.set(http::field::content_type, "application/json");
+
+    sys::error_code ec;
+    json response{};
+    auto error_response = [&res, &response, &ss]( const std::string& error_message
+                                                , const http::status& status)
+    {
+        res.result(status);
+        response = {{"status", "error"}, {"message", error_message}};
+        ss << response;
+    };
+
+    auto query = get_query(req.target());
+
+    string group_name;
+    if (const auto name = query.find("name"); name != query.end())
+    {
+        group_name = name->second;
+        response["name"] = group_name;
+    }
+
+    if (!cache_client)
+    {
+        error_response( "Cache client error"
+                      , http::status::internal_server_error);
+        return;
+    }
+
+    if (sub_path == "/" || sub_path.empty())
+    {
+        response["groups"] = json::array();
+        for (const auto& g : cache_client->get_groups())
+            response["groups"].push_back(g);
+    }
+    else if (sub_path.starts_with("/pinned"))
+    {
+        if (group_name.empty())
+        {
+            response["pinned_groups"] = json::array();
+            for (const auto& g : cache_client->get_pinned_groups())
+                response["pinned_groups"].push_back(g);
+        }
+        else
+        {
+            response["pinned"] = cache_client->is_pinned_group(group_name, ec);
+        }
+    }
+    else if (sub_path.starts_with("/pin"))
+    {
+        response["pinned"] = cache_client->pin_group(group_name, ec);
+    }
+    else if (sub_path.starts_with("/unpin"))
+    {
+        bool unpinned = cache_client->unpin_group(group_name, ec);
+        response["pinned"] = !unpinned;
+    }
+    else
+    {
+        error_response( "Undefined action"
+                      , http::status::not_found);
+        return;
+    }
+
+    if (ec)
+    {
+        auto status = http::status::internal_server_error;
+        if (ec.value() == sys::errc::no_such_file_or_directory)
+            status = http::status::not_found;
+        error_response(ec.message(), status);
+        return;
+    }
+
+    ss << response;
+}
+
+void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
+                                       , const Request& req, Response& res, ostringstream& ss
+                                       , ClientFrontEndMetricsController& metrics
+                                       , Cancel cancel
+                                       , Yield yield)
+{
+    res.set(http::field::content_type, "text/html");
+
+    if (sub_path.starts_with("/set_key_value")) {
+        auto query = get_query(req.target());
+
+        auto rec_it = query.find("record_id");
+        auto key_it = query.find("key");
+        auto val_it = query.find("value");
+
+        bool missing = false;
+
+        if (rec_it == query.end()) missing = true;
+        if (key_it == query.end()) missing = true;
+        if (val_it == query.end()) missing = true;
+
+        if (missing) {
+            res.result(http::status::bad_request);
+            ss << "set_key_value requires \"record_id\", \"key\" and \"value\" arguments\n";
+            return;
+        }
+
+        auto result = metrics.set_aux_key_value(rec_it->second, key_it->second, val_it->second);
+
+        switch (result) {
+            case metrics::SetAuxResult::Ok:
+                return; // all good
+            case metrics::SetAuxResult::BadRecordId:
+                res.result(http::status::conflict);
+                ss << "invalid or old record ID, get a new one from /api/status\n";
+                return;
+            case metrics::SetAuxResult::Noop:
+                res.result(http::status::bad_request);
+                ss << "metrics not enabled\n";
+                return;
+        }
+    }
+
+    ss << "invalid API command to metrics (" << sub_path << ")\n";
+    res.result(http::status::bad_request);
 }
 
 Response ClientFrontEnd::serve( ClientConfig& config
@@ -743,7 +932,12 @@ Response ClientFrontEnd::serve( ClientConfig& config
     util::url_match url;
     match_http_url(req.target(), url);
 
-    auto path = !url.path.empty() ? url.path : std::string(req.target());
+    auto path_str = !url.path.empty() ? url.path : std::string(req.target());
+    std::string_view path(path_str);
+
+    std::string_view groups_api_path = "/api/groups";
+    std::string_view metrics_api_path = "/api/metrics";
+    std::string_view status_api_path = "/api/status";
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
@@ -752,11 +946,20 @@ Response ClientFrontEnd::serve( ClientConfig& config
         load_log_file(config, ss);
     } else if (path == group_list_apath) {
         handle_group_list(req, res, ss, cache_client);
-    } else if (path == "/api/status") {
+    } else if (path == pinned_list_apath) {
+        handle_pinned_list(req, res, ss, cache_client);
+    } else if (path == status_api_path) {
         sys::error_code e;
-        handle_status( config, client_state, local_ep, upnps, dht, reachability
-                     , req, res, ss, cache_client, metrics, cancel
-                     , yield[e]);
+        handle_api_status( config, client_state, local_ep, upnps, dht, reachability
+                         , req, res, ss, cache_client, metrics, cancel
+                         , yield[e]);
+    } else if (path.starts_with(groups_api_path)) {
+        path.remove_prefix(groups_api_path.size());
+        handle_api_groups(path, req, res, ss, cache_client);
+    } else if (path.starts_with(metrics_api_path)) {
+        path.remove_prefix(metrics_api_path.size());
+        sys::error_code e;
+        handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps, dht, reachability
