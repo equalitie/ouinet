@@ -1,4 +1,0 @@
-module Ouinet {
-    header "Ouinet.h"
-    export *
-}
