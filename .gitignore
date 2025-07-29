@@ -16,3 +16,5 @@ android/local.properties
 
 #python byte codes
 *.pyc
+
+ouinet.build/
