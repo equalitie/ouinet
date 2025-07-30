@@ -17,3 +17,4 @@ android/local.properties
 *.pyc
 
 ouinet.build/
+.vscode/

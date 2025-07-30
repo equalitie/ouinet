@@ -73,9 +73,10 @@ if(NOT PLATFORM MATCHES ".*WATCHOS.*")
 endif()
 
 set(OUINET_IOS_SOURCE ${ouinet_DIR}/src)
+set(OUINET_IOS_INCLUDE ${ouinet_DIR}/include)
 
 # Includes
-include_directories(${OUINET_IOS_SOURCE})
+include_directories(${OUINET_IOS_SOURCE} ${OUINET_IOS_INCLUDE})
 
 # Make sure try_compile() works
 include(CheckTypeSize)
@@ -91,9 +92,9 @@ set(SOURCES
 # Headers
 set(HEADERS
   ${OUINET_IOS_SOURCE}/native-lib.hpp
-  ${OUINET_IOS_SOURCE}/Ouinet.h
-  ${OUINET_IOS_SOURCE}/ouinet/OuinetClient.h
-  ${OUINET_IOS_SOURCE}/ouinet/OuinetConfig.h
+  ${OUINET_IOS_INCLUDE}/Ouinet.h
+  ${OUINET_IOS_INCLUDE}/ouinet/OuinetClient.h
+  ${OUINET_IOS_INCLUDE}/ouinet/OuinetConfig.h
 )
 
 # Library
