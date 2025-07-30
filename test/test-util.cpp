@@ -69,6 +69,8 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
                 async_sleep(ctx, 1s, c2, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
         });
+
+        ctx.run();
     }
 
     {
