@@ -134,7 +134,7 @@ int NativeLib::getClientState()
 {
     // TODO: Avoid needing to keep this in sync by hand.
     if (!g_client)
-        return g_ctx.stopped() ? 6 /* stopped */ : 0 /* created */;
+        return g_ctx.stopped() ? 6 /* stopped */ : -1 /* missing */;
     switch (g_client->get_state()) {
     case ouinet::Client::RunningState::Created:  return 0;
     case ouinet::Client::RunningState::Failed:   return 1;
@@ -144,7 +144,7 @@ int NativeLib::getClientState()
     case ouinet::Client::RunningState::Stopping: return 5;
     case ouinet::Client::RunningState::Stopped:  return 6;
     }
-    return -1;
+    return -1 /* missing */;
 }
 
 void NativeLib::startClient(const std::vector<std::string>& args)//, const vector<string>& extra_path)
