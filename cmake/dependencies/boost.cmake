@@ -1,24 +1,29 @@
 if(NOT BOOST_VERSION)
-    set(BOOST_VERSION 1.87.0)
+    set(BOOST_VERSION 1.88.0)
 endif ()
 
 if (${BOOST_VERSION} EQUAL 1.79.0)
     set(BOOST_VERSION_HASH 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
     set(BOOST_COROUTINE_BACKEND coroutine)
-elseif (${BOOST_VERSION} EQUAL 1.87.0)
-    set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
+elseif (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
+    if (${BOOST_VERSION} EQUAL 1.87.0)
+      set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
+      if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+          # There is a bug in boost::outcome (used by cpp-upnp) which causes
+          # compilation issues. This works around it but also disables some nicer
+          # GDB error messages. I'm not sure it matters much on Android, plus
+          # AFAIK we always check the `outcome::result` type before we access
+          # it's value, so probably will also never happen.
+          # Github issue for the bug is here: https://github.com/ned14/outcome/pull/308
+          add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+          add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+      endif()
+      list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
+    elseif (${BOOST_VERSION} EQUAL 1.88.0)
+      set(BOOST_VERSION_HASH 46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b)
+    endif ()
+
     set(BOOST_COROUTINE_BACKEND fiber)
-    if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
-        # There is a bug in boost::outcome (used by cpp-upnp) which causes
-        # compilation issues. This works around it but also disables some nicer
-        # GDB error messages. I'm not sure it matters much on Android, plus
-        # AFAIK we always check the `outcome::result` type before we access
-        # it's value, so probably will also never happen.
-        # Github issue for the bug is here: https://github.com/ned14/outcome/pull/308
-        add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
-        add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
-    endif()
-    list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
     list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
 
