@@ -122,7 +122,7 @@ struct UserAgentMetaData {
     boost::optional<bool> is_private;
     boost::optional<std::string> dht_group;
 
-    static std::string get_dht_group(std::string url) {
+    static std::string get_dht_group(const std::string& url) {
         auto dhtgroup = std::move(url);
 
         boost::regex scheme("^[a-z][-+.0-9a-z]*://");
@@ -146,10 +146,10 @@ struct UserAgentMetaData {
             } else {
                 auto j = rq.find(http::field::referer);
                 if (j != rq.end()) {
-                    ret.dht_group = get_dht_group(j->value().to_string());
+                    ret.dht_group = get_dht_group(std::string(j->value()));
                     rq.erase(j);
                 } else {
-                    ret.dht_group = get_dht_group(rq.target().to_string());
+                    ret.dht_group = get_dht_group(std::string(rq.target()));
                 }
             }
         }
