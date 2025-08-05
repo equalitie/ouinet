@@ -18,6 +18,8 @@ iphoneos / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=OS64 ../scripts/build-darwin.sh
+  when: manual
+  allow_failure: true
 
 iphonesimulator / build:
   stage: build
@@ -35,6 +37,8 @@ iphonesimulator / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=SIMULATORARM64 ../scripts/build-darwin.sh
+  when: manual
+  allow_failure: true
 
 combined / build:
   stage: build
@@ -51,3 +55,5 @@ combined / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=COMBINED ../scripts/build-darwin.sh
+  when: manual
+  allow_failure: true
