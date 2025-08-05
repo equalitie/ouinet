@@ -63,7 +63,7 @@ class OuinetTests(TestCase):
         s.close()
         return ip
 
-    def run_tcp_injector(self, injector_args, deffered_tcp_port_ready):
+    def run_tcp_injector(self, injector_args, deferred_tcp_port_ready):
         injector = OuinetInjector(
             OuinetConfig(
                 app_name=TestFixtures.TCP_INJECTOR_NAME + "_tcp",
@@ -71,7 +71,7 @@ class OuinetTests(TestCase):
                 argv=injector_args,
                 benchmark_regexes=[TestFixtures.TCP_INJECTOR_PORT_READY_REGEX],
             ),
-            [deffered_tcp_port_ready],
+            [deferred_tcp_port_ready],
         )
         injector.start()
         self.proc_list.append(injector)
@@ -95,7 +95,7 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_tcp_client(self, name, idx_key, args, deffered_tcp_port_ready):
+    def run_tcp_client(self, name, idx_key, args, deferred_tcp_port_ready):
         client = OuinetClient(
             OuinetConfig(
                 name,
@@ -103,7 +103,7 @@ class OuinetTests(TestCase):
                 args,
                 benchmark_regexes=[TestFixtures.TCP_CLIENT_PORT_READY_REGEX],
             ),
-            [deffered_tcp_port_ready],
+            [deferred_tcp_port_ready],
         )
         client.start()
         self.proc_list.append(client)
@@ -168,7 +168,7 @@ class OuinetTests(TestCase):
                 "--listen-on-tcp",
                 f"127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
             ],
-            deffered_tcp_port_ready=injector_tcp_port_ready,
+            deferred_tcp_port_ready=injector_tcp_port_ready,
         )
 
         # Wait for the injector to open the port
@@ -200,13 +200,13 @@ class OuinetTests(TestCase):
         # TODO: No need to randomize in this particular test.
         # One can make another test to check that unique addresses are not cached
         content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        defered_response = yield self.request_echo(
+        deferred_response = yield self.request_echo(
             TestFixtures.TCP_CLIENT["port"], content
         )
 
-        self.assertEquals(defered_response.code, 200)
+        self.assertEquals(deferred_response.code, 200)
 
-        response_body = yield readBody(defered_response)
+        response_body = yield readBody(deferred_response)
         self.assertEquals(response_body.decode(), content)
 
     @inlineCallbacks
