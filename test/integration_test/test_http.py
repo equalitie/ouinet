@@ -13,10 +13,8 @@ from twisted.web.http_headers import Headers
 from twisted.internet.defer import inlineCallbacks, Deferred
 
 from twisted.trial.unittest import TestCase
-from twisted.internet.base import DelayedCall
 
 import socket
-import urllib
 
 # making random requests not to relying on cache
 import string
@@ -28,10 +26,8 @@ from ouinet_process_controler import OuinetConfig
 from ouinet_process_controler import (
     OuinetInjector,
     OuinetI2PInjector,
-    OuinetIPFSCacheInjector,
-    OuinetBEP44CacheInjector,
 )
-from ouinet_process_controler import OuinetClient, OuinetIPFSClient, OuinetBEP44Client
+from ouinet_process_controler import OuinetClient
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
 
@@ -93,56 +89,6 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_i2p_injector(self, injector_args, deferred_i2p_ready):
-        injector = OuinetI2PInjector(
-            OuinetConfig(
-                TestFixtures.I2P_INJECTOR_NAME + "_i2p",
-                TestFixtures.I2P_TRANSPORT_TIMEOUT,
-                injector_args,
-                benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX],
-            ),
-            [deferred_i2p_ready],
-        )
-        injector.start()
-        self.proc_list.append(injector)
-
-        return injector
-
-    def run_bep44_injector(
-        self,
-        injector_args,
-        deferred_tcp_port_ready,
-        deferred_index_ready,
-        deferred_result_got_cached,
-    ):
-        config = self._cache_injector_config(
-            TestFixtures.BEP44_CACHE_TIMEOUT,
-            [
-                TestFixtures.BEP44_CACHE_READY_REGEX,
-                TestFixtures.BEP44_REQUEST_CACHED_REGEX,
-            ],
-            injector_args,
-        )
-        return self._run_cache_injector(
-            OuinetBEP44CacheInjector,
-            config,
-            [deferred_tcp_port_ready, deferred_index_ready, deferred_result_got_cached],
-        )
-
-    def run_bep44_signer(
-        self, injector_args, deferred_tcp_port_ready, deferred_index_ready
-    ):
-        config = self._cache_injector_config(
-            TestFixtures.BEP44_CACHE_TIMEOUT,
-            [TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX],  # bootstrap not needed
-            ["--seed-content", "0"] + injector_args,
-        )
-        return self._run_cache_injector(
-            OuinetBEP44CacheInjector,
-            config,
-            [deferred_tcp_port_ready, deferred_index_ready],
-        )
-
     def _cache_injector_config(self, timeout, evt_regexes, args):
         return OuinetConfig(
             TestFixtures.CACHE_INJECTOR_NAME,
@@ -172,48 +118,6 @@ class OuinetTests(TestCase):
         self.proc_list.append(client)
 
         return client
-
-    def run_i2p_client(self, name, idx_key, args, deferred_i2p_ready):
-        client = OuinetClient(
-            OuinetConfig(
-                name,
-                TestFixtures.I2P_TRANSPORT_TIMEOUT,
-                args,
-                benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX],
-            ),
-            [deferred_i2p_ready],
-        )
-        client.start()
-        self.proc_list.append(client)
-
-        return client
-
-    def run_bep44_client(self, name, idx_key, args, deferred_cache_ready):
-        config = OuinetConfig(
-            name,
-            TestFixtures.BEP44_CACHE_TIMEOUT,
-            ["--index-bep44-public-key", idx_key] + args,
-            benchmark_regexes=[TestFixtures.BEP44_CACHE_READY_REGEX],
-        )
-        return self._run_cache_client(OuinetBEP44Client, config, [deferred_cache_ready])
-
-    def run_bep44_seeder(
-        self, name, idx_key, args, deferred_cache_ready, deferred_result_got_cached
-    ):
-        config = OuinetConfig(
-            name,
-            TestFixtures.BEP44_CACHE_TIMEOUT,
-            ["--index-bep44-public-key", idx_key] + args,
-            benchmark_regexes=[
-                TestFixtures.BEP44_CACHE_READY_REGEX,
-                TestFixtures.BEP44_RESPONSE_CACHED_REGEX,
-            ],
-        )
-        return self._run_cache_client(
-            OuinetBEP44Client,
-            config,
-            [deferred_cache_ready, deferred_result_got_cached],
-        )
 
     def _run_cache_client(self, proc_class, config, evt_deferreds):
         client = proc_class(config, evt_deferreds)
@@ -251,102 +155,6 @@ class OuinetTests(TestCase):
         ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
         agent = ProxyAgent(ouinet_client_endpoint)
         return agent.request(b"GET", url.encode())
-
-    @inlineCallbacks
-    def _test_i2p_transport(self):
-        """
-        Starts an echoing http server, a injector and a client and send a unique http
-        request to the echoing http server through the client --i2p--> injector -> http server
-        and make sure it gets the correct echo. The unique request makes sure that
-        the response is from the http server and is not cached.
-        """
-        logging.debug("################################################")
-        logging.debug("test_i2p_transport")
-        logging.debug("################################################")
-        # #injector
-        i2pinjector_tunnel_ready = defer.Deferred()
-        i2pinjector = self.run_i2p_injector(
-            ["--listen-on-i2p", "true", "--disable-cache"], i2pinjector_tunnel_ready
-        )
-
-        # wait for the injector tunnel to be advertised
-        success = yield i2pinjector_tunnel_ready
-
-        # we only can request that after injector is ready
-        injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
-        # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
-        self.assert_(
-            injector_i2p_public_id
-        )  # empty public id means injector coludn't read the endpoint file
-
-        # wait so the injector id gets advertised on the DHT
-        logging.debug(
-            "waiting "
-            + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-            + " secs for the tunnel to get advertised on the DHT..."
-        )
-        yield task.deferLater(
-            reactor, TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD, lambda: None
-        )
-
-        # http_server
-        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
-
-        # client
-        test_passed = False
-        for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
-            i2pclient_tunnel_ready = defer.Deferred()
-
-            # use only Proxy or Injector mechanisms
-            self.run_i2p_client(
-                TestFixtures.I2P_CLIENT["name"],
-                None,
-                [
-                    "--disable-origin-access",
-                    "--disable-cache",
-                    "--listen-on-tcp",
-                    "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
-                    "--injector-ep",
-                    "i2p:" + injector_i2p_public_id,
-                ],
-                i2pclient_tunnel_ready,
-            )
-
-            # wait for the client tunnel to connect to the injector
-            success = yield i2pclient_tunnel_ready
-
-            content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-            for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
-                logging.debug("request attempt no " + str(i + 1) + "...")
-                defered_response = yield self.request_echo(
-                    TestFixtures.I2P_CLIENT["port"], content
-                )
-                if defered_response.code == 200:
-                    self.assertEquals(defered_response.code, 200)
-
-                    response_body = yield readBody(defered_response)
-                    self.assertEquals(response_body.decode(), content)
-                    test_passed = True
-                    break
-                else:
-                    logging.debug(
-                        "request attempt no "
-                        + str(i + 1)
-                        + " failed. with code "
-                        + str(defered_response.code)
-                    )
-                    yield task.deferLater(
-                        reactor, TestFixtures.I2P_TUNNEL_HEALING_PERIOD, lambda: None
-                    )
-
-            if test_passed:
-                break
-            else:
-                # stop the i2p client so we can start a new one
-                i2pclient = self.proc_list.pop()
-                yield i2pclient.proc_end
-
-        self.assertTrue(test_passed)
 
     @inlineCallbacks
     def _test_tcp_transport(self):
@@ -409,44 +217,8 @@ class OuinetTests(TestCase):
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body.decode(), content)
 
-    # Disabled for the same reason as the above test.
     @inlineCallbacks
-    def _test_bep44_cache(self):
-        logging.debug("################################################")
-        logging.debug("test_bep44_cache")
-        logging.debug("################################################")
-        return self._test_cache(
-            self.run_bep44_injector, self.run_tcp_client, self.run_bep44_client
-        )
-
-    @inlineCallbacks
-    def _test_tcp_cache(self):
-        logging.debug("################################################")
-        logging.debug("test_tcp_cache")
-        logging.debug("################################################")
-        return self._test_cache(
-            self.run_tcp_injector,
-            self.run_tcp_client,
-            self.run_tcp_client,
-            injector_seed=False,
-        )
-
-    @inlineCallbacks
-    def _test_bep44_seed(self):
-        logging.debug("################################################")
-        logging.debug("test_bep44_seed")
-        logging.debug("################################################")
-        return self._test_cache(
-            self.run_bep44_signer,
-            self.run_bep44_seeder,
-            self.run_bep44_client,
-            injector_seed=False,
-        )
-
-    # A template for other cache tests. Make a new test above (see bep44 as an example)
-    # with corresponding functions when you want to test other cache types
-    @inlineCallbacks
-    def test_cache(self):
+    def test_tcp_cache(self):
         """
         Starts an echoing http server, a injector and a two clients and client1 send a unique http
         request to the echoing http server through the g client --tcp--> injector -> http server
@@ -466,11 +238,6 @@ class OuinetTests(TestCase):
         # wait for the injector to open the port
         success = yield injector_tcp_port_ready
         self.assertTrue(success)
-
-        # WE DO NOT NEED INDEX FOR BEP5
-        # #wait for the index to be ready
-        # success = yield injector_index_ready
-        # self.assertTrue(success)
 
     #        #injector client, use only Injector mechanism
     #        client_ready = defer.Deferred()
