@@ -3,14 +3,11 @@
 
 # Integration tests for Ouinet - test for http communication offered through different transports and caches
 import os
-import os.path
 
-from twisted.internet import reactor, defer, task
+from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint
-from twisted.internet.protocol import Protocol
-from twisted.web.client import ProxyAgent, Agent, readBody
-from twisted.web.http_headers import Headers
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.web.client import ProxyAgent, readBody
+from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 
 from twisted.trial.unittest import TestCase
 
@@ -20,13 +17,9 @@ import socket
 import string
 import random
 
-import pdb
 
 from ouinet_process_controler import OuinetConfig
-from ouinet_process_controler import (
-    OuinetInjector,
-    OuinetI2PInjector,
-)
+from ouinet_process_controler import OuinetInjector
 from ouinet_process_controler import OuinetClient
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
@@ -168,7 +161,7 @@ class OuinetTests(TestCase):
         logging.debug("test_tcp_transport")
         logging.debug("################################################")
         # injector
-        injector_tcp_port_ready = defer.Deferred()
+        injector_tcp_port_ready = Deferred()
         self.run_tcp_injector(
             [
                 "--listen-on-i2p",
@@ -184,7 +177,7 @@ class OuinetTests(TestCase):
         success = yield injector_tcp_port_ready
 
         # client
-        client_tcp_port_ready = defer.Deferred()
+        client_tcp_port_ready = Deferred()
 
         # use only Proxy or Injector mechanisms
         self.run_tcp_client(
@@ -227,9 +220,9 @@ class OuinetTests(TestCase):
         the response is served from cache.
         """
         # injector
-        injector_tcp_port_ready = defer.Deferred()
-        injector_index_ready = defer.Deferred()
-        injector_cached_result = defer.Deferred()
+        injector_tcp_port_ready = Deferred()
+        # injector_index_ready = Deferred()
+        # injector_cached_result = Deferred()
         cache_injector = self.run_tcp_injector(
             ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
             injector_tcp_port_ready,
@@ -326,4 +319,4 @@ class OuinetTests(TestCase):
         if hasattr(self, "test_http_server"):
             deferred_procs.append(self.test_http_server.stopListening())
 
-        return defer.gatherResults(deferred_procs)
+        return gatherResults(deferred_procs)
