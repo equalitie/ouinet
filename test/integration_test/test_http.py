@@ -15,12 +15,10 @@ from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 
-from twisted.web.client import ProxyAgent
+from twisted.web.client import ProxyAgent, readBody
 from twisted.trial.unittest import TestCase
 
-from ouinet_process_controler import OuinetConfig
-from ouinet_process_controler import OuinetInjector
-from ouinet_process_controler import OuinetClient
+from ouinet_process_controler import OuinetConfig, OuinetClient, OuinetInjector
 
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
@@ -160,10 +158,11 @@ class OuinetTests(TestCase):
         logging.debug("################################################")
         logging.debug("test_tcp_transport")
         logging.debug("################################################")
-        # injector
+
+        # Injector
         injector_tcp_port_ready = Deferred()
 
-        # It is client who decides if there will be caching or not
+        # It is client who will decide if there will be caching or not
         self.run_tcp_injector(
             injector_args=[
                 "--listen-on-tcp",
@@ -172,46 +171,43 @@ class OuinetTests(TestCase):
             deffered_tcp_port_ready=injector_tcp_port_ready,
         )
 
-        # wait for the injector to open the port
+        # Wait for the injector to open the port
         success = yield injector_tcp_port_ready
         self.assertTrue(success)
 
-        # client
+        # Client
         client_tcp_port_ready = Deferred()
-
-        # use only Proxy or Injector mechanisms
         self.run_tcp_client(
-            TestFixtures.TCP_CLIENT["name"],
-            None,
-            [
+            name=TestFixtures.TCP_CLIENT["name"],
+            idx_key=None,
+            args=[
                 "--disable-origin-access",
-                "--cache-type=none",
+                "--cache-type=none",  # Use only Proxy mechanism
                 "--listen-on-tcp",
                 f"127.0.0.1:{TestFixtures.TCP_CLIENT["port"]}",
                 "--injector-ep",
                 f"tcp:127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
             ],
-            client_tcp_port_ready,
+            deferred_tcp_port_ready=client_tcp_port_ready,
         )
 
         success = yield client_tcp_port_ready
         self.assertTrue(success)
 
-        # # http_server
-        # self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
+        # Host a test page
+        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
 
-        # # wait for the client to open the port
-        # success = yield client_tcp_port_ready
+        # TODO: No need to randomize in this particular test.
+        # One can make another test to check that unique addresses are not cached
+        content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        defered_response = yield self.request_echo(
+            TestFixtures.TCP_CLIENT["port"], content
+        )
 
-        # content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        # defered_response = yield self.request_echo(
-        #     TestFixtures.TCP_CLIENT["port"], content
-        # )
+        self.assertEquals(defered_response.code, 200)
 
-        # self.assertEquals(defered_response.code, 200)
-
-        # response_body = yield readBody(defered_response)
-        # self.assertEquals(response_body.decode(), content)
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body.decode(), content)
 
     @inlineCallbacks
     def test_tcp_cache(self):
