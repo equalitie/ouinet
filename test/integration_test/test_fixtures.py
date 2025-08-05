@@ -56,7 +56,7 @@ class TestFixtures:
 
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
     TCP_CLIENT = {"name": "tcp_client", "port": 8075}
-    TCP_CLIENT_PORT_READY_REGEX = r"[\s\S]*Serving front end on[\s\S]*"
+    TCP_CLIENT_PORT_READY_REGEX = r"[\s\S]*listening to browser requests[\s\S]*"
     CACHE_CLIENT = [
         {"name": "cache_client_1", "port": 8074},
         {"name": "cache_client_2", "port": 8073},

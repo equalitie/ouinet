@@ -2,30 +2,28 @@
 # See LICENSE for other credits and copying information
 
 # Integration tests for Ouinet - test for http communication offered through different transports and caches
-import os
-
-from twisted.internet import reactor
-from twisted.internet.endpoints import TCP4ClientEndpoint
-from twisted.web.client import ProxyAgent, readBody
-from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
-
-from twisted.trial.unittest import TestCase
 
 import socket
 
-# making random requests not to relying on cache
+# Making random requests not to relying on cache
 import string
 import random
+import sys
+import logging
 
+from twisted.internet import reactor
+from twisted.internet.endpoints import TCP4ClientEndpoint
+from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
+
+from twisted.web.client import ProxyAgent
+from twisted.trial.unittest import TestCase
 
 from ouinet_process_controler import OuinetConfig
 from ouinet_process_controler import OuinetInjector
 from ouinet_process_controler import OuinetClient
+
 from test_fixtures import TestFixtures
 from test_http_server import TestHttpServer
-
-import sys
-import logging
 
 
 class OuinetTests(TestCase):
