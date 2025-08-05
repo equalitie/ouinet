@@ -134,6 +134,13 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
     GIT_TAG v0.5.1
 )
+
+if ("${PLATFORM}" STREQUAL "OS64")
+    set(Rust_CARGO_TARGET aarch64-apple-ios)
+elseif ("${PLATFORM}" STREQUAL "SIMULATORARM64")
+    set(Rust_CARGO_TARGET aarch64-apple-ios-sim)
+endif()
+
 FetchContent_MakeAvailable(Corrosion)
 
 corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml)
@@ -141,15 +148,17 @@ corrosion_set_env_vars(ouinet_rs
     "CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include -I${CMAKE_CURRENT_SOURCE_DIR}/rust")
 add_dependencies(cargo-prebuild_ouinet_rs built_boost)
 
-# This is not necessry to build the ouinet_rs library, but using it
-# automatically adds the include directories to every target that has ouinet_rs
-# as dependency.
-# XXX: Isn't there a better way to obtain the cargo target directory?
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
+    corrosion_set_env_vars(ouinet_rs
+        "LIBRARY_PATH=${CMAKE_OSX_SYSROOT}/usr/lib")
     set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
 else()
     set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
 endif()
+# This is not necessry to build the ouinet_rs library, but using it
+# automatically adds the include directories to every target that has ouinet_rs
+# as dependency.
+# XXX: Isn't there a better way to obtain the cargo target directory?
 target_include_directories(ouinet_rs
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rust
     ${RUST_BRIDGE_PATH})
@@ -223,13 +232,18 @@ file(GLOB client_sources
     ${VERSION_CPP}
 )
 
-if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    add_executable(client ${client_sources})
-else()
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     add_library(client SHARED ${client_sources})
     add_library(ouinet::client ALIAS client)
     find_library(android_log log)
     target_link_libraries(client PUBLIC ${android_log})
+elseif ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS")
+    add_library(client STATIC ${client_sources})
+    add_library(ouinet::client ALIAS client)
+    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet REQUIRED)
+else()
+    add_executable(client ${client_sources})
 endif()
 
 target_link_libraries(client
