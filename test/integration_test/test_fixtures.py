@@ -45,7 +45,7 @@ class TestFixtures:
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
 
     TCP_INJECTOR_NAME = "tcp_injector"
-    TCP_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
+    TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     TCP_INJECTOR_PORT = 7070
 
     CACHE_INJECTOR_NAME = "cache_injector"
@@ -55,14 +55,12 @@ class TestFixtures:
     RESPONSE_LENGTH = 20
 
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
-
     TCP_CLIENT = {"name": "tcp_client", "port": 8075}
-
+    TCP_CLIENT_PORT_READY_REGEX = r"[\s\S]*Serving front end on[\s\S]*"
     CACHE_CLIENT = [
         {"name": "cache_client_1", "port": 8074},
         {"name": "cache_client_2", "port": 8073},
     ]
-
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
