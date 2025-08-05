@@ -8,10 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.3.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.3.1) - 2025-08-05
+
 ### Changed
 
 - Groups and metrics API structure is now unified.
 - Linux and Android releases are built with level 3 of compiler optimizations.
+- The default Boost version used by Ouinet is now 1.88.0.
+- Support for building Ouinet on iOS.
 
 
 ## [v1.3.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.3.0) - 2025-07-07
