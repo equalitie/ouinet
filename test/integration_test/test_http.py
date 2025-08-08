@@ -78,24 +78,8 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def _cache_injector_config(self, timeout, evt_regexes, args):
-        return OuinetConfig(
-            TestFixtures.CACHE_INJECTOR_NAME,
-            timeout,
-            args,
-            benchmark_regexes=(
-                [TestFixtures.TCP_INJECTOR_PORT_READY_REGEX] + evt_regexes
-            ),
-        )
-
-    def _run_cache_injector(self, proc_class, config, evt_deferreds):
-        injector = proc_class(config, evt_deferreds)
-        injector.start()
-        self.proc_list.append(injector)
-
-        return injector
-
-    def run_tcp_client(self, name, idx_key, args, deferred_tcp_port_ready):
+    def run_tcp_client(self, name, args, deferred_tcp_port_ready):
+        # TODO: actually use index key
         client = OuinetClient(
             OuinetConfig(
                 name,
@@ -105,13 +89,6 @@ class OuinetTests(TestCase):
             ),
             [deferred_tcp_port_ready],
         )
-        client.start()
-        self.proc_list.append(client)
-
-        return client
-
-    def _run_cache_client(self, proc_class, config, evt_deferreds):
-        client = proc_class(config, evt_deferreds)
         client.start()
         self.proc_list.append(client)
 
@@ -147,6 +124,33 @@ class OuinetTests(TestCase):
         agent = ProxyAgent(ouinet_client_endpoint)
         return agent.request(b"GET", url.encode())
 
+    def _cache_injector_config(self, timeout, evt_regexes, args):
+        return OuinetConfig(
+            TestFixtures.CACHE_INJECTOR_NAME,
+            timeout,
+            args,
+            benchmark_regexes=(
+                [TestFixtures.TCP_INJECTOR_PORT_READY_REGEX] + evt_regexes
+            ),
+        )
+
+    # TODO: they are the same, dedupe
+    def _do_run_injector(self, proc_class, config, evt_deferreds):
+        injector = proc_class(config, evt_deferreds)
+        injector.start()
+        self.proc_list.append(injector)
+
+        return injector
+
+    def _do_run_client(self, proc_class, config, evt_deferreds):
+        client = proc_class(config, evt_deferreds)
+        client.start()
+        self.proc_list.append(client)
+
+        return client
+
+    ################# Tests #####################
+
     @inlineCallbacks
     def test_tcp_transport(self):
         """
@@ -179,7 +183,6 @@ class OuinetTests(TestCase):
         client_tcp_port_ready = Deferred()
         self.run_tcp_client(
             name=TestFixtures.TCP_CLIENT["name"],
-            idx_key=None,
             args=[
                 "--disable-origin-access",
                 "--cache-type=none",  # Use only Proxy mechanism
@@ -218,7 +221,7 @@ class OuinetTests(TestCase):
         Then the second client request the same request makes sure that
         the response is served from cache.
         """
-        # injector
+        # Injector (caching by default)
         injector_tcp_port_ready = Deferred()
         # injector_index_ready = Deferred()
         # injector_cached_result = Deferred()
@@ -227,18 +230,31 @@ class OuinetTests(TestCase):
             injector_tcp_port_ready,
         )
 
-        # wait for the injector to open the port
+        # Wait for the injector to open the port
         success = yield injector_tcp_port_ready
         self.assertTrue(success)
 
-    #        #injector client, use only Injector mechanism
-    #        client_ready = defer.Deferred()
-    #        client_cached_result = defer.Deferred()
-    #        client = run_client( TestFixtures.CACHE_CLIENT[0]["name"], index_key
-    #                             , [ "--cache-type", "bep5-http", "--disable-origin-access", "--disable-proxy-access" , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]) , "--injector-ep", "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT) ] + (["--disable-cache"] if injector_seed else [])
-    #                             , client_ready
-    #                             , *([] if injector_seed else [client_cached_result]))
-    # #http_server
+        # Injector client, use only Injector mechanism
+        client_ready = Deferred()
+        # client_cached_result = Deferred()
+        client = self.run_tcp_client(
+            name=TestFixtures.CACHE_CLIENT[0]["name"],
+            args=[
+                "--cache-type",
+                "bep5-http",
+                "--disable-origin-access",
+                "--disable-proxy-access",
+                "--listen-on-tcp",
+                "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
+                "--injector-ep",
+                "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
+            ],
+            deferred_tcp_port_ready=client_ready,
+        )
+        # , client_cached_result)
+
+        # Http_server
+
     #        self.test_http_server = self.run_http_server(
     #            TestFixtures.TEST_HTTP_SERVER_PORT)
 
