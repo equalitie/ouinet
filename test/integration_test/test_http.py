@@ -225,7 +225,7 @@ class OuinetTests(TestCase):
         injector_tcp_port_ready = Deferred()
         # injector_index_ready = Deferred()
         # injector_cached_result = Deferred()
-        cache_injector = self.run_tcp_injector(
+        cache_injector: OuinetInjector = self.run_tcp_injector(
             ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
             injector_tcp_port_ready,
         )
@@ -233,6 +233,7 @@ class OuinetTests(TestCase):
         # Wait for the injector to open the port
         success = yield injector_tcp_port_ready
         self.assertTrue(success)
+        index_key = cache_injector.get_index_key()
 
         # Injector client, use only Injector mechanism
         client_ready = Deferred()
@@ -242,6 +243,8 @@ class OuinetTests(TestCase):
             args=[
                 "--cache-type",
                 "bep5-http",
+                "--cache-http-public-key",
+                str(index_key),
                 "--disable-origin-access",
                 "--disable-proxy-access",
                 "--listen-on-tcp",
@@ -255,12 +258,12 @@ class OuinetTests(TestCase):
 
         # Http_server
 
-    #        self.test_http_server = self.run_http_server(
-    #            TestFixtures.TEST_HTTP_SERVER_PORT)
+        self.test_http_server = self.run_http_server(
+           TestFixtures.TEST_HTTP_SERVER_PORT)
 
-    #        #wait for the client to open the port
-    #        success = yield defer.gatherResults([client_ready])
-    #        self.assertTrue(success)
+        # Wait for the client to open the port
+        success = yield client_ready
+        self.assertTrue(success)
 
     #        page_url = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
     #        defered_response = yield self.request_page(TestFixtures.CACHE_CLIENT[0]["port"], page_url)
