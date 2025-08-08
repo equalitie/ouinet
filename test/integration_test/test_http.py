@@ -187,7 +187,7 @@ class OuinetTests(TestCase):
                 "--disable-origin-access",
                 "--cache-type=none",  # Use only Proxy mechanism
                 "--listen-on-tcp",
-                f"127.0.0.1:{TestFixtures.TCP_CLIENT["port"]}",
+                f"127.0.0.1:{TestFixtures.TCP_CLIENT['port']}",
                 "--injector-ep",
                 f"tcp:127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
             ],
