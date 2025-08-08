@@ -136,6 +136,28 @@ Java_ie_equalit_ouinet_Ouinet_nGetClientState(
 }
 
 extern "C"
+JNIEXPORT jstring JNICALL
+Java_ie_equalit_ouinet_Ouinet_nGetProxyEndpoint(
+        JNIEnv* env,
+        jobject /* this */)
+{
+    if (!g_client)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(g_client->get_proxy_endpoint().c_str());
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_ie_equalit_ouinet_Ouinet_nGetFrontendEndpoint(
+        JNIEnv* env,
+        jobject /* this */)
+{
+    if (!g_client)
+        return env->NewStringUTF("");
+    return env->NewStringUTF(g_client->get_frontend_endpoint().c_str());
+}
+
+extern "C"
 JNIEXPORT void JNICALL
 Java_ie_equalit_ouinet_Ouinet_nStartClient(
         JNIEnv* env,

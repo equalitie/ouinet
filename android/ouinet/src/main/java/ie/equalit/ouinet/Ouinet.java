@@ -96,6 +96,14 @@ public class Ouinet {
         return RunningState.Failed;
     }
 
+    public String getProxyEndpoint() {
+        return nGetProxyEndpoint();
+    }
+
+    public String getFrontendEndpoint() {
+        return nGetFrontendEndpoint();
+    }
+
     public synchronized void start() {
         try {
             // Just touch this file, as the client looks into the
@@ -281,6 +289,8 @@ public class Ouinet {
      */
     private static native String nGetCARootCert(String ouinetDirectory);
     private native int nGetClientState();
+    private native String nGetProxyEndpoint();
+    private native String nGetFrontendEndpoint();
     private native void nStartClient(String[] args, String[] path);
     private native void nStopClient();
     private native void nChargingStateChange(boolean isCharging);
