@@ -634,6 +634,9 @@ private:
 
     shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
     metrics::Client _metrics;
+
+    std::string _proxy_endpoint;
+    std::string _frontend_endpoint;
 };
 
 //------------------------------------------------------------------------------
@@ -2959,9 +2962,15 @@ void Client::State::start()
 
     // These may throw if the endpoints are busy.
     auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
+    _proxy_endpoint = string(proxy_acceptor.local_endpoint().address().to_string()) + ":"
+                    + to_string(proxy_acceptor.local_endpoint().port());
     boost::optional<tcp::acceptor> front_end_acceptor;
     if (_config.front_end_endpoint() != tcp::endpoint())
+    {
         front_end_acceptor = make_acceptor(_config.front_end_endpoint(), "frontend");
+        _frontend_endpoint = string(front_end_acceptor->local_endpoint().address().to_string()) + ":"
+                           + to_string(front_end_acceptor->local_endpoint().port());
+    }
 
     ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
 
@@ -3220,6 +3229,16 @@ void Client::stop()
 
 Client::RunningState Client::get_state() const noexcept {
     return _state->get_state();
+}
+
+std::string Client::get_proxy_endpoint() const noexcept
+{
+    return _state->_proxy_endpoint;
+}
+
+std::string Client::get_frontend_endpoint() const noexcept
+{
+    return _state->_frontend_endpoint;
 }
 
 void Client::charging_state_change(bool is_charging) {
