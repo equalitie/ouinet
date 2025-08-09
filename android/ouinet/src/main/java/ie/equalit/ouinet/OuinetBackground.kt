@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import ie.equalit.ouinet.Config
 import ie.equalit.ouinet.Ouinet
+import ie.equalit.ouinet.OuinetEndpoint
 import ie.equalit.ouinet.OuinetNotification.Companion.MILLISECOND
 import kotlin.system.exitProcess
 
@@ -270,6 +271,28 @@ class OuinetBackground() : NotificationListener {
             mOuinet!!.getState().toString()
         else
             OuinetNotification.DEFAULT_STATE
+    }
+
+    fun getProxyEndpoint() : OuinetEndpoint? {
+        if (mOuinet != null) {
+            val endpointStr = mOuinet!!.getProxyEndpoint()
+            if (endpointStr != "")
+                return OuinetEndpoint(endpointStr)
+            return null
+        } else {
+            return null
+        }
+    }
+
+    fun getFrontendEndpoint() : OuinetEndpoint? {
+        if (mOuinet != null) {
+            val endpointStr = mOuinet!!.getFrontendEndpoint()
+            if (endpointStr != "")
+                return OuinetEndpoint(endpointStr)
+            return null
+        } else {
+            return null
+        }
     }
 
     fun shutdown(
