@@ -269,12 +269,14 @@ class OuinetTests(TestCase):
 
         self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
 
-    #        page_url = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    #        defered_response = yield self.request_page(TestFixtures.CACHE_CLIENT[0]["port"], page_url)
-    #        self.assertEquals(defered_response.code, 200)
+        page_url = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        defered_response = yield self.request_page(
+            TestFixtures.CACHE_CLIENT[0]["port"], page_url
+        )
+        self.assertEquals(defered_response.code, 200)
 
-    #        response_body = yield readBody(defered_response)
-    #        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
 
     #        if injector_seed:
     #            # shut client down to ensure it does not seed content to the cache client
