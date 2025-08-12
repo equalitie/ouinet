@@ -69,6 +69,9 @@ class TestFixtures:
     BEP5_PUBK_ANNOUNCE_REGEX = (
         "[\s\S]*HTTP signing public key \(Ed25519\): ([a-zA-Z0-9]+)[\s\S]*"
     )
+    BEP5_REQUEST_CACHED_REGEX = (
+        "[\s\S]*X-Ouinet-Injection:[\s\S]*"
+    )
     START_OF_IPNS_RESOLUTION_REGEX = r"[\s\S]*Resolving IPNS address: [\s\S]*"
     IPFS_CACHE_READY_REGEX = r"[\s\S]*IPNS ID has been resolved successfully[\s\S]*"
     BEP44_CACHE_READY_REGEX = r"[\s\S]*BEP44 index: bootstrapped BitTorrent DHT[\s\S]*"
