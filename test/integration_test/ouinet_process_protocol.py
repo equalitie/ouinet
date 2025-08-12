@@ -14,6 +14,7 @@ from twisted.internet import protocol
 from test_fixtures import TestFixtures
 import pdb
 
+
 class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     """
     Protocols are the way to communicate with different players
@@ -21,6 +22,7 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     from ouinet client/injector process and report failure
     in case of fatal error
     """
+
     def __init__(self, proc_config, ready_benchmark_regex="", ready_deferred=None):
         super(OuinetProcessProtocol, self).__init__()
         self._ready_benchmark_regex = ready_benchmark_regex
@@ -41,7 +43,11 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
             raise Exception("Fatal error")
 
-        if (not self._got_ready) and self._ready_deferred and self.check_got_ready(data):
+        if (
+            (not self._got_ready)
+            and self._ready_deferred
+            and self.check_got_ready(data)
+        ):
             self._got_ready = True
             self._ready_deferred.callback(self)
 
@@ -69,20 +75,30 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
 
 class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
-        super(OuinetCacheProcessProtocol, self).__init__(proc_config,
-                benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
-                benchmark_deferreds[TestFixtures.READY_REGEX_INDEX])
+        super(OuinetCacheProcessProtocol, self).__init__(
+            proc_config,
+            benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
+            benchmark_deferreds[TestFixtures.READY_REGEX_INDEX],
+        )
 
         self._index_ready_deferred = None
         self._request_cached_deferred = None
-       
+
         # TODO: this need to change to dictionary
-        if (len(benchmark_regexes) > TestFixtures.INDEX_READY_REGEX_INDEX):
-            self._index_ready_regex = benchmark_regexes[TestFixtures.INDEX_READY_REGEX_INDEX]
-            self._index_ready_deferred = benchmark_deferreds[TestFixtures.INDEX_READY_REGEX_INDEX]
-        if (len(benchmark_regexes) > TestFixtures.REQUEST_CACHED_REGEX_INDEX):
-            self._request_cached_regex = benchmark_regexes[TestFixtures.REQUEST_CACHED_REGEX_INDEX]
-            self._request_cached_deferred = benchmark_deferreds[TestFixtures.REQUEST_CACHED_REGEX_INDEX]
+        if len(benchmark_regexes) > TestFixtures.INDEX_READY_REGEX_INDEX:
+            self._index_ready_regex = benchmark_regexes[
+                TestFixtures.INDEX_READY_REGEX_INDEX
+            ]
+            self._index_ready_deferred = benchmark_deferreds[
+                TestFixtures.INDEX_READY_REGEX_INDEX
+            ]
+        if len(benchmark_regexes) > TestFixtures.REQUEST_CACHED_REGEX_INDEX:
+            self._request_cached_regex = benchmark_regexes[
+                TestFixtures.REQUEST_CACHED_REGEX_INDEX
+            ]
+            self._request_cached_deferred = benchmark_deferreds[
+                TestFixtures.REQUEST_CACHED_REGEX_INDEX
+            ]
         self._number_of_cache_db_updates = 0
         self._served_from_cache = False
 
@@ -91,8 +107,8 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
         listen for the debugger output calls the parent function and then react to cached request cached
         """
         data, rdata = data.decode(), data
-        #checking for specifc strings before calling back any deferred object
-        #because the reaction to the deferred might depend on these data
+        # checking for specifc strings before calling back any deferred object
+        # because the reaction to the deferred might depend on these data
         self.check_response_served_from_cached(data)
 
         super(OuinetCacheProcessProtocol, self).errReceived(rdata)
@@ -102,8 +118,10 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
 
         if self._request_cached_deferred and self.check_request_got_cached(data):
             self._number_of_cache_db_updates += 1
-            if self._number_of_cache_db_updates == \
-               TestFixtures.NO_OF_CACHED_MESSAGES_REQUIRED:
+            if (
+                self._number_of_cache_db_updates
+                == TestFixtures.NO_OF_CACHED_MESSAGES_REQUIRED
+            ):
                 self._request_cached_deferred.callback(self)
 
     def check_index_ready(self, data):
@@ -125,7 +143,8 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
 class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
         super(OuinetIPFSCacheProcessProtocol, self).__init__(
-            proc_config, benchmark_regexes, benchmark_deferreds)
+            proc_config, benchmark_regexes, benchmark_deferreds
+        )
         self.IPNS_ID = ""
         self.IPNS_resolution_start_time = 0
 
@@ -141,14 +160,36 @@ class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
             self.IPNS_ID = IPNS_ID_search_result.group(1)
 
     def Mark_start_of_first_IPNS_resolution(self, data):
-        if self.IPNS_resolution_start_time == 0 and re.match(TestFixtures.START_OF_IPNS_RESOLUTION_REGEX, data):
+        if self.IPNS_resolution_start_time == 0 and re.match(
+            TestFixtures.START_OF_IPNS_RESOLUTION_REGEX, data
+        ):
             self.IPNS_resolution_start_time = time.time()
+
+
+class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
+    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
+        super(OuinetBEP5CacheProcessProtocol, self).__init__(
+            proc_config, benchmark_regexes, benchmark_deferreds
+        )
+        self.public_key = ""
+
+    def errReceived(self, data):
+        print("receiving line", data)
+        data, rdata = data.decode(), data
+        self.look_for_public_key(data)
+        super(OuinetBEP5CacheProcessProtocol, self).errReceived(rdata)
+
+    def look_for_public_key(self, data):
+        pubkey_search_result = re.match(TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, data)
+        if pubkey_search_result:
+            self.public_key = pubkey_search_result.group(1)
 
 
 class OuinetBEP44CacheProcessProtocol(OuinetCacheProcessProtocol, object):
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
         super(OuinetBEP44CacheProcessProtocol, self).__init__(
-            proc_config, benchmark_regexes, benchmark_deferreds)
+            proc_config, benchmark_regexes, benchmark_deferreds
+        )
         self.BEP44_pubk = ""
 
     def errReceived(self, data):
@@ -157,6 +198,8 @@ class OuinetBEP44CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         super(OuinetBEP44CacheProcessProtocol, self).errReceived(rdata)
 
     def look_for_BEP44_pubk(self, data):
-        BEP44_pubk_search_result = re.match(TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data)
+        BEP44_pubk_search_result = re.match(
+            TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data
+        )
         if BEP44_pubk_search_result:
             self.BEP44_pubk = BEP44_pubk_search_result.group(1)

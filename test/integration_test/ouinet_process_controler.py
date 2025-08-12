@@ -19,6 +19,7 @@ from ouinet_process_protocol import (
     OuinetProcessProtocol,
     OuinetIPFSCacheProcessProtocol,
     OuinetBEP44CacheProcessProtocol,
+    OuinetBEP5CacheProcessProtocol,
 )
 
 ouinet_env = {}
@@ -323,6 +324,25 @@ class OuinetIPFSCacheInjector(OuinetInjector):
 
     def get_index_key(self):
         return self._proc_protocol.IPNS_ID
+
+
+class OuinetBEP5CacheInjector(OuinetInjector):
+    """
+    As above, but for the 'injector which cache data' with a BEP5 index
+    """
+
+    def __init__(self, injector_config, deferred_events):
+        super(OuinetBEP5CacheInjector, self).__init__(injector_config, deferred_events)
+        self.set_process_protocol(
+            OuinetBEP5CacheProcessProtocol(
+                proc_config=self.config,
+                benchmark_regexes=injector_config.benchmark_regexes,
+                benchmark_deferreds=deferred_events,
+            )
+        )  # change default protocol to one understand ipfs cache outputs
+
+    def get_index_key(self):
+        return self._proc_protocol.public_key
 
     #   self._setup_ipfs_identity()
 
