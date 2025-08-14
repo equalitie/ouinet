@@ -157,6 +157,13 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _front_end_access_token = *opt;
     }
 
+    if (auto opt = as_optional<string>(vm, "proxy-access-token")) {
+        if (opt->empty()) {
+            throw error("--proxy-access-token must not be an empty string");
+        }
+        _proxy_access_token = *opt;
+    }
+
     if (auto opt = as_optional<bool>(vm, "disable-bridge-announcement")) {
         _disable_bridge_announcement = *opt;
     }

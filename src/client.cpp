@@ -2753,6 +2753,22 @@ void Client::State::serve_request( GenericStream&& con
                 else break;
             }
         }
+
+        if (auto& token = _config.proxy_access_token()) {
+            std::string_view header_key = "X-Ouinet-Proxy-Token";
+            if (*token != req[header_key]) {
+                sys::error_code ec_;
+                auto message = "The request is missing a valid "
+                    + std::string(header_key)
+                    + " HTTP header\n";
+                auto res = util::http_error(req, http::status::unauthorized
+                                            , OUINET_CLIENT_SERVER_STRING
+                                            , "", message);
+                handle_http_error(con, res, yield);
+                break;
+            }
+        }
+
         // Ensure that the request has a `Host:` header
         // (to ease request routing check and later operations on the head).
         if (!util::req_ensure_host(req)) {
