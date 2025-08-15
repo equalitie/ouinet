@@ -27,7 +27,8 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
 
     private fun getBroadcastPendingIntent(
         requestCode: Int
-    ) : PendingIntent {
+    ) : PendingIntent? {
+        if (!isPendingIntentAllowed(context)) return null
         Intent().also { intent ->
             intent.action = NotificationBroadcastReceiver.NOTIFICATION_ACTION
             intent.putExtra(NotificationBroadcastReceiver.CODE_EXTRA, requestCode)
@@ -43,7 +44,8 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
 
     private fun getActivityPendingIntent(
         activityName: String
-    ): PendingIntent {
+    ): PendingIntent? {
+        if (!isPendingIntentAllowed(context)) return null
         Intent(context, Class.forName(activityName)).also { intent ->
             intent.action = Intent.ACTION_MAIN
             intent.addCategory(Intent.CATEGORY_LAUNCHER)
@@ -141,7 +143,8 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
             requestCode: Int,
             config: NotificationConfig,
             state: String? = null
-        ) : PendingIntent {
+        ) : PendingIntent? {
+            if (!isPendingIntentAllowed(context)) return null
             val intent = Intent(context, OuinetService::class.java)
             intent.putExtra(CONFIG_EXTRA, config)
             intent.putExtra(CODE_EXTRA, requestCode)
