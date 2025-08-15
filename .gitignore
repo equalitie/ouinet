@@ -2,6 +2,7 @@
 
 build/*
 _trial_temp/*
+_trial_temp.lock
 
 .vagrant/
 Vagrantfile.kvm
