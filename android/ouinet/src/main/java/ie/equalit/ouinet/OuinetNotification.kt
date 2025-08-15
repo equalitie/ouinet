@@ -63,7 +63,7 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
 
     private val showConfirmCallback = Runnable {
         try {
-            getServicePendingIntent(context, HIDE_CODE, config).send()
+            getServicePendingIntent(context, HIDE_CODE, config)?.send()
         } catch (_: PendingIntent.CanceledException) {
         }
     }

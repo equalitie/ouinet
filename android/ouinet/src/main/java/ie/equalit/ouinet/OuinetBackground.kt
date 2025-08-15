@@ -202,7 +202,7 @@ class OuinetBackground() : NotificationListener {
             OuinetNotification.UPDATE_CODE,
             notificationConfig!!,
             mCurrentState
-        ).send()
+        )?.send()
     }
 
     private var updateOuinetState: Runnable = object : Runnable {
