@@ -4,21 +4,14 @@
 # Integration tests for ouinet - classes which setup and fire
 # ouinet client and injectors for different tests situation
 
-import errno
 import os
-import time
 import logging
-import json
-
-import pdb
 
 from test_fixtures import TestFixtures
 
 from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import (
     OuinetProcessProtocol,
-    OuinetIPFSCacheProcessProtocol,
-    OuinetBEP44CacheProcessProtocol,
     OuinetBEP5CacheProcessProtocol,
 )
 
@@ -216,38 +209,6 @@ class OuinetCacheClient(OuinetClient):
         return False
 
 
-class OuinetIPFSClient(OuinetCacheClient):
-    def __init__(self, client_config, deferred_events):
-        super(OuinetIPFSClient, self).__init__(client_config, deferred_events)
-
-        self.set_process_protocol(
-            OuinetIPFSCacheProcessProtocol(
-                proc_config=self.config,
-                benchmark_regexes=client_config.benchmark_regexes,
-                benchmark_deferreds=deferred_events,
-            )
-        )
-
-    def index_resolution_start_time(self):
-        if self._proc_protocol:
-            return self._proc_protocol.IPNS_resolution_start_time
-
-        return 0
-
-
-class OuinetBEP44Client(OuinetCacheClient):
-    def __init__(self, client_config, deferred_events):
-        super(OuinetBEP44Client, self).__init__(client_config, deferred_events)
-
-        self.set_process_protocol(
-            OuinetBEP44CacheProcessProtocol(
-                proc_config=self.config,
-                benchmark_regexes=client_config.benchmark_regexes,
-                benchmark_deferreds=deferred_events,
-            )
-        )
-
-
 class OuinetInjector(OuinetProcess):
     """
     As above, but for the 'injector'
@@ -275,55 +236,6 @@ class OuinetInjector(OuinetProcess):
     def get_index_key(self) -> str:
         """Return a key string used to access the cache index created by this injector."""
         raise NotImplementedError
-
-
-class OuinetI2PInjector(OuinetInjector):
-    """
-    As above, but for the 'injector'
-    It is a child of Ouinetinjector with i2p ouiservice
-    """
-
-    def __init__(self, injector_config, deferred_events, private_key_blob=None):
-        super(OuinetI2PInjector, self).__init__(injector_config, deferred_events)
-        self._setup_i2p_private_key(private_key_blob)
-
-    def _setup_i2p_private_key(self, private_key_blob):
-        if not os.path.exists(self.config.config_folder_name + "/i2p"):
-            os.makedirs(self.config.config_folder_name + "/i2p")
-
-        if private_key_blob:
-            with open(
-                self.config.config_folder_name + "/i2p/i2p-private-key", "w"
-            ) as private_key_file:
-                private_key_file.write(private_key_blob)
-
-    def get_I2P_public_ID(self):
-        try:
-            with open(
-                self.config.config_folder_name + "/endpoint-i2p", "r"
-            ) as public_id_file:
-                return public_id_file.read().rstrip()
-        except:
-            return None
-
-
-class OuinetIPFSCacheInjector(OuinetInjector):
-    """
-    As above, but for the 'injector which cache data' with an IPNS index
-    """
-
-    def __init__(self, injector_config, deferred_events):
-        super(OuinetIPFSCacheInjector, self).__init__(injector_config, deferred_events)
-        self.set_process_protocol(
-            OuinetIPFSCacheProcessProtocol(
-                proc_config=self.config,
-                benchmark_regexes=injector_config.benchmark_regexes,
-                benchmark_deferreds=deferred_events,
-            )
-        )  # change default protocol to one understand ipfs cache outputs
-
-    def get_index_key(self):
-        return self._proc_protocol.IPNS_ID
 
 
 class OuinetBEP5CacheInjector(OuinetInjector):
@@ -355,22 +267,3 @@ class OuinetBEP5CacheInjector(OuinetInjector):
     #       as ipfs_config_file:
     #         print json.dumps(TestFixtures.IPFS_CONFIG_DIC)
     #         ipfs_config_file.write(json.dumps(TestFixtures.IPFS_CACHE_READY_REGEX))
-
-
-class OuinetBEP44CacheInjector(OuinetInjector):
-    """
-    As above, but for the 'injector which cache data' with a BEP44 index
-    """
-
-    def __init__(self, injector_config, deferred_events):
-        super(OuinetBEP44CacheInjector, self).__init__(injector_config, deferred_events)
-        self.set_process_protocol(
-            OuinetBEP44CacheProcessProtocol(
-                proc_config=self.config,
-                benchmark_regexes=injector_config.benchmark_regexes,
-                benchmark_deferreds=deferred_events,
-            )
-        )
-
-    def get_index_key(self):
-        return self._proc_protocol.BEP44_pubk
