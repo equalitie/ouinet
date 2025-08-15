@@ -5,14 +5,11 @@
 
 import re
 import os
-import time
-
 import logging
 
 from twisted.internet import protocol
 
 from test_fixtures import TestFixtures
-import pdb
 
 
 class OuinetProcessProtocol(protocol.ProcessProtocol, object):
@@ -140,32 +137,6 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
         return self._served_from_cache
 
 
-class OuinetIPFSCacheProcessProtocol(OuinetCacheProcessProtocol, object):
-    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
-        super(OuinetIPFSCacheProcessProtocol, self).__init__(
-            proc_config, benchmark_regexes, benchmark_deferreds
-        )
-        self.IPNS_ID = ""
-        self.IPNS_resolution_start_time = 0
-
-    def errReceived(self, data):
-        data, rdata = data.decode(), data
-        self.Mark_start_of_first_IPNS_resolution(data)
-        self.look_for_IPNS_ID(data)
-        super(OuinetIPFSCacheProcessProtocol, self).errReceived(rdata)
-
-    def look_for_IPNS_ID(self, data):
-        IPNS_ID_search_result = re.match(TestFixtures.IPNS_ID_ANNOUNCE_REGEX, data)
-        if IPNS_ID_search_result:
-            self.IPNS_ID = IPNS_ID_search_result.group(1)
-
-    def Mark_start_of_first_IPNS_resolution(self, data):
-        if self.IPNS_resolution_start_time == 0 and re.match(
-            TestFixtures.START_OF_IPNS_RESOLUTION_REGEX, data
-        ):
-            self.IPNS_resolution_start_time = time.time()
-
-
 class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
     def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
         super(OuinetBEP5CacheProcessProtocol, self).__init__(
@@ -183,23 +154,3 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         pubkey_search_result = re.match(TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, data)
         if pubkey_search_result:
             self.public_key = pubkey_search_result.group(1)
-
-
-class OuinetBEP44CacheProcessProtocol(OuinetCacheProcessProtocol, object):
-    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
-        super(OuinetBEP44CacheProcessProtocol, self).__init__(
-            proc_config, benchmark_regexes, benchmark_deferreds
-        )
-        self.BEP44_pubk = ""
-
-    def errReceived(self, data):
-        data, rdata = data.decode(), data
-        self.look_for_BEP44_pubk(data)
-        super(OuinetBEP44CacheProcessProtocol, self).errReceived(rdata)
-
-    def look_for_BEP44_pubk(self, data):
-        BEP44_pubk_search_result = re.match(
-            TestFixtures.BEP44_PUBK_ANNOUNCE_REGEX, data
-        )
-        if BEP44_pubk_search_result:
-            self.BEP44_pubk = BEP44_pubk_search_result.group(1)
