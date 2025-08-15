@@ -6,10 +6,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 class OuinetNotification (context: Context, config: NotificationConfig) {
 
@@ -153,5 +155,13 @@ class OuinetNotification (context: Context, config: NotificationConfig) {
                 getFlags()
             )
         }
+
+        private fun isPendingIntentAllowed(context: Context) : Boolean {
+            return ContextCompat.checkSelfPermission(
+                context,
+                "ie.equalit.ouinet.permission.PENDING_INTENT"
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
     }
 }
