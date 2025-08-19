@@ -79,7 +79,7 @@ class OuinetTests(TestCase):
                 benchmark_regexes=[
                     TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX,
                     TestFixtures.TCP_INJECTOR_PORT_READY_REGEX,
-                    TestFixtures.BEP5_REQUEST_CACHED_REGEX
+                    TestFixtures.BEP5_REQUEST_CACHED_REGEX,
                 ],
             ),
         )
@@ -282,24 +282,32 @@ class OuinetTests(TestCase):
             # shut client down to ensure it does not seed content to the cache client
             client.stop()
             # now waiting or injector to annouce caching the request
-            success = yield cache_injector.callbacks[TestFixtures.BEP5_REQUEST_CACHED_REGEX]
+            success = yield cache_injector.callbacks[
+                TestFixtures.BEP5_REQUEST_CACHED_REGEX
+            ]
             self.assertTrue(success)
 
-    #        else:
-    #            # shut injector down to ensure it does not seed content to the cache client
-    #            cache_injector.stop()
-    #            # now waiting for client to annouce caching the response
-    #            success = yield client_cached_result
-    #            self.assertTrue(success)
+            #        else:
+            #            # shut injector down to ensure it does not seed content to the cache client
+            #            cache_injector.stop()
+            #            # now waiting for client to annouce caching the response
+            #            success = yield client_cached_result
+            #            self.assertTrue(success)
 
-    #        #start cache client which supposed to read the response from cache, use only Cache mechanism
-    #        client_cache_ready = defer.Deferred()
-    #        cache_client = run_cache_client(
-    #            TestFixtures.CACHE_CLIENT[1]["name"], index_key,
-    #            [ "--cache-type", "bep5-http", "--disable-origin-access", "--disable-proxy-access"
-    #            , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"])
-    #            ],
-    #            client_cache_ready)
+            # Start cache client which supposed to read the response from cache, use only Cache mechanism
+            cache_client = self.run_tcp_client(
+                TestFixtures.CACHE_CLIENT[1]["name"],
+                [
+                    "--cache-type",
+                    "bep5-http",
+                    "--cache-http-public-key",
+                    str(index_key),
+                    "--disable-origin-access",
+                    "--disable-proxy-access",
+                    "--listen-on-tcp",
+                    "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
+                ],
+            )
 
     #        import time
 
