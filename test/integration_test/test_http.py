@@ -243,8 +243,8 @@ class OuinetTests(TestCase):
         success = yield cache_injector.callbacks[TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX]
         self.assertTrue(success)
 
-        # index_key = cache_injector.get_index_key()
-        # assert len(index_key) > 0
+        index_key = cache_injector.get_index_key()
+        assert len(index_key) > 0
 
         # # Injector client, use only Injector mechanism
         # client_ready = Deferred()
