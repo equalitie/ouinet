@@ -57,6 +57,9 @@ class TestFixtures:
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
     TCP_CLIENT = {"name": "tcp_client", "port": 8075}
     TCP_CLIENT_PORT_READY_REGEX = r"[\s\S]*listening to browser requests[\s\S]*"
+    TCP_CLIENT_DISCOVERY_START = (
+        r"[\s\S]*LocalPeerDiscovery: starting with advertised endpoints[\s\S]*"
+    )
     CACHE_CLIENT = [
         {"name": "cache_client_1", "port": 8074},
         {"name": "cache_client_2", "port": 8073},
@@ -69,9 +72,7 @@ class TestFixtures:
     BEP5_PUBK_ANNOUNCE_REGEX = (
         "[\s\S]*HTTP signing public key \(Ed25519\): ([a-zA-Z0-9]+)[\s\S]*"
     )
-    BEP5_REQUEST_CACHED_REGEX = (
-        "[\s\S]*X-Ouinet-Injection:[\s\S]*"
-    )
+    BEP5_REQUEST_CACHED_REGEX = "[\s\S]*X-Ouinet-Injection:[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r"[\s\S]*Resolving IPNS address: [\s\S]*"
     IPFS_CACHE_READY_REGEX = r"[\s\S]*IPNS ID has been resolved successfully[\s\S]*"
     BEP44_CACHE_READY_REGEX = r"[\s\S]*BEP44 index: bootstrapped BitTorrent DHT[\s\S]*"

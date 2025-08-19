@@ -94,7 +94,10 @@ class OuinetTests(TestCase):
                 name,
                 TestFixtures.TCP_TRANSPORT_TIMEOUT,
                 args,
-                benchmark_regexes=[TestFixtures.TCP_CLIENT_PORT_READY_REGEX],
+                benchmark_regexes=[
+                    TestFixtures.TCP_CLIENT_PORT_READY_REGEX,
+                    TestFixtures.TCP_CLIENT_DISCOVERY_START,
+                ],
             ),
         )
         client.start()
@@ -308,13 +311,16 @@ class OuinetTests(TestCase):
                     "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
                 ],
             )
+            sleep(20)
 
-    #        import time
+            import time
 
-    #        # make sure that the client2 is ready to access the cache
-    #        success = yield client_cache_ready
-    #        index_resolution_done_time_stamp = time.time()
-    #        self.assertTrue(success)
+            # make sure that the client2 is ready to access the cache
+            success = yield cache_client.callbacks[
+                TestFixtures.TCP_CLIENT_DISCOVERY_START
+            ]
+            index_resolution_done_time_stamp = time.time()
+            self.assertTrue(success)
 
     #        try:
     #            index_resolution_start = cache_client.index_resolution_start_time()
