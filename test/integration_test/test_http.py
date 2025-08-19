@@ -68,7 +68,7 @@ class OuinetTests(TestCase):
         s.close()
         return ip
 
-    def run_tcp_injector(self, injector_args, deferred_ready):
+    def run_tcp_injector(self, injector_args):
         # BEP5 is our default injector
         injector = OuinetBEP5CacheInjector(
             OuinetConfig(
@@ -80,8 +80,6 @@ class OuinetTests(TestCase):
                     TestFixtures.TCP_INJECTOR_PORT_READY_REGEX,
                 ],
             ),
-            regexes=TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX,
-            deferred_events=[deferred_ready],
         )
         injector.start()
         self.proc_list.append(injector)
@@ -232,11 +230,9 @@ class OuinetTests(TestCase):
         the response is served from cache.
         """
         # Injector (caching by default)
-        injector_ready = Deferred()
         # injector_cached_result = Deferred()
         cache_injector: OuinetBEP5CacheInjector = self.run_tcp_injector(
             ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
-            injector_ready,
         )
 
         assert cache_injector.callbacks

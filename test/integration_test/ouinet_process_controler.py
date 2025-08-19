@@ -241,7 +241,7 @@ class OuinetBEP5CacheInjector(OuinetInjector):
     As above, but for the 'injector which cache data' with a BEP5 index
     """
 
-    def __init__(self, injector_config, regexes, deferred_events):
+    def __init__(self, injector_config):
         super(OuinetBEP5CacheInjector, self).__init__(injector_config)
         self.set_process_protocol(
             OuinetBEP5CacheProcessProtocol(
