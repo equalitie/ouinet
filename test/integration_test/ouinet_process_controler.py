@@ -6,6 +6,7 @@
 
 import os
 import logging
+from typing import List
 
 from test_fixtures import TestFixtures
 
@@ -73,7 +74,7 @@ class OuinetProcess(object):
         """
         self.config = ouinet_config
 
-        self._proc_protocol = OuinetProcessProtocol(self.config, watchpoint_regexes=[])
+        self._proc_protocol = OuinetProcessProtocol(self.config, ouinet_config.benchmark_regexes)
 
         self._has_started = False
         self._term_signal_sent = False
@@ -183,10 +184,10 @@ class OuinetProcess(object):
 
 
 class OuinetClient(OuinetProcess):
-    def __init__(self, client_config, deferred_events):
+    def __init__(self, client_config: OuinetConfig):
         client_config.config_file_name = "ouinet-client.conf"
         client_config.config_file_content = TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT
-        super(OuinetClient, self).__init__(client_config, deferred_events)
+        super(OuinetClient, self).__init__(client_config)
 
         self.config.argv = [
             os.path.join(ouinet_env["OUINET_BUILD_DIR"], "client"),

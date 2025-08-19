@@ -86,8 +86,7 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_tcp_client(self, name, args, deferred_tcp_port_ready):
-        # TODO: actually use index key
+    def run_tcp_client(self, name, args):
         client = OuinetClient(
             OuinetConfig(
                 name,
@@ -95,7 +94,6 @@ class OuinetTests(TestCase):
                 args,
                 benchmark_regexes=[TestFixtures.TCP_CLIENT_PORT_READY_REGEX],
             ),
-            [deferred_tcp_port_ready],
         )
         client.start()
         self.proc_list.append(client)
@@ -242,29 +240,25 @@ class OuinetTests(TestCase):
         assert len(index_key) > 0
 
         # # Injector client, use only Injector mechanism
-        # client_ready = Deferred()
-        # # client_cached_result = Deferred()
-        # client = self.run_tcp_client(
-        #     name=TestFixtures.CACHE_CLIENT[0]["name"],
-        #     args=[
-        #         "--cache-type",
-        #         "bep5-http",
-        #         "--cache-http-public-key",
-        #         str(index_key),
-        #         "--disable-origin-access",
-        #         "--disable-proxy-access",
-        #         "--listen-on-tcp",
-        #         "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
-        #         "--injector-ep",
-        #         "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
-        #     ],
-        #     deferred_tcp_port_ready=client_ready,
-        # )
-        # # , client_cached_result)
+        client = self.run_tcp_client(
+            name=TestFixtures.CACHE_CLIENT[0]["name"],
+            args=[
+                "--cache-type",
+                "bep5-http",
+                "--cache-http-public-key",
+                str(index_key),
+                "--disable-origin-access",
+                "--disable-proxy-access",
+                "--listen-on-tcp",
+                "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
+                "--injector-ep",
+                "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
+            ],
+        )
 
-        # success = yield client_ready
-        # # Wait for the client to open the port
-        # self.assertTrue(success)
+        success = yield client.callbacks[TestFixtures.TCP_CLIENT_PORT_READY_REGEX]
+        # Wait for the client to open the port
+        self.assertTrue(success)
 
         # # Http_server
 
