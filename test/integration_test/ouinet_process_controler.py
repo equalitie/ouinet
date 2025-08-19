@@ -74,7 +74,9 @@ class OuinetProcess(object):
         """
         self.config = ouinet_config
 
-        self._proc_protocol = OuinetProcessProtocol(self.config, ouinet_config.benchmark_regexes)
+        self._proc_protocol = OuinetProcessProtocol(
+            self.config, ouinet_config.benchmark_regexes
+        )
 
         self._has_started = False
         self._term_signal_sent = False
@@ -193,6 +195,8 @@ class OuinetClient(OuinetProcess):
             os.path.join(ouinet_env["OUINET_BUILD_DIR"], "client"),
             "--repo",
             self.config.config_folder_name,
+            "--log-level=DEBUG",
+            "--enable-log-file",
         ] + self.config.argv
 
 

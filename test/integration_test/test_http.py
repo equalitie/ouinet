@@ -17,6 +17,7 @@ from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 
 from twisted.web.client import ProxyAgent, readBody
+from twisted.web.http_headers import Headers
 from twisted.trial.unittest import TestCase
 from twisted.internet import task
 
@@ -134,7 +135,9 @@ class OuinetTests(TestCase):
     def request_url(self, port, url):
         ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
         agent = ProxyAgent(ouinet_client_endpoint)
-        return agent.request(b"GET", url.encode())
+        return agent.request(
+            b"GET", url.encode(), headers=Headers({"X-Ouinet-Group": ["localhost"]})
+        )
 
     def _cache_injector_config(self, timeout, evt_regexes, args):
         return OuinetConfig(
@@ -175,20 +178,16 @@ class OuinetTests(TestCase):
         logging.debug("test_tcp_transport")
         logging.debug("################################################")
 
-        # Injector
-        injector_ready = Deferred()
-
         # It is client who will decide if there will be caching or not
-        self.run_tcp_injector(
+        injector = self.run_tcp_injector(
             injector_args=[
                 "--listen-on-tcp",
                 f"127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
             ],
-            deferred_ready=injector_ready,
         )
 
-        # Wait for the injector to open the port
-        success = yield injector_ready
+        # Wait for the injector to open port
+        success = yield injector.callbacks[TestFixtures.TCP_INJECTOR_PORT_READY_REGEX]
         self.assertTrue(success)
 
         # Client
@@ -355,6 +354,8 @@ class OuinetTests(TestCase):
 
             response_body = yield readBody(defered_response)
             self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+
+            sleep(60000)
 
     #        # make sure it was served from cache
     #        self.assertTrue(cache_client.served_from_cache())
