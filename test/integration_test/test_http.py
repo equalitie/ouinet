@@ -75,9 +75,11 @@ class OuinetTests(TestCase):
                 app_name=TestFixtures.TCP_INJECTOR_NAME + "_tcp",
                 timeout=TestFixtures.TCP_TRANSPORT_TIMEOUT,
                 argv=injector_args,
+                # TODO: move it to the class itself
                 benchmark_regexes=[
                     TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX,
                     TestFixtures.TCP_INJECTOR_PORT_READY_REGEX,
+                    TestFixtures.BEP5_REQUEST_CACHED_REGEX
                 ],
             ),
         )
@@ -273,12 +275,16 @@ class OuinetTests(TestCase):
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
 
-    #        if injector_seed:
-    #            # shut client down to ensure it does not seed content to the cache client
-    #            client.stop()
-    #            # now waiting or injector to annouce caching the request
-    #            success = yield injector_cached_result
-    #            self.assertTrue(success)
+        # XXX
+        injector_seed = True
+
+        if injector_seed:
+            # shut client down to ensure it does not seed content to the cache client
+            client.stop()
+            # now waiting or injector to annouce caching the request
+            success = yield cache_injector.callbacks[TestFixtures.BEP5_REQUEST_CACHED_REGEX]
+            self.assertTrue(success)
+
     #        else:
     #            # shut injector down to ensure it does not seed content to the cache client
     #            cache_injector.stop()
