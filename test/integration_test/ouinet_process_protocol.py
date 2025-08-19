@@ -49,7 +49,9 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         for regex in self.callbacks.keys():
             match = re.match(regex, data)
             if match:
-                self.callbacks[regex].callback(self)
+                cb: Deferred = self.callbacks[regex]
+                if not cb.called:
+                    cb.callback(self)
 
     def outReceived(self, data):
         print("out")

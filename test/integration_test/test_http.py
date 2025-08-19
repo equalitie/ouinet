@@ -18,6 +18,7 @@ from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 
 from twisted.web.client import ProxyAgent, readBody
 from twisted.trial.unittest import TestCase
+from twisted.internet import task
 
 from ouinet_process_controler import (
     OuinetConfig,
@@ -309,9 +310,11 @@ class OuinetTests(TestCase):
                     "--disable-proxy-access",
                     "--listen-on-tcp",
                     "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
+                    "--injector-ep",
+                    "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
                 ],
             )
-            sleep(20)
+            sleep(7)
 
             import time
 
@@ -322,29 +325,36 @@ class OuinetTests(TestCase):
             index_resolution_done_time_stamp = time.time()
             self.assertTrue(success)
 
-    #        try:
-    #            index_resolution_start = cache_client.index_resolution_start_time()
-    #            self.assertTrue(index_resolution_start > 0)
+            # try:
+            #     index_resolution_start = cache_client.index_resolution_start_time()
+            #     self.assertTrue(index_resolution_start > 0)
 
-    #            logging.debug("Index resolution took: " + str(
-    #                index_resolution_done_time_stamp -
-    #                index_resolution_start) + " seconds")
-    #        except AttributeError:  # index has no global resolution
-    #            pass
+            #     logging.debug(
+            #         "Index resolution took: "
+            #         + str(index_resolution_done_time_stamp - index_resolution_start)
+            #         + " seconds"
+            #     )
+            # except AttributeError:  # index has no global resolution
+            #     pass
 
-    #        # now request the same page from second client
-    #        defered_response = defer.Deferred()
-    #        for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
-    #            defered_response = yield self.request_page(
-    #                TestFixtures.CACHE_CLIENT[1]["port"], page_url)
-    #            if (defered_response.code == 200):
-    #                break
-    #            yield task.deferLater(reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None)
+            # now request the same page from second client
+            defered_response = Deferred()
+            for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
+                defered_response = yield self.request_page(
+                    TestFixtures.CACHE_CLIENT[1]["port"], page_url
+                )
+                if defered_response.code == 200:
+                    break
+                yield task.deferLater(
+                    reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None
+                )
 
-    #        self.assertEquals(defered_response.code, 200)
+            self.assertEquals(defered_response.code, 200)
 
-    #        response_body = yield readBody(defered_response)
-    #        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+            sleep(5)
+
+            response_body = yield readBody(defered_response)
+            self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
 
     #        # make sure it was served from cache
     #        self.assertTrue(cache_client.served_from_cache())
