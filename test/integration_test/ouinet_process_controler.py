@@ -11,8 +11,8 @@ from test_fixtures import TestFixtures
 
 from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import (
-    OuinetProcessProtocol,
     OuinetBEP5CacheProcessProtocol,
+    OuinetProcessProtocol,
 )
 
 ouinet_env = {}
@@ -59,7 +59,7 @@ class OuinetConfig(object):
 
 
 class OuinetProcess(object):
-    def __init__(self, ouinet_config, deferred_events):
+    def __init__(self, ouinet_config):
         """
         perform the initialization tasks common between all clients
         and injectors:
@@ -72,15 +72,9 @@ class OuinetProcess(object):
         process_ready_deferred   a deferred object which get called back when the process is ready
         """
         self.config = ouinet_config
-        self._proc_protocol = OuinetProcessProtocol(
-            proc_config=self.config,
-            ready_benchmark_regex=ouinet_config.benchmark_regexes[
-                TestFixtures.READY_REGEX_INDEX
-            ],
-            ready_deferred=deferred_events[TestFixtures.READY_REGEX_INDEX],
-        )  # default protocol
-        # in case the communication process protocol is not explicitly set
-        # starts a default process protocol to check on Fatal errors
+
+        self._proc_protocol = OuinetProcessProtocol(self.config, watchpoint_regexes=[])
+
         self._has_started = False
         self._term_signal_sent = False
         self.setup_config()
@@ -183,6 +177,10 @@ class OuinetProcess(object):
             # actually exits.
             # self._proc_protocol.transport.loseConnection()
 
+    @property
+    def callbacks(self):
+        return self._proc_protocol.callbacks
+
 
 class OuinetClient(OuinetProcess):
     def __init__(self, client_config, deferred_events):
@@ -223,10 +221,10 @@ class OuinetInjector(OuinetProcess):
               tunnel is ready
     """
 
-    def __init__(self, injector_config, deferred_events):
+    def __init__(self, injector_config):
         injector_config.config_file_name = TestFixtures.INJECTOR_CONF_FILE_NAME
         injector_config.config_file_content = TestFixtures.INJECTOR_CONF_FILE_CONTENT
-        super(OuinetInjector, self).__init__(injector_config, deferred_events)
+        super(OuinetInjector, self).__init__(injector_config)
         self.config.argv = [
             os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector"),
             "--repo",
@@ -243,27 +241,14 @@ class OuinetBEP5CacheInjector(OuinetInjector):
     As above, but for the 'injector which cache data' with a BEP5 index
     """
 
-    def __init__(self, injector_config, deferred_events):
-        super(OuinetBEP5CacheInjector, self).__init__(injector_config, deferred_events)
+    def __init__(self, injector_config, regexes, deferred_events):
+        super(OuinetBEP5CacheInjector, self).__init__(injector_config)
         self.set_process_protocol(
             OuinetBEP5CacheProcessProtocol(
                 proc_config=self.config,
                 benchmark_regexes=injector_config.benchmark_regexes,
-                benchmark_deferreds=deferred_events,
             )
-        )  # change default protocol to one understand ipfs cache outputs
+        )
 
     def get_index_key(self):
         return self._proc_protocol.public_key
-
-    #   self._setup_ipfs_identity()
-
-    # def _setup_ipfs_identity(self):
-    #     pdb.set_trace()
-    #     if not os.path.exists(self.config.config_folder_name+"/ipfs"):
-    #         os.makedirs(self.config.config_folder_name+"/ipfs")
-
-    #     with open(self.config.config_folder_name+"/ipfs/config", "w") \
-    #       as ipfs_config_file:
-    #         print json.dumps(TestFixtures.IPFS_CONFIG_DIC)
-    #         ipfs_config_file.write(json.dumps(TestFixtures.IPFS_CACHE_READY_REGEX))

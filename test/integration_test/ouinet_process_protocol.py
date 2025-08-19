@@ -4,11 +4,14 @@
 # Integration tests for ouinet - classes which setup and fire ouinet client and injectors for different tests situation
 
 import re
+from re import Match
 import os
 import logging
 
 from twisted.internet import protocol
+from twisted.internet.defer import Deferred
 
+from typing import List
 from test_fixtures import TestFixtures
 
 
@@ -20,41 +23,36 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     in case of fatal error
     """
 
-    def __init__(self, proc_config, ready_benchmark_regex="", ready_deferred=None):
+    def __init__(self, proc_config, watchpoint_regexes: List[str]):
         super(OuinetProcessProtocol, self).__init__()
-        self._ready_benchmark_regex = ready_benchmark_regex
-        self._ready_deferred = ready_deferred
+        self.regexes: List[str] = watchpoint_regexes
+        self.callbacks: dict[str, Deferred] = {}
         self._proc_config = proc_config
-        self._got_ready = False
 
-        self._logger = logging.getLogger()
+        for regex in self.regexes:
+            self.callbacks[regex] = Deferred()
+
+        self._logger: logging.Logger = logging.getLogger()
 
     def errReceived(self, data):
         """
         listen for the debugger output reacto to fatal errors and other clues
         """
         data = data.decode()
+        print("err")
         logging.debug(self.app_name + ": " + data)
         self._logger.handlers[0].flush()
 
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
             raise Exception("Fatal error")
 
-        if (
-            (not self._got_ready)
-            and self._ready_deferred
-            and self.check_got_ready(data)
-        ):
-            self._got_ready = True
-            self._ready_deferred.callback(self)
-
-    def check_got_ready(self, data):
-        if self._ready_benchmark_regex:
-            return re.match(self._ready_benchmark_regex, data)
-
-        return False
+        for regex in self.callbacks.keys():
+            match = re.match(regex, data)
+            if match:
+                self.callbacks[regex].callback(self)
 
     def outReceived(self, data):
+        print("out")
         data = data.decode()
         logging.debug(self.app_name + ": " + data)
         self._logger.handlers[0].flush()
@@ -71,31 +69,12 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
 
 
 class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
-    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
+    def __init__(self, proc_config, regexes=[]):
         super(OuinetCacheProcessProtocol, self).__init__(
             proc_config,
-            benchmark_regexes[TestFixtures.READY_REGEX_INDEX],
-            benchmark_deferreds[TestFixtures.READY_REGEX_INDEX],
+            watchpoint_regexes=regexes,
         )
 
-        self._index_ready_deferred = None
-        self._request_cached_deferred = None
-
-        # TODO: this need to change to dictionary
-        if len(benchmark_regexes) > TestFixtures.INDEX_READY_REGEX_INDEX:
-            self._index_ready_regex = benchmark_regexes[
-                TestFixtures.INDEX_READY_REGEX_INDEX
-            ]
-            self._index_ready_deferred = benchmark_deferreds[
-                TestFixtures.INDEX_READY_REGEX_INDEX
-            ]
-        if len(benchmark_regexes) > TestFixtures.REQUEST_CACHED_REGEX_INDEX:
-            self._request_cached_regex = benchmark_regexes[
-                TestFixtures.REQUEST_CACHED_REGEX_INDEX
-            ]
-            self._request_cached_deferred = benchmark_deferreds[
-                TestFixtures.REQUEST_CACHED_REGEX_INDEX
-            ]
         self._number_of_cache_db_updates = 0
         self._served_from_cache = False
 
@@ -109,17 +88,6 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
         self.check_response_served_from_cached(data)
 
         super(OuinetCacheProcessProtocol, self).errReceived(rdata)
-
-        if self._index_ready_deferred and self.check_index_ready(data):
-            self._index_ready_deferred.callback(self)
-
-        if self._request_cached_deferred and self.check_request_got_cached(data):
-            self._number_of_cache_db_updates += 1
-            if (
-                self._number_of_cache_db_updates
-                == TestFixtures.NO_OF_CACHED_MESSAGES_REQUIRED
-            ):
-                self._request_cached_deferred.callback(self)
 
     def check_index_ready(self, data):
         if self._index_ready_regex:
@@ -138,14 +106,16 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
 
 
 class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
-    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
+    def __init__(self, proc_config, benchmark_regexes=[]):
+        print("initting bep5 proto")
         super(OuinetBEP5CacheProcessProtocol, self).__init__(
-            proc_config, benchmark_regexes, benchmark_deferreds
+            proc_config, benchmark_regexes
         )
         self.public_key = ""
 
     def errReceived(self, data):
         print("receiving line", data)
+
         data, rdata = data.decode(), data
         self.look_for_public_key(data)
         super(OuinetBEP5CacheProcessProtocol, self).errReceived(rdata)
