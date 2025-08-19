@@ -230,14 +230,9 @@ class OuinetTests(TestCase):
         the response is served from cache.
         """
         # Injector (caching by default)
-        # injector_cached_result = Deferred()
         cache_injector: OuinetBEP5CacheInjector = self.run_tcp_injector(
             ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
         )
-
-        assert cache_injector.callbacks
-        print("callbacks:", cache_injector.callbacks)
-        assert TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX in cache_injector.callbacks.keys()
 
         # Wait for the injector to have a key
         success = yield cache_injector.callbacks[TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX]
