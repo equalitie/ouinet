@@ -41,9 +41,9 @@ static const string loopback_host[] = {
     // ipv6
     "ip6-localhost",
     "ip6-loopback",
-    "::1",
-    "::ffff:127.0.0.1",
-    "::127.0.0.1",
+    "::1:8080",
+    "::ffff:127.0.0.1:8080",
+    "::127.0.0.1:8080",
 };
 BOOST_DATA_TEST_CASE(test_resolve_target_loopback,
                      boost::unit_test::data::make(loopback_host),
@@ -69,19 +69,20 @@ static const string private_host[] = {
     "172.17.0.1",
     "10.4.2.1",
     // ipv6
-    "::ffff:192.168.1.1",
-    "::ffff:172.17.0.1",
-    "::ffff:10.4.2.1",
-    "::192.168.1.1",
-    "::172.17.0.1",
-    "::10.4.2.1",
+    "::ffff:192.168.1.1:8080",
+    "::ffff:172.17.0.1:8080",
+    "::ffff:10.4.2.1:8080",
+    "::192.168.1.1:8080",
+    "::172.17.0.1:8080",
+    "::10.4.2.1:8080",
 };
-BOOST_DATA_TEST_CASE(test_resolve_target_private,
+BOOST_DATA_TEST_CASE(test_resolve_target_restrict_private,
                      boost::unit_test::data::make(private_host),
                      hostname)
 {
     asio::io_context ctx;
     Cancel cancel;
+    allow_private_targets = false;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
         Request req;
@@ -90,6 +91,23 @@ BOOST_DATA_TEST_CASE(test_resolve_target_private,
         BOOST_CHECK_THROW(
             resolve_target(req, ctx.get_executor(), cancel, y),
             boost::system::system_error);
+    });
+    ctx.run();
+}
+
+BOOST_DATA_TEST_CASE(test_resolve_target_allow_private,
+                     boost::unit_test::data::make(private_host),
+                     hostname)
+{
+    asio::io_context ctx;
+    Cancel cancel;
+    allow_private_targets = true;
+    task::spawn_detached(ctx, [&](asio::yield_context yield)
+    {
+        Request req;
+        req.set(http::field::host, hostname);
+        Yield y(ctx.get_executor(), std::move(yield), "PRIVATE");
+        BOOST_CHECK_NO_THROW(resolve_target(req, ctx.get_executor(), cancel, y));
     });
     ctx.run();
 }
