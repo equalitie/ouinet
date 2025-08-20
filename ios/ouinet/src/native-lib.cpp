@@ -75,7 +75,8 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
     }
     */
 
-    if (g_client_thread.get_id() != thread::id()) return;
+    // if (g_client_thread.get_id() != thread::id()) return;
+    if (g_client) return;
 
     std::cout<<"Ouinet config:"<<std::endl;
     for (std::string arg: args) {
@@ -89,6 +90,7 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
 
             //debug("Starting new ouinet client.");
             std::cout<<"Starting new ouinet client"<<std::endl;
+            LOG_WARN("OUINET::Starting new ouinet client");
 
             // In case we're restarting.
             g_ctx.restart();
@@ -175,6 +177,17 @@ void NativeLib::startClient(const std::vector<std::string>& args)//, const vecto
     */
     std::cout<<"Starting ouinet client"<<std::endl;
     start_client_thread(args);
+}
+
+void NativeLib::stopClient()
+{
+    if (!g_client) return;
+    g_client->stop();
+    g_client.reset();
+    
+    if (g_client_thread.joinable()) {
+        g_client_thread.join();
+    }
 }
 
 std::string NativeLib::helloOuinet()

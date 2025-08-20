@@ -62,6 +62,12 @@ NativeLib _n;
   return;
 }
 
+- (void)stop
+{
+  _n.stopClient();
+  return;
+}
+
 
 - (std::vector<std::string>)maybeAdd:(std::vector<std::string>)args stringOfKey:(NSString*)key stringOfValue:(NSString*)value
 {

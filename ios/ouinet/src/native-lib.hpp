@@ -19,4 +19,5 @@ public:
   int getClientState();
   std::string helloOuinet();
   void startClient(const std::vector<std::string>& args);
+  void stopClient();
 };
