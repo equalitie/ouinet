@@ -837,6 +837,10 @@ int main(int argc, const char* argv[])
         LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = config.target_rx())
         LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
+    if (config.is_private_target_allowed()) {
+        LOG_INFO("Allowing injection of private targets.");
+        allow_private_targets = true;
+    }
 
     OuiServiceServer proxy_server(ex);
 
