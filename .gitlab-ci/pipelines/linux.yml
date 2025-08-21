@@ -15,6 +15,7 @@ linux / prepare-builder-image:
 linux / build:
   variables:
     TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM'
     BOOST_VERSION: "1.88.0"
     CMAKE_VERSION: "3.31.7-linux-x86_64"
     WITH_ASAN: "OFF"
@@ -27,6 +28,7 @@ linux / build:
 linux / unit-cpp-test:
   variables:
     TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM'
   extends:
     .linux-unit-cpp-test
   needs:
@@ -35,6 +37,7 @@ linux / unit-cpp-test:
 linux / unit-rust-test:
   variables:
     TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM'
   extends:
     .linux-unit-rust-test
   needs:
@@ -43,6 +46,7 @@ linux / unit-rust-test:
 linux / integration-test:
   variables:
     TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM'
   extends:
     .linux-integration-test
   needs:

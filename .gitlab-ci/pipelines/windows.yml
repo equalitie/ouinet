@@ -1,7 +1,7 @@
-variables:
-  TARGET_PLATFORM: 'windows'
-
 windows / build:
+  variables:
+    TARGET_PLATFORM: 'windows'
+    BUILD_PATH: 'build/$TARGET_PLATFORM'
   stage: build
   tags:
     - windows-shell
@@ -24,6 +24,9 @@ windows / build:
     []
 
 windows / unit-test:
+  variables:
+    TARGET_PLATFORM: 'windows'
+    BUILD_PATH: 'build/$TARGET_PLATFORM'
   stage: test
   tags:
     - windows-shell
