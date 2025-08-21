@@ -16,7 +16,7 @@ import androidx.core.content.ContextCompat
 import ie.equalit.ouinet.Config
 import ie.equalit.ouinet.Ouinet
 import ie.equalit.ouinet.OuinetEndpoint
-import ie.equalit.ouinet.OuinetNotification.Companion.MILLISECOND
+import ie.equalit.ouinet.Constants.MILLISECOND
 import kotlin.system.exitProcess
 
 class OuinetBackground() : NotificationListener {
