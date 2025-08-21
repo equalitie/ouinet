@@ -2604,6 +2604,8 @@ void Client::State::serve_request( GenericStream&& con
         // to avoid leaking internal services accessed through the client.
         Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
+        Match( reqexpr::from_regex(hostname_getter, util::private_rx)
+             , {deque<fresh_channel>({fresh_channel::origin})} ),
 
         // Access to sites under the local TLD are always accessible
         // with good connectivity, so always use the Origin channel

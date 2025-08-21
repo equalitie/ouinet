@@ -28,6 +28,7 @@
 #include "increase_open_file_limit.h"
 #endif
 #include "full_duplex_forward.h"
+#include "injector.h"
 #include "injector_config.h"
 #include "authenticate.h"
 #include "force_exit_on_signal.h"
@@ -128,50 +129,6 @@ void handle_no_proxy( GenericStream& con
     return handle_error( con, req, http::status::forbidden
                        , http_::response_error_hdr_proxy_disabled, "Proxy disabled"
                        , yield);
-}
-
-//------------------------------------------------------------------------------
-// Resolve request target address, check whether it is valid
-// and return lookup results.
-// If not valid, set error code
-// (the returned lookup may not be usable then).
-static
-TcpLookup
-resolve_target( const Request& req
-              , AsioExecutor exec
-              , Cancel& cancel
-              , Yield yield)
-{
-    TcpLookup lookup;
-    sys::error_code ec;
-
-    string host, port;
-    tie(host, port) = util::get_host_port(req);
-
-    // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = boost::regex_match(host, util::localhost_rx);
-
-    // Resolve address and also use result for more sophisticaded checking.
-    if (!local)
-        lookup = util::tcp_async_resolve( host, port
-                                        , exec
-                                        , cancel
-                                        , static_cast<asio::yield_context>(yield[ec]));
-
-    if (ec) return or_throw<TcpLookup>(yield, ec);
-
-    // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
-    for (auto r : lookup)
-        if ((local = boost::regex_match( r.endpoint().address().to_string()
-                                       , util::localhost_rx)))
-            break;
-
-    if (local) {
-        ec = asio::error::invalid_argument;
-        return or_throw<TcpLookup>(yield, ec);
-    }
-
-    return or_throw(yield, ec, move(lookup));
 }
 
 //------------------------------------------------------------------------------
@@ -880,6 +837,10 @@ int main(int argc, const char* argv[])
         LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = config.target_rx())
         LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
+    if (config.is_private_target_allowed()) {
+        LOG_INFO("Allowing injection of private targets.");
+        allow_private_targets = true;
+    }
 
     OuiServiceServer proxy_server(ex);
 
