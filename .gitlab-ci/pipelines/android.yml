@@ -56,6 +56,29 @@ android / build-asan:
   when: manual
   allow_failure: true
 
+android / build-release:
+  variables:
+    TARGET_PLATFORM: 'android'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  stage: build
+  tags:
+    - docker
+  needs:
+    - job: 'android / prepare-builder-image'
+      optional: true
+  image: $BUILDER_IMAGE
+  script:
+    - mkdir -p build.android-release
+    - cd build.android-release
+    - ../scripts/build-android.sh -r
+  artifacts:
+    paths:
+      - build.android-release/build-android-*/ouinet/outputs/aar/*.aar
+      - build.android-release/build-android-*/ouinet/outputs/apk/*.apk
+    expire_in: 6h
+  when: manual
+  allow_failure: true
+
 # TODO: Remove this job when the builder image created by prepare-builder-image
 #       is stable enough to build a production Ouinet AAR.
 android / build-prod-image:

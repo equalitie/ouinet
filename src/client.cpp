@@ -49,8 +49,6 @@
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
 
-#include "cxx/metrics.h"
-
 #ifndef __ANDROID__
 #  include "force_exit_on_signal.h"
 #endif // ifndef __ANDROID__
@@ -397,9 +395,9 @@ public:
                 OuinetYield yield(client->_ctx, yield_, "metrics");
 
                 try {
-                    client->send_metrics_record(record_name, record_content, *cancel, OuinetYield(move(yield)));
+                    client->send_metrics_record(record_name, record_content, *cancel, move(yield));
                 } catch (std::exception& e) {
-                    LOG_WARN("Failed to send statistics: ", e.what());
+                    LOG_WARN("Failed to send metrics: ", e.what());
                     throw;
                 }
             });
@@ -1121,6 +1119,17 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYiel
 
         bool is_enabled() const override {
             return client->_metrics.is_enabled();
+        }
+
+        std::optional<std::string> current_record_id() const override {
+            return client->_metrics.current_record_id();
+        }
+
+        metrics::SetAuxResult set_aux_key_value(
+                std::string_view record_id,
+                std::string_view key,
+                std::string_view value) override {
+            return client->_metrics.set_aux_key_value(record_id, key, value);
         }
 
       private:

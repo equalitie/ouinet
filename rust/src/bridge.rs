@@ -6,6 +6,7 @@ use crate::{
         BootstrapId, IpVersion, Metrics,
     },
     metrics_runner::metrics_runner,
+    record_id::RecordId,
     record_processor::RecordProcessor,
     runtime,
     store::Store,
@@ -22,7 +23,6 @@ use tokio::{
     task::{self, JoinHandle},
     time::{sleep, Duration},
 };
-use uuid::Uuid;
 
 #[cxx::bridge]
 mod ffi {
@@ -40,13 +40,15 @@ mod ffi {
         fn new_cache_out_request(self: &Client) -> Box<Request>;
         fn bridge_transfer_i2c(self: &Client, byte_count: usize);
         fn bridge_transfer_c2i(self: &Client, byte_count: usize);
+        fn set_aux_key_value(self: &Client, record_id: String, key: String, value: String) -> bool;
 
         // Until the processor is set, no metrics will be stored on the disk nor sent. The (non
         // no-oop) client will, however collect metrics in memory so that once once (and if) the
         // processor is set eventually, the metrics from this runtime can be collected.
         fn set_processor(self: &Client, processor: UniquePtr<CxxRecordProcessor>);
 
-        fn device_id(self: &Client) -> String;
+        fn current_device_id(self: &Client) -> String;
+        fn current_record_id(self: &Client) -> String;
 
         //------------------------------------------------------------
         type MainlineDht;
@@ -174,10 +176,10 @@ impl Client {
         let metrics = Arc::new(Mutex::new(Metrics::new()));
         let store = runtime.block_on(Store::new(store_path, encryption_key));
 
-        let (runner, device_id_rx) = match store {
+        let (runner, record_id_rx) = match store {
             Ok(store) => {
                 let metrics = metrics.clone();
-                let device_id_rx = store.device_id.subscribe();
+                let record_id_rx = store.record_id.subscribe();
                 let job_handle = task::spawn(async move {
                     metrics_runner(metrics, store, processor_rx).await;
                 });
@@ -188,14 +190,14 @@ impl Client {
                         processor_tx,
                         job_handle,
                     }),
-                    device_id_rx,
+                    record_id_rx,
                 )
             }
             Err(error) => {
                 log::error!("Failed to initialize metrics store: {error:?}");
 
                 // Dummy device id receiver that always returns `Uuid::nil()`
-                (None, watch::channel(Uuid::nil()).1)
+                (None, watch::channel(RecordId::nil()).1)
             }
         };
 
@@ -203,7 +205,7 @@ impl Client {
             inner: Arc::new(ClientInner {
                 runner: Mutex::new(runner),
                 metrics,
-                device_id_rx,
+                record_id_rx,
             }),
         }
     }
@@ -248,8 +250,12 @@ impl Client {
         })
     }
 
-    fn device_id(&self) -> String {
-        self.inner.device_id_rx.borrow().to_string()
+    fn current_device_id(&self) -> String {
+        self.inner.record_id_rx.borrow().device_id.to_string()
+    }
+
+    fn current_record_id(&self) -> String {
+        self.inner.record_id_rx.borrow().to_string()
     }
 
     fn bridge_transfer_i2c(&self, byte_count: usize) {
@@ -261,12 +267,22 @@ impl Client {
         let mut metrics = self.inner.metrics.lock().unwrap();
         metrics.bridge_transfer_c2i(byte_count);
     }
+
+    fn set_aux_key_value(&self, record_id: String, key: String, value: String) -> bool {
+        let mut metrics = self.inner.metrics.lock().unwrap();
+        if record_id == self.current_record_id() {
+            metrics.set_aux_key_value(key, value);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 struct ClientInner {
     runner: Mutex<Option<Runner>>,
     metrics: Arc<Mutex<Metrics>>,
-    device_id_rx: watch::Receiver<Uuid>,
+    record_id_rx: watch::Receiver<RecordId>,
 }
 
 struct Runner {

@@ -26,3 +26,5 @@ macos / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh
+  when: manual
+  allow_failure: true
