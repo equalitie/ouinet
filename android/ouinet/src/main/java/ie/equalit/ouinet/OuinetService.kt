@@ -10,7 +10,7 @@ open class OuinetService : Service(){
     // adb -s $mi shell dumpsys activity services OuinetService
 
     private lateinit var ouinetNotification : OuinetNotification
-    private var ouinetState = OuinetNotification.DEFAULT_STATE
+    private var ouinetState = Constants.DEFAULT_STATE
 
     private fun getConfigExtra(intent: Intent) : NotificationConfig {
         require(intent.hasExtra(OuinetNotification.CONFIG_EXTRA)) {

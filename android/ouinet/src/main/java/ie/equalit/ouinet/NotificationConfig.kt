@@ -38,7 +38,7 @@ class NotificationConfig : Parcelable {
             this.homeText = context.getString(R.string.ouinet_notif_home)
             this.clearText = context.getString(R.string.ouinet_notif_clear)
             this.confirmText = context.getString(R.string.ouinet_notif_confirm)
-            this.updateInterval = OuinetNotification.DEFAULT_INTERVAL
+            this.updateInterval = Constants.DEFAULT_INTERVAL
             this.disableStatus = false
         }
 
