@@ -120,6 +120,7 @@ struct UserAgentMetaData {
     boost::optional<bool> is_private;
     boost::optional<std::string> dht_group;
 
+#if defined(__MACH__)
     static std::string get_dht_group(const std::string& url) {
         auto dhtgroup = std::move(url);
 
@@ -132,24 +133,29 @@ struct UserAgentMetaData {
 
         return dhtgroup;
     }
+#endif
 
     static UserAgentMetaData extract(Request& rq) {
         UserAgentMetaData ret;
 
         {
+#if defined(__MACH__)
+            // On iOS, it is not possible to inject headers into every request
+            // Set the DHT group based on the referrer field or hostname (if referrer is not present)
+            auto i = rq.find(http::field::referer);
+            if (i != rq.end()) {
+                ret.dht_group = get_dht_group(std::string(i->value()));
+                rq.erase(i);
+            } else {
+                ret.dht_group = get_dht_group(std::string(rq.target()));
+            }
+#else
             auto i = rq.find(http_::request_group_hdr);
             if (i != rq.end()) {
                 ret.dht_group = string(i->value());
                 rq.erase(i);
-            } else {
-                auto j = rq.find(http::field::referer);
-                if (j != rq.end()) {
-                    ret.dht_group = get_dht_group(std::string(j->value()));
-                    rq.erase(j);
-                } else {
-                    ret.dht_group = get_dht_group(std::string(rq.target()));
-                }
             }
+#endif
         }
         {
             auto i = rq.find(http_::request_private_hdr);
