@@ -19,13 +19,11 @@ import ie.equalit.ouinet.OuinetEndpoint
 import ie.equalit.ouinet.Constants.MILLISECOND
 import kotlin.system.exitProcess
 
-class OuinetBackground() : NotificationListener {
+class OuinetBackground() {
     class Builder(context: Context) {
         private val context : Context
         private lateinit var ouinetConfig : Config
         private var notificationConfig: NotificationConfig? = null
-        private var onNotificationTapped : (() -> Unit)? = null
-        private var onConfirmTapped : (() -> Unit)? = null
         private var connectivityMonitorEnabled : Boolean = true
 
         init {
@@ -53,27 +51,11 @@ class OuinetBackground() : NotificationListener {
             return this
         }
 
-        fun setOnNotifiactionTappedListener(
-            onNotificationTapped : () -> Unit
-        ) : Builder {
-            this.onNotificationTapped = onNotificationTapped
-            return this
-        }
-
-        fun setOnConfirmTappedListener(
-            onConfirmTapped: () -> Unit
-        ) : Builder {
-            this.onConfirmTapped = onConfirmTapped
-            return this
-        }
-
         fun build() = OuinetBackground(
             context,
             ouinetConfig,
             connectivityMonitorEnabled,
             notificationConfig,
-            onNotificationTapped,
-            onConfirmTapped,
         )
     }
 
@@ -87,13 +69,7 @@ class OuinetBackground() : NotificationListener {
         private set
     var connectivityMonitorEnabled: Boolean = true
         private set
-    var onNotificationTapped: (() -> Unit)? = null
-        private set
-    var onConfirmTapped: (() -> Unit)? = null
-        private set
     lateinit var connectivityMonitor: ConnectivityStateMonitor
-        private set
-    lateinit var notificationReceiver: NotificationBroadcastReceiver
         private set
 
     private constructor(
@@ -101,17 +77,12 @@ class OuinetBackground() : NotificationListener {
         ouinetConfig : Config,
         connectivityMonitorEnabled : Boolean,
         notificationConfig: NotificationConfig?,
-        onNotificationTapped: (() -> Unit)?,
-        onConfirmTapped: (() -> Unit)?
     ) : this() {
         this.context = context
         this.ouinetConfig = ouinetConfig
         this.connectivityMonitorEnabled = connectivityMonitorEnabled
         this.notificationConfig = notificationConfig
-        this.onNotificationTapped = onNotificationTapped
-        this.onConfirmTapped = onConfirmTapped
         this.connectivityMonitor = ConnectivityStateMonitor(context, this)
-        this.notificationReceiver = NotificationBroadcastReceiver(this)
     }
 
     private var mOuinet: Ouinet? = null
@@ -182,18 +153,11 @@ class OuinetBackground() : NotificationListener {
             connectivityMonitor.enable()
         val notificationIntentFilter = IntentFilter()
         notificationIntentFilter.addAction(NotificationBroadcastReceiver.NOTIFICATION_ACTION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(notificationReceiver, notificationIntentFilter, Context.RECEIVER_NOT_EXPORTED)
-        }
-        else {
-            context.registerReceiver(notificationReceiver, notificationIntentFilter)
-        }
     }
 
     private fun unregister() {
         if (connectivityMonitorEnabled)
             connectivityMonitor.disable()
-        context.unregisterReceiver(notificationReceiver)
     }
 
     private fun sendOuinetStatePendingIntent() {
@@ -315,26 +279,6 @@ class OuinetBackground() : NotificationListener {
                 }
                 exitProcess(0)
             }
-        }
-    }
-
-    override fun onNotificationTapped() {
-        if (onNotificationTapped == null) {
-            Log.d("OUINET_BACKGROUND", "onNotificationTapped")
-            shutdown(doClear = false)
-        }
-        else {
-            onNotificationTapped?.invoke()
-        }
-    }
-
-    override fun onConfirmTapped() {
-        if (onConfirmTapped == null) {
-            Log.d("OUINET_BACKGROUND", "onConfirmTapped")
-            shutdown(doClear = true)
-        }
-        else {
-            onConfirmTapped?.invoke()
         }
     }
 
