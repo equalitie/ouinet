@@ -11,6 +11,7 @@ import random
 import sys
 import logging
 from time import sleep  # XXX: remove later
+import time
 
 from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint
@@ -99,6 +100,7 @@ class OuinetTests(TestCase):
                 benchmark_regexes=[
                     TestFixtures.TCP_CLIENT_PORT_READY_REGEX,
                     TestFixtures.TCP_CLIENT_DISCOVERY_START,
+                    TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
                 ],
             ),
         )
@@ -256,6 +258,8 @@ class OuinetTests(TestCase):
                 "--disable-proxy-access",
                 "--listen-on-tcp",
                 "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
+                "--front-end-ep",
+                "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["fe_port"]),
                 "--injector-ep",
                 "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
             ],
@@ -281,81 +285,61 @@ class OuinetTests(TestCase):
         # XXX
         injector_seed = True
 
-        if injector_seed:
-            # shut client down to ensure it does not seed content to the cache client
-            client.stop()
-            # now waiting or injector to annouce caching the request
-            success = yield cache_injector.callbacks[
-                TestFixtures.BEP5_REQUEST_CACHED_REGEX
-            ]
-            self.assertTrue(success)
+        # shut injector down to ensure it does not seed content to the cache client
+        cache_injector.stop()
+        # now waiting for client to annouce caching the response
 
-            #        else:
-            #            # shut injector down to ensure it does not seed content to the cache client
-            #            cache_injector.stop()
-            #            # now waiting for client to annouce caching the response
-            #            success = yield client_cached_result
-            #            self.assertTrue(success)
+        sleep(10)
+        success = yield client.callbacks[TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX]
+        self.assertTrue(success)
 
-            # Start cache client which supposed to read the response from cache, use only Cache mechanism
-            cache_client = self.run_tcp_client(
-                TestFixtures.CACHE_CLIENT[1]["name"],
-                [
-                    "--cache-type",
-                    "bep5-http",
-                    "--cache-http-public-key",
-                    str(index_key),
-                    "--disable-origin-access",
-                    "--disable-proxy-access",
-                    "--listen-on-tcp",
-                    "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
-                    "--injector-ep",
-                    "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
-                ],
+        # Start cache client which supposed to read the response from cache, use only Cache mechanism
+        cache_client = self.run_tcp_client(
+            TestFixtures.CACHE_CLIENT[1]["name"],
+            [
+                "--cache-type",
+                "bep5-http",
+                "--cache-http-public-key",
+                str(index_key),
+                "--disable-origin-access",
+                "--disable-proxy-access",
+                "--listen-on-tcp",
+                "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
+                "--front-end-ep",
+                "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["fe_port"]),
+                "--injector-ep",
+                "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
+            ],
+        )
+        sleep(7)
+
+        # import time
+
+        # make sure that the client2 is ready to access the cache
+        success = yield cache_client.callbacks[TestFixtures.TCP_CLIENT_DISCOVERY_START]
+        index_resolution_done_time_stamp = time.time()
+        self.assertTrue(success)
+
+        # now request the same page from second client
+        defered_response = Deferred()
+        for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
+            defered_response = yield self.request_page(
+                TestFixtures.CACHE_CLIENT[1]["port"], page_url
             )
-            sleep(7)
+            if defered_response.code == 200:
+                break
+            yield task.deferLater(
+                reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None
+            )
 
-            import time
+        self.assertEquals(defered_response.code, 200)
 
-            # make sure that the client2 is ready to access the cache
-            success = yield cache_client.callbacks[
-                TestFixtures.TCP_CLIENT_DISCOVERY_START
-            ]
-            index_resolution_done_time_stamp = time.time()
-            self.assertTrue(success)
+        sleep(5)
 
-            # try:
-            #     index_resolution_start = cache_client.index_resolution_start_time()
-            #     self.assertTrue(index_resolution_start > 0)
+        response_body = yield readBody(defered_response)
+        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
 
-            #     logging.debug(
-            #         "Index resolution took: "
-            #         + str(index_resolution_done_time_stamp - index_resolution_start)
-            #         + " seconds"
-            #     )
-            # except AttributeError:  # index has no global resolution
-            #     pass
-
-            # now request the same page from second client
-            defered_response = Deferred()
-            for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
-                defered_response = yield self.request_page(
-                    TestFixtures.CACHE_CLIENT[1]["port"], page_url
-                )
-                if defered_response.code == 200:
-                    break
-                yield task.deferLater(
-                    reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None
-                )
-
-            self.assertEquals(defered_response.code, 200)
-
-            sleep(5)
-
-            response_body = yield readBody(defered_response)
-            self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
-
-            sleep(60000)
+        print("all ok, now waiting")
 
     #        # make sure it was served from cache
     #        self.assertTrue(cache_client.served_from_cache())
