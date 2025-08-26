@@ -61,8 +61,8 @@ class TestFixtures:
         r"[\s\S]*LocalPeerDiscovery: starting with advertised endpoints[\s\S]*"
     )
     CACHE_CLIENT = [
-        {"name": "cache_client_1", "port": 8074},
-        {"name": "cache_client_2", "port": 8073},
+        {"name": "cache_client_1", "port": 8074, "fe_port": 8078},
+        {"name": "cache_client_2", "port": 8073, "fe_port": 8079},
     ]
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
