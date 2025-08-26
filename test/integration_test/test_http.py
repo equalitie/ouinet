@@ -170,7 +170,7 @@ class OuinetTests(TestCase):
     ################# Tests #####################
 
     @inlineCallbacks
-    def _test_tcp_transport(self):
+    def test_tcp_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http
         request to the echoing http server through the g client --tcp--> injector -> http server

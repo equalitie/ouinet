@@ -85,7 +85,7 @@ class TestFixtures:
     BEP44_RESPONSE_CACHED_REGEX = r"[\s\S]*BEP44 index: insertion finished[\s\S]*"
     NO_OF_CACHED_MESSAGES_REQUIRED = 1
     RETRIEVED_FROM_CACHE_REGEX = r"[\s\S]*Response was retrieved from cache[\s\S]*"
-    MAX_NO_OF_TRIAL_CACHE_REQUESTS = 3
+    MAX_NO_OF_TRIAL_CACHE_REQUESTS = 5
     TRIAL_CACHE_REQUESTS_WAIT = 20
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
