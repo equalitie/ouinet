@@ -101,6 +101,7 @@ class OuinetTests(TestCase):
                     TestFixtures.TCP_CLIENT_PORT_READY_REGEX,
                     TestFixtures.TCP_CLIENT_DISCOVERY_START,
                     TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
+                    TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED,
                 ],
             ),
         )
@@ -193,8 +194,7 @@ class OuinetTests(TestCase):
         self.assertTrue(success)
 
         # Client
-        client_tcp_port_ready = Deferred()
-        self.run_tcp_client(
+        client = self.run_tcp_client(
             name=TestFixtures.TCP_CLIENT["name"],
             args=[
                 "--disable-origin-access",
@@ -204,10 +204,9 @@ class OuinetTests(TestCase):
                 "--injector-ep",
                 f"tcp:127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
             ],
-            deferred_tcp_port_ready=client_tcp_port_ready,
         )
 
-        success = yield client_tcp_port_ready
+        success = yield client.callbacks[TestFixtures.TCP_CLIENT_PORT_READY_REGEX]
         self.assertTrue(success)
 
         # Host a test page
@@ -341,8 +340,9 @@ class OuinetTests(TestCase):
 
         print("all ok, now waiting")
 
-    #        # make sure it was served from cache
-    #        self.assertTrue(cache_client.served_from_cache())
+        # make sure it was served from cache
+        success = yield client.callbacks[TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED]
+        self.assertTrue(success)
 
     def tearDown(self):
         deferred_procs = []

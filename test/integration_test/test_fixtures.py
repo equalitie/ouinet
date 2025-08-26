@@ -65,6 +65,7 @@ class TestFixtures:
         {"name": "cache_client_2", "port": 8073, "fe_port": 8079},
     ]
     CACHE_CLIENT_REQUEST_STORED_REGEX = "[\s\S]*HTTP store:[\s\S]*"
+    CACHE_CLIENT_UTP_REQUEST_SERVED = "[\s\S]*serve_utp_req/serve_local END[\s\S]*"
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
