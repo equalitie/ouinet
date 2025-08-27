@@ -1,18 +1,12 @@
 package ie.equalit.ouinet
 
-import android.annotation.SuppressLint
 import android.app.ActivityManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.ConnectivityManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import ie.equalit.ouinet.Config
 import ie.equalit.ouinet.Ouinet
 import ie.equalit.ouinet.OuinetEndpoint
@@ -61,8 +55,6 @@ class OuinetBackground() {
 
     lateinit var context: Context
         private set
-    lateinit var activity: AppCompatActivity
-        private set
     lateinit var ouinetConfig: Config
         private set
     var notificationConfig: NotificationConfig? = null
@@ -87,7 +79,7 @@ class OuinetBackground() {
 
     private var mOuinet: Ouinet? = null
     private val mHandler = Handler(Looper.myLooper()!!)
-    private var mCurrentState : String = OuinetNotification.DEFAULT_STATE
+    private var mCurrentState : String = Constants.DEFAULT_STATE
     private var stopThread : Thread? = null
     var isStopped : Boolean = false
 
@@ -147,26 +139,14 @@ class OuinetBackground() {
         return thread
     }
 
-    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private fun register() {
         if (connectivityMonitorEnabled)
             connectivityMonitor.enable()
-        val notificationIntentFilter = IntentFilter()
-        notificationIntentFilter.addAction(NotificationBroadcastReceiver.NOTIFICATION_ACTION)
     }
 
     private fun unregister() {
         if (connectivityMonitorEnabled)
             connectivityMonitor.disable()
-    }
-
-    private fun sendOuinetStatePendingIntent() {
-        OuinetNotification.getServicePendingIntent(
-            context,
-            OuinetNotification.UPDATE_CODE,
-            notificationConfig!!,
-            mCurrentState
-        ).send()
     }
 
     private var updateOuinetState: Runnable = object : Runnable {
@@ -175,7 +155,6 @@ class OuinetBackground() {
                 val newState = getState()
                 if (newState != mCurrentState) {
                     mCurrentState = newState
-                    sendOuinetStatePendingIntent()
                 }
             } finally {
                 mHandler.postDelayed(
@@ -199,7 +178,7 @@ class OuinetBackground() {
     ) : Thread {
         if (notificationConfig != null) {
             Intent(context, OuinetService::class.java).also {
-                it.putExtra(OuinetNotification.CONFIG_EXTRA, notificationConfig)
+                it.putExtra(Constants.CONFIG_EXTRA, notificationConfig)
                 context.startService(it)
             }
         }
@@ -234,7 +213,7 @@ class OuinetBackground() {
         return if (mOuinet != null)
             mOuinet!!.getState().toString()
         else
-            OuinetNotification.DEFAULT_STATE
+            Constants.DEFAULT_STATE
     }
 
     fun getProxyEndpoint() : OuinetEndpoint? {
