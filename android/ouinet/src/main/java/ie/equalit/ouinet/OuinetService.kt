@@ -13,22 +13,22 @@ open class OuinetService : Service(){
     private var ouinetState = Constants.DEFAULT_STATE
 
     private fun getConfigExtra(intent: Intent) : NotificationConfig {
-        require(intent.hasExtra(OuinetNotification.CONFIG_EXTRA)) {
+        require(intent.hasExtra(Constants.CONFIG_EXTRA)) {
             "Service intent missing config extra"
         }
-        return intent.getParcelableExtra<NotificationConfig>(OuinetNotification.CONFIG_EXTRA)!!
+        return intent.getParcelableExtra<NotificationConfig>(Constants.CONFIG_EXTRA)!!
     }
 
     private fun getShowConfirmExtra(intent: Intent) : Boolean {
-        val extra = intent.getIntExtra(OuinetNotification.CODE_EXTRA, OuinetNotification.HIDE_CODE)
-        return (extra == OuinetNotification.SHOW_CODE)
+        val extra = intent.getIntExtra(Constants.CODE_EXTRA, Constants.HIDE_CODE)
+        return (extra == Constants.SHOW_CODE)
     }
 
     private fun getStateExtra(intent: Intent) : String? {
-        val extra = intent.getIntExtra(OuinetNotification.CODE_EXTRA, OuinetNotification.HIDE_CODE)
+        val extra = intent.getIntExtra(Constants.CODE_EXTRA, Constants.HIDE_CODE)
         var state : String? = null
-        if (extra == OuinetNotification.UPDATE_CODE) {
-            state = intent.getStringExtra(OuinetNotification.STATE_EXTRA)
+        if (extra == Constants.UPDATE_CODE) {
+            state = intent.getStringExtra(Constants.STATE_EXTRA)
         }
         return state
     }
