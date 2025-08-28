@@ -18,10 +18,22 @@ $ cd test/integration_test
 $ python -m twisted.trial ./test_http.py
 ```
 
-or to run  a single test
+or to run  a single test:
 ```
 $ python -m twisted.trial test_http.OuinetTests.test_i2p_i2cp_server
 ```
+to run the speedtests, use:
+
+$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport_speed_1KB
+
+or
+
+$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport_speed_1MB
+
+and look for the line:
+
+`Retrieving 1.049e+06 bytes through I2P tunnel took 15.810519 seconds..`
+
 
 ## I2P Browser tests
 

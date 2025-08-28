@@ -325,15 +325,15 @@ class OuinetTests(TestCase):
 
     @inlineCallbacks
     def test_i2p_transport(self):
-        self._test_i2p_transport(None)
+        return self._test_i2p_transport(None)
 
     @inlineCallbacks
     def test_i2p_transport_speed_1MB(self):
-        self._test_i2p_transport(size_of_transported_blob = 1024 * 1024)
+        return self._test_i2p_transport(size_of_transported_blob = 1024 * 1024)
 
     @inlineCallbacks
     def test_i2p_transport_speed_1KB(self):
-        self._test_i2p_transport(size_of_transported_blob = 1024)
+        return self._test_i2p_transport(size_of_transported_blob = 1024)
 
     def _test_i2p_transport(self, size_of_transported_blob = None):
         """
@@ -409,8 +409,12 @@ class OuinetTests(TestCase):
 
                     print(f"Retrieving %.3e bytes through I2P tunnel took %f seconds." % (actual_response_length, response_end - request_start))
 
-                    test_passed = True
-                    break
+                    if size_of_transported_blob != None and i == 0:
+                        #if it is a speed test disregard the first attempt
+                        logging.debug("repeating speed test for more accurate speed test result...")
+                    else:
+                        test_passed = True
+                        break
 
                 else:
                     logging.debug("request attempt no " + str(i+1) + " failed. with code " + str(defered_response.code))
