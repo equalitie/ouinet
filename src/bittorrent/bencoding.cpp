@@ -64,14 +64,15 @@ boost::optional<std::string> destructive_parse_string(std::string& encoded)
     if (encoded.size() < (size_t)*size) {
         return boost::none;
     }
+    if (*size > length_limit) return boost::none;
     std::string value = encoded.substr(0, *size);
     encoded.erase(0, *size);
     return value;
 }
 
-boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
+boost::optional<BencodedValue> destructive_parse_value(std::string& encoded, uint8_t depth)
 {
-    if (encoded.size() == 0) {
+    if (encoded.size() == 0 || depth > depth_limit) {
         return boost::none;
     }
 
@@ -96,10 +97,11 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
         }
         return BencodedValue(std::move(*value));
     } else if (encoded[0] == 'l') {
+        depth++;
         encoded.erase(0, 1);
         BencodedList output;
         while (encoded.size() > 0 && encoded[0] != 'e') {
-            boost::optional<BencodedValue> value = destructive_parse_value(encoded);
+            boost::optional<BencodedValue> value = destructive_parse_value(encoded, depth);
             if (!value) {
                 return boost::none;
             }
@@ -112,6 +114,7 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
         encoded.erase(0, 1);
         return BencodedValue(output);
     } else if (encoded[0] == 'd') {
+        depth++;
         encoded.erase(0, 1);
         BencodedMap output;
         while (encoded.size() > 0 && encoded[0] != 'e') {
@@ -119,7 +122,7 @@ boost::optional<BencodedValue> destructive_parse_value(std::string& encoded)
             if (!key) {
                 return boost::none;
             }
-            boost::optional<BencodedValue> value = destructive_parse_value(encoded);
+            boost::optional<BencodedValue> value = destructive_parse_value(encoded, depth);
             if (!value) {
                 return boost::none;
             }
@@ -148,7 +151,7 @@ boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded)
 {
     // TODO: We shouldn't need to create the string here
     auto encoded_s = std::string(encoded);
-    return destructive_parse_value(encoded_s);
+    return destructive_parse_value(encoded_s, 1);
 }
 
 std::ostream& operator<<(std::ostream& os, const BencodedValue& value)

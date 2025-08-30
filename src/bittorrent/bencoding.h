@@ -96,6 +96,9 @@ class BencodedValue : public detail::value {
     }
 };
 
+constexpr uint8_t depth_limit = 100;
+constexpr int length_limit = 2000000;
+
 std::string bencoding_encode(const BencodedValue& value);
 boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded);
 
