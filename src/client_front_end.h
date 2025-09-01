@@ -97,7 +97,7 @@ public:
                   , cache::Client*
                   , const CACertificate&
                   , boost::optional<UdpEndpoint> local_ep
-                  , const UPnPs&
+                  , const std::shared_ptr<UPnPs>&
                   , const bittorrent::MainlineDht* dht
                   , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
@@ -148,7 +148,7 @@ private:
     void handle_portal( ClientConfig&
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
-                      , const UPnPs&
+                      , const std::shared_ptr<UPnPs>& upnps_ptr
                       , const bittorrent::MainlineDht*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
@@ -162,7 +162,7 @@ private:
     void handle_api_status( ClientConfig&
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
-                      , const UPnPs&
+                      , const std::shared_ptr<UPnPs>&
                       , const bittorrent::MainlineDht*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&

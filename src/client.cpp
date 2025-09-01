@@ -1127,7 +1127,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYiel
                                , _cache.get()
                                , *_ca_certificate
                                , local_ep
-                               , *_upnps
+                               , _upnps_ptr
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , metrics_controller
