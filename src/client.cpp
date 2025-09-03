@@ -219,7 +219,7 @@ public:
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
-        if (_upnps) _upnps->clear();
+        if (_upnps_ptr) _upnps_ptr->clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -335,7 +335,7 @@ public:
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
-        _upnps = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
+        _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         TRACK_SPAWN(_ctx, ([
             bt_dht,
             executor = _ctx.get_executor(),
@@ -343,7 +343,7 @@ public:
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
-            upnps = _upnps
+            upnps = _upnps_ptr
         ] (asio::yield_context yield) mutable {
             sys::error_code ec;
             *ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
@@ -632,7 +632,7 @@ private:
 
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
-    shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
+    shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps_ptr;
     metrics::Client _metrics;
 
     std::string _proxy_endpoint;
@@ -1127,7 +1127,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYiel
                                , _cache.get()
                                , *_ca_certificate
                                , local_ep
-                               , *_upnps
+                               , _upnps_ptr
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , metrics_controller
