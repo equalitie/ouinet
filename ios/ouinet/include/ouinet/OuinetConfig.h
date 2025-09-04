@@ -22,6 +22,8 @@
 
 - (OuinetConfig*)setDisableInjectorAccess:(BOOL)value;
 
+- (OuinetConfig*)setDisableBridgeAnnouncement:(BOOL)value;
+
 - (OuinetConfig*)setLogLevel:(NSString*)level;
 
 - (NSString*)getOuinetDirectory;
@@ -47,5 +49,7 @@
 - (BOOL)getDisableProxyAccess;
 
 - (BOOL)getDisableInjectorAccess;
+
+- (BOOL)getDisableBridgeAnnouncement;
 
 @end

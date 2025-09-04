@@ -50,6 +50,10 @@ NativeLib _n;
   if ([config getDisableInjectorAccess]) {
     args.push_back("--disable-injector-access");
   }
+  if ([config getDisableBridgeAnnouncement]) {
+    args.push_back("--disable-bridge-announcement");
+  }
+  
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
   if (error)
     NSLog(@"Error reading file: %@", error.localizedDescription);

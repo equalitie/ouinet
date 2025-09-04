@@ -19,6 +19,7 @@
   BOOL disableOriginAccess;
   BOOL disableProxyAccess;
   BOOL disableInjectorAccess;
+  BOOL disableBridgeAnnouncement;
 }
 
 - (OuinetConfig*)init
@@ -105,6 +106,12 @@
   return self;
 }
 
+- (OuinetConfig*)setDisableBridgeAnnouncement:(BOOL)value;
+{
+  disableBridgeAnnouncement = value;
+  return self;
+}
+
 - (NSString*)getOuinetDirectory
 {
   return ouinetDirectory;
@@ -163,6 +170,11 @@
 - (BOOL)getDisableInjectorAccess
 {
   return disableInjectorAccess;
+}
+
+- (BOOL)getDisableBridgeAnnouncement
+{
+  return disableBridgeAnnouncement;
 }
 
 /**
