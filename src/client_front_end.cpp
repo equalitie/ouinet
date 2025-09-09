@@ -11,6 +11,7 @@
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
+#include "ouiservice/bep5/client.h"
 
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -20,6 +21,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
+#include <memory>
 #include <nlohmann/json.hpp>
 
 
@@ -712,6 +714,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
                                       , cache::Client* cache_client
+                                      , std::shared_ptr<ouiservice::Bep5Client> client
                                       , ClientFrontEndMetricsController& metrics
                                       , Cancel cancel
                                       , YieldContext yield)
@@ -723,6 +726,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_access", config.is_injector_access_enabled()},
+        {"injector_started", client -> is_ready()},
         {"distributed_cache", config.is_cache_access_enabled()},
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
@@ -903,6 +907,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , Client::RunningState client_state
                               , cache::Client* cache_client
+                              , std::shared_ptr<ouiservice::Bep5Client> client
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const std::shared_ptr<UPnPs>& upnps_ptr
@@ -959,7 +964,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (path == status_api_path) {
         sys::error_code e;
         handle_api_status( config, client_state, local_ep, upnps_ptr, dht, reachability
-                         , req, res, ss, cache_client, metrics, cancel
+                         , req, res, ss, cache_client, client, metrics, cancel
                          , yield[e]);
     } else if (path.starts_with(groups_api_path)) {
         path.remove_prefix(groups_api_path.size());

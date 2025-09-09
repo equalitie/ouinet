@@ -1156,6 +1156,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldConte
                                , rq
                                , get_state()
                                , _cache.get()
+                               , _bep5_client
                                , *_ca_certificate
                                , local_ep
                                , _upnps_ptr
