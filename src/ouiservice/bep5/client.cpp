@@ -297,6 +297,10 @@ public:
     {
         _injector_was_seen = true;
     }
+    bool has_injector_been_seen()
+    {
+        return _injector_was_seen;
+    }
 
 private:
     void loop(asio::yield_context yield) {
@@ -485,6 +489,10 @@ void Bep5Client::start(asio::yield_context)
         sys::error_code ec;
         status_loop(yield[ec]);
     });
+}
+
+bool Bep5Client::is_ready() const noexcept{
+    return _injector_pinger -> has_injector_been_seen();
 }
 
 void Bep5Client::stop()
