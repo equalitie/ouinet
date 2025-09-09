@@ -55,6 +55,7 @@ public:
 
     void start(asio::yield_context) override;
     void stop() override;
+    bool is_ready() const noexcept;
 
     GenericStream connect(asio::yield_context, Cancel&) override;
     GenericStream connect(asio::yield_context, Cancel&, bool tls, Target);
