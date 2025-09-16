@@ -171,7 +171,7 @@ static const std::string _localhost_re =
 #define _IP4_PRIV1_RE "10(?:\\.[0-9]{1,3}){3}"
 #define _IP4_PRIV2_RE "172\\.(1[6-9]|2[0-9]|3[0-1])(?:\\.[0-9]{1,3}){2}"
 #define _IP4_PRIV3_RE "192\\.168(?:\\.[0-9]{1,3}){2}"
-static const std::string _private_re =
+static const std::string _private_addr_re =
     "^(?:"
     "|" _IP4_PRIV1_RE         // IPv4, e.g. 10.8.4.2
     "|::ffff:" _IP4_PRIV1_RE  // IPv4-mapped IPv6
@@ -189,8 +189,8 @@ static const std::string _private_re =
 // IPv6 addresses should not be bracketed.
 static const boost::regex localhost_rx( _localhost_re
                                       , boost::regex::normal | boost::regex::icase);
-static const boost::regex private_rx( _private_re
-                                    , boost::regex::normal | boost::regex::icase);
+static const boost::regex private_addr_rx( _private_addr_re
+                                         , boost::regex::normal | boost::regex::icase);
 #undef _IP4_LOOP_RE
 #undef _IP4_PRIV1_RE
 #undef _IP4_PRIV2_RE

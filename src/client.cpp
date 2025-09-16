@@ -2604,7 +2604,7 @@ void Client::State::serve_request( GenericStream&& con
         // to avoid leaking internal services accessed through the client.
         Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(hostname_getter, util::private_rx)
+        Match( reqexpr::from_regex(hostname_getter, util::private_addr_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
 
         // Access to sites under the local TLD are always accessible
