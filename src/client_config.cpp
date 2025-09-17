@@ -301,6 +301,10 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                     "Invalid URL for '--origin-doh-base': ", doh_base));
     }
 
+    if (vm["allow-private-targets"].as<bool>()) {
+        _allow_private_targets = true;
+    }
+
     _metrics = MetricsConfig::parse(vm);
 
     save_persistent();  // only if no errors happened

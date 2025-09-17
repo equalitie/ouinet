@@ -303,6 +303,10 @@ private:
            ("origin-doh-base", po::value<string>()
             , "If given, enable DNS over HTTPS for origin access using the given base URL; "
               "the \"dns=...\" query argument will be added for the GET request.")
+            ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
+            , "Allows using non-origin channels, like injectors, dist-cache, etc, "
+              "to fetch targets using private addresses. "
+              "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
            ;
 
         po::options_description metrics("Metrics options");
@@ -478,6 +482,7 @@ private:
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
+    bool _allow_private_targets = false;
 
     std::unique_ptr<MetricsConfig> _metrics;
 };
