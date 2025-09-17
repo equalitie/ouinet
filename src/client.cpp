@@ -2498,7 +2498,7 @@ void Client::State::serve_request( GenericStream&& con
 
     static const boost::regex localhost_exact_rx{"localhost", rx_icase};
 
-    const vector<Match> matches({
+    vector<Match> matches({
         // Please keep host-specific matches at a bare minimum
         // as they require curation and they may have undesired side-effects;
         // instead, use user agent-side mechanisms like browser settings and extensions when possible,
@@ -2604,8 +2604,6 @@ void Client::State::serve_request( GenericStream&& con
         // to avoid leaking internal services accessed through the client.
         Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
              , {deque<fresh_channel>({fresh_channel::origin})} ),
-        Match( reqexpr::from_regex(hostname_getter, util::private_rx)
-             , {deque<fresh_channel>({fresh_channel::origin})} ),
 
         // Access to sites under the local TLD are always accessible
         // with good connectivity, so always use the Origin channel
@@ -2646,6 +2644,12 @@ void Client::State::serve_request( GenericStream&& con
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
         //     , {deque<fresh_channel>({fresh_channel::injector})} ),
     });
+    // Requests to the private addresses should not use the network
+    // to avoid leaking internal services accessed through the client,
+    // unless the option `allow-private-targets` is set to true.
+    if (!_config.is_private_target_allowed())
+        matches.push_back(Match(reqexpr::from_regex(hostname_getter, util::private_addr_rx)
+                         , {deque<fresh_channel>({fresh_channel::origin})}));
 
     auto connection_id = _next_connection_id++;
     auto connection_idstr = util::str('C', connection_id);

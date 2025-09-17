@@ -34,7 +34,7 @@ resolve_target(const Request& req
 
     // First test trivial cases (like "localhost" or "127.1.2.3").
     bool local = boost::regex_match(host, util::localhost_rx);
-    bool priv = boost::regex_match(host, util::private_rx);
+    bool priv = boost::regex_match(host, util::private_addr_rx);
 
     // Resolve address and also use result for more sophisticaded checking.
     if (!local && (!priv || allow_private_targets)) {}
@@ -52,7 +52,7 @@ resolve_target(const Request& req
                                         , util::localhost_rx)))
             break;
         if ((priv = boost::regex_match(r.endpoint().address().to_string()
-                                      , util::private_rx)))
+                                      , util::private_addr_rx)))
             if (!allow_private_targets)
                 break;
     }
