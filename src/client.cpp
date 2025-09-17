@@ -2571,9 +2571,7 @@ void Client::State::setup_cache(asio::yield_context yield)
       if (!_i2p_service) {
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
       }
-      
-      _i2p_service->start_i2cp_server();
-      _i2p_service->start_tunneller_service();
+
     }
 #endif // ifdef __EXPERIMENTAL__
     //unsupported cache type

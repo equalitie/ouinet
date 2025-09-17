@@ -2,10 +2,8 @@
 #include <string>
 #include <algorithm>
 #include "service.h"
-#include "i2cp_server.h"
 
 //i2p stuff
-#include <I2CP.h>
 #include <I2PTunnel.h>
 #include <Identity.h>
 #include <Destination.h>
@@ -74,7 +72,6 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
 Service::~Service()
 {
     if (_local_destination) _local_destination->Stop();
-    if (_i2cpserver) _i2cpserver->Stop();
     i2p::api::StopI2P();
 }
 
@@ -88,18 +85,9 @@ std::unique_ptr<Client> Service::build_client(const std::string& target_id)
     return std::make_unique<Client>(shared_from_this(), target_id, get_i2p_tunnel_ready_timeout(), _exec);
 }
 
-void Service::start_i2cp_server() {
-  _i2cpserver = std::make_unique<i2p::client::I2CPServer>("127.0.0.1",  i2cp_port, false);
-  _i2cpserver->Start();
-}
-
-void Service::start_tunneller_service() {
-  _i2p_tunneller = std::make_unique<TunnellerService>(shared_from_this(), _exec);
-}
-
 void Service::load_known_hosts_to_address_book()
-{
-  if (_i2p_address_book) {
+{ 
+ if (_i2p_address_book) {
     std::ifstream f(_data_dir + "/" + "hosts.txt", std::ifstream::in);
     if (f.is_open ())
       {

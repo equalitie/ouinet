@@ -6,9 +6,6 @@
 
 #include "client.h"
 #include "server.h"
-#include "i2cp_server.h"
-
-#include "tunneller_service.h"
 
 #include "../../ouiservice.h"
 
@@ -16,7 +13,6 @@
 namespace i2p::client {
     class ClientDestination;
     class AddressBook;
-    class I2CPServer;
 }
 
 namespace ouinet::ouiservice::i2poui {
@@ -43,12 +39,6 @@ public:
 
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
     std::unique_ptr<Client> build_client(const std::string& target_id);
-
-    // simply start the I2CP server on the pre-defined port
-    void start_i2cp_server();
-
-    // simply the tunneller service for testing bittorent dht over i2p
-    void start_tunneller_service();
   
 protected:
     void load_known_hosts_to_address_book();
@@ -61,9 +51,6 @@ protected:
 
     // We run an address book as soon as we start the the i2pd daemon simialr to i2pd client
     i2p::client::AddressBook* _i2p_address_book = nullptr;
-
-    std::unique_ptr<i2p::client::I2CPServer> _i2cpserver;
-    std::unique_ptr<TunnellerService> _i2p_tunneller;
 };
 
 } // namespaces
