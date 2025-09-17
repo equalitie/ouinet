@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- New client configuration option `allow-private-targets` to permit requests
+of services running in local/private networks, e.g. 192.168.1.13, 10.8.0.2,
+172.16.10.8, etc. !133
+
 
 ## [v1.4.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.0) - 2025-09-03
 
