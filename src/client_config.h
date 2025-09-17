@@ -422,6 +422,8 @@ public:
     bool is_injector_access_enabled() const { return !_disable_injector_access; }
     void is_injector_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_injector_access, !v); }
 
+    bool is_private_target_allowed() const { return _allow_private_targets; }
+
 #undef CHANGE_AND_SAVE_OPS
 #undef CHANGE_AND_SAVE
 
