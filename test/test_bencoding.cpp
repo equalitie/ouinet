@@ -8,6 +8,8 @@ BOOST_AUTO_TEST_SUITE(bencoding)
 using boost::optional;
 using ouinet::bittorrent::bencoding_encode;
 using ouinet::bittorrent::bencoding_decode;
+using ouinet::bittorrent::depth_limit;
+using ouinet::bittorrent::length_limit;
 
 BOOST_AUTO_TEST_CASE(test_bencoding)
 {
@@ -60,6 +62,43 @@ BOOST_AUTO_TEST_CASE(test_decoding)
     BOOST_REQUIRE_EQUAL("z", decoded_unsorted_map->at("zero"));
     BOOST_REQUIRE_EQUAL("a", decoded_unsorted_map->at("one"));
     std::cout << *decoded_value_4;
+}
+
+BOOST_AUTO_TEST_CASE(test_decoding_limits)
+{
+    auto test_integer_length = [](const uint8_t length){
+        std::string encoded_value(length, '0');
+        encoded_value.insert(0, "i1");
+        encoded_value.append("e");
+        auto decoded = bencoding_decode( encoded_value);
+        if (!decoded) return false;
+        return true;
+    };
+
+    auto test_string_length = [](const int length){
+        std::string encoded_value(length, 'x');
+        encoded_value.insert(0, std::to_string(length) + ":");
+        auto decoded = bencoding_decode( encoded_value);
+        if (!decoded) return false;
+        return true;
+    };
+
+    auto test_list_depth = [](const uint8_t depth_level){
+        std::string nested_list(depth_level, 'l');
+        nested_list += std::string(depth_level, 'e');
+        auto decoded = bencoding_decode(nested_list);
+        if (!decoded) return false;
+        return true;
+    };
+
+    BOOST_CHECK_EQUAL(test_integer_length(16), true);
+    BOOST_CHECK_EQUAL(test_integer_length(24), false);
+
+    BOOST_CHECK_EQUAL(test_string_length(length_limit), true);
+    BOOST_CHECK_EQUAL(test_string_length(length_limit + 1), false);
+
+    BOOST_CHECK_EQUAL(test_list_depth(depth_limit), true);
+    BOOST_CHECK_EQUAL(test_list_depth(depth_limit + 1), false);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

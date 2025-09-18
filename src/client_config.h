@@ -131,6 +131,10 @@ public:
         return _front_end_access_token;
     }
 
+    const boost::optional<std::string>& proxy_access_token() const {
+        return _proxy_access_token;
+    }
+
     boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
         return _cache_http_pubkey;
     }
@@ -209,6 +213,10 @@ private:
            ("front-end-access-token"
             , po::value<string>()
             , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
+              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
+           ("proxy-access-token"
+            , po::value<string>()
+            , "Token to access the http proxy, use agents will need to include the X-Ouinet-Proxy-Token "
               "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
            ("disable-bridge-announcement"
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
@@ -295,6 +303,10 @@ private:
            ("origin-doh-base", po::value<string>()
             , "If given, enable DNS over HTTPS for origin access using the given base URL; "
               "the \"dns=...\" query argument will be added for the GET request.")
+            ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
+            , "Allows using non-origin channels, like injectors, dist-cache, etc, "
+              "to fetch targets using private addresses. "
+              "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
            ;
 
         po::options_description metrics("Metrics options");
@@ -410,6 +422,8 @@ public:
     bool is_injector_access_enabled() const { return !_disable_injector_access; }
     void is_injector_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_injector_access, !v); }
 
+    bool is_private_target_allowed() const { return _allow_private_targets; }
+
 #undef CHANGE_AND_SAVE_OPS
 #undef CHANGE_AND_SAVE
 
@@ -452,6 +466,7 @@ private:
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
     boost::optional<std::string> _front_end_access_token;
+    boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
 
     boost::posix_time::time_duration _max_cached_age
@@ -469,6 +484,7 @@ private:
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
+    bool _allow_private_targets = false;
 
     std::unique_ptr<MetricsConfig> _metrics;
 };

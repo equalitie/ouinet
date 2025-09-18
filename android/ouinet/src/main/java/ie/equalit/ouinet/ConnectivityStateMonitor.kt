@@ -10,7 +10,7 @@ import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import ie.equalit.ouinet.OuinetNotification.Companion.MILLISECOND
+import ie.equalit.ouinet.Constants.MILLISECOND
 
 class ConnectivityStateMonitor (
     context : Context,
