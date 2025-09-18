@@ -44,7 +44,7 @@ linux / unit-test-experimental:
   variables:
     WITH_EXPERIMENTAL: "ON"
   extends:
-    .linux-unit-test
+    .linux-unit-cpp-test
   needs:
     ['linux / build-experimental']
   allow_failure: true
