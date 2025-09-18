@@ -12,6 +12,7 @@
 #include "util/reachability.h"
 #include "util/yield.h"
 #include "logger.h"
+#include "cxx/metrics.h"
 
 namespace ouinet { namespace cache {
     class Client;
@@ -26,6 +27,22 @@ class UPnPUpdater;
 namespace bittorrent {
 class MainlineDht;
 }
+
+class ClientFrontEndMetricsController {
+public:
+    virtual void enable() = 0;
+    virtual void disable() = 0;
+    virtual bool is_enabled() const = 0;
+
+    virtual std::optional<std::string> current_record_id() const = 0;
+
+    virtual metrics::SetAuxResult set_aux_key_value(
+            std::string_view record_id,
+            std::string_view key,
+            std::string_view value) = 0;
+
+    virtual ~ClientFrontEndMetricsController() = default;
+};
 
 class ClientFrontEnd {
     template<typename E> struct Input;
@@ -44,6 +61,7 @@ public:
     // Absolute paths of allowed URLs.
     static constexpr const char* log_file_apath = "/logfile.txt";
     static constexpr const char* group_list_apath = "/groups.txt";
+    static constexpr const char* pinned_list_apath = "/pinned-groups.txt";
 
 public:
     using Request = http::request<http::string_body>;
@@ -82,6 +100,8 @@ public:
                   , const UPnPs&
                   , const bittorrent::MainlineDht* dht
                   , const util::UdpServerReachabilityAnalysis*
+                  , ClientFrontEndMetricsController&
+                  , Cancel
                   , Yield yield);
 
     Task notify_task(const std::string& task_name)
@@ -114,6 +134,17 @@ private:
                           , std::ostringstream&
                           , cache::Client*);
 
+    void handle_pinned_list( const Request&
+                           , Response&
+                           , std::ostringstream&
+                           , cache::Client*);
+
+    void handle_api_groups( std::string_view
+                          , const Request&
+                          , Response&
+                          , std::ostringstream&
+                          , cache::Client*);
+
     void handle_portal( ClientConfig&
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
@@ -124,9 +155,11 @@ private:
                       , Response&
                       , std::ostringstream&
                       , cache::Client*
+                      , ClientFrontEndMetricsController& metrics
+                      , Cancel cancel
                       , Yield);
 
-    void handle_status( ClientConfig&
+    void handle_api_status( ClientConfig&
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const UPnPs&
@@ -136,7 +169,17 @@ private:
                       , Response&
                       , std::ostringstream&
                       , cache::Client*
+                      , ClientFrontEndMetricsController& metrics
+                      , Cancel cancel
                       , Yield);
+
+    void handle_api_metrics( std::string_view sub_path
+                           , const Request&
+                           , Response&
+                           , std::ostringstream&
+                           , ClientFrontEndMetricsController& metrics
+                           , Cancel cancel
+                           , Yield);
 
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);

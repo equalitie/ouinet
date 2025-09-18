@@ -51,6 +51,16 @@ consume_endpoints(boost::string_view& sv, asio::ip::address from) {
 
 using PeerId = uint64_t;
 
+namespace std {
+    inline std::ostream& operator<<(std::ostream& os, std::set<udp::endpoint> const& map)
+    {
+        os << "{ ";
+        for (auto comma{map.size()}; auto const& p : map)
+            os << '\'' << p << '\'' << (--comma ? ", " : " ");
+        return os << "}";
+    }
+}
+
 struct LocalPeerDiscovery::Impl {
     struct Peer {
         udp::endpoint discovery_ep;
@@ -74,6 +84,8 @@ struct LocalPeerDiscovery::Impl {
     {
         sys::error_code ec;
 
+        LOG_INFO("LocalPeerDiscovery: starting with advertised endpoints ", _advertised_eps);
+
         _socket.open(udp::v4());
         _socket.set_option(udp::socket::reuse_address(true));
         _socket.bind({asio::ip::address_v4::any(), multicast_ep.port()}, ec);
@@ -84,6 +96,8 @@ struct LocalPeerDiscovery::Impl {
             LOG_ERROR("LocalPeerDiscovery: Failed to bind recv socket;"
                       " ec=", ec);
             return;
+        } else {
+            LOG_DEBUG("LocalPeerDiscovery: bound to ", multicast_ep);
         }
 
         start_listening_to_broadcast(cancel);

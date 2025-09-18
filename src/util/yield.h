@@ -1,14 +1,21 @@
 #pragma once
 
+#ifdef _WIN32
+#pragma push_macro("Yield")
+#undef Yield
+#endif
+
 #include <sstream>
 #include "../namespaces.h"
 #include "../util/executor.h"
 #include "../util/str.h"
 #include "../logger.h"
 #include "../or_throw.h"
+#include "../task.h"
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
 
@@ -90,7 +97,7 @@ public:
         , _asio_yield(y._asio_yield)
         , _ignored_error(std::move(y._ignored_error))
         , _tag(std::move(y._tag))
-        , _parent(&y)
+        , _parent(y._parent)
         , _timeout_state(std::move(y._timeout_state))
         , _start_time(y._start_time)
     {
@@ -98,7 +105,10 @@ public:
             _timeout_state->self = this;
         }
 
-        y._children.push_back(*this);
+        if (_parent)
+        {
+            _parent->_children.push_back(*this);
+        }
     }
 
     Yield tag(std::string t)
@@ -242,7 +252,7 @@ void Yield::start_timing()
 
     _timeout_state = std::make_shared<TimeoutState>(_ex, this);
 
-    asio::spawn(_ex
+    task::spawn_detached(_ex
                , [ ts = _timeout_state, timeout]
                  (asio::yield_context yield) {
 
@@ -264,7 +274,7 @@ void Yield::start_timing()
             while (ts->self) {
                 sys::error_code ec; // ignored
 
-                ts->timer.expires_from_now(timeout);
+                ts->timer.expires_after(timeout);
 
                 ts->timer.async_wait(yield[ec]);
 
@@ -356,3 +366,7 @@ public:
 };
 
 }} // boost::asio namespace
+
+#ifdef _WIN32
+#pragma pop_macro("Yield")
+#endif

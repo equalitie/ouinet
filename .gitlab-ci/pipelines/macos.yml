@@ -1,0 +1,30 @@
+variables:
+  BUILD_PATH: 'build.darwin/build-mac_arm64/Debug'
+  BOOST_PATH: 'build.darwin/build-mac_arm64/boost/src/built_boost'
+  GCRYPT_PATH: 'build.darwin/build-mac_arm64/gcrypt/src/gcrypt'
+  GPGERROR_PATH: 'build.darwin/build-mac_arm64/gpg_error/src/gpg_error'
+
+macos / build:
+  stage: build
+  tags:
+    - macos-shell
+  artifacts:
+    paths:
+      - $BUILD_PATH/client.app
+      - $BUILD_PATH/injector.app
+      - $BUILD_PATH/lib*.dylib
+      - $BUILD_PATH/lib*.a
+      - $BOOST_PATH/b2
+      - $GCRYPT_PATH/cipher/gost-s-box
+      - $GCRYPT_PATH/doc/yat2m
+      - $GCRYPT_PATH/tests/testdrv-build
+      - $GPGERROR_PATH/doc/yat2m-for-build
+      - $GPGERROR_PATH/src/mkerrcodes
+      - $GPGERROR_PATH/src/mkheader
+    expire_in: 6h
+  script:
+    - mkdir -p build.darwin
+    - cd build.darwin
+    - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh
+  when: manual
+  allow_failure: true

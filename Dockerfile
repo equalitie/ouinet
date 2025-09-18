@@ -1,10 +1,9 @@
-FROM debian:bookworm AS base
+FROM rust:slim-bookworm AS base
 ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y \
       build-essential \
-      cmake \
       git \
       libssl-dev \
       python3-twisted \
@@ -17,16 +16,23 @@ FROM base AS builder
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v0.31.1
+ARG OUINET_VERSION=v1.3.0
+ARG CMAKE_VERSION=3.31.7-linux-x86_64
 RUN git clone --recursive -b "$OUINET_VERSION" https://gitlab.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
 # The C.UTF-8 locale (which is always available in Debian)
 # is needed to allow CMake to extract files in the Go language binary distribution
 # with UTF-8-encoded Unicode names.
-RUN cmake /usr/local/src/ouinet \
- && make -j $(nproc)
-RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
+RUN /usr/local/src/ouinet/scripts/install-cmake.sh "$CMAKE_VERSION"
+ENV PATH="/opt/cmake/cmake-$CMAKE_VERSION/bin:$PATH"
 ARG OUINET_DEBUG=no
+RUN \
+if [ $OUINET_DEBUG = yes ]; then \
+    cmake /usr/local/src/ouinet -DCMAKE_BUILD_TYPE=Debug && make -j $(nproc); \
+else \
+    cmake /usr/local/src/ouinet && make -j $(nproc); \
+fi
+RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
     strip injector client test/bt-* test/oui-* \
@@ -44,7 +50,7 @@ RUN cd /usr/local/src/ouinet \
 # Populate the licenses directory (avoid version numbers in source paths).
 RUN /usr/local/src/ouinet/scripts/add-licenses-dir.sh /usr/local/src/ouinet .
 
-FROM debian:bookworm
+FROM debian:bookworm-slim
 # To get the list of system library packages to install,
 # enter the build directory and execute:
 #
@@ -72,7 +78,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /opt/ouinet
 # Copy locally built libraries (all placed along binaries).
 RUN mkdir /opt/ouinet/lib
-COPY --from=builder /opt/ouinet/lib*.so /opt/ouinet/lib
+COPY --from=builder /opt/ouinet/lib* /opt/ouinet/lib
 # Update the dynamic linker cache after all non-system libraries have been copied.
 # This also creates the appropriate symbolic links to those libraries.
 RUN ldconfig

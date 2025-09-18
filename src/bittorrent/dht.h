@@ -18,6 +18,7 @@
 #include "node_id.h"
 #include "routing_table.h"
 #include "contact.h"
+#include "cxx/metrics.h"
 
 #include "../namespaces.h"
 #include "../util/crypto.h"
@@ -76,13 +77,15 @@ class DhtNode {
 
     public:
     DhtNode( const AsioExecutor&
+           , metrics::DhtNode
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {});
 
     DhtNode( asio::io_context& ctx
+           , metrics::DhtNode metrics
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {})
-        : DhtNode(ctx.get_executor(), std::move(storage_dir), std::move(extra_bs))
+        : DhtNode(ctx.get_executor(), std::move(metrics), std::move(storage_dir), std::move(extra_bs))
     {}
 
     void start(udp::endpoint, asio::yield_context yield);
@@ -377,6 +380,7 @@ class DhtNode {
     std::unique_ptr<Stats> _stats;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
+    metrics::DhtNode _metrics;
 };
 
 } // dht namespace
@@ -384,13 +388,15 @@ class DhtNode {
 class MainlineDht {
     public:
     MainlineDht( const AsioExecutor&
+               , metrics::MainlineDht
                , boost::filesystem::path storage_dir = {}
                , std::set<bootstrap::Address> extra_bs = {});
 
     MainlineDht( asio::io_context& ctx
+               , metrics::MainlineDht metrics
                , boost::filesystem::path storage_dir = {}
                , std::set<bootstrap::Address> extra_bs = {})
-        : MainlineDht(ctx.get_executor(), std::move(storage_dir), std::move(extra_bs))
+        : MainlineDht(ctx.get_executor(), std::move(metrics), std::move(storage_dir), std::move(extra_bs))
     {}
 
     MainlineDht(const MainlineDht&) = delete;
@@ -484,6 +490,7 @@ class MainlineDht {
     Cancel _cancel;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
+    metrics::MainlineDht _metrics;
 };
 
 } // bittorrent namespace

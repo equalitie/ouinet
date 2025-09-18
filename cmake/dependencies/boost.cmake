@@ -1,22 +1,37 @@
 if(NOT BOOST_VERSION)
-    set(BOOST_VERSION 1.79.0)
+    set(BOOST_VERSION 1.88.0)
 endif ()
 
-if (${BOOST_VERSION} EQUAL 1.71.0)
-    set(BOOST_VERSION_HASH d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee)
-elseif (${BOOST_VERSION} EQUAL 1.74.0)
-    set(BOOST_VERSION_HASH 83bfc1507731a0906e387fc28b7ef5417d591429e51e788417fe9ff025e116b1)
-elseif (${BOOST_VERSION} EQUAL 1.77.0)
-    set(BOOST_VERSION_HASH fc9f85fc030e233142908241af7a846e60630aa7388de9a5fafb1f3a26840854)
-elseif (${BOOST_VERSION} EQUAL 1.79.0)
+if (${BOOST_VERSION} EQUAL 1.79.0)
     set(BOOST_VERSION_HASH 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
+    set(BOOST_COROUTINE_BACKEND coroutine)
 elseif (${BOOST_VERSION} EQUAL 1.83.0)
     set(BOOST_VERSION_HASH 6478edfe2f3305127cffe8caf73ea0176c53769f4bf1585be237eb30798c3b8e)    
+elseif (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
+    if (${BOOST_VERSION} EQUAL 1.87.0)
+      set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
+      if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+          # There is a bug in boost::outcome (used by cpp-upnp) which causes
+          # compilation issues. This works around it but also disables some nicer
+          # GDB error messages. I'm not sure it matters much on Android, plus
+          # AFAIK we always check the `outcome::result` type before we access
+          # it's value, so probably will also never happen.
+          # Github issue for the bug is here: https://github.com/ned14/outcome/pull/308
+          add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+          add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
+      endif()
+      list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
+    elseif (${BOOST_VERSION} EQUAL 1.88.0)
+      set(BOOST_VERSION_HASH 46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b)
+    endif ()
+
+    set(BOOST_COROUTINE_BACKEND fiber)
+    list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
 
 set(BOOST_COMPONENTS
     context
-    coroutine
+    ${BOOST_COROUTINE_BACKEND}
     date_time
     filesystem
     iostreams
@@ -29,19 +44,22 @@ set(BOOST_COMPONENTS
 
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
+set(OUINET_BOOST_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost")
+set(OUINET_BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
+
 if(BOOST_VERSION LESS_EQUAL 1.72.0)
-    set(BOOST_PATCHES
+    list(APPEND BOOST_PATCHES
         ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
         ${CMAKE_CURRENT_LIST_DIR}/inline-boost/thread-pthread-stack-min-def-${BOOST_VERSION_FILENAME}.patch
     )
 endif()
 
+set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
+set(BOOST_BUILD_SHARED ON)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-    get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
-    string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
-    # This is the same as COMPILER_HOSTTRIPLE, _except_ on arm32.
-    set(COMPILER_CC_PREFIX ${COMPILER_HOSTTRIPLE})
+    # This is the same as CMAKE_LIBRARY_ARCHITECTURE, _except_ on arm32.
+    set(COMPILER_CC_PREFIX ${CMAKE_LIBRARY_ARCHITECTURE})
 
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
         set(COMPILER_CC_PREFIX "armv7a-linux-androideabi")
@@ -61,7 +79,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     endif()
 
     if(BOOST_VERSION LESS_EQUAL 1.77.0)
-      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
+        list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
     endif()
 
     set(BOOST_ENVIRONMENT
@@ -79,14 +97,105 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set(BOOST_ARCH_CONFIGURATION
+        address-model=64
+    )
+
+    # TODO: Use this on all platforms
+    if (CMAKE_BUILD_TYPE)
+        string(TOLOWER "${CMAKE_BUILD_TYPE}" BOOST_BUILD_TYPE)
+        list(APPEND BOOST_ARCH_CONFIGURATION variant=${BOOST_BUILD_TYPE})
+    else()
+        message(WARNING "No CMAKE_BUILD_TYPE provided, add '-DCMAKE_BUILD_TYPE={Debug,Release}' to cmake configuration phase")
+    endif()
+
+    if (MINGW)
+        set(OUINET_BOOST_USER_CONFIG_FILE ${OUINET_BOOST_PREFIX}/user-config-mingw.jam)
+        list(PREPEND OUINET_BOOST_CONFIGURE_COMMAND
+            echo "using gcc : mingw : ${CMAKE_CXX_COMPILER} $<SEMICOLON>" > ${OUINET_BOOST_USER_CONFIG_FILE} &&)
+
+        list(APPEND BOOST_ARCH_CONFIGURATION
+            target-os=windows
+            --user-config=${OUINET_BOOST_USER_CONFIG_FILE}
+            toolset=gcc-mingw
+            # https://lists.preview.boost.org/archives/list/boost@lists.preview.boost.org/thread/UEMVOSYBMS3MBQ77K3JGKOYRXSMSYLYC/
+            define=_WIN32_WINNT=0x0601
+            binary-format=pe
+            abi=ms
+        )
+    endif()
+
+    link_libraries(ws2_32 mswsock)
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    if(BOOST_VERSION EQUAL 1.79.0)
+      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
+    endif()
+    # Unary function is deprecated in clang 16, this definition avoids using it
+    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
+    set(BOOST_ARCH_CONFIGURATION
+            cxxflags=${BOOST_CXXFLAGS}
+    )
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    # iOS libraries must to be built as static libs that are linked into a single dynamic lib
+    set(BOOST_BUILD_SHARED OFF)
+    if(BOOST_VERSION EQUAL 1.79.0)
+      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
+    endif()
+    set(OUINET_BOOST_CONFIGURE_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
+    # Unary function is deprecated in clang 16, this definition avoids using it
+    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
+    string(TOLOWER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
+    set(BOOST_ENVIRONMENT )
+    if (${PLATFORM} STREQUAL "OS64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-ios64.jam
+            toolset=darwin-ios64
+            macosx-version=iphone-18.0
+            architecture=arm
+            abi=aapcs
+        )
+    elseif (${PLATFORM} STREQUAL "SIMULATOR64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossim64.jam
+            toolset=darwin-iossim64
+            macosx-version=iphonesim-18.0
+            architecture=x86
+            abi=sysv
+        )
+    elseif (${PLATFORM} STREQUAL "SIMULATORARM64")
+        set(BOOST_ARCH_CONFIGURATION
+            --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossimarm64.jam
+            toolset=darwin-iossimarm64
+            macosx-version=iphonesim-18.0
+            architecture=arm
+            abi=aapcs
+        )
+    endif()
+
+    set(BOOST_ARCH_CONFIGURATION
+        ${BOOST_ARCH_CONFIGURATION}
+        --stagedir=iphone-build/stage
+        cxxflags=${BOOST_CXXFLAGS}
+        binary-format=mach-o
+        define=_LITTLE_ENDIAN
+        target-os=iphone
+        ${BUILD_TYPE}
+        address-model=64
+        runtime-link=static
+        define=BOOST_SPIRIT_THREADSAFE
+    )
+
 else()
     set(BOOST_ENVIRONMENT )
     set(BOOST_ARCH_CONFIGURATION )
 endif()
 
 set(BUILT_BOOST_VERSION ${BOOST_VERSION})
-set(BUILT_BOOST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/include)
-set(BUILT_BOOST_LIBRARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/boost/install/lib)
+set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/install/include)
+set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/install/lib)
 set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
 
 function(_boost_library_filename component output_var)
@@ -108,29 +217,31 @@ foreach (component ${BOOST_DEPENDENT_COMPONENTS})
 endforeach()
 
 set(BOOST_PATCH_COMMAND
-    cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
+    cd ${OUINET_BOOST_PREFIX}/src/built_boost
 )
 foreach (patch ${BOOST_PATCHES})
-    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
+
+execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
 
 externalproject_add(built_boost
     URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=${BOOST_VERSION_HASH}
-    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost"
+    PREFIX ${OUINET_BOOST_PREFIX}
+    BUILD_IN_SOURCE 1
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
-    CONFIGURE_COMMAND
-           cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-        && ./bootstrap.sh
+    CONFIGURE_COMMAND ${OUINET_BOOST_CONFIGURE_COMMAND}
     BUILD_COMMAND
-           cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost
-        && ${BOOST_ENVIRONMENT} ./b2
+        ${BOOST_ENVIRONMENT} ./b2
             link=static
             threading=multi
-            -j2
+            -j${NPROC}
+            #--verbose -d2 # Output exact commands when building
             --layout=system
-            --prefix=${CMAKE_CURRENT_BINARY_DIR}/boost/install
+            --prefix=${OUINET_BOOST_PREFIX}/install
             --no-cmake-config
+            -q # Stop at first error
             ${ENABLE_BOOST_COMPONENTS}
             ${BOOST_ARCH_CONFIGURATION}
             install
@@ -169,28 +280,42 @@ set_target_properties(Boost::boost PROPERTIES
 # boundary, both the library and the program must link asio as a shared library
 # instead. Boost does not ship this library, so we need to create it.
 
-add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+if (${BOOST_BUILD_SHARED})
+    add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+else()
+    add_library(boost_asio STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+endif()
+
 add_library(Boost::asio ALIAS boost_asio)
 target_link_libraries(boost_asio
     PUBLIC
         Boost::boost
-        Boost::coroutine
         Threads::Threads
+        Boost::${BOOST_COROUTINE_BACKEND}
     PRIVATE
         Boost::system
 )
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.77.0)
+    # explicitly link with bcrypt after Boost::filesystem
+    target_link_libraries(boost_asio
+        PUBLIC
+            crypt32
+            bcrypt)
+endif()
 target_compile_definitions(boost_asio
     PUBLIC
         -DBOOST_ASIO_DYN_LINK
-        # For some reason we need to define both of these
-        -DBOOST_COROUTINES_NO_DEPRECATION_WARNING
-        -DBOOST_COROUTINE_NO_DEPRECATION_WARNING
+        ${BOOST_COMPILE_DEFINITIONS}
 )
 target_compile_options(boost_asio
     PUBLIC -std=c++20
 )
 
-add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+if (${BOOST_BUILD_SHARED})
+    add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+else()
+    add_library(boost_asio_ssl STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+endif()
 add_library(Boost::asio_ssl ALIAS boost_asio_ssl)
 target_link_libraries(boost_asio_ssl
     PUBLIC

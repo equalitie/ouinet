@@ -4,6 +4,7 @@
 #include <sstream>
 #include <vector>
 
+#include <boost/asio/ssl/context.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -15,11 +16,14 @@
 #include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"
+#ifndef __WIN32
 #include "increase_open_file_limit.h"
+#endif
 #include "endpoint.h"
 #include "logger.h"
 #include "constants.h"
 #include "bep5_swarms.h"
+#include "util.h"
 #include "bittorrent/bootstrap.h"
 
 namespace ouinet {
@@ -30,22 +34,35 @@ static const fs::path log_file_name{_LOG_FILE_NAME};
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
-  //TODO: move this to somewhere where both client and injector config has access to
+//TODO: move this to somewhere where both client and injector config has access to
 #ifdef __EXPERIMENTAL__
 #define _MAX_I2P_HOPS 8
 #endif // ifdef __EXPERIMENTAL__
+
+struct MetricsConfig {
+    bool enable_on_start = false;
+    util::url_match server_url;
+    boost::optional<std::string> server_token;
+    boost::optional<asio::ssl::context> server_cacert;
+    metrics::EncryptionKey encryption_key;
+
+    static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
+};
 
 class ClientConfig {
 public:
   enum class CacheType { None, Bep5Http, Bep3HTTPOverI2P };
 
-    ClientConfig();
+    ClientConfig() = default;
 
     // Throws on error
     ClientConfig(int argc, char* argv[]);
 
-    ClientConfig(const ClientConfig&) = default;
-    ClientConfig& operator=(const ClientConfig&) = default;
+    ClientConfig(ClientConfig&&) = default;
+    ClientConfig& operator=(ClientConfig&&) = default;
+
+    ClientConfig(const ClientConfig&) = delete;
+    ClientConfig& operator=(const ClientConfig&) = delete;
 
     const fs::path& repo_root() const {
         return _repo_root;
@@ -122,6 +139,10 @@ public:
         return _front_end_endpoint;
     }
 
+    const boost::optional<std::string>& front_end_access_token() const {
+        return _front_end_access_token;
+    }
+
     boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
         return _cache_http_pubkey;
     }
@@ -138,6 +159,16 @@ public:
 
     auto description() {
         return description_full();
+    }
+
+    // Is `nullptr` if metrics is disabled
+    const MetricsConfig* metrics() const {
+        return _metrics.get();
+    }
+
+    // Is `nullptr` if metrics is disabled
+    MetricsConfig* metrics() {
+        return _metrics.get();
     }
 
 private:
@@ -165,9 +196,11 @@ private:
               "to start the DHT (can be used several times). "
               "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
               "This option is persistent.")
+#ifndef __WIN32
            ("open-file-limit"
             , po::value<unsigned int>()
             , "To increase the maximum number of open files")
+#endif
            ;
 
         po::options_description services("Service options");
@@ -185,6 +218,10 @@ private:
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format)")
+           ("front-end-access-token"
+            , po::value<string>()
+            , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
+              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
            ("disable-bridge-announcement"
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
             , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
@@ -276,13 +313,36 @@ private:
               "the \"dns=...\" query argument will be added for the GET request.")
            ;
 
+        po::options_description metrics("Metrics options");
+        metrics.add_options()
+           ("metrics-enable-on-start", po::bool_switch()->default_value(false)
+            , "Enable metrics at startup. Must be used with --metrics-server-url")
+           ("metrics-server-url", po::value<string>()
+            , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
+           ("metrics-server-token", po::value<string>()
+            , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
+           ("metrics-server-cacert", po::value<string>()
+            , "Tls CA certificate for the metrics server")
+           ("metrics-server-cacert-file", po::value<string>()
+            , "File containing the CA certificate for the metrics server")
+           ("metrics-encryption-key", po::value<string>()
+            , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
+              "the following. \n"
+              "   First generate the private key:\n"
+              "     `openssl genpkey -algorithm x25519 -out private_key.pem`\n"
+              "   Then get the public encryption key:\n"
+              "     `openssl pkey -in private_key.pem -pubout -out public_key.pem`"
+              )
+           ;
+
         po::options_description desc;
         desc
             .add(general)
             .add(services)
             .add(injector)
             .add(cache)
-            .add(requests);
+            .add(requests)
+            .add(metrics);
         return desc;
     }
 
@@ -407,6 +467,7 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    boost::optional<std::string> _front_end_access_token;
     bool _disable_bridge_announcement = false;
 
     boost::posix_time::time_duration _max_cached_age
@@ -425,8 +486,10 @@ private:
     std::string _local_domain;
     boost::optional<doh::Endpoint> _origin_doh_endpoint;
 
+    std::unique_ptr<MetricsConfig> _metrics;
+
 #ifdef __EXPERIMENTAL__
-  size_t _i2p_hops_per_tunnel = 3;
+    size_t _i2p_hops_per_tunnel = 3;
 #endif // ifdef __EXPERIMENTAL__
   
 };

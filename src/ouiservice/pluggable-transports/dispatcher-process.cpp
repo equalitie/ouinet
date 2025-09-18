@@ -151,7 +151,7 @@ void DispatcherProcess::start_process(
         timeout_timer.cancel();
     });
 
-    asio::spawn(_ioc, [
+    task::spawn_detached(_ioc, [
         this,
         standard_output = std::move(standard_output),
         initialization
@@ -257,7 +257,7 @@ void DispatcherProcess::stop_process()
     auto& ioc = _ioc;
     _stop_signal();
 
-    asio::spawn(_ioc, [
+    task::spawn_detached(_ioc, [
         &ioc,
         process = std::move(process),
         standard_input = std::move(standard_input),

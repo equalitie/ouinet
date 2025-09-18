@@ -183,7 +183,7 @@ void Reader::setup_parser()
 {
     _on_chunk_header = [&] (auto size, auto exts, auto& ec) {
         assert(!_next_part);
-        _next_part = ChunkHdr{size, std::move(exts.to_string())};
+        _next_part = ChunkHdr{size, exts.to_string()};
     };
 
     _on_chunk_body = [&] (auto remain, auto data, auto& ec) -> size_t {
@@ -196,6 +196,9 @@ void Reader::setup_parser()
     // Reads are both streamed and parts limited to `_buffer` size,
     // so remove the whole body size limit.
     _parser.body_limit((std::numeric_limits<std::size_t>::max)());
+    // Increase the header size limit to 16KB to fix the loading of sites
+    // with big headers.
+    _parser.header_limit(16*1024);
     _parser.on_chunk_header(_on_chunk_header);
     _parser.on_chunk_body(_on_chunk_body);
 }
@@ -268,7 +271,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
 
         ec = compute_error_code(ec, cancel);
         assert(ec != http::error::end_of_stream);
-        if (ec == http::error::need_buffer) ec = sys::error_code();
+        if (ec == http::error::need_buffer) ec = {};
         if (ec) return or_throw(yield, ec, boost::none);
 
         size_t s = sizeof(buf) - _parser.get().body().size;

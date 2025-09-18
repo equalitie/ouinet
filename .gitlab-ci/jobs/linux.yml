@@ -1,7 +1,11 @@
 variables:
+  TARGET_PLATFORM: 'linux'
   WITH_EXPERIMENTAL: 'OFF'
   BUILD_PATH: 'build/$TARGET_PLATFORM-experimental_$WITH_EXPERIMENTAL'
+  BUILD_TYPE: 'Debug'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  CMAKE_VERSION: "3.31.7-linux-x86_64"
+  WITH_ASAN: "OFF"
 
 .linux-build:
   stage: build
@@ -10,6 +14,7 @@ variables:
   image: $BUILDER_IMAGE
   artifacts:
     paths:
+      - $BUILD_PATH/boost/install/include
       - $BUILD_PATH/client
       - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
@@ -23,12 +28,14 @@ variables:
       - $BUILD_PATH/modules/*/go-workspace
       - $BUILD_PATH/src/ouiservice/lampshade/go-workspace
   script:
-    - mkdir -p $BUILD_PATH
+    - source $CI_PROJECT_DIR/scripts/install-cmake.sh $CMAKE_VERSION
+    - mkdir -p $CI_PROJECT_DIR/$BUILD_PATH
     - cd $BUILD_PATH
-    - cmake $CI_PROJECT_DIR -DBOOST_VERSION=$BOOST_VERSION -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
-    - make -j `nproc`
+    - echo cmake -S $CI_PROJECT_DIR -B $CI_PROJECT_DIR/$BUILD_PATH -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBOOST_VERSION=$BOOST_VERSION -DWITH_ASAN=$WITH_ASAN  -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
+    - cmake -S $CI_PROJECT_DIR -B $CI_PROJECT_DIR/$BUILD_PATH -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBOOST_VERSION=$BOOST_VERSION -DWITH_ASAN=$WITH_ASAN  -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
+    - cmake --build $CI_PROJECT_DIR/$BUILD_PATH -- -j `nproc`
 
-.linux-unit-test:
+.linux-unit-cpp-test:
   stage: test
   tags:
     - docker
@@ -45,6 +52,26 @@ variables:
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
     - for test in ./$BUILD_PATH/test/test-*; do "$test" --log_level=test_suite; done
+
+.linux-unit-rust-test:
+  stage: test
+  tags:
+    - docker
+    - ptrace
+  artifacts:
+    paths:
+      - $BUILD_PATH/boost/install/include
+      - $BUILD_PATH/libboost_asio.so
+    expire_in: 1h
+  image: $BUILDER_IMAGE
+  script:
+    - export RUST_LOG=ouinet_rs=debug
+    - export CXXFLAGS="-I$CI_PROJECT_DIR/$BUILD_PATH/boost/install/include"
+    # For the linker to find libboost_asio.so
+    - export LIBRARY_PATH="$CI_PROJECT_DIR/$BUILD_PATH"
+    # For when the test executable is ran
+    - export LD_LIBRARY_PATH="$CI_PROJECT_DIR/$BUILD_PATH"
+    - cargo test --manifest-path ./rust/Cargo.toml -- --nocapture
 
 .linux-integration-test:
   stage: test

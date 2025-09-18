@@ -1,19 +1,26 @@
 include(ExternalProject)
 
-set(ZDNSPARSER_FILENAME
-    "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
-)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    set(ZDNSPARSER_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_BUILD_TYPE}/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+else()
+    set(ZDNSPARSER_FILENAME
+            "${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser-build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zdnsparser${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+endif()
 
 set(PATCHES
     ${CMAKE_CURRENT_LIST_DIR}/zdnsparser/disable-tests.patch
     ${CMAKE_CURRENT_LIST_DIR}/zdnsparser/virtual-destructors.patch
+    ${CMAKE_CURRENT_LIST_DIR}/zdnsparser/include-capitalization.patch
 )
 
 set(PATCH_COMMAND
     cd ${CMAKE_CURRENT_BINARY_DIR}/zdnsparser/src/zdnsparser
 )
 foreach (patch ${PATCHES})
-    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
 externalproject_add(zdnsparser
@@ -31,6 +38,7 @@ externalproject_add(zdnsparser
         -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
         -DANDROID_ABI=${ANDROID_ABI}
         -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+        -DPLATFORM=${PLATFORM}
     BUILD_BYPRODUCTS ${ZDNSPARSER_FILENAME}
     PREFIX "zdnsparser"
 )

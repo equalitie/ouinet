@@ -11,13 +11,33 @@
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 
-#include <network/uri.hpp>
+#include <skyr/percent_encoding/percent_decode.hpp>
 
 #include "util/iterators/base32_from_binary.hpp"
 #include "util/iterators/binary_from_base32.hpp"
 
 using namespace std;
 
+bool ouinet::util::match_http_url(const boost::string_view url, ouinet::util::url_match& match) {
+    static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
+                                     "([-\\.a-z0-9]+|\\[[:0-9a-f]+\\])"  // 2: host
+                                     "(:[0-9]{1,5})?"  // 3: :port (or empty)
+                                     "(/[^?#]*)?"  // 4: /path
+                                     "(\\?[^#]*)?"  // 5: ?query (or empty)
+                                     "(#.*)?"  // 6: #fragment (or empty)
+                                   , boost::regex::normal | boost::regex::icase);
+    boost::cmatch m;
+    if (!boost::regex_match(url.begin(), url.end(), m, urlrx))
+        return false;
+    match = { m[1]
+            , m[2]
+            , m[3].length() > 0 ? std::string(m[3], 1) : ""  // drop colon
+            , m[4]
+            , m[5].length() > 0 ? std::string(m[5], 1) : ""  // drop qmark
+            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop hash
+    };
+    return true;
+}
 
 boost::optional<boost::asio::ip::address>
 get_local_ip_address(const boost::asio::ip::udp::endpoint& ep) {
@@ -158,15 +178,11 @@ bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out
     return size == out_size;
 }
 
-std::string ouinet::util::percent_decode(const boost::string_view in) {
+string ouinet::util::percent_decode(const boost::string_view in) {
     if (in.empty()) return {};
-
-    std::string ret;
     try {
-        network::uri::decode( in.cbegin(), in.cend()
-                            , std::back_inserter(ret));
-    } catch (const network::percent_decoding_error&) {
+        return skyr::percent_decode(string_view(in.data(), in.size())).value();
+    } catch (const skyr::percent_encoding::percent_encode_errc&) {
         return {};
     }
-    return ret;
 }

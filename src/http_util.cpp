@@ -2,7 +2,7 @@
 
 #include <boost/asio/error.hpp>
 #include <boost/regex.hpp>
-#include <network/uri.hpp>
+#include <skyr/url.hpp>
 
 #include "logger.h"
 #include "parse/number.h"
@@ -17,7 +17,7 @@ namespace posix_time = boost::posix_time;
 
 
 pair<string, string>
-ouinet::util::get_host_port(const http::request<http::string_body>& req)
+ouinet::util::get_host_port(const http::request_header<>& req)
 {
     auto target = req.target();
     auto defport = (target.starts_with("https:") || target.starts_with("wss:"))
@@ -29,15 +29,15 @@ ouinet::util::get_host_port(const http::request<http::string_body>& req)
             : req[http::field::host];
 
     if (hp.empty() && req.version() == 10) {
-        // HTTP/1.0 proxy client with no ``Host:``, use URI.
-        network::uri uri(target.to_string());
-        return make_pair( uri.host().to_string()
-                        , (uri.has_port() ? uri.port().to_string() : defport));
+        // HTTP/1.0 proxy client with no ``Host:``, use URL.
+        skyr::url url{std::string(target)};
+        return make_pair( url.hostname()
+                        , (url.port().empty() ? defport : url.port()));
     }
 
     auto host_port = util::split_ep(hp);
-    return make_pair( host_port.first.to_string()
-                    , host_port.second.empty() ? defport : host_port.second.to_string());
+    return make_pair( std::string(host_port.first)
+                    , host_port.second.empty() ? defport : std::string(host_port.second));
 }
 
 boost::optional<ouinet::util::HttpResponseByteRange>

@@ -1,11 +1,9 @@
 include:
   - .gitlab-ci/jobs/common/prepare-builder-image.yml
 
-variables:
-  TARGET_PLATFORM: 'android'
-  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
-
 android / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'android'
   extends:
     .prepare-builder-image
   needs:
@@ -15,6 +13,7 @@ android / prepare-builder-image:
 android / build:
   variables:
     TARGET_PLATFORM: 'android'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   stage: build
   tags:
     - docker
@@ -33,26 +32,52 @@ android / build:
       - build.android/build-android-*/ouinet/outputs/apk/*.apk
     expire_in: 6h
 
-android / build-experimental:
+android / build-asan:
   variables:
     TARGET_PLATFORM: 'android'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   stage: build
   tags:
     - docker
   needs:
     - job: 'android / prepare-builder-image'
       optional: true
-    - job: 'linux / build-experimental'
+    - job: 'linux / build-asan'
   image: $BUILDER_IMAGE
   script:
-    - mkdir -p build.android-experimental
-    - cd build.android-experimental
-    - env WITH_EXPERIMENTAL=ON ../scripts/build-android.sh
+    - mkdir -p build.android-asan
+    - cd build.android-asan
+    - env WITH_ASAN=ON ../scripts/build-android.sh
   artifacts:
     paths:
-      - build.android-experimental/build-android-*/ouinet/outputs/aar/*.aar
-      - build.android-experimental/build-android-*/ouinet/outputs/apk/*.apk
+      - build.android-asan/build-android-*/ouinet/outputs/aar/*.aar
+      - build.android-asan/build-android-*/ouinet/outputs/apk/*.apk
     expire_in: 6h
+  when: manual
+  allow_failure: true
+
+android / build-release:
+  variables:
+    TARGET_PLATFORM: 'android'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  stage: build
+  tags:
+    - docker
+  needs:
+    - job: 'android / prepare-builder-image'
+      optional: true
+  image: $BUILDER_IMAGE
+  script:
+    - mkdir -p build.android-release
+    - cd build.android-release
+    - ../scripts/build-android.sh -r
+  artifacts:
+    paths:
+      - build.android-release/build-android-*/ouinet/outputs/aar/*.aar
+      - build.android-release/build-android-*/ouinet/outputs/apk/*.apk
+    expire_in: 6h
+  when: manual
+  allow_failure: true
 
 # TODO: Remove this job when the builder image created by prepare-builder-image
 #       is stable enough to build a production Ouinet AAR.
@@ -74,3 +99,24 @@ android / build-prod-image:
       when: manual
       allow_failure: true
 
+android / build-experimental:
+  variables:
+    TARGET_PLATFORM: 'android'
+    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
+  stage: build
+  tags:
+    - docker
+  needs:
+    - job: 'android / prepare-builder-image'
+      optional: true
+    - job: 'linux / build-experimental'
+  image: $BUILDER_IMAGE
+  script:
+    - mkdir -p build.android-experimental
+    - cd build.android-experimental
+    - env WITH_EXPERIMENTAL=ON ../scripts/build-android.sh
+  artifacts:
+    paths:
+      - build.android-experimental/build-android-*/ouinet/outputs/aar/*.aar
+      - build.android-experimental/build-android-*/ouinet/outputs/apk/*.apk
+    expire_in: 6h

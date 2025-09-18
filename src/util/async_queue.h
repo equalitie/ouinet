@@ -152,13 +152,10 @@ public:
 
         assert(!_queue.empty());
 
-        size_t ret = 0;
-
         while (!_queue.empty()) {
             auto p = std::move(_queue.front());
             _queue.pop_front();
             if (!p.second) {
-                ++ret;
                 out.push(std::move(p.first));
             }
         }

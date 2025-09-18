@@ -1,0 +1,15 @@
+local xcCLANGXX = [ SHELL "xcrun -sdk iphoneos -f clang++" ] ;
+local CLANGXX = [ MATCH "([^
+]*)" : $(xcCLANGXX) ] ;
+ECHO "CLANG = $(CLANGXX)" ;
+
+local xcDEVDIR = [ SHELL "xcode-select --print-path" ] ;
+local DEVDIR = [ MATCH "([^
+]*)" : $(xcDEVDIR) ] ;
+ECHO "DEVDIR = $(DEVDIR)" ;
+
+using darwin : ios64
+: $(CLANGXX) -arch arm64 -isysroot $(DEVDIR)/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk -mios-version-min=13.0 -Wno-error=implicit-function-declaration
+: <striper> <root>$(DEVDIR)/Platforms/iPhoneOS.platform/Developer
+: <architecture>arm <target-os>iphone 
+;

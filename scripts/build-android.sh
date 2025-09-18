@@ -1,15 +1,15 @@
 #!/bin/bash
 
 set -e
-set -x
+# set -x
 
 DIR=`pwd`
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-omni}
 
-CMAKE_WITH_ASAN=${WITH_ASAN}
-CMAKE_WITH_EXPERIMENTAL=${WITH_EXPERIMENTAL}
+CMAKEARG_WITH_ASAN=${WITH_ASAN}
+CMAKEARG_WITH_EXPERIMENTAL=${WITH_EXPERIMENTAL}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -45,6 +45,7 @@ else
     OUTPUT_DIR=${OUTPUT_DIR}-debug
     GRADLE_VARIANT=Debug
 fi
+CMAKEARG_CMAKE_BUILD_TYPE=$GRADLE_VARIANT
 mkdir -p "${DIR}/${OUTPUT_DIR}"
 # Tasks to be run by Gradle when building the AAR.
 # The explicit tasks are needed since there are no `build{Release,Debug}` tasks.
@@ -85,8 +86,9 @@ EOF
 # Export variables required by subprocesses (always prefixed with `OUINET_`).
 export OUINET_MIN_API OUINET_TARGET_API
 
-# Export CMake extra flags so they can be used when invoked by Gradle (always prefixed with `CMAKE_`).
-export CMAKE_WITH_ASAN CMAKE_WITH_EXPERIMENTAL
+# Export extra arguments to be forwarded by Gradle to CMake (always prefixed
+# with `CMAKEARG_`).
+export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_EXPERIMENTAL
 
 ######################################################################
 MODES=

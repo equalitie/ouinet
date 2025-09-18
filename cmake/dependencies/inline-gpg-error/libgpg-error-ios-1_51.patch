@@ -1,0 +1,132 @@
+diff --color -Nur libgpg-error-1.51.orig/Makefile.in libgpg-error-1.51/Makefile.in
+--- libgpg-error-1.51.orig/Makefile.in	2024-11-11 05:35:09
++++ libgpg-error-1.51/Makefile.in	2025-06-09 17:27:44
+@@ -323,6 +323,7 @@
+ LTLIBOBJS = @LTLIBOBJS@
+ LTLIBTHREAD = @LTLIBTHREAD@
+ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+diff --color -Nur libgpg-error-1.51.orig/configure libgpg-error-1.51/configure
+--- libgpg-error-1.51.orig/configure	2024-11-11 05:35:09
++++ libgpg-error-1.51/configure	2025-06-09 17:26:07
+@@ -730,6 +730,7 @@
+ INSTALL_GPG_ERROR_CONFIG_TRUE
+ EXEEXT_FOR_BUILD
+ CC_FOR_BUILD
++MACOS_BUILD_ROOT
+ RC
+ LT_SYS_LIBRARY_PATH
+ OTOOL64
+@@ -12755,7 +12756,9 @@
+ # flags to be left without arguments
+ need_version=unknown
+ 
+-
++#if test -z "$MACOS_BUILD_ROOT"; then
++MACOS_BUILD_ROOT=$MACOS_BUILD_ROOT
++#fi
+ 
+ case $host_os in
+ aix3*)
+diff --color -Nur libgpg-error-1.51.orig/configure.ac libgpg-error-1.51/configure.ac
+--- libgpg-error-1.51.orig/configure.ac	2024-11-11 05:31:22
++++ libgpg-error-1.51/configure.ac	2025-06-09 17:26:07
+@@ -198,6 +198,7 @@
+ 
+ # We need to compile and run a program on the build machine.
+ AX_CC_FOR_BUILD
++AX_MACOS_BUILD_ROOT
+ 
+ AH_BOTTOM([
+ /* Force using of NLS for W32 even if no libintl has been found.  This is
+diff --color -Nur libgpg-error-1.51.orig/doc/Makefile.am libgpg-error-1.51/doc/Makefile.am
+--- libgpg-error-1.51.orig/doc/Makefile.am	2022-12-16 11:20:45
++++ libgpg-error-1.51/doc/Makefile.am	2025-06-09 17:33:14
+@@ -47,8 +47,7 @@
+ CLEANFILES += yat2m-for-build$(EXEEXT_FOR_BUILD)
+ 
+ yat2m-for-build$(EXEEXT_FOR_BUILD): yat2m.c
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	$(CPPFLAGS_FOR_BUILD) -o $@ $(srcdir)/yat2m.c
++	@cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/doc/yat2m-for-build $(srcdir)/yat2m-for-build
+ else
+ YAT2M_CMD = ./yat2m$(EXEEXT)
+ YAT2M_DEP = yat2m$(EXEEXT)
+diff --color -Nur libgpg-error-1.51.orig/doc/Makefile.in libgpg-error-1.51/doc/Makefile.in
+--- libgpg-error-1.51.orig/doc/Makefile.in	2024-11-11 05:35:09
++++ libgpg-error-1.51/doc/Makefile.in	2025-06-09 17:34:46
+@@ -360,6 +360,7 @@
+ LTLIBOBJS = @LTLIBOBJS@
+ LTLIBTHREAD = @LTLIBTHREAD@
+ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+@@ -1130,8 +1131,7 @@
+ 
+ 
+ @CROSS_COMPILING_TRUE@yat2m-for-build$(EXEEXT_FOR_BUILD): yat2m.c
+-@CROSS_COMPILING_TRUE@	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-@CROSS_COMPILING_TRUE@	$(CPPFLAGS_FOR_BUILD) -o $@ $(srcdir)/yat2m.c
++@CROSS_COMPILING_TRUE@	@cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/doc/yat2m $(srcdir)/yat2m-for-build
+ 
+ yat2m-stamp: $(myman_sources) $(srcdir)/version.texi
+ 	@rm -f yat2m-stamp.tmp
+diff --color -Nur libgpg-error-1.51.orig/src/Makefile.am libgpg-error-1.51/src/Makefile.am
+--- libgpg-error-1.51.orig/src/Makefile.am	2023-05-24 10:15:42
++++ libgpg-error-1.51/src/Makefile.am	2025-06-09 17:30:38
+@@ -259,8 +259,7 @@
+ # It is correct to use $(CC_FOR_BUILD) here.  We want to run the
+ # program at build time.
+ mkerrcodes$(EXEEXT_FOR_BUILD): mkerrcodes.c mkerrcodes.h Makefile
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	$(CPPFLAGS_FOR_BUILD) -I. -I$(srcdir) -o $@ $(srcdir)/mkerrcodes.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkerrcodes $(srcdir)/mkerrcodes
+ 
+ code-from-errno.h: mkerrcodes$(EXEEXT_FOR_BUILD) Makefile
+ 	./mkerrcodes$(EXEEXT_FOR_BUILD) | $(AWK) -f $(srcdir)/mkerrcodes2.awk >$@
+@@ -272,8 +271,7 @@
+ 
+ 
+ mkheader$(EXEEXT_FOR_BUILD): mkheader.c Makefile
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	$(CPPFLAGS_FOR_BUILD) -g -I. -I$(srcdir) -o $@ $(srcdir)/mkheader.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkheader $(srcdir)/mkheader
+ 
+ parts_of_gpg_error_h = 	 	\
+ 	gpg-error.h.in  	\
+diff --color -Nur libgpg-error-1.51.orig/src/Makefile.in libgpg-error-1.51/src/Makefile.in
+--- libgpg-error-1.51.orig/src/Makefile.in	2024-11-11 05:35:09
++++ libgpg-error-1.51/src/Makefile.in	2025-06-09 17:32:01
+@@ -439,6 +439,7 @@
+ LTLIBOBJS = @LTLIBOBJS@
+ LTLIBTHREAD = @LTLIBTHREAD@
+ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
++MACOS_BUILD_ROOT = @MACOS_BUILD_ROOT@
+ MAINT = @MAINT@
+ MAKEINFO = @MAKEINFO@
+ MANIFEST_TOOL = @MANIFEST_TOOL@
+@@ -1678,8 +1679,7 @@
+ # It is correct to use $(CC_FOR_BUILD) here.  We want to run the
+ # program at build time.
+ mkerrcodes$(EXEEXT_FOR_BUILD): mkerrcodes.c mkerrcodes.h Makefile
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	$(CPPFLAGS_FOR_BUILD) -I. -I$(srcdir) -o $@ $(srcdir)/mkerrcodes.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkerrcodes $(srcdir)/mkerrcodes
+ 
+ code-from-errno.h: mkerrcodes$(EXEEXT_FOR_BUILD) Makefile
+ 	./mkerrcodes$(EXEEXT_FOR_BUILD) | $(AWK) -f $(srcdir)/mkerrcodes2.awk >$@
+@@ -1690,8 +1690,7 @@
+ 		$(srcdir)/errnos.in >$@
+ 
+ mkheader$(EXEEXT_FOR_BUILD): mkheader.c Makefile
+-	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) \
+-	$(CPPFLAGS_FOR_BUILD) -g -I. -I$(srcdir) -o $@ $(srcdir)/mkheader.c
++	cp $(MACOS_BUILD_ROOT)/gpg_error/src/gpg_error/src/mkheader $(srcdir)/mkheader
+ 
+ @FORCE_USE_SYSCFG_FALSE@@HAVE_GENERATED_LOCK_OBJ_H_FALSE@./lock-obj-pub.native.h: Makefile gen-posix-lock-obj$(EXEEXT) posix-lock-obj.h
+ @FORCE_USE_SYSCFG_FALSE@@HAVE_GENERATED_LOCK_OBJ_H_FALSE@	./gen-posix-lock-obj >$@

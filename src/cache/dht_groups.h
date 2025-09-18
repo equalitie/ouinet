@@ -19,6 +19,7 @@ public:
 public:
     virtual ~BaseDhtGroups() = default;
     virtual std::set<GroupName> groups() const = 0;
+    virtual std::set<GroupName> pinned_groups() const = 0;
 
     // Empty if the group does not exist.
     virtual std::set<ItemName> items(const GroupName&) const = 0;
@@ -37,6 +38,12 @@ public:
     // Remove item from every group it is in. Return groups that became empty
     // as a result.
     virtual std::set<GroupName> remove(const ItemName&) = 0;
+
+    // Exclude groups that are explicitly marked as pinned.
+    virtual std::set<GroupName> remove(const ItemName&, bool&) = 0;
+    virtual bool is_pinned(const GroupName&, sys::error_code&) = 0;
+    virtual bool pin_group(const GroupName&, sys::error_code&) = 0;
+    virtual bool unpin_group(const GroupName&, sys::error_code&) = 0;
 
     // Do nothing if the group does not exist.
     virtual void remove_group(const GroupName&) = 0;

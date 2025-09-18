@@ -16,30 +16,39 @@ namespace ouinet {
 // but pending send.  If there is, please send it beforehand.
 //
 // A pair of counts is returned
-// for bytes successfully forwarded (from c1 to c2, from c2 to c1).
-template<class Stream1, class Stream2>
+// for bytes successfully forwarded (from `a` to `b`, from `b` to `a`).
+template<class Stream1, class Stream2, class OnA2B, class OnB2A>
 std::pair<std::size_t, std::size_t>
-full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
+full_duplex( Stream1 a
+           , Stream2 b
+           , OnA2B on_a2b
+           , OnB2A on_b2a
+           , Cancel cancel
+           , asio::yield_context yield)
 {
     static const auto timeout = default_timeout::activity();
 
-    static const auto half_duplex = []( auto& in
-                                      , auto& out
-                                      , auto& fwd_bytes_in_out
-                                      , auto& wdog
-                                      , asio::yield_context& yield)
+    static const auto half_duplex = [&cancel]( auto& in
+                                             , auto& out
+                                             , auto& fwd_bytes_in_out
+                                             , auto& on_transfer
+                                             , auto& wdog
+                                             , asio::yield_context& yield)
     {
         sys::error_code ec;
         std::array<uint8_t, 2048> data;
 
         for (;;) {
             size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
+            ec = compute_error_code(ec, cancel, wdog);
             if (ec) break;
 
             asio::async_write(out, asio::buffer(data, length), yield[ec]);
+            ec = compute_error_code(ec, cancel, wdog);
             if (ec) break;
 
             fwd_bytes_in_out += length;  // the data was successfully forwarded
+            on_transfer(length);
             wdog.expires_after(timeout);
         }
         // On error, force the other half-duplex task to finish by closing both streams.
@@ -55,32 +64,45 @@ full_duplex(Stream1 c1, Stream2 c2, Cancel cancel, asio::yield_context yield)
         }
     };
 
-    auto cancel_slot = cancel.connect([&] { c1.close(); c2.close(); });
+    auto cancel_slot = cancel.connect([&] { a.close(); b.close(); });
 
-    auto wdog = watch_dog( c1.get_executor()
+    auto wdog = watch_dog( a.get_executor()
                          , timeout
-                         , [&] { c1.close(); c2.close(); });
+                         , [&] { a.close(); b.close(); });
 
-    WaitCondition wait_condition(c1.get_executor());
-    std::size_t fwd_bytes_c1_c2 = 0, fwd_bytes_c2_c1 = 0;
+    WaitCondition wait_condition(a.get_executor());
+    std::size_t fwd_bytes_a2b = 0, fwd_bytes_b2a = 0;
 
-    asio::spawn
+    task::spawn_detached
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(c1, c2, fwd_bytes_c1_c2, wdog, yield);
+              half_duplex(a, b, fwd_bytes_a2b, on_a2b, wdog, yield);
           });
 
-    asio::spawn
+    task::spawn_detached
         ( yield
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(c2, c1, fwd_bytes_c2_c1, wdog, yield);
+              half_duplex(b, a, fwd_bytes_b2a, on_b2a, wdog, yield);
           });
 
     sys::error_code ec;
     wait_condition.wait(yield[ec]);  // leave cancellation handling to tasks
     ec = compute_error_code(ec, cancel, wdog);
 
-    return or_throw(yield, ec, std::make_pair(fwd_bytes_c1_c2, fwd_bytes_c2_c1));
+    return or_throw(yield, ec, std::make_pair(fwd_bytes_a2b, fwd_bytes_b2a));
+}
+
+template<class Stream1, class Stream2>
+std::pair<std::size_t, std::size_t>
+full_duplex(Stream1 a, Stream2 b, Cancel cancel, asio::yield_context yield)
+{
+    return full_duplex(
+            std::move(a),
+            std::move(b),
+            [](size_t) {},
+            [](size_t) {},
+            std::move(cancel),
+            std::move(yield));
 }
 
 } // ouinet namespace

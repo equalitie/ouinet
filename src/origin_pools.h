@@ -101,7 +101,7 @@ OriginPools::make_pool_id(const RequestHdr& hdr)
     bool is_ssl = hdr.target().starts_with("https:");
 
     // TODO: Can we avoid converting to string?
-    return PoolId{is_ssl, host.to_string()};
+    return PoolId{is_ssl, std::string(host)};
 }
 
 } // namespace

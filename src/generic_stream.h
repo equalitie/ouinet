@@ -4,7 +4,6 @@
 
 #include <boost/system/error_code.hpp>
 #include <boost/asio/buffer.hpp>
-#include <boost/asio/io_service.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/error.hpp>
@@ -246,11 +245,6 @@ public:
         }
     }
 
-    //asio::io_service& get_io_service()
-    //{
-    //    return *_ios;
-    //}
-
 #if BOOST_VERSION >= 107100
     executor_type get_executor()
     {
@@ -313,44 +307,42 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-        using Sig = void(system::error_code, size_t);
+        auto init = [&](auto completion_handler) {
+            auto handler = make_shared<decltype(completion_handler)>(std::move(completion_handler));
 
-        boost::asio::async_completion<Token, Sig> init(token);
+            if (_impl) {
+                {
+                    system::error_code ec;
+                    put_back(bs, ec);
+                    assert(!ec);
+                }
 
-        using Handler = std::decay_t<decltype(init.completion_handler)>;
-
-        // XXX: Handler is non-copyable, but can we do this without allocation?
-        auto handler = make_shared<Handler>(std::move(init.completion_handler));
-
-        if (_impl) {
-            {
-                system::error_code ec;
-                put_back(bs, ec);
-                assert(!ec);
+                // TODO: It should not be necessary to check whether the underlying
+                // implementation has been closed (Asio itself doesn't guarantee
+                // returning an error in such cases). But it seems there may be a
+                // bug in Boost.Beast (Boost v1.67) because even if it destroys the
+                // socket it continues reading from it.
+                // Test vector: uTP x TLS x bbc.com
+                // (Same with the async_write_some operation)
+                _impl->read_impl([h = move(handler), impl = _impl]
+                                 (const system::error_code& ec, size_t size) {
+                                     if (impl->closed()) {
+                                        (*h)(asio::error::shut_down, 0);
+                                     } else {
+                                        (*h)(ec, size);
+                                     }
+                                 });
             }
+            else {
+                asio::post(_executor, [h = move(handler)]
+                                      { (*h)(asio::error::bad_descriptor, 0); });
+            }
+        };
 
-            // TODO: It should not be necessary to check whether the underlying
-            // implementation has been closed (Asio itself doesn't guarantee
-            // returning an error in such cases). But it seems there may be a
-            // bug in Boost.Beast (Boost v1.67) because even if it destroys the
-            // socket it continues reading from it.
-            // Test vector: uTP x TLS x bbc.com
-            // (Same with the async_write_some operation)
-            _impl->read_impl([h = move(handler), impl = _impl]
-                             (const system::error_code& ec, size_t size) {
-                                 if (impl->closed()) {
-                                    (*h)(asio::error::shut_down, 0);
-                                 } else {
-                                    (*h)(ec, size);
-                                 }
-                             });
-        }
-        else {
-            asio::post(_executor, [h = move(handler)]
-                                  { (*h)(asio::error::bad_descriptor, 0); });
-        }
-
-        return init.result.get();
+        return boost::asio::async_initiate<
+            Token,
+            void(boost::system::error_code, size_t)
+          >(init, token);
     }
 
     template< class ConstBufferSequence
@@ -367,39 +359,37 @@ public:
         namespace asio   = boost::asio;
         namespace system = boost::system;
 
-        using Sig = void(system::error_code, size_t);
+        auto init = [&] (auto completion_handler) {
+            auto handler = make_shared<decltype(completion_handler)>(std::move(completion_handler));
 
-        boost::asio::async_completion<Token, Sig> init(token);
+            if (_impl) {
+                _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
+                                                    , asio::buffer_sequence_end(bs)));
 
-        using Handler = std::decay_t<decltype(init.completion_handler)>;
+                copy( asio::buffer_sequence_begin(bs)
+                    , asio::buffer_sequence_end(bs)
+                    , _impl->write_buffers.begin());
 
-        // XXX: Handler is non-copyable, but can we do this without allocation?
-        auto handler = make_shared<Handler>(std::move(init.completion_handler));
+                // TODO: Same as the comment in async_read_some operation
+                _impl->write_impl([h = move(handler), impl = _impl]
+                                  (const system::error_code& ec, size_t size) {
+                                     if (impl->closed()) {
+                                        (*h)(asio::error::shut_down, 0);
+                                     } else {
+                                        (*h)(ec, size);
+                                     }
+                                  });
+            }
+            else {
+                asio::post(_executor, [h = move(handler)]
+                                      { (*h)(asio::error::bad_descriptor, 0); });
+            }
+        };
 
-        if (_impl) {
-            _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
-                                                , asio::buffer_sequence_end(bs)));
-
-            copy( asio::buffer_sequence_begin(bs)
-                , asio::buffer_sequence_end(bs)
-                , _impl->write_buffers.begin());
-
-            // TODO: Same as the comment in async_read_some operation
-            _impl->write_impl([h = move(handler), impl = _impl]
-                              (const system::error_code& ec, size_t size) {
-                                 if (impl->closed()) {
-                                    (*h)(asio::error::shut_down, 0);
-                                 } else {
-                                    (*h)(ec, size);
-                                 }
-                              });
-        }
-        else {
-            asio::post(_executor, [h = move(handler)]
-                                  { (*h)(asio::error::bad_descriptor, 0); });
-        }
-
-        return init.result.get();
+        return boost::asio::async_initiate<
+            Token,
+            void(system::error_code, size_t)
+        >(init, token);
     }
 
     const std::string& remote_endpoint() const { return _remote_endpoint; }

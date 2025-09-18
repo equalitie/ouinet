@@ -29,14 +29,14 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
     {
         asio::io_context ctx;
 
-        asio::spawn(ctx, [&] (asio::yield_context yield) {
+        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
                 sys::error_code ec;
                 Cancel cancel;
 
                 auto start = Clock::now();
 
-                asio::spawn(ctx, [&] (asio::yield_context yield) {
-                    ctx.post(yield);
+                task::spawn_detached(ctx, [&] (asio::yield_context yield) {
+                        asio::post(ctx, yield);
                     cancel();
                 });
 
@@ -51,16 +51,16 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
     {
         asio::io_context ctx;
 
-        asio::spawn(ctx, [&] (asio::yield_context yield) {
+        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
                 sys::error_code ec;
                 Cancel c1;
                 Cancel c2 = c1;
 
                 auto start = Clock::now();
 
-                asio::spawn(ctx, [c1 = move(c1), &ctx]
+                task::spawn_detached(ctx, [c1 = move(c1), &ctx]
                                  (asio::yield_context yield) mutable {
-                    ctx.post(yield);
+                    asio::post(ctx, yield);
                     c1();
                 });
 
@@ -69,13 +69,14 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
                 async_sleep(ctx, 1s, c2, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
         });
+
+        ctx.run();
     }
 
     {
         asio::io_context ctx;
 
-        asio::spawn(ctx, [&] (asio::yield_context yield) {
-                sys::error_code ec;
+        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
                 Cancel c;
 
                 {
@@ -103,7 +104,7 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
     {
         asio::io_context ctx;
 
-        asio::spawn(ctx, [&] (asio::yield_context yield) {
+        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
             AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
                 q.push_back(1);
             });
@@ -120,11 +121,11 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
     {
         asio::io_context ctx;
 
-        asio::spawn(ctx, [&] (asio::yield_context yield) {
+        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
             AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
-                ctx.post(y);
+                asio::post(ctx, y);
                 q.push_back(1);
-                ctx.post(y);
+                asio::post(ctx, y);
                 if (c) or_throw(y, asio::error::operation_aborted);
             });
 
@@ -140,9 +141,9 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
     {
         asio::io_context ctx;
 
-        asio::spawn(ctx, [&] (asio::yield_context yield) {
+        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
             AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
-                ctx.post(y);
+                asio::post(ctx, y);
             });
 
             Cancel cancel;

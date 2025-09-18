@@ -66,7 +66,7 @@ private:
                                         , asio::yield_context);
 
     static
-    boost::asio::const_buffers_1 buffer(const std::string& s) {
+    boost::asio::const_buffer buffer(const std::string& s) {
         return boost::asio::buffer(const_cast<const char*>(s.data()), s.size());
     }
 
@@ -94,7 +94,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
     LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
-    asio::spawn(get_executor(), [this] (asio::yield_context yield) {
+    task::spawn_detached(), [this] (asio::yield_context yield) {
             using namespace std::chrono;
             using std::cerr;
 
@@ -200,7 +200,7 @@ void UdpMultiplexer::maintain_max_rate_bytes_per_sec( float current_rate
     float delay_sec = current_rate/max_rate - 1;
     auto delay = std::chrono::milliseconds(int(delay_sec*1000));
 
-    _rate_limiting_timer.expires_from_now(delay);
+    _rate_limiting_timer.expires_after(delay);
     _rate_limiting_timer.async_wait(yield);
 }
 

@@ -1,41 +1,51 @@
 include(ExternalProject)
 
-set(GPGERROR_LIBRARY_BASE_FILENAME
-    ${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
-)
-set(GCRYPT_LIBRARY_BASE_FILENAME
-    ${CMAKE_SHARED_LIBRARY_PREFIX}gcrypt${CMAKE_SHARED_LIBRARY_SUFFIX}
-)
+if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja" AND NOT "${CMAKE_GENERATOR}" STREQUAL "Xcode" AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+    # Ninja doesn't support these.
+    # The job server options were introduced in CMake v3.28.0
+    set(BUILD_JOB_SERVER_AWARE BUILD_JOB_SERVER_AWARE YES)
+    set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
+endif()
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    # iOS libraries must to be built as static libs that are linked into a single dynamic lib
+    set(GCRYPT_BUILD_SHARED OFF)
+else()
+    set(GCRYPT_BUILD_SHARED ON)
+endif()
+
+if (${GCRYPT_BUILD_SHARED})
+    set(GPGERROR_LIBRARY_BASE_FILENAME
+        ${CMAKE_SHARED_LIBRARY_PREFIX}gpg-error${CMAKE_SHARED_LIBRARY_SUFFIX}
+    )
+    set(GCRYPT_LIBRARY_BASE_FILENAME
+        ${CMAKE_SHARED_LIBRARY_PREFIX}gcrypt${CMAKE_SHARED_LIBRARY_SUFFIX}
+    )
+else()
+    set(GPGERROR_LIBRARY_BASE_FILENAME
+        ${CMAKE_STATIC_LIBRARY_PREFIX}gpg-error${CMAKE_STATIC_LIBRARY_SUFFIX}
+    )
+    set(GCRYPT_LIBRARY_BASE_FILENAME
+        ${CMAKE_STATIC_LIBRARY_PREFIX}gcrypt${CMAKE_STATIC_LIBRARY_SUFFIX}
+    )
+endif()
 
 # The order of these lists is important.
 # The first entry is a regular file, the remainder are symlinks.
 set(GPGERROR_LIBRARY_VERSION_FILENAMES
-    ${GPGERROR_LIBRARY_BASE_FILENAME}.0.24.3
+    ${GPGERROR_LIBRARY_BASE_FILENAME}.0.38.0
     ${GPGERROR_LIBRARY_BASE_FILENAME}.0
     ${GPGERROR_LIBRARY_BASE_FILENAME}
 )
 set(GCRYPT_LIBRARY_VERSION_FILENAMES
-    ${GCRYPT_LIBRARY_BASE_FILENAME}.20.2.3
+    ${GCRYPT_LIBRARY_BASE_FILENAME}.20.5.0
     ${GCRYPT_LIBRARY_BASE_FILENAME}.20
     ${GCRYPT_LIBRARY_BASE_FILENAME}
 )
 
-set(GPG_ERROR_PATCHES
-    # This will not be needed once a released version supports gawk 5,
-    # see <https://dev.gnupg.org/T4459> and <https://dev.gnupg.org/T4469>
-    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat.patch
-    # This avoids having to run `aclocal` and `automake` again.
-    ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-gawk-compat-in.patch
-)
-
-
-
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-    get_filename_component(COMPILER_TOOLCHAIN_PREFIX ${_CMAKE_TOOLCHAIN_PREFIX} NAME)
-    string(REGEX REPLACE "-$" "" COMPILER_HOSTTRIPLE ${COMPILER_TOOLCHAIN_PREFIX})
-    # This is the same as COMPILER_HOSTTRIPLE, _except_ on arm32.
-    set(COMPILER_CC_PREFIX ${COMPILER_HOSTTRIPLE})
+    set(COMPILER_CC_PREFIX ${CMAKE_LIBRARY_ARCHITECTURE})
 
     if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
         set(COMPILER_CC_PREFIX "armv7a-linux-androideabi")
@@ -57,32 +67,88 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     set(GCRYPT_CC ${COMPILER_DIR}/${COMPILER_CC_PREFIX}${ANDROID_PLATFORM_LEVEL}-clang)
     # We need to supply an architecture/OS-specific config file,
     # and gpg-error does not supply it for most android builds.
-    set(PATCH_COMMAND
+    set(GPG_ERROR_PATCH_COMMAND
         cp ${GPG_ERROR_CONFIG} ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.linux-android.h
     )
-    set(HOST_CONFIG "--host=${COMPILER_HOSTTRIPLE}")
+    set(GCRYPT_PATCH_COMMAND "true")
+    set(HOST_CONFIG "--host=${CMAKE_LIBRARY_ARCHITECTURE}")
     # For cross builds, gcrypt guesses an important toolchain characteristic
     # that it can't test for. Unfortunately, this guess is often wrong. This
     # value is right for android systems.
     set(UNDERSCORE_CONFIG "ac_cv_sys_symbol_underscore=no")
     set(VERSIONED_LIBRARIES 0)
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set(GPG_ERROR_PATCH_COMMAND "true")
+    set(GCRYPT_PATCH_COMMAND "true")
+    set(HOST_CONFIG "--host=x86_64-w64-mingw32")
+    set(VERSIONED_LIBRARIES 0)
+    set(GPGERROR_LIBRARY_BASE_FILENAME ${GPGERROR_LIBRARY_BASE_FILENAME}.a)
+    set(GCRYPT_LIBRARY_BASE_FILENAME ${GCRYPT_LIBRARY_BASE_FILENAME}.a)
+
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    # TODO: does this need to be hard-coded
+    set(GCRYPT_CC /usr/bin/gcc)
+    set(GPG_ERROR_PATCH_COMMAND "true")
+    set(GCRYPT_PATCH_COMMAND "true")
+    set(HOST_CONFIG "")
+    set(UNDERSCORE_CONFIG "")
+    set(VERSIONED_LIBRARIES 0)
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+    set(GCRYPT_CC ${CMAKE_C_COMPILER})
+    # TODO: this copy/replace prevents runtime error with posix lock on arm64 iOS, inspired by https://github.com/xbmc/xbmc/pull/14683
+    # May not be needed in later versions of libgpg-error, or there may be a better solution
+    set(GPG_ERROR_PATCH_COMMAND
+        cp ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.aarch64-apple-darwin.h
+            ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error/src/syscfg/lock-obj-pub.arm-apple-darwin.h
+    )
+    # These patches force build-time executables to be copied from $MACOS_BUILD_ROOT
+    set(GPG_ERROR_PATCHES ${GPG_ERROR_PATCHES}
+        ${CMAKE_CURRENT_LIST_DIR}/inline-gpg-error/libgpg-error-ios-1_51.patch
+    )
+    set(GCRYPT_PATCH_COMMAND "true")
+    set(GCRYPT_PATCHES ${GCRYPT_PATCHES}
+        ${CMAKE_CURRENT_LIST_DIR}/inline-gcrypt/libgcrypt-ios-1_11_0.patch
+    )
+    set(CONFIG_ENVIRONMENT
+        export MACOS_BUILD_ROOT=${MACOS_BUILD_ROOT}
+        &&
+    )
+    if (${PLATFORM} STREQUAL "SIMULATOR64")
+        set(COMPILER_HOSTTRIPLE x86_64-apple-darwin)
+    else()
+        set(COMPILER_HOSTTRIPLE arm-apple-darwin)
+    endif()
+    set(HOST_CONFIG
+        --host=${COMPILER_HOSTTRIPLE}
+        --disable-shared
+        ac_cv_func_getentropy=no
+    )
+    set(UNDERSCORE_CONFIG "")
+    set(VERSIONED_LIBRARIES 0)
+
 else()
     # TODO: Should probably support non-android cross compilation here.
     set(GCRYPT_CC ${CMAKE_C_COMPILER})
-    set(PATCH_COMMAND "true")
+    set(GPG_ERROR_PATCH_COMMAND "true")
+    set(GCRYPT_PATCH_COMMAND "true")
     set(HOST_CONFIG "")
     set(UNDERSCORE_CONFIG "")
     set(VERSIONED_LIBRARIES 1)
 endif()
 
-set(PATCH_COMMAND
-    ${PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error
+set(GPG_ERROR_PATCH_COMMAND
+    ${GPG_ERROR_PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gpg_error/src/gpg_error
 )
 foreach (patch ${GPG_ERROR_PATCHES})
-    set(PATCH_COMMAND ${PATCH_COMMAND} && patch -p1 -i ${patch})
+    set(GPG_ERROR_PATCH_COMMAND ${GPG_ERROR_PATCH_COMMAND} && patch -N -p1 -i ${patch})
 endforeach()
 
-
+set(GCRYPT_PATCH_COMMAND
+    ${GCRYPT_PATCH_COMMAND} && cd ${CMAKE_CURRENT_BINARY_DIR}/gcrypt/src/gcrypt
+)
+foreach (patch ${GCRYPT_PATCHES})
+    set(GCRYPT_PATCH_COMMAND ${GCRYPT_PATCH_COMMAND} && patch -N -p1 -i ${patch})
+endforeach()
 
 if (CMAKE_LIBRARY_OUTPUT_DIRECTORY)
     set(GCRYPT_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
@@ -138,28 +204,38 @@ else()
     set(GPGERROR_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${GPGERROR_LIBRARY_BASE_FILENAME})
     set(GCRYPT_BYPRODUCTS ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME})
 
-    set(GPGERROR_INSTALL
-        ${CMAKE_COMMAND} -E copy ${GPGERROR_BUILD_DIRECTORY}/lib/${GPGERROR_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
-    )
-    set(GCRYPT_INSTALL
-        ${CMAKE_COMMAND} -E copy ${GCRYPT_BUILD_DIRECTORY}/lib/${GCRYPT_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
-    )
+    if (${GCRYPT_BUILD_SHARED})
+        set(GPGERROR_INSTALL
+            ${CMAKE_COMMAND} -E copy ${GPGERROR_BUILD_DIRECTORY}/lib/${GPGERROR_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+        )
+        set(GCRYPT_INSTALL
+            ${CMAKE_COMMAND} -E copy ${GCRYPT_BUILD_DIRECTORY}/lib/${GCRYPT_LIBRARY_BASE_FILENAME} ${GCRYPT_OUTPUT_DIRECTORY}
+        )
+    else()
+        # Avoid unneeded copy as static libs cannot not be moved from their build directory
+        set(GPGERROR_INSTALL "true")
+        set(GCRYPT_INSTALL "true")
+    endif()
+
 endif()
 
-
-
 externalproject_add(gpg_error
-    URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
-    URL_MD5 ef3d928a5a453fa701ecc3bb22be1c64
+    URL https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.51.tar.bz2
+    URL_HASH SHA256=be0f1b2db6b93eed55369cdf79f19f72750c8c7c39fc20b577e724545427e6b2
     PATCH_COMMAND
-        "${PATCH_COMMAND}"
+        "${GPG_ERROR_PATCH_COMMAND}"
     CONFIGURE_COMMAND
+        ${CONFIG_ENVIRONMENT}
         CC=${GCRYPT_CC}
             ./configure ${HOST_CONFIG}
             --prefix=${GPGERROR_BUILD_DIRECTORY}
+            --disable-doc
+            --enable-install-gpg-error-config
+    ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GPGERROR_BYPRODUCTS}
+    ${INSTALL_JOB_SERVER_AWARE}
     INSTALL_COMMAND
            make install
         && ${GPGERROR_INSTALL}
@@ -168,17 +244,24 @@ externalproject_add(gpg_error
 
 externalproject_add(gcrypt
     DEPENDS gpg_error
-    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
-    URL_MD5 3139c2402e844985a67fb288a930534d
+    URL https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.0.tar.bz2
+    URL_HASH SHA256=09120c9867ce7f2081d6aaa1775386b98c2f2f246135761aae47d81f58685b9c
+    PATCH_COMMAND
+        "${GCRYPT_PATCH_COMMAND}"
     CONFIGURE_COMMAND
+        ${CONFIG_ENVIRONMENT}
         CC=${GCRYPT_CC}
+        GPGRT_CONFIG=${GPGERROR_BUILD_DIRECTORY}/bin/gpgrt-config
         ${UNDERSCORE_CONFIG}
             ./configure ${HOST_CONFIG}
             --prefix=${GCRYPT_BUILD_DIRECTORY}
             --with-libgpg-error-prefix=${GPGERROR_BUILD_DIRECTORY}
+            --disable-doc
+    ${BUILD_JOB_SERVER_AWARE}
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${GCRYPT_BYPRODUCTS}
+    ${INSTALL_JOB_SERVER_AWARE}
     INSTALL_COMMAND
            make install
         && ${GCRYPT_INSTALL}
@@ -194,6 +277,13 @@ target_include_directories(lib_gcrypt
         ${GPGERROR_BUILD_DIRECTORY}/include
         ${GCRYPT_BUILD_DIRECTORY}/include
 )
-target_link_libraries(lib_gcrypt
-    INTERFACE ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME}
-)
+if (${GCRYPT_BUILD_SHARED})
+    target_link_libraries(lib_gcrypt
+        INTERFACE ${GCRYPT_OUTPUT_DIRECTORY}/${GCRYPT_LIBRARY_BASE_FILENAME}
+    )
+else()
+    target_link_libraries(lib_gcrypt
+        INTERFACE ${GPGERROR_BUILD_DIRECTORY}/lib/${GPGERROR_LIBRARY_BASE_FILENAME}
+        ${GCRYPT_BUILD_DIRECTORY}/lib/${GCRYPT_LIBRARY_BASE_FILENAME}
+    )
+endif()

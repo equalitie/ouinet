@@ -32,7 +32,7 @@ struct Defer {
 
 // g_client is only accessed from the g_client_thread.
 std::unique_ptr<ouinet::Client> g_client;
-ouinet::asio::io_service g_ios;
+ouinet::asio::io_context g_ctx;
 thread g_client_thread;
 bool g_crypto_initialized = false;
 
@@ -80,7 +80,7 @@ void start_client_thread(const vector<string>& args, const vector<string>& extra
             debug("Starting new ouinet client.");
 
             // In case we're restarting.
-            g_ios.reset();
+            g_ctx.restart();
 
             vector<const char*> args_;
             args_.reserve(args.size());
@@ -91,7 +91,7 @@ void start_client_thread(const vector<string>& args, const vector<string>& extra
 
             try {
                 ClientConfig cfg(args_.size(), (char**) args_.data());
-                g_client = make_unique<ouinet::Client>(g_ios, move(cfg));
+                g_client = make_unique<ouinet::Client>(g_ctx, move(cfg));
                 g_client->start();
             }
             catch (const std::exception& e) {
@@ -102,7 +102,7 @@ void start_client_thread(const vector<string>& args, const vector<string>& extra
             }
 
             try {
-                g_ios.run();
+                g_ctx.run();
             }
             catch (const std::exception& e) {
                 debug("Exception thrown from ouinet");
@@ -122,7 +122,7 @@ Java_ie_equalit_ouinet_Ouinet_nGetClientState(
 {
     // TODO: Avoid needing to keep this in sync by hand.
     if (!g_client)
-        return g_ios.stopped() ? 6 /* stopped */ : 0 /* created */;
+        return g_ctx.stopped() ? 6 /* stopped */ : 0 /* created */;
     switch (g_client->get_state()) {
     case ouinet::Client::RunningState::Created:  return 0;
     case ouinet::Client::RunningState::Failed:   return 1;
@@ -177,7 +177,7 @@ Java_ie_equalit_ouinet_Ouinet_nStopClient(
 {
     try {
       if (g_client_thread.get_id() == thread::id()) return;
-      g_ios.post([] { if (g_client) g_client->stop(); });
+      ouinet::asio::post(g_ctx, [] { if (g_client) g_client->stop(); });
       g_client_thread.join();
       g_client_thread = thread();
     } catch (const std::exception &e) {
@@ -204,7 +204,7 @@ Java_ie_equalit_ouinet_Ouinet_nChargingStateChange(
         JNIEnv* env,
         jobject /* this */,
         jboolean j_is_charging) {
-    g_ios.post([j_is_charging] {
+    ouinet::asio::post(g_ctx, [j_is_charging] {
         if (!g_client) return;
         g_client->charging_state_change(j_is_charging);
     });
@@ -216,7 +216,7 @@ Java_ie_equalit_ouinet_Ouinet_nWifiStateChange(
         JNIEnv* env,
         jobject /* this */,
         jboolean j_is_wifi_connected) {
-    g_ios.post([j_is_wifi_connected] {
+    ouinet::asio::post(g_ctx, [j_is_wifi_connected] {
         if (!g_client) return;
         g_client->wifi_state_change(j_is_wifi_connected);
     });

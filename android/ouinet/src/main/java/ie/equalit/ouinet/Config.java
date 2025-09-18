@@ -56,6 +56,8 @@ public class Config implements Parcelable {
         private String cacheStaticContentPath;
         private String listenOnTcp;
         private String frontEndEp;
+        private String frontEndAccessToken;
+        private boolean debugFrontEndAccessToken;
         private String udpMuxPort;
         private boolean disableBridgeAnnouncement = false;
         private String maxCachedAge;
@@ -66,6 +68,14 @@ public class Config implements Parcelable {
         private boolean disableInjectorAccess = false;
         private LogLevel logLevel = null;
         private boolean enableLogFile = false;
+
+        private boolean metricsEnableOnStart = false;
+        private String metricsServerUrl;
+        private String metricsServerToken;
+        private String metricsEncryptionKey;
+        // Set either-or, not both.
+        private String metricsServerTlsCaCert;
+        private String metricsServerTlsCaCertPath;
 
         public ConfigBuilder(Context context) {
             Ouinet.maybeLoadLibraries(context);
@@ -141,6 +151,14 @@ public class Config implements Parcelable {
             this.frontEndEp = frontEndEp;
             return this;
         }
+        public ConfigBuilder setFrontEndAccessToken(String token){
+            this.frontEndAccessToken = token;
+            return this;
+        }
+        public ConfigBuilder setDebugFrontEndAccessToken(boolean enable){
+            this.debugFrontEndAccessToken = enable;
+            return this;
+        }
         public ConfigBuilder setUdpMuxPort(String udpMuxPort){
             this.udpMuxPort = udpMuxPort;
             return this;
@@ -179,6 +197,30 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setEnableLogFile(boolean enableLogFile){
             this.enableLogFile = enableLogFile;
+            return this;
+        }
+        public ConfigBuilder setMetricsEnableOnStart(boolean enable) {
+            this.metricsEnableOnStart = enable;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerUrl(String url) {
+            this.metricsServerUrl = url;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerToken(String token) {
+            this.metricsServerToken = token;
+            return this;
+        }
+        public ConfigBuilder setMetricsEncryptionKey(String key) {
+            this.metricsEncryptionKey = key;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerTlsCaCert(String caCert) {
+            this.metricsServerTlsCaCert = caCert;
+            return this;
+        }
+        public ConfigBuilder setMetricsServerTlsCaCertPath(String path) {
+            this.metricsServerTlsCaCertPath = path;
             return this;
         }
 
@@ -353,6 +395,8 @@ public class Config implements Parcelable {
                     cacheStaticContentPath,
                     listenOnTcp,
                     frontEndEp,
+                    frontEndAccessToken,
+                    debugFrontEndAccessToken,
                     udpMuxPort,
                     disableBridgeAnnouncement,
                     maxCachedAge,
@@ -362,7 +406,13 @@ public class Config implements Parcelable {
                     disableProxyAccess,
                     disableInjectorAccess,
                     logLevel,
-                    enableLogFile);
+                    enableLogFile,
+                    metricsEnableOnStart,
+                    metricsServerUrl,
+                    metricsServerToken,
+                    metricsEncryptionKey,
+                    metricsServerTlsCaCert,
+                    metricsServerTlsCaCertPath);
         }
     }
 
@@ -381,6 +431,8 @@ public class Config implements Parcelable {
     private String cacheStaticContentPath;
     private String listenOnTcp;
     private String frontEndEp;
+    private String frontEndAccessToken;
+    private boolean debugFrontEndAccessToken;
     private String udpMuxPort;
     private boolean disableBridgeAnnouncement;
     private String maxCachedAge;
@@ -391,6 +443,12 @@ public class Config implements Parcelable {
     private boolean disableInjectorAccess;
     private LogLevel logLevel;
     private boolean enableLogFile;
+    private boolean metricsEnableOnStart;
+    private String metricsServerUrl;
+    private String metricsServerToken;
+    private String metricsEncryptionKey;
+    private String metricsServerTlsCaCert;
+    private String metricsServerTlsCaCertPath;
 
     private Config(String ouinetDirectory,
                   Set<String> btBootstrapExtras,
@@ -407,6 +465,8 @@ public class Config implements Parcelable {
                   String cacheStaticContentPath,
                   String listenOnTcp,
                   String frontEndEp,
+                  String frontEndAccessToken,
+                  boolean debugFrontEndAccessToken,
                   String udpMuxPort,
                   boolean disableBridgeAnnouncement,
                   String maxCachedAge,
@@ -416,7 +476,13 @@ public class Config implements Parcelable {
                   boolean disableProxyAccess,
                   boolean disableInjectorAccess,
                   LogLevel logLevel,
-                  boolean enableLogFile) {
+                  boolean enableLogFile,
+                  boolean metricsEnableOnStart,
+                  String metricsServerUrl,
+                  String metricsServerToken,
+                  String metricsEncryptionKey,
+                  String metricsServerTlsCaCert,
+                  String metricsServerTlsCaCertPath) {
         this.ouinetDirectory = ouinetDirectory;
         this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
         this.cacheHttpPubKey = cacheHttpPubKey;
@@ -432,6 +498,8 @@ public class Config implements Parcelable {
         this.cacheStaticContentPath = cacheStaticContentPath;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
+        this.frontEndAccessToken = frontEndAccessToken;
+        this.debugFrontEndAccessToken = debugFrontEndAccessToken;
         this.udpMuxPort = udpMuxPort;
         this.disableBridgeAnnouncement = disableBridgeAnnouncement;
         this.maxCachedAge = maxCachedAge;
@@ -442,6 +510,12 @@ public class Config implements Parcelable {
         this.disableInjectorAccess = disableInjectorAccess;
         this.logLevel = logLevel;
         this.enableLogFile = enableLogFile;
+        this.metricsEnableOnStart = metricsEnableOnStart;
+        this.metricsServerUrl = metricsServerUrl;
+        this.metricsServerToken = metricsServerToken;
+        this.metricsEncryptionKey = metricsEncryptionKey;
+        this.metricsServerTlsCaCert = metricsServerTlsCaCert;
+        this.metricsServerTlsCaCertPath = metricsServerTlsCaCertPath;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -488,6 +562,12 @@ public class Config implements Parcelable {
     public String getFrontEndEp() {
         return frontEndEp;
     }
+    public String getFrontEndAccessToken() {
+        return frontEndAccessToken;
+    }
+    public boolean getDebugFrontEndAccessToken() {
+        return debugFrontEndAccessToken;
+    }
     public String getUdpMuxPort() {
         return udpMuxPort;
     }
@@ -517,6 +597,24 @@ public class Config implements Parcelable {
     }
     public boolean getEnableLogFile() {
         return enableLogFile;
+    }
+    public boolean getMetricsEnableOnStart() {
+        return metricsEnableOnStart;
+    }
+    public String getMetricsServerUrl() {
+        return metricsServerUrl;
+    }
+    public String getMetricsServerToken() {
+        return metricsServerToken;
+    }
+    public String getMetricsEncryptionKey() {
+        return metricsEncryptionKey;
+    }
+    public String getMetricsServerTlsCaCert() {
+        return metricsServerTlsCaCert;
+    }
+    public String getMetricsServerTlsCaCertPath() {
+        return metricsServerTlsCaCertPath;
     }
 
     public static final Parcelable.Creator<Config> CREATOR
@@ -552,6 +650,8 @@ public class Config implements Parcelable {
         out.writeString(cacheStaticContentPath);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
+        out.writeString(frontEndAccessToken);
+        out.writeInt(debugFrontEndAccessToken ? 1 : 0);
         out.writeString(udpMuxPort);
         out.writeInt(disableBridgeAnnouncement ? 1 : 0);
         out.writeString(maxCachedAge);
@@ -563,6 +663,12 @@ public class Config implements Parcelable {
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
         out.writeInt(enableLogFile ? 1 : 0);
+        out.writeInt(metricsEnableOnStart ? 1 : 0);
+        out.writeString(metricsServerUrl);
+        out.writeString(metricsServerToken);
+        out.writeString(metricsEncryptionKey);
+        out.writeString(metricsServerTlsCaCert);
+        out.writeString(metricsServerTlsCaCertPath);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -588,6 +694,8 @@ public class Config implements Parcelable {
         cacheStaticContentPath = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
+        frontEndAccessToken = in.readString();
+        debugFrontEndAccessToken = in.readInt() != 0;
         udpMuxPort = in.readString();
         disableBridgeAnnouncement = in.readInt() != 0;
         maxCachedAge = in.readString();
@@ -602,6 +710,13 @@ public class Config implements Parcelable {
         logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
 
         enableLogFile = in.readInt() != 0;
+
+        metricsEnableOnStart = in.readInt() != 0;
+        metricsServerUrl = in.readString();
+        metricsServerToken = in.readString();
+        metricsEncryptionKey = in.readString();
+        metricsServerTlsCaCert = in.readString();
+        metricsServerTlsCaCertPath = in.readString();
     }
 
 }

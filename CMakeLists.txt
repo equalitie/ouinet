@@ -6,6 +6,11 @@ else()
     cmake_minimum_required (VERSION 3.5)
 endif()
 
+# Set cmake policies to avoid warnings in newer versions of cmake
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
+    cmake_policy(SET CMP0114 NEW)
+endif()
+
 ################################################################################
 # Configurable options
 option(WITH_INJECTOR "Compile injector" ON)
@@ -22,16 +27,28 @@ option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 # Global build flags
 if (WITH_ASAN)
     add_compile_options("-fsanitize=address" "-fno-omit-frame-pointer")
+    link_libraries(-fsanitize=address)
 endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options("-ggdb")
 endif()
+
 add_compile_options("-Wall")
 
+if(WIN32)
+    add_compile_options("-O1")
+    add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
+endif()
 
 ################################################################################
 project(ouinet)
 
+if(MINGW) # Note that MING gets defined only after `project(ouinet)`
+    # Fixes errors
+    #   "Fatal error: can't write 103 bytes to section .text of <CPP_FILE>.obj: 'file too big'"
+    # https://digitalkarabela.com/mingw-w64-how-to-fix-file-too-big-too-many-sections/
+    add_compile_options(-Wa,-mbig-obj)
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
@@ -39,15 +56,14 @@ include(BuildVersion)
 
 
 # This target needs to be linked by all code that includes ouinet headers.
-add_library(ouinet_base INTERFACE)
-add_library(ouinet::base ALIAS ouinet_base)
-target_compile_options(ouinet_base
+add_library(ouinet_dependencies INTERFACE)
+target_compile_options(ouinet_dependencies
     INTERFACE -std=c++20
 )
-target_include_directories(ouinet_base
+target_include_directories(ouinet_dependencies
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_link_libraries(ouinet_base
+target_link_libraries(ouinet_dependencies
     INTERFACE
         Boost::asio
         Boost::boost
@@ -60,9 +76,16 @@ target_link_libraries(ouinet_base
         # generic_stream.h needs openssl headers, but not the library.
         OpenSSL::headers
 )
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.72.0)
+    # explicitly link with bcrypt after Boost::filesystem
+    target_link_libraries(ouinet_dependencies
+        INTERFACE
+          bcrypt
+    )
+endif()
 if (WITH_ASAN)
     # NOTE: https://stackoverflow.com/a/50163972
-    target_link_libraries(ouinet_base
+    target_link_libraries(ouinet_dependencies
         INTERFACE -fsanitize=address
     )
 endif()
@@ -78,10 +101,11 @@ add_library(lib::asio_utp ALIAS asio_utp)
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
+target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
 if(WITH_EXPERIMENTAL)
-    target_compile_definitions(ouinet_base
+    target_compile_definitions(ouinet_dependencies
             INTERFACE -D__EXPERIMENTAL__
     )
     add_subdirectory(./src/ouiservice/i2p)
@@ -101,115 +125,151 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
-file(GLOB client_sources
-    "./src/client.cpp"
+# ouinet-rs (ouinet components written in rust)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5.1
+)
+
+if ("${PLATFORM}" STREQUAL "OS64")
+    set(Rust_CARGO_TARGET aarch64-apple-ios)
+elseif ("${PLATFORM}" STREQUAL "SIMULATORARM64")
+    set(Rust_CARGO_TARGET aarch64-apple-ios-sim)
+endif()
+
+FetchContent_MakeAvailable(Corrosion)
+
+corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml)
+corrosion_set_env_vars(ouinet_rs
+    "CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include -I${CMAKE_CURRENT_SOURCE_DIR}/rust")
+add_dependencies(cargo-prebuild_ouinet_rs built_boost)
+
+if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
+    corrosion_set_env_vars(ouinet_rs
+        "LIBRARY_PATH=${CMAKE_OSX_SYSROOT}/usr/lib")
+    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+else()
+    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
+endif()
+# This is not necessry to build the ouinet_rs library, but using it
+# automatically adds the include directories to every target that has ouinet_rs
+# as dependency.
+# XXX: Isn't there a better way to obtain the cargo target directory?
+target_include_directories(ouinet_rs
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rust
+    ${RUST_BRIDGE_PATH})
+
+################################################################################
+
+file(GLOB ouinet_common_sources
+    "./src/logger.cpp"
     "./src/connect_to_host.cpp"
-    "./src/client_front_end.cpp"
-    "./src/endpoint.cpp"
-    "./src/cache_control.cpp"
-    "./src/request_routing.cpp"
-    "./src/ouiservice.cpp"
     "./src/response_part.cpp"
-    "./src/bep5_swarms.cpp"
+    "./src/util.cpp"
+    "./src/util/atomic_file.cpp"
+    "./src/util/random.cpp"
+    "./src/util/handler_tracker.cpp"
+    "./src/util/crypto.cpp"
+    "./src/util/file_io.cpp"
+    "./src/util/temp_file.cpp"
+    "./src/util/hash.cpp"
     "./src/ssl/ca_certificate.cpp"
-    "./src/ssl/dummy_certificate.cpp"
+    "./src/bittorrent/*.cpp"
+    "./src/bep5_swarms.cpp"
+    "./src/ouiservice.cpp"
     "./src/ouiservice/tcp.cpp"
     "./src/ouiservice/utp.cpp"
     "./src/ouiservice/tls.cpp"
-    "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/multi_utp_server.cpp"
-    "./src/ouiservice/connect_proxy.cpp"
-    "./src/logger.cpp"
-    "./src/cache/*.cpp"
-    "./src/bittorrent/*.cpp"
-    "./src/util/atomic_dir.cpp"
-    "./src/util/atomic_file.cpp"
     "./src/util/persistent_lru_cache.cpp"
-    "./src/util/crypto.cpp"
-    "./src/util/random.cpp"
-    "./src/util/file_io.cpp"
-    "./src/util/temp_dir.cpp"
-    "./src/util/temp_file.cpp"
-    "./src/util/hash.cpp"
-    "./src/util/reachability.cpp"
-    "./src/util.cpp"
-    "./src/util/handler_tracker.cpp"
-    "./src/doh.cpp"
+    "./src/endpoint.cpp"
+    "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     ${EXPERIMENTAL_SOURCES}
+)
+
+add_library(ouinet_common STATIC ${ouinet_common_sources})
+
+target_link_libraries(ouinet_common
+    PRIVATE
+        ouinet_dependencies
+        lib::url
+        OpenSSL::Crypto
+        ${EXPERIMENTAL_LIBRARIES}
+    PUBLIC
+        Boost::iostreams
+        lib::gcrypt
+        lib::json
+        lib::asio_utp
+        ouinet_rs
+        # Boost::asio_ssl is public for Android because the ClientConfig used
+        # in native-lib.cpp contains ssl::context and we need its move
+        # constructor and destructor implementations.
+        Boost::asio_ssl
+)
+
+target_include_directories(ouinet_common PUBLIC "src")
+
+################################################################################
+file(GLOB client_sources
+    "./src/client.cpp"
+    "./src/client_config.cpp"
+    "./src/client_front_end.cpp"
+    "./src/cache_control.cpp"
+    "./src/request_routing.cpp"
+    "./src/ssl/dummy_certificate.cpp"
+    "./src/ouiservice/bep5/client.cpp"
+    "./src/ouiservice/connect_proxy.cpp"
+    "./src/cache/*.cpp"
+    "./src/util/atomic_dir.cpp"
+    "./src/util/temp_dir.cpp"
+    "./src/util/reachability.cpp"
+    "./src/doh.cpp"
     ${VERSION_CPP}
 )
 
-if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    add_executable(client ${client_sources})
-else()
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     add_library(client SHARED ${client_sources})
     add_library(ouinet::client ALIAS client)
     find_library(android_log log)
     target_link_libraries(client PUBLIC ${android_log})
+elseif ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS")
+    add_library(client STATIC ${client_sources})
+    add_library(ouinet::client ALIAS client)
+    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet REQUIRED)
+else()
+    add_executable(client ${client_sources})
 endif()
 
 target_link_libraries(client
-    PRIVATE
-        Boost::asio_ssl
-        Boost::iostreams
-        lib::asio_utp
-        cpp_upnp
-        lib::zdnsparser
-        lib::gcrypt
-        lib::json
-        lib::uri
-        OpenSSL::Crypto
-        ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
-        ouinet::base
+        ouinet_common
+        cpp_upnp
+    PRIVATE
+        lib::zdnsparser
 )
 
 ################################################################################
 if (WITH_INJECTOR)
     file(GLOB injector_sources
         "./src/injector.cpp"
-        "./src/connect_to_host.cpp"
-        "./src/ouiservice.cpp"
-        "./src/response_part.cpp"
-        "./src/bep5_swarms.cpp"
-        "./src/ouiservice/tcp.cpp"
-        "./src/ouiservice/utp.cpp"
-        "./src/ouiservice/tls.cpp"
         "./src/ouiservice/bep5/server.cpp"
-        "./src/ouiservice/multi_utp_server.cpp"
-        "./src/ssl/ca_certificate.cpp"
-        "./src/logger.cpp"
         "./src/endpoint.cpp"
         "./src/cache/http_sign.cpp"
-        "./src/bittorrent/*.cpp"
-        "./src/util/atomic_file.cpp"
-        "./src/util/persistent_lru_cache.cpp"
-        "./src/util/crypto.cpp"
-        "./src/util/random.cpp"
-        "./src/util/file_io.cpp"
-        "./src/util/temp_file.cpp"
-        "./src/util/hash.cpp"
-        "./src/util/handler_tracker.cpp"
-        "./src/util.cpp"
-        "./src/http_util.cpp"
+        "./src/http_logger.cpp"
         ${EXPERIMENTAL_SOURCES}
     )
 
     add_executable(injector ${injector_sources})
+    target_link_libraries(injector ouinet_common)
 
-    target_link_libraries(injector
-        Boost::asio_ssl
-        Boost::iostreams
-        lib::asio_utp
-        lib::gcrypt
-        lib::json
-        lib::uri
-        OpenSSL::Crypto
-        ouinet::base
-        ${EXPERIMENTAL_LIBRARIES}
-    )
 endif() # if WITH_INJECTOR
+
 
 ################################################################################
 # Config file directory

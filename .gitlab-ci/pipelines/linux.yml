@@ -4,34 +4,39 @@ include:
 
 variables:
   TARGET_PLATFORM: 'linux'
+  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
 
 linux / prepare-builder-image:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .prepare-builder-image
 
 linux / build:
   variables:
-    BOOST_VERSION: "1.79.0"
+    TARGET_PLATFORM: 'linux'
+    BOOST_VERSION: "1.88.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "OFF"
   extends:
     .linux-build
   needs:
     - job: 'linux / prepare-builder-image'
       optional: true
 
-linux / build-experimental:
+linux / unit-cpp-test:
   variables:
-    BOOST_VERSION: "1.79.0"
-    WITH_EXPERIMENTAL: "ON"
+    TARGET_PLATFORM: 'linux'
   extends:
-    .linux-build
+    .linux-unit-cpp-test
   needs:
-    - job: 'linux / prepare-builder-image'
-      optional: true
-  allow_failure: true
+    ['linux / build']
 
-linux / unit-test:
+linux / unit-rust-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
-    .linux-unit-test
+    .linux-unit-rust-test
   needs:
     ['linux / build']
 
@@ -45,22 +50,64 @@ linux / unit-test-experimental:
   allow_failure: true
 
 linux / integration-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
   extends:
     .linux-integration-test
   needs:
-    ['linux / unit-test']
+    ['linux / unit-rust-test', 'linux / unit-cpp-test']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
-linux / integration-test-experimental:
+linux / build-asan:
   variables:
-    WITH_EXPERIMENTAL: "ON"
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
+    BOOST_VERSION: "1.88.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "ON"
   extends:
-    .linux-integration-test
+    .linux-build
   needs:
-    ['linux / unit-test-experimental']
-  before_script:
-    - ln -s /usr/bin/python3 /usr/bin/python
+    - job: 'linux / build'
+      optional: true
+  when: manual
+  allow_failure: true
+
+linux / unit-cpp-asan-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
+  extends:
+    .linux-unit-cpp-test
+  needs:
+    ['linux / build-asan']
+  allow_failure: true
+
+linux / build-release:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
+    BUILD_TYPE: "Release"
+    BOOST_VERSION: "1.88.0"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "OFF"
+  extends:
+    .linux-build
+  needs:
+    - job: 'linux / build'
+      optional: true
+  when: manual
+  allow_failure: true
+
+linux / unit-cpp-release-test:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
+  extends:
+    .linux-unit-cpp-test
+  needs:
+    ['linux / build-release']
   allow_failure: true
 
 linux / build-prod-image:
@@ -77,3 +124,30 @@ linux / build-prod-image:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
       allow_failure: true
+
+linux / build-experimental:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BOOST_VERSION: "1.88.0"
+    WITH_EXPERIMENTAL: "ON"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "OFF"
+  extends:
+    .linux-build
+  needs:
+    - job: 'linux / prepare-builder-image'
+      optional: true
+
+linux / integration-test-experimental:
+  variables:
+    TARGET_PLATFORM: 'linux'
+    BOOST_VERSION: "1.88.0"
+    WITH_EXPERIMENTAL: "ON"
+    CMAKE_VERSION: "3.31.7-linux-x86_64"
+    WITH_ASAN: "OFF"
+  extends:
+    .linux-integration-test
+  needs:
+    ['linux / unit-test-experimental']
+  before_script:
+    - ln -s /usr/bin/python3 /usr/bin/python

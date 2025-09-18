@@ -1,0 +1,281 @@
+
+    Fix position tracking in iocp version of stream_file
+
+    https://github.com/chriskohlhoff/asio/issues/1346
+
+--- a/boost/asio/detail/impl/win_iocp_file_service.ipp
++++ b/boost/asio/detail/impl/win_iocp_file_service.ipp
+@@ -95,7 +95,7 @@ boost::system::error_code win_iocp_file_service::open(
+   if ((open_flags & file_base::sync_all_on_write) != 0)
+     flags |= FILE_FLAG_WRITE_THROUGH;
+ 
+-  impl.offset_ = 0;
++  *impl.offset_ = 0;
+   HANDLE handle = ::CreateFileA(path, access, share, 0, disposition, flags, 0);
+   if (handle != INVALID_HANDLE_VALUE)
+   {
+@@ -121,7 +121,7 @@ boost::system::error_code win_iocp_file_service::open(
+         distance.QuadPart = 0;
+         if (::SetFilePointerEx(handle, distance, &new_offset, FILE_END))
+         {
+-          impl.offset_ = static_cast<uint64_t>(new_offset.QuadPart);
++          *impl.offset_ = static_cast<uint64_t>(new_offset.QuadPart);
+         }
+         else
+         {
+@@ -179,7 +179,7 @@ boost::system::error_code win_iocp_file_service::resize(
+     BOOL result = ::SetEndOfFile(native_handle(impl));
+     DWORD last_error = ::GetLastError();
+ 
+-    distance.QuadPart = static_cast<LONGLONG>(impl.offset_);
++    distance.QuadPart = static_cast<LONGLONG>(*impl.offset_);
+     if (!::SetFilePointerEx(native_handle(impl), distance, 0, FILE_BEGIN))
+     {
+       result = FALSE;
+@@ -250,7 +250,7 @@ uint64_t win_iocp_file_service::seek(
+     break;
+   case file_base::seek_cur:
+     method = FILE_BEGIN;
+-    offset = static_cast<int64_t>(impl.offset_) + offset;
++    offset = static_cast<int64_t>(*impl.offset_) + offset;
+     break;
+   case file_base::seek_end:
+     method = FILE_END;
+@@ -265,9 +265,9 @@ uint64_t win_iocp_file_service::seek(
+   distance.QuadPart = offset;
+   if (::SetFilePointerEx(native_handle(impl), distance, &new_offset, method))
+   {
+-    impl.offset_ = new_offset.QuadPart;
++    *impl.offset_ = new_offset.QuadPart;
+     boost::asio::error::clear(ec);
+-    return impl.offset_;
++    return *impl.offset_;
+   }
+   else
+   {
+--- a/boost/asio/detail/impl/win_iocp_handle_service.ipp
++++ b/boost/asio/detail/impl/win_iocp_handle_service.ipp
+@@ -402,6 +402,7 @@ size_t win_iocp_handle_service::do_write(
+ 
+ void win_iocp_handle_service::start_write_op(
+     win_iocp_handle_service::implementation_type& impl, uint64_t offset,
++    std::shared_ptr<uint64_t> curpos,
+     const boost::asio::const_buffer& buffer, operation* op)
+ {
+   update_cancellation_thread_id(impl);
+@@ -428,10 +429,12 @@ void win_iocp_handle_service::start_write_op(
+     if (!ok && last_error != ERROR_IO_PENDING
+         && last_error != ERROR_MORE_DATA)
+     {
++      if (curpos) *curpos += bytes_transferred;
+       iocp_service_.on_completion(op, last_error, bytes_transferred);
+     }
+     else
+     {
++      if (curpos) *curpos += buffer.size();
+       iocp_service_.on_pending(op);
+     }
+   }
+@@ -512,6 +515,7 @@ size_t win_iocp_handle_service::do_read(
+ 
+ void win_iocp_handle_service::start_read_op(
+     win_iocp_handle_service::implementation_type& impl, uint64_t offset,
++    std::shared_ptr<uint64_t> curpos,
+     const boost::asio::mutable_buffer& buffer, operation* op)
+ {
+   update_cancellation_thread_id(impl);
+@@ -538,10 +542,12 @@ void win_iocp_handle_service::start_read_op(
+     if (!ok && last_error != ERROR_IO_PENDING
+         && last_error != ERROR_MORE_DATA)
+     {
++      if (curpos) *curpos += bytes_transferred;
+       iocp_service_.on_completion(op, last_error, bytes_transferred);
+     }
+     else
+     {
++      if (curpos) *curpos += buffer.size();
+       iocp_service_.on_pending(op);
+     }
+   }
+--- a/boost/asio/detail/win_iocp_file_service.hpp
++++ b/boost/asio/detail/win_iocp_file_service.hpp
+@@ -47,7 +47,7 @@ public:
+     // Only this service will have access to the internal values.
+     friend class win_iocp_file_service;
+ 
+-    uint64_t offset_;
++    std::shared_ptr<uint64_t> offset_;
+     bool is_stream_;
+   };
+ 
+@@ -61,7 +61,7 @@ public:
+   void construct(implementation_type& impl)
+   {
+     handle_service_.construct(impl);
+-    impl.offset_ = 0;
++    impl.offset_ = std::make_shared<uint64_t>(0);
+     impl.is_stream_ = false;
+   }
+ 
+@@ -70,9 +70,9 @@ public:
+       implementation_type& other_impl)
+   {
+     handle_service_.move_construct(impl, other_impl);
+-    impl.offset_ = other_impl.offset_;
++    impl.offset_ = std::move(other_impl.offset_);
+     impl.is_stream_ = other_impl.is_stream_;
+-    other_impl.offset_ = 0;
++    other_impl.offset_ = std::make_shared<uint64_t>(0);
+   }
+ 
+   // Move-assign from another file implementation.
+@@ -82,9 +82,9 @@ public:
+   {
+     handle_service_.move_assign(impl,
+         other_service.handle_service_, other_impl);
+-    impl.offset_ = other_impl.offset_;
++    impl.offset_ = std::move(other_impl.offset_);
+     impl.is_stream_ = other_impl.is_stream_;
+-    other_impl.offset_ = 0;
++    other_impl.offset_ = std::make_shared<uint64_t>(0);
+   }
+ 
+   // Destroy a file implementation.
+@@ -170,9 +170,10 @@ public:
+   size_t write_some(implementation_type& impl,
+       const ConstBufferSequence& buffers, boost::system::error_code& ec)
+   {
+-    uint64_t offset = impl.offset_;
+-    impl.offset_ += boost::asio::buffer_size(buffers);
+-    return handle_service_.write_some_at(impl, offset, buffers, ec);
++    uint64_t offset = *impl.offset_;
++    size_t bytes_written = handle_service_.write_some_at(impl, offset, buffers, ec);
++    *impl.offset_ += bytes_written;
++    return bytes_written;
+   }
+ 
+   // Start an asynchronous write. The data being written must be valid for the
+@@ -182,9 +183,7 @@ public:
+       const ConstBufferSequence& buffers,
+       Handler& handler, const IoExecutor& io_ex)
+   {
+-    uint64_t offset = impl.offset_;
+-    impl.offset_ += boost::asio::buffer_size(buffers);
+-    handle_service_.async_write_some_at(impl, offset, buffers, handler, io_ex);
++    handle_service_.async_write_some_at(impl, *impl.offset_, impl.offset_, buffers, handler, io_ex);
+   }
+ 
+   // Write the given data at the specified location. Returns the number of
+@@ -203,7 +202,7 @@ public:
+       uint64_t offset, const ConstBufferSequence& buffers,
+       Handler& handler, const IoExecutor& io_ex)
+   {
+-    handle_service_.async_write_some_at(impl, offset, buffers, handler, io_ex);
++    handle_service_.async_write_some_at(impl, offset, {}, buffers, handler, io_ex);
+   }
+ 
+   // Read some data. Returns the number of bytes read.
+@@ -211,9 +210,9 @@ public:
+   size_t read_some(implementation_type& impl,
+       const MutableBufferSequence& buffers, boost::system::error_code& ec)
+   {
+-    uint64_t offset = impl.offset_;
+-    impl.offset_ += boost::asio::buffer_size(buffers);
+-    return handle_service_.read_some_at(impl, offset, buffers, ec);
++    size_t bytes_read = handle_service_.read_some_at(impl, *impl.offset_, buffers, ec);
++    *impl.offset_ += bytes_read;
++    return bytes_read;
+   }
+ 
+   // Start an asynchronous read. The buffer for the data being read must be
+@@ -224,9 +223,7 @@ public:
+       const MutableBufferSequence& buffers,
+       Handler& handler, const IoExecutor& io_ex)
+   {
+-    uint64_t offset = impl.offset_;
+-    impl.offset_ += boost::asio::buffer_size(buffers);
+-    handle_service_.async_read_some_at(impl, offset, buffers, handler, io_ex);
++    handle_service_.async_read_some_at(impl, *impl.offset_, impl.offset_, buffers, handler, io_ex);
+   }
+ 
+   // Read some data. Returns the number of bytes read.
+--- a/boost/asio/detail/win_iocp_handle_service.hpp
++++ b/boost/asio/detail/win_iocp_handle_service.hpp
+@@ -170,7 +170,7 @@ public:
+     if (slot.is_connected())
+       o = &slot.template emplace<iocp_op_cancellation>(impl.handle_, o);
+ 
+-    start_write_op(impl, 0,
++    start_write_op(impl, 0, {},
+         buffer_sequence_adapter<boost::asio::const_buffer,
+           ConstBufferSequence>::first(buffers), o);
+     p.v = p.p = 0;
+@@ -180,7 +180,8 @@ public:
+   // must be valid for the lifetime of the asynchronous operation.
+   template <typename ConstBufferSequence, typename Handler, typename IoExecutor>
+   void async_write_some_at(implementation_type& impl,
+-      uint64_t offset, const ConstBufferSequence& buffers,
++      uint64_t offset, std::shared_ptr<uint64_t> curpos,
++      const ConstBufferSequence& buffers,
+       Handler& handler, const IoExecutor& io_ex)
+   {
+     associated_cancellation_slot_t<Handler> slot
+@@ -200,7 +201,7 @@ public:
+     if (slot.is_connected())
+       o = &slot.template emplace<iocp_op_cancellation>(impl.handle_, o);
+ 
+-    start_write_op(impl, offset,
++    start_write_op(impl, offset, curpos,
+         buffer_sequence_adapter<boost::asio::const_buffer,
+           ConstBufferSequence>::first(buffers), o);
+     p.v = p.p = 0;
+@@ -251,7 +252,7 @@ public:
+     if (slot.is_connected())
+       o = &slot.template emplace<iocp_op_cancellation>(impl.handle_, o);
+ 
+-    start_read_op(impl, 0,
++    start_read_op(impl, 0, {},
+         buffer_sequence_adapter<boost::asio::mutable_buffer,
+           MutableBufferSequence>::first(buffers), o);
+     p.v = p.p = 0;
+@@ -263,8 +264,9 @@ public:
+   template <typename MutableBufferSequence,
+       typename Handler, typename IoExecutor>
+   void async_read_some_at(implementation_type& impl,
+-      uint64_t offset, const MutableBufferSequence& buffers,
+-      Handler& handler, const IoExecutor& io_ex)
++      uint64_t offset, std::shared_ptr<uint64_t> curpos,
++      const MutableBufferSequence& buffers, Handler& handler,
++      const IoExecutor& io_ex)
+   {
+     associated_cancellation_slot_t<Handler> slot
+       = boost::asio::get_associated_cancellation_slot(handler);
+@@ -283,7 +285,7 @@ public:
+     if (slot.is_connected())
+       o = &slot.template emplace<iocp_op_cancellation>(impl.handle_, o);
+ 
+-    start_read_op(impl, offset,
++    start_read_op(impl, offset, curpos,
+         buffer_sequence_adapter<boost::asio::mutable_buffer,
+           MutableBufferSequence>::first(buffers), o);
+     p.v = p.p = 0;
+@@ -324,7 +326,8 @@ private:
+ 
+   // Helper function to start a write operation.
+   BOOST_ASIO_DECL void start_write_op(implementation_type& impl,
+-      uint64_t offset, const boost::asio::const_buffer& buffer,
++      uint64_t offset, std::shared_ptr<uint64_t> curpos,
++      const boost::asio::const_buffer& buffer,
+       operation* op);
+ 
+   // Helper function to perform a synchronous write operation.
+@@ -334,7 +337,8 @@ private:
+ 
+   // Helper function to start a read operation.
+   BOOST_ASIO_DECL void start_read_op(implementation_type& impl,
+-      uint64_t offset, const boost::asio::mutable_buffer& buffer,
++      uint64_t offset, std::shared_ptr<uint64_t> curpos,
++      const boost::asio::mutable_buffer& buffer,
+       operation* op);
+ 
+   // Update the ID of the thread from which cancellation is safe.

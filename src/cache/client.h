@@ -86,6 +86,7 @@ public:
     Session load( const std::string& key
                 , const GroupName& group
                 , bool is_head_request
+                , metrics::Client& metrics
                 , Cancel
                 , Yield);
 
@@ -99,6 +100,7 @@ public:
     // Times out if forwarding to the sink gets stuck.
     bool serve_local( const http::request<http::empty_body>&
                     , GenericStream& sink
+                    , metrics::Client&
                     , Cancel&
                     , Yield);
 
@@ -107,6 +109,9 @@ public:
 
     void local_purge( Cancel
                     , asio::yield_context);
+    bool pin_group(const std::string& group_name, sys::error_code& ec);
+    bool unpin_group(const std::string& group_name, sys::error_code&);
+    bool is_pinned_group(const std::string& group_name, sys::error_code&);
 
     // Get the newest protocol version that has been seen in the network
     // (e.g. to warn about potential upgrades).
@@ -114,6 +119,7 @@ public:
 
     // Get all groups present in this client.
     std::set<GroupName> get_groups() const;
+    std::set<Client::GroupName> get_pinned_groups();
 
     ~Client();
 
