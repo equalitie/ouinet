@@ -19,11 +19,11 @@
 #include <session.h>
 #include <util/bytes.h>
 #include <util/file_io.h>
+#include <util/part_io.h>
 #include <util/str.h>
 
 #include <namespaces.h>
 #include "connected_pair.h"
-#include "../src/util/part_io.h"
 
 #ifdef _WIN32
 constexpr auto connection_aborted = WSAECONNABORTED;
@@ -529,7 +529,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , complete ? rrs_head_complete : rrs_head_incomplete);
 
             // Chunk headers and bodies (one chunk per block).
@@ -643,7 +643,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , rrs_head_complete);
 
             // Chunk headers and bodies (one chunk per block).
@@ -748,7 +748,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , errs_head_complete);
 
             // Last chunk header.
@@ -866,7 +866,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , rrs_head_partial(first_block, last_block));
 
             // Chunk headers and bodies (one chunk per block).
