@@ -9,6 +9,7 @@
 #include <boost/filesystem.hpp>
 #include "util/signal.h"
 #include "util/file_io.h"
+#include "util/part_io.h"
 #include "../test/util/base_fixture.hpp"
 #include "task.h"
 
@@ -380,7 +381,7 @@ BOOST_AUTO_TEST_CASE(test_read_files)
     auto expected_size = expected.size();
     std::string data_in(expected_size, '\0');
 
-    asio::spawn(ctx, [&](asio::yield_context yield) {
+    task::spawn_detached(ctx, [&](asio::yield_context yield) {
         asio::steady_timer timer{ctx};
 
         // Create test file and close it

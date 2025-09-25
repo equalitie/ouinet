@@ -7,5 +7,6 @@
 - (NSNumber*)getClientState;
 
 - (void)start;
+- (void)stop;
 
 @end

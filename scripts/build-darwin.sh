@@ -78,11 +78,19 @@ function build {
 function combine {
     if [[ -d ${DIR}/build-OS64 ]]; then
         if [[ ${DIR}/build-SIMULATORARM64 ]]; then
+            
+            # Create frameworks for both architectures
+            add_framework_headers \
+                "${ROOT}/ios/ouinet/include" \
+                "${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework" 
+
+            add_framework_headers \
+                "${ROOT}/ios/ouinet/include" \
+                "${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework" 
+            
             xcodebuild -create-xcframework \
-                -library ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/libouinet.dylib \
-                -headers ${ROOT}/ios/ouinet/include \
-                -library ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/libouinet.dylib \
-                -headers ${ROOT}/ios/ouinet/include \
+                -framework ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework \
+                -framework ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework \
                 -output ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
         else
             echo "ERROR: ${DIR}/build-iphonesimulator not found, please build before combining frameworks"
@@ -92,6 +100,28 @@ function combine {
         echo "ERROR: ${DIR}/build-iphonesimulator not found, please build before combining frameworks"
         exit 1
     fi
+}
+
+function add_framework_headers {
+    local HEADERS_PATH=$1
+    local OUTPUT_PATH=$2
+    local FRAMEWORK_NAME="Ouinet"
+
+    mkdir -p "${OUTPUT_PATH}/Headers"
+    mkdir -p "${OUTPUT_PATH}/Modules"
+    
+    # Copy headers
+    cp -R "${HEADERS_PATH}/"* "${OUTPUT_PATH}/Headers/"
+    
+
+    # Create module.modulemap
+    cat > "${OUTPUT_PATH}/Modules/module.modulemap" << EOF
+framework module ${FRAMEWORK_NAME} {
+  umbrella "Headers"
+  export *
+  module * { export * }
+}
+EOF
 }
 
 ######################################################################

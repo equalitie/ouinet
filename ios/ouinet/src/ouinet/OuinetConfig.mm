@@ -15,9 +15,11 @@
   NSString* cacheType;
   NSString* listenOnTcp;
   NSString* frontEndEp;
+  NSString* logLevel;
   BOOL disableOriginAccess;
   BOOL disableProxyAccess;
   BOOL disableInjectorAccess;
+  BOOL disableBridgeAnnouncement;
 }
 
 - (OuinetConfig*)init
@@ -80,6 +82,12 @@
   return self;
 }
 
+- (OuinetConfig*)setLogLevel:(NSString*)level
+{
+  logLevel = level;
+  return self;
+}
+
 - (OuinetConfig*)setDisableOriginAccess:(BOOL)value
 {
   disableOriginAccess = value;
@@ -95,6 +103,12 @@
 - (OuinetConfig*)setDisableInjectorAccess:(BOOL)value;
 {
   disableInjectorAccess = value;
+  return self;
+}
+
+- (OuinetConfig*)setDisableBridgeAnnouncement:(BOOL)value;
+{
+  disableBridgeAnnouncement = value;
   return self;
 }
 
@@ -138,6 +152,11 @@
   return frontEndEp;
 }
 
+- (NSString*)getLogLevel
+{
+  return logLevel;
+}
+
 - (BOOL)getDisableOriginAccess
 {
   return disableOriginAccess;
@@ -151,6 +170,11 @@
 - (BOOL)getDisableInjectorAccess
 {
   return disableInjectorAccess;
+}
+
+- (BOOL)getDisableBridgeAnnouncement
+{
+  return disableBridgeAnnouncement;
 }
 
 /**

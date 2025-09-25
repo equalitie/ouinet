@@ -120,15 +120,42 @@ struct UserAgentMetaData {
     boost::optional<bool> is_private;
     boost::optional<std::string> dht_group;
 
+#if defined(__MACH__)
+    static std::string get_dht_group(const std::string& url) {
+        auto dhtgroup = std::move(url);
+
+        boost::regex scheme("^[a-z][-+.0-9a-z]*://");
+        dhtgroup = boost::regex_replace(dhtgroup, scheme, "");
+        boost::regex trailing_slashes("/+$");
+        dhtgroup = boost::regex_replace(dhtgroup, trailing_slashes, "");
+        boost::regex leading_www("^www.");
+        dhtgroup = boost::regex_replace(dhtgroup, leading_www, "");
+
+        return dhtgroup;
+    }
+#endif
+
     static UserAgentMetaData extract(Request& rq) {
         UserAgentMetaData ret;
 
         {
+#if defined(__MACH__)
+            // On iOS, it is not possible to inject headers into every request
+            // Set the DHT group based on the referrer field or hostname (if referrer is not present)
+            auto i = rq.find(http::field::referer);
+            if (i != rq.end()) {
+                ret.dht_group = get_dht_group(std::string(i->value()));
+                rq.erase(i);
+            } else {
+                ret.dht_group = get_dht_group(std::string(rq.target()));
+            }
+#else
             auto i = rq.find(http_::request_group_hdr);
             if (i != rq.end()) {
                 ret.dht_group = string(i->value());
                 rq.erase(i);
             }
+#endif
         }
         {
             auto i = rq.find(http_::request_private_hdr);
@@ -1614,7 +1641,10 @@ public:
         sys::error_code ec;
 
         _ua_was_written_to = true;
-        session.flush_response(_ua_con, cancel, yield[ec]);
+
+        // Using PartModifier::RemoveChunkHeaderExtension because the WebKit on
+        // iOS can't handle the extension string in chunk headers.
+        session.flush_response(_ua_con, cancel, yield[ec], PartModifier::RemoveChunkHeaderExtension);
 
         bool keep_alive = !ec && _request.keep_alive() && session.keep_alive();
 
@@ -2689,6 +2719,20 @@ void Client::State::serve_request( GenericStream&& con
 
         Request req(reqhp.release());
         auto req_done = defer([&yield] { _YDEBUG(yield, "Done"); });
+
+#if defined(__MACH__)
+        // It is not possible to inject headers into every request made
+        // by WebKit on iOS, but we can modifiy the User Agent.
+        // Check if X-Ouinet-Private string is included in the User Agent.
+        auto ua = req[http::field::user_agent];
+        if (!ua.empty()) {
+            size_t index = ua.find("X-Ouinet-Private");
+            if (index != std::string::npos ){
+                req.set(http::field::user_agent, ua.substr(0, index));
+                req.set(http_::request_private_hdr, "true");
+            }
+        }
+#endif
 
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
             return authenticate(req, con, _config.client_credentials(), y);

@@ -9,6 +9,7 @@
 #include "../src/task.h"
 #include "../src/or_throw.h"
 #include "../src/response_reader.h"
+#include "../src/util/part_io.h"
 #include "../src/util/wait_condition.h"
 
 using namespace std;
@@ -79,28 +80,6 @@ HR::Part trailer(map<string, string> trailer) {
     }
     return HR::Trailer{move(fields)};
 }
-
-namespace ouinet { namespace http_response {
-    std::ostream& operator<<(std::ostream& os, const HR::Head&) {
-        return os << "Head";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const HR::ChunkHdr& hdr) {
-        return os << "ChunkHdr(" << hdr.size << " exts:\"" << hdr.exts << "\")";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const HR::ChunkBody& b) {
-        return os << "ChunkBody(" << vec_to_str(b) << ")";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const HR::Body& b) {
-        return os << "Body(" << vec_to_str(b) << ")";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const HR::Trailer&) {
-        return os << "Trailer";
-    }
-}} // ouinet namespaces::http_response
 
 HR::Part read_full_body(RR& rr, Cancel& c, asio::yield_context y) {
     HR::Body body({});
