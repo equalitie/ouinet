@@ -458,7 +458,7 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
     assert(_helpers_swarm_name.size());
 }
 
-void Bep5Client::start(asio::yield_context)
+void Bep5Client::start(asio::yield_context yield)
 {
     {
         bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
@@ -477,6 +477,8 @@ void Bep5Client::start(asio::yield_context)
         _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, _cancel, true));
         _helpers_swarm->start();
 
+        _helpers_swarm->wait_for_ready(_cancel, yield);
+        _injector_swarm->wait_for_ready(_cancel, yield);
         _injector_pinger.reset(new InjectorPinger(  _injector_swarm
                                                   , _helpers_swarm_name
                                                   , _helper_announcement_enabled
