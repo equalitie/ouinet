@@ -480,7 +480,10 @@ void Bep5Client::start(asio::yield_context yield)
         _helpers_swarm->start();
 
         _helpers_swarm->wait_for_ready(_cancel, yield);
+        if (_cancel) return;
         _injector_swarm->wait_for_ready(_cancel, yield);
+        if (_cancel) return;
+
         _injector_pinger.reset(new InjectorPinger(  _injector_swarm
                                                   , _helpers_swarm_name
                                                   , _helper_announcement_enabled
