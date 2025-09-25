@@ -4,24 +4,21 @@
 # Integration tests for ouinet - classes which setup and fire
 # ouinet client and injectors for different tests situation
 
-import errno
 import os
-import time
 import logging
-import json
-
-import pdb
+from typing import List
 
 from test_fixtures import TestFixtures
 
 from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import (
+    OuinetBEP5CacheProcessProtocol,
     OuinetProcessProtocol,
-    OuinetIPFSCacheProcessProtocol,
-    OuinetBEP44CacheProcessProtocol)
+)
 
 ouinet_env = {}
 ouinet_env.update(os.environ)
+
 
 class OuinetConfig(object):
     """
@@ -30,11 +27,16 @@ class OuinetConfig(object):
     to make it easier to send the config to different
     process
     """
-    def __init__(self, app_name = "generic ouinet app",
-                 timeout = TestFixtures.DEFAULT_PROCESS_TIMEOUT, argv = [],
-                 config_file_name = "ouinet.conf",
-                 benchmark_regexes = [],
-                 config_file_content = ""):
+
+    def __init__(
+        self,
+        app_name="generic ouinet app",
+        timeout=TestFixtures.DEFAULT_PROCESS_TIMEOUT,
+        argv=[],
+        config_file_name="ouinet.conf",
+        benchmark_regexes=[],
+        config_file_content="",
+    ):
         """
         Initials a config object which is used to properly run a ouinet process
         Args
@@ -56,23 +58,26 @@ class OuinetConfig(object):
         self.argv = argv
         self.benchmark_regexes = benchmark_regexes
 
+
 class OuinetProcess(object):
-    def __init__(self, ouinet_config, deferred_events):
+    def __init__(self, ouinet_config):
         """
-        perform the initialization tasks common between all clients 
+        perform the initialization tasks common between all clients
         and injectors:
-        - makes a basic config folder and file 
-        - sets the timeout for the process 
- 
-        Args 
+        - makes a basic config folder and file
+        - sets the timeout for the process
+
+        Args
         ouinet_config            A OuinetConfig instance containing the configuration
                                  related to this process
         process_ready_deferred   a deferred object which get called back when the process is ready
         """
         self.config = ouinet_config
-        self._proc_protocol = OuinetProcessProtocol(proc_config = self.config, ready_benchmark_regex = ouinet_config.benchmark_regexes[TestFixtures.READY_REGEX_INDEX], ready_deferred=deferred_events[TestFixtures.READY_REGEX_INDEX]) # default protocol
-        # in case the communication process protocol is not explicitly set 
-        # starts a default process protocol to check on Fatal errors
+
+        self._proc_protocol = OuinetProcessProtocol(
+            self.config, ouinet_config.benchmark_regexes
+        )
+
         self._has_started = False
         self._term_signal_sent = False
         self.setup_config()
@@ -89,20 +94,23 @@ class OuinetProcess(object):
         # we overwrite any existing config file to make
         # the test canonical (also trial delete its temp
         # folder each time
-        with open(self.config.config_folder_name + "/" + self.config.config_file_name,
-                  "w") as conf_file:
+        with open(
+            self.config.config_folder_name + "/" + self.config.config_file_name, "w"
+        ) as conf_file:
             conf_file.write(self.config.config_file_content)
 
     def make_config_folder(self):
         if not os.path.exists(TestFixtures.REPO_FOLDER_NAME):
             os.makedirs(TestFixtures.REPO_FOLDER_NAME)
 
-        if not os.path.exists(TestFixtures.REPO_FOLDER_NAME + "/" +
-                              self.config.app_name):
-            os.makedirs(TestFixtures.REPO_FOLDER_NAME + "/" +
-                        self.config.app_name)
+        if not os.path.exists(
+            TestFixtures.REPO_FOLDER_NAME + "/" + self.config.app_name
+        ):
+            os.makedirs(TestFixtures.REPO_FOLDER_NAME + "/" + self.config.app_name)
 
-        self.config.config_folder_name = TestFixtures.REPO_FOLDER_NAME + "/" + self.config.app_name
+        self.config.config_folder_name = (
+            TestFixtures.REPO_FOLDER_NAME + "/" + self.config.app_name
+        )
 
     def set_process_protocol(self, process_protocol):
         self._proc_protocol = process_protocol
@@ -114,7 +122,7 @@ class OuinetProcess(object):
         Args
           argv: command line arguments where argv[0] should be the name of the
                 executable program with its code
-          process_protoco: twisted process protocol which deals with processing 
+          process_protoco: twisted process protocol which deals with processing
                            the output of the ouinet process. If None, a generic
                            Ouinet Process
         """
@@ -124,19 +132,25 @@ class OuinetProcess(object):
 
         self._proc_protocol.app_name = self.config.app_name
 
-        self._proc = reactor.spawnProcess(self._proc_protocol,
-                                          self.config.argv[0],
-                                          self.config.argv,
-                                          env=ouinet_env)
+        self._proc = reactor.spawnProcess(
+            self._proc_protocol, self.config.argv[0], self.config.argv, env=ouinet_env
+        )
         self._has_started = True
 
         # we add a twisted timer to kill the process after timeout
-        logging.debug(self.config.app_name + " times out in " + str(self.config.timeout) + " seconds")
+        logging.debug(
+            self.config.app_name
+            + " times out in "
+            + str(self.config.timeout)
+            + " seconds"
+        )
         self.timeout_killer = reactor.callLater(self.config.timeout, self.stop)
 
         # send a pulse to keep the output of the proccess alive
         self.pulse_timer = task.LoopingCall(self._proc_protocol.pulse_out)
-        self.pulse_timer.start(TestFixtures.KEEP_IO_ALIVE_PULSE_INTERVAL) # call every second
+        self.pulse_timer.start(
+            TestFixtures.KEEP_IO_ALIVE_PULSE_INTERVAL
+        )  # call every second
 
         # we *might* need to make sure that the process has ended before
         # ending the test because Twisted Trial might get mad otherwise
@@ -150,7 +164,7 @@ class OuinetProcess(object):
             self._proc.signalProcess("TERM")
 
     def stop(self):
-        if self._has_started: # stop only if started
+        if self._has_started:  # stop only if started
             self._has_started = False
             logging.debug("process " + self.config.app_name + " stopping")
 
@@ -164,17 +178,27 @@ class OuinetProcess(object):
             # Don't do this because we may lose some important debug
             # information that gets printed between now and when the app
             # actually exits.
-            #self._proc_protocol.transport.loseConnection()
+            # self._proc_protocol.transport.loseConnection()
+
+    @property
+    def callbacks(self):
+        return self._proc_protocol.callbacks
+
 
 class OuinetClient(OuinetProcess):
-    def __init__(self, client_config, deferred_events):
+    def __init__(self, client_config: OuinetConfig):
         client_config.config_file_name = "ouinet-client.conf"
         client_config.config_file_content = TestFixtures.FIRST_CLIENT_CONF_FILE_CONTENT
-        super(OuinetClient, self).__init__(client_config, deferred_events)
+        super(OuinetClient, self).__init__(client_config)
 
-        self.config.argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "client"),
-                                "--repo",
-                                self.config.config_folder_name] + self.config.argv
+        self.config.argv = [
+            os.path.join(ouinet_env["OUINET_BUILD_DIR"], "client"),
+            "--repo",
+            self.config.config_folder_name,
+            "--log-level=DEBUG",
+            "--enable-log-file",
+        ] + self.config.argv
+
 
 class OuinetCacheClient(OuinetClient):
     def served_from_cache(self):
@@ -182,32 +206,12 @@ class OuinetCacheClient(OuinetClient):
         returns true if any request has been served from cache
 
         """
-        if (self._proc_protocol):
+        if self._proc_protocol:
             return self._proc_protocol.served_from_cache()
 
         return False
 
-class OuinetIPFSClient(OuinetCacheClient):
-    def __init__(self, client_config, deferred_events):
-        super(OuinetIPFSClient, self).__init__(client_config, deferred_events)
 
-        self.set_process_protocol(OuinetIPFSCacheProcessProtocol(proc_config = self.config, benchmark_regexes = client_config.benchmark_regexes, benchmark_deferreds=deferred_events))
-
-    def index_resolution_start_time(self):
-        if (self._proc_protocol):
-            return self._proc_protocol.IPNS_resolution_start_time
-
-        return 0
-
-class OuinetBEP44Client(OuinetCacheClient):
-    def __init__(self, client_config, deferred_events):
-        super(OuinetBEP44Client, self).__init__(client_config, deferred_events)
-
-        self.set_process_protocol(OuinetBEP44CacheProcessProtocol(
-            proc_config=self.config,
-            benchmark_regexes=client_config.benchmark_regexes,
-            benchmark_deferreds=deferred_events))
-        
 class OuinetInjector(OuinetProcess):
     """
     As above, but for the 'injector'
@@ -221,77 +225,35 @@ class OuinetInjector(OuinetProcess):
     i2p_ready: is a Deferred object whose callback is being called when i2p
               tunnel is ready
     """
-    def __init__(self, injector_config, deferred_events):
-        injector_config.config_file_name = TestFixtures.INJECTOR_CONF_FILE_NAME
-        injector_config.config_file_content = \
-          TestFixtures.INJECTOR_CONF_FILE_CONTENT
-        super(OuinetInjector, self).__init__(injector_config, deferred_events)
-        self.config.argv = [os.path.join(ouinet_env['OUINET_BUILD_DIR'], "injector"),
-                            "--repo",
-                            self.config.config_folder_name] + self.config.argv
 
-    def get_index_key(self):
+    def __init__(self, injector_config):
+        injector_config.config_file_name = TestFixtures.INJECTOR_CONF_FILE_NAME
+        injector_config.config_file_content = TestFixtures.INJECTOR_CONF_FILE_CONTENT
+        super(OuinetInjector, self).__init__(injector_config)
+        self.config.argv = [
+            os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector"),
+            "--repo",
+            self.config.config_folder_name,
+        ] + self.config.argv
+
+    def get_index_key(self) -> str:
         """Return a key string used to access the cache index created by this injector."""
         raise NotImplementedError
 
-class OuinetI2PInjector(OuinetInjector):
-    """
-    As above, but for the 'injector' 
-    It is a child of Ouinetinjector with i2p ouiservice
-    """
-    def __init__(self, injector_config, deferred_events, private_key_blob=None):
-        super(OuinetI2PInjector, self).__init__(injector_config, deferred_events)
-        self._setup_i2p_private_key(private_key_blob)
 
-    def _setup_i2p_private_key(self, private_key_blob):
-        if not os.path.exists(self.config.config_folder_name+"/i2p"):
-            os.makedirs(self.config.config_folder_name+"/i2p")
-
-        if (private_key_blob):
-            with open(self.config.config_folder_name+"/i2p/i2p-private-key", "w") \
-              as private_key_file:
-                private_key_file.write(private_key_blob)
-
-    def get_I2P_public_ID(self):
-        try:
-            with open(self.config.config_folder_name+"/endpoint-i2p", "r") \
-              as public_id_file:
-                return public_id_file.read().rstrip()
-        except:
-            return None
-
-class OuinetIPFSCacheInjector(OuinetInjector):
+class OuinetBEP5CacheInjector(OuinetInjector):
     """
-    As above, but for the 'injector which cache data' with an IPNS index
+    As above, but for the 'injector which cache data' with a BEP5 index
     """
-    def __init__(self, injector_config, deferred_events):        
-        super(OuinetIPFSCacheInjector, self).__init__(injector_config, deferred_events)
-        self.set_process_protocol(OuinetIPFSCacheProcessProtocol(proc_config = self.config, benchmark_regexes = injector_config.benchmark_regexes, benchmark_deferreds=deferred_events)) # change default protocol to one understand ipfs cache outputs
+
+    def __init__(self, injector_config):
+        super(OuinetBEP5CacheInjector, self).__init__(injector_config)
+        self.set_process_protocol(
+            OuinetBEP5CacheProcessProtocol(
+                proc_config=self.config,
+                benchmark_regexes=injector_config.benchmark_regexes,
+            )
+        )
 
     def get_index_key(self):
-        return self._proc_protocol.IPNS_ID
-    #   self._setup_ipfs_identity()
-        
-    # def _setup_ipfs_identity(self):
-    #     pdb.set_trace()
-    #     if not os.path.exists(self.config.config_folder_name+"/ipfs"):
-    #         os.makedirs(self.config.config_folder_name+"/ipfs")
-
-    #     with open(self.config.config_folder_name+"/ipfs/config", "w") \
-    #       as ipfs_config_file:
-    #         print json.dumps(TestFixtures.IPFS_CONFIG_DIC)
-    #         ipfs_config_file.write(json.dumps(TestFixtures.IPFS_CACHE_READY_REGEX))
-
-class OuinetBEP44CacheInjector(OuinetInjector):
-    """
-    As above, but for the 'injector which cache data' with a BEP44 index
-    """
-    def __init__(self, injector_config, deferred_events):
-        super(OuinetBEP44CacheInjector, self).__init__(injector_config, deferred_events)
-        self.set_process_protocol(OuinetBEP44CacheProcessProtocol(
-            proc_config=self.config,
-            benchmark_regexes=injector_config.benchmark_regexes,
-            benchmark_deferreds=deferred_events))
-
-    def get_index_key(self):
-        return self._proc_protocol.BEP44_pubk
+        return self._proc_protocol.public_key

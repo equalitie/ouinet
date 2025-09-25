@@ -1,3 +1,10 @@
+.DS_Store
+
+build/*
+_trial_temp/*
+_trial_temp.lock
+_trial_temp*
+
 .vagrant/
 Vagrantfile.kvm
 
