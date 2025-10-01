@@ -14,7 +14,7 @@ from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import (
     OuinetBEP5CacheProcessProtocol,
     OuinetProcessProtocol,
-    OuinetBEP5CacheProcessProtocol)
+)
 
 ouinet_env = {}
 ouinet_env.update(os.environ)
@@ -60,7 +60,7 @@ class OuinetConfig(object):
 
 
 class OuinetProcess(object):
-    def __init__(self, ouinet_config, deffered_events):
+    def __init__(self, ouinet_config):
         """
         perform the initialization tasks common between all clients
         and injectors:
@@ -70,12 +70,13 @@ class OuinetProcess(object):
         Args
         ouinet_config            A OuinetConfig instance containing the configuration
                                  related to this process
-        process_ready_deferred   a deferred object which get called back when the process is ready
         """
         self.config = ouinet_config
-        self._proc_protocol = OuinetProcessProtocol(proc_config = self.config, ready_benchmark_regexes = ouinet_config.benchmark_regexes, ready_deferred_fns=deferred_events) # default protocol
         # in case the communication process protocol is not explicitly set 
         # starts a default process protocol to check on Fatal errors
+        self._proc_protocol = OuinetProcessProtocol(
+            self.config, ouinet_config.benchmark_regexes
+        )
         self._has_started = False
         self._term_signal_sent = False
         self.setup_config()
@@ -211,21 +212,7 @@ class OuinetCacheClient(OuinetClient):
 
         return False
 
-    def index_resolution_start_time(self):
-        if (self._proc_protocol):
-            return self._proc_protocol.IPNS_resolution_start_time
 
-        return 0
-
-class OuinetBEP5Client(OuinetCacheClient):
-    def __init__(self, client_config, deferred_events):
-        super(OuinetBEP5Client, self).__init__(client_config, deferred_events)
-
-        self.set_process_protocol(OuinetBEP5CacheProcessProtocol(
-            proc_config=self.config,
-            benchmark_regexes=client_config.benchmark_regexes,
-            benchmark_deferreds=deferred_events))
-        
 class OuinetInjector(OuinetProcess):
     """
     As above, but for the 'injector'
@@ -297,8 +284,8 @@ class OuinetI2PInjector(OuinetInjector):
     As above, but for the 'injector' 
     It is a child of Ouinetinjector with i2p ouiservice
     """
-    def __init__(self, injector_config, deferred_events, private_key_blob=None):
-        super(OuinetI2PInjector, self).__init__(injector_config, deferred_events)
+    def __init__(self, injector_config, private_key_blob=None):
+        super(OuinetI2PInjector, self).__init__(injector_config)
         self._setup_i2p_private_key(private_key_blob)
 
     def _setup_i2p_private_key(self, private_key_blob):

@@ -52,7 +52,7 @@ target_link_libraries(ouiservice-i2p
         libi2pdlang
         OpenSSL::SSL
     PUBLIC
-        ouinet::base
+        ouinet_common
 )
 
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
