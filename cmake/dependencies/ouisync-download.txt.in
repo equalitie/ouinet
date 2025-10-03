@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 2.8.2)
+project(ouisync-download NONE)
+
+include(ExternalProject)
+externalproject_add(ouisync
+  GIT_REPOSITORY    https://github.com/equalitie/ouisync
+  GIT_TAG           cpp-bindings
+  SOURCE_DIR        "${CMAKE_BINARY_DIR}/ouisync/src"
+  BINARY_DIR        "${CMAKE_BINARY_DIR}/ouisync/build"
+  # No building, that's done outside of this externalproject_add
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND     ""
+  INSTALL_COMMAND   ""
+  TEST_COMMAND      ""
+)

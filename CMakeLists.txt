@@ -22,6 +22,7 @@ option(WITH_INJECTOR "Compile injector" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
+option(WITH_OUISYNC "Build with Ouisync" OFF)
 
 ################################################################################
 # Global build flags
@@ -53,7 +54,6 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
-
 
 # This target needs to be linked by all code that includes ouinet headers.
 add_library(ouinet_dependencies INTERFACE)
@@ -224,6 +224,7 @@ file(GLOB client_sources
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/connect_proxy.cpp"
+    ${OUISERVICE_OUISYNC_CPP_FILES}
     "./src/cache/*.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
@@ -251,6 +252,7 @@ target_link_libraries(client
         ouinet_common
         cpp_upnp
     PRIVATE
+        ${CPP_OUISYNC_LIBRARIES}
         lib::zdnsparser
 )
 

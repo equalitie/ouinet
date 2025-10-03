@@ -67,6 +67,7 @@
 #include "ouiservice/weak_client.h"
 #include "ouiservice/bep5/client.h"
 #include "ouiservice/multi_utp_server.h"
+#include "ouiservice/ouisync.h"
 
 #include "parse/number.h"
 #include "util/signal.h"
@@ -205,6 +206,7 @@ public:
                     ? metrics::Client( _config.repo_root() / "metrics"
                                      , std::move(_config.metrics()->encryption_key))
                     : metrics::Client::noop())
+        , _ouisync(_config.repo_root() / "ouisync")
     {
         LOG_INFO("Repo root: ", _config.repo_root());
 
@@ -225,9 +227,9 @@ public:
         }
     }
 
-    void start();
+    void start_ouinet();
 
-    void stop() {
+    void stop_ouinet() {
         if (_internal_state == InternalState::Created)
             _internal_state = InternalState::Stopped;
 
@@ -257,6 +259,8 @@ public:
             _udp_reachability->stop();
             _udp_reachability = nullptr;
         }
+
+        _ouisync.stop();
     }
 
     Client::RunningState get_state() const noexcept {
@@ -664,6 +668,7 @@ private:
 
     std::string _proxy_endpoint;
     std::string _frontend_endpoint;
+    ouiservice::Ouisync _ouisync;
 };
 
 //------------------------------------------------------------------------------
@@ -2833,6 +2838,16 @@ void Client::State::serve_request( GenericStream&& con
         auto meta = UserAgentMetaData::extract(req);
         Transaction tnx(con, req, std::move(meta));
 
+        // TODO: This shouldn't be here, just testing...
+        if (_ouisync.is_running()) {
+            sys::error_code ec;
+            _ouisync.serve(con, req, static_cast<asio::yield_context>(yield)[ec]);
+            if (ec || cancel) {
+                break;
+            }
+            continue;
+        }
+
         if (request_config.fresh_channels.empty()) {
             _YDEBUG(yield, "Abort due to no route");
             sys::error_code ec;
@@ -3016,7 +3031,7 @@ void Client::State::listen_tcp
 }
 
 //------------------------------------------------------------------------------
-void Client::State::start()
+void Client::State::start_ouinet()
 {
     if (_internal_state != InternalState::Created)
         return;
@@ -3057,6 +3072,23 @@ void Client::State::start()
     }
 
     next_internal_state = InternalState::Started;
+
+    TRACK_SPAWN(_ctx, ([
+        this,
+        self = shared_from_this()
+    ] (asio::yield_context yield) mutable {
+        try {
+            _ouisync.start(yield);
+
+            LOG_INFO("Ouisync started");
+         }
+         catch (const std::exception& e) {
+            LOG_ERROR("Failed to start Ouisync: ", e.what());
+         }
+         catch (...) {
+            LOG_ERROR("Failed to start Ouisync: Unknown exception");
+         }
+    }));
 
     TRACK_SPAWN(_ctx, ([
         this,
@@ -3285,12 +3317,12 @@ Client::~Client()
 
 void Client::start()
 {
-    _state->start();
+    _state->start_ouinet();
 }
 
 void Client::stop()
 {
-    _state->stop();
+    _state->stop_ouinet();
 }
 
 Client::RunningState Client::get_state() const noexcept {
