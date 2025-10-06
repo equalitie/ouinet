@@ -121,6 +121,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     set(HOST_CONFIG
         --host=${COMPILER_HOSTTRIPLE}
         --disable-shared
+        --disable-asm
         ac_cv_func_getentropy=no
     )
     set(UNDERSCORE_CONFIG "")

@@ -151,7 +151,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         set(BOOST_ARCH_CONFIGURATION
             --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-ios64.jam
             toolset=darwin-ios64
-            macosx-version=iphone-18.0
+            macosx-version=iphone-26.0
             architecture=arm
             abi=aapcs
         )
@@ -159,7 +159,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         set(BOOST_ARCH_CONFIGURATION
             --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossim64.jam
             toolset=darwin-iossim64
-            macosx-version=iphonesim-18.0
+            macosx-version=iphonesim-26.0
             architecture=x86
             abi=sysv
         )
@@ -167,7 +167,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
         set(BOOST_ARCH_CONFIGURATION
             --user-config=${CMAKE_CURRENT_LIST_DIR}/inline-boost/user-config-iossimarm64.jam
             toolset=darwin-iossimarm64
-            macosx-version=iphonesim-18.0
+            macosx-version=iphonesim-26.0
             architecture=arm
             abi=aapcs
         )
