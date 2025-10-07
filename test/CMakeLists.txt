@@ -14,90 +14,90 @@ endif()
 
 
 ######################################################################
-add_executable(test-parser "test_parser.cpp")
+add_executable(test_parser "test_parser.cpp")
 
 ######################################################################
-add_executable(test-cache
+add_executable(test_cache
     "test_cache_control.cpp"
     "../src/cache_control.cpp"
 )
 
 ######################################################################
-add_executable(test-wait-condition "test_wait_condition.cpp")
+add_executable(test_wait_condition "test_wait_condition.cpp")
 
 ######################################################################
-add_executable(test-scheduler "test_scheduler.cpp")
+add_executable(test_scheduler "test_scheduler.cpp")
 
 ######################################################################
-add_executable(test-timeout-stream "test_timeout_stream.cpp")
+add_executable(test_timeout_stream "test_timeout_stream.cpp")
 
 ######################################################################
-add_executable(test-response-reader "test-response-reader.cpp")
+add_executable(test_response_reader "test_response_reader.cpp")
 
 ######################################################################
-add_executable(test-response-writer "test-response-writer.cpp")
+add_executable(test_response_writer "test_response_writer.cpp")
 
 ################################################################################
 if (NOT WIN32)
-add_executable(test-persistent-lru-cache "test_persistent_lru_cache.cpp")
+add_executable(test_persistent_lru_cache "test_persistent_lru_cache.cpp")
 endif ()
 
 ################################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-bittorrent "test_bittorrent.cpp")
+    add_executable(test_bittorrent "test_bittorrent.cpp")
 endif()
 
 ################################################################################
 if (NOT WIN32)
-add_executable(bt-bep44 "bt-bep44.cpp")
+add_executable(bt_bep44 "bt_bep44.cpp")
 endif ()
 
 ################################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-routing-table "test-routing-table.cpp")
+    add_executable(test_routing_table "test_routing_table.cpp")
 endif()
 
 ################################################################################
-add_executable(bt-bep5 "bt-bep5.cpp")
+add_executable(bt_bep5 "bt_bep5.cpp")
 
 ######################################################################
-add_executable(test-watch-dog "test_watch_dog.cpp")
+add_executable(test_watch_dog "test_watch_dog.cpp")
 
 ######################################################################
-add_executable(test-util "test-util.cpp")
+add_executable(test_util "test_util.cpp")
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-    set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
+    set_target_properties(test_util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
     if(${CMAKE_GENERATOR} STREQUAL "Xcode")
-        set_target_properties(test-util PROPERTIES LINK_FLAGS "-fsanitize=address")
+        set_target_properties(test_util PROPERTIES LINK_FLAGS "-fsanitize=address")
     else()
-        target_link_libraries(test-util asan)
+        target_link_libraries(test_util asan)
     endif()
 endif ()
 
 ######################################################################
-add_executable(test-logger "test_logger.cpp")
+add_executable(test_logger "test_logger.cpp")
 
 ######################################################################
-add_executable(test-connection-pool "test-connection-pool.cpp")
+add_executable(test_connection_pool "test_connection_pool.cpp")
 
 ######################################################################
-add_executable(oui-server "ouiservice-server.cpp")
+add_executable(oui_server "ouiservice_server.cpp")
 
 ######################################################################
-add_executable(oui-client "ouiservice-client.cpp")
+add_executable(oui_client "ouiservice_client.cpp")
 
 ######################################################################
-add_executable(test-http-util "test_http_util.cpp")
+add_executable(test_http_util "test_http_util.cpp")
 
 ######################################################################
-add_executable(test-http-sign
+add_executable(test_http_sign
     "test_http_sign.cpp"
     "../src/cache/http_sign.cpp"
 )
 
 ######################################################################
-add_executable(test-http-store
+add_executable(test_http_store
     "test_http_store.cpp"
     "../src/cache/http_sign.cpp"
     "../src/cache/http_store.cpp"
@@ -107,7 +107,7 @@ add_executable(test-http-store
 )
 
 ######################################################################
-add_executable(test-atomic-temp
+add_executable(test_atomic_temp
     "test_atomic_temp.cpp"
     "../src/util/atomic_dir.cpp"
     "../src/util/temp_dir.cpp"
@@ -115,28 +115,28 @@ add_executable(test-atomic-temp
 
 ######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-cache-announcer
+    add_executable(test_cache_announcer
         "performance_test/test_cache_announcer.cpp"
         "../test/util/bittorrent_utils.cpp")
 endif()
 
-add_executable(test-bencoding
+add_executable(test_bencoding
     "test_bencoding.cpp"
     "../src/bittorrent/bencoding.cpp")
 
 ######################################################################
-add_executable(test-file-io
+add_executable(test_file_io
     "test_file_io.cpp"
     "util/base_fixture.hpp"
 )
 
 ######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-dht "test_dht.cpp")
+    add_executable(test_dht "test_dht.cpp")
 endif()
 
 ######################################################################
-add_executable(test-metrics "test-metrics.cpp")
+add_executable(test_metrics "test_metrics.cpp")
 
 ######################################################################
-add_executable(test-injector-resolver "test_injector_resolver.cpp")
+add_executable(test_injector_resolver "test_injector_resolver.cpp")
