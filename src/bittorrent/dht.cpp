@@ -2621,13 +2621,13 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
 
     auto node = make_unique<dht::DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir, _extra_bs);
 
-    auto cc = _cancel.connect([&] { node = nullptr; });
+    // auto cc = _cancel.connect([&] { node = nullptr; });
 
     sys::error_code ec;
     node->start(move(m), yield[ec]);
 
-    assert(!cc || ec == asio::error::operation_aborted);
-    if (cc) ec = asio::error::operation_aborted;
+    // assert(!cc || ec == asio::error::operation_aborted);
+    // if (cc) ec = asio::error::operation_aborted;
     if (ec) return or_throw<asio::ip::udp::endpoint>(yield, ec);
 
     auto wan_ep = node->wan_endpoint();
