@@ -11,7 +11,7 @@ namespace ouinet {
     class GenericStream; 
 }
 
-namespace ouinet::ouiservice {
+namespace ouinet::ouisync_service {
 
 #ifdef WITH_OUISYNC
 
@@ -29,7 +29,7 @@ public:
 
     void serve(
         GenericStream&,
-        const http::request<http::string_body>&,
+        const http::request_header<>&,
         asio::yield_context
     );
 
@@ -60,7 +60,7 @@ public:
 
     void serve(
         GenericStream&,
-        const http::request<http::string_body>&,
+        const http::request_header<>&,
         asio::yield_context yield
     ) {
         return or_throw(yield, asio::error::operation_not_supported);
@@ -69,4 +69,4 @@ public:
 
 #endif // ifdef WITH_OUISYNC
 
-} // namespace ouinet::ouiservice
+} // namespace ouinet::ouisync_service

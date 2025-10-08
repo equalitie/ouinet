@@ -4,11 +4,16 @@
 #include <ouisync/service.hpp>
 #include <ouisync/subscription.hpp>
 #include "ouisync.h"
+#include "error.h"
 #include "util.h"
 #include "http_util.h"
 #include "generic_stream.h"
+#include "util/keep_alive.h"
+#include "cache/cache_entry.h"
+#include "ouiservice/ouisync/file.h"
+#include "cache/resource.h"
 
-namespace ouinet::ouiservice {
+namespace ouinet::ouisync_service {
 
 using ouisync::Session;
 using ouisync::Repository;
@@ -133,59 +138,74 @@ void Ouisync::start(asio::yield_context yield)
 }
 
 template<class Request>
-void reply_error(const Request& rq, sys::error_code ec, GenericStream& con, asio::yield_context yield) {
+void reply_error(const Request& rq, sys::system_error e, GenericStream& con, asio::yield_context yield) {
+    std::stringstream ss;
+    ss << "Error: " << e.what() << "\n";
     auto rs = util::http_error(
         rq,
         http::status::bad_request,
         OUINET_CLIENT_SERVER_STRING,
         "",
-        ec.message()
+        ss.str()
     );
 
     util::http_reply(con, rs, yield);
 }
 
-void Ouisync::serve(GenericStream& con, const http::request<http::string_body>& rq, asio::yield_context yield) {
+void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, asio::yield_context yield) {
     sys::error_code* caller_ec = yield.ec_;
     yield.ec_ = nullptr;
 
     try {
         if (!_impl) {
-            throw sys::system_error(asio::error::not_connected);
+            throw_error(asio::error::not_connected);
         }
 
         util::url_match url;
 
         if (!match_http_url(rq.target(), url)) {
-            throw sys::system_error(asio::error::invalid_argument);
+            throw_error(asio::error::invalid_argument);
         }
 
         auto repo = _impl->resolve(url.host, yield);
 
-        std::string file_path;
-        if (url.path == "/") {
-            file_path = "/index.html";
-        } else {
-            file_path = url.path;
+        auto key = key_from_http_req(rq);
+
+        if (!key) {
+            throw_error(Error::request_to_cache_key);
         }
 
-        auto file = open_file(*repo, file_path, yield);
-        auto len = file.get_length(yield);
-        auto content = file.read(0, len, yield);
-        auto token = ShareToken{std::string(content.begin(), content.end())};
+        // TODO: Use constants from http_store.cpp instead of these hardcoded
+        // strings
+        fs::path root = "data-v3";
+        fs::path path = root / cache::relative_path_from_key(*key);
+        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield);
+        auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield);
+        auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield);
 
-        http::response<http::vector_body<uint8_t>> rs{http::status::ok, rq.version()};
-        rs.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
-        rs.set(http::field::content_type, "text/html");
-        rs.keep_alive(rq.keep_alive());
-        rs.body() = content;
-        rs.prepare_payload();
+        using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;
 
-        util::http_reply(con, std::move(rs), yield);
+        auto reader = std::make_unique<Reader>(
+            std::move(head_file),
+            std::move(sigs_file),
+            std::move(body_file),
+            boost::optional<cache::Range>() // range
+        );
+
+        // TODO: Use cancel
+        Cancel cancel;
+        auto session = ouinet::Session::create(
+            std::move(reader),
+            rq.method() == http::verb::head,
+            cancel,
+            yield
+        );
+
+        session.flush_response(con, cancel, yield);
     }
     catch (const sys::system_error& e) {
         sys::error_code ec;
-        reply_error(rq, e.code(), con, yield[ec]);
+        reply_error(rq, e, con, yield[ec]);
         if (ec) {
             if (caller_ec) *caller_ec = e.code();
             else throw;
@@ -201,4 +221,4 @@ void Ouisync::stop() {
     auto impl = std::move(_impl);
 }
 
-} // namespace ouinet::ouiservice
+} // namespace ouinet::ouisync_service

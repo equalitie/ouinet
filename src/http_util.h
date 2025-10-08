@@ -20,6 +20,7 @@
 #include "util.h"
 #include "util/signal.h"
 #include "util/watch_dog.h"
+#include "util/keep_alive.h"
 
 namespace ouinet {
 
@@ -184,10 +185,10 @@ bool http_proto_version_check_trusted( const Message& message
 // with the given `status`, `server` header and `message` body (text/plain).
 // If `proto_error` is not empty,
 // make this a Ouinet protocol message with that error.
-template<class Request>
+template<class Fields>
 inline
 http::response<http::string_body>
-http_error( const Request& rq
+http_error( const http::request_header<Fields>& rq
           , http::status status
           , const char* server
           , const std::string& proto_error
@@ -202,7 +203,7 @@ http_error( const Request& rq
     }
     rs.set(http::field::server, server);
     rs.set(http::field::content_type, "text/plain");
-    rs.keep_alive(rq.keep_alive());
+    rs.keep_alive(get_keep_alive(rq));
     rs.body() = message;
     rs.prepare_payload();
 

@@ -67,7 +67,7 @@
 #include "ouiservice/weak_client.h"
 #include "ouiservice/bep5/client.h"
 #include "ouiservice/multi_utp_server.h"
-#include "ouiservice/ouisync.h"
+#include "ouiservice/ouisync/ouisync.h"
 
 #include "parse/number.h"
 #include "util/signal.h"
@@ -668,7 +668,7 @@ private:
 
     std::string _proxy_endpoint;
     std::string _frontend_endpoint;
-    ouiservice::Ouisync _ouisync;
+    ouisync_service::Ouisync _ouisync;
 };
 
 //------------------------------------------------------------------------------

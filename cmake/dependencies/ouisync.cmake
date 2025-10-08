@@ -5,7 +5,9 @@ if (WITH_OUISYNC)
         cpp_ouisync_service
     )
     set(OUISERVICE_OUISYNC_CPP_FILES
-        "./src/ouiservice/ouisync.cpp"
+        "./src/ouiservice/ouisync/ouisync.cpp"
+        "./src/ouiservice/ouisync/file.cpp"
+        "./src/ouiservice/ouisync/error.cpp"
     )
     # For use in Ouinet code
     add_compile_definitions(WITH_OUISYNC)
