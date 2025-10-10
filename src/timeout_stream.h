@@ -303,29 +303,29 @@ inline
 auto TimeoutStream<InnerStream>::async_connect
     (const endpoint_type& ep, Token&& token)
 {
-    using Sig = void(const sys::error_code&);
+    return boost::asio::async_initiate<
+        Token,
+        void(sys::error_code)
+    >([&] (auto completion_handler) {
+        _state->connect_handler = std::move(completion_handler);
 
-    boost::asio::async_completion<Token, Sig> init(token);
+        setup_deadline(_max_connect_duration, *_state->connect_deadline, [s = _state] {
+            auto h = std::move(s->connect_handler);
+            s->inner.close();
+            h(asio::error::timed_out);
+        });
 
-    _state->connect_handler = std::move(init.completion_handler);
-
-    setup_deadline(_max_connect_duration, *_state->connect_deadline, [s = _state] {
-        auto h = std::move(s->connect_handler);
-        s->inner.close();
-        h(asio::error::timed_out);
-    });
-
-    _state->inner.async_connect( ep
-                               , [s = _state]
-                                 (const sys::error_code& ec) {
-                                     s->connect_deadline->stop();
-                                     if (s->connect_handler) {
-                                         auto h = std::move(s->connect_handler);
-                                         h(ec);
-                                     }
-                                 });
-
-    return init.result.get();
+        _state->inner.async_connect( ep
+                                   , [s = _state]
+                                     (const sys::error_code& ec) {
+                                         s->connect_deadline->stop();
+                                         if (s->connect_handler) {
+                                             auto h = std::move(s->connect_handler);
+                                             h(ec);
+                                         }
+                                     });
+    }
+    , token);
 }
 
 template<class InnerStream>
