@@ -5,8 +5,7 @@
 namespace ouinet::ouisync_service {
 
 enum Error {
-    // TODO: This one should be in cache/
-    request_to_cache_key,
+    // TODO:
 };
 
 class ErrorCategory : public boost::system::error_category {
@@ -46,14 +45,12 @@ boost::system::error_code make_error_code(Error e) {
     return {static_cast<int>(e), error_category()};
 }
 
-template<typename ErrorCode>
 [[noreturn]]
 inline void throw_error(
-    ErrorCode ec_,
+    boost::system::error_code ec,
     std::string message = {},
     const boost::source_location& loc = BOOST_CURRENT_LOCATION
 ) {
-    auto ec = make_error_code(ec_);
     ec.assign(ec, &loc);
     boost::system::system_error e(ec, std::move(message));
     throw e;

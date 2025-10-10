@@ -844,7 +844,7 @@ Client::State::fetch_stored_in_dcache( const Request& request
     }
 
     auto key = key_from_http_req(request);
-    if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
+    if (!key) return or_throw<CacheEntry>(yield, key.error());
 
     auto s = c->load( move(*key), dht_group, request.method() == http::verb::head
                     , _metrics

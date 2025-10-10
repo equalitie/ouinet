@@ -169,16 +169,12 @@ void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, asio::
 
         auto repo = _impl->resolve(url.host, yield);
 
-        auto key = key_from_http_req(rq);
-
-        if (!key) {
-            throw_error(Error::request_to_cache_key);
-        }
+        auto key = key_from_http_req(rq).value();
 
         // TODO: Use constants from http_store.cpp instead of these hardcoded
         // strings
         fs::path root = "data-v3";
-        fs::path path = root / cache::relative_path_from_key(*key);
+        fs::path path = root / cache::relative_path_from_key(key);
         auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield);
         auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield);
         auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield);
@@ -204,6 +200,7 @@ void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, asio::
         session.flush_response(con, cancel, yield);
     }
     catch (const sys::system_error& e) {
+        LOG_WARN("Ouisync::serve exception: ", e.what());
         sys::error_code ec;
         reply_error(rq, e, con, yield[ec]);
         if (ec) {
