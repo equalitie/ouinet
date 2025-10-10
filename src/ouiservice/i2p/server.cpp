@@ -77,7 +77,7 @@ void Server::start_listen(asio::yield_context yield)
         return or_throw(yield, ec);
     }
 
-    _tcp_acceptor.listen(asio::socket_base::max_connections, ec);
+    _tcp_acceptor.listen(asio::socket_base::max_listen_connections, ec);
     if (ec) {
         _tcp_acceptor.close();
         return or_throw(yield, ec);
