@@ -24,16 +24,6 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
 
-    # openssl does not compile with __ANDROID_API__ past a certain point.
-    # Presumably this will get fixed in a future openssl version.
-    # For now, defining an old version seems to work.
-    # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-    if (${ANDROID_PLATFORM_LEVEL} LESS $ENV{OUINET_MIN_API})
-        set(OPENSSL_ANDROID_VERSION ${ANDROID_PLATFORM_LEVEL})
-    else()
-        set(OPENSSL_ANDROID_VERSION $ENV{OUINET_MIN_API})
-    endif()
-
     set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
     set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
     set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
@@ -51,7 +41,13 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
                 ${OPENSSL_TARGET}
                 no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
-                -D__ANDROID_API__=${OPENSSL_ANDROID_VERSION}
+                # `-U` removes the NDK built in definition to avoid redefinition warnings
+                # https://github.com/openssl/openssl/issues/18561
+                -U__ANDROID_API__
+                # By default OpenSSL will use the highest available Android API
+                # and needs this to use the one we use in the rest of the code.
+                # https://github.com/openssl/openssl/blob/master/NOTES-ANDROID.md
+                -D__ANDROID_API__=${ANDROID_PLATFORM_LEVEL}
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
             && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}

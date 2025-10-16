@@ -120,20 +120,6 @@ android { // ...
 This may be lowered by using an older NDK, if it includes older platforms.
 However it may pose problems with applications having a higher minimum SDK.
 
-## Consistency with other dependencies
-
-Dependencies like OpenSSL (built via CMake) may also make use of SDK versions
-and API levels.  To ensure that versions are consistent across dependencies,
-[build-android.sh](../scripts/build-android.sh) sets the following environment
-variables: `OUINET_MIN_API` and `OUINET_TARGET_API`.  Please note that there
-is no variable for `compileSdkVersion`, as it has the same value as
-`OUINET_TARGET_VERSION`.
-
-Occurrences of SDK versions and API levels in source should rely on those
-variables instead of hardwired values.  This also applies to Gradle files
-above, so they no longer contain the values, but refer to the variables
-instead.
-
 ## Changes for 64-bit builds
 
 Since support for 64-bit architectures was added in Android SDK/API 21, 64-bit
