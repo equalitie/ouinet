@@ -7,31 +7,51 @@ if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja" AND NOT "${CMAKE_GENERATOR}" STREQ
     set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
 endif()
 
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
-    set(OPENSSL_VERSION "1.1.1q")
+set(OPENSSL_VERSION_Android "1.1.1q")
+set(OPENSSL_VERSION_iOS     "1.1.1q")
+set(OPENSSL_VERSION_Windows "3.4.1")
+set(OPENSSL_VERSION ${OPENSSL_VERSION_${CMAKE_SYSTEM_NAME}})
 
+if (DEFINED OPENSSL_VERSION)
     get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+    set(OPENSSL_URL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz")
 
-    if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv7-a")
-        set(OPENSSL_TARGET "android-arm")
-    elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
-        set(OPENSSL_TARGET "android-arm64")
-    elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")
-        set(OPENSSL_TARGET "android-x86")
-    elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
-        set(OPENSSL_TARGET "android-x86_64")
-    else()
+    set(OPENSSL_URL_HASH_1.1.1q SHA256=d7939ce614029cdff0b6c20f0e2e5703158a489a72b2507b8bd51bf8c8fd10ca)
+    set(OPENSSL_URL_HASH_3.4.1  SHA256=002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3)
+    set(OPENSSL_URL_HASH ${OPENSSL_URL_HASH_${OPENSSL_VERSION}})
+
+    set(OPENSSL_TARGET_Android_armv7-a    "android-arm")
+    set(OPENSSL_TARGET_Android_aarch64    "android-arm64")
+    set(OPENSSL_TARGET_Android_i686       "android-x86")
+    set(OPENSSL_TARGET_Android_x86_64     "android-x86_64")
+    set(OPENSSL_TARGET_iOS_OS64           "ios64-xcrun")
+    set(OPENSSL_TARGET_iOS_SIMULATOR64    "darwin64-x86_64-cc")
+    set(OPENSSL_TARGET_iOS_SIMULATORARM64 "iossimulator-xcrun")
+    set(OPENSSL_TARGET_Windows_           "mingw64")
+
+    set(TARGET_KEY_Android ${CMAKE_SYSTEM_PROCESSOR})
+    set(TARGET_KEY_iOS     ${PLATFORM})
+    set(OPENSSL_TARGET ${OPENSSL_TARGET_${CMAKE_SYSTEM_NAME}_${TARGET_KEY_${CMAKE_SYSTEM_NAME}}})
+
+    if(NOT DEFINED OPENSSL_TARGET)
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
 
-    set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
     set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
     set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
 
+    # XXX: Why are these so different per platform?
+    set(OPENSSL_CONFIGURE_FLAGS_Android no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine)
+    set(OPENSSL_CONFIGURE_FLAGS_iOS     no-shared no-shared -no-dso -no-hw -no-engine -fembed-bitcode)
+    set(OPENSSL_CONFIGURE_FLAGS_Windows -no-shared -no-ssl3 -no-comp -no-engine)
+    set(OPENSSL_CONFIGURE_FLAGS ${OPENSSL_CONFIGURE_FLAGS_${CMAKE_SYSTEM_NAME}})
+endif()
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     externalproject_add(built_openssl
-        URL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
-        URL_HASH SHA256=d7939ce614029cdff0b6c20f0e2e5703158a489a72b2507b8bd51bf8c8fd10ca
+        URL ${OPENSSL_URL}
+        URL_HASH ${OPENSSL_URL_HASH}
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
@@ -39,13 +59,14 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
+                ${OPENSSL_CONFIGURE_FLAGS}
                 no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
                 # `-U` removes the NDK built in definition to avoid redefinition warnings
                 # https://github.com/openssl/openssl/issues/18561
                 -U__ANDROID_API__
                 # By default OpenSSL will use the highest available Android API
-                # and needs this to use the one we use in the rest of the code.
+                # but we it to use the one we use in the rest of the code.
                 # https://github.com/openssl/openssl/blob/master/NOTES-ANDROID.md
                 -D__ANDROID_API__=${ANDROID_PLATFORM_LEVEL}
         BUILD_COMMAND
@@ -62,30 +83,10 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make install_dev
     )
-
-    set(OpenSSL_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-openssl)
-    list(INSERT CMAKE_MODULE_PATH 0 ${OpenSSL_DIR})
  elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
-    set(OPENSSL_VERSION "1.1.1q")
-
-    get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-
-    if (${PLATFORM} STREQUAL "OS64")
-        set(OPENSSL_TARGET "ios64-xcrun")
-    elseif (${PLATFORM} STREQUAL "SIMULATOR64")
-        set(OPENSSL_TARGET "darwin64-x86_64-cc")
-    elseif (${PLATFORM} STREQUAL "SIMULATORARM64")
-        set(OPENSSL_TARGET "iossimulator-xcrun")
-    endif()
-
-    set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
-    set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
-    set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
-    set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
-
     externalproject_add(built_openssl
-        URL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
-        URL_HASH SHA256=d7939ce614029cdff0b6c20f0e2e5703158a489a72b2507b8bd51bf8c8fd10ca
+        URL ${OPENSSL_URL}
+        URL_HASH ${OPENSSL_URL_HASH}
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
@@ -93,7 +94,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
-                no-shared -no-dso -no-hw -no-engine -fembed-bitcode
+                ${OPENSSL_CONFIGURE_FLAGS}
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
@@ -108,51 +109,38 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make install_dev
     )
-
-    set(OpenSSL_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-openssl)
-    list(INSERT CMAKE_MODULE_PATH 0 ${OpenSSL_DIR})
-endif()
-
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-    set(OPENSSL_VERSION "3.4.1")
-    set(OPENSSL_TARGET "mingw64")
-
-    get_filename_component(COMPILER_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-
-    set(BUILT_OPENSSL_VERSION ${OPENSSL_VERSION})
-    set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
-    set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
-    set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
-
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     externalproject_add(built_openssl
-            URL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
-            URL_HASH SHA256=002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3
-            PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
-            CONFIGURE_COMMAND
-                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-                && set PATH=${COMPILER_DIR};$ENV{PATH}
-                && export CC=${CMAKE_C_COMPILER}
-                && ./Configure
-                ${OPENSSL_TARGET}
-                    -no-shared -no-ssl3 -no-comp -no-engine
-                    --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
-                    --libdir=${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib
-            ${BUILD_JOB_SERVER_AWARE}
-            BUILD_COMMAND
-                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-                && set PATH=${COMPILER_DIR};$ENV{PATH}
-                && make depend
-                && make build_libs
-            BUILD_BYPRODUCTS
-                ${BUILT_OPENSSL_SSL_LIBRARY}
-                ${BUILT_OPENSSL_CRYPTO_LIBRARY}
-            ${INSTALL_JOB_SERVER_AWARE}
-            INSTALL_COMMAND
+        URL ${OPENSSL_URL}
+        URL_HASH ${OPENSSL_URL_HASH}
+        PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
+        CONFIGURE_COMMAND
             cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
             && set PATH=${COMPILER_DIR};$ENV{PATH}
-            && make install_dev
+            && export CC=${CMAKE_C_COMPILER}
+            && ./Configure
+            ${OPENSSL_TARGET}
+                ${OPENSSL_CONFIGURE_FLAGS}
+                --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
+                --libdir=${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib
+        ${BUILD_JOB_SERVER_AWARE}
+        BUILD_COMMAND
+            cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+            && set PATH=${COMPILER_DIR};$ENV{PATH}
+            && make depend
+            && make build_libs
+        BUILD_BYPRODUCTS
+            ${BUILT_OPENSSL_SSL_LIBRARY}
+            ${BUILT_OPENSSL_CRYPTO_LIBRARY}
+        ${INSTALL_JOB_SERVER_AWARE}
+        INSTALL_COMMAND
+        cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+        && set PATH=${COMPILER_DIR};$ENV{PATH}
+        && make install_dev
     )
+endif()
 
+if (DEFINED OPENSSL_VERSION)
     set(OpenSSL_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-openssl)
     list(INSERT CMAKE_MODULE_PATH 0 ${OpenSSL_DIR})
 endif()
