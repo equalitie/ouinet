@@ -31,10 +31,12 @@ if (DEFINED OPENSSL_VERSION)
 
     set(TARGET_KEY_Android ${CMAKE_SYSTEM_PROCESSOR})
     set(TARGET_KEY_iOS     ${PLATFORM})
-    set(OPENSSL_TARGET ${OPENSSL_TARGET_${CMAKE_SYSTEM_NAME}_${TARGET_KEY_${CMAKE_SYSTEM_NAME}}})
+    set(TARGET_KEY         ${TARGET_KEY_${CMAKE_SYSTEM_NAME}})
+
+    set(OPENSSL_TARGET ${OPENSSL_TARGET_${CMAKE_SYSTEM_NAME}_${TARGET_KEY}})
 
     if(NOT DEFINED OPENSSL_TARGET)
-        message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
+        message(FATAL_ERROR "Unsupported OS x target combination: ${CMAKE_SYSTEM_NAME} x ${TARGET_KEY}")
     endif()
 
     set(BUILT_OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/include)
@@ -42,8 +44,11 @@ if (DEFINED OPENSSL_VERSION)
     set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
 
     # XXX: Why are these so different per platform?
+    # XXX: the -no-* options might actually be ignored as the documentation doesn't list them
+    #      with the leading dash and says every misspelled option will be ignored
+    #      https://wiki.openssl.org/index.php/Compilation_and_Installation
     set(OPENSSL_CONFIGURE_FLAGS_Android no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine)
-    set(OPENSSL_CONFIGURE_FLAGS_iOS     no-shared no-shared -no-dso -no-hw -no-engine -fembed-bitcode)
+    set(OPENSSL_CONFIGURE_FLAGS_iOS     no-shared -no-dso -no-hw -no-engine -fembed-bitcode)
     set(OPENSSL_CONFIGURE_FLAGS_Windows -no-shared -no-ssl3 -no-comp -no-engine)
     set(OPENSSL_CONFIGURE_FLAGS ${OPENSSL_CONFIGURE_FLAGS_${CMAKE_SYSTEM_NAME}})
 endif()
@@ -60,7 +65,6 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && ./Configure
                 ${OPENSSL_TARGET}
                 ${OPENSSL_CONFIGURE_FLAGS}
-                no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine
                 --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
                 # `-U` removes the NDK built in definition to avoid redefinition warnings
                 # https://github.com/openssl/openssl/issues/18561
