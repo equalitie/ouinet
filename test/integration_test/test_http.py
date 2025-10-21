@@ -4,23 +4,34 @@
 # Integration tests for Ouinet - test for http communication offered through different transports and caches
 
 import socket
-
-# Making random requests not to relying on cache
+import requests
+from requests import Response as Reqresponse
 import string
-import random
 import sys
 import logging
-from time import sleep  # XXX: remove later
 import time
+from time import sleep  # XXX: remove later
+import tempfile
+# Making random requests not to rely on cache
+import random
 
+from os import rename
+from os import remove
+from os.path import exists
+
+from urllib.parse import urlparse
+
+import twisted
 from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
+from twisted.internet import task
 
 from twisted.web.client import ProxyAgent, readBody
 from twisted.web.http_headers import Headers
+from twisted.web._newclient import Response
+
 from twisted.trial.unittest import TestCase
-from twisted.internet import task
 
 from ouinet_process_controler import (
     OuinetConfig,
@@ -54,6 +65,13 @@ class OuinetTests(TestCase):
         )
 
         self.proc_list = []  # keep track of all process we start for clean tear down
+
+        with tempfile.NamedTemporaryFile() as file:
+            file.write(TestFixtures.INJECTOR_CERTIFICATE.encode("utf-8"))
+            TestFixtures.INJECTOR_CERT_PATH = file.name + ".pem"
+            file.flush()
+            # it will be deleted otherwise but we do not want it to be deleted yet
+            rename(file.name, TestFixtures.INJECTOR_CERT_PATH)
 
     def safe_random_str(self, length):
         letters = string.ascii_lowercase
@@ -106,6 +124,8 @@ class OuinetTests(TestCase):
                     TestFixtures.TCP_CLIENT_DISCOVERY_START,
                     TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
                     TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED,
+                    TestFixtures.FRESH_SUCCESS_REGEX,
+                    TestFixtures.DHT_CONTACTS_STORED_REGEX,
                 ],
             ),
         )
@@ -145,6 +165,21 @@ class OuinetTests(TestCase):
         return agent.request(
             b"GET", url.encode(), headers=Headers({"X-Ouinet-Group": ["localhost"]})
         )
+
+    # def request_web_url(self, port, url):
+    #     ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
+    #     agent = ProxyAgent(ouinet_client_endpoint)
+    #     host =urlparse(url).hostname
+    #     return agent.request(
+    #         b"GET", url.encode(), headers=Headers({"X-Ouinet-Group": [host]})
+    #     )
+
+
+    def request_web_url(self, port, url) -> Reqresponse:
+        proxies = {"http": f"http://127.0.0.1:{port}"}
+        host = urlparse(url).hostname
+        headers = {"X-Ouinet-Group": host}
+        return requests.get(url, proxies=proxies, headers=headers)
 
     def _cache_injector_config(self, timeout, evt_regexes, args):
         return OuinetConfig(
@@ -348,6 +383,55 @@ class OuinetTests(TestCase):
         success = yield client.callbacks[TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED]
         self.assertTrue(success)
 
+    @inlineCallbacks
+    def test_wikipedia_mainline(self):
+        """
+        A test to reach wikipedia without using our own injector
+        """
+        logging.debug("################################################")
+        logging.debug("test_wikipedia_mainline")
+        logging.debug("################################################")
+
+        twisted.internet.base.DelayedCall.debug = True
+
+        # Client
+        client_port = TestFixtures.TCP_CLIENT["port"]
+        client = self.run_tcp_client(
+            name=TestFixtures.TCP_CLIENT["name"],
+            args=[
+                "--disable-origin-access",
+                "--cache-type=bep5-http",
+                f"--cache-http-public-key={TestFixtures.MAINNET_INJECTOR_HASH}",
+                "--listen-on-tcp",
+                f"127.0.0.1:{client_port}",
+                "--injector-credentials",
+                "ouinet:160d79874a52c2cbcdec58db1a8160a9",
+                "--injector-tls-cert-file",
+                TestFixtures.INJECTOR_CERT_PATH,
+            ],
+        )
+
+        success = yield client.callbacks[TestFixtures.TCP_CLIENT_PORT_READY_REGEX]
+        self.assertTrue(success)
+
+        success = yield client.callbacks[TestFixtures.DHT_CONTACTS_STORED_REGEX]
+        self.assertTrue(success)
+
+        # TODO: Find the actual thing we are waiting for (DHT obtaining peers?).
+        # It seems to not report itself in the logs unless there is a request
+        sleep(20)
+
+        response = self.request_web_url(client_port, "http://example.org")
+
+        if not response.status_code == 200:
+            raise Exception(
+                response.status_code, response.reason, response.text, response.request
+            )
+
+        # Confirm that it was fresh
+        success = yield client.callbacks[TestFixtures.FRESH_SUCCESS_REGEX]
+        self.assertTrue(success)
+
     def tearDown(self):
         deferred_procs = []
         for cur_proc in self.proc_list:
@@ -356,5 +440,8 @@ class OuinetTests(TestCase):
 
         if hasattr(self, "test_http_server"):
             deferred_procs.append(self.test_http_server.stopListening())
+
+        if exists(TestFixtures.INJECTOR_CERT_PATH):
+            remove(TestFixtures.INJECTOR_CERT_PATH)
 
         return gatherResults(deferred_procs)
