@@ -195,7 +195,7 @@ class OuinetClient(OuinetProcess):
             os.path.join(ouinet_env["OUINET_BUILD_DIR"], "client"),
             "--repo",
             self.config.config_folder_name,
-            "--log-level=DEBUG",
+            "--log-level=SILLY",
             "--enable-log-file",
         ] + self.config.argv
 
