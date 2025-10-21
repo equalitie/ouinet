@@ -642,6 +642,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
                 if (spawn_cancel) return;
             }
 
+            _DEBUG("trying to contact", peer.endpoint);
             auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;
