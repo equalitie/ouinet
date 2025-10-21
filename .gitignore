@@ -1,5 +1,6 @@
 .DS_Store
 
+.cache/*
 build/*
 _trial_temp/*
 _trial_temp.lock
