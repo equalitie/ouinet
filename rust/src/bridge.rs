@@ -17,11 +17,9 @@ use std::{
     sync::{Arc, Mutex, Weak},
 };
 use tokio::{
-    runtime::Runtime,
-    select,
     sync::{mpsc, oneshot, watch},
-    task::{self, JoinHandle},
-    time::{sleep, Duration},
+    task::JoinHandle,
+    time::{self, Duration},
 };
 
 #[cxx::bridge]
@@ -81,7 +79,8 @@ mod ffi {
         include!("cxx/record_processor.h");
         type CxxRecordProcessor;
 
-        #[allow(dead_code)] // Not used in tests
+        // Not used in tests
+        #[allow(dead_code)]
         fn execute(
             self: &CxxRecordProcessor,
             record_name: String,
@@ -132,13 +131,11 @@ static CURRENT_CLIENT_INNER: Mutex<Weak<ClientInner>> = Mutex::new(Weak::new());
 // that writes into the store.
 // TODO: Alternative is to have multiple c++ clients to point to the same rust client, both
 // approaches have pros and cons.
-fn stop_current_client() -> Option<Arc<Runtime>> {
+fn stop_current_client() {
     let client_inner_lock = CURRENT_CLIENT_INNER.lock().unwrap();
 
     if let Some(client_inner) = client_inner_lock.upgrade() {
         client_inner.stop()
-    } else {
-        None
     }
 }
 
@@ -150,15 +147,8 @@ fn new_client(
     #[expect(clippy::boxed_local)] encryption_key: Box<EncryptionKey>,
 ) -> Box<Client> {
     logger::init_idempotent();
-    let runtime = match stop_current_client() {
-        Some(runtime) => runtime,
-        None => runtime::get_runtime(),
-    };
-    Box::new(Client::new(
-        runtime,
-        PathBuf::from(store_path),
-        *encryption_key,
-    ))
+    stop_current_client();
+    Box::new(Client::new(PathBuf::from(store_path), *encryption_key))
 }
 
 // -------------------------------------------------------------------
@@ -168,25 +158,24 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(runtime: Arc<Runtime>, store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
-        let _runtime_guard = runtime.enter();
+    fn new(store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
+        let runtime_handle = runtime::handle();
 
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
 
         let metrics = Arc::new(Mutex::new(Metrics::new()));
-        let store = runtime.block_on(Store::new(store_path, encryption_key));
+        let store = runtime_handle.block_on(Store::new(store_path, encryption_key));
 
         let (runner, record_id_rx) = match store {
             Ok(store) => {
                 let metrics = metrics.clone();
                 let record_id_rx = store.record_id.subscribe();
-                let job_handle = task::spawn(async move {
+                let job_handle = runtime_handle.spawn(async move {
                     metrics_runner(metrics, store, processor_rx).await;
                 });
 
                 (
                     Some(Runner {
-                        runtime,
                         processor_tx,
                         job_handle,
                     }),
@@ -286,7 +275,6 @@ struct ClientInner {
 }
 
 struct Runner {
-    runtime: Arc<Runtime>,
     processor_tx: mpsc::UnboundedSender<Option<RecordProcessor>>,
     job_handle: JoinHandle<()>,
 }
@@ -328,14 +316,16 @@ impl ClientInner {
         })
     }
 
-    fn stop(&self) -> Option<Arc<Runtime>> {
+    fn stop(&self) {
         let mut lock = self.runner.lock().unwrap();
 
-        let Runner {
-            runtime,
+        let Some(Runner {
             processor_tx,
             mut job_handle,
-        } = lock.take()?;
+        }) = lock.take()
+        else {
+            return;
+        };
 
         // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
         drop(processor_tx);
@@ -343,17 +333,13 @@ impl ClientInner {
         // TODO: The C++ code itself does some deinitialization with a timeout and the code in this
         // function happens only after that is finished. Consider doing this session
         // deinitialization concurrently with the C++ code.
-        runtime.block_on(async move {
-            select! {
-                () = sleep(Duration::from_secs(5)) => {
-                    log::warn!("Metrics runner failed to finish within 5 seconds");
-                    job_handle.abort();
-                }
-                _ = &mut job_handle => (),
+        match runtime::handle().block_on(time::timeout(Duration::from_secs(5), &mut job_handle)) {
+            Ok(_) => (),
+            Err(_) => {
+                log::warn!("Metrics runner failed to finish within 5 seconds");
+                job_handle.abort();
             }
-        });
-
-        Some(runtime)
+        }
     }
 }
 

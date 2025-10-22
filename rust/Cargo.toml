@@ -9,7 +9,7 @@ crate-type = ["staticlib"]
 [dependencies]
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes"] }
 chrono = { version = "0.4.41", default-features = false, features = ["std", "now", "serde"] }
-cxx = "1.0.143"
+cxx = "1.0.187"
 env_logger = "0.11.6"
 log = "0"
 pkcs8 = { version = "0.10.2", default-features = false, features = ["pem", "std"] }
@@ -30,4 +30,4 @@ x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 
 
 [build-dependencies]
-cxx-build = "1.0"
+cxx-build = "1.0.187"
