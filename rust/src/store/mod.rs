@@ -196,7 +196,7 @@ impl Store {
     }
 
     pub fn build_record_name(version: u32, record_id: RecordId) -> String {
-        format!("v{version}_{}", record_id.to_string())
+        format!("v{version}_{record_id}")
     }
 
     fn parse_record_name(
@@ -280,11 +280,4 @@ impl StoredRecord {
     pub fn name(&self) -> String {
         Store::build_record_name(constants::RECORD_VERSION, self.id)
     }
-}
-
-#[derive(Serialize, Deserialize)]
-struct StoredRecordContent {
-    created: SystemTime,
-    #[serde(with = "serde_bytes")]
-    data: Vec<u8>,
 }
