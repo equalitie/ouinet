@@ -6,6 +6,7 @@ pub(crate) mod runner;
 pub(crate) mod store;
 
 mod backoff_watch;
+mod bridge;
 mod clock;
 mod constants;
 mod period;

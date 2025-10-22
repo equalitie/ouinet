@@ -1,5 +1,3 @@
 pub(crate) mod logger;
 pub(crate) mod metrics;
 pub(crate) mod runtime;
-
-mod bridge;

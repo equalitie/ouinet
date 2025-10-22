@@ -3,8 +3,8 @@ use thiserror::Error;
 
 #[cfg(not(test))]
 mod normal_impl {
+    use super::super::bridge::{CxxOneShotSender, CxxRecordProcessor};
     use super::*;
-    use crate::bridge::{CxxOneShotSender, CxxRecordProcessor};
     use cxx::UniquePtr;
     use tokio::sync::oneshot;
 

@@ -1,18 +1,17 @@
-use crate::{
-    logger,
-    metrics::{
-        collector::{
-            request::{self, RequestId, RequestType},
-            BootstrapId, Collector, IpVersion,
-        },
-        crypto::EncryptionKey,
-        record_id::RecordId,
-        record_processor::RecordProcessor,
-        runner::metrics_runner,
-        store::Store,
+//! Metrics API exposed to C++
+
+use super::{
+    collector::{
+        request::{self, RequestId, RequestType},
+        BootstrapId, Collector, IpVersion,
     },
-    runtime,
+    crypto::EncryptionKey,
+    record_id::RecordId,
+    record_processor::RecordProcessor,
+    runner::metrics_runner,
+    store::Store,
 };
+use crate::{logger, runtime};
 use cxx::UniquePtr;
 use std::{
     path::PathBuf,
