@@ -20,7 +20,7 @@ pub enum IpVersion {
     V6,
 }
 
-pub struct Metrics {
+pub struct Collector {
     on_modify_tx: Arc<ConstantBackoffWatchSender>,
     bootstraps: Bootstraps,
     bridge: Bridge,
@@ -29,7 +29,7 @@ pub struct Metrics {
     has_new_data: bool,
 }
 
-impl Metrics {
+impl Collector {
     pub fn new() -> Self {
         let on_modify_tx = Arc::new(ConstantBackoffWatchSender::new(
             constants::RECORD_WRITE_CONSTANT_BACKOFF,

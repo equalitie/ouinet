@@ -1,6 +1,6 @@
 use crate::{
     backoff_watch::ConstantBackoffWatchReceiver,
-    collector::Metrics,
+    collector::Collector,
     record_processor::{RecordProcessor, RecordProcessorError},
     store::{Store, StoredRecord},
 };
@@ -49,7 +49,7 @@ impl fmt::Debug for Event {
 }
 
 pub async fn metrics_runner(
-    metrics: Arc<Mutex<Metrics>>,
+    collector: Arc<Mutex<Collector>>,
     store: Store,
     record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
 ) {
@@ -72,7 +72,7 @@ pub async fn metrics_runner(
         }
     }
 
-    match metrics_runner_(metrics, store, record_processor_rx).await {
+    match metrics_runner_(collector, store, record_processor_rx).await {
         Ok(()) => {
             log::debug!("Metrics runner finished with Ok")
         }
@@ -86,19 +86,19 @@ pub async fn metrics_runner(
 }
 
 pub async fn metrics_runner_(
-    metrics: Arc<Mutex<Metrics>>,
+    collector: Arc<Mutex<Collector>>,
     mut store: Store,
     record_processor_rx: mpsc::UnboundedReceiver<Option<RecordProcessor>>,
 ) -> Result<(), MetricsRunnerError> {
     let mut event_listener =
-        EventListener::new(metrics.lock().unwrap().subscribe(), record_processor_rx);
+        EventListener::new(collector.lock().unwrap().subscribe(), record_processor_rx);
     let mut event_handler = EventHandler::new();
 
     loop {
         let event = event_listener.on_event(&store).await;
 
         match event_handler
-            .process_event(event, &mut store, &metrics)
+            .process_event(event, &mut store, &collector)
             .await?
         {
             EventResult::Continue => (),
@@ -124,7 +124,7 @@ impl EventHandler {
         &mut self,
         event: Event,
         store: &mut Store,
-        metrics: &Mutex<Metrics>,
+        collector: &Mutex<Collector>,
     ) -> Result<EventResult, MetricsRunnerError> {
         log::debug!("{event:?}");
 
@@ -167,24 +167,27 @@ impl EventHandler {
             }
             Event::MetricsModified { metrics_enabled } => {
                 if metrics_enabled {
-                    store_record(store, metrics).await?;
+                    store_record(store, collector).await?;
                 }
             }
             Event::RotateDeviceId { metrics_enabled } => {
                 if metrics_enabled {
-                    store_record(store, metrics).await?;
+                    store_record(store, collector).await?;
                 }
 
                 store.record_id.rotate().await?;
-                metrics.lock().unwrap().on_device_id_changed();
+                collector.lock().unwrap().on_device_id_changed();
             }
             Event::IncrementRecordNumber { metrics_enabled } => {
                 if metrics_enabled {
-                    store_record(store, metrics).await?;
+                    store_record(store, collector).await?;
                 }
 
                 store.record_id.increment().await?;
-                metrics.lock().unwrap().on_record_sequence_number_changed();
+                collector
+                    .lock()
+                    .unwrap()
+                    .on_record_sequence_number_changed();
             }
             Event::Purge => {
                 store.delete_stored_records().await?;
@@ -192,7 +195,7 @@ impl EventHandler {
             }
             Event::Exit { metrics_enabled } => {
                 if metrics_enabled {
-                    store_record(store, metrics).await?;
+                    store_record(store, collector).await?;
                 }
                 return Ok(EventResult::Break);
             }
@@ -274,11 +277,11 @@ impl EventListener {
     }
 }
 
-async fn store_record(store: &mut Store, metrics: &Mutex<Metrics>) -> io::Result<()> {
+async fn store_record(store: &mut Store, collector: &Mutex<Collector>) -> io::Result<()> {
     let id_interval = store.record_id.device_id().interval();
     let sq_interval = store.record_id.sequence_number().interval();
 
-    let record = metrics.lock().unwrap().collect(id_interval, sq_interval);
+    let record = collector.lock().unwrap().collect(id_interval, sq_interval);
 
     // Backoff may have stopped due to there being no records *or* because the one record that was
     // there was "current". So resume it.
@@ -326,7 +329,7 @@ mod tests {
         _tmpdir: TmpDir,
         event_handler: EventHandler,
         store: Store,
-        metrics: Mutex<Metrics>,
+        collector: Mutex<Collector>,
     }
 
     impl Setup {
@@ -338,19 +341,19 @@ mod tests {
             let ek = EncryptionKey::from(&dk);
             let store = Store::new(tmpdir.as_ref().into(), ek).await.unwrap();
             let event_handler = EventHandler::new();
-            let metrics = Mutex::new(Metrics::new());
+            let collector = Mutex::new(Collector::new());
 
             Self {
                 _tmpdir: tmpdir,
                 event_handler,
                 store,
-                metrics,
+                collector,
             }
         }
 
         async fn process(&mut self, event: Event) {
             self.event_handler
-                .process_event(event, &mut self.store, &self.metrics)
+                .process_event(event, &mut self.store, &self.collector)
                 .await
                 .unwrap();
         }
@@ -375,7 +378,7 @@ mod tests {
         async fn modify_metrics_and_process(&mut self) {
             // Modifying metrics normally sends an event through `tokio::watch` to the
             // event_listener. But we don't have event_listener here so we need to simulate it.
-            self.metrics.lock().unwrap().modify();
+            self.collector.lock().unwrap().modify();
             self.process(Event::MetricsModified {
                 metrics_enabled: true,
             })
