@@ -1,10 +1,10 @@
 use crate::{
-    crypto::EncryptionKey,
-    logger,
-    metrics::{
+    collector::{
         request::{self, RequestId, RequestType},
         BootstrapId, IpVersion, Metrics,
     },
+    crypto::EncryptionKey,
+    logger,
     metrics_runner::metrics_runner,
     record_id::RecordId,
     record_processor::RecordProcessor,

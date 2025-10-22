@@ -1,6 +1,6 @@
 use crate::{
     backoff_watch::ConstantBackoffWatchReceiver,
-    metrics::Metrics,
+    collector::Metrics,
     record_processor::{RecordProcessor, RecordProcessorError},
     store::{Store, StoredRecord},
 };
