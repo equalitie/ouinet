@@ -1,4 +1,4 @@
-use crate::{
+use super::{
     backoff_watch::ConstantBackoffWatchReceiver,
     collector::Collector,
     record_processor::{RecordProcessor, RecordProcessorError},
@@ -138,7 +138,7 @@ impl EventHandler {
                         "  Records on disk: {:?}, current: {:?}",
                         stored_records.iter().map(|r| r.name()).collect::<Vec<_>>(),
                         Store::build_record_name(
-                            crate::constants::RECORD_VERSION,
+                            super::constants::RECORD_VERSION,
                             current_record_id
                         )
                     );
@@ -316,12 +316,12 @@ pub enum MetricsRunnerError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{
+    use super::super::{
         crypto::{DecryptionKey, EncryptionKey},
-        logger,
         record_id::RecordId,
     };
+    use super::*;
+    use crate::logger;
     use std::collections::BTreeSet;
     use tmpdir::TmpDir;
 

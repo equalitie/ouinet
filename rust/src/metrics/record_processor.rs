@@ -1,4 +1,4 @@
-use crate::store::StoredRecord;
+use super::store::StoredRecord;
 use thiserror::Error;
 
 #[cfg(not(test))]

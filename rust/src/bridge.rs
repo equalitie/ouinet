@@ -1,15 +1,17 @@
 use crate::{
-    collector::{
-        request::{self, RequestId, RequestType},
-        BootstrapId, Collector, IpVersion,
-    },
-    crypto::EncryptionKey,
     logger,
-    metrics_runner::metrics_runner,
-    record_id::RecordId,
-    record_processor::RecordProcessor,
+    metrics::{
+        collector::{
+            request::{self, RequestId, RequestType},
+            BootstrapId, Collector, IpVersion,
+        },
+        crypto::EncryptionKey,
+        record_id::RecordId,
+        record_processor::RecordProcessor,
+        runner::metrics_runner,
+        store::Store,
+    },
     runtime,
-    store::Store,
 };
 use cxx::UniquePtr;
 use std::{

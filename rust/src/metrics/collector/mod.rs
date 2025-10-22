@@ -2,7 +2,7 @@ mod auxiliary;
 mod bootstrap;
 pub mod request;
 
-use crate::{
+use super::{
     backoff_watch::{ConstantBackoffWatchReceiver, ConstantBackoffWatchSender},
     constants,
     period::{WholeHour, WholeWeek},

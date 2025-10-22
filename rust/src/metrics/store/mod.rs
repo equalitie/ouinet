@@ -3,7 +3,7 @@ mod device_id;
 mod record_id;
 mod record_number;
 
-use crate::{
+use super::{
     constants,
     crypto::{self, EncryptionKey},
     record_id::RecordId,
