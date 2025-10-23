@@ -138,5 +138,9 @@ endif()
 ######################################################################
 add_executable(test-metrics "test-metrics.cpp")
 
+
 ######################################################################
 add_executable(test-injector-resolver "test_injector_resolver.cpp")
+
+######################################################################
+add_executable(test-dns "test-dns.cpp")
