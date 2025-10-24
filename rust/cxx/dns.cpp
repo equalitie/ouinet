@@ -20,10 +20,10 @@ Resolver::Output Resolver::resolve(const std::string& name, yield_context yield)
 
             _impl->resolve(name, std::make_unique<bridge::Completer>(
                 [ work_guard = make_work_guard(std::move(exec)),
-                  completion_handler = std::move(completion_handler_p)
+                  completion_handler_p = std::move(completion_handler_p)
                 ] (bridge::Completer::Result&& result) {
                     post(work_guard.get_executor(), [
-                        h = std::move(*completion_handler),
+                        h = std::move(*completion_handler_p),
                         r = std::move(result)
                     ] () mutable {
                         if (r.has_value()) {
@@ -55,7 +55,8 @@ namespace bridge {
 
     void Completer::on_failure(rust::String error) const {
         // TODO
-        _function(error::host_unreachable);
+        static constexpr boost::source_location loc = BOOST_CURRENT_LOCATION;
+        _function(error_code(error::host_unreachable, &loc));
     }
 
     ip::address convert(IpAddress input) {
