@@ -2,7 +2,6 @@
 #include <boost/test/included/unit_test.hpp>
 
 #include <boost/asio/spawn.hpp>
-#include "task.h"
 #include "cxx/dns.h"
 
 using namespace boost;
