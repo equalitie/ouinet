@@ -12,19 +12,21 @@ BOOST_AUTO_TEST_SUITE(ouinet_dns)
 
 BOOST_AUTO_TEST_CASE(sanity) {
     asio::io_context ctx;
-    dns::Resolver resolver;
 
-    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        auto result = resolver.resolve("ceno.app", yield);
+    asio::spawn(ctx,
+        [&] (asio::yield_context yield) {
+            dns::Resolver resolver;
 
-        BOOST_REQUIRE(result.has_value());
+            auto ips = resolver.resolve("ceno.app", yield);
 
-        auto ips = result.value();
-
-        for (auto ip : ips) {
-            std::cout << ip << std::endl;
+            for (auto ip : ips) {
+                std::cout << ip << std::endl;
+            }
+        },
+        [] (std::exception_ptr ep) {
+            if (ep) std::rethrow_exception(ep);
         }
-    });
+    );
 
     ctx.run();
 }

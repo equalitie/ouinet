@@ -18,18 +18,11 @@ namespace ouinet::dns {
 class Resolver {
 public:
     using Output = std::vector<boost::asio::ip::address>;
-    using Result = boost::system::result<Output>;
 
     Resolver();
 
     /// Resolve the given DNS name.
-    Result resolve(const std::string& name, boost::asio::yield_context yield) {
-        // TODO:
-        //
-        // _impl->resolve(name, std::make_unique<Completer>([](auto result) {
-        //     // ...
-        // }));
-    }
+    Output resolve(const std::string& name, boost::asio::yield_context);
 
 private:
 
@@ -40,7 +33,8 @@ namespace bridge {
 
 class Completer {
 public:
-    using Function = std::function<void(ouinet::dns::Resolver::Result)>;
+    using Result = boost::system::result<ouinet::dns::Resolver::Output>;
+    using Function = std::function<void(Result)>;
 
     explicit Completer(Function&& function);
     explicit Completer(const Function& function);
