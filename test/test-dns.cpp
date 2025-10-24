@@ -14,7 +14,7 @@ BOOST_AUTO_TEST_CASE(sanity) {
     asio::io_context ctx;
 
     asio::spawn(ctx,
-        [&] (asio::yield_context yield) {
+        [] (asio::yield_context yield) {
             dns::Resolver resolver;
 
             auto ips = resolver.resolve("ceno.app", yield);
