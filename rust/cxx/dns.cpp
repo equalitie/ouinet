@@ -1,73 +1,99 @@
 #include "dns.h"
+#include <iostream>
 
 namespace ouinet::dns {
 
 using namespace boost::asio;
 using namespace boost::system;
+using boost::source_location;
+
+using bridge::Error;
+
+const char* ErrorCategory::name() const noexcept {
+    return "dns_error_category";
+}
+
+std::string ErrorCategory::message(int ev) const {
+    switch (static_cast<Error>(ev)) {
+    case Error::Ok:
+        return "Ok";
+    case Error::NotFound:
+        return "Not found";
+    case Error::Busy:
+        return "Busy";
+    case Error::Other:
+    default:
+        return "Other error";
+    }
+}
+
+ErrorCategory error_category;
+
+namespace bridge {
+
+template<typename CompletionHandler>
+class Completer : public BasicCompleter {
+public:
+    using WorkGuard = executor_work_guard<typename associated_executor<CompletionHandler>::type>;
+
+    Completer(CompletionHandler&& handler) :
+        _work_guard(make_work_guard(handler)),
+        _handler(std::move(handler))
+    {}
+
+    void complete(Error error, rust::Vec<IpAddress> ips) final {
+        static constexpr boost::source_location source_location = BOOST_CURRENT_LOCATION;
+        auto ec = error_code(error, &source_location);
+
+        std::vector<ip::address> asio_ips;
+        std::transform(
+            ips.begin(),
+            ips.end(),
+            std::back_inserter(asio_ips),
+            [](auto input) {
+                auto addr = ip::address_v6(input.octets);
+
+                if (addr.is_v4_mapped()) {
+                    return ip::address(ip::make_address_v4(ip::v4_mapped, addr));
+                } else {
+                    return ip::address(addr);
+                }
+            }
+        );
+
+        post(_work_guard.get_executor(), [
+            handler = std::move(_handler),
+            ec,
+            asio_ips = std::move(asio_ips)
+        ] () mutable {
+            handler(ec, std::move(asio_ips));
+        });
+
+        _work_guard.reset();
+    }
+
+private:
+    WorkGuard _work_guard;
+    CompletionHandler _handler;
+};
+
+} // namespace bridge
 
 Resolver::Resolver() : _impl(bridge::new_resolver()) {}
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
     return async_initiate<yield_context, void(error_code, Output)> (
-        [&name, this] (auto completion_handler, auto exec) {
+        [&name, this] (auto completion_handler) {
             using CompletionHandler = decltype(completion_handler);
 
-            // `std::function` in `Completer` requires the lambda to be
-            // copyable, but `completion_handler` isn't, so we need to wrap it
-            // in a shared pointer.
-            auto completion_handler_p =
-                std::make_shared<CompletionHandler>(std::move(completion_handler));
-
-            _impl->resolve(name, std::make_unique<bridge::Completer>(
-                [ work_guard = make_work_guard(std::move(exec)),
-                  completion_handler_p = std::move(completion_handler_p)
-                ] (bridge::Completer::Result&& result) {
-                    post(work_guard.get_executor(), [
-                        h = std::move(*completion_handler_p),
-                        r = std::move(result)
-                    ] () mutable {
-                        if (r.has_value()) {
-                            h(error_code{}, std::move(r.value()));
-                        } else {
-                            h(r.error(), Output{});
-                        }
-                    });
-                }
-            ));
+            _impl->resolve(
+                name,
+                std::make_unique<bridge::Completer<CompletionHandler>>(std::move(completion_handler))
+            );
         },
-        yield,
-        yield.get_executor()
+        yield
     );
 }
 
-namespace bridge {
-    ip::address convert(IpAddress);
-
-    Completer::Completer(Function&& function) : _function(std::move(function)) {}
-    Completer::Completer(const Function& function) : _function(function) {}
-
-    void Completer::on_success(rust::Vec<IpAddress> addresses) const {
-        std::vector<ip::address> output;
-        std::transform(addresses.begin(), addresses.end(), std::back_inserter(output), convert);
-
-        _function(std::move(output));
-    }
-
-    void Completer::on_failure(rust::String error) const {
-        // TODO
-        static constexpr boost::source_location loc = BOOST_CURRENT_LOCATION;
-        _function(error_code(error::host_unreachable, &loc));
-    }
-
-    ip::address convert(IpAddress input) {
-        auto addr = ip::address_v6(input.octets);
-
-        if (addr.is_v4_mapped()) {
-            return ip::make_address_v4(ip::v4_mapped, addr);
-        } else {
-            return addr;
-        }
-    }
-}
-}
+} // namespace ouinet::dns
 

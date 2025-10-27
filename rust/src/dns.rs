@@ -5,7 +5,8 @@ use ffi::IpAddress;
 use hickory_resolver::{
     config::{NameServerConfigGroup, ResolverConfig, ResolverOpts},
     name_server::TokioConnectionProvider,
-    IntoName, TokioResolver,
+    proto::{ProtoError, ProtoErrorKind},
+    IntoName, ResolveError, ResolveErrorKind, TokioResolver,
 };
 
 use crate::runtime;
@@ -17,20 +18,30 @@ mod ffi {
         octets: [u8; 16],
     }
 
+    enum Error {
+        // Success
+        Ok = 0,
+        // No records found for the domain name
+        NotFound = 1,
+        // Name server(s) busy, try again later
+        Busy = 2,
+        // Other unspecified error
+        Other = 3,
+    }
+
     extern "Rust" {
         type Resolver;
 
         fn new_resolver() -> Box<Resolver>;
-        fn resolve(&self, name: &str, completer: UniquePtr<Completer>);
+        fn resolve(&self, name: &str, completer: UniquePtr<BasicCompleter>);
     }
 
     unsafe extern "C++" {
         include!("cxx/dns.h");
 
-        type Completer;
+        type BasicCompleter;
 
-        fn on_success(&self, addrs: Vec<IpAddress>);
-        fn on_failure(&self, error: String);
+        fn complete(self: Pin<&mut BasicCompleter>, error: Error, addrs: Vec<IpAddress>);
     }
 }
 
@@ -61,25 +72,28 @@ impl Resolver {
 
     /// Asynchronously resolve the given DNS name and invoke `completer` with the resolved ip
     /// addresses or error.
-    fn resolve(&self, name: &str, completer: UniquePtr<ffi::Completer>) {
+    fn resolve(&self, name: &str, mut completer: UniquePtr<ffi::BasicCompleter>) {
         let name = name.into_name();
         let inner = self.inner.clone();
 
         runtime::handle().spawn(async move {
+            let completer = completer.pin_mut();
+
             let name = match name {
                 Ok(name) => name,
                 Err(error) => {
-                    completer.on_failure(error.to_string());
+                    completer.complete(ffi::Error::from(&error), vec![]);
                     return;
                 }
             };
 
             match inner.lookup_ip(name).await {
                 Ok(lookup) => {
-                    completer.on_success(lookup.iter().map(IpAddress::from).collect());
+                    completer
+                        .complete(ffi::Error::Ok, lookup.iter().map(IpAddress::from).collect());
                 }
                 Err(error) => {
-                    completer.on_failure(error.to_string());
+                    completer.complete(ffi::Error::from(&error), vec![]);
                 }
             }
         });
@@ -103,4 +117,23 @@ impl From<IpAddr> for ffi::IpAddress {
     }
 }
 
-unsafe impl Send for ffi::Completer {}
+impl<'a> From<&'a ProtoError> for ffi::Error {
+    fn from(value: &'a ProtoError) -> Self {
+        match value.kind() {
+            ProtoErrorKind::NoRecordsFound { .. } => ffi::Error::NotFound,
+            ProtoErrorKind::Busy => ffi::Error::Busy,
+            _ => ffi::Error::Other,
+        }
+    }
+}
+
+impl<'a> From<&'a ResolveError> for ffi::Error {
+    fn from(value: &'a ResolveError) -> Self {
+        match value.kind() {
+            ResolveErrorKind::Proto(error) => Self::from(error),
+            ResolveErrorKind::Message(_) | ResolveErrorKind::Msg(_) | _ => Self::Other,
+        }
+    }
+}
+
+unsafe impl Send for ffi::BasicCompleter {}
