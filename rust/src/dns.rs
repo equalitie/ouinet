@@ -81,6 +81,9 @@ impl Resolver {
         let name = name.into_name();
         let inner = self.inner.clone();
 
+        // Clean up completed tasks
+        while self.tasks.try_join_next().is_some() {}
+
         self.tasks.spawn_on(
             async move {
                 let completer = completer.pin_mut();
