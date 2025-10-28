@@ -25,7 +25,7 @@ uuid = { version = "1.13.1", features = ["v4", "serde"] }
 [dependencies.hickory-resolver]
 version = "0.25.2"
 default-features = false
-features = ["tokio", "https-ring", "rustls-platform-verifier"]
+features = ["tokio", "https-ring", "webpki-roots"]
 
 [dev-dependencies]
 aes-gcm = { version = "0.10.3", features = ["alloc"] }
