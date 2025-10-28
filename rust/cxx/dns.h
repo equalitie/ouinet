@@ -23,12 +23,22 @@ public:
 
     Resolver();
 
+    Resolver(const Resolver&) = delete;
+    Resolver& operator=(const Resolver&) = delete;
+
+    Resolver(Resolver&&) = default;
+    Resolver& operator=(Resolver&&) = default;
+
     /// Resolve the given DNS name.
     Output resolve(const std::string& name, boost::asio::yield_context);
 
+    /// Close this DNS resolver, cancelling any ongoing lookups. Any subsequent lookups return with
+    /// a `NotFound` error.
+    void close();
+
 private:
 
-    rust::Box<bridge::Resolver> _impl;
+    std::optional<rust::Box<bridge::Resolver>> _impl;
 };
 
 /// A category of DNS errors
@@ -48,7 +58,11 @@ public:
 };
 
 inline boost::system::error_code make_error_code(Error error) noexcept {
-    return boost::system::error_code(static_cast<int>(error), error_category);
+    if (error == Error::Cancelled) {
+        return boost::asio::error::operation_aborted;
+    } else {
+        return boost::system::error_code(static_cast<int>(error), error_category);
+    }
 }
 
 } // namespace bridge

@@ -1,4 +1,4 @@
-use std::{net::IpAddr, sync::Arc};
+use std::{net::IpAddr, pin::Pin, sync::Arc};
 
 use cxx::UniquePtr;
 use ffi::IpAddress;
@@ -8,6 +8,7 @@ use hickory_resolver::{
     proto::{ProtoError, ProtoErrorKind},
     IntoName, ResolveError, ResolveErrorKind, TokioResolver,
 };
+use tokio::task::JoinSet;
 
 use crate::runtime;
 
@@ -25,15 +26,17 @@ mod ffi {
         NotFound = 1,
         // Name server(s) busy, try again later
         Busy = 2,
+        // Operation cancelled
+        Cancelled = 3,
         // Other unspecified error
-        Other = 3,
+        Other = 4,
     }
 
     extern "Rust" {
         type Resolver;
 
         fn new_resolver() -> Box<Resolver>;
-        fn resolve(&self, name: &str, completer: UniquePtr<BasicCompleter>);
+        fn resolve(&mut self, name: &str, completer: UniquePtr<BasicCompleter>);
     }
 
     unsafe extern "C++" {
@@ -48,6 +51,7 @@ mod ffi {
 /// DNS resolver.
 pub struct Resolver {
     inner: Arc<TokioResolver>,
+    tasks: JoinSet<()>,
 }
 
 impl Resolver {
@@ -67,41 +71,73 @@ impl Resolver {
 
         Self {
             inner: Arc::new(inner),
+            tasks: JoinSet::new(),
         }
     }
 
     /// Asynchronously resolve the given DNS name and invoke `completer` with the resolved ip
     /// addresses or error.
-    fn resolve(&self, name: &str, mut completer: UniquePtr<ffi::BasicCompleter>) {
+    fn resolve(&mut self, name: &str, mut completer: UniquePtr<ffi::BasicCompleter>) {
         let name = name.into_name();
         let inner = self.inner.clone();
 
-        runtime::handle().spawn(async move {
-            let completer = completer.pin_mut();
+        self.tasks.spawn_on(
+            async move {
+                let completer = completer.pin_mut();
 
-            let name = match name {
-                Ok(name) => name,
-                Err(error) => {
-                    completer.complete(ffi::Error::from(&error), vec![]);
-                    return;
-                }
-            };
+                let name = match name {
+                    Ok(name) => name,
+                    Err(error) => {
+                        completer.complete(ffi::Error::from(&error), vec![]);
+                        return;
+                    }
+                };
 
-            match inner.lookup_ip(name).await {
-                Ok(lookup) => {
-                    completer
-                        .complete(ffi::Error::Ok, lookup.iter().map(IpAddress::from).collect());
+                let cancel_guard = CancelGuard::new(completer);
+                let result = inner.lookup_ip(name).await;
+                let completer = cancel_guard.release();
+
+                match result {
+                    Ok(lookup) => {
+                        completer
+                            .complete(ffi::Error::Ok, lookup.iter().map(IpAddress::from).collect());
+                    }
+                    Err(error) => {
+                        completer.complete(ffi::Error::from(&error), vec![]);
+                    }
                 }
-                Err(error) => {
-                    completer.complete(ffi::Error::from(&error), vec![]);
-                }
-            }
-        });
+            },
+            runtime::handle(),
+        );
     }
 }
 
 fn new_resolver() -> Box<Resolver> {
     Box::new(Resolver::new())
+}
+
+struct CancelGuard<'a> {
+    completer: Option<Pin<&'a mut ffi::BasicCompleter>>,
+}
+
+impl<'a> CancelGuard<'a> {
+    fn new(completer: Pin<&'a mut ffi::BasicCompleter>) -> Self {
+        Self {
+            completer: Some(completer),
+        }
+    }
+
+    fn release(mut self) -> Pin<&'a mut ffi::BasicCompleter> {
+        self.completer.take().unwrap()
+    }
+}
+
+impl<'a> Drop for CancelGuard<'a> {
+    fn drop(&mut self) {
+        if let Some(completer) = self.completer.take() {
+            completer.complete(ffi::Error::Cancelled, vec![]);
+        }
+    }
 }
 
 impl From<IpAddr> for ffi::IpAddress {
