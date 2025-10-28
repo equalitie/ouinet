@@ -82,21 +82,21 @@ private:
 Resolver::Resolver() : _impl(bridge::new_resolver()) {}
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
-    if (_impl) {
-        return async_initiate<yield_context, void(error_code, Output)> (
-            [&name, this] (auto completion_handler) {
+    return async_initiate<yield_context, void(error_code, Output)> (
+        [&name, this] (auto completion_handler) {
+            if (_impl) {
                 using CompletionHandler = decltype(completion_handler);
 
                 (**_impl).resolve(
                     name,
                     std::make_unique<bridge::Completer<CompletionHandler>>(std::move(completion_handler))
                 );
-            },
-            yield
-        );
-    } else {
-        throw system_error(error::operation_aborted);
-    }
+            } else {
+                completion_handler(error::operation_aborted, {});
+            }
+        },
+        yield
+    );
 }
 
 void Resolver::close() {
