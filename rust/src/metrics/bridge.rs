@@ -148,8 +148,16 @@ fn new_client(
     #[expect(clippy::boxed_local)] encryption_key: Box<EncryptionKey>,
 ) -> Box<Client> {
     logger::init_idempotent();
+
+    let runtime = runtime::handle().clone();
+
     stop_current_client();
-    Box::new(Client::new(PathBuf::from(store_path), *encryption_key))
+
+    Box::new(Client::new(
+        runtime,
+        PathBuf::from(store_path),
+        *encryption_key,
+    ))
 }
 
 // -------------------------------------------------------------------
@@ -159,19 +167,17 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
-        let runtime_handle = runtime::handle();
-
+    fn new(runtime: runtime::Handle, store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
 
-        let collector = Arc::new(Mutex::new(Collector::new()));
-        let store = runtime_handle.block_on(Store::new(store_path, encryption_key));
+        let collector = Arc::new(Mutex::new(Collector::new(&runtime)));
+        let store = runtime.block_on(Store::new(store_path, encryption_key));
 
         let (runner, record_id_rx) = match store {
             Ok(store) => {
                 let collector = collector.clone();
                 let record_id_rx = store.record_id.subscribe();
-                let job_handle = runtime_handle.spawn(async move {
+                let job_handle = runtime.spawn(async move {
                     metrics_runner(collector, store, processor_rx).await;
                 });
 
@@ -193,6 +199,7 @@ impl Client {
 
         Self {
             inner: Arc::new(ClientInner {
+                runtime,
                 runner: Mutex::new(runner),
                 collector,
                 record_id_rx,
@@ -270,6 +277,7 @@ impl Client {
 }
 
 struct ClientInner {
+    runtime: runtime::Handle,
     runner: Mutex<Option<Runner>>,
     collector: Arc<Mutex<Collector>>,
     record_id_rx: watch::Receiver<RecordId>,
@@ -331,10 +339,16 @@ impl ClientInner {
         // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
         drop(processor_tx);
 
+        // Enter the async runtime so we can use `tokio::time::timeout`.
+        let _enter = self.runtime.enter();
+
         // TODO: The C++ code itself does some deinitialization with a timeout and the code in this
         // function happens only after that is finished. Consider doing this session
         // deinitialization concurrently with the C++ code.
-        match runtime::handle().block_on(time::timeout(Duration::from_secs(5), &mut job_handle)) {
+        match self
+            .runtime
+            .block_on(time::timeout(Duration::from_secs(5), &mut job_handle))
+        {
             Ok(_) => (),
             Err(_) => {
                 log::warn!("Metrics runner failed to finish within 5 seconds");

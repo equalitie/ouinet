@@ -1,5 +1,7 @@
 use std::sync::LazyLock;
-use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::runtime::{Builder, Runtime};
+
+pub(crate) use tokio::runtime::Handle;
 
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     // TODO: Handle failures more gracefully than panicking.

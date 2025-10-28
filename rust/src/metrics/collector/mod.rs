@@ -13,6 +13,7 @@ use chrono::{Datelike, Timelike};
 pub use request::Requests;
 use serde_json::json;
 use std::sync::Arc;
+use tokio::runtime;
 
 #[derive(Clone, Copy, Debug)]
 pub enum IpVersion {
@@ -30,8 +31,9 @@ pub struct Collector {
 }
 
 impl Collector {
-    pub fn new() -> Self {
+    pub fn new(runtime: &runtime::Handle) -> Self {
         let on_modify_tx = Arc::new(ConstantBackoffWatchSender::new(
+            runtime,
             constants::RECORD_WRITE_CONSTANT_BACKOFF,
         ));
 

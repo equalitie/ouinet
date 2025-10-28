@@ -324,6 +324,7 @@ mod tests {
     use crate::logger;
     use std::collections::BTreeSet;
     use tmpdir::TmpDir;
+    use tokio::runtime;
 
     struct Setup {
         _tmpdir: TmpDir,
@@ -341,7 +342,7 @@ mod tests {
             let ek = EncryptionKey::from(&dk);
             let store = Store::new(tmpdir.as_ref().into(), ek).await.unwrap();
             let event_handler = EventHandler::new();
-            let collector = Mutex::new(Collector::new());
+            let collector = Mutex::new(Collector::new(&runtime::Handle::current()));
 
             Self {
                 _tmpdir: tmpdir,
