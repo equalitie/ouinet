@@ -97,8 +97,7 @@ private:
 Resolver::Resolver() : _impl(bridge::new_resolver()) {}
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
-    auto cancellation_state = yield.get_cancellation_state();
-    auto cancellation_slot = cancellation_state.slot();
+    auto cancellation_slot = yield.get_cancellation_slot();
 
     return async_initiate<yield_context, void(error_code, Output)> (
         [
