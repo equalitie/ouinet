@@ -6,6 +6,7 @@ windows / build:
   tags:
     - windows-shell
   script:
+    - $env:CMAKE_POLICY_VERSION_MINIMUM = '3.5'
     - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
     - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
     - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
