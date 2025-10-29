@@ -187,6 +187,7 @@ file(GLOB ouinet_common_sources
     "./src/ouiservice/multi_utp_server.cpp"
     "./src/util/persistent_lru_cache.cpp"
     "./src/endpoint.cpp"
+    "./src/request.cpp"
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     ${EXPERIMENTAL_SOURCES}

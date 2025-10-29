@@ -426,7 +426,7 @@ private:
     // Ouinet-specific internal HTTP headers as expected by upper layers.
 
     CacheEntry
-    fetch_stored_in_dcache( const Request& request
+    fetch_stored_in_dcache( const CacheRequest& request
                           , const request_route::Config& request_config
                           , const std::string& dht_group
                           , Cancel& cancel
@@ -455,9 +455,8 @@ private:
                                              , Cancel&
                                              , OuinetYield);
 
-    Session fetch_fresh_through_simple_proxy( Request
+    Session fetch_fresh_through_simple_proxy( PublicInjectorRequest
                                             , const CacheEntry* cached
-                                            , bool can_inject
                                             , metrics::Request
                                             , Cancel& cancel
                                             , OuinetYield);
@@ -811,7 +810,7 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
 
 //------------------------------------------------------------------------------
 CacheEntry
-Client::State::fetch_stored_in_dcache( const Request& request
+Client::State::fetch_stored_in_dcache( const CacheRequest& request
                                      , const request_route::Config& request_config
                                      , const std::string& dht_group
                                      , Cancel& cancel
@@ -839,10 +838,10 @@ Client::State::fetch_stored_in_dcache( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto key = key_from_http_req(request);
+    auto key = key_from_http_req(request.header());
     if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
 
-    auto s = c->load( move(*key), dht_group, request.method() == http::verb::head
+    auto s = c->load( move(*key), dht_group, request.header().method() == http::verb::head
                     , _metrics
                     , timeout_cancel, yield[ec].tag("load"));
 
@@ -917,6 +916,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     _YDEBUG(yield, "Sending a request to self");
     // Send request
     yield[ec].tag("write_self_req").run([&] (auto y) {
+        request.prepare_payload();
         http::async_write(con, request, y);
     });
 
@@ -1304,6 +1304,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
     // Open a tunnel to the origin
     // (to later perform the SSL handshake and send the request).
     yield[ec].tag("connreq").run([&] (auto y) {
+        connreq.prepare_payload();
         util::http_request(inj.connection, connreq, timeout_cancel, y);
     });
 
@@ -1399,9 +1400,9 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_through_simple_proxy
-        ( Request request
+        ( PublicInjectorRequest request
         , const CacheEntry* cached
-        , bool can_inject
+        //, bool can_inject
         , metrics::Request metrics
         , Cancel& cancel
         , OuinetYield yield)
@@ -1414,18 +1415,18 @@ Session Client::State::fetch_fresh_through_simple_proxy
     sys::error_code ec;
 
     // Build the actual request to send to the injector (auth added below).
-    if (can_inject) {
-        bool keepalive = request.keep_alive();
-        auto irq = util::to_injector_request(move(request));
-        if (!irq) {
-            _YERROR(yield, "Invalid request");
-            return or_throw<Session>(yield, asio::error::invalid_argument);
-        }
-        request = move(*irq);
-        request.keep_alive(keepalive);
-    } else {
-        util::remove_ouinet_fields_ref(request);  // avoid accidental injection
-    }
+    //if (can_inject) {
+    //    bool keepalive = request.keep_alive();
+    //    auto irq = util::to_injector_request(move(request));
+    //    if (!irq) {
+    //        _YERROR(yield, "Invalid request");
+    //        return or_throw<Session>(yield, asio::error::invalid_argument);
+    //    }
+    //    request = move(*irq);
+    //    request.keep_alive(keepalive);
+    //} else {
+    //    util::remove_ouinet_fields_ref(request);  // avoid accidental injection
+    //}
 
     // Connect to the injector.
     // TODO: Maybe refactor with `fetch_via_self`.
@@ -1469,19 +1470,19 @@ Session Client::State::fetch_fresh_through_simple_proxy
     });
 
     if (auto credentials = _config.credentials_for(*con))
-        authorize(request, *credentials);
+        request.authorize(*credentials);
 
     if (_metrics.is_enabled()) {
         if (auto druid = _metrics.current_device_id()) {
             // Add DRUID header to the request sent to the injector
-            request.set(http_::request_druid_hdr, *druid);
+            request.set_druid(*druid);
         }
     }
 
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request
     yield[ec].tag("write_injector_req").run([&] (auto y) {
-        http::async_write(con, request, y);
+        request.async_write(con, y);
     });
 
     if (ec = compute_error_code(ec, cancel, watch_dog)) {
@@ -1496,7 +1497,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Receive response
     auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
-        return Session::create( move(con), request.method() == http::verb::head
+        return Session::create( move(con), request.header().method() == http::verb::head
                               , move(metrics)
                               , timeout_cancel, y);
     });
@@ -1505,7 +1506,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     ec = compute_error_code(ec, cancel, watch_dog);
     if ( !ec
-         && can_inject
+         && request.can_inject()
          && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
         // This is treated like the Injector mechanism being disabled.
         _YWARN(yield, "Injector is using an unacceptable protocol version: ", hdr);
@@ -1518,7 +1519,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Store keep-alive connections in connection pool
 
-    if (can_inject) {
+    if (request.can_inject()) {
         maybe_add_proto_version_warning(hdr);
 
         hdr.set(http_::response_source_hdr, http_::response_source_hdr_injector);  // for agent
@@ -1715,7 +1716,7 @@ public:
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] ( const Request& rq
+        cc.fetch_fresh = [&] ( const CacheRequest& rq
                              , const CacheEntry* cached
                              , Cancel& cancel, OuinetYield yield_) {
             auto yield = yield_.tag("injector");
@@ -1734,7 +1735,6 @@ public:
             sys::error_code ec;
             auto s = client_state.fetch_fresh_through_simple_proxy( rq
                                                                   , cached
-                                                                  , true
                                                                   , move(metrics)
                                                                   , cancel
                                                                   , yield[ec]);
@@ -1749,7 +1749,7 @@ public:
         };
 
         //------------------------------------------------------------
-        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, OuinetYield yield_) {
+        cc.fetch_stored = [&] (const CacheRequest& rq, const std::string& dht_group, Cancel& cancel, OuinetYield yield_) {
             auto yield = yield_.tag("cache");
 
             _YDEBUG(yield, "Start");
@@ -1833,8 +1833,11 @@ public:
         else {
             auto metrics = client_state._metrics.new_public_injector_request();
 
-            session = client_state.fetch_fresh_through_simple_proxy
-                    (rq, nullptr, false, std::move(metrics), cancel, yield[ec]);
+            session = client_state.fetch_fresh_through_simple_proxy(
+                    InsecureRequest(std::move(rq)),
+                    nullptr,
+                    std::move(metrics),
+                    cancel, yield[ec]);
         }
 
         _YDEBUG(yield, "Proxy fetch; ec=", ec);
@@ -1857,10 +1860,16 @@ public:
 
         _YDEBUG(yield, "Start");
 
-        const auto& rq   = tnx.request();
+        const auto rq = CacheRequest::from(tnx.request());
+
+        if (!rq) {
+            _YERROR(yield, "Invalid request");
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+
         const auto& meta = tnx.meta();
 
-        auto session = cc.fetch( rq, meta.dht_group, fresh_ec, cache_ec
+        auto session = cc.fetch( *rq, meta.dht_group, fresh_ec, cache_ec
                                , cancel, yield[ec].tag("cc_fetch"));
         _YDEBUG( yield.tag("cc_fetch")
                , "Done; ec=", ec, " fresh_ec=", fresh_ec, " cache_ec=", cache_ec);
@@ -1897,9 +1906,9 @@ public:
         bool do_cache =
             ( cache
             && meta.dht_group
-            && rq.method() == http::verb::get  // TODO: storing HEAD response not yet supported
+            && rq->header().method() == http::verb::get  // TODO: storing HEAD response not yet supported
             && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
-            && CacheControl::ok_to_cache( rq, rsh, client_state._config.do_cache_private()
+            && CacheControl::ok_to_cache( rq->header(), rsh, client_state._config.do_cache_private()
                                         , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
 
         if (do_cache) {
@@ -1907,7 +1916,7 @@ public:
                 &, cache = std::move(cache),
                 lock = wc.lock()
             ] (asio::yield_context yield_) {
-                auto key = key_from_http_req(rq); assert(key);
+                auto key = key_from_http_req(rq->header()); assert(key);
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;
                 yield.detach(yield_)[ec].run([&] (auto y) {
@@ -2730,7 +2739,7 @@ void Client::State::serve_request( GenericStream&& con
             size_t index = ua.find("X-Ouinet-Private");
             if (index != std::string::npos ){
                 req.set(http::field::user_agent, ua.substr(0, index));
-                req.set(http_::request_private_hdr, "true");
+                req.set(http_::request_private_hdr, http_::request_private_true);
             }
         }
 #endif

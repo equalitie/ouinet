@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/beast/core/detail/base64.hpp>
+#include <boost/beast/version.hpp>
 #include "namespaces.h"
 #include "generic_stream.h"
 #include "http_util.h"
@@ -84,9 +85,6 @@ void authorize( Request& req
     std::string c = ouinet::util::base64_encode(credentials);
 
     req.set(http::field::proxy_authorization, "Basic " + c);
-
-    // TODO: This shouldn't be here
-    req.prepare_payload();
 }
 
 } // ouinet namespace

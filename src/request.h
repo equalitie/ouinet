@@ -1,6 +1,10 @@
 #pragma once
 
+#include <boost/asio/spawn.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/beast/http/empty_body.hpp>
+#include <boost/beast/http/write.hpp>
+#include <boost/beast/http/string_body.hpp>
 #include "namespaces.h"
 
 namespace ouinet {
@@ -19,15 +23,21 @@ public:
     }
 
     void authorize(std::string_view credentials);
+    void set_druid(std::string_view druid);
+    void set_if_none_match(std::string_view if_none_match);
+    bool can_inject() const { return true; }
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) const {
-        http::request<http::empty_body> msg(_header, http::empty_body());
+    void async_write(WriteStream& con, asio::yield_context yield) {
+        http::request<http::empty_body> msg(_header);
         msg.prepare_payload();
         http::async_write(con, msg, yield);
     }
 
 private:
+    CacheRequest(http::request_header<> header) :
+        _header(std::move(header)) {}
+
     http::request_header<> _header;
 };
 
@@ -43,9 +53,12 @@ public:
     }
 
     void authorize(std::string_view credentials);
+    void set_druid(std::string_view druid);
+    bool can_inject() const { return false; }
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) const {
+    void async_write(WriteStream& con, asio::yield_context yield) {
+        _request.prepare_payload();
         http::async_write(con, _request, yield);
     }
 
@@ -65,17 +78,19 @@ public:
         Base(std::forward<Alternative>(alt))
     {}
 
+    const http::request_header<>& header() const;
+
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) const {
+    void async_write(WriteStream& con, asio::yield_context yield) {
         std::visit(
-            [&] (auto&& alt) { alt.async_write(con, yield); },
-            static_cast<const Base&>(*this)
+            [&] (auto& alt) { alt.async_write(con, yield); },
+            static_cast<Base&>(*this)
         );
     }
 
     void authorize(std::string_view credentials);
-
     void set_druid(std::string_view druid);
+    bool can_inject() const;
 };
 
 } // namespace ouinet

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <boost/beast/http/message.hpp>
+#include <boost/beast/core/string_type.hpp>
+#include <boost/beast/http/rfc7230.hpp>
+#include <boost/beast/http/field.hpp>
 #include "namespaces.h"
 
 namespace ouinet::util {
@@ -27,6 +30,21 @@ get_keep_alive(http::request_header<Fields> const& rq)
         return true;
     return ! http::token_list{
         it->value()}.exists("close");
+}
+
+template<class Fields>
+void
+set_keep_alive(http::request_header<Fields>& rq, bool keep_alive)
+{
+    auto const value = rq[http::field::connection];
+    beast::detail::temporary_buffer buf;
+
+    boost::beast::http::detail::keep_alive_impl(buf, value, rq.version(), keep_alive);
+
+    if(buf.empty())
+        rq.erase(boost::beast::http::field::connection);
+    else
+        rq.set(boost::beast::http::field::connection, buf.view());
 }
 
 } // namespace ouinet::util
