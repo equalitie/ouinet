@@ -18,7 +18,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11.17"
 serde_json = "1.0.138"
 thiserror = "2.0.11"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "fs", "macros", "io-util"] }
+tokio = { version = "1.48", features = ["rt-multi-thread", "sync", "time", "fs", "macros", "io-util"] }
 x25519-dalek = { version = "2.0.1", features = ["getrandom"] }
 uuid = { version = "1.13.1", features = ["v4", "serde"] }
 

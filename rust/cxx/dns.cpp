@@ -33,12 +33,25 @@ ErrorCategory error_category;
 
 namespace bridge {
 
+BasicCompleter::BasicCompleter(cancellation_slot&& cancellation_slot) :
+    _cancellation_slot(std::move(cancellation_slot))
+{}
+
+void BasicCompleter::on_cancel(rust::Box<CancellationToken> token) {
+    if (_cancellation_slot.is_connected()) {
+        _cancellation_slot.assign([token = std::move(token)](auto cancellation_type) {
+            token->cancel();
+        });
+    }
+}
+
 template<typename CompletionHandler>
 class Completer : public BasicCompleter {
 public:
     using WorkGuard = executor_work_guard<typename associated_executor<CompletionHandler>::type>;
 
-    Completer(CompletionHandler&& handler) :
+    Completer(cancellation_slot&& cancellation_slot, CompletionHandler&& handler) :
+        BasicCompleter(std::move(cancellation_slot)),
         _work_guard(make_work_guard(handler)),
         _handler(std::move(handler))
     {}
@@ -84,18 +97,30 @@ private:
 Resolver::Resolver() : _impl(bridge::new_resolver()) {}
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
-    return async_initiate<yield_context, void(error_code, Output)> (
-        [&name, this] (auto completion_handler) {
-            if (_impl) {
-                using CompletionHandler = decltype(completion_handler);
+    auto cancellation_state = yield.get_cancellation_state();
+    auto cancellation_slot = cancellation_state.slot();
 
-                (**_impl).resolve(
-                    name,
-                    std::make_unique<bridge::Completer<CompletionHandler>>(std::move(completion_handler))
-                );
-            } else {
+    return async_initiate<yield_context, void(error_code, Output)> (
+        [
+            this,
+            &name,
+            cancellation_slot = std::move(cancellation_slot)
+        ] (auto completion_handler) mutable {
+            if (!_impl) {
                 completion_handler(error::operation_aborted, {});
+                return;
             }
+
+            using CompletionHandler = decltype(completion_handler);
+            using Completer = bridge::Completer<CompletionHandler>;
+
+            (**_impl).resolve(
+                name,
+                std::make_unique<Completer>(
+                    std::move(cancellation_slot),
+                    std::move(completion_handler)
+                )
+            );
         },
         yield
     );

@@ -1,4 +1,4 @@
-use std::{net::IpAddr, pin::Pin, sync::Arc};
+use std::{future::Future, net::IpAddr, sync::Arc};
 
 use cxx::UniquePtr;
 use ffi::IpAddress;
@@ -8,7 +8,7 @@ use hickory_resolver::{
     proto::{ProtoError, ProtoErrorKind},
     IntoName, ResolveError, ResolveErrorKind, TokioResolver,
 };
-use tokio::task::JoinSet;
+use tokio::{select, sync::Notify, task::JoinSet};
 
 use crate::runtime;
 
@@ -39,12 +39,18 @@ mod ffi {
         fn resolve(&mut self, name: &str, completer: UniquePtr<BasicCompleter>);
     }
 
+    extern "Rust" {
+        type CancellationToken;
+        fn cancel(&self);
+    }
+
     unsafe extern "C++" {
         include!("cxx/dns.h");
 
         type BasicCompleter;
 
         fn complete(self: Pin<&mut BasicCompleter>, error: Error, addrs: Vec<IpAddress>);
+        fn on_cancel(self: Pin<&mut BasicCompleter>, token: Box<CancellationToken>);
     }
 }
 
@@ -84,30 +90,46 @@ impl Resolver {
         // Clean up completed tasks
         while self.tasks.try_join_next().is_some() {}
 
+        let (cancellation_token, cancelled) = CancellationToken::new();
+        completer.pin_mut().on_cancel(Box::new(cancellation_token));
+
+        let cancellation_guard = CancellationGuard::new(completer);
+
+        let task = async move {
+            let name = match name {
+                Ok(name) => name,
+                Err(error) => {
+                    cancellation_guard
+                        .release()
+                        .pin_mut()
+                        .complete(ffi::Error::from(&error), vec![]);
+                    return;
+                }
+            };
+
+            let result = inner.lookup_ip(name).await;
+
+            let mut completer = cancellation_guard.release();
+
+            match result {
+                Ok(lookup) => {
+                    completer
+                        .pin_mut()
+                        .complete(ffi::Error::Ok, lookup.iter().map(IpAddress::from).collect());
+                }
+                Err(error) => {
+                    completer
+                        .pin_mut()
+                        .complete(ffi::Error::from(&error), vec![]);
+                }
+            }
+        };
+
         self.tasks.spawn_on(
             async move {
-                let completer = completer.pin_mut();
-
-                let name = match name {
-                    Ok(name) => name,
-                    Err(error) => {
-                        completer.complete(ffi::Error::from(&error), vec![]);
-                        return;
-                    }
-                };
-
-                let cancel_guard = CancelGuard::new(completer);
-                let result = inner.lookup_ip(name).await;
-                let completer = cancel_guard.release();
-
-                match result {
-                    Ok(lookup) => {
-                        completer
-                            .complete(ffi::Error::Ok, lookup.iter().map(IpAddress::from).collect());
-                    }
-                    Err(error) => {
-                        completer.complete(ffi::Error::from(&error), vec![]);
-                    }
+                select! {
+                    _ = task => (),
+                    _ = cancelled => (),
                 }
             },
             runtime::handle(),
@@ -119,26 +141,43 @@ fn new_resolver() -> Box<Resolver> {
     Box::new(Resolver::new())
 }
 
-struct CancelGuard<'a> {
-    completer: Option<Pin<&'a mut ffi::BasicCompleter>>,
+// Cancels the operation if cancellation has been triggered by the caller.
+struct CancellationToken(Arc<Notify>);
+
+impl CancellationToken {
+    fn new() -> (Self, impl Future<Output = ()>) {
+        let notify = Arc::new(Notify::new());
+        let notified = notify.clone().notified_owned();
+
+        (Self(notify), notified)
+    }
+
+    fn cancel(&self) {
+        self.0.notify_waiters();
+    }
 }
 
-impl<'a> CancelGuard<'a> {
-    fn new(completer: Pin<&'a mut ffi::BasicCompleter>) -> Self {
+// Triggers the completer with `Error::Cancelled` if the task has been dropped before completion.
+struct CancellationGuard {
+    completer: Option<UniquePtr<ffi::BasicCompleter>>,
+}
+
+impl CancellationGuard {
+    fn new(completer: UniquePtr<ffi::BasicCompleter>) -> Self {
         Self {
             completer: Some(completer),
         }
     }
 
-    fn release(mut self) -> Pin<&'a mut ffi::BasicCompleter> {
+    fn release(mut self) -> UniquePtr<ffi::BasicCompleter> {
         self.completer.take().unwrap()
     }
 }
 
-impl<'a> Drop for CancelGuard<'a> {
+impl Drop for CancellationGuard {
     fn drop(&mut self) {
-        if let Some(completer) = self.completer.take() {
-            completer.complete(ffi::Error::Cancelled, vec![]);
+        if let Some(mut completer) = self.completer.take() {
+            completer.pin_mut().complete(ffi::Error::Cancelled, vec![]);
         }
     }
 }

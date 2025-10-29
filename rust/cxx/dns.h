@@ -54,7 +54,14 @@ namespace bridge {
 
 class BasicCompleter {
 public:
+    explicit BasicCompleter(boost::asio::cancellation_slot&&);
+
     virtual void complete(Error error_code, rust::Vec<IpAddress> addresses) = 0;
+
+    void on_cancel(rust::Box<CancellationToken>);
+
+private:
+    boost::asio::cancellation_slot _cancellation_slot;
 };
 
 inline boost::system::error_code make_error_code(Error error) noexcept {

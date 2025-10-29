@@ -1,6 +1,7 @@
 #define BOOST_TEST_MODULE utility
 #include <boost/test/included/unit_test.hpp>
 
+#include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/spawn.hpp>
 #include "cxx/dns.h"
 #include "task.h"
@@ -14,7 +15,7 @@ BOOST_AUTO_TEST_SUITE(ouinet_dns)
 BOOST_AUTO_TEST_CASE(valid_name) {
     io_context ctx;
 
-    spawn(ctx, [] (yield_context yield) {
+    spawn(ctx, [](yield_context yield) {
         dns::Resolver resolver;
 
         auto expected = ip::address_v4({23, 215, 0, 136});
@@ -31,7 +32,7 @@ BOOST_AUTO_TEST_CASE(valid_name) {
 BOOST_AUTO_TEST_CASE(invalid_name) {
     io_context ctx;
 
-    spawn(ctx, [] (yield_context yield) {
+    spawn(ctx, [](yield_context yield) {
         dns::Resolver resolver;
 
         BOOST_REQUIRE_EXCEPTION(
@@ -48,12 +49,12 @@ BOOST_AUTO_TEST_CASE(invalid_name) {
     ctx.run();
 }
 
-BOOST_AUTO_TEST_CASE(cancellation) {
+BOOST_AUTO_TEST_CASE(cancellation_per_object) {
     io_context ctx;
 
     dns::Resolver resolver;
 
-    spawn(ctx, [&resolver] (yield_context yield) {
+    spawn(ctx, [&](yield_context yield) {
         BOOST_REQUIRE_EXCEPTION(
             resolver.resolve("example.com", yield),
             system_error,
@@ -65,7 +66,39 @@ BOOST_AUTO_TEST_CASE(cancellation) {
         if (e) std::rethrow_exception(e);
     });
 
-    resolver.close();
+    post(ctx, [&]() {
+        resolver.close();
+    });
+
+    ctx.run();
+}
+
+BOOST_AUTO_TEST_CASE(cancellation_per_operation) {
+    io_context ctx;
+
+    auto cancellation_signal = asio::cancellation_signal();
+
+    spawn(
+        ctx,
+        [&](yield_context yield) {
+            dns::Resolver resolver;
+
+            BOOST_REQUIRE_EXCEPTION(
+                resolver.resolve("example.com", yield),
+                system_error,
+                [](auto e) {
+                    return e.code() == error::operation_aborted;
+                }
+            );
+        },
+        bind_cancellation_slot(cancellation_signal.slot(), [](auto e) {
+            if (e) std::rethrow_exception(e);
+        })
+    );
+
+    post(ctx, [&]() {
+        cancellation_signal.emit(cancellation_type::all);
+    });
 
     ctx.run();
 }
