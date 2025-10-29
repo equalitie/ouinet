@@ -149,15 +149,9 @@ fn new_client(
 ) -> Box<Client> {
     logger::init_idempotent();
 
-    let runtime = runtime::handle().clone();
-
     stop_current_client();
 
-    Box::new(Client::new(
-        runtime,
-        PathBuf::from(store_path),
-        *encryption_key,
-    ))
+    Box::new(Client::new(PathBuf::from(store_path), *encryption_key))
 }
 
 // -------------------------------------------------------------------
@@ -167,7 +161,9 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(runtime: runtime::Handle, store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
+    fn new(store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
+        let runtime = runtime::handle();
+
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
 
         let collector = Arc::new(Mutex::new(Collector::new(&runtime)));
@@ -199,7 +195,6 @@ impl Client {
 
         Self {
             inner: Arc::new(ClientInner {
-                runtime,
                 runner: Mutex::new(runner),
                 collector,
                 record_id_rx,
@@ -277,7 +272,6 @@ impl Client {
 }
 
 struct ClientInner {
-    runtime: runtime::Handle,
     runner: Mutex<Option<Runner>>,
     collector: Arc<Mutex<Collector>>,
     record_id_rx: watch::Receiver<RecordId>,
@@ -340,15 +334,13 @@ impl ClientInner {
         drop(processor_tx);
 
         // Enter the async runtime so we can use `tokio::time::timeout`.
-        let _enter = self.runtime.enter();
+        let runtime = runtime::handle();
+        let _enter = runtime.enter();
 
         // TODO: The C++ code itself does some deinitialization with a timeout and the code in this
         // function happens only after that is finished. Consider doing this session
         // deinitialization concurrently with the C++ code.
-        match self
-            .runtime
-            .block_on(time::timeout(Duration::from_secs(5), &mut job_handle))
-        {
+        match runtime.block_on(time::timeout(Duration::from_secs(5), &mut job_handle)) {
             Ok(_) => (),
             Err(_) => {
                 log::warn!("Metrics runner failed to finish within 5 seconds");
