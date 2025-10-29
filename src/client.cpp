@@ -32,6 +32,7 @@
 #include "async_sleep.h"
 #include "or_throw.h"
 #include "request_routing.h"
+#include "request.h"
 #include "full_duplex_forward.h"
 #include "client_config.h"
 #include "client.h"
@@ -909,7 +910,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
     // Build the actual request to send to self.
     if (!_config.client_credentials().empty())
-        request = authorize(request, _config.client_credentials());
+        authorize(request, _config.client_credentials());
     request.keep_alive(true);
     meta.apply_to(request);
 
@@ -1298,7 +1299,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
     connreq.set(http::field::host, connreq.target());
 
     if (auto credentials = _config.credentials_for(inj.remote_endpoint))
-        connreq = authorize(connreq, *credentials);
+        authorize(connreq, *credentials);
 
     // Open a tunnel to the origin
     // (to later perform the SSL handshake and send the request).
@@ -1468,7 +1469,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     });
 
     if (auto credentials = _config.credentials_for(*con))
-        request = authorize(request, *credentials);
+        authorize(request, *credentials);
 
     if (_metrics.is_enabled()) {
         if (auto druid = _metrics.current_device_id()) {
