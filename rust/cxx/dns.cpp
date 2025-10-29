@@ -21,6 +21,8 @@ std::string ErrorCategory::message(int ev) const {
         return "Not found";
     case Error::Busy:
         return "Busy";
+    case Error::Cancelled:
+        return "Cancelled";
     case Error::Other:
     default:
         return "Other error";
