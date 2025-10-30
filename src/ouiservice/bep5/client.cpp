@@ -299,11 +299,11 @@ public:
     {
         _injector_was_seen = true;
     }
+
     bool has_injector_been_seen()
     {
         return _injector_was_seen;
     }
-
 private:
     void loop(asio::yield_context yield) {
         Cancel cancel(_lifetime_cancel);
@@ -498,8 +498,8 @@ void Bep5Client::start(asio::yield_context yield)
     });
 }
 
-bool Bep5Client::is_ready() const noexcept{
-    return _injector_pinger -> has_injector_been_seen();
+size_t Bep5Client::injector_candidates_n() const noexcept {
+    return _injector_swarm -> peers().size();
 }
 
 void Bep5Client::stop()
