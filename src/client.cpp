@@ -56,11 +56,13 @@
 #include "ouiservice.h"
 #ifdef __EXPERIMENTAL__
 #  include "ouiservice/i2p.h"
+#endif // ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
 #  include "ouiservice/lampshade.h"
 #  include "ouiservice/pt-obfs2.h"
 #  include "ouiservice/pt-obfs3.h"
 #  include "ouiservice/pt-obfs4.h"
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -3193,7 +3195,7 @@ void Client::State::setup_injector(asio::yield_context yield)
             ec = {};
         }
     }
-#ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
 /*
     else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
         auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
@@ -3226,7 +3228,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         }
         client = std::move(obfs4_client);
     }
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
 
     _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
     _injector->add(*injector_ep, std::move(client));

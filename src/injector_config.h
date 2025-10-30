@@ -104,7 +104,7 @@ public:
     boost::optional<asio::ip::udp::endpoint> utp_tls_endpoint() const
     { return _utp_tls_endpoint; }
 
-#ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
     boost::optional<asio::ip::tcp::endpoint> lampshade_endpoint() const
     { return _lampshade_endpoint; }
 
@@ -116,7 +116,7 @@ public:
 
     boost::optional<asio::ip::tcp::endpoint> obfs4_endpoint() const
     { return _obfs4_endpoint; }
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
 
     boost::program_options::options_description
     options_description();
@@ -153,12 +153,12 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_tls_endpoint;
-#ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
     boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
     std::string _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
@@ -176,36 +176,47 @@ InjectorConfig::options_description()
 
     po::options_description desc("Options");
 
-    desc.add_options()
-        ("help", "Produce this help message")
-        ("repo", po::value<string>(), "Path to the repository root")
-        ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
-         , "Set log level: silly, debug, verbose, info, warn, error, abort")
-        ("enable-http-log-file"
-         , po::bool_switch()->default_value(false)
-         , "Enable logging of HTTP requests received via public mode"
-           " to log file \"" _HTTP_LOG_FILE_NAME "\" under the repository root")
-        ("bt-bootstrap-extra", po::value<std::vector<string>>()->composing()
-         , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
-           "to start the DHT (can be used several times). "
-           "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
-           "This option is persistent.")
+    desc.add_options()("help", "Produce this help message")(
+        "repo", po::value<string>(), "Path to the repository root")(
+        "log-level",
+        po::value<string>()->default_value(util::str(default_log_level())),
+        "Set log level: silly, debug, verbose, info, warn, error, abort")(
+        "enable-http-log-file", po::bool_switch()->default_value(false),
+        "Enable logging of HTTP requests received via public mode"
+        " to log file \"" _HTTP_LOG_FILE_NAME "\" under the repository root")(
+        "bt-bootstrap-extra", po::value<std::vector<string>>()->composing(),
+        "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
+        "to start the DHT (can be used several times). "
+        "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
+        "This option is persistent.")
 
         // Injector options
-        ("open-file-limit"
-         , po::value<unsigned int>()
-         , "To increase the maximum number of open files")
+        ("open-file-limit", po::value<unsigned int>(),
+         "To increase the maximum number of open files")
 
         // Transport options
-        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
-        ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
-        ("listen-on-utp", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (cleartext)")
-        ("listen-on-utp-tls", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (encrypted)")
+        ("listen-on-tcp", po::value<string>(),
+         "IP:PORT endpoint on which we'll listen (cleartext)")(
+            "listen-on-tcp-tls", po::value<string>(),
+            "IP:PORT endpoint on which we'll listen (encrypted)")(
+            "listen-on-utp", po::value<string>(),
+            "IP:PORT UDP endpoint on which we'll listen (cleartext)")(
+            "listen-on-utp-tls", po::value<string>(),
+            "IP:PORT UDP endpoint on which we'll listen (encrypted)")
+#ifdef __DEPRECATED__
+            ("listen-on-lampshade", po::value<string>(),
+             "IP:PORT endpoint on which we'll listen using the lampshade "
+             "pluggable transport")("listen-on-obfs2", po::value<string>(),
+                                    "IP:PORT endpoint on which we'll listen "
+                                    "using the obfs2 pluggable transport")(
+                "listen-on-obfs3", po::value<string>(),
+                "IP:PORT endpoint on which we'll listen using the obfs3 "
+                "pluggable transport")("listen-on-obfs4", po::value<string>(),
+                                       "IP:PORT endpoint on which we'll listen "
+                                       "using the obfs4 pluggable transport")
+#endif // ifdef __DEPRECATED__
 #ifdef __EXPERIMENTAL__
-        ("listen-on-lampshade", po::value<string>(), "IP:PORT endpoint on which we'll listen using the lampshade pluggable transport")
-        ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
-        ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
-        ("listen-on-obfs4", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs4 pluggable transport")
+        
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
@@ -394,7 +405,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _utp_tls_endpoint = ep;
     }
 
-#ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
     if (vm.count("listen-on-lampshade")) {
         _lampshade_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-lampshade"].as<string>());
     }
@@ -410,7 +421,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (vm.count("listen-on-obfs4")) {
         _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
     }
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
 
     // Please note that generating keys takes a long time
     // and it may cause time outs in CI tests.

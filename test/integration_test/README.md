@@ -20,7 +20,7 @@ $ python -m twisted.trial ./test_http.py
 
 or to run  a single test:
 ```
-$ python -m twisted.trial test_http.OuinetTests.test_i2p_i2cp_server
+$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport
 ```
 to run the speedtests, use:
 

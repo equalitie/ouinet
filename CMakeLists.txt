@@ -23,6 +23,8 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 
+option(WITH_DEPRECATED "Build with depricated features" OFF)
+
 ################################################################################
 # Global build flags
 if (WITH_ASAN)
@@ -109,21 +111,30 @@ if(WITH_EXPERIMENTAL)
             INTERFACE -D__EXPERIMENTAL__
     )
     add_subdirectory(./src/ouiservice/i2p)
+    set(EXPERIMENTAL_LIBRARIES
+            ouinet::ouiservice-i2p
+    )
+endif()
+
+###########################################################
+
+if(WITH_DEPRECATED)
+    target_compile_definitions(ouinet_dependencies
+            INTERFACE -D__DEPRECATED__
+    )
     #add_subdirectory(./src/ouiservice/lampshade)
     add_subdirectory(./src/ouiservice/obfs4proxy)
-    set(EXPERIMENTAL_SOURCES
-            #    "./src/ouiservice/lampshade.cpp"
+    set(DEPRECATED_SOURCES
+            "./src/ouiservice/lampshade.cpp"
             "./src/ouiservice/pt-obfs2.cpp"
             "./src/ouiservice/pt-obfs3.cpp"
             "./src/ouiservice/pt-obfs4.cpp"
             "./src/ouiservice/pluggable-transports/*.cpp"
     )
-    set(EXPERIMENTAL_LIBRARIES
-            #    ouinet::lampshade-asio
-            ouinet::ouiservice-i2p
+    set(DEPRECATED_LIBRARIES
+            ouinet::lampshade-asio
     )
 endif()
-
 ################################################################################
 # ouinet-rs (ouinet components written in rust)
 
@@ -190,6 +201,7 @@ file(GLOB ouinet_common_sources
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     ${EXPERIMENTAL_SOURCES}
+    ${DEPRECATED_SOURCES}
 )
 
 add_library(ouinet_common STATIC ${ouinet_common_sources})
@@ -200,6 +212,7 @@ target_link_libraries(ouinet_common
         lib::url
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
+        ${DEPRECATED_LIBRARIES}
     PUBLIC
         Boost::iostreams
         lib::gcrypt
@@ -263,6 +276,7 @@ if (WITH_INJECTOR)
         "./src/cache/http_sign.cpp"
         "./src/http_logger.cpp"
         ${EXPERIMENTAL_SOURCES}
+        ${DEPRECATED_SOURCES}
     )
 
     add_executable(injector ${injector_sources})
@@ -297,6 +311,8 @@ endif()
 ################################################################################
 # Tests
 if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+   if (NOT WITHOUT_TEST)
     add_subdirectory(test)
+    endif()
 endif()
 ################################################################################

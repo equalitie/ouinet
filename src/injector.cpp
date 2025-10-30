@@ -39,11 +39,13 @@
 #include "ouiservice.h"
 #ifdef __EXPERIMENTAL__
 #  include "ouiservice/i2p.h"
+#endif // ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
 #  include "ouiservice/lampshade.h"
 #  include "ouiservice/pt-obfs2.h"
 #  include "ouiservice/pt-obfs3.h"
 #  include "ouiservice/pt-obfs4.h"
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -956,7 +958,7 @@ int main(int argc, const char* argv[])
                 (move(dht), &ssl_context, config.bep5_injector_swarm_name()));
     }
 
-#ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
 /*
     if (config.lampshade_endpoint()) {
         tcp::endpoint endpoint = *config.lampshade_endpoint();
@@ -1009,6 +1011,8 @@ int main(int argc, const char* argv[])
         });
         proxy_server.add(std::move(server));
     }
+#endif // __DEPRECATED__    
+#ifdef __EXPERIMENTAL__    
 
     if (config.listen_on_i2p()) {
       auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());

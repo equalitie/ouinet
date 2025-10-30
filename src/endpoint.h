@@ -16,11 +16,13 @@ struct Endpoint {
 #endif
 #ifdef __EXPERIMENTAL__
         I2pEndpoint,
+#endif // ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
         LampshadeEndpoint,
         Obfs2Endpoint,
         Obfs3Endpoint,
         Obfs4Endpoint,
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
         Bep5Endpoint
     };
 

@@ -23,6 +23,8 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
 #ifdef __EXPERIMENTAL__
     } else if (type == "i2p") {
         output.type = Endpoint::I2pEndpoint;
+#endif // ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
     } else if (type == "lampshade") {
         output.type = Endpoint::LampshadeEndpoint;
     } else if (type == "obfs2") {
@@ -31,7 +33,7 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
         output.type = Endpoint::Obfs3Endpoint;
     } else if (type == "obfs4") {
         output.type = Endpoint::Obfs4Endpoint;
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef  __DEPRECATED__
     } else if (type == "bep5") {
         output.type = Endpoint::Bep5Endpoint;
     } else {
@@ -53,6 +55,8 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
 #ifdef __EXPERIMENTAL__
     } else if (ep.type == Endpoint::I2pEndpoint) {
         os << "i2p";
+#endif // ifdef __EXPERIMENTAL__
+#ifdef __DEPRECATED__
     } else if (ep.type == Endpoint::LampshadeEndpoint) {
         os << "lampshade";
     } else if (ep.type == Endpoint::Obfs2Endpoint) {
@@ -61,7 +65,7 @@ std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
         os << "obfs3";
     } else if (ep.type == Endpoint::Obfs4Endpoint) {
         os << "obfs4";
-#endif // ifdef __EXPERIMENTAL__
+#endif // ifdef __DEPRECATED__
     } else if (ep.type == Endpoint::Bep5Endpoint) {
         os << "bep5";
     } else {

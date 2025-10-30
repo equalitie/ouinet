@@ -1,6 +1,6 @@
 def loadCmakeArgs() {
     def envVarPrefix = "CMAKEARG_"
-    def allowedArguments = ['CMAKE_BUILD_TYPE', 'WITH_ASAN', 'WITH_EXPERIMENTAL']
+    def allowedArguments = ['CMAKE_BUILD_TYPE', 'WITH_ASAN', 'WITH_EXPERIMENTAL', 'WITH_DEPRECATED']
 
     def cmakeArgs = []
     for (envVarName in allowedArguments) {
