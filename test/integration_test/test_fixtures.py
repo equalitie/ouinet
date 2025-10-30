@@ -57,7 +57,7 @@ class TestFixtures:
     RESPONSE_LENGTH = 20
 
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
-    TCP_CLIENT = {"name": "tcp_client", "port": 8075}
+    TCP_CLIENT = {"name": "tcp_client", "port": 8075, "fe_port": 8078}
     TCP_CLIENT_PORT_READY_REGEX = r"[\s\S]*listening to browser requests[\s\S]*"
     TCP_CLIENT_DISCOVERY_START = (
         r"[\s\S]*LocalPeerDiscovery: starting with advertised endpoints[\s\S]*"
@@ -88,13 +88,13 @@ class TestFixtures:
     NO_OF_CACHED_MESSAGES_REQUIRED = 1
     RETRIEVED_FROM_CACHE_REGEX = r"[\s\S]*Response was retrieved from cache[\s\S]*"
     FRESH_SUCCESS_REGEX = r'[\s\S]*fresh/injector Finish; ec="Success"[\s\S]*'
-    DHT_CONTACTS_STORED_REGEX =  r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
+    DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
     MAX_NO_OF_TRIAL_CACHE_REQUESTS = 5
     TRIAL_CACHE_REQUESTS_WAIT = 20
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
-    INJECTOR_CERT_PATH = "" # will be filled during setup
+    INJECTOR_CERT_PATH = ""  # will be filled during setup
     INJECTOR_CERTIFICATE = """
 -----BEGIN CERTIFICATE-----
 MIICyTCCAbGgAwIBAgIGAWwvE3jIMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
@@ -114,4 +114,3 @@ AzZPXqk+2eab43GbbD6keXRGIufMThKGyrRX+9aIaV3tx3uWAOfWVmlzf9w3gV3D
 lmjPSOXmUsOLk0PFwoy7O7n9zJKNrUy1N2O+j0tH5HVXOnSjpS8aNrMtpfHS
 -----END CERTIFICATE-----
 """
-

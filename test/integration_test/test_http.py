@@ -12,6 +12,7 @@ import logging
 import time
 from time import sleep  # XXX: remove later
 import tempfile
+
 # Making random requests not to rely on cache
 import random
 
@@ -40,7 +41,8 @@ from ouinet_process_controler import (
 )
 
 from test_fixtures import TestFixtures
-from test_http_server import TestHttpServer
+from test_http_server import spawn_http_server
+from multiprocessing import Process
 
 
 class OuinetTests(TestCase):
@@ -72,6 +74,8 @@ class OuinetTests(TestCase):
             file.flush()
             # it will be deleted otherwise but we do not want it to be deleted yet
             rename(file.name, TestFixtures.INJECTOR_CERT_PATH)
+
+        self.server: Process = spawn_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
 
     def safe_random_str(self, length):
         letters = string.ascii_lowercase
@@ -134,48 +138,18 @@ class OuinetTests(TestCase):
 
         return client
 
-    def run_http_server(self, port):
-        return TestHttpServer(port)
-
-    def request_echo(self, port, content):
+    def request_echo(self, proxy_port, echo_content):
         """
         Send a get request to request the test server to echo the content
         """
         url = "http://%s:%d/?content=%s" % (
             self.get_nonloopback_ip(),
             TestFixtures.TEST_HTTP_SERVER_PORT,
-            content,
+            echo_content,
         )
-        return self.request_url(port, url)
+        return self.request_url(proxy_port, url)
 
-    def request_page(self, port, page_url):
-        """
-        Send a get request to request test content as a page on a specific sub url
-        """
-        url = "http://%s:%d/%s" % (
-            self.get_nonloopback_ip(),
-            TestFixtures.TEST_HTTP_SERVER_PORT,
-            page_url,
-        )
-        return self.request_url(port, url)
-
-    def request_url(self, port, url):
-        ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
-        agent = ProxyAgent(ouinet_client_endpoint)
-        return agent.request(
-            b"GET", url.encode(), headers=Headers({"X-Ouinet-Group": ["localhost"]})
-        )
-
-    # def request_web_url(self, port, url):
-    #     ouinet_client_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", port)
-    #     agent = ProxyAgent(ouinet_client_endpoint)
-    #     host =urlparse(url).hostname
-    #     return agent.request(
-    #         b"GET", url.encode(), headers=Headers({"X-Ouinet-Group": [host]})
-    #     )
-
-
-    def request_web_url(self, port, url) -> Reqresponse:
+    def request_url(self, port, url) -> Reqresponse:
         proxies = {"http": f"http://127.0.0.1:{port}"}
         host = urlparse(url).hostname
         headers = {"X-Ouinet-Group": host}
@@ -205,6 +179,21 @@ class OuinetTests(TestCase):
         self.proc_list.append(client)
 
         return client
+
+    def wait_for_injector_peers(self, frontend_port: int):
+        tries = 0
+        maxtries = 10
+        while True:
+            tries += 1
+            if tries > maxtries:
+                raise Exception(f"No peers after {maxtries} tries, aborting")
+
+            response = requests.get(f"http://localhost:{frontend_port}/api/status")
+            response.raise_for_status()
+            if response.json()["injector_ready"]:
+                break
+
+            sleep(2)
 
     ################# Tests #####################
 
@@ -248,20 +237,16 @@ class OuinetTests(TestCase):
         success = yield client.callbacks[TestFixtures.TCP_CLIENT_PORT_READY_REGEX]
         self.assertTrue(success)
 
-        # Host a test page
-        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
-
         # TODO: No need to randomize in this particular test.
         # One can make another test to check that unique addresses are not cached
         content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        deferred_response = yield self.request_echo(
+        response: Reqresponse = self.request_echo(
             TestFixtures.TCP_CLIENT["port"], content
         )
 
-        self.assertEquals(deferred_response.code, 200)
+        self.assertEquals(response.status_code, 200)
 
-        response_body = yield readBody(deferred_response)
-        self.assertEquals(response_body.decode(), content)
+        self.assertEquals(response.text, content)
 
     @inlineCallbacks
     def test_tcp_cache(self):
@@ -307,21 +292,17 @@ class OuinetTests(TestCase):
         # Wait for the client to open the port
         self.assertTrue(success)
 
-        # # Http_server
+        sleep(2)
 
-        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
-
-        page_url = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        defered_response = yield self.request_page(
-            TestFixtures.CACHE_CLIENT[0]["port"], page_url
+        content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        response: Reqresponse = self.request_echo(
+            TestFixtures.CACHE_CLIENT[0]["port"], content
         )
-        self.assertEquals(defered_response.code, 200)
+        self.assertEquals(response.status_code, 200)
 
-        response_body = yield readBody(defered_response)
-        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+        # raise Exception("hell")
 
-        # XXX
-        injector_seed = True
+        self.assertEquals(response.text, content)
 
         # shut injector down to ensure it does not seed content to the cache client
         cache_injector.stop()
@@ -350,32 +331,29 @@ class OuinetTests(TestCase):
             ],
         )
         sleep(7)
-
-        # import time
-
         # make sure that the client2 is ready to access the cache
         success = yield cache_client.callbacks[TestFixtures.TCP_CLIENT_DISCOVERY_START]
         index_resolution_done_time_stamp = time.time()
         self.assertTrue(success)
 
         # now request the same page from second client
-        defered_response = Deferred()
         for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
-            defered_response = yield self.request_page(
-                TestFixtures.CACHE_CLIENT[1]["port"], page_url
-            )
-            if defered_response.code == 200:
+            try:
+                response: Reqresponse = self.request_echo(
+                    TestFixtures.CACHE_CLIENT[1]["port"], content
+                )
+            except Exception:
+                continue
+            if response.status_code == 200:
                 break
             yield task.deferLater(
                 reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None
             )
 
-        self.assertEquals(defered_response.code, 200)
+        self.assertEquals(response.status_code, 200)
 
         sleep(5)
-
-        response_body = yield readBody(defered_response)
-        self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+        self.assertEquals(response.text, content)
 
         print("all ok, now waiting")
 
@@ -396,6 +374,7 @@ class OuinetTests(TestCase):
 
         # Client
         client_port = TestFixtures.TCP_CLIENT["port"]
+        frontend_port = TestFixtures.TCP_CLIENT["fe_port"]
         client = self.run_tcp_client(
             name=TestFixtures.TCP_CLIENT["name"],
             args=[
@@ -404,6 +383,8 @@ class OuinetTests(TestCase):
                 f"--cache-http-public-key={TestFixtures.MAINNET_INJECTOR_HASH}",
                 "--listen-on-tcp",
                 f"127.0.0.1:{client_port}",
+                "--front-end-ep",
+                f"127.0.0.1:{frontend_port}",
                 "--injector-credentials",
                 "ouinet:160d79874a52c2cbcdec58db1a8160a9",
                 "--injector-tls-cert-file",
@@ -417,11 +398,9 @@ class OuinetTests(TestCase):
         success = yield client.callbacks[TestFixtures.DHT_CONTACTS_STORED_REGEX]
         self.assertTrue(success)
 
-        # TODO: Find the actual thing we are waiting for (DHT obtaining peers?).
-        # It seems to not report itself in the logs unless there is a request
-        sleep(20)
+        self.wait_for_injector_peers(frontend_port)
 
-        response = self.request_web_url(client_port, "http://example.org")
+        response = self.request_url(client_port, "http://example.org")
 
         if not response.status_code == 200:
             raise Exception(
@@ -443,5 +422,7 @@ class OuinetTests(TestCase):
 
         if exists(TestFixtures.INJECTOR_CERT_PATH):
             remove(TestFixtures.INJECTOR_CERT_PATH)
+
+        self.server.kill()
 
         return gatherResults(deferred_procs)
