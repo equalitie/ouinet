@@ -60,6 +60,15 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
         return {};
     }
 
+    // Check the original request did not have a body
+    auto content_len_i = orig_hdr.find(http::field::content_length);
+
+    if (content_len_i != orig_hdr.end()) {
+        if (content_len_i->value() != "0") {
+            return {};
+        }
+    }
+
     // TODO: Keep alive should be handled by `to_injector_request`
     bool keepalive = util::get_keep_alive(orig_hdr);
     auto hdr = util::to_injector_request(move(orig_hdr));

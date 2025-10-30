@@ -56,6 +56,8 @@ private:
     std::string _dht_group;
 };
 
+//----
+
 // Sent through the injector and to the origin when the original request from
 // the user agent is not a secure HTTPS (i.e. http://...). In such case the
 // injector can't create a secure connection to the origin.
@@ -90,6 +92,8 @@ private:
 
     http::request<http::string_body> _request;
 };
+
+//----
 
 using PublicInjectorRequestAlternatives = std::variant<CacheRequest, InsecureRequest>;
 
