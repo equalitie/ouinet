@@ -5,22 +5,77 @@
 
 namespace ouinet {
 
+static boost::optional<std::string> extract_dht_group(http::request_header<>& hdr) {
+    boost::optional<std::string> dht_group;
+
+#if defined(__MACH__)
+    std::string from_url(const std::string& url) {
+        auto dhtgroup = std::move(url);
+
+        boost::regex scheme("^[a-z][-+.0-9a-z]*://");
+        dhtgroup = boost::regex_replace(dhtgroup, scheme, "");
+        boost::regex trailing_slashes("/+$");
+        dhtgroup = boost::regex_replace(dhtgroup, trailing_slashes, "");
+        boost::regex leading_www("^www.");
+        dhtgroup = boost::regex_replace(dhtgroup, leading_www, "");
+
+        return dhtgroup;
+    }
+
+    // On iOS, it is not possible to inject headers into every request
+    // Set the DHT group based on the referrer field or hostname (if referrer is not present)
+    auto i = hdr.find(http::field::referer);
+    if (i != hdr.end()) {
+        dht_group = from_url(std::string(i->value()));
+        hdr.erase(i);
+    } else {
+        dht_group = from_url(std::string(hdr.target()));
+    }
+#else
+    auto i = hdr.find(http_::request_group_hdr);
+    if (i != hdr.end()) {
+        dht_group = std::string(i->value());
+        hdr.erase(i);
+    }
+#endif
+
+    return dht_group;
+}
+
+static bool is_private(http::request_header<> const& hdr) {
+    bool ret = false;
+    auto i = hdr.find(http_::request_private_hdr);
+    if (i != hdr.end()) {
+        ret = boost::iequals(i->value(), http_::request_private_true);
+    }
+    return ret;
+}
+
 boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr) {
+    auto dht_group = extract_dht_group(orig_hdr);
+
+    if (!dht_group) return {};
+    if (is_private(orig_hdr)) {
+        LOG_WARN("Mutually exclusive header fields in request: ", http_::request_private_hdr, " and ", http_::request_group_hdr);
+        return {};
+    }
+
     // TODO: Keep alive should be handled by `to_injector_request`
     bool keepalive = util::get_keep_alive(orig_hdr);
     auto hdr = util::to_injector_request(move(orig_hdr));
 
     if (hdr) {
         util::set_keep_alive(*hdr, keepalive);
-        return CacheRequest(std::move(*hdr));
+        return CacheRequest(std::move(*hdr), std::move(*dht_group));
     } else {
         return {};
     }
 }
 
-InsecureRequest::InsecureRequest(http::request<http::string_body> request) {
+boost::optional<InsecureRequest> InsecureRequest::from(http::request<http::string_body> request) {
+    if (is_private(request)) return {};
     util::remove_ouinet_fields_ref(request);  // avoid accidental injection
-    _request = std::move(request);
+    return InsecureRequest(std::move(request));
 }
 
 void CacheRequest::set_if_none_match(std::string_view if_none_match) {

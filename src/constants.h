@@ -101,6 +101,23 @@ static const std::string response_source_hdr_local_cache = "local-cache";
 // injector side without using IP addresses.
 static const std::string request_druid_hdr = "X-Ouinet-DRUID";
 
+// This indicates to the client that the agent considers
+// this request and its associated response to be part of a group
+// whose identifier is the value of this header.
+// This may be used by the client to affect its processing,
+// e.g. announcement or storage.
+static const std::string request_group_hdr = header_prefix + "Group";
+
+// The presence of this HTTP request header with the true value below
+// instructs the client to avoid request mechanisms that
+// would reveal the request or the associated response to other users.
+//
+// Note that it is not enough to decide when a request is private based on the
+// absence of the `request_group_hdr` because on Apple devices the user agent
+// can't set it.
+static const std::string request_private_hdr = header_prefix + "Private";
+static const std::string request_private_true = "true";  // case insensitive
+
 } // http_ namespace
 
 static const uint16_t default_udp_port = 28729;

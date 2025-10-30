@@ -29,16 +29,15 @@ private:
     struct FetchState;
 
 public:
-    using DhtGroup = std::string;
     using Response = http::response<http::dynamic_body>;
 
-    using FetchStored = std::function<CacheEntry(const CacheRequest&, const DhtGroup&, Cancel&, Yield)>;
+    using FetchStored = std::function<CacheEntry(const CacheRequest&, Cancel&, Yield)>;
     // If not null, the given cache entry is already available
     // (e.g. this may be a revalidation).
     using FetchFresh  = std::function<Session(const CacheRequest&, const CacheEntry*, Cancel&, Yield)>;
     // When fetching stored (which may be slow), a parallel request to fetch fresh is started
     // only if this is not null and it returns true.
-    using ParallelFresh = std::function<bool(const CacheRequest&, const boost::optional<DhtGroup>&)>;
+    using ParallelFresh = std::function<bool(const CacheRequest&)>;
 
 public:
     CacheControl(const AsioExecutor& ex, std::string server_name)
@@ -52,7 +51,6 @@ public:
     {}
 
     Session fetch(const CacheRequest&,
-                  const boost::optional<DhtGroup>&,
                   sys::error_code& fresh_ec,
                   sys::error_code& cache_ec,
                   Cancel&,
@@ -83,7 +81,6 @@ public:
 private:
     Session do_fetch(
             const CacheRequest&,
-            const boost::optional<DhtGroup>&,
             sys::error_code& fresh_ec,
             sys::error_code& cache_ec,
             Cancel&,
@@ -92,7 +89,6 @@ private:
     Session do_fetch_fresh( FetchState&, const CacheRequest&, const CacheEntry*, Yield);
     CacheEntry do_fetch_stored( FetchState&
                               , const CacheRequest&
-                              , const boost::optional<DhtGroup>&
                               , bool& is_fresh
                               , Yield);
 

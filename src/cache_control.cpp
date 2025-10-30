@@ -183,7 +183,6 @@ Session add_stale_warning(Session response)
 
 Session
 CacheControl::fetch(const CacheRequest& request,
-                    const boost::optional<DhtGroup>& dht_group,
                     sys::error_code& fresh_ec,
                     sys::error_code& cache_ec,
                     Cancel& cancel,
@@ -193,7 +192,6 @@ CacheControl::fetch(const CacheRequest& request,
 
     auto response = do_fetch(
             request,
-            dht_group,
             fresh_ec,
             cache_ec,
             cancel,
@@ -245,7 +243,6 @@ struct CacheControl::FetchState {
 Session
 CacheControl::do_fetch(
         const CacheRequest& request,
-        const boost::optional<DhtGroup>& dht_group,
         sys::error_code& fresh_ec,
         sys::error_code& cache_ec,
         Cancel& cancel,
@@ -307,7 +304,7 @@ CacheControl::do_fetch(
 
         _YDEBUG(ryield, "Revalidation failed, attempting to fetch from cache");
         bool is_fresh = false;
-        auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, ryield[cache_ec]);
+        auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, ryield[cache_ec]);
         if (!cache_ec) {
             if (is_fresh) {
                 _YDEBUG(ryield, "Revalidation failed, cached response is fresh");
@@ -328,7 +325,7 @@ CacheControl::do_fetch(
     }
 
     bool is_fresh = false;
-    auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, yield[cache_ec]);
+    auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
 
     if (cache_ec == err::operation_aborted) {
         fresh_ec = err::operation_aborted;
@@ -499,7 +496,6 @@ CacheControl::do_fetch_fresh( FetchState& fs
 CacheEntry
 CacheControl::do_fetch_stored(FetchState& fs,
                               const CacheRequest& rq,
-                              const boost::optional<DhtGroup>& dht_group,
                               bool& is_fresh,
                               Yield yield)
 {
@@ -510,14 +506,9 @@ CacheControl::do_fetch_stored(FetchState& fs,
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
 
-    if (!dht_group) {
-        _YDEBUG(yield, "No group given");
-        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
-    }
-
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
-    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq, dht_group)) {
+    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq)) {
         fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
     }
 
@@ -525,7 +516,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
         fs.fetch_stored->start(
                 [&] (Cancel& cancel, asio::yield_context yield_) mutable {
-                    return fetch_stored(rq, *dht_group, cancel, yield.detach(yield_));
+                    return fetch_stored(rq, cancel, yield.detach(yield_));
                 });
     }
 

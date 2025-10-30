@@ -7,10 +7,18 @@
 #include <boost/beast/http/string_body.hpp>
 #include "namespaces.h"
 
+
 namespace ouinet {
 
-// Type safe way to ensure we're sending only stripped down requests to the
-// injector and d-cache peers.
+// Cache request sent either to the origin through injector or to peers.
+//
+// * Injector and peers can see the request in plain text
+// * Non white listed headers are removed
+// * Only GET requests are allowed
+// * Request body is removed (if present)
+// * GET arguments (`?...`) are removed from the request target
+// * Requests containing the http_::request_private_hdr field are not allowed
+// * Requests must contain the http_::request_group_hdr unless on Apple devices
 class CacheRequest {
 public:
     static boost::optional<CacheRequest> from(http::request_header<>);
@@ -27,6 +35,10 @@ public:
     void set_if_none_match(std::string_view if_none_match);
     bool can_inject() const { return true; }
 
+    const std::string& dht_group() const {
+        return _dht_group;
+    }
+
     template<class WriteStream>
     void async_write(WriteStream& con, asio::yield_context yield) {
         http::request<http::empty_body> msg(_header);
@@ -35,15 +47,24 @@ public:
     }
 
 private:
-    CacheRequest(http::request_header<> header) :
-        _header(std::move(header)) {}
+    CacheRequest(http::request_header<> header, std::string dht_group) :
+        _header(std::move(header)),
+        _dht_group(std::move(dht_group))
+    {}
 
     http::request_header<> _header;
+    std::string _dht_group;
 };
 
+// Sent through the injector and to the origin when the original request from
+// the user agent is not a secure HTTPS (i.e. http://...). In such case the
+// injector can't create a secure connection to the origin.
+//
+// * The injector can see the request
+// * All `X-Ouinet...` headers are removed from the request
 class InsecureRequest {
 public:
-    InsecureRequest(http::request<http::string_body>);
+    static boost::optional<InsecureRequest> from(http::request<http::string_body>);
 
     InsecureRequest(const InsecureRequest&) = default;
     InsecureRequest(InsecureRequest&&) = default;
@@ -63,6 +84,10 @@ public:
     }
 
 private:
+    InsecureRequest(http::request<http::string_body> request) :
+        _request(std::move(request))
+    {}
+
     http::request<http::string_body> _request;
 };
 
