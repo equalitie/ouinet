@@ -1,19 +1,9 @@
 #pragma once
 
-#include <functional>
-#include <utility>
-#include <vector>
-#include <deque>
-
-#include <boost/asio/error.hpp>
-#include <boost/beast/core/string.hpp>
 #include <boost/beast/http.hpp>
-#include <boost/regex.hpp>
 
 #include "namespaces.h"
-#include "http_util.h"
 #include "client_config.h"
-
 
 namespace ouinet {
 

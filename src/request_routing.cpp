@@ -1,4 +1,5 @@
 #include "request_routing.h"
+#include "http_util.h"
 
 using namespace ouinet;
 

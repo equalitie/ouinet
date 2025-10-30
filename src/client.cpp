@@ -2539,7 +2539,6 @@ void Client::State::serve_request( GenericStream&& con
             else break;
         }
 
-        //auto request_config = route_choose_config(req, matches, default_request_config);
         auto request_config = request_route::route_choose_config(req, _config);
 
         Transaction tnx(con, req);

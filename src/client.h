@@ -1,9 +1,6 @@
 #pragma once
 
 #include <boost/filesystem.hpp>
-
-#include "constants.h"
-
 #include "namespaces.h"
 
 namespace ouinet {
