@@ -1,3 +1,4 @@
+# Not using `if (ANDROID)` because that's available only since cmake 3.7
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     # CMAKE_ANDROID_STANDALONE_TOOLCHAIN (and likely other cross compilation
     # android variables) was only introduced in v3.7
@@ -42,6 +43,13 @@ add_compile_options("-Wall")
 if(WIN32)
     add_compile_options("-O1")
     add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
+endif()
+
+if ((NOT ANDROID) AND (NOT IOS))
+    # Adds -fPIC when building static libraries (which I think is the default
+    # when building dynamic ones). It's needed on x86 when linking the
+    # `client_lib` target.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 ################################################################################
@@ -197,27 +205,27 @@ file(GLOB client_sources
     ${VERSION_CPP}
 )
 
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    add_library(client SHARED ${client_sources})
-    add_library(ouinet::client ALIAS client)
-    find_library(android_log log)
-    target_link_libraries(client PUBLIC ${android_log})
-elseif ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS")
-    add_library(client STATIC ${client_sources})
-    add_library(ouinet::client ALIAS client)
-    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
-    find_package(ouinet REQUIRED)
-else()
-    add_executable(client ${client_sources})
-endif()
+add_library(client_lib SHARED ${client_sources})
+set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 
-target_link_libraries(client
+target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
     PRIVATE
         lib::zdnsparser
 )
+
+if (ANDROID)
+    find_library(android_log log)
+    target_link_libraries(client_lib PUBLIC ${android_log})
+elseif (IOS)
+    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet REQUIRED)
+else()
+    add_executable(client "./src/client_main.cpp")
+    target_link_libraries(client client_lib)
+endif()
 
 ################################################################################
 file(GLOB injector_sources
@@ -230,10 +238,13 @@ file(GLOB injector_sources
 )
 
 add_library(injector_lib ${injector_sources})
+set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
 target_link_libraries(injector_lib ouinet_common)
 
-add_executable(injector "./src/injector_main.cpp")
-target_link_libraries(injector injector_lib)
+if ((NOT ANDROID) AND (NOT IOS))
+    add_executable(injector "./src/injector_main.cpp")
+    target_link_libraries(injector injector_lib)
+endif()
 
 
 ################################################################################
@@ -261,7 +272,7 @@ endif()
 
 ################################################################################
 # Tests
-if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+if (NOT ANDROID)
     add_subdirectory(test)
 endif()
 ################################################################################

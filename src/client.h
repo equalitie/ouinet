@@ -1,10 +1,12 @@
 #pragma once
 
+#include <boost/asio/io_context.hpp>
 #include <boost/filesystem.hpp>
 
 #include "constants.h"
 
 #include "namespaces.h"
+#include "client_config.h"
 
 namespace ouinet {
 
