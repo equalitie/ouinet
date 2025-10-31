@@ -18,7 +18,6 @@ endif()
 
 ################################################################################
 # Configurable options
-option(WITH_INJECTOR "Compile injector" ON)
 
 # NOTE: Need to disable ASan until Boost.Asio switches to Boost.Coroutine2
 #       because trowing (and catching) exceptions inside a coroutine confuses
@@ -221,23 +220,20 @@ target_link_libraries(client
 )
 
 ################################################################################
-if (WITH_INJECTOR)
-    file(GLOB injector_sources
-        "./src/injector.cpp"
-        "./src/ouiservice/bep5/server.cpp"
-        "./src/endpoint.cpp"
-        "./src/cache/http_sign.cpp"
-        "./src/http_logger.cpp"
-        ${EXPERIMENTAL_SOURCES}
-    )
+file(GLOB injector_sources
+    "./src/injector.cpp"
+    "./src/ouiservice/bep5/server.cpp"
+    "./src/endpoint.cpp"
+    "./src/cache/http_sign.cpp"
+    "./src/http_logger.cpp"
+    ${EXPERIMENTAL_SOURCES}
+)
 
-    add_library(injector_lib ${injector_sources})
-    target_link_libraries(injector_lib ouinet_common)
+add_library(injector_lib ${injector_sources})
+target_link_libraries(injector_lib ouinet_common)
 
-    add_executable(injector "./src/injector_main.cpp")
-    target_link_libraries(injector injector_lib)
-
-endif() # if WITH_INJECTOR
+add_executable(injector "./src/injector_main.cpp")
+target_link_libraries(injector injector_lib)
 
 
 ################################################################################
