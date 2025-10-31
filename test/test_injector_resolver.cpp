@@ -1,9 +1,11 @@
 #define BOOST_TEST_MODULE injector_resolver
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/included/unit_test.hpp>
+//#include <boost/beast/message.hpp>
 
 #include "../src/injector.h"
 
+using namespace ouinet;
 using Request = http::request<http::string_body>;
 
 static const string public_host[] = {
@@ -27,7 +29,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_public,
         Request req;
         req.set(http::field::host, hostname);
         Yield y(ctx.get_executor(), std::move(yield), "PUBLIC");
-        BOOST_CHECK_NO_THROW(resolve_target(req, ctx.get_executor(), cancel, y));
+        BOOST_CHECK_NO_THROW(resolve_target(req, false, ctx.get_executor(), cancel, y));
     });
     ctx.run();
 }
@@ -57,7 +59,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_loopback,
         req.set(http::field::host, hostname);
         Yield y(ctx.get_executor(), std::move(yield), "LOOPBACK");
         BOOST_CHECK_THROW(
-            resolve_target(req, ctx.get_executor(), cancel, y),
+            resolve_target(req, false, ctx.get_executor(), cancel, y),
             boost::system::system_error);
     });
     ctx.run();
@@ -82,14 +84,13 @@ BOOST_DATA_TEST_CASE(test_resolve_target_restrict_private,
 {
     asio::io_context ctx;
     Cancel cancel;
-    allow_private_targets = false;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
         Request req;
         req.set(http::field::host, hostname);
         Yield y(ctx.get_executor(), std::move(yield), "PRIVATE");
         BOOST_CHECK_THROW(
-            resolve_target(req, ctx.get_executor(), cancel, y),
+            resolve_target(req, false, ctx.get_executor(), cancel, y),
             boost::system::system_error);
     });
     ctx.run();
@@ -101,13 +102,12 @@ BOOST_DATA_TEST_CASE(test_resolve_target_allow_private,
 {
     asio::io_context ctx;
     Cancel cancel;
-    allow_private_targets = true;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
         Request req;
         req.set(http::field::host, hostname);
         Yield y(ctx.get_executor(), std::move(yield), "PRIVATE");
-        BOOST_CHECK_NO_THROW(resolve_target(req, ctx.get_executor(), cancel, y));
+        BOOST_CHECK_NO_THROW(resolve_target(req, true, ctx.get_executor(), cancel, y));
     });
     ctx.run();
 }

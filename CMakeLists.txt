@@ -231,8 +231,11 @@ if (WITH_INJECTOR)
         ${EXPERIMENTAL_SOURCES}
     )
 
-    add_executable(injector ${injector_sources})
-    target_link_libraries(injector ouinet_common)
+    add_library(injector_lib ${injector_sources})
+    target_link_libraries(injector_lib ouinet_common)
+
+    add_executable(injector "./src/injector_main.cpp")
+    target_link_libraries(injector injector_lib)
 
 endif() # if WITH_INJECTOR
 

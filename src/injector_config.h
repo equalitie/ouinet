@@ -6,6 +6,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/regex.hpp>
+#include <boost/program_options.hpp>
 
 #include "logger.h"
 #include "http_logger.h"

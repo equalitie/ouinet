@@ -140,3 +140,4 @@ add_executable(test-metrics "test-metrics.cpp")
 
 ######################################################################
 add_executable(test-injector-resolver "test_injector_resolver.cpp")
+target_link_libraries(test-injector-resolver injector_lib)
