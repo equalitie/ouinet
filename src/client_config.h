@@ -230,7 +230,7 @@ private:
               "Previous announcements could take up to an hour to expire.")
            ("request-body-limit"
             , po::value<uint64_t>()->default_value(_max_req_body_size)
-            , "Change the max size in KiB of body requests, which could be "
+            , "Set the max size of body requests in KiB. This could be "
               "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
               "uploads, etc. To leave it unlimited, set it to zero.")
            ;
