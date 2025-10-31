@@ -21,7 +21,7 @@ static boost::optional<T> as_optional(const boost::program_options::variables_ma
 asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom);
 asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, const char* for_whom);
 
-ClientConfig::ClientConfig(int argc, char* argv[])
+ClientConfig::ClientConfig(int argc, const char* argv[])
 {
     using namespace std;
     namespace po = boost::program_options;

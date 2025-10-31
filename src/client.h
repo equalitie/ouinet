@@ -27,6 +27,10 @@ static const std::string request_private_true = "true";  // case insensitive
 
 }
 
+namespace bittorrent {
+    class MainlineDht;
+}
+
 class ClientConfig;
 
 class Client {
@@ -64,8 +68,26 @@ public:
     boost::filesystem::path get_pid_path() const;
     boost::filesystem::path ca_cert_path() const;
 
+    ClientConfig const& config() const;
+
+    std::shared_ptr<bittorrent::MainlineDht> get_dht() const;
+
 private:
     std::shared_ptr<State> _state;
 };
+
+inline std::ostream& operator<<(std::ostream& os, Client::RunningState state) {
+    using S = Client::RunningState;
+    switch (state) {
+        case S::Created: return os << "Created";
+        case S::Failed: return os << "Failed";
+        case S::Starting: return os << "Starting";
+        case S::Degraded: return os << "Degraded";
+        case S::Started: return os << "Started";
+        case S::Stopping: return os << "Stopping";
+        case S::Stopped: return os << "Stopped";
+        default: return os << "???";
+    }
+}
 
 } // ouinet namespace

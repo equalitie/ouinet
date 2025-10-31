@@ -825,38 +825,40 @@ void listen( const InjectorConfig& config
 }
 
 //------------------------------------------------------------------------------
-Injector::Injector(InjectorConfig config, asio::io_context& ctx) {
+Injector::Injector(InjectorConfig config, asio::io_context& ctx) :
+    _config(std::move(config))
+{
     #ifndef __WIN32
-    if (config.open_file_limit()) {
-        increase_open_file_limit(*config.open_file_limit());
+    if (_config.open_file_limit()) {
+        increase_open_file_limit(*_config.open_file_limit());
     }
     #endif
 
     // Create or load the TLS certificate.
     auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
         ( "localhost"
-        , config.repo_root() / OUINET_TLS_CERT_FILE
-        , config.repo_root() / OUINET_TLS_KEY_FILE
-        , config.repo_root() / OUINET_TLS_DH_FILE );
+        , _config.repo_root() / OUINET_TLS_CERT_FILE
+        , _config.repo_root() / OUINET_TLS_KEY_FILE
+        , _config.repo_root() / OUINET_TLS_DH_FILE );
 
     AsioExecutor ex = ctx.get_executor();
 
-    if (!config.is_proxy_enabled())
+    if (!_config.is_proxy_enabled())
         LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
-    if (auto target_rx_o = config.target_rx())
+    if (auto target_rx_o = _config.target_rx())
         LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
-    if (config.is_private_target_allowed()) {
+    if (_config.is_private_target_allowed()) {
         LOG_INFO("Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
 
     auto proxy_server = std::make_unique<OuiServiceServer>(ex);
 
-    if (config.tcp_endpoint()) {
-        tcp::endpoint endpoint = *config.tcp_endpoint();
+    if (_config.tcp_endpoint()) {
+        tcp::endpoint endpoint = *_config.tcp_endpoint();
         LOG_INFO("TCP address: ", endpoint);
 
-        util::create_state_file( config.repo_root()/"endpoint-tcp"
+        util::create_state_file( _config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
 
         proxy_server->add(make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint));
@@ -868,30 +870,30 @@ Injector::Injector(InjectorConfig config, asio::io_context& ctx) {
                 tls_certificate->pem_private_key(),
                 tls_certificate->pem_dh_param()));
 
-    if (config.tcp_tls_endpoint()) {
-        tcp::endpoint endpoint = *config.tcp_tls_endpoint();
+    if (_config.tcp_tls_endpoint()) {
+        tcp::endpoint endpoint = *_config.tcp_tls_endpoint();
         LOG_INFO("TCP/TLS address: ", endpoint);
-        util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
+        util::create_state_file( _config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint);
         proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *_ssl_context));
     }
 
-    if (config.utp_endpoint()) {
-        udp::endpoint endpoint = *config.utp_endpoint();
+    if (_config.utp_endpoint()) {
+        udp::endpoint endpoint = *_config.utp_endpoint();
         LOG_INFO("uTP address: ", endpoint);
 
-        util::create_state_file( config.repo_root()/"endpoint-utp"
+        util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
         auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
         proxy_server->add(move(srv));
     }
 
-    if (config.utp_tls_endpoint()) {
+    if (_config.utp_tls_endpoint()) {
 
-        udp::endpoint endpoint = *config.utp_tls_endpoint();
+        udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
 
@@ -899,12 +901,12 @@ Injector::Injector(InjectorConfig config, asio::io_context& ctx) {
 
         if (local_ep) {
             LOG_INFO("uTP/TLS address: ", *local_ep);
-            util::create_state_file( config.repo_root()/"endpoint-utp-tls"
+            util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
             proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *_ssl_context));
 
         } else {
-            LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
+            LOG_ERROR("Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
         }
     }
 
@@ -912,9 +914,9 @@ Injector::Injector(InjectorConfig config, asio::io_context& ctx) {
         ( ex
         , metrics::Client::noop().mainline_dht()
         , fs::path{}
-        , config.bt_bootstrap_extras());  // default storage dir
+        , _config.bt_bootstrap_extras());  // default storage dir
 
-    _dht->set_endpoints({config.bittorrent_endpoint()});
+    _dht->set_endpoints({_config.bittorrent_endpoint()});
 
     assert(!_dht->local_endpoints().empty());
 
@@ -922,49 +924,49 @@ Injector::Injector(InjectorConfig config, asio::io_context& ctx) {
         LOG_ERROR("Failed to bind the BitTorrent DHT to any local endpoint");
 
     proxy_server->add(make_unique<ouiservice::Bep5Server>
-            (_dht, _ssl_context.get(), config.bep5_injector_swarm_name()));
+            (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
 
     #ifdef __EXPERIMENTAL__
     /*
-        if (config.lampshade_endpoint()) {
-            tcp::endpoint endpoint = *config.lampshade_endpoint();
-            util::create_state_file( config.repo_root()/"endpoint-lampshade"
+        if (_config.lampshade_endpoint()) {
+            tcp::endpoint endpoint = *_config.lampshade_endpoint();
+            util::create_state_file( _config.repo_root()/"endpoint-lampshade"
                                    , util::str(endpoint));
     
             unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
-                make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, config.repo_root()/"lampshade-server");
+                make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, _config.repo_root()/"lampshade-server");
             LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
     
             proxy_server->add(std::move(server));
         }
     */
 
-    if (config.obfs2_endpoint()) {
-        tcp::endpoint endpoint = *config.obfs2_endpoint();
+    if (_config.obfs2_endpoint()) {
+        tcp::endpoint endpoint = *_config.obfs2_endpoint();
         LOG_INFO("obfs2 address: ", endpoint);
-        util::create_state_file( config.repo_root()/"endpoint-obfs2"
+        util::create_state_file( _config.repo_root()/"endpoint-obfs2"
                                , util::str(endpoint));
 
-        proxy_server->add(make_unique<ouiservice::Obfs2OuiServiceServer>(ctx, endpoint, config.repo_root()/"obfs2-server"));
+        proxy_server->add(make_unique<ouiservice::Obfs2OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs2-server"));
     }
 
-    if (config.obfs3_endpoint()) {
-        tcp::endpoint endpoint = *config.obfs3_endpoint();
+    if (_config.obfs3_endpoint()) {
+        tcp::endpoint endpoint = *_config.obfs3_endpoint();
         LOG_INFO("obfs3 address: ", endpoint);
-        util::create_state_file( config.repo_root()/"endpoint-obfs3"
+        util::create_state_file( _config.repo_root()/"endpoint-obfs3"
                                , util::str(endpoint));
 
-        proxy_server->add(make_unique<ouiservice::Obfs3OuiServiceServer>(ctx, endpoint, config.repo_root()/"obfs3-server"));
+        proxy_server->add(make_unique<ouiservice::Obfs3OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs3-server"));
     }
 
-    if (config.obfs4_endpoint()) {
-        tcp::endpoint endpoint = *config.obfs4_endpoint();
+    if (_config.obfs4_endpoint()) {
+        tcp::endpoint endpoint = *_config.obfs4_endpoint();
 
-        util::create_state_file( config.repo_root()/"endpoint-obfs4"
+        util::create_state_file( _config.repo_root()/"endpoint-obfs4"
                                , util::str(endpoint));
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
-            make_unique<ouiservice::Obfs4OuiServiceServer>(ctx, endpoint, config.repo_root()/"obfs4-server");
+            make_unique<ouiservice::Obfs4OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs4-server");
         task::spawn_detached(ex, [
             obfs4 = server.get(),
             endpoint
@@ -978,23 +980,23 @@ Injector::Injector(InjectorConfig config, asio::io_context& ctx) {
         proxy_server->add(std::move(server));
     }
 
-    if (config.listen_on_i2p()) {
-        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ex);
+    if (_config.listen_on_i2p()) {
+        auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), ex);
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
         LOG_INFO("I2P public ID: ", ep);
-        util::create_state_file(config.repo_root()/"endpoint-i2p", ep);
+        util::create_state_file(_config.repo_root()/"endpoint-i2p", ep);
 
         proxy_server->add(std::move(i2p_server));
     }
     #endif // ifdef __EXPERIMENTAL__
 
-    LOG_INFO("HTTP signing public key (Ed25519): ", config.cache_private_key().public_key());
+    LOG_INFO("HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
     task::spawn_detached(ex, [
         proxy_server = std::move(proxy_server),
-        config = std::move(config),
+        &config,
         cancel = _cancel
     ] (asio::yield_context yield) mutable {
         sys::error_code ec;

@@ -51,7 +51,7 @@ public:
     ClientConfig() = default;
 
     // Throws on error
-    ClientConfig(int argc, char* argv[]);
+    ClientConfig(int argc, const char* argv[]);
 
     ClientConfig(ClientConfig&&) = default;
     ClientConfig& operator=(ClientConfig&&) = default;

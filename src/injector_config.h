@@ -266,18 +266,15 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     {
         fs::path ouinet_conf_path = _repo_root/OUINET_CONF_FILE;
-        if (!fs::is_regular_file(ouinet_conf_path)) {
-            throw std::runtime_error(util::str(
-                "The path ", _repo_root, " does not contain the "
-                , OUINET_CONF_FILE, " configuration file"));
-        }
+        if (fs::is_regular_file(ouinet_conf_path)) {
 #ifdef __WIN32
-        std::ifstream ouinet_conf(ouinet_conf_path.string());
+            std::ifstream ouinet_conf(ouinet_conf_path.string());
 #else
-        std::ifstream ouinet_conf(ouinet_conf_path.native());
+            std::ifstream ouinet_conf(ouinet_conf_path.native());
 #endif
-        po::store(po::parse_config_file(ouinet_conf, desc), vm);
-        po::notify(vm);
+            po::store(po::parse_config_file(ouinet_conf, desc), vm);
+            po::notify(vm);
+        }
     }
 
     if (vm.count("log-level")) {

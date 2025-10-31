@@ -32,7 +32,24 @@ public:
     void stop();
     ~Injector();
 
+    const InjectorConfig& config() const {
+        return _config;
+    }
+
+    std::string cache_http_public_key() const {
+        std::ifstream file(_config.repo_root() / "ed25519-public-key");
+        if (!file) throw std::runtime_error("File not found");
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
+    }
+
+    fs::path tls_cert_file() const {
+        return config().repo_root() / "tls-cert.pem";
+    }
+
 private:
+    InjectorConfig _config;
     Cancel _cancel;
     std::shared_ptr<bittorrent::MainlineDht> _dht;
     std::unique_ptr<asio::ssl::context> _ssl_context;

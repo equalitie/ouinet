@@ -48,10 +48,6 @@
 #include "bittorrent/dht.h"
 #include "bittorrent/mutable_data.h"
 
-#ifndef __ANDROID__
-#  include "force_exit_on_signal.h"
-#endif // ifndef __ANDROID__
-
 #include "ouiservice.h"
 #ifdef __EXPERIMENTAL__
 #  include "ouiservice/i2p.h"
@@ -3331,6 +3327,14 @@ fs::path Client::get_or_gen_ca_root_cert(const string repo_root)
         ( "Your own local Ouinet client"
         , ca_cert_path, ca_key_path, ca_dh_path);
     return ca_cert_path;
+}
+
+const ClientConfig& Client::config() const {
+    return _state->_config;
+}
+
+std::shared_ptr<bt::MainlineDht> Client::get_dht() const {
+    return _state->_bt_dht;
 }
 
 //------------------------------------------------------------------------------

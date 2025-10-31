@@ -141,3 +141,7 @@ add_executable(test-metrics "test-metrics.cpp")
 ######################################################################
 add_executable(test-injector-resolver "test_injector_resolver.cpp")
 target_link_libraries(test-injector-resolver injector_lib)
+
+######################################################################
+add_executable(test_fetch "test_fetch.cpp")
+target_link_libraries(test_fetch injector_lib client_lib)

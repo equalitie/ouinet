@@ -13,6 +13,12 @@ public:
         fs::create_directories(tempdir);
     }
 
+    const fs::path make_subdir(const std::string& name) const {
+        fs::path path = tempdir / name;
+        fs::create_directory(path);
+        return path;
+    }
+
     const fs::path& path() const {
         return tempdir;
     }
