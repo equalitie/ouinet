@@ -216,7 +216,6 @@ InjectorConfig::options_description()
                                        "using the obfs4 pluggable transport")
 #endif // ifdef __DEPRECATED__
 #ifdef __EXPERIMENTAL__
-        
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")

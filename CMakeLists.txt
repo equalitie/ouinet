@@ -23,7 +23,7 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 
-option(WITH_DEPRECATED "Build with depricated features" OFF)
+option(WITH_DEPRECATED "Build with deprecated features" OFF)
 
 ################################################################################
 # Global build flags
@@ -107,9 +107,6 @@ target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
 if(WITH_EXPERIMENTAL)
-    target_compile_definitions(ouinet_dependencies
-            INTERFACE -D__EXPERIMENTAL__
-    )
     add_subdirectory(./src/ouiservice/i2p)
     set(EXPERIMENTAL_LIBRARIES
             ouinet::ouiservice-i2p
@@ -119,9 +116,6 @@ endif()
 ###########################################################
 
 if(WITH_DEPRECATED)
-    target_compile_definitions(ouinet_dependencies
-            INTERFACE -D__DEPRECATED__
-    )
     #add_subdirectory(./src/ouiservice/lampshade)
     add_subdirectory(./src/ouiservice/obfs4proxy)
     set(DEPRECATED_SOURCES
@@ -228,6 +222,20 @@ target_link_libraries(ouinet_common
 target_include_directories(ouinet_common PUBLIC "src")
 
 ################################################################################
+if(WITH_EXPERIMENTAL)
+    target_compile_definitions(ouinet_common
+            INTERFACE -D__EXPERIMENTAL__
+    )
+endif()
+
+################################################################################
+if(WITH_DEPRECATED)
+    target_compile_definitions(ouinet_common
+            INTERFACE -D__DEPRECATED__
+    )
+endif()
+################################################################################
+
 file(GLOB client_sources
     "./src/client.cpp"
     "./src/client_config.cpp"

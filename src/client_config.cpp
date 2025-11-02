@@ -223,6 +223,40 @@ ClientConfig::ClientConfig(int argc, char* argv[])
                 };
             }
         }
+#ifdef __EXPERIMENTAL__
+        else if (type_str == "bep3-http-over-i2p") {
+            _cache_type = CacheType::Bep3HTTPOverI2P;
+
+            LOG_DEBUG("Using bep3-http cache over i2p");
+
+            if (!_cache_http_pubkey) {
+                throw std::runtime_error(
+                    "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
+            }
+
+            // An injector can be explicitly set but it should always be an I2P endpoint
+            if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
+                throw std::runtime_error(
+                    util::str("A BEP3-I2P injector is derived implicitly"
+                              " when using '--cache-type=bep3-http-over-i2p',"
+                              " but it is already set to a non I2P endpoint: ",
+                              *_injector_ep));
+            }
+
+            /*
+             * We use an I2P endpoint here as the discovery is performed using BEP3, to support
+             * BEP5 the endpoint should be something different in order to manage multiple
+             * connections when performing the discovery of peers using a DHT.
+             */
+            if (!_injector_ep) {
+                _injector_ep = Endpoint{
+                   Endpoint::I2pEndpoint,
+                   bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+               };
+            }
+        }
+#endif // ifdef __EXPERIMENTAL__
+        
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;
         }
@@ -251,6 +285,32 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
         _injector_credentials[*_injector_ep] = cred;
     }
+
+#ifdef __EXPERIMENTAL__
+        if (vm.count("i2p-hops-per-tunnel")) {
+        auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
+
+        if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
+            throw std::runtime_error(util::str(
+                "The '--i2p-hops-per-tunnel' argument expects an integer "
+                "between 1 and 8"
+                ));
+        }
+
+        if (!(//If we neither connecting for an i2p injector 
+            (_injector_ep && _injector_ep->type == Endpoint::I2pEndpoint) ||
+            //nor we are not  running a Bep5 over i2p cache
+            (_cache_type == CacheType::Bep3HTTPOverI2P)))
+          {
+            throw std::runtime_error(
+                "The '--i2p-hops-per-tunnel' argument must be used with "
+                "'--injector-ep' with an i2p injector or with "
+                "--cache-type=bep5-http-over-i2p ");
+          }
+
+        _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
+    }
+#endif // ifdef __EXPERIMENTAL__ _i2p_hops_
 
     if (_cache_type == CacheType::None) {
         LOG_WARN("Not using d-cache");
