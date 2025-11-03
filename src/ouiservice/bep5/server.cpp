@@ -1,7 +1,7 @@
 #include "server.h"
 #include "../utp.h"
 #include "../tls.h"
-#include "../../bittorrent/dht.h"
+#include "../../bittorrent/mainline_dht.h"
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../logger.h"
 #include "../../util/hash.h"

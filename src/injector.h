@@ -7,7 +7,7 @@
 #include "http_logger.h"
 #include "util/yield.h"
 #include "injector_config.h"
-#include "bittorrent/dht.h"
+#include "bittorrent/mainline_dht.h"
 
 
 // TODO: Don't do this in global namespaces nor headers

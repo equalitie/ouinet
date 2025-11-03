@@ -4,7 +4,7 @@
 #include <set>
 #include <util/async_job.h>
 #include <util/hash.h>
-#include <bittorrent/dht.h>
+#include <bittorrent/mainline_dht.h>
 
 namespace std {
     template<> struct hash<ouinet::bittorrent::NodeID> {

@@ -1,10 +1,8 @@
 #pragma once
 
-#include "dht.h"
+#include "mainline_dht.h"
 
-namespace ouinet { namespace bittorrent {
-
-class MainlineDht;
+namespace ouinet::bittorrent {
 
 namespace detail {
     struct Bep5AnnouncerImpl;
@@ -51,4 +49,4 @@ private:
     std::shared_ptr<detail::Bep5AnnouncerImpl> _impl;
 };
 
-}} // namespaces
+} // namespace ouinet::bittorrent

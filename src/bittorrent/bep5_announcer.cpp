@@ -2,6 +2,7 @@
 #include "../async_sleep.h"
 #include "../logger.h"
 #include "../util/handler_tracker.h"
+#include "../util/wait_condition.h"
 #include <random>
 #include <iostream>
 

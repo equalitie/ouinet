@@ -45,7 +45,7 @@
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
-#include "bittorrent/dht.h"
+#include "bittorrent/mainline_dht.h"
 #include "bittorrent/mutable_data.h"
 
 #include "ouiservice.h"

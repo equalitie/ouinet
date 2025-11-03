@@ -9,7 +9,7 @@
 #include "split_string.h"
 #include "or_throw.h"
 
-#include "bittorrent/dht.h"
+#include "bittorrent/mainline_dht.h"
 #include "cache/client.h"
 
 #include <boost/algorithm/string/join.hpp>

@@ -7,7 +7,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 
-#include "../bittorrent/dht.h"
+#include "../bittorrent/mainline_dht.h"
 #include "../response_reader.h"
 #include "../util/crypto.h"
 #include "../util/yield.h"

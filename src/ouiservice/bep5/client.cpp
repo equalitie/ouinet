@@ -5,7 +5,7 @@
 #include "../connect_proxy.h"
 #include "../tls.h"
 #include "../../async_sleep.h"
-#include "../../bittorrent/dht.h"
+#include "../../bittorrent/mainline_dht.h"
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../logger.h"
