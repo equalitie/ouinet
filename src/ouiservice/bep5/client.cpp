@@ -257,7 +257,7 @@ private:
         auto lan_eps = _dht->local_endpoints();
 
         for (auto ep : eps) {
-            if (bittorrent::is_martian(ep)) continue;
+            if (_dht->is_martian(ep)) continue;
 
             // Don't connect to self
             if (wan_eps.count(ep) || lan_eps.count(ep)) continue;

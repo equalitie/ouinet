@@ -20,9 +20,6 @@ public:
 
     virtual ~DhtBase();
 
-    // This removes existing endpoints not in the given set.
-    // Since adding some endpoints may fail (e.g. because of port busy),
-    // you may want to check `local_endpoints()` after this operation.
     virtual void set_endpoints(const std::set<UdpEndpoint>&) = 0;
 
     virtual UdpEndpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context) = 0;
@@ -52,6 +49,8 @@ public:
     virtual void wait_all_ready(Cancel&, asio::yield_context) = 0;
 
     virtual void stop() = 0;
+
+    virtual bool is_martian(const UdpEndpoint&) const = 0;
 };
 
 } // namespace ouinet::bittorrent

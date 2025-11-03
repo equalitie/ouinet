@@ -2913,6 +2913,9 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     return or_throw(yield, ec, std::move(output));
 }
 
+bool MainlineDht::is_martian(UdpEndpoint const& ep) const {
+    return bittorrent::is_martian(ep);
+}
 
 void MainlineDht::wait_all_ready(
     Cancel& cancel_signal,

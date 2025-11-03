@@ -9,7 +9,6 @@
 #include "../util/watch_dog.h"
 #include "../util/crypto.h"
 #include "../util/intrusive_list.h"
-#include "../bittorrent/is_martian.h"
 #include "../constants.h"
 #include "../util/set_io.h"
 #include "../util/async_job.h"
@@ -374,7 +373,7 @@ public:
     {}
 
     void add_candidate(udp::endpoint ep) {
-        if (bt::is_martian(ep)) return;
+        if (_peer_lookup->is_martian(ep)) return;
         if (_wan_my_eps.count(ep)) return;
 
         auto ip = _all_peers.insert({ep, unique_ptr<Peer>()});

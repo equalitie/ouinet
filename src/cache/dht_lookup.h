@@ -98,6 +98,11 @@ public:
         return _swarm_name;
     }
 
+    bool is_martian(asio::ip::udp::endpoint const& ep) const {
+        auto dht = _dht_w.lock();
+        if (!dht) return false;
+        return dht->is_martian(ep);
+    }
 private:
 
     std::unique_ptr<Job> make_job() {

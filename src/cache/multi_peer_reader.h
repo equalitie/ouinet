@@ -23,9 +23,6 @@ private:
     enum class State { active, done, closed };
 
 public:
-    using PeerLookup = DhtLookup;
-
-public:
     // Use this for local cache and LAN retrieval only.
     MultiPeerReader( AsioExecutor ex
                    , std::string key
@@ -42,7 +39,7 @@ public:
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
                    , std::set<asio::ip::udp::endpoint> wan_my_endpoints
-                   , std::shared_ptr<PeerLookup> peer_lookup
+                   , std::shared_ptr<DhtLookup> peer_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , const std::string& dbg_tag);
 

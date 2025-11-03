@@ -3,7 +3,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include "../namespaces.h"
 
-namespace ouinet { namespace bittorrent {
+namespace ouinet::bittorrent {
 
 inline bool is_martian(const asio::ip::udp::endpoint& ep) {
     if (ep.port() == 0) return true;
@@ -31,4 +31,4 @@ inline bool is_martian(const asio::ip::udp::endpoint& ep) {
     return false;
 }
 
-}} // namespace
+} // namespace

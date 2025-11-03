@@ -100,6 +100,8 @@ class MainlineDht : public DhtBase {
 
     void stop() override;
 
+    bool is_martian(const UdpEndpoint&) const override;
+
     private:
     AsioExecutor _exec;
     std::map<udp::endpoint, std::unique_ptr<DhtNode>> _nodes;
