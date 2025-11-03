@@ -12,7 +12,7 @@ using namespace ouiservice;
 
 namespace bt = bittorrent;
 
-Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
+Bep5Server::Bep5Server( shared_ptr<bt::DhtBase> dht
                       , boost::asio::ssl::context* ssl_context
                       , string swarm_name)
 {

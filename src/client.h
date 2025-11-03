@@ -28,7 +28,7 @@ static const std::string request_private_true = "true";  // case insensitive
 }
 
 namespace bittorrent {
-    class MainlineDht;
+    class DhtBase;
 }
 
 class ClientConfig;
@@ -70,7 +70,7 @@ public:
 
     ClientConfig const& config() const;
 
-    std::shared_ptr<bittorrent::MainlineDht> get_dht() const;
+    std::shared_ptr<bittorrent::DhtBase> get_dht() const;
 
 private:
     std::shared_ptr<State> _state;

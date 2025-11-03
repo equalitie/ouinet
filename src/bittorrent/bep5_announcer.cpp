@@ -39,7 +39,7 @@ enum class Type { Periodic, Manual };
 struct detail::Bep5AnnouncerImpl
     : public enable_shared_from_this<detail::Bep5AnnouncerImpl>
 {
-    Bep5AnnouncerImpl(NodeID infohash, std::weak_ptr<MainlineDht> dht_w, Type type)
+    Bep5AnnouncerImpl(NodeID infohash, std::weak_ptr<DhtBase> dht_w, Type type)
         : type(type)
         , cv(dht_w.lock()->get_executor())
         , infohash(infohash)
@@ -131,13 +131,13 @@ struct detail::Bep5AnnouncerImpl
     ConditionVariable cv;
     bool go_again = false;
     NodeID infohash;
-    weak_ptr<MainlineDht> dht_w;
+    weak_ptr<DhtBase> dht_w;
     Cancel cancel;
     static const bool debug = false;  // for development testing only
 };
 
 Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
-                                            , std::weak_ptr<MainlineDht> dht)
+                                            , std::weak_ptr<DhtBase> dht)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>(infohash, move(dht), Type::Periodic))
 {
     _impl->start();
@@ -150,7 +150,7 @@ Bep5PeriodicAnnouncer::~Bep5PeriodicAnnouncer()
 }
 
 Bep5ManualAnnouncer::Bep5ManualAnnouncer( NodeID infohash
-                                        , std::weak_ptr<MainlineDht> dht)
+                                        , std::weak_ptr<DhtBase> dht)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>(infohash, move(dht), Type::Manual))
 {
     _impl->start();

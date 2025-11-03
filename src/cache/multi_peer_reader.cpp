@@ -315,7 +315,7 @@ public:
          , set<udp::endpoint> lan_peer_eps
          , util::Ed25519PublicKey cache_pk
          , const std::string& key
-         , std::shared_ptr<PeerLookup> peer_lookup
+         , std::shared_ptr<DhtLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
          , std::string dbg_tag)
         : _exec(exec)
@@ -512,7 +512,7 @@ private:
     std::set<asio::ip::udp::endpoint> _lan_my_eps;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
     std::string _key;
-    std::shared_ptr<PeerLookup> _peer_lookup;
+    std::shared_ptr<DhtLookup> _peer_lookup;
     std::shared_ptr<unsigned> _newest_proto_seen;
     std::string _dbg_tag;
 
@@ -547,7 +547,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::set<asio::ip::udp::endpoint> wan_my_eps
-                                , std::shared_ptr<PeerLookup> peer_lookup
+                                , std::shared_ptr<DhtLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , const std::string& dbg_tag)
     : _executor(ex)

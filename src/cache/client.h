@@ -18,7 +18,7 @@
 namespace ouinet {
 
 namespace bittorrent {
-    class MainlineDht;
+    class DhtBase;
 }
 
 class Session;
@@ -79,7 +79,7 @@ public:
 
     // Returns true the first time the DHT is successfully enabled,
     // false otherwise.
-    bool enable_dht(std::shared_ptr<bittorrent::MainlineDht>, size_t simultaneous_announcements);
+    bool enable_dht(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
 
     // This may add a response source header.

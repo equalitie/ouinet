@@ -25,7 +25,7 @@ class ClientConfig;
 class UPnPUpdater;
 
 namespace bittorrent {
-class MainlineDht;
+class DhtBase;
 }
 
 class ClientFrontEndMetricsController {
@@ -98,7 +98,7 @@ public:
                   , const CACertificate&
                   , boost::optional<UdpEndpoint> local_ep
                   , const std::shared_ptr<UPnPs>&
-                  , const bittorrent::MainlineDht* dht
+                  , const bittorrent::DhtBase* dht
                   , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
                   , Cancel
@@ -149,7 +149,7 @@ private:
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>& upnps_ptr
-                      , const bittorrent::MainlineDht*
+                      , const bittorrent::DhtBase*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
@@ -163,7 +163,7 @@ private:
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>&
-                      , const bittorrent::MainlineDht*
+                      , const bittorrent::DhtBase*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&

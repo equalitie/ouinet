@@ -10,7 +10,7 @@
 namespace ouinet {
 
 namespace bittorrent {
-    class MainlineDht;
+    class DhtBase;
 }
 
 namespace ouiservice {
@@ -37,12 +37,12 @@ private:
     };
 
 public:
-    Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
+    Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , asio::ssl::context*
               , Target targets = helpers | injectors);
 
-    Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
+    Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , std::string helpers_swarm_name
               , bool helper_announcement_enabled
@@ -66,7 +66,7 @@ private:
     GenericStream connect_single(AbstractClient&, bool tls, Cancel&, asio::yield_context);
 
 private:
-    std::shared_ptr<bittorrent::MainlineDht> _dht;
+    std::shared_ptr<bittorrent::DhtBase> _dht;
 
     std::string _injector_swarm_name;
     std::string _helpers_swarm_name;

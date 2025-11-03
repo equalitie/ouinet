@@ -83,7 +83,6 @@ struct GarbageCollector {
 
 struct Client::Impl {
     using GroupName = Client::GroupName;
-    using PeerLookup = DhtLookup;
     using BaseGroups = BaseDhtGroups;
     using Groups = DhtGroups;
 
@@ -93,7 +92,7 @@ struct Client::Impl {
 
     AsioExecutor _ex;
     std::set<udp::endpoint> _lan_my_endpoints;
-    shared_ptr<bt::MainlineDht> _dht;
+    shared_ptr<bt::DhtBase> _dht;
     string _uri_swarm_prefix;
     util::Ed25519PublicKey _cache_pk;
     fs::path _cache_dir;
@@ -104,7 +103,7 @@ struct Client::Impl {
     std::unique_ptr<Announcer> _announcer;
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
-    util::LruCache<std::string, shared_ptr<PeerLookup>> _peer_lookups;
+    util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<Groups> _groups;
 
@@ -139,7 +138,7 @@ struct Client::Impl {
                 group);
     }
 
-    bool enable_dht(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_announcements) {
+    bool enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
         if (_dht || _announcer) return false;
 
         _dht = move(dht);
@@ -368,7 +367,7 @@ struct Client::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
-    shared_ptr<PeerLookup> peer_lookup(std::string swarm_name)
+    shared_ptr<DhtLookup> peer_lookup(std::string swarm_name)
     {
         assert(_dht);
 
@@ -376,7 +375,7 @@ struct Client::Impl {
 
         if (!lookup) {
             lookup = _peer_lookups.put( swarm_name
-                                      , make_shared<PeerLookup>(_dht, swarm_name));
+                                      , make_shared<DhtLookup>(_dht, swarm_name));
         }
 
         return *lookup;
@@ -785,7 +784,7 @@ Client::Client(unique_ptr<Impl> impl)
     : _impl(move(impl))
 {}
 
-bool Client::enable_dht(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_announcements) {
+bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
     return _impl->enable_dht(move(dht),
                              simultaneous_announcements);
 }

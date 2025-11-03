@@ -48,7 +48,7 @@ private:
 public:
     DhtLookup(DhtLookup&&) = delete;
 
-    DhtLookup(std::weak_ptr<bittorrent::MainlineDht> dht_w, std::string swarm_name)
+    DhtLookup(std::weak_ptr<bittorrent::DhtBase> dht_w, std::string swarm_name)
         : _swarm_name(std::move(swarm_name))
         , _infohash(util::sha1_digest(_swarm_name))
         , _exec(dht_w.lock()->get_executor())
@@ -149,7 +149,7 @@ private:
     std::string _swarm_name;
     NodeID _infohash;
     AsioExecutor _exec;
-    std::weak_ptr<bittorrent::MainlineDht> _dht_w;
+    std::weak_ptr<bittorrent::DhtBase> _dht_w;
     std::unique_ptr<Job> _job;
     ConditionVariable _cv;
     Result _last_result;

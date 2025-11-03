@@ -311,7 +311,7 @@ public:
         return *_udp_multiplexer;
     }
 
-    std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield)
+    std::shared_ptr<bt::DhtBase> bittorrent_dht(asio::yield_context yield)
     {
         if (_bt_dht) return _bt_dht;
 
@@ -646,7 +646,7 @@ private:
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
 
-    shared_ptr<bt::MainlineDht> _bt_dht;
+    shared_ptr<bt::DhtBase> _bt_dht;
     WaitCondition _bt_dht_wc;
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
@@ -3333,7 +3333,7 @@ const ClientConfig& Client::config() const {
     return _state->_config;
 }
 
-std::shared_ptr<bt::MainlineDht> Client::get_dht() const {
+std::shared_ptr<bt::DhtBase> Client::get_dht() const {
     return _state->_bt_dht;
 }
 

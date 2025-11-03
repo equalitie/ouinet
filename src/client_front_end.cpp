@@ -9,7 +9,7 @@
 #include "split_string.h"
 #include "or_throw.h"
 
-#include "bittorrent/mainline_dht.h"
+#include "bittorrent/dht.h"
 #include "cache/client.h"
 
 #include <boost/algorithm/string/join.hpp>
@@ -295,7 +295,7 @@ upnp_status(const ClientFrontEnd::UPnPs& upnps) {
 
 static
 std::vector<std::string>
-public_udp_endpoints(const bittorrent::MainlineDht& dht) {
+public_udp_endpoints(const bittorrent::DhtBase& dht) {
     std::vector<std::string> eps;
     for (auto& ep : dht.wan_endpoints())
         eps.push_back(util::str(ep));
@@ -455,7 +455,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
                                   , const std::shared_ptr<UPnPs>& upnps_ptr
-                                  , const bittorrent::MainlineDht* dht
+                                  , const bittorrent::DhtBase* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
@@ -708,7 +708,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , Client::RunningState cstate
                                       , boost::optional<UdpEndpoint> local_ep
                                       , const std::shared_ptr<UPnPs>& upnps_ptr
-                                      , const bittorrent::MainlineDht* dht
+                                      , const bittorrent::DhtBase* dht
                                       , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
                                       , cache::Client* cache_client
@@ -906,7 +906,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const std::shared_ptr<UPnPs>& upnps_ptr
-                              , const bittorrent::MainlineDht* dht
+                              , const bittorrent::DhtBase* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
                               , Cancel cancel

@@ -54,7 +54,7 @@ struct Announcer::Loop {
     using Entries = util::AsyncQueue<Entry, std::list>;
 
     AsioExecutor ex;
-    shared_ptr<bt::MainlineDht> dht;
+    shared_ptr<bt::DhtBase> dht;
     Entries entries;
     size_t _simultaneous_announcements;
     Cancel _cancel;
@@ -63,7 +63,7 @@ struct Announcer::Loop {
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(shared_ptr<bt::MainlineDht> dht, size_t simultaneous_announcements)
+    Loop(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements)
         : ex(dht->get_executor())
         , dht(move(dht))
         , entries(ex)
@@ -316,7 +316,7 @@ struct Announcer::Loop {
 
 //--------------------------------------------------------------------
 // Announcer
-Announcer::Announcer(std::shared_ptr<bittorrent::MainlineDht> dht, size_t simultaneous_announcements)
+Announcer::Announcer(std::shared_ptr<bittorrent::DhtBase> dht, size_t simultaneous_announcements)
     : _loop(new Loop(std::move(dht), simultaneous_announcements))
 {
     _loop->start();
