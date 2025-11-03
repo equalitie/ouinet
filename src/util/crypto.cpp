@@ -25,7 +25,7 @@ Ed25519PublicKey::Ed25519PublicKey(Ed25519PublicKey::key_array_t key):
     _public_key(nullptr)
 {
     if (::gcry_sexp_build(&_public_key, NULL, "(public-key (ecc (curve Ed25519) (flags eddsa) (q %b)))", key.size(), key.data())) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PublicKey(Ed25519PublicKey::key_array_t)");
     }
 }
 
@@ -74,7 +74,7 @@ Ed25519PublicKey& Ed25519PublicKey::operator=(const Ed25519PublicKey& other)
         if (other._public_key) {
             if (::gcry_sexp_build(&_public_key, NULL, "%S", other._public_key)) {
                 _public_key = nullptr;
-                throw std::exception();
+                throw std::runtime_error("In Ed25519PublicKey::operator=");
             }
         }
     }
@@ -93,13 +93,13 @@ Ed25519PublicKey::key_array_t Ed25519PublicKey::serialize() const
 {
     ::gcry_sexp_t q = ::gcry_sexp_find_token(_public_key, "q", 0);
     if (!q) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PublicKey::serialize/find_token");
     }
     size_t q_size;
     const char* q_buffer = ::gcry_sexp_nth_data(q, 1, &q_size);
     if (!q_buffer) {
         ::gcry_sexp_release(q);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PublicKey::serialize/nth_data");
     }
     key_array_t output;
     assert(q_size == output.size());
@@ -112,13 +112,13 @@ bool Ed25519PublicKey::verify(const std::string& data, const Ed25519PublicKey::s
 {
     ::gcry_sexp_t signature_sexp;
     if (::gcry_sexp_build(&signature_sexp, NULL, "(sig-val (eddsa (r %b)(s %b)))", key_size, signature.data(), key_size, signature.data() + key_size)) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PublicKey::verify/sexp_build(1)");
     }
 
     ::gcry_sexp_t data_sexp;
     if (::gcry_sexp_build(&data_sexp, NULL, "(data (flags eddsa) (hash-algo sha512) (value %b))", data.size(), data.data())) {
         ::gcry_sexp_release(data_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PublicKey::verify/sexp_build(2)");
     }
 
     ::gcry_error_t error = gcry_pk_verify(signature_sexp, data_sexp, _public_key);
@@ -135,7 +135,7 @@ Ed25519PrivateKey::Ed25519PrivateKey(Ed25519PrivateKey::key_array_t key):
     _private_key(nullptr)
 {
     if (::gcry_sexp_build(&_private_key, NULL, "(private-key (ecc (curve Ed25519) (flags eddsa) (d %b)))", key.size(), key.data())) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::verify/sexp_build");
     }
 }
 
@@ -170,7 +170,7 @@ Ed25519PrivateKey& Ed25519PrivateKey::operator=(const Ed25519PrivateKey& other)
         if (other._private_key) {
             if (::gcry_sexp_build(&_private_key, NULL, "%S", other._private_key)) {
                 _private_key = nullptr;
-                throw std::exception();
+                throw std::runtime_error("In Ed25519PrivateKey::operator=");
             }
         }
     }
@@ -189,13 +189,13 @@ Ed25519PrivateKey::key_array_t Ed25519PrivateKey::serialize() const
 {
     ::gcry_sexp_t d = ::gcry_sexp_find_token(_private_key, "d", 0);
     if (!d) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::serialize/find_token");
     }
     size_t d_size;
     const char* d_buffer = ::gcry_sexp_nth_data(d, 1, &d_size);
     if (!d_buffer) {
         ::gcry_sexp_release(d);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::serialize/nth_data");
     }
     key_array_t output;
     assert(d_size == output.size());
@@ -225,26 +225,26 @@ Ed25519PublicKey Ed25519PrivateKey::public_key() const
      */
     ::gcry_ctx_t public_key_parameters;
     if (::gcry_mpi_ec_new(&public_key_parameters, _private_key, NULL)) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::public_key/ec_new");
     }
     ::gcry_sexp_t public_key_sexp;
     if (::gcry_pubkey_get_sexp(&public_key_sexp, GCRY_PK_GET_PUBKEY, public_key_parameters)) {
         ::gcry_ctx_release(public_key_parameters);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::public_key/get_sexp");
     }
     ::gcry_ctx_release(public_key_parameters);
 
     ::gcry_sexp_t q = ::gcry_sexp_find_token(public_key_sexp, "q", 0);
     if (!q) {
         ::gcry_sexp_release(public_key_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::public_key/find_token");
     }
     ::gcry_sexp_release(public_key_sexp);
     size_t q_size;
     const char* q_buffer = ::gcry_sexp_nth_data(q, 1, &q_size);
     if (!q_buffer) {
         ::gcry_sexp_release(q);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::public_key/nth_data");
     }
     Ed25519PublicKey::key_array_t public_key;
     assert(q_size == public_key.size());
@@ -258,27 +258,27 @@ Ed25519PrivateKey Ed25519PrivateKey::generate()
 {
     ::gcry_sexp_t generation_parameters;
     if (gcry_sexp_build(&generation_parameters, NULL, "(genkey (ecc (curve Ed25519) (flags eddsa)))")) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::generate/sexp_build");
     }
 
     ::gcry_sexp_t private_key_sexp;
     if (::gcry_pk_genkey(&private_key_sexp, generation_parameters)) {
         ::gcry_sexp_release(generation_parameters);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::generate/genkey");
     }
     ::gcry_sexp_release(generation_parameters);
 
     ::gcry_sexp_t d = ::gcry_sexp_find_token(private_key_sexp, "d", 0);
     if (!d) {
         ::gcry_sexp_release(private_key_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::generate/find_token");
     }
     ::gcry_sexp_release(private_key_sexp);
     size_t d_size;
     const char* d_buffer = ::gcry_sexp_nth_data(d, 1, &d_size);
     if (!d_buffer) {
         ::gcry_sexp_release(d);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::generate/nth_data");
     }
     key_array_t private_key;
     assert(d_size == private_key.size());
@@ -292,34 +292,34 @@ Ed25519PrivateKey::sig_array_t Ed25519PrivateKey::sign(boost::string_view data) 
 {
     ::gcry_sexp_t data_sexp;
     if (::gcry_sexp_build(&data_sexp, NULL, "(data (flags eddsa) (hash-algo sha512) (value %b))", data.size(), data.data())) {
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::sign/sexp_build");
     }
 
     ::gcry_sexp_t signature_sexp;
     if (::gcry_pk_sign(&signature_sexp, data_sexp, _private_key)) {
         ::gcry_sexp_release(data_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::sign/sign");
     }
     ::gcry_sexp_release(data_sexp);
 
     ::gcry_sexp_t r_sexp = ::gcry_sexp_find_token(signature_sexp, "r", 0);
     if (!r_sexp) {
         ::gcry_sexp_release(signature_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::sign/find_token");
     }
     size_t r_size;
     const char* r_buffer = ::gcry_sexp_nth_data(r_sexp, 1, &r_size);
     if (!r_buffer) {
         ::gcry_sexp_release(r_sexp);
         ::gcry_sexp_release(signature_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::sign/nth_data");
     }
 
     ::gcry_sexp_t s_sexp = ::gcry_sexp_find_token(signature_sexp, "s", 0);
     if (!r_sexp) {
         ::gcry_sexp_release(r_sexp);
         ::gcry_sexp_release(signature_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::sign/find_token");
     }
     size_t s_size;
     const char* s_buffer = ::gcry_sexp_nth_data(s_sexp, 1, &s_size);
@@ -327,7 +327,7 @@ Ed25519PrivateKey::sig_array_t Ed25519PrivateKey::sign(boost::string_view data) 
         ::gcry_sexp_release(s_sexp);
         ::gcry_sexp_release(r_sexp);
         ::gcry_sexp_release(signature_sexp);
-        throw std::exception();
+        throw std::runtime_error("In Ed25519PrivateKey::sign/nth_data(2)");
     }
 
     ::gcry_sexp_release(signature_sexp);
