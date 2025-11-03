@@ -34,6 +34,10 @@ private:
         asio::ip::udp::endpoint endpoint;
         std::shared_ptr<AbstractClient> client;
         Target target;
+
+        friend std::ostream& operator<<(std::ostream& os, const Candidate& c) {
+            return os << "Candidate{ endpoint:" << c.endpoint << ", client:" << c.client.get() << ", target:" << c.target << "}";
+        }
     };
 
 public:
