@@ -484,7 +484,7 @@ private:
         = default_max_cached_age;
     size_t _max_simultaneous_announcements
         = default_max_simultaneous_announcements;
-    uint64_t _max_req_body_size = 10240;
+    uint64_t _max_req_body_size = 102400;
     bool _cache_private = false;
 
     std::string _client_credentials;
