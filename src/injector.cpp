@@ -733,14 +733,16 @@ void serve( const InjectorConfig& config
             if (opt_err_res) {
                 send_response( con, *opt_err_res
                              , yield[ec].tag("inject/write_proto_version_error"));
-            } else if (is_restricted_target(req.target()))
+            } else if (is_restricted_target(req.target())) {
                 handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed
                             , "Target not allowed"
                             , yield[ec].tag("inject/handle_restricted"));
-            else
+            }
+            else {
                 cc.fetch( con, move(req)
                         , cancel, yield[ec].tag("inject/fetch"));
+            }
         }
 
         if (ec || !req_keep_alive) break;

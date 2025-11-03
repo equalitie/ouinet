@@ -58,7 +58,7 @@ public:
     void start();
     void stop();
     RunningState get_state() const noexcept;
-    std::string get_proxy_endpoint() const noexcept;
+    asio::ip::tcp::endpoint get_proxy_endpoint() const noexcept;
     std::string get_frontend_endpoint() const noexcept;
 
     void charging_state_change(bool is_charging);
