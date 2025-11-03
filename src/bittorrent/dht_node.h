@@ -37,8 +37,6 @@ using ip::udp;
 
 class DebugCtx;
 
-namespace dht {
-
 /**
  * To ensure that cancellation and object destruction behave in a predictable
  * way, all functions in this namespace follow the following invariant:
@@ -367,5 +365,4 @@ class DhtNode {
     metrics::DhtNode _metrics;
 };
 
-} // namespace dht
 } // namespace ouinet::bittorent

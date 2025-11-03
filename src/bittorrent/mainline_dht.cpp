@@ -60,7 +60,6 @@ using std::vector;
 using std::string;
 using boost::string_view;
 using std::cerr; using std::endl;
-using dht::NodeContact;
 using Candidates = std::vector<NodeContact>;
 namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
@@ -132,7 +131,7 @@ private:
     AccumSet _accum_set;
 };
 
-class dht::DhtNode::Stats {
+class DhtNode::Stats {
 public:
     using Duration = Stat::Duration;
 
@@ -201,10 +200,10 @@ static bool read_nodes( bool is_v4
     return true;
 }
 
-dht::DhtNode::DhtNode( const AsioExecutor& exec
-                     , metrics::DhtNode metrics
-                     , fs::path storage_dir
-                     , std::set<bootstrap::Address> extra_bs):
+DhtNode::DhtNode( const AsioExecutor& exec
+                , metrics::DhtNode metrics
+                , fs::path storage_dir
+                , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
@@ -214,7 +213,7 @@ dht::DhtNode::DhtNode( const AsioExecutor& exec
 {
 }
 
-void dht::DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
+void DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
 {
     if (local_ep.address().is_loopback()) {
         _WARN( "Node shall be bound to the loopback address and "
@@ -228,7 +227,7 @@ void dht::DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
     return start(move(m), yield);
 }
 
-void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
+void DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
 {
     _multiplexer = std::make_unique<UdpMultiplexer>(move(m));
 
@@ -252,7 +251,7 @@ void dht::DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
     return or_throw(yield, ec);
 }
 
-fs::path dht::DhtNode::stored_contacts_path() const
+fs::path DhtNode::stored_contacts_path() const
 {
     if (_storage_dir == fs::path()) return fs::path();
     string ipv = _local_endpoint.address().is_v4() ? "ipv4" : "ipv6";
@@ -260,7 +259,7 @@ fs::path dht::DhtNode::stored_contacts_path() const
 }
 
 static
-std::set<dht::NodeContact>
+std::set<NodeContact>
 read_stored_contacts( const AsioExecutor& exec
                     , const fs::path& path
                     , Cancel cancel
@@ -360,7 +359,7 @@ void write_stored_contacts( const AsioExecutor& exec
     if (ec) return or_throw(yield, ec);
 }
 
-void dht::DhtNode::store_contacts() const
+void DhtNode::store_contacts() const
 {
     if (!_routing_table) return;
 
@@ -381,7 +380,7 @@ void dht::DhtNode::store_contacts() const
     }));
 }
 
-void dht::DhtNode::stop()
+void DhtNode::stop()
 {
     store_contacts();
 
@@ -391,12 +390,12 @@ void dht::DhtNode::stop()
     _cancel();
 }
 
-dht::DhtNode::~DhtNode()
+DhtNode::~DhtNode()
 {
     stop();
 }
 
-std::set<udp::endpoint> dht::DhtNode::tracker_get_peers(
+std::set<udp::endpoint> DhtNode::tracker_get_peers(
     NodeID infohash,
     Cancel& cancel,
     asio::yield_context yield
@@ -408,7 +407,7 @@ std::set<udp::endpoint> dht::DhtNode::tracker_get_peers(
     return or_throw(yield, ec, std::move(peers));
 }
 
-std::set<udp::endpoint> dht::DhtNode::tracker_announce(
+std::set<udp::endpoint> DhtNode::tracker_announce(
     NodeID infohash,
     boost::optional<int> port,
     Cancel& cancel,
@@ -456,7 +455,7 @@ std::set<udp::endpoint> dht::DhtNode::tracker_announce(
     return or_throw<std::set<udp::endpoint>>(yield, ec, std::move(peers));
 }
 
-boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
+boost::optional<BencodedValue> DhtNode::data_get_immutable(
     const NodeID& key,
     Cancel& cancel,
     asio::yield_context yield
@@ -522,7 +521,7 @@ boost::optional<BencodedValue> dht::DhtNode::data_get_immutable(
     return or_throw<boost::optional<BencodedValue>>(yield, ec, std::move(data));
 }
 
-NodeID dht::DhtNode::data_put_immutable(
+NodeID DhtNode::data_put_immutable(
     const BencodedValue& data,
     Cancel& cancel,
     asio::yield_context yield
@@ -613,7 +612,7 @@ NodeID dht::DhtNode::data_put_immutable(
     return or_throw<NodeID>(yield, ec, std::move(key));
 }
 
-boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
+boost::optional<MutableDataItem> DhtNode::data_get_mutable(
     const util::Ed25519PublicKey& public_key,
     boost::string_view salt,
     Cancel& cancel,
@@ -725,7 +724,7 @@ boost::optional<MutableDataItem> dht::DhtNode::data_get_mutable(
     return or_throw(yield, ec, std::move(data));
 }
 
-NodeID dht::DhtNode::data_put_mutable(
+NodeID DhtNode::data_put_mutable(
     MutableDataItem data,
     Cancel& cancel_signal,
     asio::yield_context yield
@@ -877,7 +876,7 @@ NodeID dht::DhtNode::data_put_mutable(
 }
 
 
-void dht::DhtNode::receive_loop(asio::yield_context yield)
+void DhtNode::receive_loop(asio::yield_context yield)
 {
     while (true) {
         sys::error_code ec;
@@ -938,7 +937,7 @@ void dht::DhtNode::receive_loop(asio::yield_context yield)
     }
 }
 
-void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
+void DhtNode::store_contacts_loop(asio::yield_context yield)
 {
     fs::path path = stored_contacts_path();
     if (path == fs::path()) return;
@@ -960,7 +959,7 @@ void dht::DhtNode::store_contacts_loop(asio::yield_context yield)
     }
 }
 
-std::string dht::DhtNode::new_transaction_string()
+std::string DhtNode::new_transaction_string()
 {
 #if 0 // Useful for debugging
     std::ostringstream ss;
@@ -985,7 +984,7 @@ std::string dht::DhtNode::new_transaction_string()
 #endif
 }
 
-void dht::DhtNode::send_datagram(
+void DhtNode::send_datagram(
     udp::endpoint destination,
     const BencodedMap& message
 ) {
@@ -995,7 +994,7 @@ void dht::DhtNode::send_datagram(
     _multiplexer->send(bencoding_encode(message), destination);
 }
 
-void dht::DhtNode::send_datagram(
+void DhtNode::send_datagram(
     udp::endpoint destination,
     const BencodedMap& message,
     Cancel& cancel,
@@ -1007,7 +1006,7 @@ void dht::DhtNode::send_datagram(
     _multiplexer->send(bencoding_encode(message), destination, cancel, yield);
 }
 
-void dht::DhtNode::send_query(
+void DhtNode::send_query(
     udp::endpoint destination,
     std::string transaction,
     std::string query_type,
@@ -1036,7 +1035,7 @@ void dht::DhtNode::send_query(
  * If destination_id is set, update the routing table in accordance with
  * whether a successful reply was received.
  */
-BencodedMap dht::DhtNode::send_query_await_reply(
+BencodedMap DhtNode::send_query_await_reply(
     Contact dst,
     const std::string& query_type,
     const BencodedMap& query_arguments,
@@ -1166,7 +1165,7 @@ BencodedMap dht::DhtNode::send_query_await_reply(
     return or_throw<BencodedMap>(yield, *first_error_code, std::move(response));
 }
 
-void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
+void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
 {
     assert(query["y"] == "q");
 
@@ -1251,7 +1250,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
 
         BencodedMap reply;
 
-        std::vector<dht::NodeContact> contacts;
+        std::vector<NodeContact> contacts;
 
         if (_routing_table) {
             contacts = _routing_table->find_closest_routing_nodes(target_id, RoutingTable::BUCKET_SIZE);
@@ -1286,7 +1285,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
 
         BencodedMap reply;
 
-        std::vector<dht::NodeContact> contacts;
+        std::vector<NodeContact> contacts;
 
         if (_routing_table) {
             contacts = _routing_table->find_closest_routing_nodes(infohash, RoutingTable::BUCKET_SIZE);
@@ -1388,7 +1387,7 @@ void dht::DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
 
         BencodedMap reply;
 
-        std::vector<dht::NodeContact> contacts
+        std::vector<NodeContact> contacts
             = _routing_table->find_closest_routing_nodes(target, RoutingTable::BUCKET_SIZE);
         std::string nodes;
         for (auto& contact : contacts) {
@@ -1620,10 +1619,10 @@ static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
     if (cancel) ec = asio::error::operation_aborted;
 }
 
-dht::DhtNode::BootstrapResult
-dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
-                              , Cancel cancel
-                              , asio::yield_context yield)
+DhtNode::BootstrapResult
+DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
+                         , Cancel cancel
+                         , asio::yield_context yield)
 {
     sys::error_code ec;
 
@@ -1701,7 +1700,7 @@ dht::DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
     return {*my_endpoint, bootstrap_ep};
 }
 
-void dht::DhtNode::bootstrap(asio::yield_context yield)
+void DhtNode::bootstrap(asio::yield_context yield)
 {
     // Create on stack so that the member one isn't used after ~DhtNode
     Cancel cancel(_cancel);
@@ -1896,7 +1895,7 @@ void dht::DhtNode::bootstrap(asio::yield_context yield)
 
 
 template<class Evaluate>
-void dht::DhtNode::collect(
+void DhtNode::collect(
     DebugCtx& dbg,
     const NodeID& target_id,
     Evaluate&& evaluate,
@@ -1957,7 +1956,7 @@ void dht::DhtNode::collect(
     }
 }
 
-std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
+std::vector<NodeContact> DhtNode::find_closest_nodes(
     NodeID target_id,
     Cancel& cancel_signal,
     asio::yield_context yield
@@ -2004,10 +2003,10 @@ std::vector<dht::NodeContact> dht::DhtNode::find_closest_nodes(
         output_set.push_back({ c.first, c.second });
     }
 
-    return or_throw<std::vector<dht::NodeContact>>(yield, ec, std::move(output_set));
+    return or_throw<std::vector<NodeContact>>(yield, ec, std::move(output_set));
 }
 
-BencodedMap dht::DhtNode::send_ping(
+BencodedMap DhtNode::send_ping(
     NodeContact contact,
     Cancel& cancel,
     asio::yield_context yield
@@ -2025,7 +2024,7 @@ BencodedMap dht::DhtNode::send_ping(
     );
 }
 
-void dht::DhtNode::send_ping(NodeContact contact)
+void DhtNode::send_ping(NodeContact contact)
 {
     // It is currently expected that this function returns immediately, due to
     // that we need to spawn an unlimited number of coroutines.  Perhaps it
@@ -2045,7 +2044,7 @@ void dht::DhtNode::send_ping(NodeContact contact)
  * Send a query that writes data to the DHT. Repeat up to 5 times until we
  * get a positive response.
  */
-void dht::DhtNode::send_write_query(
+void DhtNode::send_write_query(
     udp::endpoint destination,
     NodeID destination_id,
     const std::string& query_type,
@@ -2083,7 +2082,7 @@ void dht::DhtNode::send_write_query(
  * @return True when received a valid response, false otherwise.
  */
 // http://bittorrent.org/beps/bep_0005.html#find-node
-bool dht::DhtNode::query_find_node(
+bool DhtNode::query_find_node(
     NodeID target_id,
     Contact node,
     std::vector<NodeContact>& closer_nodes,
@@ -2131,7 +2130,7 @@ bool dht::DhtNode::query_find_node(
     return !closer_nodes.empty();
 }
 
-bool dht::DhtNode::query_find_node2(
+bool DhtNode::query_find_node2(
     NodeID target_id,
     Contact node,
     util::AsyncQueue<NodeContact>& closer_nodes,
@@ -2174,7 +2173,7 @@ bool dht::DhtNode::query_find_node2(
 }
 
 // http://bittorrent.org/beps/bep_0005.html#get-peers
-boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
+boost::optional<BencodedMap> DhtNode::query_get_peers(
     NodeID infohash,
     Contact node,
     util::AsyncQueue<NodeContact>& closer_nodes,
@@ -2247,7 +2246,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_peers(
 }
 
 // http://bittorrent.org/beps/bep_0044.html#get-message
-boost::optional<BencodedMap> dht::DhtNode::query_get_data(
+boost::optional<BencodedMap> DhtNode::query_get_data(
     NodeID key,
     Contact node,
     util::AsyncQueue<NodeContact>& closer_nodes,
@@ -2324,7 +2323,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data(
     return {std::move(*response)};
 }
 
-boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
+boost::optional<BencodedMap> DhtNode::query_get_data2(
     NodeID key,
     Contact node,
     util::AsyncQueue<NodeContact>& closer_nodes,
@@ -2398,7 +2397,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data2(
     return {std::move(*response)};
 }
 
-boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
+boost::optional<BencodedMap> DhtNode::query_get_data3(
     NodeID key,
     Contact node,
     util::AsyncQueue<NodeContact>& closer_nodes,
@@ -2457,7 +2456,7 @@ boost::optional<BencodedMap> dht::DhtNode::query_get_data3(
  * Perform a get_peers search. Returns the peers found, as well as necessary
  * data to later perform an announce operation.
  */
-void dht::DhtNode::tracker_do_search_peers(
+void DhtNode::tracker_do_search_peers(
     NodeID infohash,
     std::set<udp::endpoint>& peers,
     std::map<NodeID, TrackerNode>& responsible_nodes,
@@ -2594,7 +2593,7 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         }
     }
 
-    _nodes[local_ep] = make_unique<dht::DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir);
+    _nodes[local_ep] = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir);
 
     TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();
@@ -2637,7 +2636,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
         }
     }
 
-    auto node = make_unique<dht::DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir, _extra_bs);
+    auto node = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()), _storage_dir, _extra_bs);
 
     auto cc = _cancel.connect([&] { node = nullptr; });
 

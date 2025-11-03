@@ -8,7 +8,6 @@
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
-using namespace ouinet::bittorrent::dht;
 
 //--------------------------------------------------------------------
 template<class From, class To, class Pred>

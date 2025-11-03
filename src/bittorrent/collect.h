@@ -5,8 +5,9 @@
 #include "../util/watch_dog.h"
 #include "../util/async_queue.h"
 #include "../util/wait_condition.h"
+#include "contact.h"
 
-namespace ouinet { namespace bittorrent {
+namespace ouinet::bittorrent {
 
 template<class CandidateSet, class Evaluate>
 void collect(
@@ -20,7 +21,6 @@ void collect(
     Cancel cancel_signal(cancel_signal_);
 
     using namespace std;
-    using dht::NodeContact;
 
     enum Progress { unused, used };
 
@@ -39,7 +39,7 @@ void collect(
     }
 
     WaitCondition all_done(exec);
-    util::AsyncQueue<dht::NodeContact> new_candidates(exec);
+    util::AsyncQueue<NodeContact> new_candidates(exec);
 
     Scheduler scheduler(exec, 8);
 
@@ -136,7 +136,7 @@ void collect(
                 // Make sure we don't get stuck waiting for candidates when
                 // there is no more work and this candidate has not returned
                 // any new ones.
-                new_candidates.async_push( dht::NodeContact()
+                new_candidates.async_push( NodeContact()
                                          , asio::error::eof
                                          , local_cancel
                                          , yield);
@@ -185,4 +185,4 @@ void collect(
     }
 }
 
-}} // namespaces
+} // namespaces

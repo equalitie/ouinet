@@ -2,38 +2,27 @@
 
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/filesystem/path.hpp>
 
-#include <chrono>
-#include <vector>
 #include <set>
+#include <map>
 
 #include <asio_utp/udp_multiplexer.hpp>
 
-#include "bencoding.h"
 #include "bootstrap.h"
-#include "dht_storage.h"
 #include "mutable_data.h"
 #include "node_id.h"
-#include "routing_table.h"
-#include "contact.h"
 #include "cxx/metrics.h"
 #include "dht.h"
 
 #include "../util/executor.h"
 #include "../namespaces.h"
-//#include "../util/crypto.h"
 #include "../util/signal.h"
-//#include "../util/wait_condition.h"
-//#include "../util/async_queue.h"
-//#include "../util/watch_dog.h"
 
 namespace ouinet::bittorrent {
 
 class UdpMultiplexer;
-
-namespace dht { class DhtNode; }
+class DhtNode;
 
 namespace ip = asio::ip;
 using ip::udp;
@@ -113,7 +102,7 @@ class MainlineDht : public DhtBase {
 
     private:
     AsioExecutor _exec;
-    std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;
+    std::map<udp::endpoint, std::unique_ptr<DhtNode>> _nodes;
     Cancel _cancel;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;

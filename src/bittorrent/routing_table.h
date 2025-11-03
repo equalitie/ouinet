@@ -8,7 +8,7 @@
 
 #include "node_contact.h"
 
-namespace ouinet { namespace bittorrent { namespace dht {
+namespace ouinet::bittorrent {
 
 class DhtNode;
 
@@ -88,5 +88,5 @@ private:
     std::vector<Bucket> _buckets;
 };
 
-}}} // namespaces
+} // namespaces
 
