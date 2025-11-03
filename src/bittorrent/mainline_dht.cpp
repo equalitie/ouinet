@@ -10,6 +10,7 @@
 #include "proximity_map.h"
 #include "debug_ctx.h"
 #include "is_martian.h"
+#include "dht_node.h"
 
 #include "../async_sleep.h"
 #include "../defer.h"
@@ -22,7 +23,6 @@
 #include "../util/crypto.h"
 #include "../util/str.h"
 #include "../util/success_condition.h"
-#include "../util/wait_condition.h"
 #include "../util/file_io.h"
 #include "../util/variant.h"
 #include "../logger.h"
@@ -2604,6 +2604,24 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         _nodes[ep]->start(move(m), yield[ec]);
         assert(!con || ec == asio::error::operation_aborted);
     }));
+}
+
+std::set<udp::endpoint> MainlineDht::wan_endpoints() const {
+    std::set<udp::endpoint> ret;
+    for (auto& p : _nodes) { ret.insert(p.second->wan_endpoint()); }
+    return ret;
+}
+
+bool MainlineDht::all_ready() const {
+    for (const auto& n : _nodes) {
+        if (!n.second->ready()) return false;
+    }
+    return true;
+}
+
+void MainlineDht::stop() {
+    _cancel();
+    _nodes.clear();
 }
 
 asio::ip::udp::endpoint

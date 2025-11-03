@@ -4,6 +4,7 @@
 #include "../util/scheduler.h"
 #include "../util/watch_dog.h"
 #include "../util/async_queue.h"
+#include "../util/wait_condition.h"
 
 namespace ouinet { namespace bittorrent {
 

@@ -13,6 +13,8 @@
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
 #include "../../util/handler_tracker.h"
+#include "../../util/wait_condition.h"
+#include "../../util/watch_dog.h"
 
 #define _LOGPFX "Bep5Client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)

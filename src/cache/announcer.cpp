@@ -4,6 +4,8 @@
 #include "announcer.h"
 #include "util/async_queue.h"
 #include "logger.h"
+#include "defer.h"
+#include "../util/wait_condition.h"
 #include "async_sleep.h"
 #include "bittorrent/node_id.h"
 #include "util/handler_tracker.h"
