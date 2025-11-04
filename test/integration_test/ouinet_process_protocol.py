@@ -116,7 +116,7 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         self.public_key = ""
 
     def errReceived(self, data):
-        print("receiving line", data)
+        # print("receiving line", data)
 
         data, rdata = data.decode(), data
         self.look_for_public_key(data)
