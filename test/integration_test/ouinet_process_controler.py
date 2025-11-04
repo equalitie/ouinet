@@ -7,6 +7,7 @@
 import os
 import logging
 from typing import List
+from traceback import format_stack
 
 from test_fixtures import TestFixtures
 
@@ -164,9 +165,16 @@ class OuinetProcess(object):
             self._proc.signalProcess("TERM")
 
     def stop(self):
-        if self._has_started:  # stop only if started
+        if self._has_started and not self._term_signal_sent:  # stop only if started
             self._has_started = False
             logging.debug("process " + self.config.app_name + " stopping")
+
+            # Introspection for extra debug details
+            tb = "\n".join(format_stack())
+            if "teardown" in tb.lower():
+                logging.debug("this is happening as a part of teardown")
+            else:
+                logging.debug("the process is being stopped from inside the test body")
 
             if self.timeout_killer.active():
                 self.timeout_killer.cancel()
