@@ -40,8 +40,8 @@ Response fetch(const Client& client, asio::yield_context yield) {
     stream.async_connect(client.get_proxy_endpoint(), yield);
 
     int version = 11;
-    std::string host = "example.org";
-    std::string target = "https://" + host + "/";
+    std::string host = "gitlab.com";
+    std::string target = "https://" + host + "/ceno-app/ceno-android/-/raw/main/LICENSE";
 
     http::request<http::string_body> req{http::verb::get, target, version};
     req.set(http::field::host, host);
@@ -80,30 +80,62 @@ BOOST_AUTO_TEST_CASE(fetch_through_injector_public) {
         ctx,
         std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
-    Client client(ctx, make_config<ClientConfig>({
+    Client seeder(ctx, make_config<ClientConfig>({
             S("./no_client_exec"),
             S("--log-level=DEBUG"),
-            S("--repo"), root.make_subdir("client").string(),
+            S("--repo"), root.make_subdir("seeder").string(),
             S("--injector-credentials"), injector_credentials,
             S("--cache-type=bep5-http"),
             S("--cache-http-public-key"), injector.cache_http_public_key(),
             S("--injector-tls-cert-file"), injector.tls_cert_file().string(),
             S("--disable-origin-access"),
+            // Bind to random ports to avoid clashes
+            S("--listen-on-tcp=127.0.0.1:0"),
+            S("--front-end-ep=127.0.0.1:0"),
         }),
         [&ctx, swarms] () {
-            return std::make_shared<MockDht>("client", ctx.get_executor(), swarms);
+            return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
         });
 
-    client.start();
+    Client leecher(ctx, make_config<ClientConfig>({
+            S("./no_client_exec"),
+            S("--log-level=DEBUG"),
+            S("--repo"), root.make_subdir("leecher").string(),
+            S("--injector-credentials"), injector_credentials,
+            S("--cache-type=bep5-http"),
+            S("--cache-http-public-key"), injector.cache_http_public_key(),
+            S("--injector-tls-cert-file"), injector.tls_cert_file().string(),
+            S("--disable-origin-access"),
+            // Bind to random ports to avoid clashes
+            S("--listen-on-tcp=127.0.0.1:0"),
+            S("--front-end-ep=127.0.0.1:0"),
+        }),
+        [&ctx, swarms] () {
+            auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
+            dht->can_not_see("injector");
+            return dht;
+        });
+
+    // Clients are started explicitly
+    seeder.start();
+    leecher.start();
 
     asio::spawn(ctx, [&] (asio::yield_context yield) {
-        auto rs = fetch(client, yield);
+        // The "seeder" fetches the signed content through the "injector"
+        auto rs1 = fetch(seeder, yield);
 
-        BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+        BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
+        BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
+
+        // The "leecher" client fetches the signed content from the "seeder"
+        auto rs2 = fetch(leecher, yield);
+
+        BOOST_CHECK_EQUAL(rs2.result(), http::status::ok);
+        BOOST_CHECK_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
 
         injector.stop();
-        client.stop();
+        seeder.stop();
+        leecher.stop();
     },
     [] (std::exception_ptr e) {
         if (e) std::rethrow_exception(e);

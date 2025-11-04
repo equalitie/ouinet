@@ -47,6 +47,16 @@ std::set<UdpEndpoint> MockDht::wan_endpoints() const {
     return {};
 }
 
+std::set<UdpEndpoint> MockDht::Swarm::endpoints(const std::set<std::string>& no_see_filter) {
+    std::set<UdpEndpoint> eps;
+    for (auto peer : *this) {
+        if (no_see_filter.count(peer.name) == 0) {
+            eps.insert(peer.endpoint);
+        }
+    }
+    return eps;
+}
+
 /*
  * TODO: announce() and put() functions don't have any real error detection.
  */
@@ -56,21 +66,22 @@ std::set<UdpEndpoint> MockDht::tracker_announce(
     Cancel,
     asio::yield_context
 ) {
-    std::set<UdpEndpoint> eps;
+    std::set<UdpEndpoint> my_endpoints;
+
     for (auto ep : _local_endpoints) {
         if (port) {
             ep.port(*port);
         }
-        eps.insert(any_to_local(ep));
+        my_endpoints.insert(any_to_local(ep));
     }
 
-    std::cout << _name << ": announce " << debug(eps) << " to " << infohash << "\n";
+    std::cout << _name << ": announce " << debug(my_endpoints) << " to " << infohash << "\n";
 
-    for (auto ep : eps) {
-        (*_swarms)[infohash].insert(ep);
+    for (auto ep : my_endpoints) {
+        (*_swarms)[infohash].insert(Peer { _name, ep });
     }
 
-    return (*_swarms)[infohash];
+    return (*_swarms)[infohash].endpoints(_no_see_filter);
 }
 
 std::set<UdpEndpoint> MockDht::tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) {
@@ -79,8 +90,16 @@ std::set<UdpEndpoint> MockDht::tracker_get_peers(NodeID infohash, Cancel&, asio:
         std::cout << _name << ": get " << infohash << " -> {} (no such swarm)\n";
         return {};
     }
-    std::cout << _name << ": get " << infohash << " -> " << debug(swarm_i->second) << "\n";
-    return swarm_i->second;
+
+    auto eps = swarm_i->second.endpoints(_no_see_filter);
+
+    std::cout << _name << ": get " << infohash << " -> " << debug(eps) << "\n";
+
+    return eps;
+}
+
+void MockDht::can_not_see(std::string peer_name) {
+    _no_see_filter.insert(peer_name);
 }
 
 Executor MockDht::get_executor() {
