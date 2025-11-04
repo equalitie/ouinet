@@ -7,7 +7,7 @@
 #include "http_logger.h"
 #include "util/yield.h"
 #include "injector_config.h"
-#include "bittorrent/mainline_dht.h"
+#include "bittorrent/mock_dht.h"
 
 
 // TODO: Don't do this in global namespaces nor headers
@@ -28,7 +28,12 @@ resolve_target(const http::request_header<>& req
 // `ssl::context` which is passed to `ssl::stream`s by reference.
 class Injector {
 public:
-    Injector(InjectorConfig config, asio::io_context& ctx);
+    Injector(
+        InjectorConfig config,
+        asio::io_context& ctx,
+        // For use in tests
+        std::shared_ptr<bittorrent::MockDht> dht = nullptr);
+
     void stop();
     ~Injector();
 
@@ -51,7 +56,7 @@ public:
 private:
     InjectorConfig _config;
     Cancel _cancel;
-    std::shared_ptr<bittorrent::MainlineDht> _dht;
+    std::shared_ptr<bittorrent::DhtBase> _dht;
     std::unique_ptr<asio::ssl::context> _ssl_context;
 };
 

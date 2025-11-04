@@ -182,7 +182,7 @@ class Client::State : public enable_shared_from_this<Client::State> {
     };
 
 public:
-    State(asio::io_context& ctx, ClientConfig cfg)
+    State(asio::io_context& ctx, ClientConfig cfg, std::optional<Client::MockDhtBuilder> dht_builder)
         : _ctx(ctx)
         , _config(move(cfg))
         // A certificate chain with OUINET_CA + SUBJECT_CERT
@@ -194,6 +194,7 @@ public:
         , _front_end(_config)
         , pub_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
+        , _bt_dht_builder(std::move(dht_builder))
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
         , _metrics(_config.metrics()
@@ -322,10 +323,18 @@ public:
         if (_bt_dht) return _bt_dht;
         auto lock = _bt_dht_wc.lock();
 
-        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
-                                                       , _metrics.mainline_dht()
-                                                       , _config.repo_root() / "dht"
-                                                       , _config.bt_bootstrap_extras());
+        std::shared_ptr<bt::DhtBase> bt_dht;
+
+        if (_bt_dht_builder) {
+            bt_dht = (*_bt_dht_builder)();
+        }
+        else {
+            bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
+                                                      , _metrics.mainline_dht()
+                                                      , _config.repo_root() / "dht"
+                                                      , _config.bt_bootstrap_extras());
+        }
+
 
         // Port allocation works like this:
         //
@@ -356,21 +365,19 @@ public:
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
-        shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         TRACK_SPAWN(_ctx, ([
             bt_dht,
             executor = _ctx.get_executor(),
-            ext_ep,
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
             upnps = _upnps_ptr
         ] (asio::yield_context yield) mutable {
             sys::error_code ec;
-            *ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
+            auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
             if (ec || shutdown_signal) return;
-            State::setup_upnp(executor, ext_ep, local_ep, upnps);
+            State::setup_upnp(executor, ext_ep.port(), local_ep, upnps);
         }));
 
         _bt_dht = move(bt_dht);
@@ -542,7 +549,7 @@ private:
 
     static void setup_upnp(
         AsioExecutor executor,
-        shared_ptr<asio::ip::udp::endpoint> ext_ep,
+        uint16_t ext_port,
         asio::ip::udp::endpoint local_ep,
         shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> upnps
     ){
@@ -559,8 +566,8 @@ private:
         }
 
         LOG_DEBUG("UPnP: Updater is starting with ",
-                 "local port ", local_ep.port(), " and external port ", ext_ep->port());
-        p = make_unique<UPnPUpdater>(executor, ext_ep->port(), local_ep.port());
+                 "local port ", local_ep.port(), " and external port ", ext_port);
+        p = make_unique<UPnPUpdater>(executor, ext_port, local_ep.port());
     }
 
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
@@ -646,6 +653,7 @@ private:
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
 
+    std::optional<Client::MockDhtBuilder> _bt_dht_builder;
     shared_ptr<bt::DhtBase> _bt_dht;
     WaitCondition _bt_dht_wc;
 
@@ -3269,9 +3277,13 @@ void Client::State::setup_injector(asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-Client::Client(asio::io_context& ctx, ClientConfig cfg)
-    : _state(make_shared<State>(ctx, move(cfg)))
-{}
+Client::Client(
+        asio::io_context& ctx,
+        ClientConfig cfg,
+        std::optional<MockDhtBuilder> dht_builder)
+    : _state(make_shared<State>(ctx, move(cfg), move(dht_builder)))
+{
+}
 
 Client::~Client()
 {
@@ -3299,6 +3311,11 @@ asio::ip::tcp::endpoint Client::get_proxy_endpoint() const noexcept
 std::string Client::get_frontend_endpoint() const noexcept
 {
     return _state->_frontend_endpoint;
+}
+
+AsioExecutor Client::get_executor() const noexcept
+{
+    return _state->_ctx.get_executor();
 }
 
 void Client::charging_state_change(bool is_charging) {

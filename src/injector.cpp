@@ -20,6 +20,7 @@
 #include "generic_stream.h"
 #include "split_string.h"
 #include "async_sleep.h"
+#include "bittorrent/mainline_dht.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -827,7 +828,10 @@ void listen( const InjectorConfig& config
 }
 
 //------------------------------------------------------------------------------
-Injector::Injector(InjectorConfig config, asio::io_context& ctx) :
+Injector::Injector(
+        InjectorConfig config,
+        asio::io_context& ctx,
+        std::shared_ptr<bittorrent::MockDht> dht) :
     _config(std::move(config))
 {
     #ifndef __WIN32
@@ -912,11 +916,15 @@ Injector::Injector(InjectorConfig config, asio::io_context& ctx) :
         }
     }
 
-    _dht = std::make_shared<bt::MainlineDht>
-        ( ex
-        , metrics::Client::noop().mainline_dht()
-        , fs::path{}
-        , _config.bt_bootstrap_extras());  // default storage dir
+    if (dht) {
+        _dht = dht;
+    } else {
+        _dht = std::make_shared<bt::MainlineDht>
+            ( ex
+            , metrics::Client::noop().mainline_dht()
+            , fs::path{}
+            , _config.bt_bootstrap_extras());  // default storage dir
+    }
 
     _dht->set_endpoints({_config.bittorrent_endpoint()});
 
@@ -997,12 +1005,12 @@ Injector::Injector(InjectorConfig config, asio::io_context& ctx) :
     LOG_INFO("HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
     task::spawn_detached(ex, [
+        this,
         proxy_server = std::move(proxy_server),
-        &config,
         cancel = _cancel
     ] (asio::yield_context yield) mutable {
         sys::error_code ec;
-        listen(config, *proxy_server, cancel, yield[ec]);
+        listen(_config, *proxy_server, cancel, yield[ec]);
     });
 }
 

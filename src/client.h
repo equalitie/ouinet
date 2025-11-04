@@ -7,6 +7,7 @@
 
 #include "namespaces.h"
 #include "client_config.h"
+#include "bittorrent/mock_dht.h"
 
 namespace ouinet {
 
@@ -37,6 +38,7 @@ class Client {
 private:
     class State;
     class ClientCacheControl;
+    using MockDhtBuilder = std::function<std::shared_ptr<bittorrent::MockDht> ()>;
 
 public:
     enum class RunningState {
@@ -51,7 +53,11 @@ public:
 
     static boost::filesystem::path get_or_gen_ca_root_cert(const std::string repo_root);
 
-    Client(asio::io_context&, ClientConfig);
+    Client(
+        asio::io_context&,
+        ClientConfig,
+        // For use in tests
+        std::optional<MockDhtBuilder> dht_builder = {});
 
     ~Client();
 
@@ -60,6 +66,7 @@ public:
     RunningState get_state() const noexcept;
     asio::ip::tcp::endpoint get_proxy_endpoint() const noexcept;
     std::string get_frontend_endpoint() const noexcept;
+    AsioExecutor get_executor() const noexcept;
 
     void charging_state_change(bool is_charging);
     void wifi_state_change(bool is_wifi_connected);
