@@ -312,18 +312,18 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
 std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options::variables_map& vm) {
     bool enable_on_start = false;
-    boost::optional<util::url_match> server_url;
+    boost::optional<util::Url> server_url;
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     std::optional<metrics::EncryptionKey> encryption_key;
 
     if (auto opt = as_optional<std::string>(vm, "metrics-server-url")) {
-        util::url_match url_match;
-        if (!util::match_http_url(*opt, url_match)) {
+        auto url = util::Url::from(*opt);
+        if (!url) {
             throw error(
                     "The '--metrics-server-url' argument must be a valid URL");
         }
-        server_url = std::move(url_match);
+        server_url = std::move(*url);
     }
 
     if (auto opt = as_optional<bool>(vm, "metrics-enable-on-start")) {
@@ -341,7 +341,6 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         }
         server_token = *opt;
     }
-
 
     auto server_cacert_str = as_optional<std::string>(vm, "metrics-server-cacert");
     auto server_cacert_file = as_optional<std::string>(vm, "metrics-server-cacert-file");

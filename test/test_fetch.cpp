@@ -12,6 +12,7 @@
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "client.h"
+#include "util/str.h"
 
 BOOST_AUTO_TEST_SUITE(ouinet_integration_tests)
 

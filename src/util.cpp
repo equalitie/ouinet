@@ -18,27 +18,6 @@
 
 using namespace std;
 
-bool ouinet::util::match_http_url(const boost::string_view url, ouinet::util::url_match& match) {
-    static const boost::regex urlrx( "^(http|https)://"  // 1: scheme
-                                     "([-\\.a-z0-9]+|\\[[:0-9a-f]+\\])"  // 2: host
-                                     "(:[0-9]{1,5})?"  // 3: :port (or empty)
-                                     "(/[^?#]*)?"  // 4: /path
-                                     "(\\?[^#]*)?"  // 5: ?query (or empty)
-                                     "(#.*)?"  // 6: #fragment (or empty)
-                                   , boost::regex::normal | boost::regex::icase);
-    boost::cmatch m;
-    if (!boost::regex_match(url.begin(), url.end(), m, urlrx))
-        return false;
-    match = { m[1]
-            , m[2]
-            , m[3].length() > 0 ? std::string(m[3], 1) : ""  // drop colon
-            , m[4]
-            , m[5].length() > 0 ? std::string(m[5], 1) : ""  // drop qmark
-            , m[6].length() > 0 ? std::string(m[6], 1) : ""  // drop hash
-    };
-    return true;
-}
-
 boost::optional<boost::asio::ip::address>
 get_local_ip_address(const boost::asio::ip::udp::endpoint& ep) {
     boost::asio::io_context ctx;

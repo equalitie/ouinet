@@ -1259,9 +1259,9 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
                                       , [&]{ timeout_cancel(); });
 
     // Parse the URL to tell HTTP/HTTPS, host, port.
-    util::url_match url;
+    auto url = util::Url::from(rq.target());
 
-    if (!match_http_url(rq.target(), url)) {
+    if (!url) {
         _YERROR(yield, "Unsupported target URL");
         auto ec = asio::error::operation_not_supported;
         if (metrics) metrics->finish(ec);
@@ -1293,7 +1293,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
     // Build the actual request to send to the proxy.
     Request connreq = { http::verb::connect
-                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
+                      , url->host + ":" + (url->port.empty() ? "443" : url->port)
                       , 11 /* HTTP/1.1 */};
 
     // HTTP/1.1 requires a ``Host:`` header in all requests:
@@ -1349,10 +1349,10 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
     GenericStream con;
 
-    if (url.scheme == "https") {
+    if (url->scheme == "https") {
         con = ssl::util::client_handshake( move(inj.connection)
                                          , tls_ctx
-                                         , url.host
+                                         , url->host
                                          , timeout_cancel
                                          , static_cast<asio::yield_context>(yield[ec]));
     } else {
@@ -1542,7 +1542,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
         throw_error(asio::error::invalid_argument);
     }
 
-    const util::url_match& server_url = metrics_conf->server_url;
+    const util::Url& server_url = metrics_conf->server_url;
 
     http::request<http::buffer_body> req;
 

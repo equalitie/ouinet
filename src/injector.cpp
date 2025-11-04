@@ -299,9 +299,9 @@ class InjectorCacheControl {
                          , Yield yield)
     {
         // Parse the URL to tell HTTP/HTTPS, host, port.
-        util::url_match url;
+        auto url = util::Url::from(rq.target());
 
-        if (!util::match_http_url(rq.target(), url)) {
+        if (!url) {
             yield.log("Unsupported target URL");
             return or_throw<GenericStream>( yield
                                           , asio::error::operation_not_supported);
@@ -321,10 +321,10 @@ class InjectorCacheControl {
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
-        if (url.scheme == "https") {
+        if (url->scheme == "https") {
             auto c = ssl::util::client_handshake( move(socket)
                                                 , ssl_ctx
-                                                , url.host
+                                                , url->host
                                                 , cancel
                                                 , static_cast<asio::yield_context>(yield[ec]));
 

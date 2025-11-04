@@ -938,10 +938,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     ostringstream ss;
 
-    util::url_match url;
-    match_http_url(req.target(), url);
+    auto url = util::Url::from(req.target());
 
-    auto path_str = !url.path.empty() ? url.path : std::string(req.target());
+    auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
     std::string_view path(path_str);
 
     std::string_view groups_api_path = "/api/groups";

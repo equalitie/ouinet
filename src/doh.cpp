@@ -23,13 +23,13 @@ static const std::string doh_content_type = "application/dns-message";
 boost::optional<Endpoint>
 endpoint_from_base(const std::string& base)
 {
-    util::url_match um;
-    if (!util::match_http_url(base, um) || !um.fragment.empty())
+    auto url = util::Url::from(base);
+    if (!url || !url->fragment.empty())
         return boost::none;
-    if (um.query.find("dns=") == 0 || um.query.find("&dns=") != std::string::npos)
+    if (url->query.find("dns=") == 0 || url->query.find("&dns=") != std::string::npos)
         return boost::none;
-    um.query += um.query.empty() ? "dns=" : "&dns=";
-    return um.reassemble();
+    url->query += url->query.empty() ? "dns=" : "&dns=";
+    return url->reassemble();
 }
 
 static
