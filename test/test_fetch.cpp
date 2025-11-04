@@ -65,7 +65,7 @@ Request build_origin_request() {
     return req;
 }
 
-Response fetch_through(const Client& client, asio::yield_context yield) {
+Response fetch_through_client(const Client& client, asio::yield_context yield) {
     boost::beast::tcp_stream stream(client.get_executor());
     stream.async_connect(client.get_proxy_endpoint(), yield);
 
@@ -187,14 +187,14 @@ BOOST_AUTO_TEST_CASE(fetch_through_injector_public) {
         auto control_body = fetch_from_origin(yield).body();
 
         // The "seeder" fetches the signed content through the "injector"
-        auto rs1 = fetch_through(seeder, yield);
+        auto rs1 = fetch_through_client(seeder, yield);
 
         BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
         BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
         // The "leecher" client fetches the signed content from the "seeder"
-        auto rs2 = fetch_through(leecher, yield);
+        auto rs2 = fetch_through_client(leecher, yield);
 
         BOOST_CHECK_EQUAL(rs2.result(), http::status::ok);
         BOOST_CHECK_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
