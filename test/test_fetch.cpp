@@ -17,7 +17,7 @@
 #include "client.h"
 #include "util/str.h"
 
-BOOST_AUTO_TEST_SUITE(ouinet_integration_tests)
+BOOST_AUTO_TEST_SUITE(ouinet_cpp_integration_tests)
 
 using namespace std;
 using namespace ouinet;
@@ -76,7 +76,6 @@ Response fetch_through_client(const Client& client, asio::yield_context yield) {
     beast::flat_buffer b;
     Response res;
     http::async_read(stream, b, res, yield);
-
     return res;
 }
 
@@ -123,8 +122,14 @@ Response fetch_from_origin(asio::yield_context yield) {
     return res;
 }
 
-// WIP: Currently just creates an injector and a client and waits for them to bootstrap
-BOOST_AUTO_TEST_CASE(fetch_through_injector_public) {
+// An integration test with three identities: the 'injector', a 'seeder' client
+// and a 'leecher' client.
+//
+// * The 'seeder' client fetches a resource through the injector and stores it locally.
+// * The 'leecher' client then fetches the resource from the 'seeder'.
+//
+// The test is using `MockDht` because the `MainlineDht` wouldn't work locally.
+BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     asio::io_context ctx;
 
     TestDir root;
