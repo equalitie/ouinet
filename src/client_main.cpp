@@ -7,7 +7,7 @@
 using namespace ouinet;
 using namespace std;
 
-int main(int argc, char* argv[])
+int main(int argc, const char* argv[])
 {
     util::crypto_init();
 

@@ -1,6 +1,7 @@
 #include <boost/asio/spawn.hpp>
 
-#include "bittorrent/dht.h"
+#include "util/wait_condition.h"
+#include "bittorrent/mainline_dht.h"
 #include "create_udp_multiplexer.h"
 
 using namespace std;

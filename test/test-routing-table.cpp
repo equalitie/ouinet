@@ -11,7 +11,6 @@
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
-using namespace ouinet::bittorrent::dht;
 
 namespace std {
     template<class T>

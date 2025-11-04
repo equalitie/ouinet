@@ -28,6 +28,15 @@ namespace ip = asio::ip;
 using ip::udp;
 using util::AsioExecutor;
 
+// TODO: This is exposed here in this header only because it's also used in tests.
+asio::ip::udp::endpoint resolve(
+    const AsioExecutor& exec,
+    asio::ip::udp ipv,
+    const std::string& addr,
+    const std::string& port,
+    Cancel& cancel_signal,
+    asio::yield_context yield);
+
 class MainlineDht : public DhtBase {
     public:
     MainlineDht( const AsioExecutor&
