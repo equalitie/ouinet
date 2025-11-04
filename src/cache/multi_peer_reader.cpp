@@ -329,8 +329,10 @@ public:
         , _dbg_tag(move(dbg_tag))
         , _random_generator(_random_device())
     {
-        for (auto ep : _lan_peer_eps) {
-            add_candidate(ep);
+        if (auto dht_lock = _peer_lookup->get_dht_lock()) {
+            for (auto ep : _lan_peer_eps) {
+                add_candidate(ep, *dht_lock);
+            }
         }
 
         if (!_peer_lookup) {
@@ -350,11 +352,13 @@ public:
 
             if (c) return;
 
-            _peer_lookup.reset();
-
             if (!ec) {
-                for (auto ep : peer_eps) add_candidate(ep);
+                if (auto dht_lock = _peer_lookup->get_dht_lock()) {
+                    for (auto ep : peer_eps) add_candidate(ep, *dht_lock);
+                }
             }
+
+            _peer_lookup.reset();
 
             _cv.notify();
         });
@@ -372,8 +376,8 @@ public:
                , move(newest_proto_seen), move(dbg_tag))
     {}
 
-    void add_candidate(udp::endpoint ep) {
-        if (_peer_lookup->is_martian(ep)) return;
+    void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
+        if (dht.is_martian(ep)) return;
         if (_wan_my_eps.count(ep)) return;
 
         auto ip = _all_peers.insert({ep, unique_ptr<Peer>()});
