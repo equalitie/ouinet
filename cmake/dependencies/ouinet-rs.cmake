@@ -47,7 +47,7 @@ corrosion_import_crate(MANIFEST_PATH ${OUINET_RS_ROOT_DIR}/rust/Cargo.toml)
 string(REPLACE ";" " " OUINET_RS_CXXFLAGS "${OUINET_RS_CXXFLAGS_LIST}")
 corrosion_set_env_vars(ouinet_rs "CXXFLAGS=${OUINET_RS_CXXFLAGS}")
 
-add_dependencies(cargo-prebuild_ouinet_rs built_boost)
+add_dependencies(cargo-prebuild_ouinet_rs Boost::asio)
 
 if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
     corrosion_set_env_vars(ouinet_rs
