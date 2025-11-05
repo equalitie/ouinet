@@ -3,6 +3,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/filesystem.hpp>
 
+#include "declspec.h"
 #include "constants.h"
 
 #include "namespaces.h"
@@ -34,7 +35,7 @@ namespace bittorrent {
 
 class ClientConfig;
 
-class Client {
+class OUINET_DECL Client {
 private:
     class State;
     class ClientCacheControl;

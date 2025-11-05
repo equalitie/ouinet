@@ -217,6 +217,10 @@ target_link_libraries(client_lib
         lib::zdnsparser
 )
 
+if (WIN32 OR MINGW)
+    target_compile_definitions(client_lib PRIVATE -DOUINET_DECL_EXPORT)
+endif()
+
 if (ANDROID)
     find_library(android_log log)
     target_link_libraries(client_lib PUBLIC ${android_log})
