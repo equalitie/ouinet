@@ -284,13 +284,12 @@ set_target_properties(Boost::boost PROPERTIES
 # instead. Boost does not ship this library, so we need to create it.
 
 if (${BOOST_BUILD_SHARED})
-    add_library(boost_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+    add_library(ouinet_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
 else()
-    add_library(boost_asio STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+    add_library(ouinet_asio STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
 endif()
 
-add_library(Boost::asio ALIAS boost_asio)
-target_link_libraries(boost_asio
+target_link_libraries(ouinet_asio
     PUBLIC
         Boost::boost
         Threads::Threads
@@ -300,30 +299,29 @@ target_link_libraries(boost_asio
 )
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.77.0)
     # explicitly link with bcrypt after Boost::filesystem
-    target_link_libraries(boost_asio
+    target_link_libraries(ouinet_asio
         PUBLIC
             crypt32
             bcrypt)
 endif()
-target_compile_definitions(boost_asio
+target_compile_definitions(ouinet_asio
     PUBLIC
         -DBOOST_ASIO_DYN_LINK
         ${BOOST_COMPILE_DEFINITIONS}
 )
-target_compile_options(boost_asio
+target_compile_options(ouinet_asio
     PUBLIC -std=c++20
 )
 
 if (${BOOST_BUILD_SHARED})
-    add_library(boost_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+    add_library(ouinet_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 else()
-    add_library(boost_asio_ssl STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
+    add_library(ouinet_asio_ssl STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 endif()
-add_library(Boost::asio_ssl ALIAS boost_asio_ssl)
-target_link_libraries(boost_asio_ssl
+target_link_libraries(ouinet_asio_ssl
     PUBLIC
         OpenSSL::SSL
-        Boost::asio
+        ouinet_asio
 )
 
 

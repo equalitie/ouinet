@@ -77,7 +77,7 @@ target_include_directories(ouinet_dependencies
 )
 target_link_libraries(ouinet_dependencies
     INTERFACE
-        Boost::asio
+        ouinet_asio
         Boost::boost
         Boost::date_time
         Boost::filesystem
@@ -183,7 +183,7 @@ target_link_libraries(ouinet_common
         # Boost::asio_ssl is public for Android because the ClientConfig used
         # in native-lib.cpp contains ssl::context and we need its move
         # constructor and destructor implementations.
-        Boost::asio_ssl
+        ouinet_asio_ssl
 )
 
 target_include_directories(ouinet_common PUBLIC "src")
