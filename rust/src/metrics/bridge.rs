@@ -1,27 +1,26 @@
-use crate::{
-    crypto::EncryptionKey,
-    logger,
-    metrics::{
+//! Metrics API exposed to C++
+
+use super::{
+    collector::{
         request::{self, RequestId, RequestType},
-        BootstrapId, IpVersion, Metrics,
+        BootstrapId, Collector, IpVersion,
     },
-    metrics_runner::metrics_runner,
+    crypto::EncryptionKey,
     record_id::RecordId,
     record_processor::RecordProcessor,
-    runtime,
+    runner::metrics_runner,
     store::Store,
 };
+use crate::{logger, runtime};
 use cxx::UniquePtr;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex, Weak},
 };
 use tokio::{
-    runtime::Runtime,
-    select,
     sync::{mpsc, oneshot, watch},
-    task::{self, JoinHandle},
-    time::{sleep, Duration},
+    task::JoinHandle,
+    time::{self, Duration},
 };
 
 #[cxx::bridge]
@@ -81,7 +80,8 @@ mod ffi {
         include!("cxx/record_processor.h");
         type CxxRecordProcessor;
 
-        #[allow(dead_code)] // Not used in tests
+        // Not used in tests
+        #[allow(dead_code)]
         fn execute(
             self: &CxxRecordProcessor,
             record_name: String,
@@ -132,13 +132,11 @@ static CURRENT_CLIENT_INNER: Mutex<Weak<ClientInner>> = Mutex::new(Weak::new());
 // that writes into the store.
 // TODO: Alternative is to have multiple c++ clients to point to the same rust client, both
 // approaches have pros and cons.
-fn stop_current_client() -> Option<Arc<Runtime>> {
+fn stop_current_client() {
     let client_inner_lock = CURRENT_CLIENT_INNER.lock().unwrap();
 
     if let Some(client_inner) = client_inner_lock.upgrade() {
         client_inner.stop()
-    } else {
-        None
     }
 }
 
@@ -150,15 +148,10 @@ fn new_client(
     #[expect(clippy::boxed_local)] encryption_key: Box<EncryptionKey>,
 ) -> Box<Client> {
     logger::init_idempotent();
-    let runtime = match stop_current_client() {
-        Some(runtime) => runtime,
-        None => runtime::get_runtime(),
-    };
-    Box::new(Client::new(
-        runtime,
-        PathBuf::from(store_path),
-        *encryption_key,
-    ))
+
+    stop_current_client();
+
+    Box::new(Client::new(PathBuf::from(store_path), *encryption_key))
 }
 
 // -------------------------------------------------------------------
@@ -168,25 +161,24 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(runtime: Arc<Runtime>, store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
-        let _runtime_guard = runtime.enter();
+    fn new(store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
+        let runtime = runtime::handle();
 
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
 
-        let metrics = Arc::new(Mutex::new(Metrics::new()));
+        let collector = Arc::new(Mutex::new(Collector::new(&runtime)));
         let store = runtime.block_on(Store::new(store_path, encryption_key));
 
         let (runner, record_id_rx) = match store {
             Ok(store) => {
-                let metrics = metrics.clone();
+                let collector = collector.clone();
                 let record_id_rx = store.record_id.subscribe();
-                let job_handle = task::spawn(async move {
-                    metrics_runner(metrics, store, processor_rx).await;
+                let job_handle = runtime.spawn(async move {
+                    metrics_runner(collector, store, processor_rx).await;
                 });
 
                 (
                     Some(Runner {
-                        runtime,
                         processor_tx,
                         job_handle,
                     }),
@@ -204,7 +196,7 @@ impl Client {
         Self {
             inner: Arc::new(ClientInner {
                 runner: Mutex::new(runner),
-                metrics,
+                collector,
                 record_id_rx,
             }),
         }
@@ -239,12 +231,12 @@ impl Client {
     }
 
     fn new_request(&self, request_type: RequestType) -> Box<Request> {
-        let metrics = self.inner.metrics.clone();
+        let collector = self.inner.collector.clone();
 
-        let id = metrics.lock().unwrap().requests.add_request(request_type);
+        let id = collector.lock().unwrap().requests.add_request(request_type);
 
         Box::new(Request {
-            metrics,
+            collector,
             request_type,
             id,
         })
@@ -259,19 +251,19 @@ impl Client {
     }
 
     fn bridge_transfer_i2c(&self, byte_count: usize) {
-        let mut metrics = self.inner.metrics.lock().unwrap();
-        metrics.bridge_transfer_i2c(byte_count);
+        let mut collector = self.inner.collector.lock().unwrap();
+        collector.bridge_transfer_i2c(byte_count);
     }
 
     fn bridge_transfer_c2i(&self, byte_count: usize) {
-        let mut metrics = self.inner.metrics.lock().unwrap();
-        metrics.bridge_transfer_c2i(byte_count);
+        let mut collector = self.inner.collector.lock().unwrap();
+        collector.bridge_transfer_c2i(byte_count);
     }
 
     fn set_aux_key_value(&self, record_id: String, key: String, value: String) -> bool {
-        let mut metrics = self.inner.metrics.lock().unwrap();
+        let mut collector = self.inner.collector.lock().unwrap();
         if record_id == self.current_record_id() {
-            metrics.set_aux_key_value(key, value);
+            collector.set_aux_key_value(key, value);
             true
         } else {
             false
@@ -281,12 +273,11 @@ impl Client {
 
 struct ClientInner {
     runner: Mutex<Option<Runner>>,
-    metrics: Arc<Mutex<Metrics>>,
+    collector: Arc<Mutex<Collector>>,
     record_id_rx: watch::Receiver<RecordId>,
 }
 
 struct Runner {
-    runtime: Arc<Runtime>,
     processor_tx: mpsc::UnboundedSender<Option<RecordProcessor>>,
     job_handle: JoinHandle<()>,
 }
@@ -324,36 +315,38 @@ impl ClientInner {
 
     fn new_mainline_dht(&self) -> Box<MainlineDht> {
         Box::new(MainlineDht {
-            metrics: self.metrics.clone(),
+            collector: self.collector.clone(),
         })
     }
 
-    fn stop(&self) -> Option<Arc<Runtime>> {
+    fn stop(&self) {
         let mut lock = self.runner.lock().unwrap();
 
-        let Runner {
-            runtime,
+        let Some(Runner {
             processor_tx,
             mut job_handle,
-        } = lock.take()?;
+        }) = lock.take()
+        else {
+            return;
+        };
 
         // Signal to metrics_runner that we are exiting so it can save the most recent metrics.
         drop(processor_tx);
 
+        // Enter the async runtime so we can use `tokio::time::timeout`.
+        let runtime = runtime::handle();
+        let _enter = runtime.enter();
+
         // TODO: The C++ code itself does some deinitialization with a timeout and the code in this
         // function happens only after that is finished. Consider doing this session
         // deinitialization concurrently with the C++ code.
-        runtime.block_on(async move {
-            select! {
-                () = sleep(Duration::from_secs(5)) => {
-                    log::warn!("Metrics runner failed to finish within 5 seconds");
-                    job_handle.abort();
-                }
-                _ = &mut job_handle => (),
+        match runtime.block_on(time::timeout(Duration::from_secs(5), &mut job_handle)) {
+            Ok(_) => (),
+            Err(_) => {
+                log::warn!("Metrics runner failed to finish within 5 seconds");
+                job_handle.abort();
             }
-        });
-
-        Some(runtime)
+        }
     }
 }
 
@@ -366,7 +359,7 @@ impl Drop for ClientInner {
 // -------------------------------------------------------------------
 
 pub struct MainlineDht {
-    metrics: Arc<Mutex<Metrics>>,
+    collector: Arc<Mutex<Collector>>,
 }
 
 impl MainlineDht {
@@ -379,7 +372,7 @@ impl MainlineDht {
 
         Box::new(DhtNode {
             ipv,
-            metrics: self.metrics.clone(),
+            collector: self.collector.clone(),
         })
     }
 }
@@ -388,12 +381,12 @@ impl MainlineDht {
 
 pub struct DhtNode {
     ipv: IpVersion,
-    metrics: Arc<Mutex<Metrics>>,
+    collector: Arc<Mutex<Collector>>,
 }
 
 impl DhtNode {
     fn new_bootstrap(&self) -> Box<Bootstrap> {
-        Box::new(Bootstrap::new(self.ipv, self.metrics.clone()))
+        Box::new(Bootstrap::new(self.ipv, self.collector.clone()))
     }
 }
 
@@ -402,24 +395,24 @@ impl DhtNode {
 pub struct Bootstrap {
     bootstrap_id: BootstrapId,
     success: Mutex<bool>,
-    metrics: Arc<Mutex<Metrics>>,
+    collector: Arc<Mutex<Collector>>,
 }
 
 impl Bootstrap {
-    fn new(ipv: IpVersion, metrics: Arc<Mutex<Metrics>>) -> Self {
-        let bootstrap_id = metrics.lock().unwrap().bootstrap_start(ipv);
+    fn new(ipv: IpVersion, collector: Arc<Mutex<Collector>>) -> Self {
+        let bootstrap_id = collector.lock().unwrap().bootstrap_start(ipv);
 
         Bootstrap {
             bootstrap_id,
             success: Mutex::new(false),
-            metrics,
+            collector,
         }
     }
 
     fn mark_success(&self) {
         *self.success.lock().unwrap() = true;
 
-        self.metrics
+        self.collector
             .lock()
             .unwrap()
             .bootstrap_finish(self.bootstrap_id, true);
@@ -433,7 +426,7 @@ impl Drop for Bootstrap {
             return;
         }
 
-        self.metrics
+        self.collector
             .lock()
             .unwrap()
             .bootstrap_finish(self.bootstrap_id, false);
@@ -443,14 +436,14 @@ impl Drop for Bootstrap {
 // -------------------------------------------------------------------
 
 struct Request {
-    metrics: Arc<Mutex<Metrics>>,
+    collector: Arc<Mutex<Collector>>,
     request_type: RequestType,
     id: RequestId,
 }
 
 impl Request {
     fn increment_transfer_size(&self, added: usize) {
-        self.metrics
+        self.collector
             .lock()
             .unwrap()
             .requests
@@ -466,7 +459,7 @@ impl Request {
     }
 
     fn remove_request(&self, reason: request::RemoveReason) {
-        self.metrics
+        self.collector
             .lock()
             .unwrap()
             .requests
