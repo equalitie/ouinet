@@ -168,6 +168,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _disable_bridge_announcement = *opt;
     }
 
+    if (auto opt = as_optional<uint64_t>(vm, "request-body-limit")) {
+        _max_req_body_size = *opt;
+    }
+
     if (auto opt = as_optional<string>(vm, "client-credentials")) {
         auto cred = *opt;
 

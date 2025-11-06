@@ -2701,7 +2701,11 @@ void Client::State::serve_request( GenericStream&& con
         // (without a size limit, in case we are uploading a big file).
         // Based on <https://stackoverflow.com/a/50359998>.
         http::request_parser<Request::body_type> reqhp;
-        reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        if (_config.max_request_body_size() == 0) {
+            reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        } else {
+            reqhp.body_limit(_config.max_request_body_size());
+        }
 
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests

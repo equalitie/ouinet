@@ -148,6 +148,12 @@ public:
         return _origin_doh_endpoint;
     }
 
+    uint64_t max_request_body_size() const {
+        // The value is set in KiB in the configuration
+        // and used in bytes by boost::beast
+        return _max_req_body_size * 1024;
+    }
+
     bool is_help() const { return _is_help; }
 
     auto description() {
@@ -223,6 +229,11 @@ private:
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
             , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
               "Previous announcements could take up to an hour to expire.")
+           ("request-body-limit"
+            , po::value<uint64_t>()->default_value(_max_req_body_size)
+            , "Set the max size of body requests in KiB. This could be "
+              "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
+              "uploads, etc. To leave it unlimited, set it to zero.")
            ;
 
         po::options_description injector("Injector options");
@@ -474,6 +485,7 @@ private:
         = default_max_cached_age;
     size_t _max_simultaneous_announcements
         = default_max_simultaneous_announcements;
+    uint64_t _max_req_body_size = 102400;
     bool _cache_private = false;
 
     std::string _client_credentials;

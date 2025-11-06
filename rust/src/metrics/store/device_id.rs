@@ -1,4 +1,7 @@
-use crate::{period::WholeWeek, store::Store};
+use super::{
+    super::period::{self, WholeWeek},
+    Store,
+};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::{
@@ -69,7 +72,7 @@ impl DeviceId {
     }
 
     pub fn rotate_after(&self) -> Duration {
-        crate::period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
+        period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
     }
 
     async fn create_and_store(file_path: &Path) -> io::Result<(Uuid, DateTime<Utc>)> {

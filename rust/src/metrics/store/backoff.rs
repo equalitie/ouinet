@@ -1,4 +1,4 @@
-use crate::clock::Clock;
+use super::super::clock::Clock;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
