@@ -6,6 +6,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "util/yield.h"
 #include "cache/cache_entry.h"
+#include "request.h"
 #include "namespaces.h"
 
 namespace ouinet {
@@ -28,17 +29,15 @@ private:
     struct FetchState;
 
 public:
-    using DhtGroup = std::string;
-    using Request  = http::request<http::string_body>;
     using Response = http::response<http::dynamic_body>;
 
-    using FetchStored = std::function<CacheEntry(const Request&, const DhtGroup&, Cancel&, Yield)>;
+    using FetchStored = std::function<CacheEntry(const CacheRequest&, Cancel&, Yield)>;
     // If not null, the given cache entry is already available
     // (e.g. this may be a revalidation).
-    using FetchFresh  = std::function<Session(const Request&, const CacheEntry*, Cancel&, Yield)>;
+    using FetchFresh  = std::function<Session(const CacheRequest&, const CacheEntry*, Cancel&, Yield)>;
     // When fetching stored (which may be slow), a parallel request to fetch fresh is started
     // only if this is not null and it returns true.
-    using ParallelFresh = std::function<bool(const Request&, const boost::optional<DhtGroup>&)>;
+    using ParallelFresh = std::function<bool(const CacheRequest&)>;
 
 public:
     CacheControl(const AsioExecutor& ex, std::string server_name)
@@ -51,8 +50,7 @@ public:
         , _server_name(std::move(server_name))
     {}
 
-    Session fetch(const Request&,
-                  const boost::optional<DhtGroup>&,
+    Session fetch(const CacheRequest&,
                   sys::error_code& fresh_ec,
                   sys::error_code& cache_ec,
                   Cancel&,
@@ -82,17 +80,15 @@ public:
 
 private:
     Session do_fetch(
-            const Request&,
-            const boost::optional<DhtGroup>&,
+            const CacheRequest&,
             sys::error_code& fresh_ec,
             sys::error_code& cache_ec,
             Cancel&,
             Yield);
 
-    Session do_fetch_fresh( FetchState&, const Request&, const CacheEntry*, Yield);
+    Session do_fetch_fresh( FetchState&, const CacheRequest&, const CacheEntry*, Yield);
     CacheEntry do_fetch_stored( FetchState&
-                              , const Request&
-                              , const boost::optional<DhtGroup>&
+                              , const CacheRequest&
                               , bool& is_fresh
                               , Yield);
 
@@ -101,7 +97,7 @@ private:
 
     bool is_older_than_max_cache_age(const boost::posix_time::ptime&) const;
 
-    auto make_fetch_fresh_job(const Request&, const CacheEntry*, Yield);
+    auto make_fetch_fresh_job(const CacheRequest&, const CacheEntry*, Yield);
 
     bool has_temporary_result(const Session&) const;
 

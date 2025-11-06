@@ -5,6 +5,7 @@
 #include <boost/beast.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
+#include <map>
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"

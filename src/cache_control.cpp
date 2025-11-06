@@ -19,8 +19,6 @@
 using namespace std;
 using namespace ouinet;
 
-using Request = CacheControl::Request;
-
 namespace posix_time = boost::posix_time;
 
 // Look for a literal directive (like "no-cache" but not "max-age=N")
@@ -42,11 +40,22 @@ bool has_cache_control_directive( const Session& session
     return false;
 }
 
+template<class H>
+static
+const http::fields& fields_of(const H& hdr) {
+    return hdr;
+}
+
+static
+const http::fields& fields_of(const CacheRequest& rq) {
+    return rq.header();
+}
+
 template<class R>
 static boost::optional<beast::string_view> get(const R& r, http::field f)
 {
-    auto i = r.find(f);
-    if (i == r.end())
+    auto i = fields_of(r).find(f);
+    if (i == fields_of(r).end())
       return boost::none;
         
     return i->value();
@@ -173,8 +182,7 @@ Session add_stale_warning(Session response)
 }
 
 Session
-CacheControl::fetch(const Request& request,
-                    const boost::optional<DhtGroup>& dht_group,
+CacheControl::fetch(const CacheRequest& request,
                     sys::error_code& fresh_ec,
                     sys::error_code& cache_ec,
                     Cancel& cancel,
@@ -184,7 +192,6 @@ CacheControl::fetch(const Request& request,
 
     auto response = do_fetch(
             request,
-            dht_group,
             fresh_ec,
             cache_ec,
             cancel,
@@ -193,7 +200,7 @@ CacheControl::fetch(const Request& request,
     return or_throw(yield, ec, move(response));
 }
 
-static bool must_revalidate(const Request& request)
+static bool must_revalidate(const CacheRequest& request)
 {
     if (get(request, http::field::if_none_match))
         return true;
@@ -235,8 +242,7 @@ struct CacheControl::FetchState {
 //------------------------------------------------------------------------------
 Session
 CacheControl::do_fetch(
-        const Request& request,
-        const boost::optional<DhtGroup>& dht_group,
+        const CacheRequest& request,
         sys::error_code& fresh_ec,
         sys::error_code& cache_ec,
         Cancel& cancel,
@@ -298,7 +304,7 @@ CacheControl::do_fetch(
 
         _YDEBUG(ryield, "Revalidation failed, attempting to fetch from cache");
         bool is_fresh = false;
-        auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, ryield[cache_ec]);
+        auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, ryield[cache_ec]);
         if (!cache_ec) {
             if (is_fresh) {
                 _YDEBUG(ryield, "Revalidation failed, cached response is fresh");
@@ -319,7 +325,7 @@ CacheControl::do_fetch(
     }
 
     bool is_fresh = false;
-    auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, yield[cache_ec]);
+    auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
 
     if (cache_ec == err::operation_aborted) {
         fresh_ec = err::operation_aborted;
@@ -397,7 +403,7 @@ CacheControl::do_fetch(
 
         auto rq = request; // Make a copy because `request` is const&.
 
-        rq.set(http::field::if_none_match, *cache_etag);
+        rq.set_if_none_match(*cache_etag);
 
         auto response = do_fetch_fresh(fetch_state, rq, &cache_entry, ryield[fresh_ec]);
 
@@ -446,7 +452,7 @@ posix_time::time_duration CacheControl::max_cached_age() const
 }
 
 //------------------------------------------------------------------------------
-auto CacheControl::make_fetch_fresh_job( const Request& rq
+auto CacheControl::make_fetch_fresh_job( const CacheRequest& rq
                                        , const CacheEntry* cached
                                        , Yield yield)
 {
@@ -466,7 +472,7 @@ auto CacheControl::make_fetch_fresh_job( const Request& rq
 //------------------------------------------------------------------------------
 Session
 CacheControl::do_fetch_fresh( FetchState& fs
-                            , const Request& rq
+                            , const CacheRequest& rq
                             , const CacheEntry* cached
                             , Yield yield)
 {
@@ -489,8 +495,7 @@ CacheControl::do_fetch_fresh( FetchState& fs
 
 CacheEntry
 CacheControl::do_fetch_stored(FetchState& fs,
-                              const Request& rq,
-                              const boost::optional<DhtGroup>& dht_group,
+                              const CacheRequest& rq,
                               bool& is_fresh,
                               Yield yield)
 {
@@ -501,14 +506,9 @@ CacheControl::do_fetch_stored(FetchState& fs,
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
 
-    if (!dht_group) {
-        _YDEBUG(yield, "No group given");
-        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
-    }
-
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
-    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq, dht_group)) {
+    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq)) {
         fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
     }
 
@@ -516,7 +516,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
         fs.fetch_stored->start(
                 [&] (Cancel& cancel, asio::yield_context yield_) mutable {
-                    return fetch_stored(rq, *dht_group, cancel, yield.detach(yield_));
+                    return fetch_stored(rq, cancel, yield.detach(yield_));
                 });
     }
 
