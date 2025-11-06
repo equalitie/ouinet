@@ -455,7 +455,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         // Test signed output.
         task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
-            int xidx = 0;
+            size_t xidx = 0;
             Cancel cancel;
             sys::error_code e;
             http_response::Reader rr(std::move(signed_r));
@@ -571,7 +571,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         // Check generation of chained hashes.
         task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
-            int xidx = 0;
+            size_t xidx = 0;
             Cancel cancel;
             sys::error_code e;
             http_response::Reader rr(std::move(hashed_r));
