@@ -172,6 +172,9 @@ file(GLOB ouinet_common_sources
     ${EXPERIMENTAL_SOURCES}
 )
 
+# TODO: Some low level openssl functions we use are deprecated.
+set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
+
 add_library(ouinet_common STATIC ${ouinet_common_sources})
 
 target_link_libraries(ouinet_common
