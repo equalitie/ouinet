@@ -40,7 +40,7 @@ NativeLib _n;
   args = [self maybeAdd:args stringOfKey:@"--cache-type" stringOfValue:[config getCacheType]];
   args = [self maybeAdd:args stringOfKey:@"--injector-tls-cert-file" stringOfValue:[config getInjectorTlsCertPath]];
   args = [self maybeAdd:args stringOfKey:@"--tls-ca-cert-store-path" stringOfValue:[config getTlsCaCertStorePath]];
-  args.push_back(std::string([[NSString stringWithFormat: @"%@", @"--log-level=DEBUG"] UTF8String]));
+  args = [self maybeAdd:args stringOfKey:@"--log-level" stringOfValue:[config getLogLevel]];
   if ([config getDisableOriginAccess]) {
     args.push_back("--disable-origin-access");
   }
@@ -50,6 +50,10 @@ NativeLib _n;
   if ([config getDisableInjectorAccess]) {
     args.push_back("--disable-injector-access");
   }
+  if ([config getDisableBridgeAnnouncement]) {
+    args.push_back("--disable-bridge-announcement");
+  }
+  
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
   if (error)
     NSLog(@"Error reading file: %@", error.localizedDescription);
@@ -59,6 +63,12 @@ NativeLib _n;
 
   _n.startClient(args);
   NSLog( @"text: %@", @"Ouinet start request complete");
+  return;
+}
+
+- (void)stop
+{
+  _n.stopClient();
   return;
 }
 

@@ -74,9 +74,12 @@ class OuinetProcess(object):
         self.config = ouinet_config
         # in case the communication process protocol is not explicitly set 
         # starts a default process protocol to check on Fatal errors
+        # TODO: This option apparently has been removed. Check if we ever need
+        # preset process protocol.
         self._proc_protocol = OuinetProcessProtocol(
             self.config, ouinet_config.benchmark_regexes
         )
+
         self._has_started = False
         self._term_signal_sent = False
         self.setup_config()

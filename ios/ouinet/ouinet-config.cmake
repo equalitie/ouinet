@@ -72,9 +72,11 @@ if(NOT PLATFORM MATCHES ".*WATCHOS.*")
   find_host_package(XCTest REQUIRED)
 endif()
 
+set(OUINET_IOS_SOURCE ${ouinet_DIR}/src)
+set(OUINET_IOS_INCLUDE ${ouinet_DIR}/include)
 
 # Includes
-include_directories(${ouinet_DIR}/src ${ouinet_DIR}/include)
+include_directories(${OUINET_IOS_SOURCE} ${OUINET_IOS_INCLUDE})
 
 # Make sure try_compile() works
 include(CheckTypeSize)
@@ -82,17 +84,17 @@ check_type_size(time_t SIZEOF_TIME_T)
 
 # Source files
 set(SOURCES
-  ${ouinet_DIR}/src/native-lib.cpp
-  ${ouinet_DIR}/src/ouinet/OuinetClient.mm
-  ${ouinet_DIR}/src/ouinet/OuinetConfig.mm
+  ${OUINET_IOS_SOURCE}/native-lib.cpp
+  ${OUINET_IOS_SOURCE}/ouinet/OuinetClient.mm
+  ${OUINET_IOS_SOURCE}/ouinet/OuinetConfig.mm
 )
 
 # Headers
 set(HEADERS
-  ${ouinet_DIR}/src/native-lib.hpp
-  ${ouinet_DIR}/include/Ouinet.h
-  ${ouinet_DIR}/include/ouinet/OuinetClient.h
-  ${ouinet_DIR}/include/ouinet/OuinetConfig.h
+  ${OUINET_IOS_SOURCE}/native-lib.hpp
+  ${OUINET_IOS_INCLUDE}/Ouinet.h
+  ${OUINET_IOS_INCLUDE}/ouinet/OuinetClient.h
+  ${OUINET_IOS_INCLUDE}/ouinet/OuinetConfig.h
 )
 
 # Library
@@ -104,12 +106,26 @@ target_link_libraries(ouinet
 )
 target_compile_definitions(ouinet PUBLIC IS_BUILDING_SHARED)
 message(STATUS "Building framework bundle...")
+set_target_properties(ouinet PROPERTIES
+  FRAMEWORK TRUE
+  FRAMEWORK_VERSION A
+  MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.ouinet
+  # "current version" in semantic format in Mach-O binary file
+  VERSION 1.0.0
+  # "compatibility version" in semantic format in Mach-O binary file
+  SOVERSION 1.0.0
+  PUBLIC_HEADER Ouinet.h
+  XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+  MACOSX_FRAMEWORK_BUNDLE_VERSION ${VERSION_NAME}
+  MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
+)
 
 # Debug symbols set in XCode project
 set_xcode_property(ouinet GCC_GENERATE_DEBUGGING_SYMBOLS YES "All")
 
 install(TARGETS ouinet
         LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib/static)
+        ARCHIVE DESTINATION lib/static
+        FRAMEWORK DESTINATION framework)
 
 install (FILES ${HEADERS} DESTINATION include)

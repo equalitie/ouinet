@@ -19,6 +19,7 @@
 #include <session.h>
 #include <util/bytes.h>
 #include <util/file_io.h>
+#include <util/part_io.h>
 #include <util/str.h>
 
 #include <namespaces.h>
@@ -29,27 +30,6 @@ constexpr auto connection_aborted = WSAECONNABORTED;
 #else
 constexpr auto connection_aborted = boost::system::errc::connection_aborted;
 #endif
-
-// For checks to be able to report errors.
-namespace ouinet { namespace http_response {
-    std::ostream& operator<<(std::ostream& os, const ChunkHdr& hdr) {
-        return os << "ChunkHdr(" << hdr.size << ", \"" << hdr.exts << "\")";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const Trailer& trailer) {
-        os << "Trailer{";
-        bool is_first = true;
-        for (auto& field : trailer) {
-            if (is_first) {
-                is_first = false;
-            } else {
-                os << ", ";
-            }
-            os << field.name() << ":" << field.value();
-        }
-        return os << "}";
-    }
-}} // namespace ouinet::http_response
 
 using first_last = std::pair<unsigned, unsigned>;
 // <https://stackoverflow.com/a/33965517>
@@ -549,7 +529,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , complete ? rrs_head_complete : rrs_head_incomplete);
 
             // Chunk headers and bodies (one chunk per block).
@@ -663,7 +643,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , rrs_head_complete);
 
             // Chunk headers and bodies (one chunk per block).
@@ -768,7 +748,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , errs_head_complete);
 
             // Last chunk header.
@@ -886,7 +866,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
-            BOOST_REQUIRE_EQUAL( util::str(*(part->as_head()))
+            BOOST_REQUIRE_EQUAL( util::str(part->as_head()->base())
                                , rrs_head_partial(first_block, last_block));
 
             // Chunk headers and bodies (one chunk per block).

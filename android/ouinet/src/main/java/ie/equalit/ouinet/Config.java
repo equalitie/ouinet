@@ -57,6 +57,7 @@ public class Config implements Parcelable {
         private String listenOnTcp;
         private String frontEndEp;
         private String frontEndAccessToken;
+        private String proxyAccessToken;
         private boolean debugFrontEndAccessToken;
         private String udpMuxPort;
         private boolean disableBridgeAnnouncement = false;
@@ -153,6 +154,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setFrontEndAccessToken(String token){
             this.frontEndAccessToken = token;
+            return this;
+        }
+        public ConfigBuilder setProxyAccessToken(String token){
+            this.proxyAccessToken = token;
             return this;
         }
         public ConfigBuilder setDebugFrontEndAccessToken(boolean enable){
@@ -396,6 +401,7 @@ public class Config implements Parcelable {
                     listenOnTcp,
                     frontEndEp,
                     frontEndAccessToken,
+                    proxyAccessToken,
                     debugFrontEndAccessToken,
                     udpMuxPort,
                     disableBridgeAnnouncement,
@@ -432,6 +438,7 @@ public class Config implements Parcelable {
     private String listenOnTcp;
     private String frontEndEp;
     private String frontEndAccessToken;
+    private String proxyAccessToken;
     private boolean debugFrontEndAccessToken;
     private String udpMuxPort;
     private boolean disableBridgeAnnouncement;
@@ -466,6 +473,7 @@ public class Config implements Parcelable {
                   String listenOnTcp,
                   String frontEndEp,
                   String frontEndAccessToken,
+                  String proxyAccessToken,
                   boolean debugFrontEndAccessToken,
                   String udpMuxPort,
                   boolean disableBridgeAnnouncement,
@@ -499,6 +507,7 @@ public class Config implements Parcelable {
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
         this.frontEndAccessToken = frontEndAccessToken;
+        this.proxyAccessToken = proxyAccessToken;
         this.debugFrontEndAccessToken = debugFrontEndAccessToken;
         this.udpMuxPort = udpMuxPort;
         this.disableBridgeAnnouncement = disableBridgeAnnouncement;
@@ -564,6 +573,9 @@ public class Config implements Parcelable {
     }
     public String getFrontEndAccessToken() {
         return frontEndAccessToken;
+    }
+    public String getProxyAccessToken() {
+        return proxyAccessToken;
     }
     public boolean getDebugFrontEndAccessToken() {
         return debugFrontEndAccessToken;
@@ -651,6 +663,7 @@ public class Config implements Parcelable {
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
         out.writeString(frontEndAccessToken);
+        out.writeString(proxyAccessToken);
         out.writeInt(debugFrontEndAccessToken ? 1 : 0);
         out.writeString(udpMuxPort);
         out.writeInt(disableBridgeAnnouncement ? 1 : 0);
@@ -695,6 +708,7 @@ public class Config implements Parcelable {
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
         frontEndAccessToken = in.readString();
+        proxyAccessToken = in.readString();
         debugFrontEndAccessToken = in.readInt() != 0;
         udpMuxPort = in.readString();
         disableBridgeAnnouncement = in.readInt() != 0;

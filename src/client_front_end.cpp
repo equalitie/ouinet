@@ -454,7 +454,7 @@ std::optional<bool> parse_enable(std::string& str) {
 void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
-                                  , const UPnPs& upnps
+                                  , const std::shared_ptr<UPnPs>& upnps_ptr
                                   , const bittorrent::MainlineDht* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
@@ -577,9 +577,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     if (reachability) {
         ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
     }
-    auto upnp_status_ = upnp_status(upnps);
-    ss << "UPnP status: " << upnp_status_ << "<br>\n";
-
     if (local_ep) {
         ss << "Local UDP endpoints:<br>\n";
         ss << "<ul>\n";
@@ -588,12 +585,20 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "</ul>\n";
     }
 
-    if (upnp_status_ == "enabled") {
-        ss << "External UDP endpoints (from UPnP):<br>\n";
+    if (upnps_ptr)
+    {
+        const auto& upnps = *upnps_ptr;
+        auto upnp_status_ = upnp_status(upnps);
+        ss << "UPnP status: " << upnp_status_ << "<br>\n";
+
+        if (upnp_status_ == "enabled")
+        {
+            ss << "External UDP endpoints (from UPnP):<br>\n";
         ss << "<ul>\n";
         for (auto& ep : external_udp_endpoints(upnps))
             ss << "<li>" << as_safe_html(ep) << "</li>\n";
         ss << "</ul>\n";
+        }
     }
 
     if (dht) {
@@ -702,7 +707,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , Client::RunningState cstate
                                       , boost::optional<UdpEndpoint> local_ep
-                                      , const UPnPs& upnps
+                                      , const std::shared_ptr<UPnPs>& upnps_ptr
                                       , const bittorrent::MainlineDht* dht
                                       , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
@@ -731,10 +736,14 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
 
-    auto upnp_status_ = upnp_status(upnps);
-    response["is_upnp_active"] = upnp_status_;
-    if (upnp_status_ == "enabled")
-        response["external_udp_endpoints"] = external_udp_endpoints(upnps);
+    if (upnps_ptr)
+    {
+        const auto& upnps = *upnps_ptr;
+        auto upnp_status_ = upnp_status(upnps);
+        response["is_upnp_active"] = upnp_status_;
+        if (upnp_status_ == "enabled")
+            response["external_udp_endpoints"] = external_udp_endpoints(upnps);
+    }
 
     if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
 
@@ -896,7 +905,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , cache::Client* cache_client
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
-                              , const UPnPs& upnps
+                              , const std::shared_ptr<UPnPs>& upnps_ptr
                               , const bittorrent::MainlineDht* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
@@ -950,7 +959,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_pinned_list(req, res, ss, cache_client);
     } else if (path == status_api_path) {
         sys::error_code e;
-        handle_api_status( config, client_state, local_ep, upnps, dht, reachability
+        handle_api_status( config, client_state, local_ep, upnps_ptr, dht, reachability
                          , req, res, ss, cache_client, metrics, cancel
                          , yield[e]);
     } else if (path.starts_with(groups_api_path)) {
@@ -962,7 +971,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
     } else {
         sys::error_code e;
-        handle_portal( config, client_state, local_ep, upnps, dht, reachability
+        handle_portal( config, client_state, local_ep, upnps_ptr, dht, reachability
                      , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
     }

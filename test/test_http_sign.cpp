@@ -781,7 +781,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         // Check generation of chained hashes.
         task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
-            int xidx = 0;
+            size_t xidx = 0;
             Cancel cancel;
             sys::error_code e;
             http_response::Reader rr(std::move(hashed_r));

@@ -30,3 +30,6 @@ test/integration_test/_trial_temp/
 
 # When running rust tests with `cargo test --manifest-path=./rust/Cargo.toml`
 rust/target/
+
+ouinet.build/
+.vscode/

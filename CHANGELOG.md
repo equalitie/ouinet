@@ -8,15 +8,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.4.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.1) - 2025-10-21
+
 ### Added
 
-- A new `file_io` component that supports asynchronous I/O operations for
-Windows systems.
+- New client configuration option `allow-private-targets` to permit requests
+of services running in local/private networks, e.g. 192.168.1.13, 10.8.0.2,
+172.16.10.8, etc. !133
+- Patches and changes needed for full production support of iOS in Ouinet. !128
+
+### Changed
+
+- Restore and refactoring of the integration tests. !124
+- Ouinet for Android is now built using NDK r28c. This is needed to
+support 16K page sizes, which will soon be required for publishing apps on
+the Google Play Store. !134
+
+
+## [v1.4.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.0) - 2025-09-03
+
+### Added
+
+- Two new JNI methods `getProxyEndpoint` and `getFrontendEndpoint` that are
+useful to connect with the Ouinet service when the port selection is delegated
+to the OS. !125
+
+### Fixed
+
+- Portal functions of the front-end were changed to pass and check `upnps_ptr`,
+instead of attempting to de-reference it on the fly, just to prevent issues
+when the pointer is null. !131
+
+### Removed
+
+- Remove obsolete code from `OuinetNotification` and its related components.
+MR !129
+
+### Security
+
+- Add authentication for the Ouinet proxy requests and also exposes methods
+in JNI that can be used in Android. MR !126
+- Improve the validations applied to determine if a target is local, private
+or public, which determines if it's allowed to be injected. MR !127
+- Set explicit limits to the decoding of bencode strings, integers, lists
+and dictionaries. MR !130
+
+
+## [v1.3.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.3.1) - 2025-08-05
 
 ### Changed
 
 - Groups and metrics API structure is now unified.
 - Linux and Android releases are built with level 3 of compiler optimizations.
+- The default Boost version used by Ouinet is now 1.88.0.
+- Support for building Ouinet on iOS.
 
 
 ## [v1.3.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.3.0) - 2025-07-07

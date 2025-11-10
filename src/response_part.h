@@ -53,6 +53,8 @@ struct Head : public http::response_header<> {
     Head(const Base& b) : Base(b) {}
     Head(Base&& b) : Base(std::move(b)) {}
 
+    const Base& base() const { return *this; }
+
     bool chunked() const {
         return Base::get_chunked_impl();
     }

@@ -122,15 +122,42 @@ struct UserAgentMetaData {
     boost::optional<bool> is_private;
     boost::optional<std::string> dht_group;
 
+#if defined(__MACH__)
+    static std::string get_dht_group(const std::string& url) {
+        auto dhtgroup = std::move(url);
+
+        boost::regex scheme("^[a-z][-+.0-9a-z]*://");
+        dhtgroup = boost::regex_replace(dhtgroup, scheme, "");
+        boost::regex trailing_slashes("/+$");
+        dhtgroup = boost::regex_replace(dhtgroup, trailing_slashes, "");
+        boost::regex leading_www("^www.");
+        dhtgroup = boost::regex_replace(dhtgroup, leading_www, "");
+
+        return dhtgroup;
+    }
+#endif
+
     static UserAgentMetaData extract(Request& rq) {
         UserAgentMetaData ret;
 
         {
+#if defined(__MACH__)
+            // On iOS, it is not possible to inject headers into every request
+            // Set the DHT group based on the referrer field or hostname (if referrer is not present)
+            auto i = rq.find(http::field::referer);
+            if (i != rq.end()) {
+                ret.dht_group = get_dht_group(std::string(i->value()));
+                rq.erase(i);
+            } else {
+                ret.dht_group = get_dht_group(std::string(rq.target()));
+            }
+#else
             auto i = rq.find(http_::request_group_hdr);
             if (i != rq.end()) {
                 ret.dht_group = string(i->value());
                 rq.erase(i);
             }
+#endif
         }
         {
             auto i = rq.find(http_::request_private_hdr);
@@ -221,7 +248,7 @@ public:
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
-        if (_upnps) _upnps->clear();
+        if (_upnps_ptr) _upnps_ptr->clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
         if (_bt_dht) {
@@ -338,7 +365,7 @@ public:
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
-        _upnps = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
+        _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         TRACK_SPAWN(_ctx, ([
             bt_dht,
             executor = _ctx.get_executor(),
@@ -346,7 +373,7 @@ public:
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
-            upnps = _upnps
+            upnps = _upnps_ptr
         ] (asio::yield_context yield) mutable {
             sys::error_code ec;
             *ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
@@ -635,8 +662,11 @@ private:
 
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
-    shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps;
+    shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps_ptr;
     metrics::Client _metrics;
+
+    std::string _proxy_endpoint;
+    std::string _frontend_endpoint;
 
 #ifdef __EXPERIMENTAL__
     //this could be start either because of cache or injector
@@ -1133,7 +1163,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYiel
                                , _cache.get()
                                , *_ca_certificate
                                , local_ep
-                               , *_upnps
+                               , _upnps_ptr
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , metrics_controller
@@ -1620,7 +1650,10 @@ public:
         sys::error_code ec;
 
         _ua_was_written_to = true;
-        session.flush_response(_ua_con, cancel, yield[ec]);
+
+        // Using PartModifier::RemoveChunkHeaderExtension because the WebKit on
+        // iOS can't handle the extension string in chunk headers.
+        session.flush_response(_ua_con, cancel, yield[ec], PartModifier::RemoveChunkHeaderExtension);
 
         bool keep_alive = !ec && _request.keep_alive() && session.keep_alive();
 
@@ -2504,7 +2537,7 @@ void Client::State::serve_request( GenericStream&& con
 
     static const boost::regex localhost_exact_rx{"localhost", rx_icase};
 
-    const vector<Match> matches({
+    vector<Match> matches({
         // Please keep host-specific matches at a bare minimum
         // as they require curation and they may have undesired side-effects;
         // instead, use user agent-side mechanisms like browser settings and extensions when possible,
@@ -2650,6 +2683,12 @@ void Client::State::serve_request( GenericStream&& con
         //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
         //     , {deque<fresh_channel>({fresh_channel::injector})} ),
     });
+    // Requests to the private addresses should not use the network
+    // to avoid leaking internal services accessed through the client,
+    // unless the option `allow-private-targets` is set to true.
+    if (!_config.is_private_target_allowed())
+        matches.push_back(Match(reqexpr::from_regex(hostname_getter, util::private_addr_rx)
+                         , {deque<fresh_channel>({fresh_channel::origin})}));
 
     auto connection_id = _next_connection_id++;
     auto connection_idstr = util::str('C', connection_id);
@@ -2689,6 +2728,20 @@ void Client::State::serve_request( GenericStream&& con
 
         Request req(reqhp.release());
         auto req_done = defer([&yield] { _YDEBUG(yield, "Done"); });
+
+#if defined(__MACH__)
+        // It is not possible to inject headers into every request made
+        // by WebKit on iOS, but we can modifiy the User Agent.
+        // Check if X-Ouinet-Private string is included in the User Agent.
+        auto ua = req[http::field::user_agent];
+        if (!ua.empty()) {
+            size_t index = ua.find("X-Ouinet-Private");
+            if (index != std::string::npos ){
+                req.set(http::field::user_agent, ua.substr(0, index));
+                req.set(http_::request_private_hdr, "true");
+            }
+        }
+#endif
 
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
             return authenticate(req, con, _config.client_credentials(), y);
@@ -2759,6 +2812,22 @@ void Client::State::serve_request( GenericStream&& con
                 else break;
             }
         }
+
+        if (auto& token = _config.proxy_access_token()) {
+            std::string_view header_key = "X-Ouinet-Proxy-Token";
+            if (*token != req[header_key]) {
+                sys::error_code ec_;
+                auto message = "The request is missing a valid "
+                    + std::string(header_key)
+                    + " HTTP header\n";
+                auto res = util::http_error(req, http::status::unauthorized
+                                            , OUINET_CLIENT_SERVER_STRING
+                                            , "", message);
+                handle_http_error(con, res, yield);
+                break;
+            }
+        }
+
         // Ensure that the request has a `Host:` header
         // (to ease request routing check and later operations on the head).
         if (!util::req_ensure_host(req)) {
@@ -2988,9 +3057,15 @@ void Client::State::start()
 
     // These may throw if the endpoints are busy.
     auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
+    _proxy_endpoint = string(proxy_acceptor.local_endpoint().address().to_string()) + ":"
+                    + to_string(proxy_acceptor.local_endpoint().port());
     boost::optional<tcp::acceptor> front_end_acceptor;
     if (_config.front_end_endpoint() != tcp::endpoint())
+    {
         front_end_acceptor = make_acceptor(_config.front_end_endpoint(), "frontend");
+        _frontend_endpoint = string(front_end_acceptor->local_endpoint().address().to_string()) + ":"
+                           + to_string(front_end_acceptor->local_endpoint().port());
+    }
 
     ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
 
@@ -3257,6 +3332,16 @@ void Client::stop()
 
 Client::RunningState Client::get_state() const noexcept {
     return _state->get_state();
+}
+
+std::string Client::get_proxy_endpoint() const noexcept
+{
+    return _state->_proxy_endpoint;
+}
+
+std::string Client::get_frontend_endpoint() const noexcept
+{
+    return _state->_frontend_endpoint;
 }
 
 void Client::charging_state_change(bool is_charging) {

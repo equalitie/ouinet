@@ -75,7 +75,8 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
     }
     */
 
-    if (g_client_thread.get_id() != thread::id()) return;
+    // if (g_client_thread.get_id() != thread::id()) return;
+    if (g_client) return;
 
     std::cout<<"Ouinet config:"<<std::endl;
     for (std::string arg: args) {
@@ -89,6 +90,7 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
 
             //debug("Starting new ouinet client.");
             std::cout<<"Starting new ouinet client"<<std::endl;
+            LOG_WARN("OUINET::Starting new ouinet client");
 
             // In case we're restarting.
             g_ctx.restart();
@@ -134,7 +136,7 @@ int NativeLib::getClientState()
 {
     // TODO: Avoid needing to keep this in sync by hand.
     if (!g_client)
-        return g_ctx.stopped() ? 6 /* stopped */ : 0 /* created */;
+        return g_ctx.stopped() ? 6 /* stopped */ : -1 /* missing */;
     switch (g_client->get_state()) {
     case ouinet::Client::RunningState::Created:  return 0;
     case ouinet::Client::RunningState::Failed:   return 1;
@@ -144,7 +146,7 @@ int NativeLib::getClientState()
     case ouinet::Client::RunningState::Stopping: return 5;
     case ouinet::Client::RunningState::Stopped:  return 6;
     }
-    return -1;
+    return -1 /* missing */;
 }
 
 void NativeLib::startClient(const std::vector<std::string>& args)//, const vector<string>& extra_path)
@@ -175,6 +177,17 @@ void NativeLib::startClient(const std::vector<std::string>& args)//, const vecto
     */
     std::cout<<"Starting ouinet client"<<std::endl;
     start_client_thread(args);
+}
+
+void NativeLib::stopClient()
+{
+    if (!g_client) return;
+    g_client->stop();
+    g_client.reset();
+    
+    if (g_client_thread.joinable()) {
+        g_client_thread.join();
+    }
 }
 
 std::string NativeLib::helloOuinet()

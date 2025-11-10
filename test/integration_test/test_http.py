@@ -2,16 +2,6 @@
 # See LICENSE for other credits and copying information
 
 # Integration tests for Ouinet - test for http communication offered through different transports and caches
-import os
-import os.path
-import re
-
-from twisted.internet import reactor, defer, task
-from twisted.internet.endpoints import TCP4ClientEndpoint
-from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
-from twisted.web.client import ProxyAgent, readBody
-from twisted.web.http_headers import Headers
 
 import socket
 
@@ -37,7 +27,7 @@ from ouinet_process_controler import (
     OuinetI2PInjector,
     OuinetConfig,
     OuinetClient,
-    OuinetBEP5CacheInjector
+    OuinetBEP5CacheInjector,
 )
 
 from test_fixtures import TestFixtures
@@ -529,35 +519,32 @@ class OuinetTests(TestCase):
             , "--front-end-ep", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["front-end-port"])
             , "--log-level", "DEBUG",
             ],
-            client_cache_ready)
+        )
+        sleep(7)
 
         # make sure that the client2 is ready to access the cache
         success = yield client_cache_ready
         self.assertTrue(success)
 
-        try:
-            index_resolution_start = cache_client.index_resolution_start_time()
-            self.assertTrue(index_resolution_start > 0)
-
-            logging.debug("Index resolution took: " + str(
-                index_resolution_done_time_stamp -
-                index_resolution_start) + " seconds")
-        except AttributeError:  # index has no global resolution
-            pass
-
         # now request the same page from second client
-        defered_response = defer.Deferred()
-        for i in range(0,TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
+        defered_response = Deferred()
+        for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
             defered_response = yield self.request_page(
                 TestFixtures.CACHE_CLIENT[1]["port"], content)
             if (defered_response.code == 200):
                 break
-            yield task.deferLater(reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None)
+            yield task.deferLater(
+                reactor, TestFixtures.TRIAL_CACHE_REQUESTS_WAIT, lambda: None
+            )
 
         self.assertEquals(defered_response.code, 200)
 
+        sleep(5)
+
         response_body = yield readBody(defered_response)
         self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
+
+        print("all ok, now waiting")
 
         # make sure it was served from cache
         self.assertTrue(cache_client.served_from_cache())

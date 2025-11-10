@@ -139,6 +139,9 @@ endif()
 add_executable(test-metrics "test-metrics.cpp")
 
 ######################################################################
+add_executable(test-injector-resolver "test_injector_resolver.cpp")
+
+######################################################################
 if(WITH_EXPERIMENTAL)
     # TODO: Hack, this forces cmake to add `-lz` at the *end* of the linking
     # command. For some reason we get unresolved libz dependencies otherwise.

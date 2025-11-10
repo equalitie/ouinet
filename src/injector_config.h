@@ -130,6 +130,9 @@ public:
     boost::optional<boost::regex> target_rx() const
     { return _target_rx; }
 
+    bool is_private_target_allowed() const
+    { return _allow_private_targets; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -164,6 +167,7 @@ private:
     std::string _credentials;
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
+    bool _allow_private_targets = false;
     util::Ed25519PrivateKey _ed25519_private_key;
 };
 
@@ -233,6 +237,9 @@ InjectorConfig::options_description()
          , "Only allow injection of URIs fully matching the given regular expression. "
            "This option implies \"--disable-proxy\". "
            "Example: https?://(www\\.)?(example\\.com|test\\.net/foo)/.*")
+        ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
+         , "Allows the injection of targets resolving to private addresses. "
+           "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
@@ -334,6 +341,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     if (vm.count("restricted")) {
         _target_rx = boost::regex{vm["restricted"].as<string>()};
         _disable_proxy = true;
+    }
+
+    if (vm["allow-private-targets"].as<bool>()) {
+        _allow_private_targets = true;
     }
 
 #ifdef __EXPERIMENTAL__

@@ -22,18 +22,6 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     from ouinet client/injector process and report failure
     in case of fatal error
     """
-    def __init__(self, proc_config, ready_benchmark_regexes=[], ready_deferred_fns=[]):
-        super(OuinetProcessProtocol, self).__init__()
-
-        # There should be as many deferred functions as benchmarks
-        assert len(ready_benchmark_regexes) == len(ready_deferred_fns), \
-            "The number of benchmark regex do not match the number of \
-            deferred events to be called on those benchmarks"
-
-        self._ready_benchmark_regexes = ready_benchmark_regexes
-        self._ready_deferred_fns = ready_deferred_fns
-        self._proc_config = proc_config
-        self._got_ready_level = -1
 
     def __init__(self, proc_config, watchpoint_regexes: List[str]):
         super(OuinetProcessProtocol, self).__init__()
@@ -45,8 +33,6 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
             self.callbacks[regex] = Deferred()
 
         self._logger: logging.Logger = logging.getLogger()
-
-        self.ready_data = None #the data which has triggered current deferred to be access by the deferred
 
     def errReceived(self, data):
         """
@@ -104,10 +90,11 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
             os.remove(process_pid_file)
 
 class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
-    def __init__(self, proc_config, benchmark_regexes=[], benchmark_deferreds=None):
-        super(OuinetCacheProcessProtocol, self).__init__(proc_config,
-                                                         [benchmark_regexes[TestFixtures.READY_REGEX_INDEX]],
-                                                         [benchmark_deferreds[TestFixtures.READY_REGEX_INDEX]])
+    def __init__(self, proc_config, regexes=[]):
+        super(OuinetCacheProcessProtocol, self).__init__(
+            proc_config,
+            watchpoint_regexes=regexes,
+        )
 
         self._number_of_cache_db_updates = 0
         self._served_from_cache = False
