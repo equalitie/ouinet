@@ -297,6 +297,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
+    if (vm["disable-doh"].as<bool>()) {
+        _disable_doh = true;
+    }
+
     if (auto opt = as_optional<string>(vm, "origin-doh-base")) {
         auto doh_base = *opt;
         _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
