@@ -23,6 +23,7 @@
 
 #include "namespaces.h"
 #include "origin_pools.h"
+#include "cxx/dns.h"
 #include "doh.h"
 #include "http_util.h"
 #include "client_front_end.h"
@@ -996,58 +997,12 @@ Client::State::resolve_tcp_doh( const std::string& host
         if (!e) return TcpLookup::create(TcpEndpoint{move(addr), *portn_o}, host, port);
     }
 
-    // TODO: When to disable queries for IPv4 or IPv6 addresses?
-    auto rq4_o = doh::build_request_ipv4(host, ep);
-    auto rq6_o = doh::build_request_ipv6(host, ep);
-    if (!rq4_o || !rq6_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    sys::error_code ec4, ec6;
-    doh::Response rs4, rs6;
-
-    WaitCondition wc(_ctx);
-
-    // By passing user agent metadata as is,
-    // we ensure that the DoH request is done with the same browsing mode
-    // as the content request that triggered it,
-    // and is announced under the same group.
-    // TODO: Handle redirects.
-#define SPAWN_QUERY(VER) \
-    TRACK_SPAWN(_ctx, ([ \
-        this, \
-        rq = move(*rq##VER##_o), &meta, &ec##VER, &rs##VER, \
-        &cancel, &yield, lock = wc.lock() \
-    ] (asio::yield_context y_) { \
-        sys::error_code ec; \
-        auto y = YieldContext(y_, yield.log_path()); \
-        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch##VER")); \
-        if (ec) { ec##VER = ec; return; } \
-        rs##VER = y[ec].tag("slurp##VER").run([&] (auto yy) { \
-            return http_response::slurp_response<doh::Response::body_type> \
-                (s, doh::payload_size, cancel, yy); \
-        }); \
-        if (ec) { ec##VER = ec; return; } \
-    }));
-    SPAWN_QUERY(4);
-    SPAWN_QUERY(6);
-
-    yield.tag("wait").run([&] (auto y) {
-        wc.wait(y);
+    sys::error_code ec;
+    dns::Resolver resolver;
+    auto answers46= yield[ec].tag("resolve host via DoH").run([&] (auto y) {
+        return resolver.resolve(host, y);
     });
-
-    _YDEBUG(yield, "DoH query; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    doh::Answers answers4, answers6;
-    if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
-    if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
-
-    _YDEBUG(yield, "DoH parse; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    answers4.insert( answers4.end()
-                   , std::make_move_iterator(answers6.begin())
-                   , std::make_move_iterator(answers6.end()));
-    AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers4, *portn_o};
+    AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers46, *portn_o};
     return TcpLookup::create(eps.begin(), eps.end(), host, port);
 }
 
@@ -1075,11 +1030,9 @@ Client::State::connect_to_origin( const http::request_header<>& rq
 
     sys::error_code ec;
 
-    // Resolve using DoH if configured and not resolving the resolver's address itself.
-    auto doh_ep_o = _config.origin_doh_endpoint();
-    bool do_doh = doh_ep_o && !rq.target().starts_with(*doh_ep_o);
+    auto do_doh = _config.is_doh_enabled();
     auto lookup = do_doh
-        ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
+        ? resolve_tcp_doh(host, port, meta, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);
