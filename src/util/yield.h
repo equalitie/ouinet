@@ -31,21 +31,6 @@ class Yield : public boost::intrusive::list_base_hook
     using List = boost::intrusive::list
         <Yield, boost::intrusive::constant_time_size<false>>;
 
-    struct TimeoutState {
-        Yield* self;
-        asio::steady_timer timer;
-
-        TimeoutState(const AsioExecutor& ex, Yield* self)
-            : self(self)
-            , timer(ex)
-        {}
-
-        void stop() {
-            self = nullptr;
-            timer.cancel();
-        }
-    };
-
 public:
     Yield( asio::yield_context asio_yield
          , std::string con_id = "")
@@ -53,13 +38,10 @@ public:
         , _ignored_error(std::make_shared<sys::error_code>())
         , _tag(util::str("R", generate_context_id()))
         , _parent(nullptr)
-        , _start_time(Clock::now())
     {
         if (!con_id.empty()) {
             _tag = con_id + "/" + _tag;
         }
-
-        start_timing();
     }
 
     Yield(Yield& parent)
@@ -77,7 +59,6 @@ private:
         , _ignored_error(parent._ignored_error)
         , _tag(parent.tag())
         , _parent(&parent)
-        , _start_time(Clock::now())
     {
         parent._children.push_back(*this);
     }
@@ -88,13 +69,7 @@ public:
         , _ignored_error(std::move(y._ignored_error))
         , _tag(std::move(y._tag))
         , _parent(y._parent)
-        , _timeout_state(std::move(y._timeout_state))
-        , _start_time(y._start_time)
     {
-        if (_timeout_state) {
-            _timeout_state->self = this;
-        }
-
         if (_parent)
         {
             _parent->_children.push_back(*this);
@@ -105,7 +80,6 @@ public:
     {
         Yield ret(*this);
         ret._tag = tag() + "/" + t;
-        ret.start_timing();
         return ret;
     }
 
@@ -158,10 +132,6 @@ public:
 
     ~Yield()
     {
-        if (_children.empty()) {
-            stop_timing();
-        }
-
         auto chs = std::move(_children);
 
         for (auto& ch : chs) {
@@ -178,10 +148,6 @@ public:
 
             // At least this node has to be on parent.
             assert(_parent->_children.size() >= 1);
-
-            if (_parent->_children.size() == 1) {
-                _parent->start_timing();
-            }
         }
     }
 
@@ -203,9 +169,6 @@ private:
         return next_id++;
     }
 
-    void start_timing();
-    void stop_timing();
-
     static uint64_t duration_secs(Clock::duration d) {
         return std::chrono::duration_cast<std::chrono::seconds>(d).count();
     }
@@ -215,64 +178,8 @@ private:
     std::shared_ptr<sys::error_code> _ignored_error;
     std::string _tag;
     Yield* _parent;
-    std::shared_ptr<TimeoutState> _timeout_state;
     List _children;
-    Clock::time_point _start_time;
 };
-
-inline
-void Yield::stop_timing()
-{
-    if (!_timeout_state) {
-        if (_parent) _parent->stop_timing();
-        return;
-    }
-
-    _timeout_state->stop();
-    _timeout_state = nullptr;
-}
-
-inline
-void Yield::start_timing()
-{
-    Clock::duration timeout = std::chrono::seconds(30);
-
-    stop_timing();
-
-    _timeout_state = std::make_shared<TimeoutState>(_asio_yield.get_executor(), this);
-
-    task::spawn_detached(_asio_yield.get_executor()
-               , [ ts = _timeout_state, timeout]
-                 (asio::yield_context yield) {
-
-            if (!ts->self) return;
-
-            auto notify = [&](Clock::duration d) {
-                LOG_WARN(ts->self->tag()
-                        , " is still working after "
-                        , Yield::duration_secs(d), " seconds");
-            };
-
-            boost::optional<Clock::duration> first_duration
-                = Clock::now() - ts->self->_start_time;
-
-            if (*first_duration >= timeout) {
-                notify(*first_duration);
-            }
-
-            while (ts->self) {
-                sys::error_code ec; // ignored
-
-                ts->timer.expires_after(timeout);
-
-                ts->timer.async_wait(yield[ec]);
-
-                if (!ts->self) break;
-
-                notify(Clock::now() - ts->self->_start_time);
-            }
-        });
-}
 
 template<class... Args>
 inline
