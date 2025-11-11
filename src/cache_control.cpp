@@ -453,7 +453,7 @@ auto CacheControl::make_fetch_fresh_job( const Request& rq
     AsyncJob<Session> job(_ex);
 
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
-            auto y = Yield(yield_, yield.log_tree());
+            auto y = Yield(yield_, yield.log_path());
             sys::error_code ec;
             auto r = fetch_fresh(rq, cached, cancel, y[ec]);
             ec = compute_error_code(ec, cancel);
@@ -516,7 +516,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
         fs.fetch_stored->start(
                 [&] (Cancel& cancel, asio::yield_context yield_) mutable {
-                    auto y = Yield(yield_, yield.log_tree());
+                    auto y = Yield(yield_, yield.log_path());
                     return fetch_stored(rq, *dht_group, cancel, y);
                 });
     }

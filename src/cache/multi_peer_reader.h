@@ -7,7 +7,7 @@
 #include "dht_lookup.h"
 #include "hash_list.h"
 #include "../util/async_generator.h"
-#include "../util/log_tree.h"
+#include "../util/log_path.h"
 #include "../session.h"
 
 namespace ouinet { namespace cache {
@@ -31,7 +31,7 @@ public:
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
                    , std::shared_ptr<unsigned> newest_proto_seen
-                   , std::optional<util::LogTree>);
+                   , std::optional<util::LogPath>);
 
     // Use this to include peers on the Internet.
     MultiPeerReader( AsioExecutor ex
@@ -42,7 +42,7 @@ public:
                    , std::set<asio::ip::udp::endpoint> wan_my_endpoints
                    , std::shared_ptr<DhtLookup> peer_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen
-                   , std::optional<util::LogTree>);
+                   , std::optional<util::LogPath>);
 
     MultiPeerReader(MultiPeerReader&&) = delete;
     MultiPeerReader(const MultiPeerReader&) = delete;
@@ -79,7 +79,7 @@ private:
 
     boost::optional<HashList> _reference_hash_list;
     std::unique_ptr<Peers> _peers;
-    std::optional<util::LogTree> _log_tree;
+    std::optional<util::LogPath> _log_path;
     bool _head_sent = false;
     size_t _block_id = 0;
 

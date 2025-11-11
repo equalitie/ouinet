@@ -544,13 +544,12 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
 //------------------------------------------------------------------------------
 static
 void serve( const InjectorConfig& config
-          , uint64_t connection_id
           , GenericStream con
           , asio::ssl::context& ssl_ctx
           , OriginPools& origin_pools
           , uuid_generator& genuuid
           , Cancel& cancel
-          , asio::yield_context yield_)
+          , Yield yield_)
 {
     auto close_connection_slot = cancel.connect([&con] {
         con.close();
@@ -572,9 +571,11 @@ void serve( const InjectorConfig& config
     bool is_first_request = true;
     beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
 
+    uint64_t next_request_id = 0;
+
     for (;;) {
         sys::error_code ec;
-        Yield yield(yield_, util::str('C', connection_id));
+        Yield yield = yield_.tag(util::str('R', next_request_id++));
 
         Request req;
         {
@@ -755,7 +756,7 @@ static
 void listen( const InjectorConfig& config
            , OuiServiceServer& proxy_server
            , Cancel& cancel
-           , asio::yield_context yield)
+           , Yield yield)
 {
     uuid_generator genuuid;
 
@@ -766,9 +767,9 @@ void listen( const InjectorConfig& config
     AsioExecutor exec = proxy_server.get_executor();
 
     sys::error_code ec;
-    proxy_server.start_listen(yield[ec]);
+    proxy_server.start_listen(yield[ec].native());
     if (ec) {
-        LOG_ERROR("Failed to setup ouiservice proxy server; ec=", ec);
+        LOG_ERROR(yield, " Failed to setup ouiservice proxy server; ec=", ec);
         return;
     }
 
@@ -785,11 +786,11 @@ void listen( const InjectorConfig& config
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
 
     while (true) {
-        GenericStream connection = proxy_server.accept(yield[ec]);
+        GenericStream connection = proxy_server.accept(yield[ec].native());
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield)) {
+            if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield.native())) {
                 break;
             }
             ec = {};
@@ -805,22 +806,23 @@ void listen( const InjectorConfig& config
             &config,
             &genuuid,
             &origin_pools,
+            &yield,
             connection_id,
             lock = shutdown_connections.lock()
-        ] (boost::asio::yield_context yield) mutable {
+        ] (boost::asio::yield_context asio_yield) mutable {
             sys::error_code leaked_ec;
+            auto y = Yield(asio_yield, yield.log_path().tag(util::str('C', connection_id)));
             serve( config
-                 , connection_id
                  , std::move(connection)
                  , ssl_ctx
                  , origin_pools
                  , genuuid
                  , cancel
-                 , yield[leaked_ec]);
+                 , y[leaked_ec]);
             if (leaked_ec) {
                 // The convention is that `serve` does not throw errors,
                 // so complain otherwise but avoid crashing in production.
-                LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
+                LOG_ERROR(y, " Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
         });
@@ -831,6 +833,7 @@ void listen( const InjectorConfig& config
 Injector::Injector(
         InjectorConfig config,
         asio::io_context& ctx,
+        util::LogPath log_path,
         std::shared_ptr<bittorrent::MockDht> dht) :
     _config(std::move(config))
 {
@@ -850,11 +853,11 @@ Injector::Injector(
     AsioExecutor ex = ctx.get_executor();
 
     if (!_config.is_proxy_enabled())
-        LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+        LOG_INFO(log_path, "Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = _config.target_rx())
-        LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
+        LOG_INFO(log_path, "Target URIs restricted to regular expression: ", *target_rx_o);
     if (_config.is_private_target_allowed()) {
-        LOG_INFO("Allowing injection of private targets.");
+        LOG_INFO(log_path, "Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
 
@@ -862,7 +865,7 @@ Injector::Injector(
 
     if (_config.tcp_endpoint()) {
         tcp::endpoint endpoint = *_config.tcp_endpoint();
-        LOG_INFO("TCP address: ", endpoint);
+        LOG_INFO(log_path, " TCP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
@@ -878,7 +881,7 @@ Injector::Injector(
 
     if (_config.tcp_tls_endpoint()) {
         tcp::endpoint endpoint = *_config.tcp_tls_endpoint();
-        LOG_INFO("TCP/TLS address: ", endpoint);
+        LOG_INFO(log_path, " TCP/TLS address: ", endpoint);
         util::create_state_file( _config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
@@ -888,7 +891,7 @@ Injector::Injector(
 
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
-        LOG_INFO("uTP address: ", endpoint);
+        LOG_INFO(log_path, "uTP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
@@ -906,13 +909,13 @@ Injector::Injector(
         auto local_ep = base->local_endpoint();
 
         if (local_ep) {
-            LOG_INFO("uTP/TLS address: ", *local_ep);
+            LOG_INFO(log_path, "uTP/TLS address: ", *local_ep);
             util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
             proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *_ssl_context));
 
         } else {
-            LOG_ERROR("Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
+            LOG_ERROR(log_path, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
         }
     }
 
@@ -931,7 +934,7 @@ Injector::Injector(
     assert(!_dht->local_endpoints().empty());
 
     if (_dht->local_endpoints().empty())
-        LOG_ERROR("Failed to bind the BitTorrent DHT to any local endpoint");
+        LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
 
     proxy_server->add(make_unique<ouiservice::Bep5Server>
             (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
@@ -1002,15 +1005,16 @@ Injector::Injector(
     }
     #endif // ifdef __EXPERIMENTAL__
 
-    LOG_INFO("HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
+    LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
     task::spawn_detached(ex, [
         this,
         proxy_server = std::move(proxy_server),
-        cancel = _cancel
+        cancel = _cancel,
+        log_path
     ] (asio::yield_context yield) mutable {
         sys::error_code ec;
-        listen(_config, *proxy_server, cancel, yield[ec]);
+        listen(_config, *proxy_server, cancel, Yield(yield, log_path)[ec]);
     });
 }
 

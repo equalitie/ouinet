@@ -7,38 +7,38 @@
 namespace ouinet::util {
 
 // To help keep track about which coroutine we're logging from.
-class LogTree {
+class LogPath {
 public:
     class Node {
         std::string _tag;
         std::shared_ptr<Node> _parent;
 
-        friend class LogTree;
+        friend class LogPath;
 
     public:
         Node(std::string tag, std::shared_ptr<Node> parent);
     };
 
-    LogTree() = default;
-    LogTree(std::string tag);
+    LogPath() = default;
+    LogPath(std::string tag);
 
-    LogTree(const LogTree&) = default;
-    LogTree(LogTree&&) = default;
-    LogTree& operator=(LogTree&&) = default;
+    LogPath(const LogPath&) = default;
+    LogPath(LogPath&&) = default;
+    LogPath& operator=(LogPath&&) = default;
 
     // Create new log tree with a new node having parent the one from `this`.
-    LogTree tag(std::string tag);
+    LogPath tag(std::string tag);
 
-    friend std::ostream& operator<<(std::ostream& os, LogTree const& l) {
+    friend std::ostream& operator<<(std::ostream& os, LogPath const& l) {
         print_from_root(os, l._node);
         return os;
     }
 
 private:
-    LogTree(std::shared_ptr<Node> node) : _node(std::move(node)) {}
+    LogPath(std::shared_ptr<Node> node) : _node(std::move(node)) {}
 
     static
-    bool print_from_root(std::ostream&, const std::shared_ptr<LogTree::Node>&);
+    void print_from_root(std::ostream&, const std::shared_ptr<LogPath::Node>&);
 
 private:
     std::shared_ptr<Node> _node;

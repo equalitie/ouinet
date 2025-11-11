@@ -28,7 +28,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_public,
     {
         Request req;
         req.set(http::field::host, hostname);
-        Yield y(std::move(yield), util::LogTree("PUBLIC"));
+        Yield y(std::move(yield), util::LogPath("PUBLIC"));
         BOOST_CHECK_NO_THROW(resolve_target(req, false, ctx.get_executor(), cancel, y));
     });
     ctx.run();
@@ -57,7 +57,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_loopback,
     {
         Request req;
         req.set(http::field::host, hostname);
-        Yield y(std::move(yield), util::LogTree("LOOPBACK"));
+        Yield y(std::move(yield), util::LogPath("LOOPBACK"));
         BOOST_CHECK_THROW(
             resolve_target(req, false, ctx.get_executor(), cancel, y),
             boost::system::system_error);
@@ -88,7 +88,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_restrict_private,
     {
         Request req;
         req.set(http::field::host, hostname);
-        Yield y(std::move(yield), util::LogTree("PRIVATE"));
+        Yield y(std::move(yield), util::LogPath("PRIVATE"));
         BOOST_CHECK_THROW(
             resolve_target(req, false, ctx.get_executor(), cancel, y),
             boost::system::system_error);
@@ -106,7 +106,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_allow_private,
     {
         Request req;
         req.set(http::field::host, hostname);
-        Yield y(std::move(yield), util::LogTree("PRIVATE"));
+        Yield y(std::move(yield), util::LogPath("PRIVATE"));
         BOOST_CHECK_NO_THROW(resolve_target(req, true, ctx.get_executor(), cancel, y));
     });
     ctx.run();

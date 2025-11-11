@@ -152,7 +152,7 @@ file(GLOB ouinet_common_sources
     "./src/util/random.cpp"
     "./src/util/handler_tracker.cpp"
     "./src/util/crypto.cpp"
-    "./src/util/log_tree.cpp"
+    "./src/util/log_path.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
     "./src/util/hash.cpp"

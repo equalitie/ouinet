@@ -9,7 +9,7 @@
 #include "../namespaces.h"
 #include "../util/executor.h"
 #include "../util/str.h"
-#include "../util/log_tree.h"
+#include "../util/log_path.h"
 #include "../logger.h"
 #include "../or_throw.h"
 #include "../task.h"
@@ -26,38 +26,40 @@ class Yield : public boost::intrusive::list_base_hook
               < boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
 {
 public:
-    Yield( asio::yield_context asio_yield, util::LogTree log_tree = {})
+    Yield( asio::yield_context asio_yield, util::LogPath log_path = {})
         : _asio_yield(asio_yield)
         , _ignored_error(std::make_shared<sys::error_code>())
-        , _log_tree(std::move(log_tree))
+        , _log_path(std::move(log_path))
     {}
 
     Yield(const Yield&) = default;
 
-public:
     Yield tag(std::string t)
     {
-        Yield ret(_asio_yield, _log_tree.tag(std::move(t)));
-        return ret;
+        return Yield(_asio_yield, _log_path.tag(std::move(t)));
     }
 
-    util::LogTree log_tree() const {
-        return _log_tree;
+    util::LogPath log_path() const {
+        return _log_path;
     }
 
     Yield operator[](sys::error_code& ec)
     {
-        return Yield(_asio_yield[ec], _log_tree);
+        return Yield(_asio_yield[ec], _log_path);
+    }
+
+    asio::yield_context native() const {
+        return _asio_yield;
     }
 
     explicit operator asio::yield_context() const
     {
-        return _asio_yield;
+        return native();
     }
 
     Yield ignore_error()
     {
-        return Yield(_asio_yield[*_ignored_error], _log_tree);
+        return Yield(_asio_yield[*_ignored_error], _log_path);
     }
 
     // Use this to keep this instance (with tag, tracking, etc.) alive
@@ -93,10 +95,14 @@ public:
     void log(Args&&...);
     void log(boost::string_view);
 
+    friend std::ostream& operator<<(std::ostream& os, const Yield& y) {
+        return os << y._log_path;
+    }
+
 private:
     asio::yield_context _asio_yield;
     std::shared_ptr<sys::error_code> _ignored_error;
-    util::LogTree _log_tree;
+    util::LogPath _log_path;
 };
 
 template<class... Args>
@@ -136,7 +142,7 @@ void Yield::log(log_level_t log_level, boost::string_view str)
     while (str.size()) {
         auto endl = str.find('\n');
 
-        logger.log(log_level, util::str(_log_tree, " ", str.substr(0, endl)));
+        logger.log(log_level, util::str(_log_path, " ", str.substr(0, endl)));
 
         if (endl == std::string::npos) {
             break;

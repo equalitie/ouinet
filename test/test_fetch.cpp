@@ -146,6 +146,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             S("--credentials"), injector_credentials,
         }),
         ctx,
+        util::LogPath("injector"),
         std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
     Client seeder(ctx, make_config<ClientConfig>({
@@ -161,6 +162,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             S("--listen-on-tcp=127.0.0.1:0"),
             S("--front-end-ep=127.0.0.1:0"),
         }),
+        util::LogPath("seeder"),
         [&ctx, swarms] () {
             return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
         });
@@ -178,6 +180,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             S("--listen-on-tcp=127.0.0.1:0"),
             S("--front-end-ep=127.0.0.1:0"),
         }),
+        util::LogPath("leecher"),
         [&ctx, swarms] () {
             auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
             dht->can_not_see("injector");
