@@ -172,21 +172,6 @@ void or_throw( Yield yield
 } // ouinet namespace
 
 
-namespace boost { namespace asio {
-
-template<class Sig>
-class async_result<::ouinet::Yield, Sig>
-    : public async_result<asio::yield_context, Sig>
-{
-    using Super = async_result<asio::yield_context, Sig>;
-
-public:
-    explicit async_result(typename Super::completion_handler_type& h)
-        : Super(h) {}
-};
-
-}} // boost::asio namespace
-
 #ifdef _WIN32
 #pragma pop_macro("Yield")
 #endif
