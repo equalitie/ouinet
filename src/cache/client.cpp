@@ -417,9 +417,9 @@ struct Client::Impl {
         }
         ec = {};  // try distributed cache
 
-        string debug_tag;
+        std::optional<util::LogTree> log_tree;
         if (logger.get_threshold() <= DEBUG) {
-            debug_tag = yield.tag() + "/multi_peer_reader";
+            log_tree = yield.log_tree().tag("multi_peer_reader");
         };
 
         std::unique_ptr<MultiPeerReader> reader;
@@ -433,13 +433,13 @@ struct Client::Impl {
 
             auto local_peers = _local_peer_discovery.found_peers();
 
-            if (!debug_tag.empty()) {
-                LOG_DEBUG(debug_tag, " Peer lookup with DHT and local discovery:");
-                LOG_DEBUG(debug_tag, "    key=         ", key);
-                LOG_DEBUG(debug_tag, "    group=       ", group);
-                LOG_DEBUG(debug_tag, "    swarm_name=  ", peer_lookup_->swarm_name());
-                LOG_DEBUG(debug_tag, "    infohash=    ", peer_lookup_->infohash());
-                LOG_DEBUG(debug_tag, "    local_peers= ", local_peers);
+            if (log_tree) {
+                LOG_DEBUG(*log_tree, " Peer lookup with DHT and local discovery:");
+                LOG_DEBUG(*log_tree, "    key=         ", key);
+                LOG_DEBUG(*log_tree, "    group=       ", group);
+                LOG_DEBUG(*log_tree, "    swarm_name=  ", peer_lookup_->swarm_name());
+                LOG_DEBUG(*log_tree, "    infohash=    ", peer_lookup_->infohash());
+                LOG_DEBUG(*log_tree, "    local_peers= ", local_peers);
             };
 
             reader = std::make_unique<MultiPeerReader>
@@ -451,14 +451,14 @@ struct Client::Impl {
                 , _dht->wan_endpoints()
                 , move(peer_lookup_)
                 , _newest_proto_seen
-                , debug_tag);
+                , log_tree);
         } else {
             auto local_peers = _local_peer_discovery.found_peers();
 
-            if (!debug_tag.empty()) {
-                LOG_DEBUG(debug_tag, " Peer lookup with local discovery only:");
-                LOG_DEBUG(debug_tag, "    key=         ", key);
-                LOG_DEBUG(debug_tag, "    local_peers= ", local_peers);
+            if (log_tree) {
+                LOG_DEBUG(*log_tree, " Peer lookup with local discovery only:");
+                LOG_DEBUG(*log_tree, "    key=         ", key);
+                LOG_DEBUG(*log_tree, "    local_peers= ", local_peers);
             };
 
             reader = std::make_unique<MultiPeerReader>
@@ -468,7 +468,7 @@ struct Client::Impl {
                 , move(local_peers)
                 , _lan_my_endpoints
                 , _newest_proto_seen
-                , debug_tag);
+                , log_tree);
         }
 
         auto s = yield[ec].tag("read_hdr").run([&] (auto y) {

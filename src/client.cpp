@@ -400,7 +400,7 @@ public:
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
-                OuinetYield yield(yield_, "metrics");
+                OuinetYield yield(yield_, util::LogTree("metrics"));
 
                 try {
                     client->send_metrics_record(record_name, record_content, *cancel, move(yield));
@@ -850,9 +850,6 @@ Client::State::fetch_stored_in_dcache( const Request& request
 
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
 
-    s.debug();
-    s.debug_prefix(yield.tag());
-
     auto& hdr = s.response_header();
 
     if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
@@ -1017,7 +1014,7 @@ Client::State::resolve_tcp_doh( const std::string& host
         &cancel, &yield, lock = wc.lock() \
     ] (asio::yield_context y_) { \
         sys::error_code ec; \
-        auto y = yield.detach(y_); \
+        auto y = Yield(y_, yield.log_tree()); \
         auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch##VER")); \
         if (ec) { ec##VER = ec; return; } \
         rs##VER = y[ec].tag("slurp##VER").run([&] (auto yy) { \
@@ -1912,7 +1909,8 @@ public:
                 auto key = key_from_http_req(rq); assert(key);
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;
-                yield.detach(yield_)[ec].run([&] (auto y) {
+                auto y = Yield(yield_, yield.log_tree());
+                y[ec].run([&] (auto y) {
                     cache->store(*key, *meta.dht_group, rr, cancel, y);
                 });
                 if (ec && ec != asio::error::operation_aborted)
@@ -2157,7 +2155,7 @@ public:
                 func = std::move(func),
                 job_type
             ] (Cancel& c, asio::yield_context y_) {
-                auto y = yield.detach(y_).tag(name_tag);
+                auto y = Yield(y_, yield.log_tree().tag(name_tag));
 
                 jobs.sleep_before_job(job_type, c, y);
 
@@ -2696,6 +2694,10 @@ void Client::State::serve_request( GenericStream&& con
     // Process the different requests that may come over the same connection.
     beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
 
+    uint64_t next_request_id = 0;
+
+    OuinetYield con_yield(yield_, connection_idstr);
+
     for (;;) {  // continue for next request; break for no more requests
         // Read the (clear-text) HTTP request
         // (without a size limit, in case we are uploading a big file).
@@ -2710,7 +2712,7 @@ void Client::State::serve_request( GenericStream&& con
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests
         // until the later desires to close it.
-        OuinetYield yield(yield_, connection_idstr);
+        OuinetYield yield = con_yield.tag(util::str("R", next_request_id++));
         yield[ec].tag("read_req").run([&] (auto y) {
             http::async_read(con, con_rbuf, reqhp, y);
         });
@@ -2720,7 +2722,7 @@ void Client::State::serve_request( GenericStream&& con
           || ec == asio::error::operation_aborted) break;
 
         if (ec) {
-            LOG_WARN("Failed to read request; ec=", ec);
+            LOG_WARN(yield.log_tree(), " Failed to read request; ec=", ec);
             break;
         }
 
@@ -2740,6 +2742,7 @@ void Client::State::serve_request( GenericStream&& con
             }
         }
 #endif
+        req.set(http_::request_private_hdr, "true");
 
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
             return authenticate(req, con, _config.client_credentials(), y);
@@ -3095,7 +3098,7 @@ void Client::State::start()
                       , move(acceptor)
                       , [this, self]
                         (GenericStream c, asio::yield_context yield_) {
-                  OuinetYield yield(yield_, "frontend");
+                  OuinetYield yield(yield_, util::LogTree("frontend"));
                   sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
