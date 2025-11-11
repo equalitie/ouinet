@@ -2742,7 +2742,6 @@ void Client::State::serve_request( GenericStream&& con
             }
         }
 #endif
-        req.set(http_::request_private_hdr, "true");
 
         bool auth = yield[ec].tag("auth").run([&] (auto y) {
             return authenticate(req, con, _config.client_credentials(), y);
