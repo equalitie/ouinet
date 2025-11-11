@@ -574,7 +574,7 @@ void serve( const InjectorConfig& config
 
     for (;;) {
         sys::error_code ec;
-        Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
+        Yield yield(yield_, util::str('C', connection_id));
 
         Request req;
         {

@@ -47,17 +47,9 @@ class Yield : public boost::intrusive::list_base_hook
     };
 
 public:
-    Yield( asio::io_context& ctx
-         , asio::yield_context asio_yield
+    Yield( asio::yield_context asio_yield
          , std::string con_id = "")
-        : Yield(ctx.get_executor(), asio_yield, std::move(con_id))
-    {}
-
-    Yield(const AsioExecutor& ex
-         , asio::yield_context asio_yield
-         , std::string con_id = "")
-        : _ex(ex)
-        , _asio_yield(asio_yield)
+        : _asio_yield(asio_yield)
         , _ignored_error(std::make_shared<sys::error_code>())
         , _tag(util::str("R", generate_context_id()))
         , _parent(nullptr)
@@ -81,8 +73,7 @@ public:
 
 private:
     Yield(Yield& parent, asio::yield_context asio_yield)
-        : _ex(parent._ex)
-        , _asio_yield(asio_yield)
+        : _asio_yield(asio_yield)
         , _ignored_error(parent._ignored_error)
         , _tag(parent.tag())
         , _parent(&parent)
@@ -93,8 +84,7 @@ private:
 
 public:
     Yield(Yield&& y)
-        : _ex(y._ex)
-        , _asio_yield(y._asio_yield)
+        : _asio_yield(y._asio_yield)
         , _ignored_error(std::move(y._ignored_error))
         , _tag(std::move(y._tag))
         , _parent(y._parent)
@@ -221,7 +211,6 @@ private:
     }
 
 private:
-    AsioExecutor _ex;
     asio::yield_context _asio_yield;
     std::shared_ptr<sys::error_code> _ignored_error;
     std::string _tag;
@@ -250,9 +239,9 @@ void Yield::start_timing()
 
     stop_timing();
 
-    _timeout_state = std::make_shared<TimeoutState>(_ex, this);
+    _timeout_state = std::make_shared<TimeoutState>(_asio_yield.get_executor(), this);
 
-    task::spawn_detached(_ex
+    task::spawn_detached(_asio_yield.get_executor()
                , [ ts = _timeout_state, timeout]
                  (asio::yield_context yield) {
 

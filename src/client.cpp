@@ -400,7 +400,7 @@ public:
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
-                OuinetYield yield(client->_ctx, yield_, "metrics");
+                OuinetYield yield(yield_, "metrics");
 
                 try {
                     client->send_metrics_record(record_name, record_content, *cancel, move(yield));
@@ -609,7 +609,7 @@ private:
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
                     // Do not log other users' addresses unless debugging.
-                    OuinetYield y( _ctx, yield
+                    OuinetYield y( yield
                            , (logger.get_threshold() <= DEBUG)
                              ? "uTPAccept(" + con.remote_endpoint() + ")"
                              : "uTPAccept");
@@ -2710,7 +2710,7 @@ void Client::State::serve_request( GenericStream&& con
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests
         // until the later desires to close it.
-        OuinetYield yield(_ctx.get_executor(), yield_, connection_idstr);
+        OuinetYield yield(yield_, connection_idstr);
         yield[ec].tag("read_req").run([&] (auto y) {
             http::async_read(con, con_rbuf, reqhp, y);
         });
@@ -3095,7 +3095,7 @@ void Client::State::start()
                       , move(acceptor)
                       , [this, self]
                         (GenericStream c, asio::yield_context yield_) {
-                  OuinetYield yield(_ctx, yield_, "frontend");
+                  OuinetYield yield(yield_, "frontend");
                   sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
