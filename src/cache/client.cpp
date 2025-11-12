@@ -167,7 +167,7 @@ struct Client::Impl {
                     , GenericStream& sink
                     , metrics::Client& metrics_client
                     , Cancel& cancel
-                    , Yield& yield)
+                    , YieldContext& yield)
     {
         sys::error_code ec;
 
@@ -346,7 +346,7 @@ struct Client::Impl {
                           , const http::request<http::empty_body>& req
                           , http::status status
                           , const string& proto_error
-                          , Yield yield)
+                          , YieldContext yield)
     {
         auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
         util::http_reply(con, res, static_cast<asio::yield_context>(yield));
@@ -354,14 +354,14 @@ struct Client::Impl {
 
     void handle_bad_request( GenericStream& con
                            , const http::request<http::empty_body>& req
-                           , Yield yield)
+                           , YieldContext yield)
     {
         return handle_http_error(con, req, http::status::bad_request, "", yield);
     }
 
     void handle_not_found( GenericStream& con
                          , const http::request<http::empty_body>& req
-                         , Yield yield)
+                         , YieldContext yield)
     {
         return handle_http_error( con, req, http::status::not_found
                                 , http_::response_error_hdr_retrieval_failed, yield);
@@ -386,7 +386,7 @@ struct Client::Impl {
                 , bool is_head_request
                 , metrics::Client& metrics_client
                 , Cancel cancel
-                , Yield yield)
+                , YieldContext yield)
     {
         namespace err = asio::error;
 
@@ -495,7 +495,7 @@ struct Client::Impl {
                            , bool is_head_request
                            , std::size_t& body_size
                            , Cancel cancel
-                           , Yield yield)
+                           , YieldContext yield)
     {
         sys::error_code ec;
         cache::reader_uptr rr;
@@ -793,7 +793,7 @@ Session Client::load( const std::string& key
                     , const GroupName& group
                     , bool is_head_request
                     , metrics::Client& metrics
-                    , Cancel cancel, Yield yield)
+                    , Cancel cancel, YieldContext yield)
 {
     return _impl->load(key, group, is_head_request, metrics, cancel, yield);
 }
@@ -811,7 +811,7 @@ bool Client::serve_local( const http::request<http::empty_body>& req
                         , GenericStream& sink
                         , metrics::Client& metrics
                         , Cancel& cancel
-                        , Yield yield)
+                        , YieldContext yield)
 {
     return _impl->serve_local(req, sink, metrics, cancel, yield);
 }

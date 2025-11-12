@@ -87,7 +87,7 @@ template<class Res>
 static
 void send_response( GenericStream& con
                   , const Res& res
-                  , Yield yield)
+                  , YieldContext yield)
 {
     yield.log("=== Sending back response ===");
     yield.log(res);
@@ -101,7 +101,7 @@ void handle_error( GenericStream& con
                  , http::status status
                  , const string& proto_error
                  , const string& message
-                 , Yield yield)
+                 , YieldContext yield)
 {
     auto res = util::http_error( req, status
                                , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
@@ -113,7 +113,7 @@ void handle_error( GenericStream& con
                  , const Request& req
                  , http::status status
                  , const string& message
-                 , Yield yield)
+                 , YieldContext yield)
 {
     return handle_error(con, req, status, "", message, yield);
 }
@@ -121,7 +121,7 @@ void handle_error( GenericStream& con
 static
 void handle_no_proxy( GenericStream& con
                     , const Request& req
-                    , Yield yield)
+                    , YieldContext yield)
 {
     return handle_error( con, req, http::status::forbidden
                        , http_::response_error_hdr_proxy_disabled, "Proxy disabled"
@@ -139,7 +139,7 @@ ouinet::resolve_target(const http::request_header<>& req
                       , bool allow_private_targets
                       , AsioExecutor exec
                       , Cancel& cancel
-                      , Yield yield)
+                      , YieldContext yield)
 {
     TcpLookup lookup;
     sys::error_code ec;
@@ -193,7 +193,7 @@ void handle_connect_request( GenericStream client_c
                            , beast::flat_buffer client_c_rbuf
                            , const Request& req
                            , Cancel& cancel
-                           , Yield yield)
+                           , YieldContext yield)
 {
     sys::error_code ec;
 
@@ -295,7 +295,7 @@ class InjectorCacheControl {
 
     GenericStream connect( const Request& rq
                          , Cancel& cancel
-                         , Yield yield)
+                         , YieldContext yield)
     {
         // Parse the URL to tell HTTP/HTTPS, host, port.
         auto url = util::Url::from(rq.target());
@@ -354,7 +354,7 @@ private:
                      , const Request& cache_rq
                      , bool rq_keep_alive
                      , Cancel& cancel
-                     , Yield yield)
+                     , YieldContext yield)
     {
         yield.log("BEGIN");
 
@@ -452,7 +452,7 @@ public:
     void fetch( GenericStream& con
               , Request rq
               , Cancel cancel
-              , Yield yield)
+              , YieldContext yield)
     {
         sys::error_code ec;
         bool rq_keep_alive = rq.keep_alive();
@@ -474,7 +474,7 @@ public:
         return or_throw(yield, ec);
     }
 
-    Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
+    Connection get_connection(const Request& rq_, Cancel& cancel, YieldContext yield) {
         Connection connection;
         sys::error_code ec;
 
@@ -520,7 +520,7 @@ bool is_request_to_this(const Request& rq) {
 }
 
 //------------------------------------------------------------------------------
-void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
+void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
 {
     if (rq.target() == "/api/ok") {
         http::response<http::empty_body> rs{http::status::ok, rq.version()};
@@ -548,7 +548,7 @@ void serve( const InjectorConfig& config
           , OriginPools& origin_pools
           , uuid_generator& genuuid
           , Cancel& cancel
-          , Yield yield_)
+          , YieldContext yield_)
 {
     auto close_connection_slot = cancel.connect([&con] {
         con.close();
@@ -574,7 +574,7 @@ void serve( const InjectorConfig& config
 
     for (;;) {
         sys::error_code ec;
-        Yield yield = yield_.tag(util::str('R', next_request_id++));
+        YieldContext yield = yield_.tag(util::str('R', next_request_id++));
 
         Request req;
         {
@@ -755,7 +755,7 @@ static
 void listen( const InjectorConfig& config
            , OuiServiceServer& proxy_server
            , Cancel& cancel
-           , Yield yield)
+           , YieldContext yield)
 {
     uuid_generator genuuid;
 
@@ -810,7 +810,7 @@ void listen( const InjectorConfig& config
             lock = shutdown_connections.lock()
         ] (boost::asio::yield_context asio_yield) mutable {
             sys::error_code leaked_ec;
-            auto y = Yield(asio_yield, yield.log_path().tag(util::str('C', connection_id)));
+            auto y = YieldContext(asio_yield, yield.log_path().tag(util::str('C', connection_id)));
             serve( config
                  , std::move(connection)
                  , ssl_ctx
@@ -1013,7 +1013,7 @@ Injector::Injector(
         log_path
     ] (asio::yield_context yield) mutable {
         sys::error_code ec;
-        listen(_config, *proxy_server, cancel, Yield(yield, log_path)[ec]);
+        listen(_config, *proxy_server, cancel, YieldContext(yield, log_path)[ec]);
     });
 }
 

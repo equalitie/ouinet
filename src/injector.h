@@ -23,7 +23,7 @@ resolve_target(const http::request_header<>& req
               , bool allow_private_targets
               , AsioExecutor exec
               , Cancel& cancel
-              , Yield yield);
+              , YieldContext yield);
 
 // This class needs to outlive the `asio::io_context`. Mainly because of the
 // `ssl::context` which is passed to `ssl::stream`s by reference.

@@ -25,7 +25,7 @@ full_duplex( Stream1 a
            , OnA2B on_a2b
            , OnB2A on_b2a
            , Cancel cancel
-           , Yield yield)
+           , YieldContext yield)
 {
     static const auto timeout = default_timeout::activity();
 
@@ -100,7 +100,7 @@ full_duplex( Stream1 a
 
 template<class Stream1, class Stream2>
 std::pair<std::size_t, std::size_t>
-full_duplex(Stream1 a, Stream2 b, Cancel cancel, Yield yield)
+full_duplex(Stream1 a, Stream2 b, Cancel cancel, YieldContext yield)
 {
     return full_duplex(
             std::move(a),

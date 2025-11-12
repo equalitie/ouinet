@@ -1,10 +1,5 @@
 #pragma once
 
-#ifdef _WIN32
-#pragma push_macro("Yield")
-#undef Yield
-#endif
-
 #include <sstream>
 #include "../namespaces.h"
 #include "../util/executor.h"
@@ -22,30 +17,30 @@ namespace ouinet {
 
 using ouinet::util::AsioExecutor;
 
-class Yield : public boost::intrusive::list_base_hook
+class YieldContext : public boost::intrusive::list_base_hook
               < boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
 {
 public:
-    Yield( asio::yield_context asio_yield, util::LogPath log_path = {})
+    YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
         : _asio_yield(asio_yield)
         , _ignored_error(std::make_shared<sys::error_code>())
         , _log_path(std::move(log_path))
     {}
 
-    Yield(const Yield&) = default;
+    YieldContext(const YieldContext&) = default;
 
-    Yield tag(std::string t)
+    YieldContext tag(std::string t)
     {
-        return Yield(_asio_yield, _log_path.tag(std::move(t)));
+        return YieldContext(_asio_yield, _log_path.tag(std::move(t)));
     }
 
     util::LogPath log_path() const {
         return _log_path;
     }
 
-    Yield operator[](sys::error_code& ec)
+    YieldContext operator[](sys::error_code& ec)
     {
-        return Yield(_asio_yield[ec], _log_path);
+        return YieldContext(_asio_yield[ec], _log_path);
     }
 
     AsioExecutor get_executor() const {
@@ -61,9 +56,9 @@ public:
         return native();
     }
 
-    Yield ignore_error()
+    YieldContext ignore_error()
     {
-        return Yield(_asio_yield[*_ignored_error], _log_path);
+        return YieldContext(_asio_yield[*_ignored_error], _log_path);
     }
 
     // Use this to keep this instance (with tag, tracking, etc.) alive
@@ -100,7 +95,7 @@ public:
     void log(Args&&...);
     void log(boost::string_view);
 
-    friend std::ostream& operator<<(std::ostream& os, const Yield& y) {
+    friend std::ostream& operator<<(std::ostream& os, const YieldContext& y) {
         return os << y._log_path;
     }
 
@@ -112,32 +107,32 @@ private:
 
 template<class... Args>
 inline
-void Yield::log(Args&&... args)
+void YieldContext::log(Args&&... args)
 {
     if (logger.get_threshold() > INFO)
         return;  // avoid string conversion early
 
-    Yield::log(INFO, boost::string_view(util::str(std::forward<Args>(args)...)));
+    YieldContext::log(INFO, boost::string_view(util::str(std::forward<Args>(args)...)));
 }
 
 inline
-void Yield::log(boost::string_view str)
+void YieldContext::log(boost::string_view str)
 {
-    Yield::log(INFO, str);
+    YieldContext::log(INFO, str);
 }
 
 template<class... Args>
 inline
-void Yield::log(log_level_t log_level, Args&&... args)
+void YieldContext::log(log_level_t log_level, Args&&... args)
 {
     if (logger.get_threshold() > log_level)
         return;  // avoid string conversion early
 
-    Yield::log(log_level, boost::string_view(util::str(std::forward<Args>(args)...)));
+    YieldContext::log(log_level, boost::string_view(util::str(std::forward<Args>(args)...)));
 }
 
 inline
-void Yield::log(log_level_t log_level, boost::string_view str)
+void YieldContext::log(log_level_t log_level, boost::string_view str)
 {
     using boost::string_view;
 
@@ -160,7 +155,7 @@ void Yield::log(log_level_t log_level, boost::string_view str)
 
 template<class Ret>
 inline
-Ret or_throw( Yield yield
+Ret or_throw( YieldContext yield
             , const sys::error_code& ec
             , Ret&& ret = {})
 {
@@ -168,15 +163,10 @@ Ret or_throw( Yield yield
 }
 
 inline
-void or_throw( Yield yield
+void or_throw( YieldContext yield
              , const sys::error_code& ec)
 {
     return or_throw(static_cast<asio::yield_context>(yield), ec);
 }
 
 } // ouinet namespace
-
-
-#ifdef _WIN32
-#pragma pop_macro("Yield")
-#endif

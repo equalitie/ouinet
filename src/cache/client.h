@@ -88,7 +88,7 @@ public:
                 , bool is_head_request
                 , metrics::Client& metrics
                 , Cancel
-                , Yield);
+                , YieldContext);
 
     void store( const std::string& key
               , const GroupName& group
@@ -102,7 +102,7 @@ public:
                     , GenericStream& sink
                     , metrics::Client&
                     , Cancel&
-                    , Yield);
+                    , YieldContext);
 
     std::size_t local_size( Cancel
                           , asio::yield_context) const;

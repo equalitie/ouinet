@@ -461,7 +461,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , cache::Client* cache_client
                                   , ClientFrontEndMetricsController& metrics
                                   , Cancel cancel
-                                  , Yield yield)
+                                  , YieldContext yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -714,7 +714,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , cache::Client* cache_client
                                       , ClientFrontEndMetricsController& metrics
                                       , Cancel cancel
-                                      , Yield yield)
+                                      , YieldContext yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -856,7 +856,7 @@ void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
                                        , const Request& req, Response& res, ostringstream& ss
                                        , ClientFrontEndMetricsController& metrics
                                        , Cancel cancel
-                                       , Yield yield)
+                                       , YieldContext yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -910,7 +910,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
                               , Cancel cancel
-                              , Yield yield)
+                              , YieldContext yield)
 {
     if (auto& token = config.front_end_access_token()) {
         std::string_view header_key = "X-Ouinet-Front-End-Token";
