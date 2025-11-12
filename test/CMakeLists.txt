@@ -148,7 +148,3 @@ target_link_libraries(test-injector-resolver injector_lib)
 ######################################################################
 add_executable(test_fetch "test_fetch.cpp")
 target_link_libraries(test_fetch injector_lib client_lib)
-
-target_link_libraries(test_fetch asan)
-set_target_properties(test_fetch PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-set_target_properties(test_fetch PROPERTIES LINK_FLAGS "-fsanitize=address")
