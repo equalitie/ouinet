@@ -48,6 +48,10 @@ public:
         return Yield(_asio_yield[ec], _log_path);
     }
 
+    AsioExecutor get_executor() const {
+        return _asio_yield.get_executor();
+    }
+
     asio::yield_context native() const {
         return _asio_yield;
     }
@@ -79,6 +83,7 @@ public:
     //
     //     auto foo = YIELD_KEEP(yield[ec].tag("foo"), do_foo(a, __Y));
     //
+    // TODO: This function is deprecated, use `native()` instead.
     template<class F>
     auto
     run(F&& f) {
