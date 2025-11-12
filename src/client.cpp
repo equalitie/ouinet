@@ -803,15 +803,14 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
         assert(!ec);
 
         // Forward the rest of data in both directions.
-        auto c2i_i2c = cyield[ec].tag("full_duplex").run([&] (auto y) {
-            return full_duplex(
-                    move(con),
-                    move(inj),
-                    [&] (size_t byte_count) { _metrics.bridge_transfer_c2i(byte_count); },
-                    [&] (size_t byte_count) { _metrics.bridge_transfer_i2c(byte_count); },
-                    cancel,
-                    y);
-        });
+        auto c2i_i2c =  full_duplex(
+            move(con),
+            move(inj),
+            [&] (size_t byte_count) { _metrics.bridge_transfer_c2i(byte_count); },
+            [&] (size_t byte_count) { _metrics.bridge_transfer_i2c(byte_count); },
+            cancel,
+            cyield[ec].tag("full_duplex"));
+
         std::tie(fwd_bytes_c2i, fwd_bytes_i2c) = c2i_i2c;
         return or_throw(cyield, ec);
     }
@@ -1357,7 +1356,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
                                          , tls_ctx
                                          , url->host
                                          , timeout_cancel
-                                         , static_cast<asio::yield_context>(yield[ec]));
+                                         , yield.native()[ec]);
     } else {
         con = move(inj.connection);
     }
@@ -1833,13 +1832,13 @@ public:
             auto metrics = client_state._metrics.new_private_injector_request();
 
             session = client_state.fetch_fresh_through_connect_proxy
-                    (rq, client_state.pub_ctx, std::move(metrics), cancel, yield[ec]);
+                    (rq, client_state.pub_ctx, std::move(metrics), cancel, yield[ec].tag("connect"));
         }
         else {
             auto metrics = client_state._metrics.new_public_injector_request();
 
             session = client_state.fetch_fresh_through_simple_proxy
-                    (rq, nullptr, false, std::move(metrics), cancel, yield[ec]);
+                    (rq, nullptr, false, std::move(metrics), cancel, yield[ec].tag("simple"));
         }
 
         _YDEBUG(yield, "Proxy fetch; ec=", ec);
@@ -2406,9 +2405,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    yield[ec].tag("full_duplex").run([&] (auto y) {
-        full_duplex(move(browser), move(origin), cancel, y);
-    });
+    full_duplex(move(browser), move(origin), cancel, yield[ec].tag("full_duplex"));
 
     return or_throw(yield, ec, true);
 }
@@ -2470,7 +2467,6 @@ void Client::State::serve_request(GenericStream&& con, OuinetYield yield_)
 {
     Cancel cancel(_shutdown_signal);
 
-    LOG_DEBUG(yield_, "---------------------- ", __LINE__);
     namespace rr = request_route;
     using rr::fresh_channel;
 

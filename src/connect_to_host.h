@@ -2,7 +2,6 @@
 
 #include "namespaces.h"
 #include "generic_stream.h"
-#include "or_throw.h"
 #include "util/executor.h"
 #include "util/signal.h"
 

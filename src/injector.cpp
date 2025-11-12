@@ -283,10 +283,9 @@ void handle_connect_request( GenericStream client_c
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    auto c2o_o2c = yield[ec].tag("full_duplex").run([&] (auto y) {
-        return full_duplex(move(client_c), move(origin_c), cancel, y);
-    });
-    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) = c2o_o2c;
+    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) =
+        full_duplex(move(client_c), move(origin_c), cancel, yield[ec].tag("full_duplex"));
+
     return or_throw(yield, ec);
 }
 

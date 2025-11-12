@@ -9,6 +9,7 @@
 #include "util/signal.h"
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
+#include "util/yield.h"
 
 namespace ouinet {
 
@@ -24,7 +25,7 @@ full_duplex( Stream1 a
            , OnA2B on_a2b
            , OnB2A on_b2a
            , Cancel cancel
-           , asio::yield_context yield)
+           , Yield yield)
 {
     static const auto timeout = default_timeout::activity();
 
@@ -41,11 +42,15 @@ full_duplex( Stream1 a
         for (;;) {
             size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
             ec = compute_error_code(ec, cancel, wdog);
-            if (ec) break;
+            if (ec) {
+                break;
+            }
 
             asio::async_write(out, asio::buffer(data, length), yield[ec]);
             ec = compute_error_code(ec, cancel, wdog);
-            if (ec) break;
+            if (ec) {
+                break;
+            }
 
             fwd_bytes_in_out += length;  // the data was successfully forwarded
             on_transfer(length);
@@ -74,19 +79,19 @@ full_duplex( Stream1 a
     std::size_t fwd_bytes_a2b = 0, fwd_bytes_b2a = 0;
 
     task::spawn_detached
-        ( yield
+        ( yield.get_executor()
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(a, b, fwd_bytes_a2b, on_a2b, wdog, yield);
           });
 
     task::spawn_detached
-        ( yield
+        ( yield.get_executor()
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
               half_duplex(b, a, fwd_bytes_b2a, on_b2a, wdog, yield);
           });
 
     sys::error_code ec;
-    wait_condition.wait(yield[ec]);  // leave cancellation handling to tasks
+    wait_condition.wait(yield.native()[ec]);  // leave cancellation handling to tasks
     ec = compute_error_code(ec, cancel, wdog);
 
     return or_throw(yield, ec, std::make_pair(fwd_bytes_a2b, fwd_bytes_b2a));
@@ -94,7 +99,7 @@ full_duplex( Stream1 a
 
 template<class Stream1, class Stream2>
 std::pair<std::size_t, std::size_t>
-full_duplex(Stream1 a, Stream2 b, Cancel cancel, asio::yield_context yield)
+full_duplex(Stream1 a, Stream2 b, Cancel cancel, Yield yield)
 {
     return full_duplex(
             std::move(a),
