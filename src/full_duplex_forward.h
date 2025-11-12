@@ -29,12 +29,13 @@ full_duplex( Stream1 a
 {
     static const auto timeout = default_timeout::activity();
 
-    static const auto half_duplex = [&cancel]( auto& in
-                                             , auto& out
-                                             , auto& fwd_bytes_in_out
-                                             , auto& on_transfer
-                                             , auto& wdog
-                                             , asio::yield_context& yield)
+    static const auto half_duplex = []( auto& in
+                                      , auto& out
+                                      , auto& fwd_bytes_in_out
+                                      , auto& on_transfer
+                                      , auto& wdog
+                                      , auto& cancel
+                                      , asio::yield_context& yield)
     {
         sys::error_code ec;
         std::array<uint8_t, 2048> data;
@@ -81,13 +82,13 @@ full_duplex( Stream1 a
     task::spawn_detached
         ( yield.get_executor()
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(a, b, fwd_bytes_a2b, on_a2b, wdog, yield);
+              half_duplex(a, b, fwd_bytes_a2b, on_a2b, wdog, cancel, yield);
           });
 
     task::spawn_detached
         ( yield.get_executor()
         , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(b, a, fwd_bytes_b2a, on_b2a, wdog, yield);
+              half_duplex(b, a, fwd_bytes_b2a, on_b2a, wdog, cancel, yield);
           });
 
     sys::error_code ec;
