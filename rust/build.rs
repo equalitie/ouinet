@@ -13,7 +13,7 @@ fn main() {
         .compile("rust-bridge");
 
     // Use `export LIBRARY_PATH="./build"` to tell the linker where to find libboost_asio.so
-    println!("cargo:rustc-link-lib=boost_asio");
+    println!("cargo:rustc-link-lib=ouinet_asio");
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=cxx");
     println!("cargo:rerun-if-env-changed=CXXFLAGS");

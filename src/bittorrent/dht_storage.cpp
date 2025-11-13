@@ -10,9 +10,7 @@
 #include <cstdlib>
 #include <boost/asio/detached.hpp>
 
-namespace ouinet {
-namespace bittorrent {
-namespace dht {
+namespace ouinet::bittorrent {
 
 detail::DhtWriteTokenStorage::DhtWriteTokenStorage():
     _salt(util::random::string(32))
@@ -263,6 +261,4 @@ boost::optional<MutableDataItem> DataStore::get_mutable(NodeID id)
     return it->second.item;
 }
 
-} // dht namespace
-} // bittorrent namespace
-} // ouinet namespace
+} // namespaces

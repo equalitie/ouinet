@@ -9,6 +9,7 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
+#include "declspec.h"
 #include "namespaces.h"
 #include "cache_control.h"
 #include "doh.h"
@@ -36,7 +37,7 @@ static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
 struct MetricsConfig {
     bool enable_on_start = false;
-    util::url_match server_url;
+    util::Url server_url;
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     metrics::EncryptionKey encryption_key;
@@ -44,14 +45,14 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
-class ClientConfig {
+class OUINET_DECL ClientConfig {
 public:
     enum class CacheType { None, Bep5Http };
 
     ClientConfig() = default;
 
     // Throws on error
-    ClientConfig(int argc, char* argv[]);
+    ClientConfig(int argc, const char* argv[]);
 
     ClientConfig(ClientConfig&&) = default;
     ClientConfig& operator=(ClientConfig&&) = default;

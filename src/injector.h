@@ -6,63 +6,60 @@
 #include "http_util.h"
 #include "http_logger.h"
 #include "util/yield.h"
+#include "util/log_path.h"
+#include "injector_config.h"
+#include "bittorrent/mock_dht.h"
 
+
+// TODO: Don't do this in global namespaces nor headers
 using namespace std;
-using namespace ouinet;
-using Request = http::request<http::string_body>;
+
+namespace ouinet {
+
 using TcpLookup = asio::ip::tcp::resolver::results_type;
 
-static bool allow_private_targets = false;
-
-//------------------------------------------------------------------------------
-// Resolve request target address, check whether it is valid
-// and return lookup results.
-// If not valid, set error code
-// (the returned lookup may not be usable then).
-static
 TcpLookup
-resolve_target(const Request& req
+resolve_target(const http::request_header<>& req
+              , bool allow_private_targets
               , AsioExecutor exec
               , Cancel& cancel
-              , Yield yield)
-{
-    TcpLookup lookup;
-    sys::error_code ec;
+              , YieldContext yield);
 
-    string host, port;
-    tie(host, port) = util::get_host_port(req);
+// This class needs to outlive the `asio::io_context`. Mainly because of the
+// `ssl::context` which is passed to `ssl::stream`s by reference.
+class Injector {
+public:
+    Injector(
+        InjectorConfig config,
+        asio::io_context& ctx,
+        // For use in tests
+        util::LogPath log_path = {},
+        std::shared_ptr<bittorrent::MockDht> dht = nullptr);
 
-    // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = boost::regex_match(host, util::localhost_rx);
-    bool priv = boost::regex_match(host, util::private_addr_rx);
+    void stop();
+    ~Injector();
 
-    // Resolve address and also use result for more sophisticaded checking.
-    if (!local && (!priv || allow_private_targets)) {}
-        lookup = util::tcp_async_resolve(host, port
-                                         , exec
-                                         , cancel
-                                         , static_cast<asio::yield_context>(yield[ec]));
-
-    if (ec) return or_throw<TcpLookup>(yield, ec);
-
-    // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
-    for (auto r : lookup)
-    {
-        if ((local = boost::regex_match(r.endpoint().address().to_string()
-                                        , util::localhost_rx)))
-            break;
-        if ((priv = boost::regex_match(r.endpoint().address().to_string()
-                                      , util::private_addr_rx)))
-            if (!allow_private_targets)
-                break;
+    const InjectorConfig& config() const {
+        return _config;
     }
 
-    if (local || (priv && !allow_private_targets))
-    {
-        ec = asio::error::invalid_argument;
-        return or_throw<TcpLookup>(yield, ec);
+    std::string cache_http_public_key() const {
+        std::ifstream file(_config.repo_root() / "ed25519-public-key");
+        if (!file) throw std::runtime_error("File not found");
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
     }
 
-    return or_throw(yield, ec, move(lookup));
-}
+    fs::path tls_cert_file() const {
+        return config().repo_root() / "tls-cert.pem";
+    }
 
+private:
+    InjectorConfig _config;
+    Cancel _cancel;
+    std::shared_ptr<bittorrent::DhtBase> _dht;
+    std::unique_ptr<asio::ssl::context> _ssl_context;
+};
+
+} // namespace ouinet

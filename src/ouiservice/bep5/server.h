@@ -5,7 +5,7 @@
 namespace ouinet {
 
 namespace bittorrent {
-    class MainlineDht;
+    class DhtBase;
     class Bep5PeriodicAnnouncer;
 }
 
@@ -14,7 +14,7 @@ namespace ouiservice {
 class Bep5Server : public OuiServiceImplementationServer
 {
 public:
-    Bep5Server( std::shared_ptr<bittorrent::MainlineDht>
+    Bep5Server( std::shared_ptr<bittorrent::DhtBase>
               , boost::asio::ssl::context* ssl_context
               , std::string swarm_name);
 

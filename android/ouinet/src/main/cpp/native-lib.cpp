@@ -90,7 +90,7 @@ void start_client_thread(const vector<string>& args, const vector<string>& extra
             }
 
             try {
-                ClientConfig cfg(args_.size(), (char**) args_.data());
+                ClientConfig cfg(args_.size(), (const char**) args_.data());
                 g_client = make_unique<ouinet::Client>(g_ctx, move(cfg));
                 g_client->start();
             }
@@ -143,7 +143,9 @@ Java_ie_equalit_ouinet_Ouinet_nGetProxyEndpoint(
 {
     if (!g_client)
         return env->NewStringUTF("");
-    return env->NewStringUTF(g_client->get_proxy_endpoint().c_str());
+    auto ep = g_client->get_proxy_endpoint();
+    auto ep_str = string(ep.address().to_string()) + ":" + to_string(ep.port());
+    return env->NewStringUTF(ep_str.c_str());
 }
 
 extern "C"

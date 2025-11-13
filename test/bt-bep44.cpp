@@ -1,4 +1,4 @@
-#include <bittorrent/dht.h>
+#include <bittorrent/mainline_dht.h>
 
 #include <iostream>
 #include <chrono>
@@ -14,7 +14,9 @@
 #include "../src/util/wait_condition.h"
 #include "../src/util/str.h"
 #include "../src/util/hash.h"
+#include "../src/task.h"
 #include "../src/util/file_io/async_file_handle.h"
+#include "cxx/metrics.h"
 
 using namespace ouinet;
 using namespace std;
@@ -162,7 +164,7 @@ int main(int argc, const char** argv)
 
     auto metrics = metrics::Client::noop();
 
-    unique_ptr<MainlineDht> dht(new MainlineDht(ctx, metrics.mainline_dht()));
+    unique_ptr<MainlineDht> dht(new MainlineDht(ctx.get_executor(), metrics.mainline_dht()));
 
     vector<string> args;
 

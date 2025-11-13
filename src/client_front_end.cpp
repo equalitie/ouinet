@@ -295,7 +295,7 @@ upnp_status(const ClientFrontEnd::UPnPs& upnps) {
 
 static
 std::vector<std::string>
-public_udp_endpoints(const bittorrent::MainlineDht& dht) {
+public_udp_endpoints(const bittorrent::DhtBase& dht) {
     std::vector<std::string> eps;
     for (auto& ep : dht.wan_endpoints())
         eps.push_back(util::str(ep));
@@ -455,13 +455,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
                                   , const std::shared_ptr<UPnPs>& upnps_ptr
-                                  , const bittorrent::MainlineDht* dht
+                                  , const bittorrent::DhtBase* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
                                   , ClientFrontEndMetricsController& metrics
                                   , Cancel cancel
-                                  , Yield yield)
+                                  , YieldContext yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -708,13 +708,13 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , Client::RunningState cstate
                                       , boost::optional<UdpEndpoint> local_ep
                                       , const std::shared_ptr<UPnPs>& upnps_ptr
-                                      , const bittorrent::MainlineDht* dht
+                                      , const bittorrent::DhtBase* dht
                                       , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
                                       , cache::Client* cache_client
                                       , ClientFrontEndMetricsController& metrics
                                       , Cancel cancel
-                                      , Yield yield)
+                                      , YieldContext yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -856,7 +856,7 @@ void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
                                        , const Request& req, Response& res, ostringstream& ss
                                        , ClientFrontEndMetricsController& metrics
                                        , Cancel cancel
-                                       , Yield yield)
+                                       , YieldContext yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -906,11 +906,11 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const std::shared_ptr<UPnPs>& upnps_ptr
-                              , const bittorrent::MainlineDht* dht
+                              , const bittorrent::DhtBase* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
                               , Cancel cancel
-                              , Yield yield)
+                              , YieldContext yield)
 {
     if (auto& token = config.front_end_access_token()) {
         std::string_view header_key = "X-Ouinet-Front-End-Token";
@@ -938,10 +938,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     ostringstream ss;
 
-    util::url_match url;
-    match_http_url(req.target(), url);
+    auto url = util::Url::from(req.target());
 
-    auto path_str = !url.path.empty() ? url.path : std::string(req.target());
+    auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
     std::string_view path(path_str);
 
     std::string_view groups_api_path = "/api/groups";

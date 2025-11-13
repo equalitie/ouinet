@@ -9,7 +9,6 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/beast/core/string_type.hpp>
@@ -18,58 +17,17 @@
 #include "util/signal.h"
 #include "util/condition_variable.h"
 #include "util/handler_tracker.h"
+#include "util/url.h"
 #include "or_throw.h"
 
 namespace ouinet { namespace util {
-
-struct url_match {
-    // Uniform Resource Identifier (URI): Generic Syntax
-    // https://www.ietf.org/rfc/rfc3986.txt
-
-    //      foo://example.com:8042/over/there?name=ferret#nose
-    //      \_/   \______________/\_________/ \_________/ \__/
-    //       |           |            |            |        |
-    //    scheme     authority       path        query   fragment
-    //
-    // authority = [ userinfo "@" ] host [ ":" port ]
-
-    std::string scheme;
-    std::string host;
-    std::string port;      // maybe empty
-    std::string path;      // maybe empty
-    std::string query;     // maybe empty
-    std::string fragment;  // maybe empty
-
-    // Rebuild the URL, dropping port, query and fragment if empty.
-    std::string reassemble() const {
-        auto url = boost::format("%s://%s%s%s%s%s")
-            % scheme % host
-            % (port.empty() ? "" : ':' + port)
-            % path
-            % (query.empty() ? "" : '?' + query)
-            % (fragment.empty() ? "" : '#' + fragment);
-        return url.str();
-    }
-
-    std::string host_and_port() const {
-        if (port.empty()) {
-            return host;
-        } else {
-            return host + ':' + port;
-        }
-    }
-};
-
-// Parse the HTTP URL to tell the different components.
-// If successful, the `match` is updated.
-bool match_http_url(const boost::string_view url, url_match& match);
 
 // Return the canonical version of the given HTTP(S) URL
 // whose match components are in `urlm`.
 //
 // Canonical URLs never have fragments (they should be handled by the agent).
 inline
-std::string canonical_url(url_match urlm) {
+std::string canonical_url(Url urlm) {
     if (!urlm.fragment.empty()) urlm.fragment = {};
     return urlm.reassemble();  // TODO: make canonical
 }
@@ -78,9 +36,9 @@ std::string canonical_url(url_match urlm) {
 // or the empty string if it is invalid.
 inline
 std::string canonical_url(const boost::string_view url) {
-    url_match urlm;
-    if (!match_http_url(url, urlm)) return {};  // error
-    return canonical_url(std::move(urlm));
+    auto urlm = Url::from(url);
+    if (!urlm) return {};  // error
+    return canonical_url(std::move(*urlm));
 }
 
 // Get the source IPv4 address used when communicating with external hosts.

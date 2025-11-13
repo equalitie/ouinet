@@ -1,6 +1,8 @@
 #pragma once
 
 #include <thread>
+#include <boost/asio/signal_set.hpp>
+#include "namespaces.h"
 
 namespace ouinet {
 
