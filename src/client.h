@@ -8,6 +8,7 @@
 #include "namespaces.h"
 #include "client_config.h"
 #include "bittorrent/mock_dht.h"
+#include "util/log_path.h"
 
 namespace ouinet {
 
@@ -36,6 +37,7 @@ public:
         asio::io_context&,
         ClientConfig,
         // For use in tests
+        util::LogPath log_path = {},
         std::optional<MockDhtBuilder> dht_builder = {});
 
     ~Client();

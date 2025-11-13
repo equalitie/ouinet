@@ -103,7 +103,7 @@ public:
                   , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
                   , Cancel
-                  , Yield yield);
+                  , YieldContext yield);
 
     Task notify_task(const std::string& task_name)
     {
@@ -158,7 +158,7 @@ private:
                       , cache::Client*
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
-                      , Yield);
+                      , YieldContext);
 
     void handle_api_status( ClientConfig&
                       , Client::RunningState
@@ -172,7 +172,7 @@ private:
                       , cache::Client*
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
-                      , Yield);
+                      , YieldContext);
 
     void handle_api_metrics( std::string_view sub_path
                            , const Request&
@@ -180,7 +180,7 @@ private:
                            , std::ostringstream&
                            , ClientFrontEndMetricsController& metrics
                            , Cancel cancel
-                           , Yield);
+                           , YieldContext);
 
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);

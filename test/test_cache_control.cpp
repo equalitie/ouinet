@@ -26,7 +26,6 @@ using posix_time::seconds;
 using boost::optional;
 using beast::string_view;
 using ouinet::util::str;
-using OuinetYield = ouinet::Yield;
 
 static const string dht_group("fake-dht-group");
 
@@ -44,7 +43,7 @@ static optional<string_view> get_field(const CacheRequest& rq, http::field f)
 template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
     task::spawn_detached(ctx, [&ctx, f = forward<F>(f)](auto yield) {
             try {
-                f(OuinetYield(ctx, yield));
+                f(YieldContext(yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
@@ -112,7 +111,7 @@ Session make_session(
 Session make_session(
         asio::io_context& ctx,
         Response rs,
-        OuinetYield y)
+        YieldContext y)
 {
     return make_session(ctx, move(rs), static_cast<asio::yield_context>(y));
 }
@@ -131,7 +130,7 @@ Entry make_entry(
         asio::io_context& ctx,
         posix_time::ptime created,
         Response rs,
-        OuinetYield y)
+        YieldContext y)
 {
     return make_entry(ctx, move(created), move(rs), static_cast<asio::yield_context>(y));
 }

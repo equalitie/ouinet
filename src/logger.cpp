@@ -147,6 +147,13 @@ bool Logger::would_log(log_level_t level) const
     return get_threshold() <= level;
 }
 
+static const char* pad(log_level_t level) {
+    if (level == INFO || level == WARN) {
+        return " ";
+    }
+    return "";
+}
+
 namespace {
     struct Printer {
         using string_view = boost::string_view;
@@ -185,6 +192,8 @@ namespace {
             } else {
                 os << "]" << color_end << " ";
             }
+
+            os << pad(p.level);
 
             if (!p.fun.empty()) {
                 os << p.fun << ": ";

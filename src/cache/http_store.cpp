@@ -199,7 +199,7 @@ private:
     const fs::path& dirp;
     const AsioExecutor& ex;
 
-    std::string uri;  // for warnings, should use `Yield::log` instead
+    std::string uri;  // for warnings, should use `YieldContext::log` instead
     http_response::Head head;  // for merging in the trailer later on
     boost::optional<async_file_handle> headf, bodyf, sigsf;
 

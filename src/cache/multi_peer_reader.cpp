@@ -316,7 +316,7 @@ public:
          , const std::string& key
          , std::shared_ptr<DhtLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
-         , std::string dbg_tag)
+         , std::optional<util::LogPath> log_path)
         : _exec(exec)
         , _cv(_exec)
         , _cache_pk(move(cache_pk))
@@ -326,7 +326,7 @@ public:
         , _key(move(key))
         , _peer_lookup(move(peer_lookup))
         , _newest_proto_seen(move(newest_proto_seen))
-        , _dbg_tag(move(dbg_tag))
+        , _log_path(move(log_path))
         , _random_generator(_random_device())
     {
         if (auto dht_lock = _peer_lookup->get_dht_lock()) {
@@ -340,14 +340,14 @@ public:
             return;
         }
 
-        task::spawn_detached(_exec, [this, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
             auto peer_eps = _peer_lookup->get(c, y[ec]);
 
-            if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " Peer lookup result; ec=", ec, " eps=", peer_eps);
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Peer lookup result; ec=", ec, " eps=", peer_eps);
             }
 
             if (c) return;
@@ -370,10 +370,10 @@ public:
          , util::Ed25519PublicKey cache_pk
          , const std::string& key
          , std::shared_ptr<unsigned> newest_proto_seen
-         , std::string dbg_tag)
+         , std::optional<util::LogPath> log_path)
         : Peers( exec, move(lan_my_eps), {}, move(lan_peer_eps)
                , move(cache_pk), key, nullptr
-               , move(newest_proto_seen), move(dbg_tag))
+               , move(newest_proto_seen), move(log_path))
     {}
 
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
@@ -389,18 +389,18 @@ public:
 
         _candidate_peers.push_back(*p);
 
-        task::spawn_detached(_exec, [=, this, dbg_tag = _dbg_tag, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [=, this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
-            if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " Fetching hash list from: ", ep);
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Fetching hash list from: ", ep);
             }
 
             p->download_hash_list(ep, _lan_my_eps, _newest_proto_seen, c, y[ec]);
 
-            if (!dbg_tag.empty()) {
-                LOG_DEBUG(dbg_tag, " Done fetching hash list; ep=", ep
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Done fetching hash list; ep=", ep
                          , " ec=", ec, " c=", bool(c));
             }
 
@@ -517,7 +517,7 @@ private:
     std::string _key;
     std::shared_ptr<DhtLookup> _peer_lookup;
     std::shared_ptr<unsigned> _newest_proto_seen;
-    std::string _dbg_tag;
+    std::optional<util::LogPath> _log_path;
 
     Cancel _lifetime_cancel;
 
@@ -531,9 +531,9 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , const std::string& dbg_tag)
+                                , std::optional<util::LogPath> log_path)
     : _executor(ex)
-    , _dbg_tag(dbg_tag)
+    , _log_path(log_path)
 {
     _peers = make_unique<Peers>(ex
                                , move(lan_my_eps)
@@ -541,7 +541,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , move(cache_pk)
                                , move(key)
                                , move(newest_proto_seen)
-                               , dbg_tag);
+                               , log_path);
 }
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
@@ -552,9 +552,9 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::set<asio::ip::udp::endpoint> wan_my_eps
                                 , std::shared_ptr<DhtLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , const std::string& dbg_tag)
+                                , std::optional<util::LogPath> log_path)
     : _executor(ex)
-    , _dbg_tag(dbg_tag)
+    , _log_path(log_path)
 {
     _peers = make_unique<Peers>(ex
                                , move(lan_my_eps)
@@ -564,7 +564,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , move(key)
                                , move(peer_lookup)
                                , move(newest_proto_seen)
-                               , dbg_tag);
+                               , log_path);
 }
 
 struct MultiPeerReader::PreFetch {

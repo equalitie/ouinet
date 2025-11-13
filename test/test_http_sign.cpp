@@ -44,7 +44,6 @@ BOOST_AUTO_TEST_SUITE(ouinet_http_sign)
 
 using namespace std;
 using namespace ouinet;
-using OuinetYield = ouinet::Yield;
 
 static const string rq_target = "https://example.com/foo";  // proxy-like
 static const string rq_host = "example.com";
@@ -222,7 +221,7 @@ template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
     task::spawn_detached(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
             try {
-                f(OuinetYield(ctx, yield));
+                f(YieldContext(yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());

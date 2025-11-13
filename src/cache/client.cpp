@@ -167,7 +167,7 @@ struct Client::Impl {
                     , GenericStream& sink
                     , metrics::Client& metrics_client
                     , Cancel& cancel
-                    , Yield& yield)
+                    , YieldContext& yield)
     {
         sys::error_code ec;
 
@@ -346,7 +346,7 @@ struct Client::Impl {
                           , const http::request<http::empty_body>& req
                           , http::status status
                           , const string& proto_error
-                          , Yield yield)
+                          , YieldContext yield)
     {
         auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
         util::http_reply(con, res, static_cast<asio::yield_context>(yield));
@@ -354,14 +354,14 @@ struct Client::Impl {
 
     void handle_bad_request( GenericStream& con
                            , const http::request<http::empty_body>& req
-                           , Yield yield)
+                           , YieldContext yield)
     {
         return handle_http_error(con, req, http::status::bad_request, "", yield);
     }
 
     void handle_not_found( GenericStream& con
                          , const http::request<http::empty_body>& req
-                         , Yield yield)
+                         , YieldContext yield)
     {
         return handle_http_error( con, req, http::status::not_found
                                 , http_::response_error_hdr_retrieval_failed, yield);
@@ -386,7 +386,7 @@ struct Client::Impl {
                 , bool is_head_request
                 , metrics::Client& metrics_client
                 , Cancel cancel
-                , Yield yield)
+                , YieldContext yield)
     {
         namespace err = asio::error;
 
@@ -417,9 +417,9 @@ struct Client::Impl {
         }
         ec = {};  // try distributed cache
 
-        string debug_tag;
+        std::optional<util::LogPath> log_path;
         if (logger.get_threshold() <= DEBUG) {
-            debug_tag = yield.tag() + "/multi_peer_reader";
+            log_path = yield.log_path().tag("multi_peer_reader");
         };
 
         std::unique_ptr<MultiPeerReader> reader;
@@ -433,13 +433,13 @@ struct Client::Impl {
 
             auto local_peers = _local_peer_discovery.found_peers();
 
-            if (!debug_tag.empty()) {
-                LOG_DEBUG(debug_tag, " Peer lookup with DHT and local discovery:");
-                LOG_DEBUG(debug_tag, "    key=         ", key);
-                LOG_DEBUG(debug_tag, "    group=       ", group);
-                LOG_DEBUG(debug_tag, "    swarm_name=  ", peer_lookup_->swarm_name());
-                LOG_DEBUG(debug_tag, "    infohash=    ", peer_lookup_->infohash());
-                LOG_DEBUG(debug_tag, "    local_peers= ", local_peers);
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Peer lookup with DHT and local discovery:");
+                LOG_DEBUG(*log_path, "    key=         ", key);
+                LOG_DEBUG(*log_path, "    group=       ", group);
+                LOG_DEBUG(*log_path, "    swarm_name=  ", peer_lookup_->swarm_name());
+                LOG_DEBUG(*log_path, "    infohash=    ", peer_lookup_->infohash());
+                LOG_DEBUG(*log_path, "    local_peers= ", local_peers);
             };
 
             reader = std::make_unique<MultiPeerReader>
@@ -451,14 +451,14 @@ struct Client::Impl {
                 , _dht->wan_endpoints()
                 , move(peer_lookup_)
                 , _newest_proto_seen
-                , debug_tag);
+                , log_path);
         } else {
             auto local_peers = _local_peer_discovery.found_peers();
 
-            if (!debug_tag.empty()) {
-                LOG_DEBUG(debug_tag, " Peer lookup with local discovery only:");
-                LOG_DEBUG(debug_tag, "    key=         ", key);
-                LOG_DEBUG(debug_tag, "    local_peers= ", local_peers);
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Peer lookup with local discovery only:");
+                LOG_DEBUG(*log_path, "    key=         ", key);
+                LOG_DEBUG(*log_path, "    local_peers= ", local_peers);
             };
 
             reader = std::make_unique<MultiPeerReader>
@@ -468,7 +468,7 @@ struct Client::Impl {
                 , move(local_peers)
                 , _lan_my_endpoints
                 , _newest_proto_seen
-                , debug_tag);
+                , log_path);
         }
 
         auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
@@ -495,7 +495,7 @@ struct Client::Impl {
                            , bool is_head_request
                            , std::size_t& body_size
                            , Cancel cancel
-                           , Yield yield)
+                           , YieldContext yield)
     {
         sys::error_code ec;
         cache::reader_uptr rr;
@@ -793,7 +793,7 @@ Session Client::load( const std::string& key
                     , const GroupName& group
                     , bool is_head_request
                     , metrics::Client& metrics
-                    , Cancel cancel, Yield yield)
+                    , Cancel cancel, YieldContext yield)
 {
     return _impl->load(key, group, is_head_request, metrics, cancel, yield);
 }
@@ -811,7 +811,7 @@ bool Client::serve_local( const http::request<http::empty_body>& req
                         , GenericStream& sink
                         , metrics::Client& metrics
                         , Cancel& cancel
-                        , Yield yield)
+                        , YieldContext yield)
 {
     return _impl->serve_local(req, sink, metrics, cancel, yield);
 }
