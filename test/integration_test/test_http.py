@@ -66,6 +66,8 @@ class OuinetTests(TestCase):
             + str(TestFixtures.TEST_TIMEOUT[self._testMethodName])
         )
 
+        self.announce(self._testMethodName)
+
         self.proc_list = []  # keep track of all process we start for clean tear down
 
         with tempfile.NamedTemporaryFile() as file:
@@ -195,19 +197,21 @@ class OuinetTests(TestCase):
 
             sleep(2)
 
+    def announce(self, test_name: str) -> None:
+        logging.debug("################################################")
+        logging.debug(test_name)
+        logging.debug("################################################")
+
     ################# Tests #####################
 
     @inlineCallbacks
-    def test_tcp_transport(self):
+    def _test_tcp_transport(self):
         """
         Starts an echoing http server, a injector and a client and send a unique http
         request to the echoing http server through the g client --tcp--> injector -> http server
         and make sure it gets the correct echo. The unique request makes sure that
         the response is from the http server and is not cached.
         """
-        logging.debug("################################################")
-        logging.debug("test_tcp_transport")
-        logging.debug("################################################")
 
         # It is client who will decide if there will be caching or not
         injector = self.run_tcp_injector(
@@ -351,8 +355,6 @@ class OuinetTests(TestCase):
             )
 
         self.assertEquals(response.status_code, 200)
-
-        sleep(5)
         self.assertEquals(response.text, content)
 
         print("all ok, now waiting")
@@ -366,10 +368,6 @@ class OuinetTests(TestCase):
         """
         A test to reach wikipedia without using our own injector
         """
-        logging.debug("################################################")
-        logging.debug("test_wikipedia_mainline")
-        logging.debug("################################################")
-
         twisted.internet.base.DelayedCall.debug = True
 
         # Client
@@ -412,6 +410,11 @@ class OuinetTests(TestCase):
         self.assertTrue(success)
 
     def tearDown(self):
+        logging.debug(f"Tearing the test {self._testMethodName} down")
+
+        self.server.terminate()
+        self.server.join(timeout=2)
+
         deferred_procs = []
         for cur_proc in self.proc_list:
             deferred_procs.append(cur_proc.proc_end)
@@ -423,6 +426,9 @@ class OuinetTests(TestCase):
         if exists(TestFixtures.INJECTOR_CERT_PATH):
             remove(TestFixtures.INJECTOR_CERT_PATH)
 
-        self.server.kill()
+        gatherResults(deferred_procs)
+        logging.debug(
+            "######### Finished teardown, all processes joined ################"
+        )
 
-        return gatherResults(deferred_procs)
+        return
