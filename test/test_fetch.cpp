@@ -300,15 +300,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             BOOST_REQUIRE_EQUAL(buf.size(), 0);
 
             // Do TLS handshake with the origin over the established tunnel
-            ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
-
-            if(! SSL_set_tlsext_host_name(stream.native_handle(), test_url.host.c_str())) {
-                sys::error_code ec;
-                ec.assign(static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category());
-                static boost::source_location loc = BOOST_CURRENT_LOCATION;
-                sys::throw_exception_from_error(ec, loc);
-            }
-            stream.set_verify_callback(ssl::host_name_verification(test_url.host));
+            auto stream = setup_tls_stream(std::move(socket), ctx, test_url.host);
             stream.async_handshake(ssl::stream_base::client, yield);
 
             // Send and receive through the secure tunnel
