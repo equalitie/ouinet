@@ -61,6 +61,7 @@ public class Config implements Parcelable {
         private boolean debugFrontEndAccessToken;
         private String udpMuxPort;
         private boolean disableBridgeAnnouncement = false;
+        private String requestBodyLimit;
         private String maxCachedAge;
         private String localDomain;
         private String originDohBase;
@@ -170,6 +171,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setDisableBridgeAnnouncement(boolean disableBridgeAnnouncement){
             this.disableBridgeAnnouncement = disableBridgeAnnouncement;
+            return this;
+        }
+        public ConfigBuilder setRequestBodyLimit(String requestBodyLimit){
+            this.requestBodyLimit = requestBodyLimit;
             return this;
         }
         public ConfigBuilder setMaxCachedAge(String maxCachedAge){
@@ -405,6 +410,7 @@ public class Config implements Parcelable {
                     debugFrontEndAccessToken,
                     udpMuxPort,
                     disableBridgeAnnouncement,
+                    requestBodyLimit,
                     maxCachedAge,
                     localDomain,
                     originDohBase,
@@ -442,6 +448,7 @@ public class Config implements Parcelable {
     private boolean debugFrontEndAccessToken;
     private String udpMuxPort;
     private boolean disableBridgeAnnouncement;
+    private String requestBodyLimit;
     private String maxCachedAge;
     private String localDomain;
     private String originDohBase;
@@ -477,6 +484,7 @@ public class Config implements Parcelable {
                   boolean debugFrontEndAccessToken,
                   String udpMuxPort,
                   boolean disableBridgeAnnouncement,
+                  String requestBodyLimit,
                   String maxCachedAge,
                   String localDomain,
                   String originDohBase,
@@ -511,6 +519,7 @@ public class Config implements Parcelable {
         this.debugFrontEndAccessToken = debugFrontEndAccessToken;
         this.udpMuxPort = udpMuxPort;
         this.disableBridgeAnnouncement = disableBridgeAnnouncement;
+        this.requestBodyLimit = requestBodyLimit;
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
         this.originDohBase = originDohBase;
@@ -585,6 +594,9 @@ public class Config implements Parcelable {
     }
     public boolean getDisableBridgeAnnouncement() {
         return disableBridgeAnnouncement;
+    }
+    public String getRequestBodyLimit() {
+        return requestBodyLimit;
     }
     public String getMaxCachedAge() {
         return maxCachedAge;
@@ -667,6 +679,7 @@ public class Config implements Parcelable {
         out.writeInt(debugFrontEndAccessToken ? 1 : 0);
         out.writeString(udpMuxPort);
         out.writeInt(disableBridgeAnnouncement ? 1 : 0);
+        out.writeString(requestBodyLimit);
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
         out.writeString(originDohBase);
@@ -712,6 +725,7 @@ public class Config implements Parcelable {
         debugFrontEndAccessToken = in.readInt() != 0;
         udpMuxPort = in.readString();
         disableBridgeAnnouncement = in.readInt() != 0;
+        requestBodyLimit = in.readString();
         maxCachedAge = in.readString();
         localDomain = in.readString();
         originDohBase = in.readString();

@@ -133,6 +133,7 @@ public class Ouinet {
         maybeAddBool(args, "--disable-injector-access",     config.getDisableInjectorAccess());
         maybeAddBool(args, "--cache-private",               config.getCachePrivate());
         maybeAddBool(args, "--disable-bridge-announcement", config.getDisableBridgeAnnouncement());
+        maybeAdd    (args, "--request-body-limit",          config.getRequestBodyLimit());
 
         maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
         maybeAdd    (args, "--metrics-server-url",          config.getMetricsServerUrl());
