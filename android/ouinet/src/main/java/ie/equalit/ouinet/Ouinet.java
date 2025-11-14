@@ -23,8 +23,8 @@ public class Ouinet {
     public static synchronized void maybeLoadLibraries(Context context) {
         if (libsLoaded) return;
         System.loadLibrary("c++_shared");
-        System.loadLibrary("boost_asio");
-        System.loadLibrary("boost_asio_ssl");
+        System.loadLibrary("ouinet_asio");
+        System.loadLibrary("ouinet_asio_ssl");
         System.loadLibrary("gpg-error");
         System.loadLibrary("gcrypt");
         System.loadLibrary("client");
