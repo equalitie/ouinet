@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
-## [v1.4.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.0) - 2025-10-21
+## [v1.4.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.2) - 2025-11-14
+
+### Fixed
+
+-  Fix "connection reset by peer" coming through the private route. !142
+
+
+## [v1.4.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.1) - 2025-10-21
 
 ### Added
 
