@@ -56,7 +56,7 @@ class TestFixtures:
     RESPONSE_LENGTH = 20
 
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
-    TCP_CLIENT = {"name": "tcp_client", "port": 8075}
+    TCP_CLIENT = {"name": "tcp_client", "port": 8075, "fe_port": 8099}
     TCP_CLIENT_PORT_READY_REGEX = r"[\s\S]*listening to browser requests[\s\S]*"
     TCP_CLIENT_DISCOVERY_START = (
         r"[\s\S]*LocalPeerDiscovery: starting with advertised endpoints[\s\S]*"
@@ -91,11 +91,11 @@ class TestFixtures:
 
     MAINNET_INJECTOR_HASH = "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq"
     FRESH_SUCCESS_REGEX = r'[\s\S]*fresh/injector Finish; ec="Success"[\s\S]*'
-    DHT_CONTACTS_STORED_REGEX =  r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
+    DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
-    INJECTOR_CERT_PATH = "" # will be filled during setup
+    INJECTOR_CERT_PATH = ""  # will be filled during setup
     INJECTOR_CERTIFICATE = """
 -----BEGIN CERTIFICATE-----
 MIICyTCCAbGgAwIBAgIGAWwvE3jIMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM

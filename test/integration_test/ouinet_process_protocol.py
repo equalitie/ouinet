@@ -26,13 +26,31 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
     def __init__(self, proc_config, watchpoint_regexes: List[str]):
         super(OuinetProcessProtocol, self).__init__()
         self.regexes: List[str] = watchpoint_regexes
-        self.callbacks: dict[str, Deferred] = {}
+        self.benchmarks: dict[str, bool] = {}
         self._proc_config = proc_config
 
         for regex in self.regexes:
-            self.callbacks[regex] = Deferred()
+            self.benchmarks[regex] = False
 
         self._logger: logging.Logger = logging.getLogger()
+
+    def connectionMade(self):
+        print("protocol got connected: ", self)
+
+    def inConnectionLost(self):
+        print("protocol stdin got disconnected: ", self)
+
+    def outConnectionLost(self):
+        print("protocol stdout got disconnected: ", self)
+
+    def errConnectionLost(self):
+        print("protocol stderr got disconnected: ", self)
+
+    def processExited(self):
+        print("protocol's process has exited: ", self)
+
+    def processEnded(self):
+        print("protocol's process has ended: ", self)
 
     def errReceived(self, data):
         """
@@ -42,19 +60,20 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         print("err")
         logging.debug(self.app_name + ": " + data)
         self._logger.handlers[0].flush()
+        print("line received", data)
 
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
             raise Exception("Fatal error")
 
-        for regex in self.callbacks.keys():
+        for regex in self.benchmarks.keys():
             match = re.match(regex, data)
             if match:
-                cb: Deferred = self.callbacks[regex]
-                if not cb.called:
-                    cb.callback(self)
+                cb = self.benchmarks[regex]
+                if not cb:
+                    cb == True
 
     def outReceived(self, data):
-        print("out")
+        print("output received")
         data = data.decode()
         logging.debug(self.app_name + ": " + data)
         self._logger.handlers[0].flush()
@@ -63,6 +82,7 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         logging.debug(self.app_name + " is alive")
 
     def processExited(self, reason):
+        print("process exited for protocol :", self)
         self.onExit.callback(self)
         # delete the pid file if still exists
         process_pid_file = self._proc_config.config_folder_name + "/pid"
@@ -116,7 +136,7 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         self.public_key = ""
 
     def errReceived(self, data):
-        # print("receiving line", data)
+        print("receiving line", data)
 
         data, rdata = data.decode(), data
         self.look_for_public_key(data)
