@@ -5,10 +5,7 @@
 #include "namespaces.h"
 #include "client_config.h"
 
-namespace ouinet {
-
-//------------------------------------------------------------------------------
-namespace request_route {
+namespace ouinet::request_route {
 
 // TODO: It may make sense to split private/dynamic/non-cached channels (origin, proxy)
 // from public/static/cached channels (cache/injector)
@@ -53,7 +50,8 @@ struct Config {
 // otherwise route it according to the given list of default channels.
 Config route_choose_config(const http::request_header<>&, const ClientConfig&);
 
-} // request_route namespace
-//------------------------------------------------------------------------------
+} // namespace ouinet::request_route
 
-} // ouinet namespace
+namespace std {
+    std::ostream& operator<<(std::ostream&, const ouinet::request_route::Config&);
+} // namespace std
