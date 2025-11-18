@@ -161,8 +161,9 @@ int main(int argc, const char** argv)
     asio::io_context ctx;
 
     auto metrics = metrics::Client::noop();
+    bool do_doh = true;
 
-    unique_ptr<MainlineDht> dht(new MainlineDht(ctx, metrics.mainline_dht()));
+    unique_ptr<MainlineDht> dht(new MainlineDht(ctx, metrics.mainline_dht(), do_doh));
 
     vector<string> args;
 
