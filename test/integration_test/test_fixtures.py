@@ -46,6 +46,7 @@ class TestFixtures:
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
 
     TCP_INJECTOR_NAME = "tcp_injector"
+    # TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     TCP_INJECTOR_PORT = 7070
 
