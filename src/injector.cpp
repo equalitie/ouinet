@@ -841,6 +841,8 @@ int main(int argc, const char* argv[])
         LOG_INFO("Allowing injection of private targets.");
         allow_private_targets = true;
     }
+    if (!config.is_doh_enabled())
+        LOG_INFO("DNS over HTTPS disabled.");
 
     OuiServiceServer proxy_server(ex);
 

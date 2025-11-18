@@ -124,6 +124,9 @@ public:
     bool is_private_target_allowed() const
     { return _allow_private_targets; }
 
+    bool is_doh_enabled() const
+    { return !_disable_doh; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -158,6 +161,7 @@ private:
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
+    bool _disable_doh = false;
     util::Ed25519PrivateKey _ed25519_private_key;
 };
 
@@ -218,6 +222,10 @@ InjectorConfig::options_description()
         ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
          , "Allows the injection of targets resolving to private addresses. "
            "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
+        ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+         , "Disable DNS over HTTPS for domain name resolution. "
+           "When this option is present the injector will fallback to the default DNS mechanism "
+           "provided by the operating system.")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
@@ -323,6 +331,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm["allow-private-targets"].as<bool>()) {
         _allow_private_targets = true;
+    }
+
+    if (vm["disable-doh"].as<bool>()) {
+        _disable_doh = true;
     }
 
 #ifdef __EXPERIMENTAL__
