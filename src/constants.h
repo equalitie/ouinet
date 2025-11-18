@@ -69,12 +69,6 @@ static const std::string response_uri_hdr = header_prefix + "URI";
 // This contains identifying data about the injection itself.
 static const std::string response_injection_hdr = header_prefix + "Injection";
 
-// The presence of this HTTP request header with the true value below
-// instructs the injector to behave synchronously
-// and inline the resulting descriptor in response headers.
-static const std::string request_sync_injection_hdr = header_prefix + "Sync";
-static const std::string request_sync_injection_true = "true";
-
 // If synchronous injection is enabled in an HTTP request,
 // this header is added to the resulting response
 // with the Base64-encoded, Zlib-compressed content of the descriptor.
