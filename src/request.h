@@ -14,30 +14,59 @@ namespace ouinet {
 //
 // * Injector and peers can see the request in plain text
 // * Non white listed headers are removed
-// * Only GET requests are allowed
+// * Only GET or HEAD requests are allowed
 // * Request body is removed (if present)
 // * GET arguments (`?...`) are removed from the request target
 // * Requests containing the http_::request_private_hdr field are not allowed
 // * Requests must contain the http_::request_group_hdr unless on Apple devices
-class CacheRequest {
+class CacheRetrieveRequest {
 public:
-    static boost::optional<CacheRequest> from(http::request_header<>);
+    CacheRetrieveRequest(const CacheRetrieveRequest&) = default;
+    CacheRetrieveRequest(CacheRetrieveRequest&&) = default;
 
-    CacheRequest(const CacheRequest&) = default;
-    CacheRequest(CacheRequest&&) = default;
+    http::verb method() const;
 
-    const http::request_header<>& header() const {
-        return _header;
+    const std::string& resource_id() const {
+        return _resource_id;
     }
-
-    void authorize(std::string_view credentials);
-    void set_druid(std::string_view druid);
-    void set_if_none_match(std::string_view if_none_match);
-    bool can_inject() const { return true; }
 
     const std::string& dht_group() const {
         return _dht_group;
     }
+
+private:
+    friend class CacheRequest;
+
+    CacheRetrieveRequest(http::verb method, std::string resource_id, std::string dht_group) :
+        _method(method),
+        _resource_id(std::move(resource_id)),
+        _dht_group(std::move(dht_group))
+    {}
+
+    http::verb _method;
+    std::string _resource_id;
+    std::string _dht_group;
+};
+
+class CacheInjectRequest {
+public:
+    CacheInjectRequest(const CacheInjectRequest&) = default;
+    CacheInjectRequest(CacheInjectRequest&&) = default;
+
+    http::verb method() const {
+        return _header.method();
+    }
+
+    const std::string& resource_id() const {
+        return _resource_id;
+    }
+
+    const std::string& dht_group() const {
+        return _dht_group;
+    }
+
+    void authorize(std::string_view credentials);
+    void set_druid(std::string_view druid);
 
     template<class WriteStream>
     void async_write(WriteStream& con, asio::yield_context yield) {
@@ -47,12 +76,47 @@ public:
     }
 
 private:
-    CacheRequest(http::request_header<> header, std::string dht_group) :
+    friend class CacheRequest;
+
+    CacheInjectRequest(http::request_header<> header, std::string resource_id, std::string dht_group) :
         _header(std::move(header)),
+        _resource_id(std::move(resource_id)),
         _dht_group(std::move(dht_group))
     {}
 
     http::request_header<> _header;
+    std::string _resource_id;
+    std::string _dht_group;
+};
+
+class CacheRequest {
+public:
+    // TODO: This is only used in tests now, use it also when constructing the message.
+    static const uint8_t HTTP_VERSION = 11;
+
+    static boost::optional<CacheRequest> from(http::request_header<>);
+
+    const http::request_header<>& header() const {
+        return _header;
+    }
+
+    CacheInjectRequest to_inject_request() const;
+    CacheRetrieveRequest to_retrieve_request() const;
+
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-None-Match
+    void set_if_none_match(std::string_view if_none_match);
+
+    const std::string& dht_group() const { return _dht_group; }
+
+private:
+    CacheRequest(http::request_header<> header, std::string resource_id, std::string dht_group) :
+        _header(std::move(header)),
+        _resource_id(std::move(resource_id)),
+        _dht_group(std::move(dht_group))
+    {}
+
+    http::request_header<> _header;
+    std::string _resource_id;
     std::string _dht_group;
 };
 
@@ -71,13 +135,12 @@ public:
     InsecureRequest(const InsecureRequest&) = default;
     InsecureRequest(InsecureRequest&&) = default;
 
-    const http::request_header<>& header() const {
-        return _request;
+    http::verb method() const {
+        return _request.method();
     }
 
     void authorize(std::string_view credentials);
     void set_druid(std::string_view druid);
-    bool can_inject() const { return false; }
 
     template<class WriteStream>
     void async_write(WriteStream& con, asio::yield_context yield) {
@@ -95,7 +158,7 @@ private:
 
 //----
 
-using PublicInjectorRequestAlternatives = std::variant<CacheRequest, InsecureRequest>;
+using PublicInjectorRequestAlternatives = std::variant<CacheInjectRequest, InsecureRequest>;
 
 class PublicInjectorRequest : PublicInjectorRequestAlternatives {
 private:
@@ -107,7 +170,7 @@ public:
         Base(std::forward<Alternative>(alt))
     {}
 
-    const http::request_header<>& header() const;
+    http::verb method() const;
 
     template<class WriteStream>
     void async_write(WriteStream& con, asio::yield_context yield) {
@@ -119,7 +182,7 @@ public:
 
     void authorize(std::string_view credentials);
     void set_druid(std::string_view druid);
-    bool can_inject() const;
+    bool is_inject_request() const;
 };
 
 } // namespace ouinet

@@ -33,7 +33,7 @@ static posix_time::ptime current_time() {
     return posix_time::second_clock::universal_time();
 }
 
-static optional<string_view> get_field(const CacheRequest& rq, http::field f)
+static optional<string_view> get_field(const auto& rq, http::field f)
 {
     auto i = rq.header().find(f);
     if (i == rq.header().end()) return boost::none;
@@ -150,7 +150,7 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
         return make_entry(
                 ctx,
                 current_time(),
-                {http::status::ok, rq.header().version()},
+                {http::status::ok, CacheRequest::HTTP_VERSION},
                 y);
     };
 
@@ -189,13 +189,13 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set( http::field::cache_control
               , str("max-age=", (cc.max_cached_age().total_seconds() + 10)));
 
         auto created = current_time() - cc.max_cached_age();
 
-        if (rq.header().target() == "http://old") created -= seconds(5);
+        if (rq.resource_id() == "http://old") created -= seconds(5);
         else                               created += seconds(5);
 
         return make_entry(ctx, created, rs, y);
@@ -204,8 +204,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
         BOOST_CHECK(ce);
-        BOOST_CHECK_EQUAL(rq.header().target(), "http://old");
-        return make_session(ctx, {http::status::ok, rq.header().version()}, y);
+        BOOST_CHECK_EQUAL(rq.resource_id(), "http://old");
+        return make_session(ctx, {http::status::ok, CacheRequest::HTTP_VERSION}, y);
     };
 
     run_spawned(ctx, [&](auto yield) {
@@ -250,17 +250,17 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set(http::field::cache_control, "max-age=60");
 
         auto created = current_time();
 
-        if (rq.header().target() == "http://old") {
+        if (rq.resource_id() == "http://old") {
             created -= seconds(120);
         }
         else {
             created -= seconds(30);
-            BOOST_CHECK(rq.header().target() == "http://new");
+            BOOST_CHECK(rq.resource_id() == "http://new");
         }
 
         return make_entry(ctx, created, rs, y);
@@ -269,7 +269,7 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
         BOOST_CHECK(ce);
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         return make_session(ctx, rs, y);
     };
 
@@ -320,16 +320,16 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
 
         auto created = current_time();
 
-        if (rq.header().target() == "http://old") {
+        if (rq.resource_id() == "http://old") {
             rs.set( http::field::expires
                   , format_time(current_time() - posix_time::seconds(10)));
         }
         else {
-            BOOST_CHECK(rq.header().target() == "http://new");
+            BOOST_CHECK(rq.resource_id() == "http://new");
             rs.set( http::field::expires
                   , format_time(current_time() + posix_time::seconds(10)));
         }
@@ -340,7 +340,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
         BOOST_CHECK(ce);
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         return make_session(ctx, rs, y);
     };
 
@@ -386,7 +386,7 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
         BOOST_CHECK(!ce);
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set("X-Test", "from-origin");
         return make_session(ctx, rs, y);
     };
@@ -428,7 +428,7 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
         BOOST_CHECK(etag);
         BOOST_CHECK_EQUAL(*etag, "origin-etag");
 
-        return make_session(ctx, {http::status::ok, rq.header().version()}, y);
+        return make_session(ctx, {http::status::ok, CacheRequest::HTTP_VERSION}, y);
     };
 
     run_spawned(ctx, [&](auto yield) {
@@ -478,7 +478,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set(http::field::cache_control, "max-age=10");
         rs.set(http::field::etag, "123");
         rs.set("X-Test", "from-cache");
@@ -494,13 +494,13 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 
         if (*etag == "123") {
             // No check for available cache entry since this may or may not be a revalidation.
-            Response rs{http::status::not_modified, rq.header().version()};
+            Response rs{http::status::not_modified, CacheRequest::HTTP_VERSION};
             rs.set("X-Test", "from-origin-not-modified");
             return make_session(ctx, rs, y);
         }
         BOOST_CHECK(!ce);
 
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set("X-Test", "from-origin-ok");
 
         return make_session(ctx, rs, y);
@@ -566,7 +566,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
 
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         // Return a fresh cached version.
         rs.set(http::field::cache_control, "max-age=3600");
         rs.set("X-Test", "from-cache");
@@ -582,7 +582,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
 
         // Force using version from origin instead of validated version from cache
         // (i.e. not returning "304 Not Modified" here).
-        Response rs{http::status::ok, rq.header().version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set("X-Test", "from-origin");
         return make_session(ctx, rs, y);
     };

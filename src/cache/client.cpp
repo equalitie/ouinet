@@ -152,9 +152,8 @@ struct Client::Impl {
         return true;
     }
 
-    template<class Body>
     static
-    boost::optional<util::HttpRequestByteRange> get_range(const http::request<Body>& rq)
+    boost::optional<util::HttpRequestByteRange> get_range(const http::request_header<>& rq)
     {
         auto rs = util::HttpRequestByteRange::parse(rq[http::field::range]);
         if (!rs) return boost::none;

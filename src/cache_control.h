@@ -31,10 +31,10 @@ private:
 public:
     using Response = http::response<http::dynamic_body>;
 
-    using FetchStored = std::function<CacheEntry(const CacheRequest&, Cancel&, YieldContext)>;
+    using FetchStored = std::function<CacheEntry(const CacheRetrieveRequest&, Cancel&, YieldContext)>;
     // If not null, the given cache entry is already available
     // (e.g. this may be a revalidation).
-    using FetchFresh  = std::function<Session(const CacheRequest&, const CacheEntry*, Cancel&, YieldContext)>;
+    using FetchFresh  = std::function<Session(const CacheInjectRequest&, const CacheEntry*, Cancel&, YieldContext)>;
     // When fetching stored (which may be slow), a parallel request to fetch fresh is started
     // only if this is not null and it returns true.
     using ParallelFresh = std::function<bool(const CacheRequest&)>;
@@ -92,9 +92,6 @@ private:
                               , const CacheRequest&
                               , bool& is_fresh
                               , YieldContext);
-
-    //bool is_stale( const boost::posix_time::ptime& time_stamp
-    //             , const Response&) const;
 
     bool is_older_than_max_cache_age(const boost::posix_time::ptime&) const;
 

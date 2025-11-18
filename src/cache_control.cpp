@@ -401,7 +401,7 @@ CacheControl::do_fetch(
         auto ryield = yield.tag("cache_reval");
         _YDEBUG(ryield, "Attempting to revalidate cached response");
 
-        auto rq = request; // Make a copy because `request` is const&.
+        auto rq = request;
 
         rq.set_if_none_match(*cache_etag);
 
@@ -461,7 +461,7 @@ auto CacheControl::make_fetch_fresh_job( const CacheRequest& rq
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
             auto y = YieldContext(yield_, yield.log_path());
             sys::error_code ec;
-            auto r = fetch_fresh(rq, cached, cancel, y[ec]);
+            auto r = fetch_fresh(rq.to_inject_request(), cached, cancel, y[ec]);
             ec = compute_error_code(ec, cancel);
             return or_throw(y, ec, move(r));
         });
@@ -517,7 +517,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         fs.fetch_stored->start(
                 [&] (Cancel& cancel, asio::yield_context yield_) mutable {
                     auto y = YieldContext(yield_, yield.log_path());
-                    return fetch_stored(rq, cancel, y);
+                    return fetch_stored(rq.to_retrieve_request(), cancel, y);
                 });
     }
 

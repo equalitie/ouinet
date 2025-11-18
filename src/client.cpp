@@ -365,7 +365,7 @@ private:
     // Ouinet-specific internal HTTP headers as expected by upper layers.
 
     CacheEntry
-    fetch_stored_in_dcache( const CacheRequest& request
+    fetch_stored_in_dcache( const CacheRetrieveRequest& request
                           , Cancel& cancel
                           , YieldContext yield);
 
@@ -709,9 +709,6 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
         http::response<http::empty_body> res{http::status::ok, req.version()};
         res.prepare_payload();
 
-        // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
-        // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
-
         _YDEBUG(cyield, "BEGIN");
 
         // Remember to always set `ec` before return in case of error,
@@ -746,7 +743,7 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
 
 //------------------------------------------------------------------------------
 CacheEntry
-Client::State::fetch_stored_in_dcache( const CacheRequest& request
+Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
                                      , Cancel& cancel
                                      , YieldContext yield)
 {
@@ -772,12 +769,11 @@ Client::State::fetch_stored_in_dcache( const CacheRequest& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto key = key_from_http_req(request.header());
-    if (!key) return or_throw<CacheEntry>(yield, asio::error::invalid_argument);
+    auto key = request.resource_id();
 
-    auto s = c->load( move(*key)
+    auto s = c->load( move(key)
                     , request.dht_group()
-                    , request.header().method() == http::verb::head
+                    , request.method() == http::verb::head
                     , _metrics
                     , timeout_cancel, yield[ec].tag("load"));
 
@@ -1411,7 +1407,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Receive response
     auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
-        return Session::create( move(con), request.header().method() == http::verb::head
+        return Session::create( move(con), request.method() == http::verb::head
                               , move(metrics)
                               , timeout_cancel, y);
     });
@@ -1420,7 +1416,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     ec = compute_error_code(ec, cancel, watch_dog);
     if ( !ec
-         && request.can_inject()
+         && request.is_inject_request()
          && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
         // This is treated like the Injector mechanism being disabled.
         _YWARN(yield, "Injector is using an unacceptable protocol version: ", hdr);
@@ -1433,7 +1429,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Store keep-alive connections in connection pool
 
-    if (request.can_inject()) {
+    if (request.is_inject_request()) {
         maybe_add_proto_version_warning(hdr);
 
         hdr.set(http_::response_source_hdr, http_::response_source_hdr_injector);  // for agent
@@ -1624,7 +1620,7 @@ public:
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] ( const CacheRequest& rq
+        cc.fetch_fresh = [&] ( const CacheInjectRequest& rq
                              , const CacheEntry* cached
                              , Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("injector");
@@ -1657,7 +1653,7 @@ public:
         };
 
         //------------------------------------------------------------
-        cc.fetch_stored = [&] (const CacheRequest& rq, Cancel& cancel, YieldContext yield_) {
+        cc.fetch_stored = [&] (const CacheRetrieveRequest& rq, Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("cache");
 
             _YDEBUG(yield, "Start");

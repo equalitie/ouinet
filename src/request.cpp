@@ -1,7 +1,7 @@
 #include "request.h"
 #include "http_util.h"
-#include "util/keep_alive.h"
 #include "authenticate.h"
+#include "cache/cache_entry.h"
 
 namespace ouinet {
 
@@ -53,8 +53,12 @@ static bool is_private(http::request_header<> const& hdr) {
 
 boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr) {
     auto dht_group = extract_dht_group(orig_hdr);
-
     if (!dht_group) return {};
+
+    if (orig_hdr.method() != http::verb::get && orig_hdr.method() != http::verb::head) {
+        return {};
+    }
+
     if (is_private(orig_hdr)) {
         LOG_WARN("Mutually exclusive header fields in request: ", http_::request_private_hdr, " and ", http_::request_group_hdr);
         return {};
@@ -69,22 +73,44 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
         }
     }
 
-    // TODO: Keep alive should be handled by `to_injector_request`
-    bool keepalive = util::get_keep_alive(orig_hdr);
     auto hdr = util::to_injector_request(move(orig_hdr));
 
-    if (hdr) {
-        util::set_keep_alive(*hdr, keepalive);
-        return CacheRequest(std::move(*hdr), std::move(*dht_group));
-    } else {
+    if (!hdr) {
         return {};
     }
+
+    // TODO: Check GET parameters are removed
+    auto resource_id = key_from_http_req(*hdr);
+
+    if (!resource_id) {
+        return {};
+    }
+
+    return CacheRequest(std::move(*hdr), std::move(*resource_id), std::move(*dht_group));
 }
 
-boost::optional<InsecureRequest> InsecureRequest::from(http::request<http::string_body> request) {
-    if (is_private(request)) return {};
-    util::remove_ouinet_fields_ref(request);  // avoid accidental injection
-    return InsecureRequest(std::move(request));
+//----
+
+void CacheInjectRequest::authorize(std::string_view credentials) {
+    ouinet::authorize(_header, credentials);
+}
+
+void CacheInjectRequest::set_druid(std::string_view druid) {
+    _header.set(http_::request_druid_hdr, druid);
+}
+
+//----
+
+CacheRetrieveRequest CacheRequest::to_retrieve_request() const {
+    return CacheRetrieveRequest(_header.method(), _resource_id, _dht_group);
+}
+
+http::verb CacheRetrieveRequest::method() const {
+    return _method;
+}
+
+CacheInjectRequest CacheRequest::to_inject_request() const {
+    return CacheInjectRequest(_header, _resource_id, _dht_group);
 }
 
 void CacheRequest::set_if_none_match(std::string_view if_none_match) {
@@ -93,12 +119,14 @@ void CacheRequest::set_if_none_match(std::string_view if_none_match) {
 
 //----
 
-void CacheRequest::authorize(std::string_view credentials) {
-    ouinet::authorize(_header, credentials);
-}
-
 void InsecureRequest::authorize(std::string_view credentials) {
     ouinet::authorize(_request, credentials);
+}
+
+boost::optional<InsecureRequest> InsecureRequest::from(http::request<http::string_body> request) {
+    if (is_private(request)) return {};
+    util::remove_ouinet_fields_ref(request);  // avoid accidental injection
+    return InsecureRequest(std::move(request));
 }
 
 void PublicInjectorRequest::authorize(std::string_view credentials) {
@@ -108,15 +136,11 @@ void PublicInjectorRequest::authorize(std::string_view credentials) {
     );
 }
 
-//----
-
-void CacheRequest::set_druid(std::string_view druid) {
-    _header.set(http_::request_druid_hdr, druid);
-}
-
 void InsecureRequest::set_druid(std::string_view druid) {
     _request.set(http_::request_druid_hdr, druid);
 }
+
+//----
 
 void PublicInjectorRequest::set_druid(std::string_view druid) {
     std::visit(
@@ -125,19 +149,16 @@ void PublicInjectorRequest::set_druid(std::string_view druid) {
     );
 }
 
-const http::request_header<>& PublicInjectorRequest::header() const {
+http::verb PublicInjectorRequest::method() const {
     return std::visit(
-        [] (const auto& alt) -> const http::request_header<>&
-        { return alt.header(); },
+        [] (const auto& alt)
+        { return alt.method(); },
         static_cast<const Base&>(*this)
     );
 }
 
-bool PublicInjectorRequest::can_inject() const {
-    return std::visit(
-        [] (const auto& alt) { return alt.can_inject(); },
-        static_cast<const Base&>(*this)
-    );
+bool PublicInjectorRequest::is_inject_request() const {
+    return std::get_if<CacheInjectRequest>(static_cast<const Base*>(this)) != nullptr;
 }
 
 } // namespace ouinet
