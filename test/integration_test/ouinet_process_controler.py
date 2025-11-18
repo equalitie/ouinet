@@ -83,10 +83,8 @@ def output_yielder(handle: Popen) -> Generator[str, None, None]:
     """Note: If you break during iteration, it kills the process"""
     with handle:
         try:
-            while True:
-                # line = asyncio.wait_for(handle.stdout.readline(), timeout=1)
-                for line in iter(handle.stdout.readline, ""):
-                    yield line
+            for line in iter(handle.stdout.readline, ""):
+                yield line
         except:
             # yield ""
             pass
@@ -187,7 +185,10 @@ class OuinetProcess(object):
 
     async def listening_loop(self):
         try:
+            # while True:
             for line in self.output:
+                # line = self.output.next()
+                # line = await asyncio.wait_for(self.output.next())
                 # line = await line
                 self._proc_protocol.errReceived(line)
                 await asyncio.sleep(0.1)
