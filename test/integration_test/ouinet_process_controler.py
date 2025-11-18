@@ -133,9 +133,11 @@ class OuinetProcess(object):
 
         self._proc_protocol.app_name = self.config.app_name
 
+        print("spawning a twisted process")
         self._proc = reactor.spawnProcess(
             self._proc_protocol, self.config.argv[0], self.config.argv, env=ouinet_env
         )
+        print("spawned")
         self._has_started = True
 
         # we add a twisted timer to kill the process after timeout
@@ -190,7 +192,7 @@ class OuinetProcess(object):
 
     @property
     def callbacks(self):
-        return self._proc_protocol.callbacks
+        return self._proc_protocol.benchmarks
 
 
 class OuinetClient(OuinetProcess):
