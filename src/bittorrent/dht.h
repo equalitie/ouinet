@@ -37,6 +37,7 @@ asio::ip::udp::endpoint resolve(
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
+    bool do_doh,
     Signal<void()>& cancel_signal,
     asio::yield_context yield
 );
@@ -78,14 +79,16 @@ class DhtNode {
     public:
     DhtNode( const AsioExecutor&
            , metrics::DhtNode
+           , bool do_doh
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {});
 
     DhtNode( asio::io_context& ctx
            , metrics::DhtNode metrics
+           , bool do_doh
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {})
-        : DhtNode(ctx.get_executor(), std::move(metrics), std::move(storage_dir), std::move(extra_bs))
+        : DhtNode(ctx.get_executor(), std::move(metrics), do_doh, std::move(storage_dir), std::move(extra_bs))
     {}
 
     void start(udp::endpoint, asio::yield_context yield);
@@ -378,6 +381,7 @@ class DhtNode {
 
     class Stats;
     std::unique_ptr<Stats> _stats;
+    bool _do_doh;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
     metrics::DhtNode _metrics;
@@ -389,14 +393,16 @@ class MainlineDht {
     public:
     MainlineDht( const AsioExecutor&
                , metrics::MainlineDht
+               , bool do_doh
                , boost::filesystem::path storage_dir = {}
                , std::set<bootstrap::Address> extra_bs = {});
 
     MainlineDht( asio::io_context& ctx
                , metrics::MainlineDht metrics
+               , bool do_doh
                , boost::filesystem::path storage_dir = {}
                , std::set<bootstrap::Address> extra_bs = {})
-        : MainlineDht(ctx.get_executor(), std::move(metrics), std::move(storage_dir), std::move(extra_bs))
+        : MainlineDht(ctx.get_executor(), std::move(metrics), do_doh, std::move(storage_dir), std::move(extra_bs))
     {}
 
     MainlineDht(const MainlineDht&) = delete;
@@ -489,6 +495,7 @@ class MainlineDht {
     std::map<udp::endpoint, std::unique_ptr<dht::DhtNode>> _nodes;
     Cancel _cancel;
     boost::filesystem::path _storage_dir;
+    bool _do_doh = true;
     std::set<bootstrap::Address> _extra_bs;
     metrics::MainlineDht _metrics;
 };
