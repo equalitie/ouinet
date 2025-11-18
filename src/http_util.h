@@ -442,6 +442,7 @@ _to_canonical_request(Request rq, const Fields&... keep_fields) {
     return filter_fields( move(rq)
                         // Still DROP some fields that may break browsing for others
                         // and which have no sensible default (for all).
+                        , http::field::connection
                         , http::field::host
                         , http::field::accept
                         //, http::field::accept_datetime  // DROP
