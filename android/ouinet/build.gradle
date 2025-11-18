@@ -28,7 +28,7 @@ android {
             }
         }
 
-        ndkVersion "27.2.12479018"
+        ndkVersion "28.2.13676358"
         ndk {
           if (android_abi == "omni") {
             abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'

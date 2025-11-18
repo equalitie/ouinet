@@ -21,3 +21,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/dependencies/json.cmake)
 
 # For URL parsing and encoding/decoding.
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/url.cmake)
+
+# Ouinet code written in rust
+include(${CMAKE_CURRENT_LIST_DIR}/dependencies/ouinet-rs.cmake)

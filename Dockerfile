@@ -16,7 +16,7 @@ FROM base AS builder
 # This version is a recommendation and this file has been tested to work for it,
 # but you may attempt to build other versions by overriding this argument.
 # Also see `OUINET_DOCKER_VERSION` below.
-ARG OUINET_VERSION=v1.4.0
+ARG OUINET_VERSION=v1.4.2
 ARG CMAKE_VERSION=3.31.7-linux-x86_64
 RUN git clone --recursive -b "$OUINET_VERSION" https://gitlab.com/equalitie/ouinet.git
 WORKDIR /opt/ouinet
