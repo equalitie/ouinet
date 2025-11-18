@@ -49,6 +49,8 @@ public:
     template<class Reader>
     static Session create(std::unique_ptr<Reader>&&, bool is_head_response, std::optional<metrics::Request>, Cancel, asio::yield_context);
 
+    const bool head_was_read() const { return _head_was_read; }
+
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
 

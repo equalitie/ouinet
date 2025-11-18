@@ -1556,6 +1556,10 @@ public:
         // iOS can't handle the extension string in chunk headers.
         session.flush_response(_ua_con, cancel, yield[ec], PartModifier::RemoveChunkHeaderExtension);
 
+        if (!ec) {
+            _response_header = session.response_header();
+        }
+
         bool keep_alive = !ec && _request.keep_alive() && session.keep_alive();
 
         if (!keep_alive) {
@@ -1586,6 +1590,10 @@ public:
         _ua_was_written_to = true;
         http::async_write(_ua_con, rs, yield[ec]);
 
+        if (!ec) {
+            _response_header = rs.base();
+        }
+
         bool keep_alive = !ec && _request.keep_alive() && rs.keep_alive();
 
         if (!keep_alive) _ua_con.close();
@@ -1603,6 +1611,11 @@ public:
         return _ua_con.is_open();
     }
 
+    http::response_header<> const*  response_header() const {
+        if (!_response_header) return nullptr;
+        return &*_response_header;
+    }
+
 private:
     /*
      * Connection to the user agent
@@ -1610,6 +1623,7 @@ private:
     GenericStream& _ua_con;
     const Request& _request;
     bool _ua_was_written_to = false;
+    std::optional<http::response_header<>> _response_header;
 };
 
 //------------------------------------------------------------------------------
@@ -1785,9 +1799,6 @@ public:
         if (ec) return or_throw(yield, ec);
 
         auto& rsh = session.response_header();
-
-        _YDEBUG(yield, "Response header:");
-        _YDEBUG(yield, rsh);
 
         assert(!fresh_ec || !cache_ec); // At least one success
         assert( fresh_ec ||  cache_ec); // One needs to fail
@@ -2081,9 +2092,6 @@ public:
             });
         };
 
-        _YDEBUG(yield, "Handling request:");
-        _YDEBUG(yield, tnx.request().base());
-
         // TODO: When the origin is enabled and it always times out, it
         // will induce an unnecessary delay to the other routes. We need a
         // mechanism which will "realize" that other origin requests are
@@ -2153,6 +2161,10 @@ public:
 
             _YDEBUG( yield, "Got result; job=", jobs.as_string(which), " ec=", result.ec
                    , " target=", short_target);
+
+            if (auto h = tnx.response_header()) {
+                _YDEBUG(yield, *h);
+            }
 
             if (!result.ec) {
                 final_job = jobs.as_string(which);
