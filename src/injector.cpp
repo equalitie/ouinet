@@ -825,6 +825,7 @@ int main(int argc, const char* argv[])
         bt_dht_ptr = std::make_shared<bt::MainlineDht>
             ( ex
             , metrics::Client::noop().mainline_dht()
+            , config.is_doh_enabled()
             , fs::path{}
             , config.bt_bootstrap_extras());  // default storage dir
                                               //
