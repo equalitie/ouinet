@@ -307,8 +307,7 @@ template<class Message, class... Fields>
 static Message filter_fields(Message message, const Fields&... keep_fields)
 {
     for (auto fit = message.begin(); fit != message.end();) {
-        if (!( field_is_one_of(*fit, keep_fields...)
-               || boost::istarts_with(fit->name_string(), http_::header_prefix))) {
+        if (!field_is_one_of(*fit, keep_fields...)) {
             fit = message.erase(fit);
         } else {
             fit++;
@@ -420,7 +419,7 @@ bool req_ensure_host(Request& req) {
 // If the request is invalid, none is returned.
 template<class Request, class... Fields>
 static boost::optional<Request>
-to_canonical_request(Request rq, const Fields&... keep_fields) {
+_to_canonical_request(Request rq, const Fields&... keep_fields) {
     auto url = Url::from(rq.target());
     if (!url) return boost::none;
     auto rq_host = url->port.empty() ? url->host : url->host + ":" + url->port;
@@ -469,7 +468,8 @@ to_injector_request(Request rq) {
     // The Ouinet version header hints the endpoint
     // to behave like an injector instead of a proxy.
     rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-    return to_canonical_request( move(rq)
+
+    return _to_canonical_request( move(rq)
                                // PROXY AUTHENTICATION HEADERS (PASS)
                                , http::field::proxy_authorization
                                // CACHING AND RANGE HEADERS (PASS)
@@ -481,6 +481,8 @@ to_injector_request(Request rq) {
                                , http::field::if_unmodified_since
                                , http::field::pragma
                                , http::field::range
+                               , http::string_to_field(http_::request_druid_hdr)
+                               , http::string_to_field(http_::protocol_version_hdr)
                                );
 }
 
@@ -505,8 +507,7 @@ static Request to_origin_request(Request rq) {
 template<class Request>
 static boost::optional<Request>
 to_cache_request(Request rq) {
-    rq = remove_ouinet_fields(move(rq));
-    return to_canonical_request(move(rq));
+    return _to_canonical_request(move(rq));
 }
 
 // Make the given response ready to be sent to the cache.
