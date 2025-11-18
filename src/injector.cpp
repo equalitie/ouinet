@@ -859,6 +859,8 @@ Injector::Injector(
         LOG_INFO(log_path, "Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
+    if (!config.is_doh_enabled())
+        LOG_INFO("DNS over HTTPS disabled.");
 
     auto proxy_server = std::make_unique<OuiServiceServer>(ex);
 
