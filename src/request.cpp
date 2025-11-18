@@ -79,7 +79,6 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
         return {};
     }
 
-    // TODO: Check GET parameters are removed
     auto resource_id = key_from_http_req(*hdr);
 
     if (!resource_id) {

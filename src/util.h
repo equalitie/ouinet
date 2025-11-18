@@ -28,17 +28,9 @@ namespace ouinet { namespace util {
 // Canonical URLs never have fragments (they should be handled by the agent).
 inline
 std::string canonical_url(Url urlm) {
+    if (!urlm.query.empty()) urlm.query = {};
     if (!urlm.fragment.empty()) urlm.fragment = {};
     return urlm.reassemble();  // TODO: make canonical
-}
-
-// Return the canonical version of the given HTTP(S) `url`,
-// or the empty string if it is invalid.
-inline
-std::string canonical_url(const boost::string_view url) {
-    auto urlm = Url::from(url);
-    if (!urlm) return {};  // error
-    return canonical_url(std::move(*urlm));
 }
 
 // Get the source IPv4 address used when communicating with external hosts.

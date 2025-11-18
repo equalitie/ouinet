@@ -12,12 +12,12 @@ namespace ouinet {
 
 // If a key cannot be correctly derived from the request,
 // return none.
-template <class Request>
 inline
-boost::optional<std::string> key_from_http_req(const Request& req) {
-    // The key is currently the canonical URL itself.
-    auto key = util::canonical_url(req.target());
-    if (key.empty()) return boost::none;
+std::optional<std::string> key_from_http_req(const http::request_header<>& req) {
+    auto url = util::Url::from(req.target());
+    if (!url) return {};
+    auto key = util::canonical_url(std::move(*url));
+    if (key.empty()) return {};
     return key;
 }
 
