@@ -88,6 +88,8 @@ async def wait_for_benchmark(process: OuinetProcess, benchmark: str):
 def run_tcp_injector(args, proc_list):
     argv = args.copy()
     argv.append("--allow-private-targets")
+    argv.extend(["--log-level", "SILLY"])
+
     # BEP5 is our default injector
     injector = OuinetBEP5CacheInjector(
         OuinetConfig(
@@ -177,10 +179,7 @@ def proc_list() -> List[Process]:
     deferred_procs = []
     for cur_proc in processes:
         print("stopping process", cur_proc)
-        deferred_procs.append(cur_proc.proc_end)
         cur_proc.stop()
-    print("waiting for end-of-process deferreds:", deferred_procs)
-    gatherResults(deferred_procs)
     print("Done, no processes left")
 
 
@@ -235,7 +234,8 @@ async def test_tcp_transport(proc_list, certificate_file, http_server):
 
     # Wait for the injector to open port
     await wait_for_benchmark(injector, TestFixtures.TCP_INJECTOR_PORT_READY_REGEX)
-    await sleep(600000)
+    print("WE ARE THROUGH")
+    # await sleep(600000)
     # Client
     client = run_tcp_client(
         name=TestFixtures.TCP_CLIENT["name"],

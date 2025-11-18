@@ -7,11 +7,12 @@
 import os
 import logging
 from typing import List
+from typing import Generator
 from traceback import format_stack
+import asyncio
 
 from test_fixtures import TestFixtures
 
-from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import (
     OuinetBEP5CacheProcessProtocol,
     OuinetProcessProtocol,
@@ -58,6 +59,39 @@ class OuinetConfig(object):
         self.timeout = timeout
         self.argv = argv
         self.benchmark_regexes = benchmark_regexes
+
+
+from subprocess import Popen, PIPE, STDOUT
+
+
+def spawn(command: List[str]) -> Popen:
+    print("running command :", " ".join(command))
+    handle = Popen(
+        command,
+        shell=False,
+        stdin=PIPE,
+        stdout=PIPE,
+        stderr=STDOUT,
+        # universal_newlines=True,
+    )
+    if handle.stdout is None:
+        raise ValueError("could not run command: ", command)
+    return handle
+
+
+def output_yielder(handle: Popen) -> Generator[str, None, None]:
+    """Note: If you break during iteration, it kills the process"""
+    with handle:
+        try:
+            while True:
+                # line = asyncio.wait_for(handle.stdout.readline(), timeout=1)
+                for line in iter(handle.stdout.readline, ""):
+                    yield line
+        except:
+            # yield ""
+            pass
+        # except GeneratorExit:
+        #     handle.kill()
 
 
 class OuinetProcess(object):
@@ -133,10 +167,13 @@ class OuinetProcess(object):
 
         self._proc_protocol.app_name = self.config.app_name
 
-        print("spawning a twisted process")
-        self._proc = reactor.spawnProcess(
-            self._proc_protocol, self.config.argv[0], self.config.argv, env=ouinet_env
-        )
+        print("spawning a process")
+        comm = self.config.argv
+
+        self._proc = spawn(comm)
+        self.output = output_yielder(self._proc)
+        self.listener: asyncio.Task = asyncio.create_task(self.listening_loop())
+        # self._proc_protocol, , self.config.argv, env=ouinet_env
         print("spawned")
         self._has_started = True
 
@@ -147,24 +184,22 @@ class OuinetProcess(object):
             + str(self.config.timeout)
             + " seconds"
         )
-        self.timeout_killer = reactor.callLater(self.config.timeout, self.stop)
 
-        # send a pulse to keep the output of the proccess alive
-        self.pulse_timer = task.LoopingCall(self._proc_protocol.pulse_out)
-        self.pulse_timer.start(
-            TestFixtures.KEEP_IO_ALIVE_PULSE_INTERVAL
-        )  # call every second
-
-        # we *might* need to make sure that the process has ended before
-        # ending the test because Twisted Trial might get mad otherwise
-        self.proc_end = defer.Deferred()
-        self._proc_protocol.onExit = self.proc_end
+    async def listening_loop(self):
+        try:
+            for line in self.output:
+                # line = await line
+                self._proc_protocol.errReceived(line)
+                await asyncio.sleep(0.1)
+            print("exited listening loop for ", self)
+        except asyncio.CancelledError:
+            print("stopping output analysis")
 
     def send_term_signal(self):
         if not self._term_signal_sent:
             logging.debug("Sending term signal to " + self.config.app_name)
             self._term_signal_sent = True
-            self._proc.signalProcess("TERM")
+            self._proc.terminate()
 
     def stop(self):
         if self._has_started and not self._term_signal_sent:  # stop only if started
@@ -178,11 +213,11 @@ class OuinetProcess(object):
             else:
                 logging.debug("the process is being stopped from inside the test body")
 
-            if self.timeout_killer.active():
-                self.timeout_killer.cancel()
+            # if self.timeout_killer.active():
+            #     self.timeout_killer.cancel()
 
-            self.pulse_timer.stop()
-
+            # self.pulse_timer.stop()
+            self.listener.cancel()
             self.send_term_signal()
 
             # Don't do this because we may lose some important debug
