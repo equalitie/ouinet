@@ -2432,6 +2432,19 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         Request req(reqhp.release());
         auto req_done = defer([&yield] { _YDEBUG(yield, "Done"); });
 
+        {
+            auto& fields = _config.add_request_fields();
+
+            if (!fields.empty()) {
+                LOG_WARN(yield, " Adding request fields:");
+            }
+
+            for (const auto& [key, value] : fields) {
+                LOG_WARN(yield, "   ", key, ": ", value);
+                req.set(key, value);
+            }
+        }
+
 #if defined(__MACH__)
         // It is not possible to inject headers into every request made
         // by WebKit on iOS, but we can modifiy the User Agent.

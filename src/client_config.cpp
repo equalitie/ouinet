@@ -172,6 +172,18 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _max_req_body_size = *opt;
     }
 
+    if (vm.count("add-request-field")) {
+        auto fields = vm["add-request-field"].as<std::vector<std::string>>();
+        for (auto field : fields) {
+            auto pos = field.find(':');
+            if (pos != string::npos) {
+                _add_request_fields[field.substr(0, pos)] = field.substr(pos + 1);
+            } else {
+                _add_request_fields[field] = "";
+            }
+        }
+    }
+
     if (auto opt = as_optional<string>(vm, "client-credentials")) {
         auto cred = *opt;
 
