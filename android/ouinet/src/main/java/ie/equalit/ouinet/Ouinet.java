@@ -10,6 +10,10 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import androidx.annotation.Nullable;
 import android.util.Log;
+
+import com.getkeepsafe.relinker.ReLinker;
+import com.getkeepsafe.relinker.ReLinkerInstance;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -22,13 +26,27 @@ public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
     public static synchronized void maybeLoadLibraries(Context context) {
         if (libsLoaded) return;
-        System.loadLibrary("c++_shared");
-        System.loadLibrary("boost_asio");
-        System.loadLibrary("boost_asio_ssl");
-        System.loadLibrary("gpg-error");
-        System.loadLibrary("gcrypt");
-        System.loadLibrary("client");
-        System.loadLibrary("native-lib");
+
+        // Explicitly loading library dependencies is needed for older versions of Android
+        // (probably 16 <= API < 19).
+        // ReLinker should take care of working around these issues,
+        // but it still has some problems with API < 18
+        // (see <https://github.com/KeepSafe/ReLinker/issues/15>).
+        if (Build.VERSION.SDK_INT < 18) {
+            System.loadLibrary("c++_shared");
+            System.loadLibrary("boost_asio");
+            System.loadLibrary("boost_asio_ssl");
+            System.loadLibrary("gpg-error");
+            System.loadLibrary("gcrypt");
+
+            System.loadLibrary("client");
+            System.loadLibrary("native-lib");
+        } else {
+            ReLinkerInstance relinker = ReLinker.recursively();
+            relinker.loadLibrary(context, "client");
+            relinker.loadLibrary(context, "native-lib");
+        }
+
         libsLoaded = true;
     }
 

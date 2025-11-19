@@ -76,6 +76,7 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     // Please read `doc/android-sdk-versions.md` and keep in sync with it.
     implementation 'androidx.appcompat:appcompat:1.4.1'
+    implementation 'com.getkeepsafe.relinker:relinker:1.4.4'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
     testImplementation 'org.mockito:mockito-core:4.3.0'
