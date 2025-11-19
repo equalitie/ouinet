@@ -33,13 +33,6 @@ static posix_time::ptime current_time() {
     return posix_time::second_clock::universal_time();
 }
 
-static optional<string_view> get_field(const auto& rq, http::field f)
-{
-    auto i = rq.header().find(f);
-    if (i == rq.header().end()) return boost::none;
-    return i->value();
-}
-
 template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
     task::spawn_detached(ctx, [&ctx, f = forward<F>(f)](auto yield) {
             try {
@@ -186,6 +179,9 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
+    auto old_resource_id = cache::ResourceId::from_url("http://old").value();
+    auto new_resource_id = cache::ResourceId::from_url("http://new").value();
+
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
@@ -195,8 +191,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
 
         auto created = current_time() - cc.max_cached_age();
 
-        if (rq.resource_id() == "http://old") created -= seconds(5);
-        else                               created += seconds(5);
+        if (rq.resource_id() == old_resource_id) created -= seconds(5);
+        else                                     created += seconds(5);
 
         return make_entry(ctx, created, rs, y);
     };
@@ -204,7 +200,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
         BOOST_CHECK(ce);
-        BOOST_CHECK_EQUAL(rq.resource_id(), "http://old");
+        BOOST_CHECK_EQUAL(rq.resource_id(), old_resource_id);
         return make_session(ctx, {http::status::ok, CacheRequest::HTTP_VERSION}, y);
     };
 
@@ -247,6 +243,9 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
+    auto old_resource_id = cache::ResourceId::from_url("http://old").value();
+    auto new_resource_id = cache::ResourceId::from_url("http://new").value();
+
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
@@ -255,12 +254,12 @@ BOOST_AUTO_TEST_CASE(test_maxage)
 
         auto created = current_time();
 
-        if (rq.resource_id() == "http://old") {
+        if (rq.resource_id() == old_resource_id) {
             created -= seconds(120);
         }
         else {
             created -= seconds(30);
-            BOOST_CHECK(rq.resource_id() == "http://new");
+            BOOST_CHECK(rq.resource_id() == new_resource_id);
         }
 
         return make_entry(ctx, created, rs, y);
@@ -317,6 +316,9 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
         return ss.str();
     };
 
+    auto old_resource_id = cache::ResourceId::from_url("http://old").value();
+    auto new_resource_id = cache::ResourceId::from_url("http://new").value();
+
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
@@ -324,12 +326,12 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
 
         auto created = current_time();
 
-        if (rq.resource_id() == "http://old") {
+        if (rq.resource_id() == old_resource_id) {
             rs.set( http::field::expires
                   , format_time(current_time() - posix_time::seconds(10)));
         }
         else {
-            BOOST_CHECK(rq.resource_id() == "http://new");
+            BOOST_CHECK(rq.resource_id() == new_resource_id);
             rs.set( http::field::expires
                   , format_time(current_time() + posix_time::seconds(10)));
         }
@@ -424,7 +426,7 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
         origin_check++;
         BOOST_CHECK(!ce);
 
-        auto etag = get_field(rq, http::field::if_none_match);
+        auto etag = rq.get_if_none_match_field();
         BOOST_CHECK(etag);
         BOOST_CHECK_EQUAL(*etag, "origin-etag");
 
@@ -489,7 +491,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
 
-        auto etag = get_field(rq, http::field::if_none_match);
+        auto etag = rq.get_if_none_match_field();
         BOOST_REQUIRE(etag);
 
         if (*etag == "123") {
@@ -577,7 +579,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         origin_check++;
         // No check for available cache entry since it may or may not have been checked.
 
-        auto nocache = get_field(rq, http::field::cache_control);
+        auto nocache = rq.get_cache_control_field();
         BOOST_REQUIRE(nocache);
 
         // Force using version from origin instead of validated version from cache

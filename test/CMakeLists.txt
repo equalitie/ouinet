@@ -17,10 +17,8 @@ endif()
 add_executable(test-parser "test_parser.cpp")
 
 ######################################################################
-add_executable(test-cache
-    "test_cache_control.cpp"
-    "../src/cache_control.cpp"
-)
+add_executable(test-cache "test_cache_control.cpp")
+target_link_libraries(test-cache client_lib)
 
 ######################################################################
 add_executable(test-wait-condition "test_wait_condition.cpp")
@@ -97,14 +95,8 @@ add_executable(test-http-sign
 )
 
 ######################################################################
-add_executable(test-http-store
-    "test_http_store.cpp"
-    "../src/cache/http_sign.cpp"
-    "../src/cache/http_store.cpp"
-    "../src/cache/hash_list.cpp"
-    "../src/util/atomic_dir.cpp"
-    "../src/util/temp_dir.cpp"
-)
+add_executable(test-http-store "test_http_store.cpp")
+target_link_libraries(test-http-store client_lib)
 
 ######################################################################
 add_executable(test-atomic-temp

@@ -76,6 +76,18 @@ public:
         http::async_write(con, msg, yield);
     }
 
+    std::optional<const std::string_view> get_if_none_match_field() const {
+        auto i = _header.find(http::field::if_none_match);
+        if (i == _header.end()) return {};
+        return i->value();
+    }
+
+    std::optional<const std::string_view> get_cache_control_field() const {
+        auto i = _header.find(http::field::cache_control);
+        if (i == _header.end()) return {};
+        return i->value();
+    }
+
 private:
     friend class CacheRequest;
 

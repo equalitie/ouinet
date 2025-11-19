@@ -21,6 +21,10 @@ public:
         return _repr < other._repr;
     }
 
+    bool operator==(const ResourceId& other) const {
+        return _repr == other._repr;
+    }
+
 private:
     explicit ResourceId(std::string repr) : _repr(std::move(repr)) {}
 
