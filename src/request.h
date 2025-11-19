@@ -6,6 +6,7 @@
 #include <boost/beast/http/write.hpp>
 #include <boost/beast/http/string_body.hpp>
 #include "namespaces.h"
+#include "cache/resource_id.h"
 
 
 namespace ouinet {
@@ -26,7 +27,7 @@ public:
 
     http::verb method() const;
 
-    const std::string& resource_id() const {
+    const cache::ResourceId& resource_id() const {
         return _resource_id;
     }
 
@@ -37,14 +38,14 @@ public:
 private:
     friend class CacheRequest;
 
-    CacheRetrieveRequest(http::verb method, std::string resource_id, std::string dht_group) :
+    CacheRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group) :
         _method(method),
         _resource_id(std::move(resource_id)),
         _dht_group(std::move(dht_group))
     {}
 
     http::verb _method;
-    std::string _resource_id;
+    cache::ResourceId _resource_id;
     std::string _dht_group;
 };
 
@@ -57,7 +58,7 @@ public:
         return _header.method();
     }
 
-    const std::string& resource_id() const {
+    const cache::ResourceId& resource_id() const {
         return _resource_id;
     }
 
@@ -78,14 +79,14 @@ public:
 private:
     friend class CacheRequest;
 
-    CacheInjectRequest(http::request_header<> header, std::string resource_id, std::string dht_group) :
+    CacheInjectRequest(http::request_header<> header, cache::ResourceId resource_id, std::string dht_group) :
         _header(std::move(header)),
         _resource_id(std::move(resource_id)),
         _dht_group(std::move(dht_group))
     {}
 
     http::request_header<> _header;
-    std::string _resource_id;
+    cache::ResourceId _resource_id;
     std::string _dht_group;
 };
 
@@ -109,14 +110,14 @@ public:
     const std::string& dht_group() const { return _dht_group; }
 
 private:
-    CacheRequest(http::request_header<> header, std::string resource_id, std::string dht_group) :
+    CacheRequest(http::request_header<> header, cache::ResourceId resource_id, std::string dht_group) :
         _header(std::move(header)),
         _resource_id(std::move(resource_id)),
         _dht_group(std::move(dht_group))
     {}
 
     http::request_header<> _header;
-    std::string _resource_id;
+    cache::ResourceId _resource_id;
     std::string _dht_group;
 };
 

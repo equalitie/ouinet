@@ -90,15 +90,15 @@ public:
     util::intrusive::list_hook _good_peer_hook;
 
     AsioExecutor _exec;
-    string _key;
+    ResourceId _resource_id;
     const util::Ed25519PublicKey _cache_pk;
     std::unique_ptr<http_response::Reader> _reader;
     HashList _hash_list;
     Cancel _lifetime_cancel;
 
-    Peer(AsioExecutor exec, const string& key, util::Ed25519PublicKey cache_pk) :
+    Peer(AsioExecutor exec, const ResourceId& resource_id, util::Ed25519PublicKey cache_pk) :
         _exec(exec),
-        _key(key),
+        _resource_id(resource_id),
         _cache_pk(cache_pk)
     {
     }
@@ -129,7 +129,7 @@ public:
         Cancel tc(c);
         auto wd = watch_dog(_exec, WRITE_REQUEST_TIMEOUT, [&] { tc(); });
 
-        http::async_write(_reader->stream(), range_request(http::verb::get, block_id, _key), yield[ec]);
+        http::async_write(_reader->stream(), range_request(http::verb::get, block_id, _resource_id), yield[ec]);
         fail_on_error_or_timeout(yield, c, ec, wd);
     }
 
@@ -248,9 +248,9 @@ public:
         return block;
     }
 
-    http::request<http::string_body> request(http::verb verb, const string& key)
+    http::request<http::string_body> request(http::verb verb, const ResourceId& resource_id)
     {
-        auto uri = uri_from_key(_key);
+        auto uri = _resource_id.hex_string();
         http::request<http::string_body> rq{verb, uri, 11 /* version */};
         rq.set(http::field::host, "OuinetClient");
         rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
@@ -258,9 +258,9 @@ public:
         return rq;
     }
 
-    http::request<http::string_body> range_request(http::verb verb, size_t chunk_id, const string& key)
+    http::request<http::string_body> range_request(http::verb verb, size_t chunk_id, const ResourceId& resource_id)
     {
-        auto rq = request(verb, key);
+        auto rq = request(verb, resource_id);
         auto bs = _hash_list.signed_head.block_size();
         size_t first = chunk_id * bs;
         size_t last = (bs > 0) ? (first + bs - 1) : first;
@@ -286,7 +286,7 @@ public:
 
         auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
 
-        http::async_write(con, request(http::verb::propfind, _key), yield[ec]);
+        http::async_write(con, request(http::verb::propfind, _resource_id), yield[ec]);
         fail_on_error_or_timeout(yield, cancel, ec, wd);
 
         auto reader = std::make_unique<http_response::Reader>(move(con));
@@ -313,7 +313,7 @@ public:
          , set<udp::endpoint> wan_my_eps
          , set<udp::endpoint> lan_peer_eps
          , util::Ed25519PublicKey cache_pk
-         , const std::string& key
+         , const ResourceId& resource_id
          , std::shared_ptr<DhtLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
          , std::optional<util::LogPath> log_path)
@@ -323,7 +323,7 @@ public:
         , _lan_peer_eps(move(lan_peer_eps))
         , _lan_my_eps(move(lan_my_eps))
         , _wan_my_eps(move(wan_my_eps))
-        , _key(move(key))
+        , _resource_id(move(resource_id))
         , _peer_lookup(move(peer_lookup))
         , _newest_proto_seen(move(newest_proto_seen))
         , _log_path(move(log_path))
@@ -368,11 +368,11 @@ public:
          , set<udp::endpoint> lan_my_eps
          , set<udp::endpoint> lan_peer_eps
          , util::Ed25519PublicKey cache_pk
-         , const std::string& key
+         , const ResourceId& resource_id
          , std::shared_ptr<unsigned> newest_proto_seen
          , std::optional<util::LogPath> log_path)
         : Peers( exec, move(lan_my_eps), {}, move(lan_peer_eps)
-               , move(cache_pk), key, nullptr
+               , move(cache_pk), resource_id, nullptr
                , move(newest_proto_seen), move(log_path))
     {}
 
@@ -384,7 +384,7 @@ public:
 
         if (!ip.second) return; // Already inserted
 
-        ip.first->second = make_unique<Peer>(_exec, _key, _cache_pk);
+        ip.first->second = make_unique<Peer>(_exec, _resource_id, _cache_pk);
         Peer* p = ip.first->second.get();
 
         _candidate_peers.push_back(*p);
@@ -514,7 +514,7 @@ private:
     std::set<asio::ip::udp::endpoint> _lan_peer_eps;
     std::set<asio::ip::udp::endpoint> _lan_my_eps;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
-    std::string _key;
+    ResourceId _resource_id;
     std::shared_ptr<DhtLookup> _peer_lookup;
     std::shared_ptr<unsigned> _newest_proto_seen;
     std::optional<util::LogPath> _log_path;
@@ -526,7 +526,7 @@ private:
 };
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
-                                , std::string key
+                                , ResourceId resource_id
                                 , util::Ed25519PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
@@ -539,13 +539,13 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , move(lan_my_eps)
                                , move(lan_peer_eps)
                                , move(cache_pk)
-                               , move(key)
+                               , move(resource_id)
                                , move(newest_proto_seen)
                                , log_path);
 }
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
-                                , std::string key
+                                , ResourceId resource_id
                                 , util::Ed25519PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
@@ -561,7 +561,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , move(wan_my_eps)
                                , move(lan_peer_eps)
                                , move(cache_pk)
-                               , move(key)
+                               , move(resource_id)
                                , move(peer_lookup)
                                , move(newest_proto_seen)
                                , log_path);

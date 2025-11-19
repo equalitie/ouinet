@@ -32,6 +32,7 @@ using namespace std;
 using namespace ouinet;
 using namespace ouinet::cache;
 using udp = asio::ip::udp;
+using cache::ResourceId;
 
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
@@ -66,9 +67,9 @@ struct GarbageCollector {
                 if (cancel || ec) break;
 
                 _DEBUG("Collecting garbage...");
-                http_store.for_each([&] (auto rr, auto y) {
+                http_store.for_each([&] (cache::ResourceId const& resource_id, auto rr, auto y) {
                     sys::error_code e;
-                    auto k = keep(std::move(rr), y[e]);
+                    auto k = keep(resource_id, std::move(rr), y[e]);
                     ec = compute_error_code(ec, cancel);
                     return or_throw(y, e, k);
                 }, cancel, yield[ec]);
@@ -84,7 +85,6 @@ struct GarbageCollector {
 struct Client::Impl {
     using GroupName = Client::GroupName;
     using BaseGroups = BaseDhtGroups;
-    using Groups = DhtGroups;
 
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from injector-signed cached content).
@@ -105,7 +105,7 @@ struct Client::Impl {
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
     LocalPeerDiscovery _local_peer_discovery;
-    std::unique_ptr<Groups> _groups;
+    std::unique_ptr<DhtGroups> _groups;
 
 
     Impl( AsioExecutor ex
@@ -125,8 +125,8 @@ struct Client::Impl {
         , _static_cache_dir(std::move(static_cache_dir))
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
-        , _gc(*_http_store, [&] (auto rr, auto y) {
-              return keep_cache_entry(move(rr), y);
+        , _gc(*_http_store, [&] (const auto& resource_id, auto rr, auto y) {
+              return keep_cache_entry(resource_id, move(rr), y);
           }, _ex)
         , _peer_lookups(256)
         , _local_peer_discovery(_ex, _lan_my_endpoints)
@@ -174,9 +174,9 @@ struct Client::Impl {
 
         // Usually we would
         // (1) check that the request matches our protocol version, and
-        // (2) check that we can derive a key to look up the local cache.
+        // (2) check that we can derive a resource_id to look up the local cache.
         // However, we still want to blindly send a response we have cached
-        // if the request looks like a Ouinet one and we can derive a key,
+        // if the request looks like a Ouinet one and we can derive a resource_id,
         // to help the requesting client get the result and other information
         // like a potential new protocol version.
         // The requesting client may choose to drop the response
@@ -190,19 +190,19 @@ struct Client::Impl {
             return or_throw(yield, ec, req.keep_alive());
         }
 
-        auto key = key_from_http_req(req);
-        if (!key) {
-            _YDEBUG(yield, "Cannot derive key from request\n", req);
+        auto resource_id = ResourceId::from_hex(req.target());
+        if (!resource_id) {
+            _YDEBUG(yield, "Cannot derive resource_id from request target:", req.target());
             handle_bad_request(sink, req, yield[ec]);
             return or_throw(yield, ec, req.keep_alive());
         }
 
-        _YDEBUG(yield, "Received request for ", *key);
+        _YDEBUG(yield, "Received request for ", *resource_id);
 
         if (req.method() == http::verb::propfind) {
-            _YDEBUG(yield, "Serving propfind for ", *key);
+            _YDEBUG(yield, "Serving propfind for ", *resource_id);
             auto hl = _http_store->load_hash_list
-                (*key, cancel, static_cast<asio::yield_context>(yield[ec]));
+                (*resource_id, cancel, static_cast<asio::yield_context>(yield[ec]));
 
             _YDEBUG(yield, "Load; ec=", ec);
             if (ec) {
@@ -223,10 +223,10 @@ struct Client::Impl {
         auto range = get_range(req);
 
         if (range) {
-            rr = _http_store->range_reader(*key, range->first, range->last, ec);
+            rr = _http_store->range_reader(*resource_id, range->first, range->last, ec);
             assert(rr);
         } else {
-            rr = _http_store->reader(*key, ec);
+            rr = _http_store->reader(*resource_id, ec);
             // We may also, depending on whether the request is `HEAD`:
             // (tru) the operation above (which may work for an entry missing a body),
             // or (false) `_http_store->reader_and_size` instead so as to choose
@@ -238,7 +238,7 @@ struct Client::Impl {
 
         if (ec) {
             if (!cancel) {
-                _YDEBUG(yield, "Not serving: ", *key, "; ec=", ec);
+                _YDEBUG(yield, "Not serving: ", *resource_id, "; ec=", ec);
             }
             sys::error_code hnf_ec;
             handle_not_found(sink, req, yield[hnf_ec]);
@@ -254,7 +254,7 @@ struct Client::Impl {
             _YDEBUG(yield, "END; ec=", ec, " fwd_bytes=", fwd_bytes);
         });
 
-        _YDEBUG(yield, "Serving: ", *key);
+        _YDEBUG(yield, "Serving: ", *resource_id);
 
         bool is_head_request = req.method() == http::verb::head;
 
@@ -295,15 +295,13 @@ struct Client::Impl {
         _DEBUG("Purging local cache...");
 
         sys::error_code ec;
-        _http_store->for_each([&] (auto rr, auto y) {
+        _http_store->for_each([&] (auto& resource_id, auto rr, auto y) {
             // TODO: Implement specific purge operations
             // for DHT groups and announcer
             // to avoid having to parse all stored heads.
             sys::error_code e;
             auto hdr = read_response_header(*rr, yield[e]);
             if (e) return false;
-            auto key = hdr[http_::response_uri_hdr];
-            if (key.empty()) return false;
 
             /*
              * `group_pinned` is passed by reference to `unpublished_cache_entry`
@@ -312,7 +310,7 @@ struct Client::Impl {
              * a group is pinned or not.
              */
             bool group_pinned = false;
-            unpublish_cache_entry(std::string(key), group_pinned);
+            unpublish_cache_entry(resource_id, group_pinned);
             if (group_pinned) return true; // keep entries of pinned groups
 
             return false;  // remove entries that are not pinned
@@ -380,7 +378,7 @@ struct Client::Impl {
         return *lookup;
     }
 
-    Session load( const std::string& key
+    Session load( const ResourceId& resource_id
                 , const GroupName& group
                 , bool is_head_request
                 , metrics::Client& metrics_client
@@ -391,11 +389,11 @@ struct Client::Impl {
 
         sys::error_code ec;
 
-        _YDEBUG(yield, "Requesting from the cache: ", key);
+        _YDEBUG(yield, "Requesting from the cache: ", resource_id);
 
         bool rs_available = false;
         std::size_t rs_sz = 0;
-        auto rs = load_from_local(key, is_head_request, rs_sz, cancel, yield[ec]);
+        auto rs = load_from_local(resource_id, is_head_request, rs_sz, cancel, yield[ec]);
         _YDEBUG(yield, "Looking up local cache; ec=", ec);
         if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
         if (!ec) {
@@ -434,7 +432,7 @@ struct Client::Impl {
 
             if (log_path) {
                 LOG_DEBUG(*log_path, " Peer lookup with DHT and local discovery:");
-                LOG_DEBUG(*log_path, "    key=         ", key);
+                LOG_DEBUG(*log_path, "    resource_id= ", resource_id);
                 LOG_DEBUG(*log_path, "    group=       ", group);
                 LOG_DEBUG(*log_path, "    swarm_name=  ", peer_lookup_->swarm_name());
                 LOG_DEBUG(*log_path, "    infohash=    ", peer_lookup_->infohash());
@@ -443,7 +441,7 @@ struct Client::Impl {
 
             reader = std::make_unique<MultiPeerReader>
                 ( _ex
-                , key
+                , resource_id
                 , _cache_pk
                 , move(local_peers)
                 , _dht->local_endpoints()
@@ -456,13 +454,13 @@ struct Client::Impl {
 
             if (log_path) {
                 LOG_DEBUG(*log_path, " Peer lookup with local discovery only:");
-                LOG_DEBUG(*log_path, "    key=         ", key);
+                LOG_DEBUG(*log_path, "    resource_id= ", resource_id);
                 LOG_DEBUG(*log_path, "    local_peers= ", local_peers);
             };
 
             reader = std::make_unique<MultiPeerReader>
                 ( _ex
-                , key
+                , resource_id
                 , _cache_pk
                 , move(local_peers)
                 , _lan_my_endpoints
@@ -490,7 +488,7 @@ struct Client::Impl {
         return or_throw<Session>(yield, ec, move(s));
     }
 
-    Session load_from_local( const std::string& key
+    Session load_from_local( const ResourceId& resource_id
                            , bool is_head_request
                            , std::size_t& body_size
                            , Cancel cancel
@@ -499,9 +497,9 @@ struct Client::Impl {
         sys::error_code ec;
         cache::reader_uptr rr;
         if (is_head_request)
-            rr = _http_store->reader(key, ec);
+            rr = _http_store->reader(resource_id, ec);
         else
-            std::tie(rr, body_size) = _http_store->reader_and_size(key, ec);
+            std::tie(rr, body_size) = _http_store->reader_and_size(resource_id, ec);
         if (ec) return or_throw<Session>(yield, ec);
         auto rs = yield[ec].tag("read_hdr").run([&] (auto y) {
             return Session::create(move(rr), is_head_request, cancel, y);
@@ -513,7 +511,7 @@ struct Client::Impl {
         return rs;
     }
 
-    void store( const std::string& key
+    void store( const ResourceId& resource_id
               , const GroupName& group
               , http_response::AbstractReader& r
               , Cancel cancel
@@ -521,10 +519,10 @@ struct Client::Impl {
     {
         sys::error_code ec;
         cache::KeepSignedReader fr(r);
-        _http_store->store(key, fr, cancel, yield[ec]);
+        _http_store->store(resource_id, fr, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        _groups->add(group, key, cancel, yield[ec]);
+        _groups->add(group, resource_id, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
         if (!_announcer) return;
@@ -566,16 +564,16 @@ struct Client::Impl {
     }
 
     inline
-    void unpublish_cache_entry(const std::string& key)
+    void unpublish_cache_entry(const cache::ResourceId& resource_id)
     {
         bool _ = false; // pinned group checks are not needed here
-        unpublish_cache_entry(key, _);
+        unpublish_cache_entry(resource_id, _);
     }
 
     inline
-    void unpublish_cache_entry(const std::string& key, bool& group_pinned)
+    void unpublish_cache_entry(const cache::ResourceId& resource_id, bool& group_pinned)
     {
-        auto empty_groups = _groups->remove(key, group_pinned);
+        auto empty_groups = _groups->remove(resource_id, group_pinned);
         if (!_announcer || group_pinned) return;
         for (const auto& eg : empty_groups)
             if (_announcer->remove(compute_swarm_name(eg)))
@@ -583,10 +581,10 @@ struct Client::Impl {
     }
 
     // Return whether the entry should be kept in storage.
-    bool keep_cache_entry(cache::reader_uptr rr, asio::yield_context yield)
+    bool keep_cache_entry(const cache::ResourceId& resource_id, cache::reader_uptr rr, asio::yield_context yield)
     {
         // This should be available to
-        // allow removing keys of entries to be evicted.
+        // allow removing resource_ids of entries to be evicted.
         assert(_groups);
 
         sys::error_code ec;
@@ -601,27 +599,18 @@ struct Client::Impl {
             return false;
         }
 
-        auto key = hdr[http_::response_uri_hdr];
-        if (key.empty()) {
-            _WARN( "Cached response does not contain a "
-                 , http_::response_uri_hdr
-                 , " header field; removing");
-            return false;
-        }
-
         auto age = cache_entry_age(hdr);
         if (age > _max_cached_age) {
             _DEBUG( "Cached response is too old; removing: "
                   , age, " > ", _max_cached_age
-                  , "; uri=", key );
+                  , "; resource_id=", resource_id );
 
-            if (sys::error_code pin_ec; is_pinned_group(std::string(key), pin_ec) && !ec)
-            {
-                _DEBUG("Keep ", key, " even if it is old because it is pinned");
+            if (_groups->is_pinned(resource_id)) {
+                _DEBUG("Keep ", resource_id, " even if it is old because it is pinned");
                 return true;
             }
 
-            unpublish_cache_entry(std::string(key));
+            unpublish_cache_entry(resource_id);
             return false;
         }
 
@@ -654,14 +643,14 @@ struct Client::Impl {
             : load_dht_groups(groups_dir, _ex, cancel, y[e]);
         return_or_throw_on_error(y, cancel, e);
 
-        _http_store->for_each([&] (auto rr, auto yield) {
-            return keep_cache_entry(std::move(rr), yield);
+        _http_store->for_each([&] (const auto& resource_id, auto rr, auto yield) {
+            return keep_cache_entry(resource_id, std::move(rr), yield);
         }, cancel, y[e]);
         return_or_throw_on_error(y, cancel, e);
 
         // These checks are not bullet-proof, but they should catch some inconsistencies
         // between resource groups and the HTTP store.
-        std::set<BaseGroups::ItemName> bad_items;
+        std::set<ResourceId> bad_items;
         std::set<BaseGroups::GroupName> bad_groups;
         for (auto& group_name : _groups->groups()) {
             unsigned good_items = 0;
@@ -788,7 +777,7 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
                              simultaneous_announcements);
 }
 
-Session Client::load( const std::string& key
+Session Client::load( const cache::ResourceId& key
                     , const GroupName& group
                     , bool is_head_request
                     , metrics::Client& metrics
@@ -797,7 +786,7 @@ Session Client::load( const std::string& key
     return _impl->load(key, group, is_head_request, metrics, cancel, yield);
 }
 
-void Client::store( const std::string& key
+void Client::store( const cache::ResourceId& key
                   , const GroupName& group
                   , http_response::AbstractReader& r
                   , Cancel cancel

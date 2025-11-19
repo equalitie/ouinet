@@ -12,6 +12,7 @@
 #include "../util/crypto.h"
 #include "../util/yield.h"
 #include "cache_entry.h"
+#include "resource_id.h"
 #include "dht_groups.h"
 
 
@@ -83,14 +84,14 @@ public:
 
 
     // This may add a response source header.
-    Session load( const std::string& key
+    Session load( const ResourceId&
                 , const GroupName& group
                 , bool is_head_request
                 , metrics::Client& metrics
                 , Cancel
                 , YieldContext);
 
-    void store( const std::string& key
+    void store( const ResourceId&
               , const GroupName& group
               , http_response::AbstractReader&
               , Cancel

@@ -9,6 +9,7 @@
 #include "../util/async_generator.h"
 #include "../util/log_path.h"
 #include "../session.h"
+#include "resource_id.h"
 
 namespace ouinet { namespace cache {
 
@@ -26,7 +27,7 @@ private:
 public:
     // Use this for local cache and LAN retrieval only.
     MultiPeerReader( AsioExecutor ex
-                   , std::string key
+                   , ResourceId
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
@@ -35,7 +36,7 @@ public:
 
     // Use this to include peers on the Internet.
     MultiPeerReader( AsioExecutor ex
-                   , std::string key
+                   , ResourceId
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints

@@ -1835,7 +1835,13 @@ public:
                 lock = wc.lock(),
                 log_path = yield.log_path()
             ] (asio::yield_context yield) {
-                auto key = key_from_http_req(rq->header()); assert(key);
+                auto target = rq->header().target();
+                auto key = cache::ResourceId::from_url(target);
+                if (!key) {
+                    LOG_WARN(log_path, " Injector response target URL can't be used as ResourceId: \"", target, "\"");
+                    assert(false);
+                    return;
+                }
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;
                 cache->store(*key, rq->dht_group(), rr, cancel, yield);

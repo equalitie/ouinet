@@ -79,7 +79,7 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
         return {};
     }
 
-    auto resource_id = key_from_http_req(*hdr);
+    auto resource_id = cache::ResourceId::from_url(hdr->target());
 
     if (!resource_id) {
         return {};

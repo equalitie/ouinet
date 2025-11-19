@@ -22,10 +22,6 @@
 
 namespace ouinet { namespace util {
 
-// Return the canonical version of the given HTTP(S) URL
-// whose match components are in `urlm`.
-//
-// Canonical URLs never have fragments (they should be handled by the agent).
 inline
 std::string canonical_url(Url urlm) {
     if (!urlm.query.empty()) urlm.query = {};
