@@ -16,20 +16,42 @@ std::optional<ResourceId> ResourceId::from_url(std::string_view url_str) {
     return ResourceId(std::move(hex_digest));
 }
 
-inline bool is_hex(char c) {
+template<class CharT>
+inline bool is_hex(CharT c) {
     return ('0' <= c && c <= '9') || ('a' <= c && c <= 'f');
 }
 
-std::optional<ResourceId> ResourceId::from_hex(std::string_view hex) {
-    if (hex.size() != util::SHA1::size() * 2) {
+template<class CharT>
+inline std::optional<std::string> sanitize_hex(std::basic_string_view<CharT> hex) {
+    auto hex_size = util::SHA1::size() * 2;
+
+    if (hex.size() != hex_size) {
         return {};
     }
-    for (auto c : hex) {
-        if (!is_hex(c)) {
+
+    std::string ret(hex_size, '0');
+
+    for (size_t i = 0; i < hex_size; ++i) {
+        if (is_hex(hex[i])) {
+            ret[i] = char(hex[i]);
+        } else {
             return {};
         }
     }
-    return ResourceId(std::string(hex));
+
+    return ret;
+}
+
+std::optional<ResourceId> ResourceId::from_hex(std::string_view hex) {
+    auto sanitized = sanitize_hex(hex);
+    if (!sanitized) return {};
+    return ResourceId(std::move(*sanitized));
+}
+
+std::optional<ResourceId> ResourceId::from_hex(std::wstring_view hex) {
+    auto sanitized = sanitize_hex(hex);
+    if (!sanitized) return {};
+    return ResourceId(std::move(*sanitized));
 }
 
 const std::string& ResourceId::hex_string() const {

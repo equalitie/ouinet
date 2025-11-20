@@ -8,7 +8,9 @@ namespace ouinet::cache {
 class ResourceId {
 public:
     static std::optional<ResourceId> from_url(std::string_view url);
+
     static std::optional<ResourceId> from_hex(std::string_view hex);
+    static std::optional<ResourceId> from_hex(std::wstring_view hex);
 
     ResourceId(ResourceId const&) = default;
     ResourceId(ResourceId &&) = default;
