@@ -67,6 +67,7 @@ class DhtNode {
     public:
     DhtNode( const AsioExecutor&
            , metrics::DhtNode
+           , bool do_doh
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {});
 
@@ -356,6 +357,7 @@ class DhtNode {
     //   https://stackoverflow.com/questions/35525777/use-of-string-view-for-map-lookup
     std::map<std::string, ActiveRequest, std::less<>> _active_requests;
 
+    bool _do_doh;
     std::vector<udp::endpoint> _bootstrap_endpoints;
 
     class Stats;

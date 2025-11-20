@@ -335,6 +335,7 @@ public:
         else {
             bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                       , _metrics.mainline_dht()
+                                                      , _config.is_doh_enabled()
                                                       , _config.repo_root() / "dht"
                                                       , _config.bt_bootstrap_extras());
         }
@@ -536,7 +537,6 @@ private:
                              , Cancel&, YieldContext);
     TcpLookup resolve_tcp_doh( const std::string&, const std::string&
                              , const UserAgentMetaData&
-                             , const doh::Endpoint&
                              , Cancel&, YieldContext);
 
     GenericStream connect_to_origin( const http::request_header<>&
@@ -980,7 +980,6 @@ TcpLookup
 Client::State::resolve_tcp_doh( const std::string& host
                               , const std::string& port
                               , const UserAgentMetaData& meta
-                              , const doh::Endpoint& ep
                               , Cancel& cancel
                               , YieldContext yield)
 {
