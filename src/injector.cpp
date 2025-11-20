@@ -926,6 +926,7 @@ Injector::Injector(
         _dht = std::make_shared<bt::MainlineDht>
             ( ex
             , metrics::Client::noop().mainline_dht()
+            , config.is_doh_enabled()
             , fs::path{}
             , _config.bt_bootstrap_extras());  // default storage dir
     }
