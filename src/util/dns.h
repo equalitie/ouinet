@@ -2,8 +2,17 @@
 
 #include <iterator>
 
+#include "../parse/number.h"
+#include "yield.h"
+
+#include "cxx/dns.h"
+
 namespace ouinet::util
 {
+    using tcp = asio::ip::tcp;
+    using TcpLookup = tcp::resolver::results_type;
+    using Answers = std::vector<asio::ip::address>;
+
     // Transforms addresses to endpoints with the given port.
     template <class Addrs, class Endpoint>
     class AddrsAsEndpoints
@@ -123,5 +132,33 @@ namespace ouinet::util
 
         ec = compute_error_code(ec, cancel);
         return or_throw(yield, ec, std::move(results));
+    }
+
+    inline
+    TcpLookup resolve_tcp_doh( const std::string& host
+                             , const std::string& port
+                             , Cancel& cancel
+                             , YieldContext yield)
+    {
+        using TcpEndpoint = typename TcpLookup::endpoint_type;
+
+        boost::string_view portsv(port);
+        auto portn_o = parse::number<unsigned short>(portsv);
+        if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+
+        // Build and return lookup if `host` is already a network address.
+        {
+            sys::error_code e;
+            auto addr = asio::ip::make_address(host, e);
+            if (!e) return TcpLookup::create(TcpEndpoint{std::move(addr), *portn_o}, host, port);
+        }
+
+        sys::error_code ec;
+        dns::Resolver resolver;
+        auto answers46= yield[ec].tag("resolve host via DoH").run([&] (auto y) {
+            return resolver.resolve(host, y);
+        });
+        AddrsAsEndpoints<Answers, TcpEndpoint> eps{answers46, *portn_o};
+        return TcpLookup::create(eps.begin(), eps.end(), host, port);
     }
 }

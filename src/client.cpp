@@ -536,8 +536,6 @@ private:
     // Resolve host and port strings.
     TcpLookup resolve_tcp_dns( const std::string&, const std::string&
                              , Cancel&, YieldContext);
-    TcpLookup resolve_tcp_doh( const std::string&, const std::string&
-                             , Cancel&, YieldContext);
 
     GenericStream connect_to_origin( const http::request_header<>&
                                    , const UserAgentMetaData&
@@ -936,34 +934,6 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 }
 
 TcpLookup
-Client::State::resolve_tcp_doh( const std::string& host
-                              , const std::string& port
-                              , Cancel& cancel
-                              , YieldContext yield)
-{
-    using TcpEndpoint = typename TcpLookup::endpoint_type;
-
-    boost::string_view portsv(port);
-    auto portn_o = parse::number<unsigned short>(portsv);
-    if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    // Build and return lookup if `host` is already a network address.
-    {
-        sys::error_code e;
-        auto addr = asio::ip::make_address(host, e);
-        if (!e) return TcpLookup::create(TcpEndpoint{move(addr), *portn_o}, host, port);
-    }
-
-    sys::error_code ec;
-    dns::Resolver resolver;
-    auto answers46= yield[ec].tag("resolve host via DoH").run([&] (auto y) {
-        return resolver.resolve(host, y);
-    });
-    util::AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers46, *portn_o};
-    return TcpLookup::create(eps.begin(), eps.end(), host, port);
-}
-
-TcpLookup
 Client::State::resolve_tcp_dns( const std::string& host
                               , const std::string& port
                               , Cancel& cancel
@@ -989,7 +959,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
 
     auto do_doh = _config.is_doh_enabled();
     auto lookup = do_doh
-        ? resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
+        ? util::resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);
