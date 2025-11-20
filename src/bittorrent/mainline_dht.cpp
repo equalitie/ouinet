@@ -5,6 +5,7 @@
 #include "mainline_dht.h"
 #include "udp_multiplexer.h"
 #include "code.h"
+#include "cxx/dns.h"
 #include "debug_ctx.h"
 #include "collect.h"
 #include "proximity_map.h"
@@ -21,6 +22,7 @@
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
+#include "../util/endpoint.h"
 #include "../util/str.h"
 #include "../util/success_condition.h"
 #include "../util/file_io.h"
@@ -1589,16 +1591,35 @@ asio::ip::udp::endpoint resolve(
 ) {
     sys::error_code ec;
 
-    udp::resolver resolver(exec);
+    using UdpLookup = udp::resolver::results_type;
+    using UdpEndpoint = typename UdpLookup::endpoint_type;
+    using Answers = std::vector<asio::ip::address>;
+    UdpLookup results;
+    if (do_doh)
+    {
+        dns::Resolver resolver;
 
-    auto cancelled = cancel_signal.connect([&] {
-        resolver.cancel();
-    });
+        auto answers = resolver.resolve(addr, yield[ec]);
+        if (!ec) {
+            string_view port_strv = port;
+            auto port_int = parse::number<uint16_t>(port_strv).get();
+            util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
+            results = UdpLookup::create(eps.begin(), eps.end(),
+                                        addr, port);
+        }
 
-    udp::resolver::results_type results = resolver.async_resolve(addr, port, yield[ec]);
+        if (cancel_signal) ec = asio::error::operation_aborted;
+    } else
+    {
+        udp::resolver resolver(exec);
 
-    if (cancelled) ec = asio::error::operation_aborted;
+        auto cancelled = cancel_signal.connect([&] {
+            resolver.cancel();
+        });
+        results = resolver.async_resolve(addr, port, yield[ec]);
 
+        if (cancelled) ec = asio::error::operation_aborted;
+    }
     if (ec) {
         return or_throw<udp::endpoint>(yield, ec);
     }
