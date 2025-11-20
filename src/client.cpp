@@ -536,7 +536,6 @@ private:
     TcpLookup resolve_tcp_dns( const std::string&, const std::string&
                              , Cancel&, YieldContext);
     TcpLookup resolve_tcp_doh( const std::string&, const std::string&
-                             , const UserAgentMetaData&
                              , Cancel&, YieldContext);
 
     GenericStream connect_to_origin( const http::request_header<>&
@@ -979,7 +978,6 @@ private:
 TcpLookup
 Client::State::resolve_tcp_doh( const std::string& host
                               , const std::string& port
-                              , const UserAgentMetaData& meta
                               , Cancel& cancel
                               , YieldContext yield)
 {
@@ -1031,7 +1029,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
 
     auto do_doh = _config.is_doh_enabled();
     auto lookup = do_doh
-        ? resolve_tcp_doh(host, port, meta, cancel, yield[ec].tag("resolve_doh"))
+        ? resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);
