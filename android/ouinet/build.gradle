@@ -19,7 +19,7 @@ android {
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_STL='c++_shared'"
+                arguments "-DANDROID_STL=c++_shared"
                 cmakeExtraArguments.each { arg ->
                     arguments.add(arg)
                 }
