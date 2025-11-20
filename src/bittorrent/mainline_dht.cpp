@@ -22,7 +22,7 @@
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
-#include "../util/endpoint.h"
+#include "../util/dns.h"
 #include "../util/str.h"
 #include "../util/success_condition.h"
 #include "../util/file_io.h"

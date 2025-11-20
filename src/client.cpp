@@ -40,6 +40,7 @@
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
+#include "util/dns.h"
 #include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"

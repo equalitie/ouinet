@@ -50,6 +50,7 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
+#include "util/dns.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/yield.h"
