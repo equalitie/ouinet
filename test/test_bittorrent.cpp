@@ -63,8 +63,9 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
 
-    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4());
+    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh);
 
     task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
@@ -105,8 +106,9 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
 
-    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4());
+    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh);
 
     auto mutable_data = []( const string& value
                           , const string& salt
