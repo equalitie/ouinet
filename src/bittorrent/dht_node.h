@@ -357,11 +357,11 @@ class DhtNode {
     //   https://stackoverflow.com/questions/35525777/use-of-string-view-for-map-lookup
     std::map<std::string, ActiveRequest, std::less<>> _active_requests;
 
-    bool _do_doh;
     std::vector<udp::endpoint> _bootstrap_endpoints;
 
     class Stats;
     std::unique_ptr<Stats> _stats;
+    bool _do_doh;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
     metrics::DhtNode _metrics;

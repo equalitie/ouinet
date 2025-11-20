@@ -2564,8 +2564,8 @@ MainlineDht::MainlineDht( const AsioExecutor& exec
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)
-    , _storage_dir(std::move(storage_dir))
     , _do_doh(do_doh)
+    , _storage_dir(std::move(storage_dir))
     , _extra_bs(std::move(extra_bs))
     , _metrics(std::move(metrics))
 {
