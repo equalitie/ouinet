@@ -81,6 +81,7 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 // TODO: Get rid of this
 static bool g_allow_private_targets = false;
+static bool g_do_doh = true;
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -137,6 +138,7 @@ void handle_no_proxy( GenericStream& con
 TcpLookup
 ouinet::resolve_target(const http::request_header<>& req
                       , bool allow_private_targets
+                      , bool do_doh
                       , AsioExecutor exec
                       , Cancel& cancel
                       , YieldContext yield)
@@ -203,7 +205,11 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target(req, g_allow_private_targets, exec, cancel, yield[ec].tag("resolve"));
+    TcpLookup lookup = resolve_target( req
+                                     , g_allow_private_targets
+                                     , g_do_doh
+                                     , exec
+                                     , cancel, yield[ec].tag("resolve"));
 
     if (ec) {
         sys::error_code he_ec;
@@ -309,7 +315,11 @@ class InjectorCacheControl {
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target(rq, g_allow_private_targets, executor, cancel, yield[ec]);
+        TcpLookup lookup = resolve_target( rq
+                                         , g_allow_private_targets
+                                         , g_do_doh
+                                         , executor
+                                         , cancel, yield[ec]);
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -859,8 +869,10 @@ Injector::Injector(
         LOG_INFO(log_path, "Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
-    if (!config.is_doh_enabled())
-        LOG_INFO("DNS over HTTPS disabled.");
+    if (!config.is_doh_enabled()) {
+        LOG_INFO("DNS over HTTPS is disabled.");
+        g_do_doh = false;
+    }
 
     auto proxy_server = std::make_unique<OuiServiceServer>(ex);
 
