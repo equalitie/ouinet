@@ -2,6 +2,13 @@
 
 namespace ouinet::util {
 
+struct LogPath::Node {
+    std::string _tag;
+    std::shared_ptr<Node> _parent;
+
+    Node(std::string tag, std::shared_ptr<Node> parent);
+};
+
 LogPath::Node::Node(std::string tag, std::shared_ptr<Node> parent) :
     _tag(std::move(tag)),
     _parent(std::move(parent))
