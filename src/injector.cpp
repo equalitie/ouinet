@@ -158,11 +158,11 @@ ouinet::resolve_target(const http::request_header<>& req
     if (!local && (!priv || allow_private_targets))
     {
         lookup = do_doh
-               ? util::tcp_async_resolve( host, port
+               ? util::resolve_tcp_doh( host, port, cancel, yield )
+               : util::resolve_tcp_async( host, port
                                         , exec
                                         , cancel
-                                        , static_cast<asio::yield_context>(yield[ec]))
-               : TcpLookup{}; // TODO: invoke tcp_doh_resolver
+                                        , static_cast<asio::yield_context>(yield[ec]));
     }
 
     if (ec) return or_throw<TcpLookup>(yield, ec);
