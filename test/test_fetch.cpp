@@ -141,6 +141,18 @@ Response fetch_from_origin(asio::yield_context yield) {
     return res;
 }
 
+void check_exception(std::exception_ptr e) {
+    try {
+        if (e) {
+            std::rethrow_exception(e);
+        }
+    } catch (const std::exception& e) {
+        BOOST_FAIL("Test failed with exception: " << e.what());
+    } catch (...) {
+        BOOST_FAIL("Test failed with unknown exception");
+    }
+}
+
 // An integration test with three identities: the 'injector', a 'seeder' client
 // and a 'leecher' client.
 //
@@ -233,9 +245,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         seeder.stop();
         leecher.stop();
     },
-    [] (std::exception_ptr e) {
-        if (e) std::rethrow_exception(e);
-    });
+    check_exception);
 
     ctx.run();
 }
@@ -315,9 +325,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
         injector.stop();
     },
-    [] (std::exception_ptr e) {
-        if (e) std::rethrow_exception(e);
-    });
+    check_exception);
 
     ctx.run();
 }
@@ -379,9 +387,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
         injector.stop();
         client.stop();
     },
-    [] (std::exception_ptr e) {
-        if (e) std::rethrow_exception(e);
-    });
+    check_exception);
 
     ctx.run();
 }
