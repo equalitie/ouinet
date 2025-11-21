@@ -119,7 +119,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_allow_private,
     Cancel cancel;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
-        bool allow_private_targets = false;
+        bool allow_private_targets = true;
         bool do_doh = true;
         Request req;
         req.set(http::field::host, hostname);
