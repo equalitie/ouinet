@@ -162,8 +162,8 @@ DhtGroupsImpl::load_group( const fs::path dir
     Group::second_type items;
 
     for (auto f : fs::directory_iterator(items_dir)) {
-        auto path = f.path().filename().c_str();
-        auto resource_id = cache::ResourceId::from_hex(path);
+        auto path = f.path().filename();
+        auto resource_id = cache::ResourceId::from_hex(path.c_str());
         if (!resource_id) {
             _ERROR("Group item file name is not a valid ResourceId: ", items_dir/path);
             continue;
