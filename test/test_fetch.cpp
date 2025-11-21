@@ -167,31 +167,29 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
     const std::string injector_credentials = "username:password";
 
-    using S = std::string;
-
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     Injector injector(make_config<InjectorConfig>({
-            S("./no_injector_exec"),
-            S("--repo"), root.make_subdir("injector").string(),
-            S("--credentials"), injector_credentials,
+            "./no_injector_exec"s,
+            "--repo"s, root.make_subdir("injector").string(),
+            "--credentials"s, injector_credentials,
         }),
         ctx,
         util::LogPath("injector"),
         std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
     Client seeder(ctx, make_config<ClientConfig>({
-            S("./no_client_exec"),
-            S("--log-level=DEBUG"),
-            S("--repo"), root.make_subdir("seeder").string(),
-            S("--injector-credentials"), injector_credentials,
-            S("--cache-type=bep5-http"),
-            S("--cache-http-public-key"), injector.cache_http_public_key(),
-            S("--injector-tls-cert-file"), injector.tls_cert_file().string(),
-            S("--disable-origin-access"),
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("seeder").string(),
+            "--injector-credentials"s, injector_credentials,
+            "--cache-type=bep5-http"s,
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+            "--disable-origin-access"s,
             // Bind to random ports to avoid clashes
-            S("--listen-on-tcp=127.0.0.1:0"),
-            S("--front-end-ep=127.0.0.1:0"),
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
         }),
         util::LogPath("seeder"),
         [&ctx, swarms] () {
@@ -199,17 +197,17 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         });
 
     Client leecher(ctx, make_config<ClientConfig>({
-            S("./no_client_exec"),
-            S("--log-level=DEBUG"),
-            S("--repo"), root.make_subdir("leecher").string(),
-            S("--injector-credentials"), injector_credentials,
-            S("--cache-type=bep5-http"),
-            S("--cache-http-public-key"), injector.cache_http_public_key(),
-            S("--injector-tls-cert-file"), injector.tls_cert_file().string(),
-            S("--disable-origin-access"),
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("leecher").string(),
+            "--injector-credentials"s, injector_credentials,
+            "--cache-type=bep5-http"s,
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+            "--disable-origin-access"s,
             // Bind to random ports to avoid clashes
-            S("--listen-on-tcp=127.0.0.1:0"),
-            S("--front-end-ep=127.0.0.1:0"),
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
         }),
         util::LogPath("leecher"),
         [&ctx, swarms] () {
@@ -258,8 +256,6 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
     TestDir root;
 
-    using S = std::string;
-
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     tcp::endpoint injector_ep{
@@ -268,10 +264,10 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
     };
 
     Injector injector(make_config<InjectorConfig>({
-            S("./no_injector_exec"),
-            S("--repo"), root.make_subdir("injector").string(),
+            "./no_injector_exec"s,
+            "--repo"s, root.make_subdir("injector").string(),
             // TODO: Listen on a random port
-            S("--listen-on-tcp"), util::str(injector_ep),
+            "--listen-on-tcp"s, util::str(injector_ep),
         }),
         ctx,
         util::LogPath("injector"),
@@ -337,31 +333,29 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
 
     const std::string injector_credentials = "username:password";
 
-    using S = std::string;
-
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     Injector injector(make_config<InjectorConfig>({
-            S("./no_injector_exec"),
-            S("--repo"), root.make_subdir("injector").string(),
-            S("--credentials"), injector_credentials,
+            "./no_injector_exec"s,
+            "--repo"s, root.make_subdir("injector").string(),
+            "--credentials"s, injector_credentials,
         }),
         ctx,
         util::LogPath("injector"),
         std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
     Client client(ctx, make_config<ClientConfig>({
-            S("./no_client_exec"),
-            S("--log-level=DEBUG"),
-            S("--repo"), root.make_subdir("client").string(),
-            S("--injector-credentials"), injector_credentials,
-            S("--cache-type=bep5-http"),
-            S("--cache-http-public-key"), injector.cache_http_public_key(),
-            S("--injector-tls-cert-file"), injector.tls_cert_file().string(),
-            S("--disable-origin-access"),
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("client").string(),
+            "--injector-credentials"s, injector_credentials,
+            "--cache-type=bep5-http"s,
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+            "--disable-origin-access"s,
             // Bind to random ports to avoid clashes
-            S("--listen-on-tcp=127.0.0.1:0"),
-            S("--front-end-ep=127.0.0.1:0"),
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
         }),
         util::LogPath("client"),
         [&ctx, swarms] () {
