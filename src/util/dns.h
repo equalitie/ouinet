@@ -66,7 +66,7 @@ namespace ouinet::util
     };
 
     inline
-    auto tcp_async_resolve( const std::string& host
+    auto resolve_tcp_async( const std::string& host
                           , const std::string& port
                           , AsioExecutor exec
                           , Cancel& cancel

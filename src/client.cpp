@@ -938,7 +938,7 @@ Client::State::resolve_tcp_dns( const std::string& host
                               , Cancel& cancel
                               , YieldContext yield)
 {
-    return util::tcp_async_resolve( host, port
+    return util::resolve_tcp_async( host, port
                                   , _ctx.get_executor()
                                   , cancel
                                   , static_cast<asio::yield_context>(yield));
