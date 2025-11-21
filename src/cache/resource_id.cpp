@@ -6,13 +6,31 @@
 
 namespace ouinet::cache {
 
-std::optional<ResourceId> ResourceId::from_url(std::string_view url_str) {
+// TODO: This is arbitrary, previous implementations used SHA1(url) as resource ID
+// and here it's kept for compatibility, probably nothing will break if we used
+// a different size. SHA1 lenght is 20 bytes and an example Scrypt from OpenSSL uses
+// 64 bytes. 
+static constexpr size_t BYTE_SIZE = util::SHA1::size();
+
+// Took these values from https://docs.openssl.org/1.1.1/man7/scrypt/
+// and increased the N.
+// TODO: Check if they are reasonable
+static constexpr uint64_t SCRYPT_N = 1 << 14;
+static constexpr uint64_t SCRYPT_r = 8;
+static constexpr uint64_t SCRYPT_p = 1;
+
+std::optional<ResourceId> ResourceId::from_url(std::string_view url_str, asio::yield_context yield) {
     auto url = util::Url::from(util::to_boost(url_str));
     if (!url) return {};
-    auto key = util::canonical_url(std::move(*url));
-    if (key.empty()) return {};
-    auto key_digest = util::sha1_digest(key);
-    auto hex_digest = util::bytes::to_hex(key_digest);
+    std::string cache_url = util::canonical_url(std::move(*url));
+    if (cache_url.empty()) return {};
+    util::ScryptParams params{
+        SCRYPT_N,
+        SCRYPT_r,
+        SCRYPT_p
+    };
+    auto key = util::ScryptWorker::global_worker.derive<BYTE_SIZE>(cache_url, "ouinet-resource-id", params, yield);
+    auto hex_digest = util::bytes::to_hex(key);
     return ResourceId(std::move(hex_digest));
 }
 
@@ -23,7 +41,7 @@ inline bool is_hex(CharT c) {
 
 template<class CharT>
 inline std::optional<std::string> sanitize_hex(std::basic_string_view<CharT> hex) {
-    auto hex_size = util::SHA1::size() * 2;
+    auto hex_size = BYTE_SIZE * 2;
 
     if (hex.size() != hex_size) {
         return {};

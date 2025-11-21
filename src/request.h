@@ -107,7 +107,7 @@ public:
     // TODO: This is only used in tests now, use it also when constructing the message.
     static const uint8_t HTTP_VERSION = 11;
 
-    static boost::optional<CacheRequest> from(http::request_header<>);
+    static boost::optional<CacheRequest> from(http::request_header<>, asio::yield_context);
 
     const http::request_header<>& header() const {
         return _header;
@@ -120,6 +120,10 @@ public:
     void set_if_none_match(std::string_view if_none_match);
 
     const std::string& dht_group() const { return _dht_group; }
+
+    const cache::ResourceId& resource_id() const {
+        return _resource_id;
+    }
 
 private:
     CacheRequest(http::request_header<> header, cache::ResourceId resource_id, std::string dht_group) :

@@ -1784,7 +1784,9 @@ public:
 
         _YDEBUG(yield, "Start");
 
-        const auto rq = CacheRequest::from(tnx.request());
+        const auto rq = CacheRequest::from(tnx.request(), yield.native()[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
 
         if (!rq) {
             _YERROR(yield, "Invalid request");
@@ -1835,16 +1837,12 @@ public:
                 lock = wc.lock(),
                 log_path = yield.log_path()
             ] (asio::yield_context yield) {
-                auto target = rq->header().target();
-                auto key = cache::ResourceId::from_url(target);
-                if (!key) {
-                    LOG_WARN(log_path, " Injector response target URL can't be used as ResourceId: \"", target, "\"");
-                    assert(false);
-                    return;
-                }
+                //auto target = rq->header().target();
+                //auto key = cache::ResourceId::from_url(target, yield);
+                auto key = rq->resource_id();
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;
-                cache->store(*key, rq->dht_group(), rr, cancel, yield);
+                cache->store(key, rq->dht_group(), rr, cancel, yield);
                 if (ec && ec != asio::error::operation_aborted)
                     LOG_ERROR(log_path, " Failed to write response to cache; ec=", ec);
             }));

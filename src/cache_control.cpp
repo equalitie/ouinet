@@ -529,6 +529,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
     boost::optional<AsyncJob<CacheEntry>::Connection> fetch_stored_con;
 
     if (fs.fetch_fresh) {
+        fs.fetch_fresh->was_started();
         assert(fs.fetch_fresh->was_started());
 
         fetch_fresh_con = fs.fetch_fresh->on_finish_sig([&] {
