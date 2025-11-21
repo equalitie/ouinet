@@ -158,6 +158,9 @@ namespace ouinet::util
         auto answers46= yield[ec].tag("resolve host via DoH").run([&] (auto y) {
             return resolver.resolve(host, y);
         });
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw<TcpLookup>(yield, ec);
+
         AddrsAsEndpoints<Answers, TcpEndpoint> eps{answers46, *portn_o};
         return TcpLookup::create(eps.begin(), eps.end(), host, port);
     }
