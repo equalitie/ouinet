@@ -64,7 +64,6 @@ public class Config implements Parcelable {
         private String requestBodyLimit;
         private String maxCachedAge;
         private String localDomain;
-        private String originDohBase;
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
         private boolean disableInjectorAccess = false;
@@ -183,10 +182,6 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setLocalDomain(String localDomain){
             this.localDomain = localDomain;
-            return this;
-        }
-        public ConfigBuilder setOriginDohBase(String originDohBase){
-            this.originDohBase = originDohBase;
             return this;
         }
         public ConfigBuilder setDisableOriginAccess(boolean disableOriginAccess){
@@ -413,7 +408,6 @@ public class Config implements Parcelable {
                     requestBodyLimit,
                     maxCachedAge,
                     localDomain,
-                    originDohBase,
                     disableOriginAccess,
                     disableProxyAccess,
                     disableInjectorAccess,
@@ -451,7 +445,6 @@ public class Config implements Parcelable {
     private String requestBodyLimit;
     private String maxCachedAge;
     private String localDomain;
-    private String originDohBase;
     private boolean disableOriginAccess;
     private boolean disableProxyAccess;
     private boolean disableInjectorAccess;
@@ -487,7 +480,6 @@ public class Config implements Parcelable {
                   String requestBodyLimit,
                   String maxCachedAge,
                   String localDomain,
-                  String originDohBase,
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
                   boolean disableInjectorAccess,
@@ -522,7 +514,6 @@ public class Config implements Parcelable {
         this.requestBodyLimit = requestBodyLimit;
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
-        this.originDohBase = originDohBase;
         this.disableOriginAccess = disableOriginAccess;
         this.disableProxyAccess = disableProxyAccess;
         this.disableInjectorAccess = disableInjectorAccess;
@@ -604,9 +595,6 @@ public class Config implements Parcelable {
     public String getLocalDomain() {
         return localDomain;
     }
-    public String getOriginDohBase() {
-        return originDohBase;
-    }
     public boolean getDisableOriginAccess() {
         return disableOriginAccess;
     }
@@ -682,7 +670,6 @@ public class Config implements Parcelable {
         out.writeString(requestBodyLimit);
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
-        out.writeString(originDohBase);
         out.writeInt(disableOriginAccess ? 1 : 0);
         out.writeInt(disableProxyAccess ? 1 : 0);
         out.writeInt(disableInjectorAccess ? 1 : 0);
@@ -728,7 +715,6 @@ public class Config implements Parcelable {
         requestBodyLimit = in.readString();
         maxCachedAge = in.readString();
         localDomain = in.readString();
-        originDohBase = in.readString();
 
         disableOriginAccess   = in.readInt() != 0;
         disableProxyAccess    = in.readInt() != 0;

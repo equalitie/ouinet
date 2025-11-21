@@ -24,7 +24,6 @@
 #include "namespaces.h"
 #include "origin_pools.h"
 #include "cxx/dns.h"
-#include "doh.h"
 #include "http_util.h"
 #include "client_front_end.h"
 #include "connect_to_host.h"

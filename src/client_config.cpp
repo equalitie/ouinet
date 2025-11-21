@@ -301,14 +301,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _disable_doh = true;
     }
 
-    if (auto opt = as_optional<string>(vm, "origin-doh-base")) {
-        auto doh_base = *opt;
-        _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
-        if (!_origin_doh_endpoint)
-            throw error(util::str(
-                    "Invalid URL for '--origin-doh-base': ", doh_base));
-    }
-
     if (vm["allow-private-targets"].as<bool>()) {
         _allow_private_targets = true;
     }

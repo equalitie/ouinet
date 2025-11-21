@@ -46,7 +46,6 @@ public class ConfigTest {
     private static final boolean DISABLE_BRIDGE_ANNOUNCEMENT = true;
     private static final String MAX_CACHED_AGE = "120";
     private static final String LOCAL_DOMAIN = "local.domain";
-    private static final String ORIGIN_DOH_BASE = "0.0.0.0:8079";
 
     static {
         BT_BOOTSTRAP_EXTRAS.add("192.0.2.1");
@@ -105,7 +104,6 @@ public class ConfigTest {
                 .setDisableBridgeAnnouncement(DISABLE_BRIDGE_ANNOUNCEMENT)
                 .setMaxCachedAge(MAX_CACHED_AGE)
                 .setLocalDomain(LOCAL_DOMAIN)
-                .setOriginDohBase(ORIGIN_DOH_BASE)
                 .build();
 
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
@@ -121,7 +119,6 @@ public class ConfigTest {
         assertThat(config.getFrontEndEp(), is(FRONT_END_EP));
         assertThat(config.getMaxCachedAge(), is(MAX_CACHED_AGE));
         assertThat(config.getLocalDomain(), is(LOCAL_DOMAIN));
-        assertThat(config.getOriginDohBase(), is(ORIGIN_DOH_BASE));
 
         assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));
         assertThat(contentOf(new File(config.getTlsCaCertStorePath())), is(TLS_CA_CERT));
