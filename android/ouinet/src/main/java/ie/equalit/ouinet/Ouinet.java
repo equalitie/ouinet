@@ -131,6 +131,7 @@ public class Ouinet {
         maybeAdd(args, "--udp-mux-port",           config.getUdpMuxPort());
         maybeAdd(args, "--max-cached-age",         config.getMaxCachedAge());
         maybeAdd(args, "--local-domain",           config.getLocalDomain());
+        maybeAddBool(args, "--disable-doh",        config.getDisableDoH());
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
