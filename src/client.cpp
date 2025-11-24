@@ -1784,7 +1784,7 @@ public:
 
         _YDEBUG(yield, "Start");
 
-        const auto rq = CacheRequest::from(tnx.request(), yield.native()[ec]);
+        const auto rq = CacheRequest::from(tnx.request(), yield[ec]);
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw(yield, ec);
 
@@ -1837,8 +1837,6 @@ public:
                 lock = wc.lock(),
                 log_path = yield.log_path()
             ] (asio::yield_context yield) {
-                //auto target = rq->header().target();
-                //auto key = cache::ResourceId::from_url(target, yield);
                 auto key = rq->resource_id();
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;

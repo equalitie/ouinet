@@ -41,6 +41,9 @@ template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
             }
+            catch (...) {
+                BOOST_ERROR("Test ended with unknown exception");
+            }
         });
     ctx.run();
 }
@@ -157,7 +160,7 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
             Request normal_request{http::verb::get, "http://foo", 11};
             normal_request.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_request, yield.native()).value();
+            auto req = CacheRequest::from(normal_request, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -181,8 +184,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     unsigned origin_check = 0;
 
     run_spawned(ctx, [&](auto yield) {
-        auto old_resource_id = cache::ResourceId::from_url("http://old", yield.native()).value();
-        auto new_resource_id = cache::ResourceId::from_url("http://new", yield.native()).value();
+        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
+        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
 
         cc.fetch_stored = [&](auto rq, auto&, auto y) {
             cache_check++;
@@ -210,7 +213,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
             Request normal_req{http::verb::get, "http://old", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req, yield.native()).value();
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -221,7 +224,7 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
             Request normal_req{http::verb::get, "http://new", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req, yield.native()).value();
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -245,8 +248,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     unsigned origin_check = 0;
 
     run_spawned(ctx, [&](auto yield) {
-        auto old_resource_id = cache::ResourceId::from_url("http://old", yield.native()).value();
-        auto new_resource_id = cache::ResourceId::from_url("http://new", yield.native()).value();
+        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
+        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
 
         cc.fetch_stored = [&](auto rq, auto&, auto y) {
             cache_check++;
@@ -278,16 +281,16 @@ BOOST_AUTO_TEST_CASE(test_maxage)
             Request normal_req{http::verb::get, "http://old", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req, yield.native()).value();
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
-            cc.fetch(req, fresh_ec, cache_ec, cancel, yield.native());
+            cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
         }
         {
             Request normal_req{http::verb::get, "http://new", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req, yield.native()).value();
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -318,8 +321,8 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
     };
 
     run_spawned(ctx, [&](auto yield) {
-        auto old_resource_id = cache::ResourceId::from_url("http://old", yield.native()).value();
-        auto new_resource_id = cache::ResourceId::from_url("http://new", yield.native()).value();
+        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
+        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
 
         cc.fetch_stored = [&](auto rq, auto&, auto y) {
             cache_check++;
@@ -352,7 +355,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
             Request normal_req{http::verb::get, "http://old", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req, yield.native()).value();
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -361,7 +364,7 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
             Request normal_req{http::verb::get, "http://new", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req, yield.native()).value();
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -398,7 +401,7 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
             Request normal_req{http::verb::get, "http://foo", 11};
             normal_req.set(http::field::if_none_match, "abc");
             normal_req.set(http_::request_group_hdr, dht_group);
-            auto req = CacheRequest::from(normal_req, yield.native()).value();
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -440,7 +443,7 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
             normal_rq.set(http::field::if_none_match, "origin-etag");
             normal_rq.set(http_::request_group_hdr, dht_group);
 
-            auto rq = CacheRequest::from(normal_rq, yield.native()).value();
+            auto rq = CacheRequest::from(normal_rq, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
             cc.fetch(rq, fresh_ec, cache_ec, cancel, yield);
@@ -513,7 +516,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
             {
                 Request normal_rq{http::verb::get, "http://mypage", 11};
                 normal_rq.set(http_::request_group_hdr, dht_group);
-                auto rq = CacheRequest::from(normal_rq, yield.native()).value();
+                auto rq = CacheRequest::from(normal_rq, yield).value();
 
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
@@ -529,7 +532,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
                 Request normal_rq{http::verb::get, "http://mypage", 11};
                 normal_rq.set(http::field::if_none_match, "123");
                 normal_rq.set(http_::request_group_hdr, dht_group);
-                auto rq  = CacheRequest::from(normal_rq, yield.native()).value();
+                auto rq  = CacheRequest::from(normal_rq, yield).value();
 
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
@@ -544,7 +547,7 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
                 Request normal_rq{http::verb::get, "http://mypage", 11};
                 normal_rq.set(http::field::if_none_match, "abc");
                 normal_rq.set(http_::request_group_hdr, dht_group);
-                auto rq  = CacheRequest::from(normal_rq, yield.native()).value();
+                auto rq  = CacheRequest::from(normal_rq, yield).value();
 
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
@@ -596,7 +599,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 // since the cached version is fresh enough.
                 Request normal_req{http::verb::get, "http://foo", 11};
                 normal_req.set(http_::request_group_hdr, dht_group);
-                auto req = CacheRequest::from(normal_req, yield.native()).value();
+                auto req = CacheRequest::from(normal_req, yield).value();
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
                 auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
@@ -611,7 +614,7 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 normal_req.set(http::field::cache_control, "no-cache");
                 normal_req.set(http_::request_group_hdr, dht_group);
 
-                auto req = CacheRequest::from(normal_req, yield.native()).value();
+                auto req = CacheRequest::from(normal_req, yield).value();
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
                 auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);

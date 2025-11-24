@@ -2,14 +2,14 @@
 
 #include <string>
 #include <optional>
-#include <boost/asio/spawn.hpp>
+#include "util/yield.h"
 #include "util/scrypt.h"
 
 namespace ouinet::cache {
 
 class ResourceId {
 public:
-    static std::optional<ResourceId> from_url(std::string_view url, asio::yield_context);
+    static std::optional<ResourceId> from_url(std::string_view url, YieldContext);
 
     static std::optional<ResourceId> from_hex(std::string_view hex);
     static std::optional<ResourceId> from_hex(std::wstring_view hex);

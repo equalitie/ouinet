@@ -14,7 +14,8 @@ void scrypt_derive(
         std::string_view salt,
         uint8_t* out_data,
         size_t out_size,
-        ScryptParams params)
+        ScryptParams params,
+        sys::error_code& ec_out)
 {
     EVP_PKEY_CTX* pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_SCRYPT, NULL);
 
@@ -23,25 +24,31 @@ void scrypt_derive(
     });
 
     if (EVP_PKEY_derive_init(pctx) <= 0) {
-        throw std::runtime_error("Failure in Scrypt: EVP_PKEY_derive_init");
+        ec_out = make_error_code(ScryptError::init);
+        return;
     }
     if (EVP_PKEY_CTX_set_scrypt_N(pctx, params.N) <= 0) {
-        throw std::runtime_error("Failure in Scrypt: EVP_PKEY_CTX_set_scrypt_N");
+        ec_out = make_error_code(ScryptError::set_N);
+        return;
     }
     if (EVP_PKEY_CTX_set_scrypt_r(pctx, params.r) <= 0) {
-        throw std::runtime_error("Failure in Scrypt: EVP_PKEY_CTX_set_scrypt_r");
+        ec_out = make_error_code(ScryptError::set_r);
+        return;
     }
     if (EVP_PKEY_CTX_set_scrypt_p(pctx, params.p) <= 0) {
-        throw std::runtime_error("Failure in Scrypt: EVP_PKEY_CTX_set_scrypt_p");
+        ec_out = make_error_code(ScryptError::set_p);
+        return;
     }
     if (EVP_PKEY_CTX_set1_pbe_pass(pctx, password.data(), password.size()) <= 0) {
-        throw std::runtime_error("Failure in Scrypt: EVP_PKEY_CTX_set1_pbe_pass");
+        ec_out = make_error_code(ScryptError::set_pass);
+        return;
     }
     if (EVP_PKEY_CTX_set1_scrypt_salt(pctx, (unsigned char*) salt.data(), salt.size()) <= 0) {
-        throw std::runtime_error("Failure in Scrypt: EVP_PKEY_CTX_set1_scrypt_salt");
+        ec_out = make_error_code(ScryptError::set_salt);
+        return;
     }
     if (EVP_PKEY_derive(pctx, out_data, &out_size) <= 0) {
-        throw std::runtime_error("Failure in Scrypt: EVP_PKEY_derive");
+        ec_out = make_error_code(ScryptError::derive);
     }
 }
 
@@ -84,9 +91,11 @@ void ScryptWorker::derive(
         ScryptParams params,
         uint8_t* output_data,
         size_t output_size,
-        asio::yield_context yield)
+        YieldContext yield)
 {
-    async_initiate<asio::yield_context, void(std::exception_ptr)> (
+    asio::yield_context native_yield = yield.native();
+
+    async_initiate<asio::yield_context, void(sys::error_code)> (
         [
             impl = _impl,
             password,
@@ -94,7 +103,7 @@ void ScryptWorker::derive(
             params,
             output_data,
             output_size,
-            exec = yield.get_executor()
+            work = asio::make_work_guard(yield.get_executor())
         ] (auto completion_handler) mutable {
             asio::post(impl->thread_exec,
             [ password,
@@ -103,19 +112,49 @@ void ScryptWorker::derive(
               output_data,
               output_size,
               handler = std::move(completion_handler),
-              exec = std::move(exec)
+              work = std::move(work)
             ] () mutable {
-                std::exception_ptr e;
-                try {
-                    scrypt_derive(password, salt, output_data, output_size, params);
-                } catch (...) {
-                    e = std::current_exception();
-                }
-                asio::post(exec, [h = std::move(handler), e] () mutable { h(e); });
+                sys::error_code ec;
+                scrypt_derive(password, salt, output_data, output_size, params, ec);
+                asio::post(work.get_executor(), [h = std::move(handler), ec] () mutable { h(ec); });
             });
         },
-        yield
+        native_yield
     );
+}
+
+class ScryptErrorCategory: public sys::error_category {
+public:
+    const char * name() const noexcept {
+        return "Scrypt (KDF) error";
+    }
+
+    std::string message( int ev ) const {
+        char buffer[ 64 ];
+        return this->message( ev, buffer, sizeof(buffer));
+    }
+
+    char const * message( int ev, char * buffer, std::size_t len ) const noexcept {
+        switch(static_cast<ScryptError>(ev))
+        {
+            case ScryptError::success:  return "no error";
+            case ScryptError::init:     return "init";
+            case ScryptError::set_N:    return "set_N";
+            case ScryptError::set_r:    return "set_r";
+            case ScryptError::set_p:    return "set_p";
+            case ScryptError::set_pass: return "set_pass";
+            case ScryptError::set_salt: return "set_salt";
+            case ScryptError::derive:   return "derive";
+        }
+
+        std::snprintf( buffer, len, "Unknown error %d", ev );
+        return buffer;
+    }
+};
+
+sys::error_category const& scrypt_error_category() {
+    static const ScryptErrorCategory instance;
+    return instance;
 }
 
 } // namespace ouinet::util

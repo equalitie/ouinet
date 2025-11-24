@@ -107,7 +107,7 @@ public:
     // TODO: This is only used in tests now, use it also when constructing the message.
     static const uint8_t HTTP_VERSION = 11;
 
-    static boost::optional<CacheRequest> from(http::request_header<>, asio::yield_context);
+    static boost::optional<CacheRequest> from(http::request_header<>, YieldContext);
 
     const http::request_header<>& header() const {
         return _header;

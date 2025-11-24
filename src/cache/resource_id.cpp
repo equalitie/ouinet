@@ -19,7 +19,7 @@ static constexpr uint64_t SCRYPT_N = 1 << 14;
 static constexpr uint64_t SCRYPT_r = 8;
 static constexpr uint64_t SCRYPT_p = 1;
 
-std::optional<ResourceId> ResourceId::from_url(std::string_view url_str, asio::yield_context yield) {
+std::optional<ResourceId> ResourceId::from_url(std::string_view url_str, YieldContext yield) {
     auto url = util::Url::from(util::to_boost(url_str));
     if (!url) return {};
     std::string cache_url = util::canonical_url(std::move(*url));

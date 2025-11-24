@@ -51,7 +51,7 @@ static bool is_private(http::request_header<> const& hdr) {
     return ret;
 }
 
-boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr, asio::yield_context yield) {
+boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr, YieldContext yield) {
     auto dht_group = extract_dht_group(orig_hdr);
     if (!dht_group) return {};
 
