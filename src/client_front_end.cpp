@@ -734,7 +734,8 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
-        {"metrics_enabled", metrics.is_enabled()}
+        {"metrics_enabled", metrics.is_enabled()},
+        {"doh_enabled", config.is_doh_enabled()}
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
