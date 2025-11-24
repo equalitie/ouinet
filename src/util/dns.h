@@ -156,7 +156,7 @@ namespace ouinet::util
         sys::error_code ec;
         dns::Resolver resolver;
         auto answers46= yield[ec].tag("resolve host via DoH").run([&] (auto y) {
-            return resolver.resolve(host, y);
+            return resolver.resolve(host, y[ec]);
         });
         if (cancel) ec = asio::error::operation_aborted;
         if (ec) return or_throw<TcpLookup>(yield, ec);
