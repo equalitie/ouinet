@@ -202,7 +202,7 @@ struct Client::Impl {
         if (req.method() == http::verb::propfind) {
             _YDEBUG(yield, "Serving propfind for ", *resource_id);
             auto hl = _http_store->load_hash_list
-                (*resource_id, cancel, static_cast<asio::yield_context>(yield[ec]));
+                (*resource_id, cancel, yield[ec].native());
 
             _YDEBUG(yield, "Load; ec=", ec);
             if (ec) {
@@ -346,7 +346,7 @@ struct Client::Impl {
                           , YieldContext yield)
     {
         auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
-        util::http_reply(con, res, static_cast<asio::yield_context>(yield));
+        util::http_reply(con, res, yield.native());
     }
 
     void handle_bad_request( GenericStream& con

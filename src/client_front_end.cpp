@@ -502,8 +502,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
         sys::error_code ec;
-        auto yield_ = static_cast<asio::yield_context>(yield);
-        cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
+        auto yield_ = yield.native();
+        cache_client->local_purge(cancel, yield_[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
         if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
         query_handled = true;
@@ -656,7 +656,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
               % max_age.total_seconds() % past_as_string(max_age));
 
         sys::error_code ec;
-        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto yield_ = yield.native();
         auto local_size = cache_client->local_size(cancel, yield_[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
@@ -757,7 +757,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
 
     if (cache_client) {
         sys::error_code ec;
-        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto yield_ = yield.native();
         auto sz = cache_client->local_size(cancel, yield_[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);

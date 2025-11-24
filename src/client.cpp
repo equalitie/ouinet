@@ -613,7 +613,7 @@ void handle_http_error( GenericStream& con
     _YDEBUG(yield, "=== Sending back response ===");
     _YDEBUG(yield, res);
 
-    util::http_reply(con, res, static_cast<asio::yield_context>(yield));
+    util::http_reply(con, res, yield.native());
 }
 
 template<class ReqBody>
@@ -814,7 +814,7 @@ Client::State::fetch_via_self( Rq request
         // TODO: Keep lookup object or allow connecting to endpoint.
         auto epl = TcpLookup::create(_config.local_endpoint(), "dummy", "dummy");
         auto c = connect_to_host( epl, _ctx.get_executor()
-                                , cancel, static_cast<asio::yield_context>(yield[ec]));
+                                , cancel, yield[ec].native());
 
         assert(!cancel || ec == asio::error::operation_aborted);
 
@@ -984,7 +984,7 @@ Client::State::resolve_tcp_dns( const std::string& host
     return util::tcp_async_resolve( host, port
                                   , _ctx.get_executor()
                                   , cancel
-                                  , static_cast<asio::yield_context>(yield));
+                                  , yield.native());
 }
 
 GenericStream
@@ -1009,7 +1009,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host( lookup, _ctx.get_executor()
-                               , cancel, static_cast<asio::yield_context>(yield[ec]));
+                               , cancel, yield[ec].native());
 
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
@@ -1020,7 +1020,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
                                             , tls_ctx
                                             , host
                                             , cancel
-                                            , static_cast<asio::yield_context>(yield[ec]));
+                                            , yield[ec].native());
 
         return_or_throw_on_error(yield, cancel, ec, GenericStream());
     }
@@ -1695,7 +1695,7 @@ public:
         sys::error_code ec;
         Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield[ec]);
         ec = compute_error_code(ec, cancel);
-        if (!ec) tnx.write_to_user_agent(res, cancel, static_cast<asio::yield_context>(yield[ec]));
+        if (!ec) tnx.write_to_user_agent(res, cancel, yield[ec].native());
         return or_throw(yield, ec);
     }
 
@@ -1724,7 +1724,7 @@ public:
 
         return_or_throw_on_error(yield, cancel, ec);
 
-        tnx.write_to_user_agent(session, cancel, static_cast<asio::yield_context>(yield[ec]));
+        tnx.write_to_user_agent(session, cancel, yield[ec].native());
 
         _YDEBUG(yield, "Flush; ec=", ec);
 
@@ -1768,7 +1768,7 @@ public:
 
         return_or_throw_on_error(yield, cancel, ec);
 
-        tnx.write_to_user_agent(session, cancel, static_cast<asio::yield_context>(yield[ec]));
+        tnx.write_to_user_agent(session, cancel, yield[ec].native());
 
         _YDEBUG(yield, "Flush; ec=", ec);
 
@@ -1808,7 +1808,7 @@ public:
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
             _YERROR(yield, "Error from injector: ", injector_error);
-            tnx.write_to_user_agent(session, cancel, static_cast<asio::yield_context>(yield[ec]));
+            tnx.write_to_user_agent(session, cancel, yield[ec].native());
             return or_throw(yield, ec);
         }
 
@@ -2014,12 +2014,12 @@ public:
                     ? n * chrono::seconds(1)
                     : n * chrono::seconds(3);
 
-                async_sleep(exec, delay, c, static_cast<asio::yield_context>(yield));
+                async_sleep(exec, delay, c, yield.native());
             } else if (job_type == Type::front_end) {
                 // No pause for front-end jobs.
             } else {
                 async_sleep( exec, n * chrono::seconds(3)
-                           , cancel, static_cast<asio::yield_context>(yield));
+                           , cancel, yield.native());
             }
         }
     };
@@ -2154,7 +2154,7 @@ public:
 
             _YDEBUG(yield, "Waiting for ", job_count, " running jobs");
 
-            cv.wait(static_cast<asio::yield_context>(yield));
+            cv.wait(yield.native());
 
             if (!which) {
                 _YWARN(yield, "Got result from unknown job");
@@ -2174,7 +2174,7 @@ public:
                 final_job = jobs.as_string(which);
                 final_ec = sys::error_code{}; // success
                 for (auto& job : jobs.running()) {
-                    job.stop(static_cast<asio::yield_context>(yield));
+                    job.stop(yield.native());
                 }
                 break;
             } else if (!final_ec) {
@@ -2577,7 +2577,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
             _YDEBUG(yield, "Abort due to no route");
             sys::error_code ec;
             tnx.write_to_user_agent( retrieval_failure_response(req)
-                                   , cancel, static_cast<asio::yield_context>(yield[ec]));
+                                   , cancel, yield[ec].native());
             if (ec || cancel) break;
             continue;
         }
@@ -2592,7 +2592,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
             if (con.is_open() && !cancel) {
                 sys::error_code ec_;
                 tnx.write_to_user_agent( retrieval_failure_response(req)
-                                       , cancel, static_cast<asio::yield_context>(yield[ec_]));
+                                       , cancel, yield[ec_].native());
             }
             if (!req.keep_alive())
                 con.close();

@@ -92,7 +92,7 @@ void send_response( GenericStream& con
     yield.log("=== Sending back response ===");
     yield.log(res);
 
-    util::http_reply(con, res, static_cast<asio::yield_context>(yield));
+    util::http_reply(con, res, yield.native());
 }
 
 static
@@ -156,7 +156,7 @@ ouinet::resolve_target(const http::request_header<>& req
         lookup = util::tcp_async_resolve(host, port
                                          , exec
                                          , cancel
-                                         , static_cast<asio::yield_context>(yield[ec]));
+                                         , yield[ec].native());
 
     if (ec) return or_throw<TcpLookup>(yield, ec);
 
@@ -316,7 +316,7 @@ class InjectorCacheControl {
         auto socket = connect_to_host( lookup
                                      , executor
                                      , cancel
-                                     , static_cast<asio::yield_context>(yield[ec]));
+                                     , yield[ec].native());
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -325,7 +325,7 @@ class InjectorCacheControl {
                                                 , ssl_ctx
                                                 , url->host
                                                 , cancel
-                                                , static_cast<asio::yield_context>(yield[ec]));
+                                                , yield[ec].native());
 
             return or_throw(yield, ec, move(c));
         } else {

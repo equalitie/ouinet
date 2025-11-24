@@ -17,8 +17,7 @@ namespace ouinet {
 
 using ouinet::util::AsioExecutor;
 
-class YieldContext : public boost::intrusive::list_base_hook
-              < boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
+class YieldContext
 {
 public:
     YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
@@ -49,11 +48,6 @@ public:
 
     asio::yield_context native() const {
         return _asio_yield;
-    }
-
-    explicit operator asio::yield_context() const
-    {
-        return native();
     }
 
     YieldContext ignore_error()
@@ -159,14 +153,14 @@ Ret or_throw( YieldContext yield
             , const sys::error_code& ec
             , Ret&& ret = {})
 {
-    return or_throw(static_cast<asio::yield_context>(yield), ec, std::forward<Ret>(ret));
+    return or_throw(yield.native(), ec, std::forward<Ret>(ret));
 }
 
 inline
 void or_throw( YieldContext yield
              , const sys::error_code& ec)
 {
-    return or_throw(static_cast<asio::yield_context>(yield), ec);
+    return or_throw(yield.native(), ec);
 }
 
 } // ouinet namespace

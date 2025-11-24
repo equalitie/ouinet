@@ -49,14 +49,14 @@ inline
 std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
 connected_pair(const AsioExecutor& ex, YieldContext yield)
 {
-    return connected_pair(ex, static_cast<asio::yield_context>(yield));
+    return connected_pair(ex, yield.native());
 }
 
 inline
 std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
 connected_pair(asio::io_context& ctx, YieldContext yield)
 {
-    return connected_pair(ctx, static_cast<asio::yield_context>(yield));
+    return connected_pair(ctx, yield.native());
 }
 
 }} // namespaces
