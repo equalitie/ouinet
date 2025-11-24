@@ -617,6 +617,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<br>\n";
 
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+    ss << "<br>\n";
+
+    ss << "DNS over HTTPS: "
+       << ( config.is_doh_enabled()
+          ? "enabled"
+          : "disabled" )
+       << ".<br><br>\n";
 
     ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
                    , "bt_extra_bootstraps"
