@@ -31,6 +31,7 @@ from twisted.python import log as twistedlog
 
 import logging
 import pytest
+import pytest_asyncio
 
 from test_fixtures import TestFixtures
 from test_http_server import spawn_http_server
@@ -105,6 +106,8 @@ def run_tcp_injector(args, proc_list):
         ),
     )
     injector.start()
+    # plist = await proc_list
+    # plist.append(injector)
     proc_list.append(injector)
 
     return injector
@@ -164,23 +167,31 @@ def assertEquals(x, y):
 @pytest.fixture()
 def http_server() -> Process:
     server = spawn_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
+
     yield server
-    # server.kill()
+
     print("waiting for http server to terminate")
     server.terminate()
     server.join(timeout=2)
     print("http server terminated")
 
 
-@pytest.fixture()
-def proc_list() -> List[Process]:
-    processes = []
-    yield processes
-    deferred_procs = []
-    for cur_proc in processes:
+proc_list: List[OuinetProcess] = []
+
+
+@pytest_asyncio.fixture()
+async def proc_list_janitor() -> List[OuinetProcess]:
+    """
+    This fixture is teardown-only, otherwise it forces too much async in code
+    """
+    yield
+
+    for cur_proc in proc_list:
         print("stopping process", cur_proc)
-        cur_proc.stop()
+        await cur_proc.stop()
+
     print("Done, no processes left")
+    proc_list.clear()
 
 
 @pytest.fixture()
@@ -215,7 +226,7 @@ async def waitfordef(deferred: Deferred) -> Any:
 
 # @pytest.mark.timeout(TestFixtures.TCP_TRANSPORT_TIMEOUT)
 @pytest.mark.asyncio
-async def test_tcp_transport(proc_list, certificate_file, http_server):
+async def test_tcp_transport(proc_list_janitor, certificate_file, http_server):
     """
     Starts an echoing http server, a injector and a client and send a unique http
     request to the echoing http server through the g client --tcp--> injector -> http server
@@ -234,8 +245,7 @@ async def test_tcp_transport(proc_list, certificate_file, http_server):
 
     # Wait for the injector to open port
     await wait_for_benchmark(injector, TestFixtures.TCP_INJECTOR_PORT_READY_REGEX)
-    print("WE ARE THROUGH")
-    # await sleep(600000)
+
     # Client
     client = run_tcp_client(
         name=TestFixtures.TCP_CLIENT["name"],
@@ -250,6 +260,7 @@ async def test_tcp_transport(proc_list, certificate_file, http_server):
         proc_list=proc_list,
     )
 
+    # Wait for the client to open port
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
     # TODO: No need to randomize in this particular test.
