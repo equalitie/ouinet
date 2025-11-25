@@ -78,16 +78,14 @@ def spawn(command: List[str]) -> Popen:
 
 
 def output_yielder(handle: Popen) -> Generator[str, None, None]:
-    """Note: If you break during iteration, it kills the process"""
     with handle:
         try:
             for line in iter(handle.stdout.readline, ""):
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
                 yield line
         except:
-            # yield ""
             pass
-        # except GeneratorExit:
-        #     handle.kill()
 
 
 class OuinetProcess(object):
@@ -204,10 +202,7 @@ class OuinetProcess(object):
     async def stdout_listening_task(self):
         try:
             while True:
-                # for line in self.output:
-                print("mew")
-                # line = self.output.__next__()
-                # Process has not yet terminated
+                # Assert process has not yet terminated
                 if self._proc.poll() is not None:
                     print("sudden death of ", self.command[0])
                     stdout, stderr = self._proc.communicate(timeout=5)
@@ -219,11 +214,12 @@ class OuinetProcess(object):
                         "stderr:",
                         stderr,
                     )
-                line = await asyncio.to_thread(self.output.__next__)
-                # line = await asyncio.wait_for(self.output.next())
-                # line = await line
+
+                line: str = await asyncio.to_thread(self.output.__next__)
+                assert isinstance(line, str)
                 self._proc_protocol.errReceived(line)
                 await asyncio.sleep(0.1)
+
             print("exited listening loop for ", self)
         except asyncio.CancelledError:
             print("stopping output analysis")
