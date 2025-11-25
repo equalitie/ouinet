@@ -30,31 +30,10 @@ class OuinetProcessProtocol(object):
 
         self._logger: logging.Logger = logging.getLogger()
 
-    def connectionMade(self):
-        print("protocol got connected: ", self)
-
-    def inConnectionLost(self):
-        print("protocol stdin got disconnected: ", self)
-
-    def outConnectionLost(self):
-        print("protocol stdout got disconnected: ", self)
-
-    def errConnectionLost(self):
-        print("protocol stderr got disconnected: ", self)
-
-    def processExited(self):
-        print("protocol's process has exited: ", self)
-
-    def processEnded(self):
-        print("protocol's process has ended: ", self)
-
     def errReceived(self, data: str):
         """
         Listen to the process output to react to fatal errors and track status
         """
-
-        if isinstance(data, bytes):
-            data = data.decode("utf-8")
         report = self.app_name + ": " + data
         logging.debug(report)
         self._logger.handlers[0].flush()
@@ -65,20 +44,9 @@ class OuinetProcessProtocol(object):
 
         for regex in self.benchmarks.keys():
             match = re.match(regex, data)
-            # if "TCP address" in data and "TCP address" in regex:
-            #     raise RuntimeError(data, regex, "Matches?", match)
             if match:
                 if not self.benchmarks[regex]:
                     self.benchmarks[regex] = True
-
-    def outReceived(self, data):
-        print("output received")
-        data = data.decode()
-        logging.debug(self.app_name + ": " + data)
-        self._logger.handlers[0].flush()
-
-    def pulse_out(self):
-        logging.debug(self.app_name + " is alive")
 
     def processExited(self, reason):
         print("process exited for protocol :", self)
