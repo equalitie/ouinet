@@ -128,23 +128,16 @@ class OuinetProcess(object):
         ) as conf_file:
             conf_file.write(self.config.config_file_content)
 
-    def abort(self, task: asyncio.Task):
-        print("ABORTING FOR FUCK SAKE")
-        if task.done():
-            print("now the task is finally done")
-        else:
-            print("for fuck sake, it still is not done")
+    def abort_task_because_exception(self, task: asyncio.Task):
+        """
+        Using this makes sure we have enough debugging information
+        """
+        if not task.done():
+            raise ValueError(f"Task {task} failed to mark itself done when aborting")
+        if not task.exception():
+            raise ValueError(f"Task {task} failed to set up exception when aborting")
 
-        if self.listener.done():
-            print("and the listener is done too")
-        else:
-            print("and the self.listener is NOT done")
-
-        if self.listener == task:
-            print("they are the same tasks")
-        else:
-            print("and they are different tasks apparently")
-
+        print(f"Properly aborted the task {task}, now stopping the loop")
         loop = asyncio.get_running_loop()
         loop.stop()
 
@@ -187,7 +180,6 @@ class OuinetProcess(object):
         self._proc = spawn(self.command)
         self.output = output_yielder(self._proc)
         self.listener: asyncio.Task = asyncio.create_task(self.stdout_listening_task())
-        # self._proc_protocol, , self.config.argv, env=ouinet_env
         print("spawned")
         self._has_started = True
 
@@ -199,21 +191,23 @@ class OuinetProcess(object):
             + " seconds"
         )
 
+    def assert_process_is_alive(self):
+        if self._proc.poll() is not None:
+            print("sudden death of ", self.command[0])
+            stdout, stderr = self._proc.communicate(timeout=5)
+            raise IOError(
+                "process",
+                self.command,
+                "has unexpectedly died, stdout:",
+                stdout,
+                "stderr:",
+                stderr,
+            )
+
     async def stdout_listening_task(self):
         try:
             while True:
-                # Assert process has not yet terminated
-                if self._proc.poll() is not None:
-                    print("sudden death of ", self.command[0])
-                    stdout, stderr = self._proc.communicate(timeout=5)
-                    raise IOError(
-                        "process",
-                        self.command,
-                        "has unexpectedly died, stdout:",
-                        stdout,
-                        "stderr:",
-                        stderr,
-                    )
+                self.assert_process_is_alive()
 
                 line: str = await asyncio.to_thread(self.output.__next__)
                 assert isinstance(line, str)
@@ -222,20 +216,19 @@ class OuinetProcess(object):
 
             print("exited listening loop for ", self)
         except asyncio.CancelledError:
-            print("stopping output analysis")
+            print("Cancelled listening to process ", self.command[0])
+            return
+
         except Exception as e:
             # stopping the test to return the error
             print("setting an exception for ", self.command)
-            task = asyncio.current_task()
 
-            # This does not finish a task
-            loop = asyncio.get_running_loop()
-            asyncio.get_running_loop().call_soon(self.abort, task)
+            task = asyncio.current_task()
+            asyncio.get_running_loop().call_soon(
+                self.abort_task_because_exception, task
+            )
             print("scheduled loopstop, setting e")
             raise IOError("Error while listening to stdout") from e
-            # this finishes the task
-            # task.set_exception(e)
-            return
 
     def send_term_signal(self):
         if not self._term_signal_sent:
