@@ -204,7 +204,6 @@ class OuinetProcess(object):
                 line: str = await asyncio.to_thread(self.output.__next__)
                 assert isinstance(line, str)
                 self._proc_protocol.errReceived(line)
-                await asyncio.sleep(0.1)
 
             print("exited listening loop for ", self)
         except asyncio.CancelledError:
