@@ -163,10 +163,9 @@ class OuinetProcess(object):
 
         Args
           argv: command line arguments where argv[0] should be the name of the
-                executable program with its code
-          process_protoco: twisted process protocol which deals with processing
-                           the output of the ouinet process. If None, a generic
-                           Ouinet Process
+                executable binary
+          process_protocol: deals with processing the output of the ouinet process.
+                If None, a generic Ouinet Process
         """
         # do not start twice
         if self._has_started:
@@ -181,15 +180,8 @@ class OuinetProcess(object):
         self.output = output_yielder(self._proc)
         self.listener: asyncio.Task = asyncio.create_task(self.stdout_listening_task())
         print("spawned")
-        self._has_started = True
 
-        # we add a twisted timer to kill the process after timeout
-        logging.debug(
-            self.config.app_name
-            + " times out in "
-            + str(self.config.timeout)
-            + " seconds"
-        )
+        self._has_started = True
 
     def assert_process_is_alive(self):
         if self._proc.poll() is not None:
@@ -227,7 +219,7 @@ class OuinetProcess(object):
             asyncio.get_running_loop().call_soon(
                 self.abort_task_because_exception, task
             )
-            print("scheduled loopstop, setting e")
+            print("scheduled loopstop")
             raise IOError("Error while listening to stdout") from e
 
     def send_term_signal(self):
@@ -236,6 +228,21 @@ class OuinetProcess(object):
             self._term_signal_sent = True
             self._proc.terminate()
 
+    async def stop_listening(self):
+        listener = self.listener
+        if listener.done() and listener.exception():
+            raise IOError("Error while running the process:") from listener.exception()
+        print("no error reported, cancelling listening task")
+        if not listener.get_loop().is_closed():
+            listener.cancel()
+            await listener
+
+    def is_teardown(self) -> bool:
+        tb = "\n".join(format_stack())
+        if "teardown" in tb.lower():
+            return True
+        return False
+
     async def stop(self):
         if self._has_started and not self._term_signal_sent:  # stop only if started
             self._has_started = False
@@ -243,23 +250,12 @@ class OuinetProcess(object):
             print("process " + self.config.app_name + " stopping")
 
             # Introspection for extra debug details
-            tb = "\n".join(format_stack())
-            if "teardown" in tb.lower():
+            if self.is_teardown():
                 print("this is happening as a part of teardown")
             else:
                 print("the process is being stopped from inside the test body")
 
-            listener = self.listener
-
-            if listener.done() and listener.exception():
-                raise IOError(
-                    "Error while running the process:"
-                ) from listener.exception()
-
-            print("no error reported, cancelling listening task")
-            if not listener.get_loop().is_closed():
-                listener.cancel()
-                await listener
+            await self.stop_listening()
 
             self.send_term_signal()
             print("waiting for termination of", self.command[0])
@@ -307,20 +303,13 @@ class OuinetInjector(OuinetProcess):
     """
     As above, but for the 'injector'
     Starts an injector process by passing the args to the service
-
-    Args
-    injector_name: the name of the injector which determines the config folder
-                   name
-    timeout: how long before killing the injector process
-    args: list containing command line arguments passed directly to the injector
-    i2p_ready: is a Deferred object whose callback is being called when i2p
-              tunnel is ready
     """
 
     def __init__(self, injector_config):
         injector_config.config_file_name = TestFixtures.INJECTOR_CONF_FILE_NAME
         injector_config.config_file_content = TestFixtures.INJECTOR_CONF_FILE_CONTENT
         super(OuinetInjector, self).__init__(injector_config)
+        # Isn't it supposed to do it BEFORE initializing the superclass?
         self.config.argv = [
             os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector"),
             "--repo",
