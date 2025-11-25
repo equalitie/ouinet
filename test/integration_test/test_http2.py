@@ -5,7 +5,6 @@
 
 
 from typing import List
-from typing import Any
 import string
 
 import sys
@@ -25,9 +24,6 @@ import requests
 import socket
 from requests import Response as Reqresponse
 from urllib.parse import urlparse
-
-from twisted.internet.defer import gatherResults, Deferred
-from twisted.python import log as twistedlog
 
 import logging
 import pytest
@@ -86,7 +82,7 @@ async def wait_for_benchmark(process: OuinetProcess, benchmark: str):
     print("successfully waited for", benchmark)
 
 
-def run_tcp_injector(args, proc_list):
+def run_tcp_injector(args):
     argv = args.copy()
     argv.append("--allow-private-targets")
     argv.extend(["--log-level", "SILLY"])
@@ -106,14 +102,12 @@ def run_tcp_injector(args, proc_list):
         ),
     )
     injector.start()
-    # plist = await proc_list
-    # plist.append(injector)
     proc_list.append(injector)
 
     return injector
 
 
-def run_tcp_client(name, args, proc_list):
+def run_tcp_client(name, args):
     argv = args.copy()
     argv.append("--allow-private-targets")
     client = OuinetClient(
@@ -156,6 +150,7 @@ def request_url(port, url) -> Reqresponse:
     return requests.get(url, proxies=proxies, headers=headers)
 
 
+# Compatibility functions, not needed in newer tests
 def assertTrue(value):
     assert value
 
@@ -202,7 +197,10 @@ def certificate_file() -> str:
         file.flush()
         # it will be deleted otherwise but we do not want it to be deleted yet
         rename(file.name, TestFixtures.INJECTOR_CERT_PATH)
+
     yield TestFixtures.INJECTOR_CERT_PATH
+
+    # Now we will delete it
     if exists(TestFixtures.INJECTOR_CERT_PATH):
         remove(TestFixtures.INJECTOR_CERT_PATH)
 
@@ -214,14 +212,9 @@ def log():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=TestFixtures.LOGGING_LEVEL,
     )
-    twistedlog.startLogging(sys.stdout)
 
 
 ################# Tests #####################
-
-
-async def waitfordef(deferred: Deferred) -> Any:
-    return gatherResults([deferred])[0]
 
 
 # @pytest.mark.timeout(TestFixtures.TCP_TRANSPORT_TIMEOUT)
@@ -239,8 +232,7 @@ async def test_tcp_transport(proc_list_janitor, certificate_file, http_server):
         args=[
             "--listen-on-tcp",
             f"127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
-        ],
-        proc_list=proc_list,
+        ]
     )
 
     # Wait for the injector to open port
@@ -257,7 +249,6 @@ async def test_tcp_transport(proc_list_janitor, certificate_file, http_server):
             "--injector-ep",
             f"tcp:127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
         ],
-        proc_list=proc_list,
     )
 
     # Wait for the client to open port
