@@ -10,6 +10,8 @@ from typing import List
 from typing import Generator
 from traceback import format_stack
 import asyncio
+from subprocess import TimeoutExpired
+from subprocess import Popen, PIPE, STDOUT
 
 from test_fixtures import TestFixtures
 
@@ -61,9 +63,6 @@ class OuinetConfig(object):
         self.benchmark_regexes = benchmark_regexes
 
 
-from subprocess import Popen, PIPE, STDOUT
-
-
 def spawn(command: List[str]) -> Popen:
     print("running command :", " ".join(command))
     handle = Popen(
@@ -72,7 +71,6 @@ def spawn(command: List[str]) -> Popen:
         stdin=PIPE,
         stdout=PIPE,
         stderr=STDOUT,
-        # universal_newlines=True,
     )
     if handle.stdout is None:
         raise ValueError("could not run command: ", command)
@@ -132,6 +130,26 @@ class OuinetProcess(object):
         ) as conf_file:
             conf_file.write(self.config.config_file_content)
 
+    def abort(self, task: asyncio.Task):
+        print("ABORTING FOR FUCK SAKE")
+        if task.done():
+            print("now the task is finally done")
+        else:
+            print("for fuck sake, it still is not done")
+
+        if self.listener.done():
+            print("and the listener is done too")
+        else:
+            print("and the self.listener is NOT done")
+
+        if self.listener == task:
+            print("they are the same tasks")
+        else:
+            print("and they are different tasks apparently")
+
+        loop = asyncio.get_running_loop()
+        loop.stop()
+
     def make_config_folder(self):
         if not os.path.exists(TestFixtures.REPO_FOLDER_NAME):
             os.makedirs(TestFixtures.REPO_FOLDER_NAME)
@@ -166,11 +184,11 @@ class OuinetProcess(object):
         self._proc_protocol.app_name = self.config.app_name
 
         print("spawning a process")
-        comm = self.config.argv
+        self.command = self.config.argv
 
-        self._proc = spawn(comm)
+        self._proc = spawn(self.command)
         self.output = output_yielder(self._proc)
-        self.listener: asyncio.Task = asyncio.create_task(self.listening_loop())
+        self.listener: asyncio.Task = asyncio.create_task(self.stdout_listening_task())
         # self._proc_protocol, , self.config.argv, env=ouinet_env
         print("spawned")
         self._has_started = True
@@ -183,11 +201,25 @@ class OuinetProcess(object):
             + " seconds"
         )
 
-    async def listening_loop(self):
+    async def stdout_listening_task(self):
         try:
-            # while True:
-            for line in self.output:
-                # line = self.output.next()
+            while True:
+                # for line in self.output:
+                print("mew")
+                # line = self.output.__next__()
+                # Process has not yet terminated
+                if self._proc.poll() is not None:
+                    print("sudden death of ", self.command[0])
+                    stdout, stderr = self._proc.communicate(timeout=5)
+                    raise IOError(
+                        "process",
+                        self.command,
+                        "has unexpectedly died, stdout:",
+                        stdout,
+                        "stderr:",
+                        stderr,
+                    )
+                line = await asyncio.to_thread(self.output.__next__)
                 # line = await asyncio.wait_for(self.output.next())
                 # line = await line
                 self._proc_protocol.errReceived(line)
@@ -195,6 +227,19 @@ class OuinetProcess(object):
             print("exited listening loop for ", self)
         except asyncio.CancelledError:
             print("stopping output analysis")
+        except Exception as e:
+            # stopping the test to return the error
+            print("setting an exception for ", self.command)
+            task = asyncio.current_task()
+
+            # This does not finish a task
+            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop().call_soon(self.abort, task)
+            print("scheduled loopstop, setting e")
+            raise IOError("Error while listening to stdout") from e
+            # this finishes the task
+            # task.set_exception(e)
+            return
 
     def send_term_signal(self):
         if not self._term_signal_sent:
@@ -202,29 +247,40 @@ class OuinetProcess(object):
             self._term_signal_sent = True
             self._proc.terminate()
 
-    def stop(self):
+    async def stop(self):
         if self._has_started and not self._term_signal_sent:  # stop only if started
             self._has_started = False
             logging.debug("process " + self.config.app_name + " stopping")
+            print("process " + self.config.app_name + " stopping")
 
             # Introspection for extra debug details
             tb = "\n".join(format_stack())
             if "teardown" in tb.lower():
-                logging.debug("this is happening as a part of teardown")
+                print("this is happening as a part of teardown")
             else:
-                logging.debug("the process is being stopped from inside the test body")
+                print("the process is being stopped from inside the test body")
 
-            # if self.timeout_killer.active():
-            #     self.timeout_killer.cancel()
+            listener = self.listener
 
-            # self.pulse_timer.stop()
-            self.listener.cancel()
+            if listener.done() and listener.exception():
+                raise IOError(
+                    "Error while running the process:"
+                ) from listener.exception()
+
+            print("no error reported, cancelling listening task")
+            if not listener.get_loop().is_closed():
+                listener.cancel()
+                await listener
+
             self.send_term_signal()
-
-            # Don't do this because we may lose some important debug
-            # information that gets printed between now and when the app
-            # actually exits.
-            # self._proc_protocol.transport.loseConnection()
+            print("waiting for termination of", self.command[0])
+            # Waiting for the process to actually terminate
+            try:
+                self._proc.wait(timeout=5)
+            except TimeoutExpired:
+                print("[WARNING] termination unsuccessfull, killing", self.command[0])
+                self._proc.kill()
+                self._proc.communicate()
 
     @property
     def callbacks(self):

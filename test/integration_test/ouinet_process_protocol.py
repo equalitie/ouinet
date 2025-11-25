@@ -4,12 +4,10 @@
 # Integration tests for ouinet - classes which setup and fire ouinet client and injectors for different tests situation
 
 import re
-from re import Match
 import os
 import logging
 
 from twisted.internet import protocol
-from twisted.internet.defer import Deferred
 
 from typing import List
 from test_fixtures import TestFixtures
@@ -58,7 +56,9 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         """
         # data = data.decode()
         # print("err")
-        print("base protocol receiving data", data)
+        # print("base protocol receiving data", data)
+        if isinstance(data, bytes):
+            data = data.decode("utf-8")
         report = self.app_name + ": " + data
         logging.debug(report)
         self._logger.handlers[0].flush()
@@ -69,10 +69,11 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
 
         for regex in self.benchmarks.keys():
             match = re.match(regex, data)
+            # if "TCP address" in data and "TCP address" in regex:
+            #     raise RuntimeError(data, regex, "Matches?", match)
             if match:
-                cb = self.benchmarks[regex]
-                if not cb:
-                    cb == True
+                if not self.benchmarks[regex]:
+                    self.benchmarks[regex] = True
 
     def outReceived(self, data):
         print("output received")
@@ -107,7 +108,7 @@ class OuinetCacheProcessProtocol(OuinetProcessProtocol, object):
         listen for the debugger output calls the parent function and then react to cached request cached
         """
         # data = data.decode()
-        print("cache process receiving", data)
+        # print("cache process receiving", data)
         # checking for specifc strings before calling back any deferred object
         # because the reaction to the deferred might depend on these data
         self.check_response_served_from_cached(data)
@@ -139,10 +140,10 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         self.public_key = ""
 
     def errReceived(self, data: bytes):
-        print("receiving line", data)
+        # print("receiving line", data)
 
         data = data.decode("utf-8")
-        print("decoded as", data)
+        # print("decoded as", data)
         self.look_for_public_key(data)
         super(OuinetBEP5CacheProcessProtocol, self).errReceived(data)
 
