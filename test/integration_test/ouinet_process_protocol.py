@@ -39,29 +39,11 @@ class OuinetProcessProtocol(protocol.ProcessProtocol, object):
         listen for the debugger output reacto to fatal errors and other clues
         """
         data = data.decode()
-        print("err")
         logging.debug(self.app_name + ": " + data)
         self._logger.handlers[0].flush()
 
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
             raise Exception("Fatal error")
-
-#       keeping the old code to replicate the behavoir with new code.        
-#        if self.check_next_level_got_ready(data):
-#             self._got_ready_level += 1
-#             self.ready_data = data
-#             self._ready_deferred_fns[self._got_ready_level].callback(self)
-
-#         if self.check_error_received(data):
-#             raise Exception("error")
-
-#     def check_next_level_got_ready(self, data):
-#         # if re.match(TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, data):
-#         #     pdb.set_trace()
-#         if len(self._ready_benchmark_regexes) > self._got_ready_level + 1:
-#             return re.match(self._ready_benchmark_regexes[self._got_ready_level + 1], data)
-
-#         return False
 # 
         for regex in self.callbacks.keys():
             match = re.match(regex, data)
@@ -132,7 +114,7 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         super(OuinetBEP5CacheProcessProtocol, self).__init__(
             proc_config, benchmark_regexes
         )
-        self.public_key = ""
+        self.bep5_public_key = ""
 
     def errReceived(self, data):
         print("receiving line", data)
@@ -144,4 +126,4 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
     def look_for_public_key(self, data):
         pubkey_search_result = re.match(TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, data)
         if pubkey_search_result:
-            self.public_key = pubkey_search_result.group(1)
+            self.bep5_public_key = pubkey_search_result.group(1)

@@ -244,26 +244,6 @@ class OuinetInjector(OuinetProcess):
         """Return a key string used to access the cache index created by this injector."""
         raise NotImplementedError
 
-    def _setup_i2p_private_key(self, private_key_blob):
-        if not os.path.exists(self.config.config_folder_name+"/i2p"):
-            os.makedirs(self.config.config_folder_name+"/i2p")
-
-        if (private_key_blob):
-            with open(self.config.config_folder_name+"/i2p/i2p-private-key", "w") \
-              as private_key_file:
-                private_key_file.write(private_key_blob)
-
-    def get_I2P_public_ID(self):
-        try:
-            with open(self.config.config_folder_name+"/endpoint-i2p", "r") \
-              as public_id_file:
-                return public_id_file.read().rstrip()
-        except:
-            return None
-
-    def get_index_key(self):
-        return self._proc_protocol.BEP5_pubk
-
 
 class OuinetBEP5CacheInjector(OuinetInjector):
     """
@@ -289,6 +269,15 @@ class OuinetI2PInjector(OuinetInjector):
     """
     def __init__(self, injector_config, private_key_blob=None):
         super(OuinetI2PInjector, self).__init__(injector_config)
+        # we use cache process protocol to be able to store
+        # cache public key in case we need it
+        self.set_process_protocol(
+            OuinetBEP5CacheProcessProtocol(
+                proc_config=self.config,
+                benchmark_regexes=injector_config.benchmark_regexes,
+            )
+        )
+
         self._setup_i2p_private_key(private_key_blob)
 
     def _setup_i2p_private_key(self, private_key_blob):
@@ -307,3 +296,6 @@ class OuinetI2PInjector(OuinetInjector):
                 return public_id_file.read().rstrip()
         except:
             return None
+
+    def get_index_key(self):
+        return self._proc_protocol.bep5_public_key

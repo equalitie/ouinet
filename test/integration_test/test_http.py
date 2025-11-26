@@ -112,7 +112,7 @@ class OuinetTests(TestCase):
 
         return injector
 
-    def run_i2p_injector_with_cache_pub_key(self, injector_args, deferred_cache_pub_key, deferred_i2p_ready):
+    def run_i2p_injector_with_cache_pub_key(self, args):
         argv = args.copy()
         argv.append("--allow-private-targets")
 
@@ -158,6 +158,30 @@ class OuinetTests(TestCase):
         self.proc_list.append(client)
 
         return client
+
+    def run_bep5_client(self, name, idx_key, args, deferred_cache_ready):
+        argv = args.copy()
+        argv.append("--allow-private-targets")
+        client = OuinetClient(
+            OuinetConfig(
+                name,
+                TestFixtures.BEP5_TRANSPORT_TIMEOUT,
+                ["--cache-type",
+                "bep5-http",
+                "--cache-http-public-key",
+                str(index_key),
+                "--index-bep44-public-key", idx_key,] + 
+                argv,
+                benchmark_regexes=[
+                    TestFixtures.BEP44_CACHE_READY_REGEX
+                ],
+            ),
+        )
+        client.start()
+        self.proc_list.append(client)
+
+        return client
+
 
     def run_i2p_client(self, name, idx_key, args):
         argv = args.copy()
@@ -437,16 +461,11 @@ class OuinetTests(TestCase):
         #     ],
         #     client_cache_ready)
             
-        i2pinjector_cache_key_announced = Deferred()
-        i2pinjector_cache_key_announced.addCallback()
-        
-        i2pinjector_tunnel_ready = Deferred()
-        i2pinjector = self.run_i2p_injector_with_cache_pub_key(["--listen-on-i2p", "true",
+        i2pinjector = self.run_i2p_injector_with_cache_pub_key(args=["--listen-on-i2p", "true",
                                              "--i2p-hops-per-tunnel", str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
                                              "--log-level", "DEBUG",
-                                                                 ], i2pinjector_cache_key_announced, i2pinjector_tunnel_ready) #"--disable-cache"
-
-        success = yield i2pinjector.callbacks[OuinetTests.look_for_BEP5_pubk]
+                                                                 ])
+        success = yield i2pinjector.callbacks[TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX]
         index_key = i2pinjector.get_index_key()
         logging.debug("Index key is: " + index_key)
         #wait for the injector tunnel to be advertised
@@ -469,16 +488,15 @@ class OuinetTests(TestCase):
         content_delivered_over_i2p = False
         for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
             #use only Proxy or Injector mechanisms
-            current_client = self.run_i2p_client( TestFixtures.I2P_CLIENT["name"], None
-                               , [ "--disable-origin-access",
+            current_client = self.run_i2p_client(name=TestFixtures.I2P_CLIENT["name"], idx_key=None
+                               , args=[ "--disable-origin-access",
                                    "--cache-type", "bep5-http",
                                    "--cache-private",
                                    "--cache-http-public-key", index_key,
                                    "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
                                    "--injector-ep", "i2p:" + injector_i2p_public_id,
                                    "--i2p-hops-per-tunnel", str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
-                                 ]
-                               , i2pclient_tunnel_ready)
+                                 ])
         
             #wait for the client tunnel to connect to the injector
             success = yield current_client.callbacks[TestFixtures.I2P_TUNNEL_READY_REGEX]
@@ -486,7 +504,7 @@ class OuinetTests(TestCase):
             content = self.safe_random_str(TestFixtures.RESPONSE_LENGTH)
             for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
                 logging.debug("request attempt no " + str(i+1) + "...")
-                defered_response = yield  self.request_page(TestFixtures.I2P_CLIENT["port"], content, cachable=True)
+                defered_response = yield  self.request_page(TestFixtures.I2P_CLIENT["port"], content, cachable=True) 
                 if defered_response.code == 200:
                     response_body = yield readBody(defered_response)
                     self.assertEquals(response_body, TestFixtures.TEST_PAGE_BODY)
