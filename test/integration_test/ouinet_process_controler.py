@@ -205,6 +205,15 @@ class OuinetClient(OuinetProcess):
 
 
 class OuinetCacheClient(OuinetClient):
+    def __init__(self, client_config: OuinetConfig):
+        super(OuinetCacheClient, self).__init__(client_config)
+        self.set_process_protocol(
+            OuinetBEP5CacheProcessProtocol(
+                proc_config=self.config,
+                benchmark_regexes=client_config.benchmark_regexes,
+            )
+        )
+
     def served_from_cache(self):
         """
         returns true if any request has been served from cache

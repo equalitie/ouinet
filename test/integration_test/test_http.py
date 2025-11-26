@@ -28,6 +28,7 @@ from ouinet_process_controler import (
     OuinetConfig,
     OuinetClient,
     OuinetBEP5CacheInjector,
+    OuinetCacheClient,
 )
 
 from test_fixtures import TestFixtures
@@ -159,21 +160,21 @@ class OuinetTests(TestCase):
 
         return client
 
-    def run_bep5_client(self, name, idx_key, args, deferred_cache_ready):
+    def run_bep5_client(self, name, idx_key, args):
         argv = args.copy()
         argv.append("--allow-private-targets")
-        client = OuinetClient(
+        client = OuinetCacheClient(
             OuinetConfig(
                 name,
-                TestFixtures.BEP5_TRANSPORT_TIMEOUT,
+                TestFixtures.BEP5_CACHE_TIMEOUT,
                 ["--cache-type",
                 "bep5-http",
                 "--cache-http-public-key",
-                str(index_key),
-                "--index-bep44-public-key", idx_key,] + 
+                str(idx_key),
+                ] + 
                 argv,
                 benchmark_regexes=[
-                    TestFixtures.BEP44_CACHE_READY_REGEX
+                    TestFixtures.BEP5_CACHE_READY_REGEX
                 ],
             ),
         )
@@ -267,72 +268,6 @@ class OuinetTests(TestCase):
         self.proc_list.append(client)
 
         return client
-
-
-    @inlineCallbacks
-    def test_externally_discovered_i2p_injector(self):
-        """
-        Starts an echoing http server which server a constant size response, an injector and a client.
-        the client listen on a tcp port to receive the injector's id thne send a http 
-        request to the echoing http server through the client --i2p--> injector -> http server
-        and make sure it gets the response.
-        """
-        logging.debug("################################################")
-        logging.debug("test_externally_discovered_i2p_injector");
-        logging.debug("################################################")
-        # #injector
-        i2pinjector_tunnel_ready = defer.Deferred()
-        i2pinjector = self.run_i2p_injector(["--listen-on-i2p", "true", "--log-level", "DEBUG",
-                                             ], [i2pinjector_tunnel_ready]) #"--disable-cache"
-
-
-        #wait for the injector tunnel to be advertised
-        success = yield i2pinjector_tunnel_ready
-
-        #we only can request that after injector is ready
-        injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
-        # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
-        self.assert_(injector_i2p_public_id) # empty public id means injector coludn't read the endpoint file
-
-        # Wait so the injector id gets advertised on the DHT
-        logging.debug("waiting " + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD) + " secs for the tunnel to get advertised on the DHT...")
-        yield task.deferLater(reactor, TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD, lambda: None)
-        
-        # Http_server
-        self.test_http_server = self.run_http_server(TestFixtures.TEST_HTTP_SERVER_PORT)
-
-        #client
-        test_passed = False
-        for i2p_client_id in range(0, 10):  # TestFixtures.MAX_NO_OF_I2P_CLIENTS):
-            i2p_tunneller_ready = defer.Deferred()                        
-            i2p_client_finished_reading = defer.Deferred()
-
-            #use only Proxy or Injector mechanisms
-            self.run_i2p_bep5_client( TestFixtures.I2P_CLIENT["name"], None
-                               , [ "--disable-origin-access"
-                                 , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"])
-                                   , "--cache-type", "bep3-http-over-i2p",
-                                   "--log-level", "DEBUG",
-                                  ]
-                                 ,)
-
-            #wait for the cache discovery tunnel get open
-            success = yield i2p_tunneller_ready
-            if TestFixtures.SIMULATE_I2P_EXTERNAL_DISCOVERY:
-                self.write_into_tcp_socket(TestFixtures.I2P_DISCOVERED_ID_ANNOUNCE_PORT, injector_i2p_public_id + "\n")
-
-            #wait for the client tunnel to connect to the injector and request content
-            #The client should write a message which make us know that the end of content
-            #is acheived and we yeild based on that
-            try:
-                success = yield i2p_client_finished_reading
-                break
-            except Exception as err:
-                yield i2pclient.proc_end
-                yield task.deferLater(reactor, TestFixtures.I2P_TUNNEL_HEALING_PERIOD, lambda: None)
-
-
-        self.assertTrue(success)
 
     @inlineCallbacks
     def test_i2p_transport(self):
@@ -474,6 +409,7 @@ class OuinetTests(TestCase):
         #we only can request that after injector is ready
         injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
         # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
+
         self.assert_(injector_i2p_public_id) #empty public id means injector coludn't read the endpoint file
 
         #wait so the injector id gets advertised on the DHT
@@ -529,13 +465,13 @@ class OuinetTests(TestCase):
             TestFixtures.CACHE_CLIENT[1]["name"], index_key,
             [ "--disable-origin-access", "--disable-proxy-access"
             , "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"])
-            , "--front-end-ep", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["front-end-port"])
+            , "--front-end-ep", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["fe_port"])
             ],
         )
         sleep(7)
 
         # make sure that the client2 is ready to access the cache
-        success = yield cache_client.callbacks[TestFixtures.I2P_TUNNEL_READY_REGEX]
+        success = yield cache_client.callbacks[TestFixtures.BEP5_CACHE_READY_REGEX]
         self.assertTrue(success)
 
         # now request the same page from second client

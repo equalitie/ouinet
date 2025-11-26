@@ -20,6 +20,9 @@ endif()
 # Configurable options
 option(WITH_INJECTOR "Compile injector" ON)
 
+# Configurable options
+option(WITH_TEST "Compile tests" ON)
+
 # NOTE: Need to disable ASan until Boost.Asio switches to Boost.Coroutine2
 #       because trowing (and catching) exceptions inside a coroutine confuses
 #       ASan. More info:
@@ -284,8 +287,7 @@ endif()
 
 ################################################################################
 # Tests
-if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-   if (NOT WITHOUT_TEST)
+if ( (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android") AND WITH_TEST)
     add_subdirectory(test)
     endif()
 endif()

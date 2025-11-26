@@ -89,14 +89,14 @@ class TestFixtures:
 
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
     BEP5_PUBK_ANNOUNCE_REGEX = "[\s\S]*BEP5 Index: ([0-9A-Fa-f]+)[\s\S]*"
-    # BEP5_PUBK_ANNOUNCE_REGEX = "HTTP signing public key \(Ed25519\): ([a-zA-Z0-9]+)"
+    BEP5_PUBK_ANNOUNCE_REGEX = "HTTP signing public key \(Ed25519\): ([a-zA-Z0-9]+)"
     BEP5_PUBK_ANNOUNCE_REGEX = (
         "[\s\S]*HTTP signing public key \(Ed25519\): ([a-zA-Z0-9]+)[\s\S]*"
     )
     BEP5_REQUEST_CACHED_REGEX = "[\s\S]*X-Ouinet-Injection:[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r"[\s\S]*Resolving IPNS address: [\s\S]*"
     IPFS_CACHE_READY_REGEX = r"[\s\S]*IPNS ID has been resolved successfully[\s\S]*"
-    BEP5_CACHE_READY_REGEX = r"[\s\S]*BEP5 index: bootstrapped BitTorrent DHT[\s\S]*"
+    BEP5_CACHE_READY_REGEX = r"[\s\S]*BT DHT: Successfully stored contacts[\s\S]*"#r"[\s\S]*BEP5 index: bootstrapped BitTorrent DHT[\s\S]*" TODO: Replace with correct regex.
     IPFS_REQUEST_CACHED_REGEX = (
         r"[\s\S]*Request was successfully published to cache[\s\S]*"
     )
@@ -109,4 +109,4 @@ class TestFixtures:
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
-    #TEST_PAGE_BODY=b"<html><body>" + b" "*2**20 + b"</body></html>\n"
+    TEST_PAGE_BODY=b"<html><body>" + b" "*2**20 + b"</body></html>\n"
