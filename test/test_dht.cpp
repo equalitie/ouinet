@@ -104,8 +104,9 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
 
-    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4());
+    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh);
 
     init_without_bootstrapping(ctx, dht_node);
     bootstrap(ctx, dht_node);

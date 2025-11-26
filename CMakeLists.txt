@@ -209,7 +209,6 @@ file(GLOB client_sources
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
     "./src/util/reachability.cpp"
-    "./src/doh.cpp"
     ${VERSION_CPP}
 )
 
@@ -220,8 +219,6 @@ target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
-    PRIVATE
-        lib::zdnsparser
 )
 
 if (WIN32 OR MINGW)

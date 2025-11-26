@@ -67,6 +67,7 @@ class DhtNode {
     public:
     DhtNode( const AsioExecutor&
            , metrics::DhtNode
+           , bool do_doh
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {});
 
@@ -360,6 +361,7 @@ class DhtNode {
 
     class Stats;
     std::unique_ptr<Stats> _stats;
+    bool _do_doh;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
     metrics::DhtNode _metrics;

@@ -12,7 +12,6 @@
 #include "declspec.h"
 #include "namespaces.h"
 #include "cache_control.h"
-#include "doh.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
@@ -144,8 +143,8 @@ public:
 
     std::string local_domain() const { return _local_domain; }
 
-    boost::optional<std::string> origin_doh_endpoint() const {
-        return _origin_doh_endpoint;
+    bool is_doh_enabled() const {
+        return !_disable_doh;
     }
 
     uint64_t max_request_body_size() const {
@@ -312,9 +311,10 @@ private:
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
-           ("origin-doh-base", po::value<string>()
-            , "If given, enable DNS over HTTPS for origin access using the given base URL; "
-              "the \"dns=...\" query argument will be added for the GET request.")
+           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
+              "When this option is present the client will fallback to the default DNS mechanism "
+              "provided by the operating system.")
             ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
             , "Allows using non-origin channels, like injectors, dist-cache, etc, "
               "to fetch targets using private addresses. "
@@ -496,7 +496,7 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
-    boost::optional<doh::Endpoint> _origin_doh_endpoint;
+    bool _disable_doh = false;
     bool _allow_private_targets = false;
 
     std::unique_ptr<MetricsConfig> _metrics;

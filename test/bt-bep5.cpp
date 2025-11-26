@@ -103,8 +103,9 @@ int main(int argc, const char** argv)
 
     auto metrics_client = metrics::Client::noop();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
 
-    DhtNode dht {ctx.get_executor(), metrics_dht.dht_node_ipv4()};
+    DhtNode dht {ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh};
 
     vector<string> args;
 
@@ -133,6 +134,7 @@ int main(int argc, const char** argv)
                          , udp::v4()
                          , "router.bittorrent.com"
                          , "6881"
+                         , do_doh
                          , cancel
                          , yield[ec]);
 
