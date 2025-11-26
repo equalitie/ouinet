@@ -308,6 +308,5 @@ endif()
 # Tests
 if ((NOT ANDROID) AND WITH_TEST)
     add_subdirectory(test)
-    endif()
 endif()
 ################################################################################
