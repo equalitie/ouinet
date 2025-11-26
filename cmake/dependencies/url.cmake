@@ -76,6 +76,7 @@ externalproject_add(url
         -Drange-v3_DIR=${CMAKE_CURRENT_BINARY_DIR}/range_v3/install/lib/cmake/range-v3
         -Dtl-expected_DIR=${CMAKE_CURRENT_BINARY_DIR}/expected/install/share/cmake/tl-expected
         -DPLATFORM=${PLATFORM}
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=true
     BUILD_BYPRODUCTS ${URL_FILENAME}
     PREFIX "url"
 )

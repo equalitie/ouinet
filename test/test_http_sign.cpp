@@ -44,7 +44,6 @@ BOOST_AUTO_TEST_SUITE(ouinet_http_sign)
 
 using namespace std;
 using namespace ouinet;
-using OuinetYield = ouinet::Yield;
 
 static const string rq_target = "https://example.com/foo";  // proxy-like
 static const string rq_host = "example.com";
@@ -222,7 +221,7 @@ template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
     task::spawn_detached(ctx, [&ctx, f = forward<F>(f)] (auto yield) {
             try {
-                f(OuinetYield(ctx, yield));
+                f(YieldContext(yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
@@ -455,7 +454,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         // Test signed output.
         task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
-            int xidx = 0;
+            size_t xidx = 0;
             Cancel cancel;
             sys::error_code e;
             http_response::Reader rr(std::move(signed_r));
@@ -571,7 +570,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         // Check generation of chained hashes.
         task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
-            int xidx = 0;
+            size_t xidx = 0;
             Cancel cancel;
             sys::error_code e;
             http_response::Reader rr(std::move(hashed_r));

@@ -16,16 +16,13 @@
 #include "../util/executor.h"
 #include "../util/signal.h"
 
-namespace ouinet {
-namespace bittorrent {
-namespace dht {
+namespace ouinet::bittorrent {
 
 namespace ip = asio::ip;
 using ip::tcp;
 using ouinet::util::AsioExecutor;
 
 namespace detail {
-
 
 class DhtWriteTokenStorage {
     public:
@@ -148,7 +145,4 @@ class DataStore {
     Signal<void()> _terminate_signal;
 };
 
-
-} // dht namespace
-} // bittorrent namespace
-} // ouinet namespace
+} // namespaces

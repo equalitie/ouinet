@@ -98,9 +98,6 @@ public:
         return _reader->get_executor();
     }
 
-    void debug() { _debug = true; }
-    void debug_prefix(std::string s) { _debug_prefix = std::move(s); }
-
 private:
     static void finish_metering(std::optional<metrics::Request>& metrics, sys::error_code ec) {
         if (metrics) {
@@ -123,8 +120,6 @@ private:
     reader_uptr _reader;
     bool _head_was_read = false;
     bool _is_head_response;
-    bool _debug = false;
-    std::string _debug_prefix;
     std::optional<metrics::Request> _metrics;
     Cancel _destroyed;
 };

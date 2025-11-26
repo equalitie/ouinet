@@ -3,7 +3,7 @@
 #include "node_id.h"
 #include "code.h"
 
-namespace ouinet { namespace bittorrent { namespace dht {
+namespace ouinet::bittorrent {
 
 struct NodeContact {
     NodeID id;
@@ -60,7 +60,7 @@ NodeContact::decode_compact_v6(boost::string_view& s)
 
 inline
 bool NodeContact::decode_compact_v4( boost::string_view str
-                                   , std::vector<dht::NodeContact>& contacts)
+                                   , std::vector<NodeContact>& contacts)
 {
     // 20 bytes of ID, plus 6 bytes of endpoint
     if (str.size() % 26) { return false; }
@@ -75,7 +75,7 @@ bool NodeContact::decode_compact_v4( boost::string_view str
 
 inline
 bool NodeContact::decode_compact_v6( boost::string_view str
-                                   , std::vector<dht::NodeContact>& contacts)
+                                   , std::vector<NodeContact>& contacts)
 {
     // 20 bytes of ID, plus 18 bytes of endpoint
     if (str.size() % 38) { return false; }
@@ -94,4 +94,4 @@ std::ostream& operator<<(std::ostream& os, const NodeContact& n)
     return os << "{" << n.id << ", " << n.endpoint << "}";
 }
 
-}}} // namespaces
+} // namespaces

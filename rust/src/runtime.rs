@@ -1,23 +1,20 @@
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::LazyLock;
 use tokio::runtime::{Builder, Runtime};
 
-static RUNTIME: Mutex<Weak<Runtime>> = Mutex::new(Weak::new());
+pub(crate) use tokio::runtime::Handle;
 
-pub fn get_runtime() -> Arc<Runtime> {
-    let mut lock = RUNTIME.lock().unwrap();
-
-    if let Some(runtime) = lock.upgrade() {
-        return runtime;
-    }
-
-    // TODO: Unwrap.
+static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    // TODO: Handle failures more gracefully than panicking.
     // TODO: Be explicit about the number of threads to use, the default is the number of CPU
     // cores. Which is likely an overkill for the current use.
-    let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+    Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("failed to initialize async runtime")
+});
 
-    let runtime = Arc::new(runtime);
-
-    *lock = Arc::downgrade(&runtime);
-
-    runtime
+/// Returns a handle to the global async runtime. The runtime is lazily created the first time this
+/// function is called.
+pub fn handle() -> &'static Handle {
+    RUNTIME.handle()
 }

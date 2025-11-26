@@ -9,9 +9,9 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
+#include "declspec.h"
 #include "namespaces.h"
 #include "cache_control.h"
-#include "doh.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
@@ -41,7 +41,7 @@ static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
 struct MetricsConfig {
     bool enable_on_start = false;
-    util::url_match server_url;
+    util::Url server_url;
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     metrics::EncryptionKey encryption_key;
@@ -49,14 +49,14 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
-class ClientConfig {
+class OUINET_DECL ClientConfig {
 public:
   enum class CacheType { None, Bep5Http, Bep3HTTPOverI2P };
 
     ClientConfig() = default;
 
     // Throws on error
-    ClientConfig(int argc, char* argv[]);
+    ClientConfig(int argc, const char* argv[]);
 
     ClientConfig(ClientConfig&&) = default;
     ClientConfig& operator=(ClientConfig&&) = default;
@@ -155,8 +155,14 @@ public:
 
     std::string local_domain() const { return _local_domain; }
 
-    boost::optional<std::string> origin_doh_endpoint() const {
-        return _origin_doh_endpoint;
+    bool is_doh_enabled() const {
+        return !_disable_doh;
+    }
+
+    uint64_t max_request_body_size() const {
+        // The value is set in KiB in the configuration
+        // and used in bytes by boost::beast
+        return _max_req_body_size * 1024;
     }
 
     bool is_help() const { return _is_help; }
@@ -234,6 +240,11 @@ private:
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
             , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
               "Previous announcements could take up to an hour to expire.")
+           ("request-body-limit"
+            , po::value<uint64_t>()->default_value(_max_req_body_size)
+            , "Set the max size of body requests in KiB. This could be "
+              "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
+              "uploads, etc. To leave it unlimited, set it to zero.")
            ;
 
         po::options_description injector("Injector options");
@@ -316,9 +327,10 @@ private:
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
-           ("origin-doh-base", po::value<string>()
-            , "If given, enable DNS over HTTPS for origin access using the given base URL; "
-              "the \"dns=...\" query argument will be added for the GET request.")
+           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
+              "When this option is present the client will fallback to the default DNS mechanism "
+              "provided by the operating system.")
             ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
             , "Allows using non-origin channels, like injectors, dist-cache, etc, "
               "to fetch targets using private addresses. "
@@ -489,6 +501,7 @@ private:
         = default_max_cached_age;
     size_t _max_simultaneous_announcements
         = default_max_simultaneous_announcements;
+    uint64_t _max_req_body_size = 102400;
     bool _cache_private = false;
 
     std::string _client_credentials;
@@ -499,7 +512,7 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
-    boost::optional<doh::Endpoint> _origin_doh_endpoint;
+    bool _disable_doh = false;
     bool _allow_private_targets = false;
 
     std::unique_ptr<MetricsConfig> _metrics;

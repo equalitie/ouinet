@@ -365,11 +365,12 @@ template<class Request>
 Request req_form_from_absolute_to_origin(const Request& absolute_req)
 {
     // Parse the URL to tell HTTP/HTTPS, host, port.
-    url_match url;
 
     auto absolute_target = absolute_req.target();
 
-    if (!match_http_url(absolute_target, url)) {
+    auto url = Url::from(absolute_target);
+
+    if (!url) {
         // It's already in origin form
         return absolute_req;
     }
@@ -377,10 +378,10 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
     Request origin_req(absolute_req);
 
     origin_req.target(absolute_target.substr(
-                absolute_target.find( url.path
+                absolute_target.find( url->path
                                     // Length of "http://" or "https://",
                                     // do not fail on "http(s)://FOO/FOO".
-                                    , url.scheme.length() + 3)));
+                                    , url->scheme.length() + 3)));
 
     return origin_req;
 }
@@ -420,11 +421,10 @@ bool req_ensure_host(Request& req) {
 template<class Request, class... Fields>
 static boost::optional<Request>
 to_canonical_request(Request rq, const Fields&... keep_fields) {
-    auto url = rq.target();
-    url_match urlm;
-    if (!match_http_url(url, urlm)) return boost::none;
-    auto rq_host = urlm.port.empty() ? urlm.host : urlm.host + ":" + urlm.port;
-    rq.target(canonical_url(std::move(urlm)));
+    auto url = Url::from(rq.target());
+    if (!url) return boost::none;
+    auto rq_host = url->port.empty() ? url->host : url->host + ":" + url->port;
+    rq.target(canonical_url(std::move(*url)));
     rq.version(11);  // HTTP/1.1
 
     // Some canonical header values that need ADD, KEEP or PROCESS.

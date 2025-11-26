@@ -8,10 +8,11 @@
 #include <util/wait_condition.h>
 
 #define private public
-#include <bittorrent/node_id.h>
-#include <bittorrent/dht.h>
+#include <bittorrent/dht_node.h>
 #include <bittorrent/code.h>
 #include <util/hash.h>
+#include "task.h"
+#include "cxx/metrics.h"
 
 namespace utf = boost::unit_test;
 
@@ -56,14 +57,15 @@ float seconds(Clock::duration d)
 BOOST_AUTO_TEST_CASE(test_bep_5,
                      * utf::timeout(240))
 {
-    using namespace ouinet::bittorrent::dht;
+    using namespace ouinet::bittorrent;
 
     asio::io_context ctx;
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
 
-    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
+    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh);
 
     task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
@@ -98,14 +100,15 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
                      * utf::disabled()
                      * utf::description("tests unused feature, fails randomly in CI"))
 {
-    using namespace ouinet::bittorrent::dht;
+    using namespace ouinet::bittorrent;
 
     asio::io_context ctx;
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
 
-    DhtNode dht(ctx, metrics_dht.dht_node_ipv4());
+    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh);
 
     auto mutable_data = []( const string& value
                           , const string& salt

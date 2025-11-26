@@ -64,7 +64,7 @@ endif()
 
 target_link_libraries(native-lib
     PRIVATE
-        ouinet::client
+        client_lib
         ${android_log}
 )
 

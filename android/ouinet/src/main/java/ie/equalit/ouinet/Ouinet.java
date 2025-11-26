@@ -131,7 +131,7 @@ public class Ouinet {
         maybeAdd(args, "--udp-mux-port",           config.getUdpMuxPort());
         maybeAdd(args, "--max-cached-age",         config.getMaxCachedAge());
         maybeAdd(args, "--local-domain",           config.getLocalDomain());
-        maybeAdd(args, "--origin-doh-base",        config.getOriginDohBase());
+        maybeAddBool(args, "--disable-doh",        config.getDisableDoH());
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
@@ -151,6 +151,7 @@ public class Ouinet {
         maybeAddBool(args, "--disable-injector-access",     config.getDisableInjectorAccess());
         maybeAddBool(args, "--cache-private",               config.getCachePrivate());
         maybeAddBool(args, "--disable-bridge-announcement", config.getDisableBridgeAnnouncement());
+        maybeAdd    (args, "--request-body-limit",          config.getRequestBodyLimit());
 
         maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
         maybeAdd    (args, "--metrics-server-url",          config.getMetricsServerUrl());
