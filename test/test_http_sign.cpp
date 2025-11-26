@@ -415,9 +415,9 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             origin_w(ctx), origin_r(ctx),
             signed_w(ctx), signed_r(ctx),
             tested_w(ctx), tested_r(ctx);
-        tie(origin_w, origin_r) = util::connected_pair(ctx, yield);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+        tie(origin_w, origin_r) = util::connected_pair(yield);
+        tie(signed_w, signed_r) = util::connected_pair(yield);
+        tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send raw origin response.
         task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
@@ -515,10 +515,10 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             signed_w(ctx), signed_r(ctx),
             hashed_w(ctx), hashed_r(ctx),
             tested_w(ctx), tested_r(ctx);
-        tie(origin_w, origin_r) = util::connected_pair(ctx, yield);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-        tie(hashed_w, hashed_r) = util::connected_pair(ctx, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+        tie(origin_w, origin_r) = util::connected_pair(yield);
+        tie(signed_w, signed_r) = util::connected_pair(yield);
+        tie(hashed_w, hashed_r) = util::connected_pair(yield);
+        tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send raw origin response.
         task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
@@ -624,10 +624,10 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             signed_w(ctx), signed_r(ctx),
             forged_w(ctx), forged_r(ctx),
             tested_w(ctx), tested_r(ctx);
-        tie(origin_w, origin_r) = util::connected_pair(ctx, yield);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-        tie(forged_w, forged_r) = util::connected_pair(ctx, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+        tie(origin_w, origin_r) = util::connected_pair(yield);
+        tie(signed_w, signed_r) = util::connected_pair(yield);
+        tie(forged_w, forged_r) = util::connected_pair(yield);
+        tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send raw origin response.
         task::spawn_detached(ctx, [&origin_w, lock = wc.lock()] (auto y) {
@@ -726,9 +726,9 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             signed_w(ctx), signed_r(ctx),
             hashed_w(ctx), hashed_r(ctx),
             tested_w(ctx), tested_r(ctx);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-        tie(hashed_w, hashed_r) = util::connected_pair(ctx, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+        tie(signed_w, signed_r) = util::connected_pair(yield);
+        tie(hashed_w, hashed_r) = util::connected_pair(yield);
+        tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send signed response.
         task::spawn_detached(ctx, [&signed_w, lock = wc.lock()] (auto y) {
@@ -868,8 +868,8 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         asio::ip::tcp::socket
             signed_w(ctx), signed_r(ctx),
             tested_w(ctx), tested_r(ctx);
-        tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
-        tie(tested_w, tested_r) = util::connected_pair(ctx, yield);
+        tie(signed_w, signed_r) = util::connected_pair(yield);
+        tie(tested_w, tested_r) = util::connected_pair(yield);
 
         unsigned first_block, last_block;
         tie(first_block, last_block) = firstb_lastb;

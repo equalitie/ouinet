@@ -33,6 +33,7 @@
 #include "or_throw.h"
 #include "request_routing.h"
 #include "request.h"
+#include "peer_message.h"
 #include "full_duplex_forward.h"
 #include "client.h"
 #include "authenticate.h"
@@ -616,14 +617,13 @@ void handle_http_error( GenericStream& con
     util::http_reply(con, res, yield.native());
 }
 
-template<class ReqBody>
 static
 void handle_bad_request( GenericStream& con
-                       , const http::request<ReqBody>& req
+                       , bool keep_alive
                        , const string& message
                        , YieldContext yield)
 {
-    auto res = util::http_error( req, http::status::bad_request
+    auto res = util::http_error( keep_alive, http::status::bad_request
                                , OUINET_CLIENT_SERVER_STRING
                                , "", message);
     return handle_http_error(con, res, yield);
@@ -650,7 +650,8 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
     while (true) {
         sys::error_code ec;
 
-        http::request<http::empty_body> req;
+        PeerRequest req;
+
         {
             auto rq_read_timeout = default_timeout::http_recv_simple();
             if (is_first_request) {
@@ -660,16 +661,14 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
 
             auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });
 
-            yield[ec].tag("read_req").run([&] (auto y) {
-                http::async_read(con, con_rbuf, req, y);
-            });
+            req = PeerRequest::async_read(con, yield.tag("read_req")[ec]);
 
             fail_on_error_or_timeout(yield, cancel, ec, wd);
         }
 
-        if (req.method() != http::verb::connect) {
+        if (auto* cache_req = std::get_if<PeerCacheRequest>(&req)) {
             auto keep_alive = _cache->serve_local(
-                    req,
+                    *cache_req,
                     con,
                     _metrics,
                     cancel,
@@ -681,14 +680,21 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
             return or_throw(yield, ec);  // done or unrecoverable error
         }
 
+        auto connect_req = std::get_if<PeerConnectRequest>(&req);
+
         auto cyield = yield.tag("connect");
+
+        if (!connect_req) {
+            return handle_bad_request( con, false, "Invalid request"
+                                     , cyield.tag("invalid request"));
+        }
 
         _YDEBUG(cyield, "Client: Received uTP/CONNECT request");
 
         // Connect to the injector and tunnel the transaction through it
 
         if (!_bep5_client) {
-            return handle_bad_request( con, req, "No known injectors"
+            return handle_bad_request( con, false, "No known injectors"
                                      , cyield.tag("handle_no_injectors_error"));
         }
 
@@ -700,13 +706,13 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
         ec = compute_error_code(ec, cancel);
         if (ec == asio::error::operation_aborted) return or_throw(cyield, ec);
         if (ec) {
-            return handle_bad_request( con, req, "Failed to connect to injector"
+            return handle_bad_request( con, false, "Failed to connect to injector"
                                      , cyield.tag("handle_injector_unreachable"));
         }
 
         // Send the client an OK message indicating that the tunnel
         // has been established.
-        http::response<http::empty_body> res{http::status::ok, req.version()};
+        http::response<http::empty_body> res{http::status::ok, 11};
         res.prepare_payload();
 
         _YDEBUG(cyield, "BEGIN");
@@ -722,10 +728,6 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
             util::http_reply(con, res, y);
         });
         return_or_throw_on_error(cyield, cancel, ec);
-
-        // First queue unused but already read data back into the other client connnection.
-        if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
-        assert(!ec);
 
         // Forward the rest of data in both directions.
         auto c2i_i2c =  full_duplex(
@@ -2281,7 +2283,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     if (!rq.target().starts_with("ws:") && !rq.target().starts_with("wss:")) {
         if (connect_hp.empty()) {
             sys::error_code ec_;
-            handle_bad_request(browser, rq, "Not a websocket server", yield[ec_]);
+            handle_bad_request(browser, false, "Not a websocket server", yield[ec_]);
             return true;
         }
 
@@ -2369,7 +2371,7 @@ Client::State::retrieval_failure_response(const Request& req)
     std::string content = file_to_string(error_page_path().string());
     if (content.empty()) {
         res = util::http_error
-            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
+            ( req.keep_alive(), http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
               , http_::response_error_hdr_retrieval_failed
               , "Failed to retrieve the resource "
               "(after attempting all configured mechanisms)");
@@ -2537,7 +2539,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
                 // as plain HTTP requests (as if we were a plain HTTP server)
                 // but for the moment we only accept proxy requests.
                 sys::error_code ec_;
-                handle_bad_request(con, req, "Not a proxy request", yield[ec_]);
+                handle_bad_request(con, req.keep_alive(), "Not a proxy request", yield[ec_]);
                 if (req.keep_alive()) continue;
                 else break;
             }
@@ -2550,7 +2552,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
                 auto message = "The request is missing a valid "
                     + std::string(header_key)
                     + " HTTP header\n";
-                auto res = util::http_error(req, http::status::unauthorized
+                auto res = util::http_error( req.keep_alive(), http::status::unauthorized
                                             , OUINET_CLIENT_SERVER_STRING
                                             , "", message);
                 handle_http_error(con, res, yield);
@@ -2562,7 +2564,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         // (to ease request routing check and later operations on the head).
         if (!util::req_ensure_host(req)) {
             sys::error_code ec_;
-            handle_bad_request(con, req, "Invalid or missing host in request", yield[ec_]);
+            handle_bad_request(con, req.keep_alive(), "Invalid or missing host in request", yield[ec_]);
             if (req.keep_alive()) continue;
             else break;
         }

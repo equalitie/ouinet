@@ -14,7 +14,7 @@
 #include "cache_entry.h"
 #include "resource_id.h"
 #include "dht_groups.h"
-
+#include "peer_message.h"
 
 namespace ouinet {
 
@@ -99,7 +99,7 @@ public:
 
     // Returns true if both request and response had keep-alive == true.
     // Times out if forwarding to the sink gets stuck.
-    bool serve_local( const http::request<http::empty_body>&
+    bool serve_local( const PeerCacheRequest&
                     , GenericStream& sink
                     , metrics::Client&
                     , Cancel&

@@ -103,7 +103,7 @@ void handle_error( GenericStream& con
                  , const string& message
                  , YieldContext yield)
 {
-    auto res = util::http_error( req, status
+    auto res = util::http_error( req.keep_alive(), status
                                , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
     send_response(con, res, yield);
 }

@@ -57,10 +57,14 @@ struct HttpRequestByteRange {
     size_t first;
     size_t last;
 
-    // Returns boost::none on parse error
+    // Returns none on parse error
     static
-    boost::optional<std::vector<HttpRequestByteRange>>
+    std::optional<std::vector<HttpRequestByteRange>>
     parse(boost::string_view);
+
+    friend std::ostream& operator<<(std::ostream& os, HttpRequestByteRange const& r) {
+        return os << "{ first: " << r.first << ", last: " << r.last << "}";
+    }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -184,16 +188,15 @@ bool http_proto_version_check_trusted( const Message& message
 // with the given `status`, `server` header and `message` body (text/plain).
 // If `proto_error` is not empty,
 // make this a Ouinet protocol message with that error.
-template<class Request>
 inline
 http::response<http::string_body>
-http_error( const Request& rq
+http_error( bool keep_alive
           , http::status status
           , const char* server
           , const std::string& proto_error
           , const std::string& message = "")
 {
-    http::response<http::string_body> rs{status, rq.version()};
+    http::response<http::string_body> rs{status, 11};
 
     if (!proto_error.empty()) {
         assert(boost::regex_match(proto_error, http_::response_error_rx));
@@ -202,7 +205,7 @@ http_error( const Request& rq
     }
     rs.set(http::field::server, server);
     rs.set(http::field::content_type, "text/plain");
-    rs.keep_alive(rq.keep_alive());
+    rs.keep_alive(keep_alive);
     rs.body() = message;
     rs.prepare_payload();
 

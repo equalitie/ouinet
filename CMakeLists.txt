@@ -169,6 +169,7 @@ file(GLOB ouinet_common_sources
     "./src/util/persistent_lru_cache.cpp"
     "./src/endpoint.cpp"
     "./src/request.cpp"
+    "./src/peer_message.cpp"
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     ${EXPERIMENTAL_SOURCES}

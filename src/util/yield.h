@@ -20,7 +20,7 @@ using ouinet::util::AsioExecutor;
 class YieldContext
 {
 public:
-    YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
+    explicit YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
         : _asio_yield(asio_yield)
         , _ignored_error(std::make_shared<sys::error_code>())
         , _log_path(std::move(log_path))

@@ -10,6 +10,7 @@
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
+#include "../util/keep_alive.h"
 #include "../ouiservice/utp.h"
 #include "../logger.h"
 #include "../async_sleep.h"
@@ -152,17 +153,7 @@ struct Client::Impl {
         return true;
     }
 
-    static
-    boost::optional<util::HttpRequestByteRange> get_range(const http::request_header<>& rq)
-    {
-        auto rs = util::HttpRequestByteRange::parse(rq[http::field::range]);
-        if (!rs) return boost::none;
-        // XXX: We currently support max 1 rage in the request
-        if ((*rs).size() != 1) return boost::none;
-        return (*rs)[0];
-    }
-
-    bool serve_local( const http::request<http::empty_body>& req
+    bool serve_local( const PeerCacheRequest& req
                     , GenericStream& sink
                     , metrics::Client& metrics_client
                     , Cancel& cancel
@@ -182,32 +173,17 @@ struct Client::Impl {
         // The requesting client may choose to drop the response
         // or attempt to extract useful information from it.
 
-        auto req_proto = req[http_::protocol_version_hdr];
-        if (!boost::regex_match( req_proto.begin(), req_proto.end()
-                               , http_::protocol_version_rx)) {
-            _YDEBUG(yield, "Not a Ouinet request\n", req);
-            handle_bad_request(sink, req, yield[ec]);
-            return or_throw(yield, ec, req.keep_alive());
-        }
-
-        auto resource_id = ResourceId::from_hex(req.target());
-        if (!resource_id) {
-            _YDEBUG(yield, "Cannot derive resource_id from request target:", req.target());
-            handle_bad_request(sink, req, yield[ec]);
-            return or_throw(yield, ec, req.keep_alive());
-        }
-
-        _YDEBUG(yield, "Received request for ", *resource_id);
+        _YDEBUG(yield, "Received request for ", req.resource_id());
 
         if (req.method() == http::verb::propfind) {
-            _YDEBUG(yield, "Serving propfind for ", *resource_id);
+            _YDEBUG(yield, "Serving propfind for ", req.resource_id());
             auto hl = _http_store->load_hash_list
-                (*resource_id, cancel, yield[ec].native());
+                (req.resource_id(), cancel, yield[ec].native());
 
             _YDEBUG(yield, "Load; ec=", ec);
             if (ec) {
                 sys::error_code hnf_ec;
-                handle_not_found(sink, req, yield[hnf_ec]);
+                handle_not_found(sink, req.keep_alive(), yield[hnf_ec]);
                 return or_throw(yield, hnf_ec, bool(!hnf_ec));
             }
             return_or_throw_on_error(yield, cancel, ec, false);
@@ -220,13 +196,10 @@ struct Client::Impl {
 
         cache::reader_uptr rr;
 
-        auto range = get_range(req);
-
-        if (range) {
-            rr = _http_store->range_reader(*resource_id, range->first, range->last, ec);
-            assert(rr);
+        if (auto range = req.range()) {
+            rr = _http_store->range_reader(req.resource_id(), range->first, range->last, ec);
         } else {
-            rr = _http_store->reader(*resource_id, ec);
+            rr = _http_store->reader(req.resource_id(), ec);
             // We may also, depending on whether the request is `HEAD`:
             // (tru) the operation above (which may work for an entry missing a body),
             // or (false) `_http_store->reader_and_size` instead so as to choose
@@ -238,10 +211,10 @@ struct Client::Impl {
 
         if (ec) {
             if (!cancel) {
-                _YDEBUG(yield, "Not serving: ", *resource_id, "; ec=", ec);
+                _YDEBUG(yield, "Not serving: ", req.resource_id(), "; ec=", ec);
             }
             sys::error_code hnf_ec;
-            handle_not_found(sink, req, yield[hnf_ec]);
+            handle_not_found(sink, req.keep_alive(), yield[hnf_ec]);
             return or_throw(yield, hnf_ec, req.keep_alive());
         }
 
@@ -254,13 +227,15 @@ struct Client::Impl {
             _YDEBUG(yield, "END; ec=", ec, " fwd_bytes=", fwd_bytes);
         });
 
-        _YDEBUG(yield, "Serving: ", *resource_id);
-
-        bool is_head_request = req.method() == http::verb::head;
+        _YDEBUG(yield, "Serving: ", req.resource_id());
 
         auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
-            auto metrics = metrics_client.new_cache_out_request();
-            return Session::create(move(rr), is_head_request, std::move(metrics), cancel, y);
+            return Session::create(
+                    move(rr),
+                    req.method() == http::verb::head,
+                    metrics_client.new_cache_out_request(),
+                    cancel,
+                    y);
         });
 
         if (ec) return or_throw(yield, ec, false);
@@ -340,27 +315,27 @@ struct Client::Impl {
     }
 
     void handle_http_error( GenericStream& con
-                          , const http::request<http::empty_body>& req
+                          , bool keep_alive
                           , http::status status
                           , const string& proto_error
                           , YieldContext yield)
     {
-        auto res = util::http_error(req, status, OUINET_CLIENT_SERVER_STRING, proto_error);
+        auto res = util::http_error(keep_alive, status, OUINET_CLIENT_SERVER_STRING, proto_error);
         util::http_reply(con, res, yield.native());
     }
 
     void handle_bad_request( GenericStream& con
-                           , const http::request<http::empty_body>& req
+                           , bool keep_alive
                            , YieldContext yield)
     {
-        return handle_http_error(con, req, http::status::bad_request, "", yield);
+        return handle_http_error(con, keep_alive, http::status::bad_request, "", yield);
     }
 
     void handle_not_found( GenericStream& con
-                         , const http::request<http::empty_body>& req
+                         , bool keep_alive
                          , YieldContext yield)
     {
-        return handle_http_error( con, req, http::status::not_found
+        return handle_http_error( con, keep_alive, http::status::not_found
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
@@ -795,7 +770,7 @@ void Client::store( const cache::ResourceId& key
     _impl->store(key, group, r, cancel, yield);
 }
 
-bool Client::serve_local( const http::request<http::empty_body>& req
+bool Client::serve_local( const PeerCacheRequest& req
                         , GenericStream& sink
                         , metrics::Client& metrics
                         , Cancel& cancel
