@@ -17,6 +17,9 @@ endif()
 add_executable(test-parser "test_parser.cpp")
 
 ######################################################################
+add_executable(test_crypto_stream "test_crypto_stream.cpp")
+
+######################################################################
 add_executable(test-cache "test_cache_control.cpp")
 target_link_libraries(test-cache client_lib)
 
