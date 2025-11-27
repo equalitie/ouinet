@@ -11,10 +11,12 @@ import sys
 from os import rename
 from os import remove
 from os.path import exists
+from shutil import rmtree
+from time import time
+from math import floor
 
 import tempfile
 from multiprocessing import Process
-from time import sleep
 import asyncio
 
 # Making random requests not to rely on cache
@@ -58,28 +60,33 @@ def get_nonloopback_ip() -> str:
     return ip
 
 
-def wait_for_injector_peers(frontend_port: int):
+async def wait_for_injector_peer_candidates(frontend_port: int):
     tries = 0
-    maxtries = 10
+    maxtries = 20
     while True:
-        tries += 1
-        if tries > maxtries:
-            raise Exception(f"No peers after {maxtries} tries, aborting")
 
+        print(f"waiting for peers: try {tries+1}/{maxtries}")
         response = requests.get(f"http://localhost:{frontend_port}/api/status")
         response.raise_for_status()
         if response.json()["injector_ready"]:
             break
+        peer_n = response.json()["injector_peers_n"]
 
-        sleep(2)
+        tries += 1
+        if tries >= maxtries:
+            raise Exception(
+                f"No peers after {maxtries} tries, aborting. Number of peers reported:",
+                peer_n,
+            )
+        await asyncio.sleep(3)
 
 
 async def wait_for_benchmark(process: OuinetProcess, benchmark: str):
-    print("waiting for ", benchmark)
+    start = time()
     while not process.callbacks[benchmark]:
+        print("waiting for", benchmark, "-", floor(time() - start), "s", end="\r")
         await asyncio.sleep(1)
-        print("waiting for ", benchmark)
-    print("successfully waited for", benchmark)
+    print("successfully waited for", benchmark, "\n\n")
 
 
 def run_tcp_injector(args):
@@ -121,6 +128,7 @@ def run_tcp_client(name, args):
                 TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
                 TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED,
                 TestFixtures.FRESH_SUCCESS_REGEX,
+                TestFixtures.DHT_INITIALIZED_REGEX,
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
             ],
         ),
@@ -190,6 +198,17 @@ async def proc_list_janitor() -> List[OuinetProcess]:
 
 
 @pytest.fixture()
+def repo_janitor() -> List[OuinetProcess]:
+    """
+    This fixture is teardown-only
+    """
+    yield
+
+    if exists(TestFixtures.REPO_FOLDER_NAME):
+        rmtree(TestFixtures.REPO_FOLDER_NAME)
+
+
+@pytest.fixture()
 def certificate_file() -> str:
     with tempfile.NamedTemporaryFile() as file:
         file.write(TestFixtures.INJECTOR_CERTIFICATE.encode("utf-8"))
@@ -217,9 +236,11 @@ def log():
 ################# Tests #####################
 
 
-# @pytest.mark.timeout(TestFixtures.TCP_TRANSPORT_TIMEOUT)
+@pytest.mark.timeout(TestFixtures.TCP_TRANSPORT_TIMEOUT)
 @pytest.mark.asyncio
-async def test_tcp_transport(proc_list_janitor, certificate_file, http_server):
+async def test_tcp_transport(
+    proc_list_janitor, repo_janitor, certificate_file, http_server
+):
     """
     Starts an echoing http server, a injector and a client and send a unique http
     request to the echoing http server through the g client --tcp--> injector -> http server
@@ -370,46 +391,54 @@ async def test_tcp_transport(proc_list_janitor, certificate_file, http_server):
 #     assertTrue(success)
 
 
-# def test_wikipedia_mainline():
-#     """
-#     A test to reach wikipedia without using our own injector
-#     """
+@pytest.mark.timeout(TestFixtures.BEP44_CACHE_TIMEOUT)
+@pytest.mark.asyncio
+async def test_wikipedia_mainline_dht(
+    repo_janitor, proc_list_janitor, http_server, certificate_file
+):
+    """
+    A test to reach wikipedia without using our own injector
+    """
 
-#     # Client
-#     client_port = TestFixtures.TCP_CLIENT["port"]
-#     frontend_port = TestFixtures.TCP_CLIENT["fe_port"]
-#     client = run_tcp_client(
-#         name=TestFixtures.TCP_CLIENT["name"],
-#         args=[
-#             "--disable-origin-access",
-#             "--cache-type=bep5-http",
-#             f"--cache-http-public-key={TestFixtures.MAINNET_INJECTOR_HASH}",
-#             "--listen-on-tcp",
-#             f"127.0.0.1:{client_port}",
-#             "--front-end-ep",
-#             f"127.0.0.1:{frontend_port}",
-#             "--injector-credentials",
-#             "ouinet:160d79874a52c2cbcdec58db1a8160a9",
-#             "--injector-tls-cert-file",
-#             TestFixtures.INJECTOR_CERT_PATH,
-#         ],
-#     )
+    # Client
+    client_port = TestFixtures.TCP_CLIENT["port"]
+    frontend_port = TestFixtures.TCP_CLIENT["fe_port"]
+    client = run_tcp_client(
+        name=TestFixtures.TCP_CLIENT["name"],
+        args=[
+            "--disable-origin-access",
+            "--cache-type=bep5-http",
+            f"--cache-http-public-key={TestFixtures.MAINNET_INJECTOR_HASH}",
+            "--listen-on-tcp",
+            f"127.0.0.1:{client_port}",
+            "--front-end-ep",
+            f"127.0.0.1:{frontend_port}",
+            "--injector-credentials",
+            "ouinet:160d79874a52c2cbcdec58db1a8160a9",
+            "--injector-tls-cert-file",
+            TestFixtures.INJECTOR_CERT_PATH,
+        ],
+    )
 
-#     success = yield client.callbacks[TestFixtures.TCP_CLIENT_PORT_READY_REGEX]
-#     assertTrue(success)
+    await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
-#     success = yield client.callbacks[TestFixtures.DHT_CONTACTS_STORED_REGEX]
-#     assertTrue(success)
+    print("[WARNING] Waiting for DHT to initialize, this can take 1-5 minutes")
+    timestamp = time()
+    await wait_for_benchmark(client, TestFixtures.DHT_INITIALIZED_REGEX)
+    print(
+        "[INFO] for DHT to get a WAN endpoint it took: ", time() - timestamp, "seconds"
+    )
 
-#     wait_for_injector_peers(frontend_port)
+    await wait_for_benchmark(client, TestFixtures.DHT_CONTACTS_STORED_REGEX)
+    # Peer candidates will necessarily be after DHT storing contacts
+    await wait_for_injector_peer_candidates(frontend_port)
 
-#     response = request_url(client_port, "http://example.org")
+    response = request_url(client_port, "http://example.org")
 
-#     if not response.status_code == 200:
-#         raise Exception(
-#             response.status_code, response.reason, response.text, response.request
-#         )
+    if not response.status_code == 200:
+        raise Exception(
+            response.status_code, response.reason, response.text, response.request
+        )
 
-#     # Confirm that it was fresh
-#     success = yield client.callbacks[TestFixtures.FRESH_SUCCESS_REGEX]
-#     assertTrue(success)
+    # Confirm that it was fresh
+    await wait_for_benchmark(client, TestFixtures.FRESH_SUCCESS_REGEX)

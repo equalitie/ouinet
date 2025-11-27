@@ -32,7 +32,7 @@ class TestFixtures:
     INDEX_READY_REGEX_INDEX = 1
     REQUEST_CACHED_REGEX_INDEX = 2
 
-    REPO_FOLDER_NAME = "repos"
+    REPO_FOLDER_NAME = "test_repos"
 
     INJECTOR_CONF_FILE_NAME = "ouinet-injector.conf"
     INJECTOR_CONF_FILE_CONTENT = "open-file-limit = 32768\n"
@@ -93,9 +93,11 @@ class TestFixtures:
     MAINNET_INJECTOR_HASH = "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq"
     FRESH_SUCCESS_REGEX = r'[\s\S]*fresh/injector Finish; ec="Success"[\s\S]*'
     DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
+    DHT_INITIALIZED_REGEX = r"[\s\S]*BT DHT: WAN endpoint[\s\S]*"
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
+
     INJECTOR_CERT_PATH = ""  # will be filled during setup
     INJECTOR_CERTIFICATE = """
 -----BEGIN CERTIFICATE-----
