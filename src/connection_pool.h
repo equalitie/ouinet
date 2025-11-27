@@ -195,57 +195,60 @@ class IdleConnection {
             return;
         }
 
+        auto handler = [
+            data = _data.get(),
+            was_destroyed = _data->was_destroyed
+        ] (sys::error_code ec, size_t read) {
+            if (*was_destroyed) {
+                return;
+            }
+
+            /*
+             * Three cases are possible:
+             * - Connection is in idle mode, which makes this read unexpected;
+             * - Connection is not in idle mode, and there is a read request queued
+             *   to which we can forward the data;
+             * - Connection is not in idle mode and there is no read request queued.
+             *   Store the data for later and use it to complete the next request.
+             */
+
+            assert(data->pending_idle_read);
+            data->pending_idle_read = false;
+
+            assert(!data->read_queued);
+
+            if (data->on_idle_read) {
+                auto handler = std::move(data->on_idle_read);
+                handler();
+                return;
+            }
+
+            if (data->read_callback) {
+                if (read > 0) {
+                    *data->read_buffer = data->queued_read_buffer;
+                }
+
+                asio::post(data->connection.get_executor(), [
+                    handler = std::move(data->read_callback),
+                    ec,
+                    read
+                ] () mutable {
+                    handler(ec, read);
+                });
+
+                return;
+            }
+
+            data->queued_read_error = ec;
+            data->read_queued = true;
+        };
+
         _data->pending_idle_read = true;
         _data->connection.async_read_some(
-            boost::asio::mutable_buffer(&_data->queued_read_buffer, 1), [
-                data = _data.get(),
-                was_destroyed = _data->was_destroyed
-            ] (sys::error_code ec, size_t read) {
-                if (*was_destroyed) {
-                    return;
-                }
-
-                /*
-                 * Three cases are possible:
-                 * - Connection is in idle mode, which makes this read unexpected;
-                 * - Connection is not in idle mode, and there is a read request queued
-                 *   to which we can forward the data;
-                 * - Connection is not in idle mode and there is no read request queued.
-                 *   Store the data for later and use it to complete the next request.
-                 */
-
-                assert(data->pending_idle_read);
-                data->pending_idle_read = false;
-
-                assert(!data->read_queued);
-
-                if (data->on_idle_read) {
-                    auto handler = std::move(data->on_idle_read);
-                    handler();
-                    return;
-                }
-
-                if (data->read_callback) {
-                    if (read > 0) {
-                        *data->read_buffer = data->queued_read_buffer;
-                    }
-
-                    asio::post(data->connection.get_executor(), [
-                        handler = std::move(data->read_callback),
-                        ec,
-                        read
-                    ] () mutable {
-                        handler(ec, read);
-                    });
-
-                    return;
-                }
-
-                data->queued_read_error = ec;
-                data->read_queued = true;
-            }
+            boost::asio::mutable_buffer(&_data->queued_read_buffer, 1),
+            handler
         );
-    }
+    };
 
     void make_not_idle()
     {

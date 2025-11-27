@@ -17,10 +17,8 @@ endif()
 add_executable(test_parser "test_parser.cpp")
 
 ######################################################################
-add_executable(test_cache
-    "test_cache_control.cpp"
-    "../src/cache_control.cpp"
-)
+add_executable(test_cache "test_cache_control.cpp")
+target_link_libraries(test_cache client_lib injector_lib)
 
 ######################################################################
 add_executable(test_wait_condition "test_wait_condition.cpp")
@@ -97,14 +95,8 @@ add_executable(test_http_sign
 )
 
 ######################################################################
-add_executable(test_http_store
-    "test_http_store.cpp"
-    "../src/cache/http_sign.cpp"
-    "../src/cache/http_store.cpp"
-    "../src/cache/hash_list.cpp"
-    "../src/util/atomic_dir.cpp"
-    "../src/util/temp_dir.cpp"
-)
+add_executable(test_http_store "test_http_store.cpp")
+target_link_libraries(test_http_store client_lib)
 
 ######################################################################
 add_executable(test_atomic_temp
@@ -140,3 +132,11 @@ add_executable(test_metrics "test_metrics.cpp")
 
 ######################################################################
 add_executable(test_injector_resolver "test_injector_resolver.cpp")
+target_link_libraries(test_injector_resolver injector_lib)
+
+######################################################################
+add_executable(test_dns "test_dns.cpp")
+
+######################################################################
+add_executable(test_fetch "test_fetch.cpp")
+target_link_libraries(test_fetch injector_lib client_lib)

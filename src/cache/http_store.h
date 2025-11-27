@@ -8,6 +8,7 @@
 #include <boost/filesystem/path.hpp>
 
 #include "hash_list.h"
+#include "resource_id.h"
 #include "../constants.h"
 #include "../response_reader.h"
 #include "../util/crypto.h"
@@ -189,25 +190,25 @@ public:
     // so this is also convenient for reading just the response head if present
     // (i.e. for a `HEAD` request).
     virtual reader_uptr
-    reader(const std::string& key, sys::error_code&) = 0;
+    reader(const ResourceId&, sys::error_code&) = 0;
 
     // This is similar to `reader` above,
     // but it also returns the size of stored body data.
     // Also, an `asio::error::no_data` error is reported if the body is missing.
     virtual ReaderAndSize
-    reader_and_size(const std::string& key, sys::error_code&) = 0;
+    reader_and_size(const ResourceId&, sys::error_code&) = 0;
 
     virtual reader_uptr
-    range_reader(const std::string& key, size_t first, size_t last, sys::error_code&) = 0;
+    range_reader(const ResourceId&, size_t first, size_t last, sys::error_code&) = 0;
 
     virtual std::size_t
-    body_size(const std::string& key, sys::error_code&) const = 0;
+    body_size(const ResourceId&, sys::error_code&) const = 0;
 
     virtual std::size_t
     size(Cancel, asio::yield_context) const = 0;
 
     virtual HashList
-    load_hash_list(const std::string& key, Cancel, asio::yield_context) const = 0;
+    load_hash_list(const ResourceId&, Cancel, asio::yield_context) const = 0;
 };
 
 // As static HTTP stores may come from untrusted sources,
@@ -229,7 +230,7 @@ make_static_http_store( fs::path path, fs::path content_path
 class HttpStore : public BaseHttpStore {
 public:
     using keep_func = std::function<
-        bool(reader_uptr, asio::yield_context)>;
+        bool(ResourceId const&, reader_uptr, asio::yield_context)>;
 
 public:
     virtual ~HttpStore() = default;
@@ -238,7 +239,7 @@ public:
     for_each(keep_func, Cancel, asio::yield_context) = 0;
 
     virtual void
-    store( const std::string& key, http_response::AbstractReader&
+    store( const ResourceId&, http_response::AbstractReader&
          , Cancel, asio::yield_context) = 0;
 };
 

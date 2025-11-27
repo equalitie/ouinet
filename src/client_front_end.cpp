@@ -295,7 +295,7 @@ upnp_status(const ClientFrontEnd::UPnPs& upnps) {
 
 static
 std::vector<std::string>
-public_udp_endpoints(const bittorrent::MainlineDht& dht) {
+public_udp_endpoints(const bittorrent::DhtBase& dht) {
     std::vector<std::string> eps;
     for (auto& ep : dht.wan_endpoints())
         eps.push_back(util::str(ep));
@@ -455,13 +455,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , Client::RunningState cstate
                                   , boost::optional<UdpEndpoint> local_ep
                                   , const std::shared_ptr<UPnPs>& upnps_ptr
-                                  , const bittorrent::MainlineDht* dht
+                                  , const bittorrent::DhtBase* dht
                                   , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
                                   , ClientFrontEndMetricsController& metrics
                                   , Cancel cancel
-                                  , Yield yield)
+                                  , YieldContext yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -502,8 +502,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
         sys::error_code ec;
-        auto yield_ = static_cast<asio::yield_context>(yield);
-        cache_client->local_purge(cancel, static_cast<asio::yield_context>(yield_[ec]));
+        auto yield_ = yield.native();
+        cache_client->local_purge(cancel, yield_[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
         if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
         query_handled = true;
@@ -617,10 +617,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<br>\n";
 
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
-    if (auto doh_ep = config.origin_doh_endpoint()) {
-        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
-           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
-    }
+    ss << "<br>\n";
+
+    ss << "DNS over HTTPS: "
+       << ( config.is_doh_enabled()
+          ? "enabled"
+          : "disabled" )
+       << ".<br><br>\n";
 
     ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
                    , "bt_extra_bootstraps"
@@ -656,7 +659,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
               % max_age.total_seconds() % past_as_string(max_age));
 
         sys::error_code ec;
-        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto yield_ = yield.native();
         auto local_size = cache_client->local_size(cancel, yield_[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
@@ -708,13 +711,13 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , Client::RunningState cstate
                                       , boost::optional<UdpEndpoint> local_ep
                                       , const std::shared_ptr<UPnPs>& upnps_ptr
-                                      , const bittorrent::MainlineDht* dht
+                                      , const bittorrent::DhtBase* dht
                                       , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
                                       , cache::Client* cache_client
                                       , ClientFrontEndMetricsController& metrics
                                       , Cancel cancel
-                                      , Yield yield)
+                                      , YieldContext yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -731,7 +734,8 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
-        {"metrics_enabled", metrics.is_enabled()}
+        {"metrics_enabled", metrics.is_enabled()},
+        {"doh_enabled", config.is_doh_enabled()}
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
@@ -757,7 +761,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
 
     if (cache_client) {
         sys::error_code ec;
-        auto yield_ = static_cast<asio::yield_context>(yield);
+        auto yield_ = yield.native();
         auto sz = cache_client->local_size(cancel, yield_[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
         if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
@@ -856,7 +860,7 @@ void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
                                        , const Request& req, Response& res, ostringstream& ss
                                        , ClientFrontEndMetricsController& metrics
                                        , Cancel cancel
-                                       , Yield yield)
+                                       , YieldContext yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -906,11 +910,11 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const std::shared_ptr<UPnPs>& upnps_ptr
-                              , const bittorrent::MainlineDht* dht
+                              , const bittorrent::DhtBase* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
                               , Cancel cancel
-                              , Yield yield)
+                              , YieldContext yield)
 {
     if (auto& token = config.front_end_access_token()) {
         std::string_view header_key = "X-Ouinet-Front-End-Token";
@@ -938,10 +942,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     ostringstream ss;
 
-    util::url_match url;
-    match_http_url(req.target(), url);
+    auto url = util::Url::from(req.target());
 
-    auto path_str = !url.path.empty() ? url.path : std::string(req.target());
+    auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
     std::string_view path(path_str);
 
     std::string_view groups_api_path = "/api/groups";

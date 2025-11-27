@@ -20,34 +20,29 @@ using namespace ouinet;
 namespace error = asio::error;
 namespace posix_time = boost::posix_time;
 using Entry    = CacheEntry;
-using Request  = CacheControl::Request;
+using Request  = http::request<http::string_body>;
 using Response = CacheControl::Response;
 using posix_time::seconds;
 using boost::optional;
 using beast::string_view;
 using ouinet::util::str;
-using OuinetYield = ouinet::Yield;
 
-static const optional<string> dht_group("fake-dht-group");
+static const string dht_group("fake-dht-group");
 
 static posix_time::ptime current_time() {
     return posix_time::second_clock::universal_time();
 }
 
-static optional<string_view> get(const Request& rq, http::field f)
-{
-    auto i = rq.find(f);
-    if (i == rq.end()) return boost::none;
-    return i->value();
-}
-
 template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
     task::spawn_detached(ctx, [&ctx, f = forward<F>(f)](auto yield) {
             try {
-                f(OuinetYield(ctx, yield));
+                f(YieldContext(yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
+            }
+            catch (...) {
+                BOOST_ERROR("Test ended with unknown exception");
             }
         });
     ctx.run();
@@ -112,9 +107,9 @@ Session make_session(
 Session make_session(
         asio::io_context& ctx,
         Response rs,
-        OuinetYield y)
+        YieldContext y)
 {
-    return make_session(ctx, move(rs), static_cast<asio::yield_context>(y));
+    return make_session(ctx, move(rs), y.native());
 }
 
 Entry make_entry(
@@ -131,9 +126,9 @@ Entry make_entry(
         asio::io_context& ctx,
         posix_time::ptime created,
         Response rs,
-        OuinetYield y)
+        YieldContext y)
 {
-    return make_entry(ctx, move(created), move(rs), static_cast<asio::yield_context>(y));
+    return make_entry(ctx, move(created), move(rs), y.native());
 }
 
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
@@ -141,17 +136,17 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
 
-    cc.parallel_fresh = [] (auto, auto) { return true; };
+    cc.parallel_fresh = [] (auto) { return true; };
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto&, auto& c, auto y) {
+    cc.fetch_stored = [&](auto rq, auto& c, auto y) {
         cache_check++;
         return make_entry(
                 ctx,
                 current_time(),
-                {http::status::ok, rq.version()},
+                {http::status::ok, CacheRequest::HTTP_VERSION},
                 y);
     };
 
@@ -162,10 +157,13 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     };
 
     run_spawned(ctx, [&](auto yield) {
-            Request req{http::verb::get, "foo", 11};
+            Request normal_request{http::verb::get, "http://foo", 11};
+            normal_request.set(http_::request_group_hdr, dht_group);
+
+            auto req = CacheRequest::from(normal_request, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
-            auto s = cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+            auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
             BOOST_REQUIRE(fresh_ec);
             BOOST_REQUIRE(!cache_ec);
             auto& hdr = s.response_header();
@@ -179,52 +177,62 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 BOOST_AUTO_TEST_CASE(test_max_cached_age)
 {
     asio::io_context ctx;
+
     CacheControl cc(ctx, "test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
-        cache_check++;
-
-        Response rs{http::status::ok, rq.version()};
-        rs.set( http::field::cache_control
-              , str("max-age=", (cc.max_cached_age().total_seconds() + 10)));
-
-        auto created = current_time() - cc.max_cached_age();
-
-        if (rq.target() == "old") created -= seconds(5);
-        else                      created += seconds(5);
-
-        return make_entry(ctx, created, rs, y);
-    };
-
-    cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
-        origin_check++;
-        BOOST_CHECK(ce);
-        BOOST_CHECK_EQUAL(rq.target(), "old");
-        return make_session(ctx, {http::status::ok, rq.version()}, y);
-    };
-
     run_spawned(ctx, [&](auto yield) {
-            {
-                Request req{http::verb::get, "old", 11};
-                Cancel cancel;
-                sys::error_code fresh_ec, cache_ec;
-                cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
-                BOOST_REQUIRE(!fresh_ec);
-                BOOST_REQUIRE(cache_ec);
-            }
-            {
-                Request req{http::verb::get, "new", 11};
-                Cancel cancel;
-                sys::error_code fresh_ec, cache_ec;
-                cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
+        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
 
-                BOOST_REQUIRE(fresh_ec);
-                BOOST_REQUIRE(!cache_ec);
-            }
-        });
+        cc.fetch_stored = [&](auto rq, auto&, auto y) {
+            cache_check++;
+
+            Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
+            rs.set( http::field::cache_control
+                  , str("max-age=", (cc.max_cached_age().total_seconds() + 10)));
+
+            auto created = current_time() - cc.max_cached_age();
+
+            if (rq.resource_id() == old_resource_id) created -= seconds(5);
+            else                                     created += seconds(5);
+
+            return make_entry(ctx, created, rs, y);
+        };
+
+        cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
+            origin_check++;
+            BOOST_CHECK(ce);
+            BOOST_CHECK_EQUAL(rq.resource_id(), old_resource_id);
+            return make_session(ctx, {http::status::ok, CacheRequest::HTTP_VERSION}, y);
+        };
+
+        {
+            Request normal_req{http::verb::get, "http://old", 11};
+            normal_req.set(http_::request_group_hdr, dht_group);
+
+            auto req = CacheRequest::from(normal_req, yield).value();
+            Cancel cancel;
+            sys::error_code fresh_ec, cache_ec;
+            cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
+            BOOST_REQUIRE(!fresh_ec);
+            BOOST_REQUIRE(cache_ec);
+        }
+        {
+            Request normal_req{http::verb::get, "http://new", 11};
+            normal_req.set(http_::request_group_hdr, dht_group);
+
+            auto req = CacheRequest::from(normal_req, yield).value();
+            Cancel cancel;
+            sys::error_code fresh_ec, cache_ec;
+            cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
+
+            BOOST_REQUIRE(fresh_ec);
+            BOOST_REQUIRE(!cache_ec);
+        }
+    });
 
     BOOST_CHECK_EQUAL(cache_check, 2u);
     BOOST_CHECK_EQUAL(origin_check, 1u);
@@ -239,46 +247,55 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
-        cache_check++;
-
-        Response rs{http::status::ok, rq.version()};
-        rs.set(http::field::cache_control, "max-age=60");
-
-        auto created = current_time();
-
-        if (rq.target() == "old") {
-            created -= seconds(120);
-        }
-        else {
-            created -= seconds(30);
-            BOOST_CHECK(rq.target() == "new");
-        }
-
-        return make_entry(ctx, created, rs, y);
-    };
-
-    cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
-        origin_check++;
-        BOOST_CHECK(ce);
-        Response rs{http::status::ok, rq.version()};
-        return make_session(ctx, rs, y);
-    };
-
     run_spawned(ctx, [&](auto yield) {
-            {
-                Request req{http::verb::get, "old", 11};
-                Cancel cancel;
-                sys::error_code fresh_ec, cache_ec;
-                cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
+        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
+
+        cc.fetch_stored = [&](auto rq, auto&, auto y) {
+            cache_check++;
+
+            Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
+            rs.set(http::field::cache_control, "max-age=60");
+
+            auto created = current_time();
+
+            if (rq.resource_id() == old_resource_id) {
+                created -= seconds(120);
             }
-            {
-                Request req{http::verb::get, "new", 11};
-                Cancel cancel;
-                sys::error_code fresh_ec, cache_ec;
-                cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+            else {
+                created -= seconds(30);
+                BOOST_CHECK(rq.resource_id() == new_resource_id);
             }
-        });
+
+            return make_entry(ctx, created, rs, y);
+        };
+
+        cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
+            origin_check++;
+            BOOST_CHECK(ce);
+            Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
+            return make_session(ctx, rs, y);
+        };
+
+        {
+            Request normal_req{http::verb::get, "http://old", 11};
+            normal_req.set(http_::request_group_hdr, dht_group);
+
+            auto req = CacheRequest::from(normal_req, yield).value();
+            Cancel cancel;
+            sys::error_code fresh_ec, cache_ec;
+            cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
+        }
+        {
+            Request normal_req{http::verb::get, "http://new", 11};
+            normal_req.set(http_::request_group_hdr, dht_group);
+
+            auto req = CacheRequest::from(normal_req, yield).value();
+            Cancel cancel;
+            sys::error_code fresh_ec, cache_ec;
+            cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
+        }
+    });
 
     BOOST_CHECK_EQUAL(cache_check, 2u);
     BOOST_CHECK_EQUAL(origin_check, 1u);
@@ -303,47 +320,56 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
         return ss.str();
     };
 
-    cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
-        cache_check++;
-
-        Response rs{http::status::ok, rq.version()};
-
-        auto created = current_time();
-
-        if (rq.target() == "old") {
-            rs.set( http::field::expires
-                  , format_time(current_time() - posix_time::seconds(10)));
-        }
-        else {
-            BOOST_CHECK(rq.target() == "new");
-            rs.set( http::field::expires
-                  , format_time(current_time() + posix_time::seconds(10)));
-        }
-
-        return make_entry(ctx, created, rs, y);
-    };
-
-    cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
-        origin_check++;
-        BOOST_CHECK(ce);
-        Response rs{http::status::ok, rq.version()};
-        return make_session(ctx, rs, y);
-    };
-
     run_spawned(ctx, [&](auto yield) {
-            {
-                Request req{http::verb::get, "old", 11};
-                Cancel cancel;
-                sys::error_code fresh_ec, cache_ec;
-                cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
+        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
+
+        cc.fetch_stored = [&](auto rq, auto&, auto y) {
+            cache_check++;
+
+            Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
+
+            auto created = current_time();
+
+            if (rq.resource_id() == old_resource_id) {
+                rs.set( http::field::expires
+                      , format_time(current_time() - posix_time::seconds(10)));
             }
-            {
-                Request req{http::verb::get, "new", 11};
-                Cancel cancel;
-                sys::error_code fresh_ec, cache_ec;
-                cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+            else {
+                BOOST_CHECK(rq.resource_id() == new_resource_id);
+                rs.set( http::field::expires
+                      , format_time(current_time() + posix_time::seconds(10)));
             }
-        });
+
+            return make_entry(ctx, created, rs, y);
+        };
+
+        cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
+            origin_check++;
+            BOOST_CHECK(ce);
+            Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
+            return make_session(ctx, rs, y);
+        };
+
+        {
+            Request normal_req{http::verb::get, "http://old", 11};
+            normal_req.set(http_::request_group_hdr, dht_group);
+
+            auto req = CacheRequest::from(normal_req, yield).value();
+            Cancel cancel;
+            sys::error_code fresh_ec, cache_ec;
+            cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
+        }
+        {
+            Request normal_req{http::verb::get, "http://new", 11};
+            normal_req.set(http_::request_group_hdr, dht_group);
+
+            auto req = CacheRequest::from(normal_req, yield).value();
+            Cancel cancel;
+            sys::error_code fresh_ec, cache_ec;
+            cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
+        }
+    });
 
     BOOST_CHECK_EQUAL(cache_check, 2u);
     BOOST_CHECK_EQUAL(origin_check, 1u);
@@ -354,11 +380,11 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
 
-    cc.parallel_fresh = [] (auto, auto) { return true; };
+    cc.parallel_fresh = [] (auto) { return true; };
 
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
         return make_entry(ctx, current_time(), Response{}, y);
     };
@@ -366,17 +392,19 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
         BOOST_CHECK(!ce);
-        Response rs{http::status::ok, rq.version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set("X-Test", "from-origin");
         return make_session(ctx, rs, y);
     };
 
     run_spawned(ctx, [&](auto yield) {
-            Request req{http::verb::get, "foo", 11};
-            req.set(http::field::if_none_match, "abc");
+            Request normal_req{http::verb::get, "http://foo", 11};
+            normal_req.set(http::field::if_none_match, "abc");
+            normal_req.set(http_::request_group_hdr, dht_group);
+            auto req = CacheRequest::from(normal_req, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
-            auto s = cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+            auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
             auto& hdr = s.response_header();
             BOOST_CHECK_EQUAL(hdr.result(), http::status::ok);
         });
@@ -389,11 +417,11 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
 
-    cc.parallel_fresh = [] (auto, auto) { return true; };
+    cc.parallel_fresh = [] (auto) { return true; };
 
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
         return make_entry(ctx, current_time(), {}, y);
     };
@@ -402,20 +430,23 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
         origin_check++;
         BOOST_CHECK(!ce);
 
-        auto etag = get(rq, http::field::if_none_match);
+        auto etag = rq.get_if_none_match_field();
         BOOST_CHECK(etag);
         BOOST_CHECK_EQUAL(*etag, "origin-etag");
 
-        return make_session(ctx, {http::status::ok, rq.version()}, y);
+        return make_session(ctx, {http::status::ok, CacheRequest::HTTP_VERSION}, y);
     };
 
     run_spawned(ctx, [&](auto yield) {
             // In this test, the user agent provides its own etag.
-            Request rq{http::verb::get, "mypage", 11};
-            rq.set(http::field::if_none_match, "origin-etag");
+            Request normal_rq{http::verb::get, "http://mypage", 11};
+            normal_rq.set(http::field::if_none_match, "origin-etag");
+            normal_rq.set(http_::request_group_hdr, dht_group);
+
+            auto rq = CacheRequest::from(normal_rq, yield).value();
             Cancel cancel;
             sys::error_code fresh_ec, cache_ec;
-            cc.fetch(rq, dht_group, fresh_ec, cache_ec, cancel, yield);
+            cc.fetch(rq, fresh_ec, cache_ec, cancel, yield);
         });
 
     BOOST_CHECK_EQUAL(origin_check, 1u);
@@ -450,10 +481,10 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
 
-        Response rs{http::status::ok, rq.version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set(http::field::cache_control, "max-age=10");
         rs.set(http::field::etag, "123");
         rs.set("X-Test", "from-cache");
@@ -464,18 +495,18 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
     cc.fetch_fresh = [&](auto rq, auto ce, auto&, auto y) {
         origin_check++;
 
-        auto etag = get(rq, http::field::if_none_match);
+        auto etag = rq.get_if_none_match_field();
         BOOST_REQUIRE(etag);
 
         if (*etag == "123") {
             // No check for available cache entry since this may or may not be a revalidation.
-            Response rs{http::status::not_modified, rq.version()};
+            Response rs{http::status::not_modified, CacheRequest::HTTP_VERSION};
             rs.set("X-Test", "from-origin-not-modified");
             return make_session(ctx, rs, y);
         }
         BOOST_CHECK(!ce);
 
-        Response rs{http::status::ok, rq.version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set("X-Test", "from-origin-ok");
 
         return make_session(ctx, rs, y);
@@ -483,10 +514,13 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 
     run_spawned(ctx, [&](auto yield) {
             {
-                Request rq{http::verb::get, "mypage", 11};
+                Request normal_rq{http::verb::get, "http://mypage", 11};
+                normal_rq.set(http_::request_group_hdr, dht_group);
+                auto rq = CacheRequest::from(normal_rq, yield).value();
+
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
-                auto s = cc.fetch(rq, dht_group, fresh_ec, cache_ec, cancel, yield);
+                auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield);
                 auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-cache");
@@ -495,11 +529,14 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
             {
 
                 // In this test, the user agent provides the existing etag.
-                Request rq{http::verb::get, "mypage", 11};
-                rq.set(http::field::if_none_match, "123");
+                Request normal_rq{http::verb::get, "http://mypage", 11};
+                normal_rq.set(http::field::if_none_match, "123");
+                normal_rq.set(http_::request_group_hdr, dht_group);
+                auto rq  = CacheRequest::from(normal_rq, yield).value();
+
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
-                auto s = cc.fetch(rq, dht_group, fresh_ec, cache_ec, cancel, yield);
+                auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield);
                 auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::not_modified);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin-not-modified");
@@ -507,11 +544,14 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 
             {
                 // In this test, the user agent provides its own etag.
-                Request rq{http::verb::get, "mypage", 11};
-                rq.set(http::field::if_none_match, "abc");
+                Request normal_rq{http::verb::get, "http://mypage", 11};
+                normal_rq.set(http::field::if_none_match, "abc");
+                normal_rq.set(http_::request_group_hdr, dht_group);
+                auto rq  = CacheRequest::from(normal_rq, yield).value();
+
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
-                auto s = cc.fetch(rq, dht_group, fresh_ec, cache_ec, cancel, yield);
+                auto s = cc.fetch(rq, fresh_ec, cache_ec, cancel, yield);
                 auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin-ok");
@@ -530,9 +570,9 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
-    cc.fetch_stored = [&](auto rq, auto&, auto&, auto y) {
+    cc.fetch_stored = [&](auto rq, auto&, auto y) {
         cache_check++;
-        Response rs{http::status::ok, rq.version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         // Return a fresh cached version.
         rs.set(http::field::cache_control, "max-age=3600");
         rs.set("X-Test", "from-cache");
@@ -543,12 +583,12 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         origin_check++;
         // No check for available cache entry since it may or may not have been checked.
 
-        auto nocache = get(rq, http::field::cache_control);
+        auto nocache = rq.get_cache_control_field();
         BOOST_REQUIRE(nocache);
 
         // Force using version from origin instead of validated version from cache
         // (i.e. not returning "304 Not Modified" here).
-        Response rs{http::status::ok, rq.version()};
+        Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set("X-Test", "from-origin");
         return make_session(ctx, rs, y);
     };
@@ -557,10 +597,12 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
             {
                 // Cached resources requested without "no-cache" should come from the cache
                 // since the cached version is fresh enough.
-                Request req{http::verb::get, "foo", 11};
+                Request normal_req{http::verb::get, "http://foo", 11};
+                normal_req.set(http_::request_group_hdr, dht_group);
+                auto req = CacheRequest::from(normal_req, yield).value();
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
-                auto s = cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+                auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
                 auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-cache");
@@ -568,11 +610,14 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
             {
                 // Cached resources requested without "no-cache" should come from or be validated by the origin.
                 // In this test we know it will be the origin.
-                Request req{http::verb::get, "foo", 11};
-                req.set(http::field::cache_control, "no-cache");
+                Request normal_req{http::verb::get, "http://foo", 11};
+                normal_req.set(http::field::cache_control, "no-cache");
+                normal_req.set(http_::request_group_hdr, dht_group);
+
+                auto req = CacheRequest::from(normal_req, yield).value();
                 Cancel cancel;
                 sys::error_code fresh_ec, cache_ec;
-                auto s = cc.fetch(req, dht_group, fresh_ec, cache_ec, cancel, yield);
+                auto s = cc.fetch(req, fresh_ec, cache_ec, cancel, yield);
                 auto h = s.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin");

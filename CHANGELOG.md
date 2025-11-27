@@ -8,11 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.5.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.5.0) - 2025-11-26
+
+### Added
+
+- New config value named `request-body-limit` which is useful to control
+the allowed size of the Body section of POST/PUT requests. !138 !141
+- DNS over HTTPS is the new default resolver. !137 !144
+- CPP integration tests to cover Ouinet fetch mechanisms. !140
+
+### Changed
+
+- Refactoring of Dht and DhtNode code to make it usable with the new CPP
+integration tests. !140
+- Refactor URL parsing. !140
+- CMake refactoring and Asio lib targets renaming. !140
+- General refactoring to use `YieldContext` instead of `asio::yield_context`. !140
+
+### Fixed
+
+- OpenSSL Android warnings. !135
+- Building in Windows docker containers. !140
+- Fix gradle warnings. !143
+
+
+## [v1.4.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.2) - 2025-11-14
+
+### Fixed
+
+-  Fix "connection reset by peer" coming through the private route. !142
+
+
+## [v1.4.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.1) - 2025-10-21
+
 ### Added
 
 - New client configuration option `allow-private-targets` to permit requests
 of services running in local/private networks, e.g. 192.168.1.13, 10.8.0.2,
 172.16.10.8, etc. !133
+- Patches and changes needed for full production support of iOS in Ouinet. !128
+
+### Changed
+
+- Restore and refactoring of the integration tests. !124
+- Ouinet for Android is now built using NDK r28c. This is needed to
+support 16K page sizes, which will soon be required for publishing apps on
+the Google Play Store. !134
 
 
 ## [v1.4.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.0) - 2025-09-03

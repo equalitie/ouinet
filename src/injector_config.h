@@ -6,6 +6,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/regex.hpp>
+#include <boost/program_options.hpp>
 
 #include "logger.h"
 #include "http_logger.h"
@@ -124,6 +125,9 @@ public:
     bool is_private_target_allowed() const
     { return _allow_private_targets; }
 
+    bool is_doh_enabled() const
+    { return !_disable_doh; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -158,6 +162,7 @@ private:
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
+    bool _disable_doh = false;
     util::Ed25519PrivateKey _ed25519_private_key;
 };
 
@@ -218,6 +223,10 @@ InjectorConfig::options_description()
         ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
          , "Allows the injection of targets resolving to private addresses. "
            "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
+        ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+         , "Disable DNS over HTTPS for domain name resolution. "
+           "When this option is present the injector will fallback to the default DNS mechanism "
+           "provided by the operating system.")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
@@ -265,18 +274,15 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     {
         fs::path ouinet_conf_path = _repo_root/OUINET_CONF_FILE;
-        if (!fs::is_regular_file(ouinet_conf_path)) {
-            throw std::runtime_error(util::str(
-                "The path ", _repo_root, " does not contain the "
-                , OUINET_CONF_FILE, " configuration file"));
-        }
+        if (fs::is_regular_file(ouinet_conf_path)) {
 #ifdef __WIN32
-        std::ifstream ouinet_conf(ouinet_conf_path.string());
+            std::ifstream ouinet_conf(ouinet_conf_path.string());
 #else
-        std::ifstream ouinet_conf(ouinet_conf_path.native());
+            std::ifstream ouinet_conf(ouinet_conf_path.native());
 #endif
-        po::store(po::parse_config_file(ouinet_conf, desc), vm);
-        po::notify(vm);
+            po::store(po::parse_config_file(ouinet_conf, desc), vm);
+            po::notify(vm);
+        }
     }
 
     if (vm.count("log-level")) {
@@ -323,6 +329,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm["allow-private-targets"].as<bool>()) {
         _allow_private_targets = true;
+    }
+
+    if (vm["disable-doh"].as<bool>()) {
+        _disable_doh = true;
     }
 
 #ifdef __EXPERIMENTAL__

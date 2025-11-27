@@ -15,7 +15,7 @@ struct Contact {
         , id(id)
     {}
 
-    Contact(const dht::NodeContact& c)
+    Contact(const NodeContact& c)
         : endpoint(c.endpoint)
         , id(c.id)
     {}

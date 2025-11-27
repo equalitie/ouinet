@@ -19,8 +19,6 @@
 using namespace std;
 using namespace ouinet;
 
-using Request = CacheControl::Request;
-
 namespace posix_time = boost::posix_time;
 
 // Look for a literal directive (like "no-cache" but not "max-age=N")
@@ -42,11 +40,22 @@ bool has_cache_control_directive( const Session& session
     return false;
 }
 
+template<class H>
+static
+const http::fields& fields_of(const H& hdr) {
+    return hdr;
+}
+
+static
+const http::fields& fields_of(const CacheRequest& rq) {
+    return rq.header();
+}
+
 template<class R>
 static boost::optional<beast::string_view> get(const R& r, http::field f)
 {
-    auto i = r.find(f);
-    if (i == r.end())
+    auto i = fields_of(r).find(f);
+    if (i == fields_of(r).end())
       return boost::none;
         
     return i->value();
@@ -173,18 +182,16 @@ Session add_stale_warning(Session response)
 }
 
 Session
-CacheControl::fetch(const Request& request,
-                    const boost::optional<DhtGroup>& dht_group,
+CacheControl::fetch(const CacheRequest& request,
                     sys::error_code& fresh_ec,
                     sys::error_code& cache_ec,
                     Cancel& cancel,
-                    Yield yield)
+                    YieldContext yield)
 {
     sys::error_code ec;
 
     auto response = do_fetch(
             request,
-            dht_group,
             fresh_ec,
             cache_ec,
             cancel,
@@ -193,7 +200,7 @@ CacheControl::fetch(const Request& request,
     return or_throw(yield, ec, move(response));
 }
 
-static bool must_revalidate(const Request& request)
+static bool must_revalidate(const CacheRequest& request)
 {
     if (get(request, http::field::if_none_match))
         return true;
@@ -235,12 +242,11 @@ struct CacheControl::FetchState {
 //------------------------------------------------------------------------------
 Session
 CacheControl::do_fetch(
-        const Request& request,
-        const boost::optional<DhtGroup>& dht_group,
+        const CacheRequest& request,
         sys::error_code& fresh_ec,
         sys::error_code& cache_ec,
         Cancel& cancel,
-        Yield yield)
+        YieldContext yield)
 {
     FetchState fetch_state;
 
@@ -253,7 +259,7 @@ CacheControl::do_fetch(
         auto& fs = fetch_state;
         // Create new yield context so that we don't accidentally reset the
         // returned error code.
-        asio::yield_context y(yield);
+        asio::yield_context y = yield.native();
         {
 #           ifndef NDEBUG
             auto wdog = watch_dog(_ex, std::chrono::seconds(10), [&] {
@@ -298,7 +304,7 @@ CacheControl::do_fetch(
 
         _YDEBUG(ryield, "Revalidation failed, attempting to fetch from cache");
         bool is_fresh = false;
-        auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, ryield[cache_ec]);
+        auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, ryield[cache_ec]);
         if (!cache_ec) {
             if (is_fresh) {
                 _YDEBUG(ryield, "Revalidation failed, cached response is fresh");
@@ -319,7 +325,7 @@ CacheControl::do_fetch(
     }
 
     bool is_fresh = false;
-    auto cache_entry = do_fetch_stored(fetch_state, request, dht_group, is_fresh, yield[cache_ec]);
+    auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
 
     if (cache_ec == err::operation_aborted) {
         fresh_ec = err::operation_aborted;
@@ -395,9 +401,9 @@ CacheControl::do_fetch(
         auto ryield = yield.tag("cache_reval");
         _YDEBUG(ryield, "Attempting to revalidate cached response");
 
-        auto rq = request; // Make a copy because `request` is const&.
+        auto rq = request;
 
-        rq.set(http::field::if_none_match, *cache_etag);
+        rq.set_if_none_match(*cache_etag);
 
         auto response = do_fetch_fresh(fetch_state, rq, &cache_entry, ryield[fresh_ec]);
 
@@ -446,16 +452,16 @@ posix_time::time_duration CacheControl::max_cached_age() const
 }
 
 //------------------------------------------------------------------------------
-auto CacheControl::make_fetch_fresh_job( const Request& rq
+auto CacheControl::make_fetch_fresh_job( const CacheRequest& rq
                                        , const CacheEntry* cached
-                                       , Yield yield)
+                                       , YieldContext yield)
 {
     AsyncJob<Session> job(_ex);
 
     job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
-            auto y = yield.detach(yield_);
+            auto y = YieldContext(yield_, yield.log_path());
             sys::error_code ec;
-            auto r = fetch_fresh(rq, cached, cancel, y[ec]);
+            auto r = fetch_fresh(rq.to_inject_request(), cached, cancel, y[ec]);
             ec = compute_error_code(ec, cancel);
             return or_throw(y, ec, move(r));
         });
@@ -466,9 +472,9 @@ auto CacheControl::make_fetch_fresh_job( const Request& rq
 //------------------------------------------------------------------------------
 Session
 CacheControl::do_fetch_fresh( FetchState& fs
-                            , const Request& rq
+                            , const CacheRequest& rq
                             , const CacheEntry* cached
-                            , Yield yield)
+                            , YieldContext yield)
 {
     if (!fetch_fresh) {
         _YDEBUG(yield, "No fetch fresh operation");
@@ -479,7 +485,7 @@ CacheControl::do_fetch_fresh( FetchState& fs
         fs.fetch_fresh = make_fetch_fresh_job(rq, cached, yield);
     }
 
-    fs.fetch_fresh->wait_for_finish(static_cast<asio::yield_context>(yield));
+    fs.fetch_fresh->wait_for_finish(yield.native());
 
     auto result = move(fs.fetch_fresh->result());
     auto rs = move(result.retval);
@@ -489,10 +495,9 @@ CacheControl::do_fetch_fresh( FetchState& fs
 
 CacheEntry
 CacheControl::do_fetch_stored(FetchState& fs,
-                              const Request& rq,
-                              const boost::optional<DhtGroup>& dht_group,
+                              const CacheRequest& rq,
                               bool& is_fresh,
-                              Yield yield)
+                              YieldContext yield)
 {
     is_fresh = false;
 
@@ -501,14 +506,9 @@ CacheControl::do_fetch_stored(FetchState& fs,
         return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
     }
 
-    if (!dht_group) {
-        _YDEBUG(yield, "No group given");
-        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
-    }
-
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
-    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq, dht_group)) {
+    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq)) {
         fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
     }
 
@@ -516,7 +516,8 @@ CacheControl::do_fetch_stored(FetchState& fs,
         fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
         fs.fetch_stored->start(
                 [&] (Cancel& cancel, asio::yield_context yield_) mutable {
-                    return fetch_stored(rq, *dht_group, cancel, yield.detach(yield_));
+                    auto y = YieldContext(yield_, yield.log_path());
+                    return fetch_stored(rq.to_retrieve_request(), cancel, y);
                 });
     }
 
@@ -528,6 +529,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
     boost::optional<AsyncJob<CacheEntry>::Connection> fetch_stored_con;
 
     if (fs.fetch_fresh) {
+        fs.fetch_fresh->was_started();
         assert(fs.fetch_fresh->was_started());
 
         fetch_fresh_con = fs.fetch_fresh->on_finish_sig([&] {
@@ -559,7 +561,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         if (!fs.fetch_stored->has_result()) {
-            cv.wait(static_cast<asio::yield_context>(yield));
+            cv.wait(yield.native());
         }
     }
 
@@ -574,7 +576,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         // fetch_fresh errored, wait for the stored version
-        fs.fetch_stored->wait_for_finish(static_cast<asio::yield_context>(yield));
+        fs.fetch_stored->wait_for_finish(yield.native());
 
         auto& r2 = fs.fetch_stored->result();
         return or_throw(yield, r2.ec, move(r2.retval));

@@ -90,7 +90,7 @@ ouinet::util::operator<<( std::ostream& os
     return os << '*';
 }
 
-boost::optional<std::vector<ouinet::util::HttpRequestByteRange>>
+std::optional<std::vector<ouinet::util::HttpRequestByteRange>>
 ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
 {
     using Ranges = std::vector<ouinet::util::HttpRequestByteRange>;
@@ -106,21 +106,21 @@ ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
     };
 
     trim_ws(s);
-    if (!consume(s, "bytes")) return boost::none;
+    if (!consume(s, "bytes")) return {};
     trim_ws(s);
-    if (!consume(s, "=")) return boost::none;
+    if (!consume(s, "=")) return {};
     trim_ws(s);
 
     Ranges ranges;
 
     while (true) {
         auto first = parse::number<size_t>(s);
-        if (!first) return boost::none;
+        if (!first) return {};
         trim_ws(s);
-        if (!consume(s, "-")) return boost::none;
+        if (!consume(s, "-")) return {};
         trim_ws(s);
         auto last = parse::number<size_t>(s);
-        if (!last) return boost::none;
+        if (!last) return {};
         ranges.push_back({*first, *last});
         trim_ws(s);
         if (!consume(s, ",")) break;

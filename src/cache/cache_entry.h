@@ -1,32 +1,9 @@
 #pragma once
 
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/asio/error.hpp>
-#include <boost/beast.hpp>
-#include <boost/system/result.hpp>
-#include "../namespaces.h"
-#include "../util.h"
 #include "../session.h"
 
 namespace ouinet {
-
-// If a key cannot be correctly derived from the request,
-// return error::invalid_argument.
-template <class Request>
-inline
-sys::result<std::string> key_from_http_req(const Request& req) {
-    // The key is currently the canonical URL itself.
-    auto key = util::canonical_url(req.target());
-    if (key.empty()) return asio::error::invalid_argument;
-    return key;
-}
-
-template <class Key>
-inline
-Key uri_from_key(Key&& key) {
-    // The key is currently the canonical URI itself.
-    return key;
-}
 
 struct CacheEntry {
     using Response = Session;

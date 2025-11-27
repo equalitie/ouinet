@@ -7,18 +7,19 @@
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 
-#include "../bittorrent/dht.h"
+#include "../bittorrent/mainline_dht.h"
 #include "../response_reader.h"
 #include "../util/crypto.h"
 #include "../util/yield.h"
 #include "cache_entry.h"
+#include "resource_id.h"
 #include "dht_groups.h"
-
+#include "peer_message.h"
 
 namespace ouinet {
 
 namespace bittorrent {
-    class MainlineDht;
+    class DhtBase;
 }
 
 class Session;
@@ -79,18 +80,18 @@ public:
 
     // Returns true the first time the DHT is successfully enabled,
     // false otherwise.
-    bool enable_dht(std::shared_ptr<bittorrent::MainlineDht>, size_t simultaneous_announcements);
+    bool enable_dht(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
 
     // This may add a response source header.
-    Session load( const std::string& key
+    Session load( const ResourceId&
                 , const GroupName& group
                 , bool is_head_request
                 , metrics::Client& metrics
                 , Cancel
-                , Yield);
+                , YieldContext);
 
-    void store( const std::string& key
+    void store( const ResourceId&
               , const GroupName& group
               , http_response::AbstractReader&
               , Cancel
@@ -98,11 +99,11 @@ public:
 
     // Returns true if both request and response had keep-alive == true.
     // Times out if forwarding to the sink gets stuck.
-    bool serve_local( const http::request<http::empty_body>&
+    bool serve_local( const PeerCacheRequest&
                     , GenericStream& sink
                     , metrics::Client&
                     , Cancel&
-                    , Yield);
+                    , YieldContext);
 
     std::size_t local_size( Cancel
                           , asio::yield_context) const;

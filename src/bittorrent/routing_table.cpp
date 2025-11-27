@@ -1,5 +1,5 @@
 #include "routing_table.h"
-#include "dht.h"
+#include "mainline_dht.h"
 #include "proximity_map.h"
 
 #include <set>
@@ -8,7 +8,6 @@
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
-using namespace ouinet::bittorrent::dht;
 
 //--------------------------------------------------------------------
 template<class From, class To, class Pred>

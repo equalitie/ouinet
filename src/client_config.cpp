@@ -21,7 +21,7 @@ static boost::optional<T> as_optional(const boost::program_options::variables_ma
 asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom);
 asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, const char* for_whom);
 
-ClientConfig::ClientConfig(int argc, char* argv[])
+ClientConfig::ClientConfig(int argc, const char* argv[])
 {
     using namespace std;
     namespace po = boost::program_options;
@@ -168,6 +168,22 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _disable_bridge_announcement = *opt;
     }
 
+    if (auto opt = as_optional<uint64_t>(vm, "request-body-limit")) {
+        _max_req_body_size = *opt;
+    }
+
+    if (vm.count("add-request-field")) {
+        auto fields = vm["add-request-field"].as<std::vector<std::string>>();
+        for (auto field : fields) {
+            auto pos = field.find(':');
+            if (pos != string::npos) {
+                _add_request_fields[field.substr(0, pos)] = field.substr(pos + 1);
+            } else {
+                _add_request_fields[field] = "";
+            }
+        }
+    }
+
     if (auto opt = as_optional<string>(vm, "client-credentials")) {
         auto cred = *opt;
 
@@ -293,12 +309,8 @@ ClientConfig::ClientConfig(int argc, char* argv[])
         _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
-    if (auto opt = as_optional<string>(vm, "origin-doh-base")) {
-        auto doh_base = *opt;
-        _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
-        if (!_origin_doh_endpoint)
-            throw error(util::str(
-                    "Invalid URL for '--origin-doh-base': ", doh_base));
+    if (vm["disable-doh"].as<bool>()) {
+        _disable_doh = true;
     }
 
     if (vm["allow-private-targets"].as<bool>()) {
@@ -312,18 +324,18 @@ ClientConfig::ClientConfig(int argc, char* argv[])
 
 std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options::variables_map& vm) {
     bool enable_on_start = false;
-    boost::optional<util::url_match> server_url;
+    boost::optional<util::Url> server_url;
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     std::optional<metrics::EncryptionKey> encryption_key;
 
     if (auto opt = as_optional<std::string>(vm, "metrics-server-url")) {
-        util::url_match url_match;
-        if (!util::match_http_url(*opt, url_match)) {
+        auto url = util::Url::from(*opt);
+        if (!url) {
             throw error(
                     "The '--metrics-server-url' argument must be a valid URL");
         }
-        server_url = std::move(url_match);
+        server_url = std::move(*url);
     }
 
     if (auto opt = as_optional<bool>(vm, "metrics-enable-on-start")) {
@@ -341,7 +353,6 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         }
         server_token = *opt;
     }
-
 
     auto server_cacert_str = as_optional<std::string>(vm, "metrics-server-cacert");
     auto server_cacert_file = as_optional<std::string>(vm, "metrics-server-cacert-file");

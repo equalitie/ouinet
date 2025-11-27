@@ -9,7 +9,6 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/beast/core/string_type.hpp>
@@ -18,69 +17,16 @@
 #include "util/signal.h"
 #include "util/condition_variable.h"
 #include "util/handler_tracker.h"
+#include "util/url.h"
 #include "or_throw.h"
 
 namespace ouinet { namespace util {
 
-struct url_match {
-    // Uniform Resource Identifier (URI): Generic Syntax
-    // https://www.ietf.org/rfc/rfc3986.txt
-
-    //      foo://example.com:8042/over/there?name=ferret#nose
-    //      \_/   \______________/\_________/ \_________/ \__/
-    //       |           |            |            |        |
-    //    scheme     authority       path        query   fragment
-    //
-    // authority = [ userinfo "@" ] host [ ":" port ]
-
-    std::string scheme;
-    std::string host;
-    std::string port;      // maybe empty
-    std::string path;      // maybe empty
-    std::string query;     // maybe empty
-    std::string fragment;  // maybe empty
-
-    // Rebuild the URL, dropping port, query and fragment if empty.
-    std::string reassemble() const {
-        auto url = boost::format("%s://%s%s%s%s%s")
-            % scheme % host
-            % (port.empty() ? "" : ':' + port)
-            % path
-            % (query.empty() ? "" : '?' + query)
-            % (fragment.empty() ? "" : '#' + fragment);
-        return url.str();
-    }
-
-    std::string host_and_port() const {
-        if (port.empty()) {
-            return host;
-        } else {
-            return host + ':' + port;
-        }
-    }
-};
-
-// Parse the HTTP URL to tell the different components.
-// If successful, the `match` is updated.
-bool match_http_url(const boost::string_view url, url_match& match);
-
-// Return the canonical version of the given HTTP(S) URL
-// whose match components are in `urlm`.
-//
-// Canonical URLs never have fragments (they should be handled by the agent).
 inline
-std::string canonical_url(url_match urlm) {
+std::string canonical_url(Url urlm) {
+    if (!urlm.query.empty()) urlm.query = {};
     if (!urlm.fragment.empty()) urlm.fragment = {};
     return urlm.reassemble();  // TODO: make canonical
-}
-
-// Return the canonical version of the given HTTP(S) `url`,
-// or the empty string if it is invalid.
-inline
-std::string canonical_url(const boost::string_view url) {
-    url_match urlm;
-    if (!match_http_url(url, urlm)) return {};  // error
-    return canonical_url(std::move(urlm));
 }
 
 // Get the source IPv4 address used when communicating with external hosts.
@@ -88,75 +34,6 @@ boost::optional<asio::ip::address> get_local_ipv4_address();
 
 // Get the source IPv6 address used when communicating with external hosts.
 boost::optional<asio::ip::address> get_local_ipv6_address();
-
-inline
-auto tcp_async_resolve( const std::string& host
-                      , const std::string& port
-                      , AsioExecutor exec
-                      , Cancel& cancel
-                      , asio::yield_context yield)
-{
-    using tcp = asio::ip::tcp;
-    using Results = tcp::resolver::results_type;
-
-    if (cancel) {
-        return or_throw<Results>(yield, asio::error::operation_aborted);
-    }
-
-    // Note: we're spawning a new coroutine here and deal with all this
-    // ConditionVariable machinery because - contrary to what Asio's
-    // documentation says - resolver::async_resolve isn't immediately
-    // cancelable. I.e.  when resolver::async_resolve is running and
-    // resolver::cancel is called, it is not guaranteed that the async_resolve
-    // call gets placed on the io_service queue immediately. Instead, it was
-    // observed that this can in some rare cases take more than 20 seconds.
-    //
-    // Also note that this is not Asio's fault. Asio uses internally the
-    // getaddrinfo() function which doesn't support cancellation.
-    //
-    // https://stackoverflow.com/questions/41352985/abort-a-call-to-getaddrinfo
-    sys::error_code ec;
-    Results results;
-    ConditionVariable cv(exec);
-    tcp::resolver* rp = nullptr;
-
-    auto cancel_lookup_slot = cancel.connect([&] {
-        ec = asio::error::operation_aborted;
-        cv.notify();
-        if (rp) rp->cancel();
-    });
-
-    bool* finished_p = nullptr;
-
-    TRACK_SPAWN(exec, ([&] (asio::yield_context yield) {
-        bool finished = false;
-        finished_p = &finished;
-
-        tcp::resolver resolver{exec};
-        rp = &resolver;
-        sys::error_code ec_;
-        auto r = resolver.async_resolve(host, port, yield[ec_]);
-        // Turn this confusing resolver error into something more understandable.
-        static const sys::error_code busy_ec{ sys::errc::device_or_resource_busy
-                                            , sys::system_category()};
-        if (ec_ == busy_ec) ec_ = asio::error::host_not_found;
-
-        if (finished) return;
-
-        rp = nullptr;
-        results = std::move(r);
-        ec = ec_;
-        finished_p = nullptr;
-        cv.notify();
-    }));
-
-    cv.wait(yield);
-
-    if (finished_p) *finished_p = true;
-
-    ec = compute_error_code(ec, cancel);
-    return or_throw(yield, ec, std::move(results));
-}
 
 #define _IP4_LOOP_RE "127(?:\\.[0-9]{1,3}){3}"
 static const std::string _localhost_re =

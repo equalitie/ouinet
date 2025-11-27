@@ -1,4 +1,7 @@
-use crate::{period::WholeHour, store::Store};
+use super::{
+    super::period::{self, WholeHour},
+    Store,
+};
 use chrono::Utc;
 use std::{io, path::PathBuf};
 use tokio::time::Duration;
@@ -77,7 +80,7 @@ impl RecordNumber {
     }
 
     pub fn increment_after(&self) -> Duration {
-        crate::period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
+        period::duration_to_end(Utc::now(), self.interval.start(), self.interval.end())
     }
 
     async fn store(&self) -> io::Result<()> {

@@ -5,7 +5,7 @@
 #include "../connect_proxy.h"
 #include "../tls.h"
 #include "../../async_sleep.h"
-#include "../../bittorrent/dht.h"
+#include "../../bittorrent/mainline_dht.h"
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../logger.h"
@@ -13,6 +13,8 @@
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
 #include "../../util/handler_tracker.h"
+#include "../../util/wait_condition.h"
+#include "../../util/watch_dog.h"
 
 #define _LOGPFX "Bep5Client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -52,7 +54,7 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 
 static
 boost::optional<asio_utp::udp_multiplexer>
-choose_multiplexer_for(bt::MainlineDht& dht, const udp::endpoint& ep)
+choose_multiplexer_for(bt::DhtBase& dht, const udp::endpoint& ep)
 {
     auto eps = dht.local_endpoints();
 
@@ -121,7 +123,7 @@ private:
 
 private:
     Bep5Client* _owner;
-    shared_ptr<bt::MainlineDht> _dht;
+    shared_ptr<bt::DhtBase> _dht;
     bt::NodeID _infohash;
     Cancel _lifetime_cancel;
     size_t _get_peers_call_count = 0;
@@ -132,7 +134,7 @@ private:
 public:
     Swarm( Bep5Client* owner
          , bt::NodeID infohash
-         , shared_ptr<bt::MainlineDht> dht
+         , shared_ptr<bt::DhtBase> dht
          , size_t capacity
          , Cancel& cancel
          , bool connect_proxy)
@@ -255,7 +257,7 @@ private:
         auto lan_eps = _dht->local_endpoints();
 
         for (auto ep : eps) {
-            if (bittorrent::is_martian(ep)) continue;
+            if (_dht->is_martian(ep)) continue;
 
             // Don't connect to self
             if (wan_eps.count(ep) || lan_eps.count(ep)) continue;
@@ -274,7 +276,7 @@ public:
     InjectorPinger( shared_ptr<Bep5Client::Swarm> injector_swarm
                   , string helper_swarm_name
                   , bool helper_announcement_enabled
-                  , shared_ptr<bt::MainlineDht> dht
+                  , shared_ptr<bt::DhtBase> dht
                   , Cancel& cancel)
         : _lifetime_cancel(cancel)
         , _injector_swarm(move(injector_swarm))
@@ -418,7 +420,7 @@ private:
     bool _helper_announcement_enabled = true;
 };
 
-Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
+Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
                       , string injector_swarm_name
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets)
@@ -433,7 +435,7 @@ Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
     }
 }
 
-Bep5Client::Bep5Client( shared_ptr<bt::MainlineDht> dht
+Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
                       , string injector_swarm_name
                       , string helpers_swarm_name
                       , bool helper_announcement_enabled

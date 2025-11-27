@@ -20,7 +20,7 @@ done
 shift $((OPTIND -1))
 
 # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-OUINET_TARGET_API=34
+OUINET_TARGET_API=36
 if [ "$ABI" = "armeabi-v7a" ]; then
     OUINET_MIN_API=21
 elif [ "$ABI" = "arm64-v8a" ]; then
@@ -104,7 +104,7 @@ function check_mode {
 
 ######################################################################
 function maybe_install_sdk {
-    local toolsfile=commandlinetools-linux-6858069_latest.zip
+    local toolsfile=commandlinetools-linux-13114758_latest.zip
 
     # Reuse downloaded SDK stuff from old versions of this script.
     if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
@@ -185,8 +185,8 @@ function maybe_install_gradle {
     check_mode build || return 0
 
     GRADLE_REQUIRED_MAJOR_VERSION=8
-    GRADLE_REQUIRED_MINOR_VERSION=7
-    GRADLE_REQUIRED_PATCH_VERSION=0
+    GRADLE_REQUIRED_MINOR_VERSION=14
+    GRADLE_REQUIRED_PATCH_VERSION=3
 
     NEED_GRADLE=false
 
@@ -214,7 +214,7 @@ function maybe_install_gradle {
     echo need gradle? $NEED_GRADLE
 
     if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-8.7
+        local GRADLE=gradle-8.14.3
         local GRADLE_ZIP=$GRADLE-bin.zip
         if [ ! -d "$GRADLE" ]; then
             if [ ! -f $GRADLE_ZIP ]; then

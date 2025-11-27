@@ -1,3 +1,4 @@
+# Not using `if (ANDROID)` because that's available only since cmake 3.7
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     # CMAKE_ANDROID_STANDALONE_TOOLCHAIN (and likely other cross compilation
     # android variables) was only introduced in v3.7
@@ -11,9 +12,13 @@ if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
     cmake_policy(SET CMP0114 NEW)
 endif()
 
+# Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
+	cmake_policy(SET CMP0135 NEW)
+endif()
+
 ################################################################################
 # Configurable options
-option(WITH_INJECTOR "Compile injector" ON)
 
 # NOTE: Need to disable ASan until Boost.Asio switches to Boost.Coroutine2
 #       because trowing (and catching) exceptions inside a coroutine confuses
@@ -41,6 +46,13 @@ if(WIN32)
     add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
 endif()
 
+if ((NOT ANDROID) AND (NOT IOS))
+    # Adds -fPIC when building static libraries (which I think is the default
+    # when building dynamic ones). It's needed on x86 when linking the
+    # `client_lib` target.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 ################################################################################
 project(ouinet)
 
@@ -65,7 +77,7 @@ target_include_directories(ouinet_dependencies
 )
 target_link_libraries(ouinet_dependencies
     INTERFACE
-        Boost::asio
+        ouinet_asio
         Boost::boost
         Boost::date_time
         Boost::filesystem
@@ -125,48 +137,14 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
-# ouinet-rs (ouinet components written in rust)
-
-include(FetchContent)
-
-FetchContent_Declare(
-    Corrosion
-    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-    GIT_TAG v0.5.1
-)
-
-if ("${PLATFORM}" STREQUAL "OS64")
-    set(Rust_CARGO_TARGET aarch64-apple-ios)
-elseif ("${PLATFORM}" STREQUAL "SIMULATORARM64")
-    set(Rust_CARGO_TARGET aarch64-apple-ios-sim)
-endif()
-
-FetchContent_MakeAvailable(Corrosion)
-
-corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml)
-corrosion_set_env_vars(ouinet_rs
-    "CXXFLAGS=-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include -I${CMAKE_CURRENT_SOURCE_DIR}/rust")
-add_dependencies(cargo-prebuild_ouinet_rs built_boost)
-
-if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
-    corrosion_set_env_vars(ouinet_rs
-        "LIBRARY_PATH=${CMAKE_OSX_SYSROOT}/usr/lib")
-    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
-else()
-    set(RUST_BRIDGE_PATH ${CMAKE_BINARY_DIR}/cargo/build/${Rust_CARGO_TARGET_CACHED}/cxxbridge)
-endif()
-# This is not necessry to build the ouinet_rs library, but using it
-# automatically adds the include directories to every target that has ouinet_rs
-# as dependency.
-# XXX: Isn't there a better way to obtain the cargo target directory?
-target_include_directories(ouinet_rs
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rust
-    ${RUST_BRIDGE_PATH})
+# This is separate from `ouinet_common` because it's also required by
+# `ouinet_rs`
+add_library(ouinet_logger STATIC "./src/logger.cpp")
+target_link_libraries(ouinet_logger PUBLIC Boost::filesystem)
 
 ################################################################################
 
 file(GLOB ouinet_common_sources
-    "./src/logger.cpp"
     "./src/connect_to_host.cpp"
     "./src/response_part.cpp"
     "./src/util.cpp"
@@ -174,9 +152,12 @@ file(GLOB ouinet_common_sources
     "./src/util/random.cpp"
     "./src/util/handler_tracker.cpp"
     "./src/util/crypto.cpp"
+    "./src/util/log_path.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
     "./src/util/hash.cpp"
+    "./src/util/scrypt.cpp"
+    "./src/util/url.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/bittorrent/*.cpp"
     "./src/bep5_swarms.cpp"
@@ -187,10 +168,15 @@ file(GLOB ouinet_common_sources
     "./src/ouiservice/multi_utp_server.cpp"
     "./src/util/persistent_lru_cache.cpp"
     "./src/endpoint.cpp"
+    "./src/request.cpp"
+    "./src/peer_message.cpp"
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     ${EXPERIMENTAL_SOURCES}
 )
+
+# TODO: Some low level openssl functions we use are deprecated.
+set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 
 add_library(ouinet_common STATIC ${ouinet_common_sources})
 
@@ -206,10 +192,11 @@ target_link_libraries(ouinet_common
         lib::json
         lib::asio_utp
         ouinet_rs
+        ouinet_logger
         # Boost::asio_ssl is public for Android because the ClientConfig used
         # in native-lib.cpp contains ssl::context and we need its move
         # constructor and destructor implementations.
-        Boost::asio_ssl
+        ouinet_asio_ssl
 )
 
 target_include_directories(ouinet_common PUBLIC "src")
@@ -229,48 +216,51 @@ file(GLOB client_sources
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
     "./src/util/reachability.cpp"
-    "./src/doh.cpp"
     ${VERSION_CPP}
 )
 
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    add_library(client SHARED ${client_sources})
-    add_library(ouinet::client ALIAS client)
-    find_library(android_log log)
-    target_link_libraries(client PUBLIC ${android_log})
-elseif ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS")
-    add_library(client STATIC ${client_sources})
-    add_library(ouinet::client ALIAS client)
-    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
-    find_package(ouinet REQUIRED)
-else()
-    add_executable(client ${client_sources})
-endif()
+add_library(client_lib SHARED ${client_sources})
+set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 
-target_link_libraries(client
+target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
-    PRIVATE
-        ${CPP_OUISYNC_LIBRARIES}
-        lib::zdnsparser
 )
 
+if (WIN32 OR MINGW)
+    target_compile_definitions(client_lib PRIVATE -DOUINET_DECL_EXPORT)
+endif()
+
+if (ANDROID)
+    find_library(android_log log)
+    target_link_libraries(client_lib PUBLIC ${android_log})
+elseif (IOS)
+    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet REQUIRED)
+else()
+    add_executable(client "./src/client_main.cpp")
+    target_link_libraries(client client_lib)
+endif()
+
 ################################################################################
-if (WITH_INJECTOR)
-    file(GLOB injector_sources
-        "./src/injector.cpp"
-        "./src/ouiservice/bep5/server.cpp"
-        "./src/endpoint.cpp"
-        "./src/cache/http_sign.cpp"
-        "./src/http_logger.cpp"
-        ${EXPERIMENTAL_SOURCES}
-    )
+file(GLOB injector_sources
+    "./src/injector.cpp"
+    "./src/ouiservice/bep5/server.cpp"
+    "./src/endpoint.cpp"
+    "./src/cache/http_sign.cpp"
+    "./src/http_logger.cpp"
+    ${EXPERIMENTAL_SOURCES}
+)
 
-    add_executable(injector ${injector_sources})
-    target_link_libraries(injector ouinet_common)
+add_library(injector_lib ${injector_sources})
+set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
+target_link_libraries(injector_lib ouinet_common)
 
-endif() # if WITH_INJECTOR
+if ((NOT ANDROID) AND (NOT IOS))
+    add_executable(injector "./src/injector_main.cpp")
+    target_link_libraries(injector injector_lib)
+endif()
 
 
 ################################################################################
@@ -298,7 +288,7 @@ endif()
 
 ################################################################################
 # Tests
-if (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+if (NOT ANDROID)
     add_subdirectory(test)
 endif()
 ################################################################################

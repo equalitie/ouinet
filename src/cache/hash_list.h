@@ -6,7 +6,7 @@
 #include "../response_part.h"
 #include "signed_head.h"
 
-namespace ouinet { namespace cache {
+namespace ouinet::cache {
 
 struct HashList {
     using Digest    = util::SHA512::digest_type;
@@ -41,4 +41,4 @@ struct HashList {
 
 };
 
-}}
+} // namespace ouinet::cache

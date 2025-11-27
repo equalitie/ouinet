@@ -23,7 +23,7 @@
 
 #include "namespaces.h"
 #include "origin_pools.h"
-#include "doh.h"
+#include "cxx/dns.h"
 #include "http_util.h"
 #include "client_front_end.h"
 #include "connect_to_host.h"
@@ -32,26 +32,24 @@
 #include "async_sleep.h"
 #include "or_throw.h"
 #include "request_routing.h"
+#include "request.h"
+#include "peer_message.h"
 #include "full_duplex_forward.h"
-#include "client_config.h"
 #include "client.h"
 #include "authenticate.h"
 #include "defer.h"
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
+#include "util/dns.h"
 #include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
-#include "bittorrent/dht.h"
+#include "bittorrent/mainline_dht.h"
 #include "bittorrent/mutable_data.h"
-
-#ifndef __ANDROID__
-#  include "force_exit_on_signal.h"
-#endif // ifndef __ANDROID__
 
 #include "ouiservice.h"
 #ifdef __EXPERIMENTAL__
@@ -99,15 +97,11 @@ using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
 using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
 using ouinet::util::AsioExecutor;
-using OuinetYield = ouinet::Yield;
 
 static const fs::path OUINET_CA_CERT_FILE = "ssl-ca-cert.pem";
 static const fs::path OUINET_CA_KEY_FILE = "ssl-ca-key.pem";
 static const fs::path OUINET_CA_DH_FILE = "ssl-ca-dh.pem";
 static const fs::path OUINET_ERROR_PAGE_FILE = "error-page.html";
-
-// Flags for normal, case-insensitive regular expression.
-static const auto rx_icase = boost::regex::normal | boost::regex::icase;
 
 // TODO: Put this somewhere in util/ if it turns out useful.
 void throw_error(const boost::system::error_code& err)
@@ -115,69 +109,6 @@ void throw_error(const boost::system::error_code& err)
     if (!err) return;
     throw boost::system::system_error(err);
 }
-
-//------------------------------------------------------------------------------
-struct UserAgentMetaData {
-    boost::optional<bool> is_private;
-    boost::optional<std::string> dht_group;
-
-#if defined(__MACH__)
-    static std::string get_dht_group(const std::string& url) {
-        auto dhtgroup = std::move(url);
-
-        boost::regex scheme("^[a-z][-+.0-9a-z]*://");
-        dhtgroup = boost::regex_replace(dhtgroup, scheme, "");
-        boost::regex trailing_slashes("/+$");
-        dhtgroup = boost::regex_replace(dhtgroup, trailing_slashes, "");
-        boost::regex leading_www("^www.");
-        dhtgroup = boost::regex_replace(dhtgroup, leading_www, "");
-
-        return dhtgroup;
-    }
-#endif
-
-    static UserAgentMetaData extract(Request& rq) {
-        UserAgentMetaData ret;
-
-        {
-#if defined(__MACH__)
-            // On iOS, it is not possible to inject headers into every request
-            // Set the DHT group based on the referrer field or hostname (if referrer is not present)
-            auto i = rq.find(http::field::referer);
-            if (i != rq.end()) {
-                ret.dht_group = get_dht_group(std::string(i->value()));
-                rq.erase(i);
-            } else {
-                ret.dht_group = get_dht_group(std::string(rq.target()));
-            }
-#else
-            auto i = rq.find(http_::request_group_hdr);
-            if (i != rq.end()) {
-                ret.dht_group = string(i->value());
-                rq.erase(i);
-            }
-#endif
-        }
-        {
-            auto i = rq.find(http_::request_private_hdr);
-            if (i != rq.end()) {
-                ret.is_private = boost::iequals(i->value(), http_::request_private_true);
-                rq.erase(i);
-            }
-        }
-
-        return ret;
-    }
-
-    // Apply the metadata to the given request.
-    template<class Req>
-    void apply_to(Req& rq) const {
-        if (is_private && *is_private)
-            rq.set(http_::request_private_hdr, http_::request_private_true);
-        if (dht_group)
-            rq.set(http_::request_group_hdr, *dht_group);
-    }
-};
 
 //------------------------------------------------------------------------------
 class Client::State : public enable_shared_from_this<Client::State> {
@@ -188,7 +119,10 @@ class Client::State : public enable_shared_from_this<Client::State> {
     };
 
 public:
-    State(asio::io_context& ctx, ClientConfig cfg)
+    State( asio::io_context& ctx
+         , ClientConfig cfg
+         , util::LogPath log_path
+         , std::optional<Client::MockDhtBuilder> dht_builder)
         : _ctx(ctx)
         , _config(move(cfg))
         // A certificate chain with OUINET_CA + SUBJECT_CERT
@@ -200,6 +134,8 @@ public:
         , _front_end(_config)
         , pub_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
+        , _log_path(std::move(log_path))
+        , _bt_dht_builder(std::move(dht_builder))
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
         , _metrics(_config.metrics()
@@ -320,7 +256,7 @@ public:
         return *_udp_multiplexer;
     }
 
-    std::shared_ptr<bt::MainlineDht> bittorrent_dht(asio::yield_context yield)
+    std::shared_ptr<bt::DhtBase> bittorrent_dht(asio::yield_context yield)
     {
         if (_bt_dht) return _bt_dht;
 
@@ -331,10 +267,19 @@ public:
         if (_bt_dht) return _bt_dht;
         auto lock = _bt_dht_wc.lock();
 
-        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
-                                                       , _metrics.mainline_dht()
-                                                       , _config.repo_root() / "dht"
-                                                       , _config.bt_bootstrap_extras());
+        std::shared_ptr<bt::DhtBase> bt_dht;
+
+        if (_bt_dht_builder) {
+            bt_dht = (*_bt_dht_builder)();
+        }
+        else {
+            bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
+                                                      , _metrics.mainline_dht()
+                                                      , _config.is_doh_enabled()
+                                                      , _config.repo_root() / "dht"
+                                                      , _config.bt_bootstrap_extras());
+        }
+
 
         // Port allocation works like this:
         //
@@ -365,21 +310,19 @@ public:
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
-        shared_ptr<asio::ip::udp::endpoint> ext_ep = std::make_shared<asio::ip::udp::endpoint>();
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         TRACK_SPAWN(_ctx, ([
             bt_dht,
             executor = _ctx.get_executor(),
-            ext_ep,
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
             upnps = _upnps_ptr
         ] (asio::yield_context yield) mutable {
             sys::error_code ec;
-            *ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
+            auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
             if (ec || shutdown_signal) return;
-            State::setup_upnp(executor, ext_ep, local_ep, upnps);
+            State::setup_upnp(executor, ext_ep.port(), local_ep, upnps);
         }));
 
         _bt_dht = move(bt_dht);
@@ -402,7 +345,7 @@ public:
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
-                OuinetYield yield(client->_ctx, yield_, "metrics");
+                YieldContext yield(yield_, util::LogPath("metrics"));
 
                 try {
                     client->send_metrics_record(record_name, record_content, *cancel, move(yield));
@@ -423,31 +366,28 @@ private:
                                     , const Request&
                                     , asio::yield_context);
 
-    void serve_request(GenericStream&& con, asio::yield_context yield);
+    void serve_request(GenericStream&& con, YieldContext yield);
 
     // All `fetch_*` functions below take care of keeping or dropping
     // Ouinet-specific internal HTTP headers as expected by upper layers.
 
     CacheEntry
-    fetch_stored_in_dcache( const Request& request
-                          , const request_route::Config& request_config
-                          , const std::string& dht_group
+    fetch_stored_in_dcache( const CacheRetrieveRequest& request
                           , Cancel& cancel
-                          , OuinetYield yield);
+                          , YieldContext yield);
 
     template<class Rq>
-    Session fetch_via_self(Rq, const UserAgentMetaData&, Cancel&, OuinetYield);
+    Session fetch_via_self(Rq, Cancel&, YieldContext);
 
-    Response fetch_fresh_from_front_end(const Request&, OuinetYield);
+    Response fetch_fresh_from_front_end(const Request&, YieldContext);
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
     template<class Rq>
     Session fetch_fresh_from_origin( Rq
-                                   , const UserAgentMetaData&
                                    , asio::ssl::context&
                                    , std::optional<metrics::Request> metrics
-                                   , Cancel, OuinetYield);
+                                   , Cancel, YieldContext);
 
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
@@ -456,19 +396,18 @@ private:
                                              , asio::ssl::context&
                                              , std::optional<metrics::Request>
                                              , Cancel&
-                                             , OuinetYield);
+                                             , YieldContext);
 
-    Session fetch_fresh_through_simple_proxy( Request
+    Session fetch_fresh_through_simple_proxy( PublicInjectorRequest
                                             , const CacheEntry* cached
-                                            , bool can_inject
                                             , metrics::Request
                                             , Cancel& cancel
-                                            , OuinetYield);
+                                            , YieldContext);
 
     void send_metrics_record( std::string_view record_name
                             , asio::const_buffer record_content
                             , Cancel& cancel
-                            , OuinetYield);
+                            , YieldContext);
 
     template<class Resp>
     void maybe_add_proto_version_warning(Resp& res) const {
@@ -488,7 +427,7 @@ private:
 
     void listen_tcp( asio::yield_context
                    , tcp::acceptor
-                   , function<void(GenericStream, asio::yield_context)>);
+                   , function<void(GenericStream, YieldContext)>);
 
     void setup_injector(asio::yield_context);
 
@@ -497,7 +436,7 @@ private:
     }
 
 #define DEF_WAIT_FOR(WHAT) \
-    void wait_for_##WHAT(Cancel& cancel, OuinetYield yield) { \
+    void wait_for_##WHAT(Cancel& cancel, YieldContext yield) { \
         if (!_##WHAT##_starting) \
             return or_throw(yield, _##WHAT##_start_ec); \
         \
@@ -527,31 +466,26 @@ private:
     bool maybe_handle_websocket_upgrade( GenericStream&
                                        , beast::string_view connect_host_port
                                        , Request&
-                                       , OuinetYield);
+                                       , YieldContext);
 
     // Resolve host and port strings.
     TcpLookup resolve_tcp_dns( const std::string&, const std::string&
-                             , Cancel&, OuinetYield);
-    TcpLookup resolve_tcp_doh( const std::string&, const std::string&
-                             , const UserAgentMetaData&
-                             , const doh::Endpoint&
-                             , Cancel&, OuinetYield);
+                             , Cancel&, YieldContext);
 
     GenericStream connect_to_origin( const http::request_header<>&
-                                   , const UserAgentMetaData&
                                    , asio::ssl::context&
-                                   , Cancel&, OuinetYield);
+                                   , Cancel&, YieldContext);
 
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
     cache::Client* get_cache() const { return _cache.get(); }
 
-    void serve_utp_request(GenericStream, OuinetYield);
+    void serve_utp_request(GenericStream, YieldContext);
 
     static void setup_upnp(
         AsioExecutor executor,
-        shared_ptr<asio::ip::udp::endpoint> ext_ep,
+        uint16_t ext_port,
         asio::ip::udp::endpoint local_ep,
         shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> upnps
     ){
@@ -568,8 +502,8 @@ private:
         }
 
         LOG_DEBUG("UPnP: Updater is starting with ",
-                 "local port ", local_ep.port(), " and external port ", ext_ep->port());
-        p = make_unique<UPnPUpdater>(executor, ext_ep->port(), local_ep.port());
+                 "local port ", local_ep.port(), " and external port ", ext_port);
+        p = make_unique<UPnPUpdater>(executor, ext_port, local_ep.port());
     }
 
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
@@ -611,10 +545,11 @@ private:
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
                     // Do not log other users' addresses unless debugging.
-                    OuinetYield y( _ctx, yield
-                           , (logger.get_threshold() <= DEBUG)
+                    std::string tag = (logger.get_threshold() <= DEBUG)
                              ? "uTPAccept(" + con.remote_endpoint() + ")"
-                             : "uTPAccept");
+                             : "uTPAccept";
+
+                    YieldContext y(yield, _log_path.tag(std::move(tag)));
                     serve_utp_request(move(con), y[ec].tag("serve_utp_req"));
                     _YDEBUG(y, "Done; ec=", ec);
                 }));
@@ -655,7 +590,9 @@ private:
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
     unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
 
-    shared_ptr<bt::MainlineDht> _bt_dht;
+    util::LogPath _log_path;
+    std::optional<Client::MockDhtBuilder> _bt_dht_builder;
+    shared_ptr<bt::DhtBase> _bt_dht;
     WaitCondition _bt_dht_wc;
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
@@ -666,7 +603,7 @@ private:
     shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps_ptr;
     metrics::Client _metrics;
 
-    std::string _proxy_endpoint;
+    asio::ip::tcp::endpoint _proxy_endpoint;
     std::string _frontend_endpoint;
     ouisync_service::Ouisync _ouisync;
 };
@@ -676,22 +613,21 @@ template<class Resp>
 static
 void handle_http_error( GenericStream& con
                       , Resp& res
-                      , OuinetYield yield)
+                      , YieldContext yield)
 {
     _YDEBUG(yield, "=== Sending back response ===");
     _YDEBUG(yield, res);
 
-    util::http_reply(con, res, static_cast<asio::yield_context>(yield));
+    util::http_reply(con, res, yield.native());
 }
 
-template<class ReqBody>
 static
 void handle_bad_request( GenericStream& con
-                       , const http::request<ReqBody>& req
+                       , bool keep_alive
                        , const string& message
-                       , OuinetYield yield)
+                       , YieldContext yield)
 {
-    auto res = util::http_error( req, http::status::bad_request
+    auto res = util::http_error( keep_alive, http::status::bad_request
                                , OUINET_CLIENT_SERVER_STRING
                                , "", message);
     return handle_http_error(con, res, yield);
@@ -699,11 +635,11 @@ void handle_bad_request( GenericStream& con
 
 //------------------------------------------------------------------------------
 void
-Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
+Client::State::serve_utp_request(GenericStream con, YieldContext yield)
 {
     assert(_cache);
     if (!_cache) {
-        LOG_WARN("Received uTP request, but cache is not initialized");
+        LOG_WARN(yield, " Received uTP request, but cache is not initialized");
         return;
     }
 
@@ -718,7 +654,8 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
     while (true) {
         sys::error_code ec;
 
-        http::request<http::empty_body> req;
+        PeerRequest req;
+
         {
             auto rq_read_timeout = default_timeout::http_recv_simple();
             if (is_first_request) {
@@ -728,16 +665,14 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
 
             auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });
 
-            yield[ec].tag("read_req").run([&] (auto y) {
-                http::async_read(con, con_rbuf, req, y);
-            });
+            req = PeerRequest::async_read(con, yield.tag("read_req")[ec]);
 
             fail_on_error_or_timeout(yield, cancel, ec, wd);
         }
 
-        if (req.method() != http::verb::connect) {
+        if (auto* cache_req = std::get_if<PeerCacheRequest>(&req)) {
             auto keep_alive = _cache->serve_local(
-                    req,
+                    *cache_req,
                     con,
                     _metrics,
                     cancel,
@@ -749,14 +684,21 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
             return or_throw(yield, ec);  // done or unrecoverable error
         }
 
+        auto connect_req = std::get_if<PeerConnectRequest>(&req);
+
         auto cyield = yield.tag("connect");
+
+        if (!connect_req) {
+            return handle_bad_request( con, false, "Invalid request"
+                                     , cyield.tag("invalid request"));
+        }
 
         _YDEBUG(cyield, "Client: Received uTP/CONNECT request");
 
         // Connect to the injector and tunnel the transaction through it
 
         if (!_bep5_client) {
-            return handle_bad_request( con, req, "No known injectors"
+            return handle_bad_request( con, false, "No known injectors"
                                      , cyield.tag("handle_no_injectors_error"));
         }
 
@@ -768,17 +710,14 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
         ec = compute_error_code(ec, cancel);
         if (ec == asio::error::operation_aborted) return or_throw(cyield, ec);
         if (ec) {
-            return handle_bad_request( con, req, "Failed to connect to injector"
+            return handle_bad_request( con, false, "Failed to connect to injector"
                                      , cyield.tag("handle_injector_unreachable"));
         }
 
         // Send the client an OK message indicating that the tunnel
         // has been established.
-        http::response<http::empty_body> res{http::status::ok, req.version()};
+        http::response<http::empty_body> res{http::status::ok, 11};
         res.prepare_payload();
-
-        // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
-        // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
 
         _YDEBUG(cyield, "BEGIN");
 
@@ -794,20 +733,15 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
         });
         return_or_throw_on_error(cyield, cancel, ec);
 
-        // First queue unused but already read data back into the other client connnection.
-        if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
-        assert(!ec);
-
         // Forward the rest of data in both directions.
-        auto c2i_i2c = cyield[ec].tag("full_duplex").run([&] (auto y) {
-            return full_duplex(
-                    move(con),
-                    move(inj),
-                    [&] (size_t byte_count) { _metrics.bridge_transfer_c2i(byte_count); },
-                    [&] (size_t byte_count) { _metrics.bridge_transfer_i2c(byte_count); },
-                    cancel,
-                    y);
-        });
+        auto c2i_i2c =  full_duplex(
+            move(con),
+            move(inj),
+            [&] (size_t byte_count) { _metrics.bridge_transfer_c2i(byte_count); },
+            [&] (size_t byte_count) { _metrics.bridge_transfer_i2c(byte_count); },
+            cancel,
+            cyield[ec].tag("full_duplex"));
+
         std::tie(fwd_bytes_c2i, fwd_bytes_i2c) = c2i_i2c;
         return or_throw(cyield, ec);
     }
@@ -815,11 +749,9 @@ Client::State::serve_utp_request(GenericStream con, OuinetYield yield)
 
 //------------------------------------------------------------------------------
 CacheEntry
-Client::State::fetch_stored_in_dcache( const Request& request
-                                     , const request_route::Config& request_config
-                                     , const std::string& dht_group
+Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
                                      , Cancel& cancel
-                                     , OuinetYield yield)
+                                     , YieldContext yield)
 {
     Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
@@ -843,17 +775,15 @@ Client::State::fetch_stored_in_dcache( const Request& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto key = key_from_http_req(request);
-    if (!key) return or_throw<CacheEntry>(yield, key.error());
+    auto key = request.resource_id();
 
-    auto s = c->load( move(*key), dht_group, request.method() == http::verb::head
+    auto s = c->load( move(key)
+                    , request.dht_group()
+                    , request.method() == http::verb::head
                     , _metrics
                     , timeout_cancel, yield[ec].tag("load"));
 
     fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
-
-    s.debug();
-    s.debug_prefix(yield.tag());
 
     auto& hdr = s.response_header();
 
@@ -876,8 +806,8 @@ Client::State::fetch_stored_in_dcache( const Request& request
 //------------------------------------------------------------------------------
 template<class Rq>
 Session
-Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
-                             , Cancel& cancel, OuinetYield yield)
+Client::State::fetch_via_self( Rq request
+                             , Cancel& cancel, YieldContext yield)
 {
     sys::error_code ec;
 
@@ -890,7 +820,7 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
         // TODO: Keep lookup object or allow connecting to endpoint.
         auto epl = TcpLookup::create(_config.local_endpoint(), "dummy", "dummy");
         auto c = connect_to_host( epl, _ctx.get_executor()
-                                , cancel, static_cast<asio::yield_context>(yield[ec]));
+                                , cancel, yield[ec].native());
 
         assert(!cancel || ec == asio::error::operation_aborted);
 
@@ -914,13 +844,13 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
 
     // Build the actual request to send to self.
     if (!_config.client_credentials().empty())
-        request = authorize(request, _config.client_credentials());
+        authorize(request, _config.client_credentials());
     request.keep_alive(true);
-    meta.apply_to(request);
 
     _YDEBUG(yield, "Sending a request to self");
     // Send request
     yield[ec].tag("write_self_req").run([&] (auto y) {
+        request.prepare_payload();
         http::async_write(con, request, y);
     });
 
@@ -935,159 +865,39 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     });
 }
 
-// Transforms addresses to endpoints with the given port.
-template<class Addrs, class Endpoint>
-class AddrsAsEndpoints {
-public:
-    using value_type = Endpoint;
-    using addrs_iterator = typename Addrs::const_iterator;
-
-    AddrsAsEndpoints(const Addrs& addrs, unsigned short port)
-        : _addrs(addrs), _port(port)
-    {}
-
-    class const_iterator {
-    public:
-        // Iterator requirements
-        using iterator_category = std::input_iterator_tag;
-        using value_type        = Endpoint;
-        using difference_type   = std::ptrdiff_t;
-        using pointer           = value_type*;
-        using reference         = value_type&;
-
-        const_iterator(const addrs_iterator& it, unsigned short port)
-            : _it(it), _port(port)
-        {}
-
-        value_type operator*() const { return {*_it, _port}; }
-        const_iterator& operator++() { ++_it; return *this; }
-        bool operator==(const const_iterator& other) const { return _it == other._it; }
-        bool operator!=(const const_iterator& other) const { return _it != other._it; }
-    private:
-        addrs_iterator _it;
-        unsigned short _port;
-    };
-
-    const_iterator begin() const { return {_addrs.begin(), _port}; };
-    const_iterator end() const { return {_addrs.end(), _port}; };
-
-private:
-    const Addrs& _addrs;
-    unsigned short _port;
-};
-
-TcpLookup
-Client::State::resolve_tcp_doh( const std::string& host
-                              , const std::string& port
-                              , const UserAgentMetaData& meta
-                              , const doh::Endpoint& ep
-                              , Cancel& cancel
-                              , OuinetYield yield)
-{
-    using TcpEndpoint = typename TcpLookup::endpoint_type;
-
-    boost::string_view portsv(port);
-    auto portn_o = parse::number<unsigned short>(portsv);
-    if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    // Build and return lookup if `host` is already a network address.
-    {
-        sys::error_code e;
-        auto addr = asio::ip::make_address(host, e);
-        if (!e) return TcpLookup::create(TcpEndpoint{move(addr), *portn_o}, host, port);
-    }
-
-    // TODO: When to disable queries for IPv4 or IPv6 addresses?
-    auto rq4_o = doh::build_request_ipv4(host, ep);
-    auto rq6_o = doh::build_request_ipv6(host, ep);
-    if (!rq4_o || !rq6_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    sys::error_code ec4, ec6;
-    doh::Response rs4, rs6;
-
-    WaitCondition wc(_ctx);
-
-    // By passing user agent metadata as is,
-    // we ensure that the DoH request is done with the same browsing mode
-    // as the content request that triggered it,
-    // and is announced under the same group.
-    // TODO: Handle redirects.
-#define SPAWN_QUERY(VER) \
-    TRACK_SPAWN(_ctx, ([ \
-        this, \
-        rq = move(*rq##VER##_o), &meta, &ec##VER, &rs##VER, \
-        &cancel, &yield, lock = wc.lock() \
-    ] (asio::yield_context y_) { \
-        sys::error_code ec; \
-        auto y = yield.detach(y_); \
-        auto s = fetch_via_self(move(rq), meta, cancel, y[ec].tag("fetch##VER")); \
-        if (ec) { ec##VER = ec; return; } \
-        rs##VER = y[ec].tag("slurp##VER").run([&] (auto yy) { \
-            return http_response::slurp_response<doh::Response::body_type> \
-                (s, doh::payload_size, cancel, yy); \
-        }); \
-        if (ec) { ec##VER = ec; return; } \
-    }));
-    SPAWN_QUERY(4);
-    SPAWN_QUERY(6);
-
-    yield.tag("wait").run([&] (auto y) {
-        wc.wait(y);
-    });
-
-    _YDEBUG(yield, "DoH query; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    doh::Answers answers4, answers6;
-    if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
-    if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
-
-    _YDEBUG(yield, "DoH parse; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    answers4.insert( answers4.end()
-                   , std::make_move_iterator(answers6.begin())
-                   , std::make_move_iterator(answers6.end()));
-    AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers4, *portn_o};
-    return TcpLookup::create(eps.begin(), eps.end(), host, port);
-}
-
 TcpLookup
 Client::State::resolve_tcp_dns( const std::string& host
                               , const std::string& port
                               , Cancel& cancel
-                              , OuinetYield yield)
+                              , YieldContext yield)
 {
-    return util::tcp_async_resolve( host, port
+    return util::resolve_tcp_async( host, port
                                   , _ctx.get_executor()
                                   , cancel
-                                  , static_cast<asio::yield_context>(yield));
+                                  , yield.native());
 }
 
 GenericStream
 Client::State::connect_to_origin( const http::request_header<>& rq
-                                , const UserAgentMetaData& meta
                                 , asio::ssl::context& tls_ctx
                                 , Cancel& cancel
-                                , OuinetYield yield)
+                                , YieldContext yield)
 {
     std::string host, port;
     std::tie(host, port) = util::get_host_port(rq);
 
     sys::error_code ec;
 
-    // Resolve using DoH if configured and not resolving the resolver's address itself.
-    auto doh_ep_o = _config.origin_doh_endpoint();
-    bool do_doh = doh_ep_o && !rq.target().starts_with(*doh_ep_o);
+    auto do_doh = _config.is_doh_enabled();
     auto lookup = do_doh
-        ? resolve_tcp_doh(host, port, meta, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
+        ? util::resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host( lookup, _ctx.get_executor()
-                               , cancel, static_cast<asio::yield_context>(yield[ec]));
+                               , cancel, yield[ec].native());
 
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
@@ -1098,7 +908,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
                                             , tls_ctx
                                             , host
                                             , cancel
-                                            , static_cast<asio::yield_context>(yield[ec]));
+                                            , yield[ec].native());
 
         return_or_throw_on_error(yield, cancel, ec, GenericStream());
     }
@@ -1109,7 +919,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     return stream;
 }
 //------------------------------------------------------------------------------
-Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYield yield)
+Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldContext yield)
 {
     Cancel cancel = _shutdown_signal;
 
@@ -1179,10 +989,9 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, OuinetYiel
 //------------------------------------------------------------------------------
 template<class Rq>
 Session Client::State::fetch_fresh_from_origin( Rq rq
-                                              , const UserAgentMetaData& meta
                                               , asio::ssl::context& tls_ctx
                                               , std::optional<metrics::Request> metrics
-                                              , Cancel cancel, OuinetYield yield)
+                                              , Cancel cancel, YieldContext yield)
 {
     Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
@@ -1200,7 +1009,7 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
     if (maybe_con) {
         con = std::move(*maybe_con);
     } else {
-        auto stream = connect_to_origin(rq, meta, tls_ctx, timeout_cancel, yield[ec]);
+        auto stream = connect_to_origin(rq, tls_ctx, timeout_cancel, yield[ec]);
 
         if (ec = compute_error_code(ec, cancel, watch_dog)) {
             if (metrics) metrics->finish(ec);
@@ -1249,7 +1058,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
                                                         , asio::ssl::context& tls_ctx
                                                         , std::optional<metrics::Request> metrics
                                                         , Cancel& cancel
-                                                        , OuinetYield yield)
+                                                        , YieldContext yield)
 {
     // TODO: We're not re-using connections here. It's because the
     // ConnectionPool as it is right now can only work with http requests
@@ -1261,9 +1070,9 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
                                       , [&]{ timeout_cancel(); });
 
     // Parse the URL to tell HTTP/HTTPS, host, port.
-    util::url_match url;
+    auto url = util::Url::from(rq.target());
 
-    if (!match_http_url(rq.target(), url)) {
+    if (!url) {
         _YERROR(yield, "Unsupported target URL");
         auto ec = asio::error::operation_not_supported;
         if (metrics) metrics->finish(ec);
@@ -1295,7 +1104,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
     // Build the actual request to send to the proxy.
     Request connreq = { http::verb::connect
-                      , url.host + ":" + (url.port.empty() ? "443" : url.port)
+                      , url->host + ":" + (url->port.empty() ? "443" : url->port)
                       , 11 /* HTTP/1.1 */};
 
     // HTTP/1.1 requires a ``Host:`` header in all requests:
@@ -1303,11 +1112,12 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
     connreq.set(http::field::host, connreq.target());
 
     if (auto credentials = _config.credentials_for(inj.remote_endpoint))
-        connreq = authorize(connreq, *credentials);
+        authorize(connreq, *credentials);
 
     // Open a tunnel to the origin
     // (to later perform the SSL handshake and send the request).
     yield[ec].tag("connreq").run([&] (auto y) {
+        connreq.prepare_payload();
         util::http_request(inj.connection, connreq, timeout_cancel, y);
     });
 
@@ -1351,12 +1161,12 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
     GenericStream con;
 
-    if (url.scheme == "https") {
+    if (url->scheme == "https") {
         con = ssl::util::client_handshake( move(inj.connection)
                                          , tls_ctx
-                                         , url.host
+                                         , url->host
                                          , timeout_cancel
-                                         , static_cast<asio::yield_context>(yield[ec]));
+                                         , yield.native()[ec]);
     } else {
         con = move(inj.connection);
     }
@@ -1403,12 +1213,11 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
 //------------------------------------------------------------------------------
 Session Client::State::fetch_fresh_through_simple_proxy
-        ( Request request
+        ( PublicInjectorRequest request
         , const CacheEntry* cached
-        , bool can_inject
         , metrics::Request metrics
         , Cancel& cancel
-        , OuinetYield yield)
+        , YieldContext yield)
 {
     Cancel timeout_cancel(cancel);
     auto watch_dog = ouinet::watch_dog( _ctx
@@ -1416,20 +1225,6 @@ Session Client::State::fetch_fresh_through_simple_proxy
                                       , [&]{ timeout_cancel(); });
 
     sys::error_code ec;
-
-    // Build the actual request to send to the injector (auth added below).
-    if (can_inject) {
-        bool keepalive = request.keep_alive();
-        auto irq = util::to_injector_request(move(request));
-        if (!irq) {
-            _YERROR(yield, "Invalid request");
-            return or_throw<Session>(yield, asio::error::invalid_argument);
-        }
-        request = move(*irq);
-        request.keep_alive(keepalive);
-    } else {
-        util::remove_ouinet_fields_ref(request);  // avoid accidental injection
-    }
 
     // Connect to the injector.
     // TODO: Maybe refactor with `fetch_via_self`.
@@ -1473,19 +1268,19 @@ Session Client::State::fetch_fresh_through_simple_proxy
     });
 
     if (auto credentials = _config.credentials_for(*con))
-        request = authorize(request, *credentials);
+        request.authorize(*credentials);
 
     if (_metrics.is_enabled()) {
         if (auto druid = _metrics.current_device_id()) {
             // Add DRUID header to the request sent to the injector
-            request.set(http_::request_druid_hdr, *druid);
+            request.set_druid(*druid);
         }
     }
 
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request
     yield[ec].tag("write_injector_req").run([&] (auto y) {
-        http::async_write(con, request, y);
+        request.async_write(con, y);
     });
 
     if (ec = compute_error_code(ec, cancel, watch_dog)) {
@@ -1509,7 +1304,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     ec = compute_error_code(ec, cancel, watch_dog);
     if ( !ec
-         && can_inject
+         && request.is_inject_request()
          && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
         // This is treated like the Injector mechanism being disabled.
         _YWARN(yield, "Injector is using an unacceptable protocol version: ", hdr);
@@ -1522,7 +1317,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     // Store keep-alive connections in connection pool
 
-    if (can_inject) {
+    if (request.is_inject_request()) {
         maybe_add_proto_version_warning(hdr);
 
         hdr.set(http_::response_source_hdr, http_::response_source_hdr_injector);  // for agent
@@ -1536,7 +1331,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
     return session;
 }
 
-void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, OuinetYield yield) {
+void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, YieldContext yield) {
     auto metrics_conf = _config.metrics();
 
     if (!metrics_conf) {
@@ -1544,7 +1339,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
         throw_error(asio::error::invalid_argument);
     }
 
-    const util::url_match& server_url = metrics_conf->server_url;
+    const util::Url& server_url = metrics_conf->server_url;
 
     http::request<http::buffer_body> req;
 
@@ -1573,7 +1368,6 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
 
     // Try sending the record to the origin directly.
     auto direct_session = fetch_fresh_from_origin( req
-                                                 , UserAgentMetaData()
                                                  , tls_ctx
                                                  , {}
                                                  , cancel
@@ -1582,13 +1376,13 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     // We're only interested in the header of the response. We use this to read
     // and ignore the rest of the response so the connection can potentially be
     // reused.
-    auto ignore_rest = [](Session& session, Cancel& cancel, OuinetYield yield) {
+    auto ignore_rest = [](Session& session, Cancel& cancel, YieldContext yield) {
         yield.run([&] (auto yield) {
             session.flush_response(cancel, yield, [](auto part, auto cancel, auto yield) {}, 60s);
         });
     };
 
-    LOG_DEBUG("Metrics direct: ec:\"", direct_ec.message(), "\" result:", direct_session.response_header().result());
+    LOG_DEBUG(yield, " Metrics direct: ec:\"", direct_ec.message(), "\" result:", direct_session.response_header().result());
 
     if (!direct_ec) {
         ignore_rest(direct_session, cancel, yield);
@@ -1607,7 +1401,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     // Sending directly failed, try sending through the injector.
     auto injector_session = fetch_fresh_through_connect_proxy(req, tls_ctx, {}, cancel, yield[injector_ec]);
 
-    LOG_DEBUG("Metrics injector: ec:\"", injector_ec.message(), "\" result:", injector_session.response_header().result());
+    LOG_DEBUG(yield, " Metrics injector: ec:\"", injector_ec.message(), "\" result:", injector_session.response_header().result());
 
     if (injector_ec) {
         throw_error(injector_ec);
@@ -1623,10 +1417,9 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
 //------------------------------------------------------------------------------
 class Transaction {
 public:
-    Transaction(GenericStream& ua_con, const Request& rq, UserAgentMetaData meta)
+    Transaction(GenericStream& ua_con, const Request& rq)
         : _ua_con(ua_con)
         , _request(rq)
-        , _meta(std::move(meta))
     {}
 
     void write_to_user_agent(Session& session, Cancel& cancel, asio::yield_context yield)
@@ -1650,6 +1443,10 @@ public:
         // Using PartModifier::RemoveChunkHeaderExtension because the WebKit on
         // iOS can't handle the extension string in chunk headers.
         session.flush_response(_ua_con, cancel, yield[ec], PartModifier::RemoveChunkHeaderExtension);
+
+        if (!ec) {
+            _response_header = session.response_header();
+        }
 
         bool keep_alive = !ec && _request.keep_alive() && session.keep_alive();
 
@@ -1681,6 +1478,10 @@ public:
         _ua_was_written_to = true;
         http::async_write(_ua_con, rs, yield[ec]);
 
+        if (!ec) {
+            _response_header = rs.base();
+        }
+
         bool keep_alive = !ec && _request.keep_alive() && rs.keep_alive();
 
         if (!keep_alive) _ua_con.close();
@@ -1698,7 +1499,11 @@ public:
         return _ua_con.is_open();
     }
 
-    const UserAgentMetaData& meta() const { return _meta; }
+    http::response_header<> const*  response_header() const {
+        if (!_response_header) return nullptr;
+        return &*_response_header;
+    }
+
 private:
     /*
      * Connection to the user agent
@@ -1706,22 +1511,20 @@ private:
     GenericStream& _ua_con;
     const Request& _request;
     bool _ua_was_written_to = false;
-    UserAgentMetaData _meta;
+    std::optional<http::response_header<>> _response_header;
 };
 
 //------------------------------------------------------------------------------
 class Client::ClientCacheControl {
 public:
-    ClientCacheControl( Client::State& client_state
-                      , const request_route::Config& request_config)
+    ClientCacheControl(Client::State& client_state)
         : client_state(client_state)
-        , request_config(request_config)
         , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] ( const Request& rq
+        cc.fetch_fresh = [&] ( const CacheInjectRequest& rq
                              , const CacheEntry* cached
-                             , Cancel& cancel, OuinetYield yield_) {
+                             , Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("injector");
 
             namespace err = asio::error;
@@ -1738,7 +1541,6 @@ public:
             sys::error_code ec;
             auto s = client_state.fetch_fresh_through_simple_proxy( rq
                                                                   , cached
-                                                                  , true
                                                                   , move(metrics)
                                                                   , cancel
                                                                   , yield[ec]);
@@ -1753,15 +1555,13 @@ public:
         };
 
         //------------------------------------------------------------
-        cc.fetch_stored = [&] (const Request& rq, const std::string& dht_group, Cancel& cancel, OuinetYield yield_) {
+        cc.fetch_stored = [&] (const CacheRetrieveRequest& rq, Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("cache");
 
             _YDEBUG(yield, "Start");
 
             sys::error_code ec;
             auto r = client_state.fetch_stored_in_dcache( rq
-                                                        , request_config
-                                                        , dht_group
                                                         , cancel
                                                         , yield[ec]);
 
@@ -1773,24 +1573,24 @@ public:
         // Do not even attempt parallel fetch fresh if the injector is still starting.
         // This prevents requests from getting stuck waiting for the injector
         // when missing connectivity.
-        cc.parallel_fresh = [&] (auto, auto) { return !client_state._injector_starting; };
+        cc.parallel_fresh = [&] (auto) { return !client_state._injector_starting; };
 
         //------------------------------------------------------------
         cc.max_cached_age(client_state._config.max_cached_age());
     }
 
-    void front_end_job_func(Transaction& tnx, Cancel& cancel, OuinetYield yield) {
+    void front_end_job_func(Transaction& tnx, Cancel& cancel, YieldContext yield) {
         sys::error_code ec;
         Response res = client_state.fetch_fresh_from_front_end(tnx.request(), yield[ec]);
         ec = compute_error_code(ec, cancel);
-        if (!ec) tnx.write_to_user_agent(res, cancel, static_cast<asio::yield_context>(yield[ec]));
+        if (!ec) tnx.write_to_user_agent(res, cancel, yield[ec].native());
         return or_throw(yield, ec);
     }
 
     void origin_job_func( Transaction& tnx
-                        , Cancel& cancel, OuinetYield yield) {
+                        , Cancel& cancel, YieldContext yield) {
         if (cancel) {
-            LOG_ERROR("origin_job_func received an already triggered cancel");
+            LOG_ERROR(yield, " origin_job_func received an already triggered cancel");
             return or_throw(yield, asio::error::operation_aborted);
         }
 
@@ -1803,7 +1603,7 @@ public:
         auto metrics = client_state._metrics.new_origin_request();
 
         sys::error_code ec;
-        auto session = client_state.fetch_fresh_from_origin( rq, tnx.meta()
+        auto session = client_state.fetch_fresh_from_origin( rq
                                                            , client_state.pub_ctx
                                                            , move(metrics)
                                                            , cancel, yield[ec]);
@@ -1812,47 +1612,58 @@ public:
 
         return_or_throw_on_error(yield, cancel, ec);
 
-        tnx.write_to_user_agent(session, cancel, static_cast<asio::yield_context>(yield[ec]));
+        tnx.write_to_user_agent(session, cancel, yield[ec].native());
 
         _YDEBUG(yield, "Flush; ec=", ec);
 
         return or_throw(yield, ec);
     }
 
-    void proxy_job_func(Transaction& tnx, Cancel& cancel, OuinetYield yield) {
+    void proxy_job_func(Transaction& tnx, Cancel& cancel, YieldContext yield) {
         sys::error_code ec;
 
         _YDEBUG(yield, "Start");
 
         Session session;
 
-        const auto& rq = tnx.request();
+        auto rq = tnx.request();
 
         if (rq.target().starts_with("https://")) {
             auto metrics = client_state._metrics.new_private_injector_request();
 
+            util::remove_ouinet_fields_ref(rq);
+
             session = client_state.fetch_fresh_through_connect_proxy
-                    (rq, client_state.pub_ctx, std::move(metrics), cancel, yield[ec]);
+                    (rq, client_state.pub_ctx, std::move(metrics), cancel, yield[ec].tag("connect"));
         }
         else {
             auto metrics = client_state._metrics.new_public_injector_request();
 
-            session = client_state.fetch_fresh_through_simple_proxy
-                    (rq, nullptr, false, std::move(metrics), cancel, yield[ec]);
+            auto insecure_rq = InsecureRequest::from(std::move(rq));
+
+            if (!insecure_rq) {
+                return or_throw(yield, asio::error::invalid_argument);
+            }
+
+            session = client_state.fetch_fresh_through_simple_proxy(
+                    std::move(*insecure_rq),
+                    nullptr,
+                    std::move(metrics),
+                    cancel, yield[ec].tag("simple"));
         }
 
         _YDEBUG(yield, "Proxy fetch; ec=", ec);
 
         return_or_throw_on_error(yield, cancel, ec);
 
-        tnx.write_to_user_agent(session, cancel, static_cast<asio::yield_context>(yield[ec]));
+        tnx.write_to_user_agent(session, cancel, yield[ec].native());
 
         _YDEBUG(yield, "Flush; ec=", ec);
 
         return or_throw(yield, ec);
     }
 
-    void injector_job_func(Transaction& tnx, Cancel& cancel, OuinetYield yield) {
+    void injector_job_func(Transaction& tnx, Cancel& cancel, YieldContext yield) {
         namespace err = asio::error;
 
         sys::error_code ec;
@@ -1861,10 +1672,16 @@ public:
 
         _YDEBUG(yield, "Start");
 
-        const auto& rq   = tnx.request();
-        const auto& meta = tnx.meta();
+        const auto rq = CacheRequest::from(tnx.request(), yield[ec]);
+        if (cancel) ec = asio::error::operation_aborted;
+        if (ec) return or_throw(yield, ec);
 
-        auto session = cc.fetch( rq, meta.dht_group, fresh_ec, cache_ec
+        if (!rq) {
+            _YERROR(yield, "Invalid request");
+            return or_throw(yield, asio::error::invalid_argument);
+        }
+
+        auto session = cc.fetch( *rq, fresh_ec, cache_ec
                                , cancel, yield[ec].tag("cc_fetch"));
         _YDEBUG( yield.tag("cc_fetch")
                , "Done; ec=", ec, " fresh_ec=", fresh_ec, " cache_ec=", cache_ec);
@@ -1873,16 +1690,13 @@ public:
 
         auto& rsh = session.response_header();
 
-        _YDEBUG(yield, "Response header:");
-        _YDEBUG(yield, rsh);
-
         assert(!fresh_ec || !cache_ec); // At least one success
         assert( fresh_ec ||  cache_ec); // One needs to fail
 
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {
             _YERROR(yield, "Error from injector: ", injector_error);
-            tnx.write_to_user_agent(session, cancel, static_cast<asio::yield_context>(yield[ec]));
+            tnx.write_to_user_agent(session, cancel, yield[ec].native());
             return or_throw(yield, ec);
         }
 
@@ -1900,25 +1714,23 @@ public:
         const char* no_cache_reason = nullptr;
         bool do_cache =
             ( cache
-            && meta.dht_group
-            && rq.method() == http::verb::get  // TODO: storing HEAD response not yet supported
+            && rq->header().method() == http::verb::get  // TODO: storing HEAD response not yet supported
             && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
-            && CacheControl::ok_to_cache( rq, rsh, client_state._config.do_cache_private()
+            && CacheControl::ok_to_cache( rq->header(), rsh, client_state._config.do_cache_private()
                                         , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
 
         if (do_cache) {
             TRACK_SPAWN(ctx, ([
                 &, cache = std::move(cache),
-                lock = wc.lock()
-            ] (asio::yield_context yield_) {
-                auto key = key_from_http_req(rq); assert(key);
+                lock = wc.lock(),
+                log_path = yield.log_path()
+            ] (asio::yield_context yield) {
+                auto key = rq->resource_id();
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;
-                yield.detach(yield_)[ec].run([&] (auto y) {
-                    cache->store(*key, *meta.dht_group, rr, cancel, y);
-                });
+                cache->store(key, rq->dht_group(), rr, cancel, yield);
                 if (ec && ec != asio::error::operation_aborted)
-                    _YERROR(yield, "Failed to write response to cache; ec=", ec);
+                    LOG_ERROR(log_path, " Failed to write response to cache; ec=", ec);
             }));
         } else
             _YDEBUG( yield, "Not ok to cache response: "
@@ -2062,7 +1874,7 @@ public:
             return std::distance(jobs.begin(), jobs.end());
         }
 
-        void sleep_before_job(Type job_type, Cancel& cancel, OuinetYield& yield) {
+        void sleep_before_job(Type job_type, Cancel& cancel, YieldContext& yield) {
             size_t n = count_running();
 
             // 'n' includes "this" job, and we don't need to wait for that.
@@ -2088,12 +1900,12 @@ public:
                     ? n * chrono::seconds(1)
                     : n * chrono::seconds(3);
 
-                async_sleep(exec, delay, c, static_cast<asio::yield_context>(yield));
+                async_sleep(exec, delay, c, yield.native());
             } else if (job_type == Type::front_end) {
                 // No pause for front-end jobs.
             } else {
                 async_sleep( exec, n * chrono::seconds(3)
-                           , cancel, static_cast<asio::yield_context>(yield));
+                           , cancel, yield.native());
             }
         }
     };
@@ -2120,7 +1932,7 @@ public:
     // If an error is reported but the connection was not yet written to,
     // a response may still be sent to it
     // (please check `tnx.user_agent_was_written_to()`).
-    void mixed_fetch(Transaction& tnx, OuinetYield yield)
+    void mixed_fetch(Transaction& tnx, const request_route::Config& request_config, YieldContext yield)
     {
         Cancel cancel(client_state._shutdown_signal);
 
@@ -2159,7 +1971,7 @@ public:
                 func = std::move(func),
                 job_type
             ] (Cancel& c, asio::yield_context y_) {
-                auto y = yield.detach(y_).tag(name_tag);
+                auto y = YieldContext(y_, yield.log_path().tag(name_tag));
 
                 jobs.sleep_before_job(job_type, c, y);
 
@@ -2169,9 +1981,6 @@ public:
                 return or_throw(y, ec, boost::none);
             });
         };
-
-        _YDEBUG(yield, "Handling request:");
-        _YDEBUG(yield, tnx.request().base());
 
         // TODO: When the origin is enabled and it always times out, it
         // will induce an unnecessary delay to the other routes. We need a
@@ -2231,7 +2040,7 @@ public:
 
             _YDEBUG(yield, "Waiting for ", job_count, " running jobs");
 
-            cv.wait(static_cast<asio::yield_context>(yield));
+            cv.wait(yield.native());
 
             if (!which) {
                 _YWARN(yield, "Got result from unknown job");
@@ -2243,11 +2052,15 @@ public:
             _YDEBUG( yield, "Got result; job=", jobs.as_string(which), " ec=", result.ec
                    , " target=", short_target);
 
+            if (auto h = tnx.response_header()) {
+                _YDEBUG(yield, *h);
+            }
+
             if (!result.ec) {
                 final_job = jobs.as_string(which);
                 final_ec = sys::error_code{}; // success
                 for (auto& job : jobs.running()) {
-                    job.stop(static_cast<asio::yield_context>(yield));
+                    job.stop(yield.native());
                 }
                 break;
             } else if (!final_ec) {
@@ -2268,7 +2081,6 @@ public:
 
 private:
     Client::State& client_state;
-    const request_route::Config& request_config;
     CacheControl cc;
 };
 
@@ -2340,7 +2152,7 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
                                                   , beast::string_view connect_hp
                                                   , Request& rq
-                                                  , OuinetYield yield)
+                                                  , YieldContext yield)
 {
     sys::error_code ec;
 
@@ -2357,7 +2169,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     if (!rq.target().starts_with("ws:") && !rq.target().starts_with("wss:")) {
         if (connect_hp.empty()) {
             sys::error_code ec_;
-            handle_bad_request(browser, rq, "Not a websocket server", yield[ec_]);
+            handle_bad_request(browser, false, "Not a websocket server", yield[ec_]);
             return true;
         }
 
@@ -2376,8 +2188,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     // TODO: Reuse existing connections to origin and injectors.  Currently
     // this is hard because those are stored not as streams but as
     // ConnectionPool::Connection.
-    auto meta = UserAgentMetaData::extract(rq);
-    auto origin = connect_to_origin(rq, meta, pub_ctx, cancel, yield[ec]);
+    auto origin = connect_to_origin(rq, pub_ctx, cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec, true);
 
@@ -2404,9 +2215,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    yield[ec].tag("full_duplex").run([&] (auto y) {
-        full_duplex(move(browser), move(origin), cancel, y);
-    });
+    full_duplex(move(browser), move(origin), cancel, yield[ec].tag("full_duplex"));
 
     return or_throw(yield, ec, true);
 }
@@ -2448,7 +2257,7 @@ Client::State::retrieval_failure_response(const Request& req)
     std::string content = file_to_string(error_page_path().string());
     if (content.empty()) {
         res = util::http_error
-            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
+            ( req.keep_alive(), http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
               , http_::response_error_hdr_retrieval_failed
               , "Failed to retrieve the resource "
               "(after attempting all configured mechanisms)");
@@ -2464,12 +2273,9 @@ Client::State::retrieval_failure_response(const Request& req)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::serve_request( GenericStream&& con
-                                 , asio::yield_context yield_)
+void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
 {
     Cancel cancel(_shutdown_signal);
-
-    LOG_DEBUG("Request received ");
 
     namespace rr = request_route;
     using rr::fresh_channel;
@@ -2478,213 +2284,9 @@ void Client::State::serve_request( GenericStream&& con
         con.close();
     });
 
-    // This request router configuration will be used for requests by default.
-    //
-    // Looking up the cache when needed is allowed, while for fetching fresh
-    // content:
-    //
-    //  - the origin is first contacted directly,
-    //    for good overall speed and responsiveness
-    //  - if not available, the injector is used to
-    //    get the content and cache it for future accesses
-    //
-    // So enabling the Injector channel will result in caching content
-    // when access to the origin is not possible.
-    //
-    // To also avoid getting content from the cache
-    // (so that browsing looks like using a normal non-caching proxy)
-    // the cache can be disabled.
-    const rr::Config default_request_config
-        { deque<fresh_channel>({ fresh_channel::origin
-                               , fresh_channel::injector_or_dcache})};
-
-    // This is the matching configuration for the one above,
-    // but for uncacheable requests.
-    const rr::Config nocache_request_config
-        { deque<fresh_channel>({ fresh_channel::origin
-                               , fresh_channel::proxy})};
-
-    // The currently effective request router configuration.
-    rr::Config request_config;
-
-    Client::ClientCacheControl cache_control(*this, request_config);
+    Client::ClientCacheControl cache_control(*this);
 
     sys::error_code ec;
-
-    // Expressions to test the request against and configurations to be used.
-    // TODO: Create once and reuse.
-    using Match = pair<const ouinet::reqexpr::reqex, const rr::Config>;
-
-    auto method_override_getter([](const Request& r) {return r["X-HTTP-Method-Override"];});
-    auto method_getter([](const Request& r) {return r.method_string();});
-    auto host_getter([](const Request& r) {return r[http::field::host];});
-    auto hostname_getter([](const Request& r) {return util::split_ep(r[http::field::host]).first;});
-    auto x_private_getter([](const Request& r) {return r[http_::request_private_hdr];});
-    auto target_getter([](const Request& r) {return r.target();});
-
-    auto local_rx = util::str("https?://[^:/]+\\.", _config.local_domain(), "(:[0-9]+)?/.*");
-
-#ifdef NDEBUG // release
-    const rr::Config unrequested{deque<fresh_channel>({fresh_channel::origin})};
-#else // debug
-    // Don't request these in debug mode as they bring a lot of noise into the log
-    const rr::Config unrequested{deque<fresh_channel>()};
-#endif
-
-    static const boost::regex localhost_exact_rx{"localhost", rx_icase};
-
-    vector<Match> matches({
-        // Please keep host-specific matches at a bare minimum
-        // as they require curation and they may have undesired side-effects;
-        // instead, use user agent-side mechanisms like browser settings and extensions when possible,
-        // and only leave those that really break things and cannot be otherwise disabled.
-        //
-        // Also note that using the normal mechanisms for these may help users
-        // keep their browsers up-to-date (by retrieving via the injector in case of interference),
-        // and they may still not pollute the cache unless
-        // the requests are explicitly marked for caching and announcement.
-
-        // Disable cache and always go to origin for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
-        //     , {deque<fresh_channel>({fresh_channel::origin})} ),
-
-        /* Requests which may be considered public but too noisy and of little value for caching
-         * should be processed by something like browser extensions.
-        // Google Search completion
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
-             , unrequested ),
-        */
-
-        /* To stop these requests in Firefox,
-         * uncheck "Preferences / Privacy & Security / Deceptive Content and Dangerous Software Protection".
-        // Safe Browsing API <https://developers.google.com/safe-browsing/>.
-        // These should not be very frequent after start,
-        // plus they use POST requests, so there is no risk of accidental injection.
-        Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
-             , unrequested ),
-        */
-
-        /* These are used to retrieve add-ons and all kinds of minor security updates from Mozilla,
-         * and they mostly happen on browser start only.
-        // Disable cache and always go to origin for these mozilla sites.
-        Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services\\.mozilla\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
-             , unrequested ),
-        */
-
-        /* To stop these requests,
-         * uncheck "Preferences / Add-ons / (gear icon) / Update Add-ons Automatically".
-        // Firefox add-ons hotfix (auto-update)
-        Match( reqexpr::from_regex(target_getter, "https?://services\\.addons\\.mozilla\\.org/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg\\.addons\\.mozilla\\.org/.*")
-             , unrequested ),
-        */
-
-        /* To stop these requests,
-         * uncheck all options from "Preferences / Privacy & Security / Firefox Data Collection and Use",
-         * maybe clear `toolkit.telemetry.server` in `about:config`.
-        // Firefox telemetry
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.net/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.org/.*")
-             , unrequested ),
-        */
-
-        /* This should work as expected as long as Origin is enabled.
-         * To stop these requests, set `network.captive-portal-service.enabled` to false in `about:config`.
-        // Firefox' captive portal detection
-        Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
-             , unrequested ),
-        */
-
-        /* To avoid these at the client, use some kind of ad blocker (like uBlock Origin).
-        // Ads and tracking
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*google-analytics\\.com/.*")
-             , unrequested ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*moatads\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*amazon-adsystem\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*adsafeprotected\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*ads-twitter\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
-             , unrequested ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*summerhamster\\.com/.*")
-             , unrequested ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
-             , unrequested ),
-        */
-
-        // Handle requests to <http://localhost/> internally.
-        Match( reqexpr::from_regex(host_getter, localhost_exact_rx)
-             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
-
-        Match( reqexpr::from_regex(host_getter, util::str(_config.front_end_endpoint()))
-             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
-
-        // Other requests to the local host should not use the network
-        // to avoid leaking internal services accessed through the client.
-        Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
-             , {deque<fresh_channel>({fresh_channel::origin})} ),
-
-        // Access to sites under the local TLD are always accessible
-        // with good connectivity, so always use the Origin channel
-        // and never cache them.
-        Match( reqexpr::from_regex(target_getter, local_rx)
-             , {deque<fresh_channel>({fresh_channel::origin})} ),
-
-        // Do not use caching for requests tagged as private with Ouinet headers.
-        Match( reqexpr::from_regex( x_private_getter
-                                  , boost::regex(http_::request_private_true, rx_icase))
-             , nocache_request_config),
-
-        // When to try to cache or not, depending on the request method:
-        //
-        //   - Unsafe methods (CONNECT, DELETE, PATCH, POST, PUT): do not cache
-        //   - Safe but uncacheable methods (OPTIONS, TRACE): do not cache
-        //   - Safe and cacheable (GET, HEAD): cache
-        //
-        // Thus the only remaining method that implies caching is GET.
-        Match( !reqexpr::from_regex(method_getter, "(GET|HEAD)")
-             , nocache_request_config),
-        // Requests declaring a method override are checked by that method.
-        // This is not a standard header,
-        // but for instance Firefox uses it for Safe Browsing requests,
-        // which according to this standard should actually be POST requests
-        // (probably in the hopes of having more chances that requests get through,
-        // in spite of using HTTPS).
-        Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
-             , nocache_request_config),
-
-        // Disable cache and always go to proxy for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
-        //     , {deque<fresh_channel>({fresh_channel::proxy})} ),
-        // Force cache and default channels for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.com/.*")
-        //     , {deque<fresh_channel>()} ),
-        // Force cache and particular channels for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
-        //     , {deque<fresh_channel>({fresh_channel::injector})} ),
-    });
-    // Requests to the private addresses should not use the network
-    // to avoid leaking internal services accessed through the client,
-    // unless the option `allow-private-targets` is set to true.
-    if (!_config.is_private_target_allowed())
-        matches.push_back(Match(reqexpr::from_regex(hostname_getter, util::private_addr_rx)
-                         , {deque<fresh_channel>({fresh_channel::origin})}));
 
     auto connection_id = _next_connection_id++;
     auto connection_idstr = util::str('C', connection_id);
@@ -2698,17 +2300,24 @@ void Client::State::serve_request( GenericStream&& con
     // Process the different requests that may come over the same connection.
     beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
 
+    uint64_t next_request_id = 0;
+
     for (;;) {  // continue for next request; break for no more requests
         // Read the (clear-text) HTTP request
         // (without a size limit, in case we are uploading a big file).
         // Based on <https://stackoverflow.com/a/50359998>.
         http::request_parser<Request::body_type> reqhp;
-        reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        if (_config.max_request_body_size() == 0) {
+            reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        } else {
+            reqhp.body_limit(_config.max_request_body_size());
+        }
 
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests
         // until the later desires to close it.
-        OuinetYield yield(_ctx.get_executor(), yield_, connection_idstr);
+        YieldContext yield = yield_.tag(util::str("R", next_request_id++));
+
         yield[ec].tag("read_req").run([&] (auto y) {
             http::async_read(con, con_rbuf, reqhp, y);
         });
@@ -2718,12 +2327,25 @@ void Client::State::serve_request( GenericStream&& con
           || ec == asio::error::operation_aborted) break;
 
         if (ec) {
-            LOG_WARN("Failed to read request; ec=", ec);
+            LOG_WARN(yield.log_path(), " Failed to read request; ec=", ec);
             break;
         }
 
         Request req(reqhp.release());
         auto req_done = defer([&yield] { _YDEBUG(yield, "Done"); });
+
+        {
+            auto& fields = _config.add_request_fields();
+
+            if (!fields.empty()) {
+                LOG_WARN(yield, " Adding request fields:");
+            }
+
+            for (const auto& [key, value] : fields) {
+                LOG_WARN(yield, "   ", key, ": ", value);
+                req.set(key, value);
+            }
+        }
 
 #if defined(__MACH__)
         // It is not possible to inject headers into every request made
@@ -2734,7 +2356,7 @@ void Client::State::serve_request( GenericStream&& con
             size_t index = ua.find("X-Ouinet-Private");
             if (index != std::string::npos ){
                 req.set(http::field::user_agent, ua.substr(0, index));
-                req.set(http_::request_private_hdr, "true");
+                req.set(http_::request_private_hdr, http_::request_private_true);
             }
         }
 #endif
@@ -2803,7 +2425,7 @@ void Client::State::serve_request( GenericStream&& con
                 // as plain HTTP requests (as if we were a plain HTTP server)
                 // but for the moment we only accept proxy requests.
                 sys::error_code ec_;
-                handle_bad_request(con, req, "Not a proxy request", yield[ec_]);
+                handle_bad_request(con, req.keep_alive(), "Not a proxy request", yield[ec_]);
                 if (req.keep_alive()) continue;
                 else break;
             }
@@ -2816,7 +2438,7 @@ void Client::State::serve_request( GenericStream&& con
                 auto message = "The request is missing a valid "
                     + std::string(header_key)
                     + " HTTP header\n";
-                auto res = util::http_error(req, http::status::unauthorized
+                auto res = util::http_error( req.keep_alive(), http::status::unauthorized
                                             , OUINET_CLIENT_SERVER_STRING
                                             , "", message);
                 handle_http_error(con, res, yield);
@@ -2828,20 +2450,19 @@ void Client::State::serve_request( GenericStream&& con
         // (to ease request routing check and later operations on the head).
         if (!util::req_ensure_host(req)) {
             sys::error_code ec_;
-            handle_bad_request(con, req, "Invalid or missing host in request", yield[ec_]);
+            handle_bad_request(con, req.keep_alive(), "Invalid or missing host in request", yield[ec_]);
             if (req.keep_alive()) continue;
             else break;
         }
 
-        request_config = route_choose_config(req, matches, default_request_config);
+        auto request_config = request_route::route_choose_config(req, _config);
 
-        auto meta = UserAgentMetaData::extract(req);
-        Transaction tnx(con, req, std::move(meta));
+        Transaction tnx(con, req);
 
         // TODO: This shouldn't be here, just testing...
         if (_ouisync.is_running()) {
             sys::error_code ec;
-            _ouisync.serve(con, req, static_cast<asio::yield_context>(yield)[ec]);
+            _ouisync.serve(con, req, yield.native()[ec]);
             if (ec || cancel) {
                 break;
             }
@@ -2852,12 +2473,12 @@ void Client::State::serve_request( GenericStream&& con
             _YDEBUG(yield, "Abort due to no route");
             sys::error_code ec;
             tnx.write_to_user_agent( retrieval_failure_response(req)
-                                   , cancel, static_cast<asio::yield_context>(yield[ec]));
+                                   , cancel, yield[ec].native());
             if (ec || cancel) break;
             continue;
         }
 
-        cache_control.mixed_fetch(tnx, yield[ec].tag("mixed_fetch"));
+        cache_control.mixed_fetch(tnx, request_config, yield[ec].tag("mixed_fetch"));
 
         if (ec) {
             _YERROR(yield, "Error writing back response; ec=", ec);
@@ -2867,7 +2488,7 @@ void Client::State::serve_request( GenericStream&& con
             if (con.is_open() && !cancel) {
                 sys::error_code ec_;
                 tnx.write_to_user_agent( retrieval_failure_response(req)
-                                       , cancel, static_cast<asio::yield_context>(yield[ec_]));
+                                       , cancel, yield[ec_].native());
             }
             if (!req.keep_alive())
                 con.close();
@@ -2878,7 +2499,7 @@ void Client::State::serve_request( GenericStream&& con
         }
     }
 
-    LOG_DEBUG(connection_idstr, " Done");
+    LOG_DEBUG(yield_, " Done");
 }
 
 //------------------------------------------------------------------------------
@@ -2982,7 +2603,7 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
 void Client::State::listen_tcp
         ( asio::yield_context yield
         , tcp::acceptor acceptor
-        , function<void(GenericStream, asio::yield_context)> handler)
+        , function<void(GenericStream, YieldContext)> handler)
 {
     auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
         acceptor.close();
@@ -3000,7 +2621,7 @@ void Client::State::listen_tcp
         if (ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN("Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
+            LOG_WARN(_log_path, " Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
 
             if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -3022,7 +2643,7 @@ void Client::State::listen_tcp
                 lock = wait_condition.lock()
             ](asio::yield_context yield) mutable {
                 if (was_stopped()) return;
-                handler(move(c), yield);
+                handler(move(c), YieldContext(yield, _log_path));
             }));
         }
     }
@@ -3043,8 +2664,7 @@ void Client::State::start_ouinet()
 
     // These may throw if the endpoints are busy.
     auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
-    _proxy_endpoint = string(proxy_acceptor.local_endpoint().address().to_string()) + ":"
-                    + to_string(proxy_acceptor.local_endpoint().port());
+    _proxy_endpoint = proxy_acceptor.local_endpoint();
     boost::optional<tcp::acceptor> front_end_acceptor;
     if (_config.front_end_endpoint() != tcp::endpoint())
     {
@@ -3101,8 +2721,14 @@ void Client::State::start_ouinet()
         listen_tcp( yield[ec]
                   , move(acceptor)
                   , [this, self]
-                    (GenericStream c, asio::yield_context yield) {
-                serve_request(move(c), yield);
+                    (GenericStream c, YieldContext yield) {
+                auto connection_id = _next_connection_id++;
+
+                auto y = yield.tag(util::str('C', connection_id));
+
+                LOG_DEBUG(y, " Accepted connection from UA");
+
+                serve_request(move(c), y);
             });
     }));
 
@@ -3120,8 +2746,8 @@ void Client::State::start_ouinet()
             listen_tcp( yield[ec]
                       , move(acceptor)
                       , [this, self]
-                        (GenericStream c, asio::yield_context yield_) {
-                  OuinetYield yield(_ctx, yield_, "frontend");
+                        (GenericStream c, YieldContext yield_) {
+                  YieldContext yield = yield_.tag("frontend");
                   sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
@@ -3174,7 +2800,7 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
     bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
 
     if (!enable_injector_tls) {
-        LOG_WARN("Connection to the injector shall not be encrypted");
+        LOG_WARN(_log_path, "Connection to the injector shall not be encrypted");
         return client;
     }
 
@@ -3307,9 +2933,14 @@ void Client::State::setup_injector(asio::yield_context yield)
 }
 
 //------------------------------------------------------------------------------
-Client::Client(asio::io_context& ctx, ClientConfig cfg)
-    : _state(make_shared<State>(ctx, move(cfg)))
-{}
+Client::Client(
+        asio::io_context& ctx,
+        ClientConfig cfg,
+        util::LogPath log_path,
+        std::optional<MockDhtBuilder> dht_builder)
+    : _state(make_shared<State>(ctx, move(cfg), std::move(log_path), move(dht_builder)))
+{
+}
 
 Client::~Client()
 {
@@ -3329,7 +2960,7 @@ Client::RunningState Client::get_state() const noexcept {
     return _state->get_state();
 }
 
-std::string Client::get_proxy_endpoint() const noexcept
+asio::ip::tcp::endpoint Client::get_proxy_endpoint() const noexcept
 {
     return _state->_proxy_endpoint;
 }
@@ -3337,6 +2968,11 @@ std::string Client::get_proxy_endpoint() const noexcept
 std::string Client::get_frontend_endpoint() const noexcept
 {
     return _state->_frontend_endpoint;
+}
+
+AsioExecutor Client::get_executor() const noexcept
+{
+    return _state->_ctx.get_executor();
 }
 
 void Client::charging_state_change(bool is_charging) {
@@ -3366,55 +3002,12 @@ fs::path Client::get_or_gen_ca_root_cert(const string repo_root)
     return ca_cert_path;
 }
 
-//------------------------------------------------------------------------------
-#ifndef __ANDROID__
-int main(int argc, char* argv[])
-{
-    util::crypto_init();
-
-    ClientConfig cfg;
-
-    try {
-        cfg = ClientConfig(argc, argv);
-    } catch(std::exception const& e) {
-        LOG_ABORT(e.what());
-        return 1;
-    }
-
-    if (cfg.is_help()) {
-        cout << "Usage: client [OPTION...]" << endl;
-        cout << cfg.description() << endl;
-        return 0;
-    }
-
-    asio::io_context ctx;
-
-    asio::signal_set signals(ctx, SIGINT, SIGTERM);
-
-    Client client(ctx, move(cfg));
-
-    unique_ptr<ForceExitOnSignal> force_exit;
-
-    signals.async_wait([&client, &signals, &force_exit]
-                       (const sys::error_code& ec, int signal_number) {
-            LOG_INFO("GOT SIGNAL ", signal_number);
-            HandlerTracker::stopped();
-            client.stop();
-            signals.clear();
-            force_exit = make_unique<ForceExitOnSignal>();
-        });
-
-    try {
-        client.start();
-    } catch (std::exception& e) {
-        LOG_ABORT(e.what());
-        return 1;
-    }
-
-    ctx.run();
-
-    LOG_INFO("Exiting gracefuly");
-
-    return EXIT_SUCCESS;
+const ClientConfig& Client::config() const {
+    return _state->_config;
 }
-#endif
+
+std::shared_ptr<bt::DhtBase> Client::get_dht() const {
+    return _state->_bt_dht;
+}
+
+//------------------------------------------------------------------------------

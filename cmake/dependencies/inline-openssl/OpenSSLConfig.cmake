@@ -14,6 +14,10 @@ if (NOT TARGET OpenSSL::Crypto)
         IMPORTED_LOCATION "${OPENSSL_CRYPTO_LIBRARY}"
     )
 
+    if (WIN32)
+        target_link_libraries(openssl_crypto INTERFACE crypt32)
+    endif()
+
     add_library(openssl_crypto_ INTERFACE)
     add_library(OpenSSL::Crypto ALIAS openssl_crypto_)
     set_target_properties(openssl_crypto_ PROPERTIES
