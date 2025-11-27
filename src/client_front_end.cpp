@@ -617,10 +617,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<br>\n";
 
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
-    if (auto doh_ep = config.origin_doh_endpoint()) {
-        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
-           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
-    }
+    ss << "<br>\n";
+
+    ss << "DNS over HTTPS: "
+       << ( config.is_doh_enabled()
+          ? "enabled"
+          : "disabled" )
+       << ".<br><br>\n";
 
     ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
                    , "bt_extra_bootstraps"
@@ -731,7 +734,8 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
-        {"metrics_enabled", metrics.is_enabled()}
+        {"metrics_enabled", metrics.is_enabled()},
+        {"doh_enabled", config.is_doh_enabled()}
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);

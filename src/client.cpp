@@ -23,7 +23,7 @@
 
 #include "namespaces.h"
 #include "origin_pools.h"
-#include "doh.h"
+#include "cxx/dns.h"
 #include "http_util.h"
 #include "client_front_end.h"
 #include "connect_to_host.h"
@@ -41,6 +41,7 @@
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
+#include "util/dns.h"
 #include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
@@ -270,6 +271,7 @@ public:
         else {
             bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                       , _metrics.mainline_dht()
+                                                      , _config.is_doh_enabled()
                                                       , _config.repo_root() / "dht"
                                                       , _config.bt_bootstrap_extras());
         }
@@ -464,9 +466,6 @@ private:
 
     // Resolve host and port strings.
     TcpLookup resolve_tcp_dns( const std::string&, const std::string&
-                             , Cancel&, YieldContext);
-    TcpLookup resolve_tcp_doh( const std::string&, const std::string&
-                             , const doh::Endpoint&
                              , Cancel&, YieldContext);
 
     GenericStream connect_to_origin( const http::request_header<>&
@@ -861,129 +860,13 @@ Client::State::fetch_via_self( Rq request
     });
 }
 
-// Transforms addresses to endpoints with the given port.
-template<class Addrs, class Endpoint>
-class AddrsAsEndpoints {
-public:
-    using value_type = Endpoint;
-    using addrs_iterator = typename Addrs::const_iterator;
-
-    AddrsAsEndpoints(const Addrs& addrs, unsigned short port)
-        : _addrs(addrs), _port(port)
-    {}
-
-    class const_iterator {
-    public:
-        // Iterator requirements
-        using iterator_category = std::input_iterator_tag;
-        using value_type        = Endpoint;
-        using difference_type   = std::ptrdiff_t;
-        using pointer           = value_type*;
-        using reference         = value_type&;
-
-        const_iterator(const addrs_iterator& it, unsigned short port)
-            : _it(it), _port(port)
-        {}
-
-        value_type operator*() const { return {*_it, _port}; }
-        const_iterator& operator++() { ++_it; return *this; }
-        bool operator==(const const_iterator& other) const { return _it == other._it; }
-        bool operator!=(const const_iterator& other) const { return _it != other._it; }
-    private:
-        addrs_iterator _it;
-        unsigned short _port;
-    };
-
-    const_iterator begin() const { return {_addrs.begin(), _port}; };
-    const_iterator end() const { return {_addrs.end(), _port}; };
-
-private:
-    const Addrs& _addrs;
-    unsigned short _port;
-};
-
-TcpLookup
-Client::State::resolve_tcp_doh( const std::string& host
-                              , const std::string& port
-                              , const doh::Endpoint& ep
-                              , Cancel& cancel
-                              , YieldContext yield)
-{
-    using TcpEndpoint = typename TcpLookup::endpoint_type;
-
-    boost::string_view portsv(port);
-    auto portn_o = parse::number<unsigned short>(portsv);
-    if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    // Build and return lookup if `host` is already a network address.
-    {
-        sys::error_code e;
-        auto addr = asio::ip::make_address(host, e);
-        if (!e) return TcpLookup::create(TcpEndpoint{move(addr), *portn_o}, host, port);
-    }
-
-    // TODO: When to disable queries for IPv4 or IPv6 addresses?
-    auto rq4_o = doh::build_request_ipv4(host, ep);
-    auto rq6_o = doh::build_request_ipv6(host, ep);
-    if (!rq4_o || !rq6_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    sys::error_code ec4, ec6;
-    doh::Response rs4, rs6;
-
-    WaitCondition wc(_ctx);
-
-    // By passing user agent metadata as is,
-    // we ensure that the DoH request is done with the same browsing mode
-    // as the content request that triggered it,
-    // and is announced under the same group.
-    // TODO: Handle redirects.
-#define SPAWN_QUERY(VER) \
-    TRACK_SPAWN(_ctx, ([ \
-        this, \
-        rq = move(*rq##VER##_o), &ec##VER, &rs##VER, \
-        &cancel, &yield, lock = wc.lock() \
-    ] (asio::yield_context y_) { \
-        sys::error_code ec; \
-        auto y = YieldContext(y_, yield.log_path()); \
-        auto s = fetch_via_self(move(rq), cancel, y[ec].tag("fetch##VER")); \
-        if (ec) { ec##VER = ec; return; } \
-        rs##VER = y[ec].tag("slurp##VER").run([&] (auto yy) { \
-            return http_response::slurp_response<doh::Response::body_type> \
-                (s, doh::payload_size, cancel, yy); \
-        }); \
-        if (ec) { ec##VER = ec; return; } \
-    }));
-    SPAWN_QUERY(4);
-    SPAWN_QUERY(6);
-
-    yield.tag("wait").run([&] (auto y) {
-        wc.wait(y);
-    });
-
-    _YDEBUG(yield, "DoH query; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    doh::Answers answers4, answers6;
-    if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
-    if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
-
-    _YDEBUG(yield, "DoH parse; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    answers4.insert( answers4.end()
-                   , std::make_move_iterator(answers6.begin())
-                   , std::make_move_iterator(answers6.end()));
-    AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers4, *portn_o};
-    return TcpLookup::create(eps.begin(), eps.end(), host, port);
-}
-
 TcpLookup
 Client::State::resolve_tcp_dns( const std::string& host
                               , const std::string& port
                               , Cancel& cancel
                               , YieldContext yield)
 {
-    return util::tcp_async_resolve( host, port
+    return util::resolve_tcp_async( host, port
                                   , _ctx.get_executor()
                                   , cancel
                                   , yield.native());
@@ -1000,11 +883,9 @@ Client::State::connect_to_origin( const http::request_header<>& rq
 
     sys::error_code ec;
 
-    // Resolve using DoH if configured and not resolving the resolver's address itself.
-    auto doh_ep_o = _config.origin_doh_endpoint();
-    bool do_doh = doh_ep_o && !rq.target().starts_with(*doh_ep_o);
+    auto do_doh = _config.is_doh_enabled();
     auto lookup = do_doh
-        ? resolve_tcp_doh(host, port, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
+        ? util::resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);

@@ -50,6 +50,7 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
+#include "util/dns.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/yield.h"
@@ -81,6 +82,7 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 // TODO: Get rid of this
 static bool g_allow_private_targets = false;
+static bool g_do_doh = true;
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -137,6 +139,7 @@ void handle_no_proxy( GenericStream& con
 TcpLookup
 ouinet::resolve_target(const http::request_header<>& req
                       , bool allow_private_targets
+                      , bool do_doh
                       , AsioExecutor exec
                       , Cancel& cancel
                       , YieldContext yield)
@@ -152,11 +155,15 @@ ouinet::resolve_target(const http::request_header<>& req
     bool priv = boost::regex_match(host, util::private_addr_rx);
 
     // Resolve address and also use result for more sophisticaded checking.
-    if (!local && (!priv || allow_private_targets)) {}
-        lookup = util::tcp_async_resolve(host, port
-                                         , exec
-                                         , cancel
-                                         , yield[ec].native());
+    if (!local && (!priv || allow_private_targets))
+    {
+        lookup = do_doh
+               ? util::resolve_tcp_doh( host, port, cancel, yield[ec] )
+               : util::resolve_tcp_async( host, port
+                                        , exec
+                                        , cancel
+                                        , yield[ec].native());
+    }
 
     if (ec) return or_throw<TcpLookup>(yield, ec);
 
@@ -203,7 +210,11 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target(req, g_allow_private_targets, exec, cancel, yield[ec].tag("resolve"));
+    TcpLookup lookup = resolve_target( req
+                                     , g_allow_private_targets
+                                     , g_do_doh
+                                     , exec
+                                     , cancel, yield[ec].tag("resolve"));
 
     if (ec) {
         sys::error_code he_ec;
@@ -309,7 +320,11 @@ class InjectorCacheControl {
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target(rq, g_allow_private_targets, executor, cancel, yield[ec]);
+        TcpLookup lookup = resolve_target( rq
+                                         , g_allow_private_targets
+                                         , g_do_doh
+                                         , executor
+                                         , cancel, yield[ec]);
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -859,6 +874,10 @@ Injector::Injector(
         LOG_INFO(log_path, "Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
+    if (!config.is_doh_enabled()) {
+        LOG_INFO("DNS over HTTPS is disabled.");
+        g_do_doh = false;
+    }
 
     auto proxy_server = std::make_unique<OuiServiceServer>(ex);
 
@@ -924,6 +943,7 @@ Injector::Injector(
         _dht = std::make_shared<bt::MainlineDht>
             ( ex
             , metrics::Client::noop().mainline_dht()
+            , config.is_doh_enabled()
             , fs::path{}
             , _config.bt_bootstrap_extras());  // default storage dir
     }
