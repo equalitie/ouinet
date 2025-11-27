@@ -158,7 +158,7 @@ ouinet::resolve_target(const http::request_header<>& req
     if (!local && (!priv || allow_private_targets))
     {
         lookup = do_doh
-               ? util::resolve_tcp_doh( host, port, cancel, yield )
+               ? util::resolve_tcp_doh( host, port, cancel, yield[ec] )
                : util::resolve_tcp_async( host, port
                                         , exec
                                         , cancel
