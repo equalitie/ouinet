@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.5.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.5.1) - 2025-11-27
+
 ### Fixed
 
 - Add `ec` to `yield` when calling injector's `resolve_tcp_doh` method. !148
