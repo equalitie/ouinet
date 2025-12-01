@@ -422,15 +422,5 @@ private:
 
 using ResourceReader = GenericResourceReader<async_file_handle>;
 
-static
-fs::path
-relative_path_from_key(const std::string& key)
-{
-    auto key_digest = util::sha1_digest(key);
-    auto hex_digest = util::bytes::to_hex(key_digest);
-    boost::string_view hd0(hex_digest); hd0.remove_suffix(hex_digest.size() - 2);
-    boost::string_view hd1(hex_digest); hd1.remove_prefix(2);
-    return fs::path(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
-}
 
 } // namespace ouinet::cache

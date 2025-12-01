@@ -169,6 +169,9 @@ http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
 HashList
 http_store_load_hash_list(const fs::path&, AsioExecutor, Cancel&, asio::yield_context);
 
+fs::path
+path_from_resource_id(fs::path dir, const ResourceId& resource_id);
+
 //// High-level classes for HTTP response storage
 
 // Store each response in a directory named `DIGEST[:2]/DIGEST[2:]` (where

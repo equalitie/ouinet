@@ -6,6 +6,7 @@
 #include <boost/filesystem/path.hpp>
 #include "namespaces.h"
 #include "or_throw.h"
+#include "util/yield.h"
 
 namespace ouinet {
     class GenericStream; 
@@ -30,7 +31,7 @@ public:
     void serve(
         GenericStream&,
         const http::request_header<>&,
-        asio::yield_context
+        YieldContext
     );
 
 private:
@@ -61,7 +62,7 @@ public:
     void serve(
         GenericStream&,
         const http::request_header<>&,
-        asio::yield_context yield
+        YieldContext
     ) {
         return or_throw(yield, asio::error::operation_not_supported);
     }

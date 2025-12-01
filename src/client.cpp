@@ -2462,7 +2462,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         // TODO: This shouldn't be here, just testing...
         if (_ouisync.is_running()) {
             sys::error_code ec;
-            _ouisync.serve(con, req, yield.native()[ec]);
+            _ouisync.serve(con, req, yield[ec]);
             if (ec || cancel) {
                 break;
             }

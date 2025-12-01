@@ -226,6 +226,8 @@ target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
+        cpp_ouisync_client
+        cpp_ouisync_service
 )
 
 if (WIN32 OR MINGW)

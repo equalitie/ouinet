@@ -50,6 +50,12 @@ public:
         return _asio_yield;
     }
 
+    YieldContext throwing() const {
+        YieldContext ret = *this;
+        ret._asio_yield.ec_ = nullptr;
+        return ret;
+    }
+
     YieldContext ignore_error()
     {
         return YieldContext(_asio_yield[*_ignored_error], _log_path);

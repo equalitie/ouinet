@@ -529,7 +529,6 @@ http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor 
     return _http_store_body_size(dirp, cdirp, std::move(ex), ec);
 }
 
-static
 fs::path
 path_from_resource_id(fs::path dir, const ResourceId& resource_id)
 {

@@ -5,13 +5,14 @@
 #include <ouisync/subscription.hpp>
 #include "ouisync.h"
 #include "error.h"
-#include "util.h"
+#include "util/url.h"
 #include "http_util.h"
 #include "generic_stream.h"
 #include "util/keep_alive.h"
 #include "cache/cache_entry.h"
 #include "ouiservice/ouisync/file.h"
 #include "cache/resource.h"
+#include "cache/http_store.h"
 
 namespace ouinet::ouisync_service {
 
@@ -138,46 +139,47 @@ void Ouisync::start(asio::yield_context yield)
 }
 
 template<class Request>
-void reply_error(const Request& rq, sys::system_error e, GenericStream& con, asio::yield_context yield) {
+void reply_error(const Request& rq, sys::system_error e, GenericStream& con, YieldContext yield) {
     std::stringstream ss;
     ss << "Error: " << e.what() << "\n";
     auto rs = util::http_error(
-        rq,
+        util::get_keep_alive(rq),
         http::status::bad_request,
         OUINET_CLIENT_SERVER_STRING,
         "",
         ss.str()
     );
 
-    util::http_reply(con, rs, yield);
+    util::http_reply(con, rs, yield.native());
 }
 
-void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, asio::yield_context yield) {
-    sys::error_code* caller_ec = yield.ec_;
-    yield.ec_ = nullptr;
+void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, YieldContext yield_) {
+    auto yield = yield_.throwing();
 
     try {
         if (!_impl) {
             throw_error(asio::error::not_connected);
         }
 
-        util::url_match url;
+        auto url = util::Url::from(rq.target());
 
-        if (!match_http_url(rq.target(), url)) {
+        if (!url) {
             throw_error(asio::error::invalid_argument);
         }
 
-        auto repo = _impl->resolve(url.host, yield);
+        auto repo = _impl->resolve(url->host, yield.native());
 
-        auto key = key_from_http_req(rq).value();
+        //auto key = key_from_http_req(rq).value();
+        auto resource_id = cache::ResourceId::from_url(rq.target(), yield).value();
 
         // TODO: Use constants from http_store.cpp instead of these hardcoded
         // strings
         fs::path root = "data-v3";
-        fs::path path = root / cache::relative_path_from_key(key);
-        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield);
-        auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield);
-        auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield);
+        //fs::path path = root / cache::relative_path_from_key(key);
+        fs::path path = cache::path_from_resource_id(root, resource_id);
+        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield.native()), yield.native());
+        auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield.native()), yield.native());
+        auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield.native()), yield.native());
 
         using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;
 
@@ -194,18 +196,17 @@ void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, asio::
             std::move(reader),
             rq.method() == http::verb::head,
             cancel,
-            yield
+            yield.native()
         );
 
-        session.flush_response(con, cancel, yield);
+        session.flush_response(con, cancel, yield.native());
     }
     catch (const sys::system_error& e) {
         LOG_WARN("Ouisync::serve exception: ", e.what());
         sys::error_code ec;
-        reply_error(rq, e, con, yield[ec]);
+        reply_error(rq, e, con, yield_[ec]);
         if (ec) {
-            if (caller_ec) *caller_ec = e.code();
-            else throw;
+            return or_throw(yield_, e.code());
         }
     }
 }
