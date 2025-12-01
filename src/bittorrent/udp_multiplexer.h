@@ -180,6 +180,8 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
 
         buf.resize(65536);
 
+        const float max_rate = (500 * 1000)/8; // 500K bits/sec
+
         while (true) {
             sys::error_code ec;
 
@@ -189,6 +191,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
 
             _rc_rx.update(size);
             recv += size;
+            maintain_max_rate_bytes_per_sec(_rc_rx.rate(), max_rate, yield[ec]);
 
             for (auto& entry : std::move(_receive_queue)) {
                 entry.handler(ec, boost::string_view((char*)&buf[0], size), from);
