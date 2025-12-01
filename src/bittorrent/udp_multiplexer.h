@@ -94,16 +94,16 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
     LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
-    task::spawn_detached(), [this] (asio::yield_context yield) {
+    task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
             using namespace std::chrono;
             using std::cerr;
 
             Cancel cancel(_terminate_signal);
 
             auto print_rate = [](float r) {
-                if      (r >= 1000000) cerr << (r / 1000000) << "MiB/s";
-                else if (r >= 1000)    cerr << (r / 1000)    << "KiB/s";
-                else                   cerr << (r)           << "B/s";
+                if      (r >= 1000000) cerr << (r / 1000000) << " MiB/s";
+                else if (r >= 1000)    cerr << (r / 1000)    << " KiB/s";
+                else                   cerr << (r)           << " B/s";
             };
 
             while (true) {
@@ -111,11 +111,18 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
                 async_sleep(get_executor(), seconds(1), cancel, yield[ec]);
                 if (cancel) return;
 
-                cerr << "Current BT rate rx:";
+                cerr << "Current BT rate ";
+
+                cerr << "rx: ";
                 print_rate(_rc_rx.rate());
-                cerr << " (" << recv << ") tx:";
+                cerr << " (" << recv << ")" ;
+                cerr << " receive_queue size: " << _receive_queue.size();
+
+                cerr << " tx: ";
                 print_rate(_rc_tx.rate());
-                cerr << " (" << sent << ") send_queue size:" << _send_queue.size();
+                cerr << " (" << sent << ")";
+                cerr << " send_queue size: " << _send_queue.size();
+
                 cerr << "\n";
                 sent = 0;
                 recv = 0;
