@@ -202,7 +202,7 @@ def http_server() -> Process:
 proc_list: List[OuinetProcess] = []
 
 
-@pytest_asyncio.fixture()
+@pytest_asyncio.fixture(autouse=True)
 async def proc_list_janitor() -> List[OuinetProcess]:
     """
     This fixture is teardown-only, otherwise it forces too much async in code
@@ -217,13 +217,14 @@ async def proc_list_janitor() -> List[OuinetProcess]:
     proc_list.clear()
 
 
-@pytest.fixture()
+@pytest.fixture(autouse=True)
 def repo_janitor() -> List[OuinetProcess]:
     """
     This fixture is teardown-only
     """
     yield
 
+    print("cleaning up the folder", TestFixtures.REPO_FOLDER_NAME)
     if exists(TestFixtures.REPO_FOLDER_NAME):
         rmtree(TestFixtures.REPO_FOLDER_NAME)
 
@@ -258,9 +259,7 @@ def log():
 
 @pytest.mark.timeout(TestFixtures.TCP_TRANSPORT_TIMEOUT)
 @pytest.mark.asyncio
-async def test_tcp_transport(
-    proc_list_janitor, repo_janitor, certificate_file, http_server
-):
+async def test_tcp_transport(certificate_file, http_server):
     """
     Starts an echoing http server, a injector and a client and send a unique http
     request to the echoing http server through the g client --tcp--> injector -> http server
@@ -306,9 +305,7 @@ async def test_tcp_transport(
 
 @pytest.mark.timeout(TestFixtures.BEP44_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_tcp_cache(
-    repo_janitor, proc_list_janitor, certificate_file, http_server
-):
+async def test_tcp_cache(certificate_file, http_server):
     """
     Starts an echoing http server, a injector and a two clients and client1 send a unique http
     request to the echoing http server through the g client --tcp--> injector -> http server
@@ -406,9 +403,7 @@ async def test_tcp_cache(
 
 @pytest.mark.timeout(TestFixtures.BEP44_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_wikipedia_mainline_dht(
-    repo_janitor, proc_list_janitor, http_server, certificate_file
-):
+async def test_wikipedia_mainline_dht(http_server, certificate_file):
     """
     A test to reach wikipedia without using our own injector
     """
