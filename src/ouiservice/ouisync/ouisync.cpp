@@ -22,7 +22,6 @@ using ouisync::File;
 using ouisync::ShareToken;
 using ouisync::RepositorySubscription;
 
-static const ShareToken INDEX_TOKEN{"https://ouisync.net/r#AwEglsib07NXLGQJsiLMXQnYheM4rusMFBPcEYJyNe5YYSAgOafq4GHj1NOG-E2UY88ehe4yX4gBGH9X4beIAv7jDcE?name=page_index"};
 static const bool SYNC_ENABLED = true;
 static const bool DHT_ENABLED = true;
 static const bool PEX_ENABLED = true;
@@ -56,13 +55,13 @@ void set_repo_defaults(Repository& repo, asio::yield_context yield) {
     repo.set_pex_enabled(true, yield);
 }
 
-File open_file(Repository& repo, std::string const& path, asio::yield_context yield) {
+File open_file(Repository& repo, std::string const& path, YieldContext yield) {
     RepositorySubscription sub;
-    sub.subscribe(repo, yield);
+    sub.subscribe(repo, yield.native());
 
     while (true) {
         try {
-            return repo.open_file(path, yield);
+            return repo.open_file(path, yield.native());
         }
         catch (const sys::system_error& e) {
             // We get STORE_ERROR when the file is there but it's first block
@@ -72,7 +71,7 @@ File open_file(Repository& repo, std::string const& path, asio::yield_context yi
                 throw;
             }
             // TODO: Break if the repo has been fully synced
-            sub.state_changed(yield);
+            sub.state_changed(yield.native());
         }
     }
 }
@@ -85,19 +84,19 @@ struct Ouisync::Impl {
     ouisync::Repository page_index;
     Sites sites;
 
-    std::shared_ptr<Repository> resolve(std::string repo_name, asio::yield_context yield) {
+    std::shared_ptr<Repository> resolve(std::string repo_name, YieldContext yield) {
         auto repo_i = sites.find(repo_name);
         if (repo_i != sites.end()) {
             return repo_i->second;
         }
 
-        auto file = open_file(page_index, std::string("/") + repo_name, yield);
-        auto len = file.get_length(yield);
-        auto token_vec = file.read(0, len, yield);
+        auto file = open_file(page_index, std::string("/") + repo_name, yield.tag("open_file"));
+        auto len = file.get_length(yield.native());
+        auto token_vec = file.read(0, len, yield.native());
         auto token = ShareToken{std::string(token_vec.begin(), token_vec.end())};
 
-        auto repo = open_or_create_repo(session, repo_name, token, yield);
-        set_repo_defaults(repo, yield);
+        auto repo = open_or_create_repo(session, repo_name, token, yield.native());
+        set_repo_defaults(repo, yield.native());
         auto repo_ptr = std::make_shared<Repository>(std::move(repo));
 
         sites[std::move(repo_name)] = repo_ptr;
@@ -106,10 +105,11 @@ struct Ouisync::Impl {
     }
 };
 
-Ouisync::Ouisync(fs::path service_dir) :
+Ouisync::Ouisync(fs::path service_dir, std::string page_index_token) :
     _service_dir(std::move(service_dir)),
     _store_dir(_service_dir / "store"),
-    _mount_dir(_service_dir / "mount")
+    _mount_dir(_service_dir / "mount"),
+    _page_index_token(std::move(page_index_token))
 {
     fs::create_directories(_store_dir);
     fs::create_directories(_mount_dir);
@@ -123,11 +123,11 @@ void Ouisync::start(asio::yield_context yield)
     auto session = ouisync::Session::connect(_service_dir, yield);
 
     session.bind_network({"quic/0.0.0.0:0"}, yield);
-    session.set_store_dir(_store_dir.string(), yield);
+    session.set_store_dirs({_store_dir.string()}, yield);
     session.set_mount_root(_mount_dir.string(), yield);
     session.set_local_discovery_enabled(true, yield);
 
-    auto page_index = open_or_create_repo(session, "page_index", INDEX_TOKEN, yield);
+    auto page_index = open_or_create_repo(session, "page_index", ShareToken{_page_index_token}, yield);
     set_repo_defaults(page_index, yield);
 
     _impl = std::make_shared<Impl>(Impl {
@@ -167,19 +167,17 @@ void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, YieldC
             throw_error(asio::error::invalid_argument);
         }
 
-        auto repo = _impl->resolve(url->host, yield.native());
+        auto repo = _impl->resolve(url->host, yield.tag("resolve"));
 
-        //auto key = key_from_http_req(rq).value();
         auto resource_id = cache::ResourceId::from_url(rq.target(), yield).value();
 
         // TODO: Use constants from http_store.cpp instead of these hardcoded
         // strings
         fs::path root = "data-v3";
-        //fs::path path = root / cache::relative_path_from_key(key);
         fs::path path = cache::path_from_resource_id(root, resource_id);
-        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield.native()), yield.native());
-        auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield.native()), yield.native());
-        auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield.native()), yield.native());
+        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield.native());
+        auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield.native());
+        auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield.native());
 
         using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;
 

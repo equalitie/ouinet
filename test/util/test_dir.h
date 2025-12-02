@@ -19,14 +19,34 @@ public:
         fs::create_directories(_tempdir);
     }
 
-    const fs::path make_subdir(const std::string& name) const {
+    TestDir make_subdir(const std::string& name) const {
         fs::path path = _tempdir / name;
         fs::create_directory(path);
-        return path;
+        auto dir = TestDir(path);
+        dir.delete_on_exit(false);
+        return dir;
     }
 
     const fs::path& path() const {
         return _tempdir;
+    }
+
+    const std::string string() const {
+        return _tempdir.string();
+    }
+
+    void delete_content() const {
+        auto begin = fs::directory_iterator(_tempdir);
+        auto end = fs::directory_iterator();
+        sys::error_code ec;
+        for (auto i = begin; i != end; ++i) {
+            try {
+                fs::remove_all(*i);
+            } catch (const std::exception& e) {
+                std::cout << "Failed to remove " << *i << ": " << e.what() << "\n";
+                throw;
+            }
+        }
     }
 
     ~TestDir() {

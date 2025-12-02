@@ -142,7 +142,6 @@ public:
                     ? metrics::Client( _config.repo_root() / "metrics"
                                      , std::move(_config.metrics()->encryption_key))
                     : metrics::Client::noop())
-        , _ouisync(_config.repo_root() / "ouisync")
     {
         LOG_INFO("Repo root: ", _config.repo_root());
 
@@ -160,6 +159,10 @@ public:
 
         if (_config.metrics() && _config.metrics()->enable_on_start) {
             enable_metrics();
+        }
+
+        if (auto config = _config.ouisync_cache_config()) {
+            _ouisync.emplace(_config.repo_root() / "ouisync", config->page_index_token);
         }
     }
 
@@ -196,7 +199,10 @@ public:
             _udp_reachability = nullptr;
         }
 
-        _ouisync.stop();
+        if (_ouisync) {
+            _ouisync->stop();
+            _ouisync.reset();
+        }
     }
 
     Client::RunningState get_state() const noexcept {
@@ -605,7 +611,7 @@ private:
 
     asio::ip::tcp::endpoint _proxy_endpoint;
     std::string _frontend_endpoint;
-    ouisync_service::Ouisync _ouisync;
+    std::optional<ouisync_service::Ouisync> _ouisync;
 };
 
 //------------------------------------------------------------------------------
@@ -2460,9 +2466,9 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         Transaction tnx(con, req);
 
         // TODO: This shouldn't be here, just testing...
-        if (_ouisync.is_running()) {
+        if (_ouisync && _ouisync->is_running()) {
             sys::error_code ec;
-            _ouisync.serve(con, req, yield[ec]);
+            _ouisync->serve(con, req, yield[ec]);
             if (ec || cancel) {
                 break;
             }
@@ -2693,22 +2699,24 @@ void Client::State::start_ouinet()
 
     next_internal_state = InternalState::Started;
 
-    TRACK_SPAWN(_ctx, ([
-        this,
-        self = shared_from_this()
-    ] (asio::yield_context yield) mutable {
-        try {
-            _ouisync.start(yield);
+    if (_ouisync) {
+        TRACK_SPAWN(_ctx, ([
+            this,
+            self = shared_from_this()
+        ] (asio::yield_context yield) mutable {
+            try {
+                _ouisync->start(yield);
 
-            LOG_INFO("Ouisync started");
-         }
-         catch (const std::exception& e) {
-            LOG_ERROR("Failed to start Ouisync: ", e.what());
-         }
-         catch (...) {
-            LOG_ERROR("Failed to start Ouisync: Unknown exception");
-         }
-    }));
+                LOG_INFO("Ouisync started");
+             }
+             catch (const std::exception& e) {
+                LOG_ERROR("Failed to start Ouisync: ", e.what());
+             }
+             catch (...) {
+                LOG_ERROR("Failed to start Ouisync: Unknown exception");
+             }
+        }));
+    }
 
     TRACK_SPAWN(_ctx, ([
         this,

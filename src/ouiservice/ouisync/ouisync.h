@@ -18,7 +18,7 @@ namespace ouinet::ouisync_service {
 
 class Ouisync {
 public:
-    Ouisync(boost::filesystem::path);
+    Ouisync(boost::filesystem::path, std::string page_index_token);
     Ouisync(const Ouisync&) = delete;
     Ouisync(Ouisync&&) = default;
     Ouisync operator=(const Ouisync&) = delete;
@@ -40,6 +40,7 @@ private:
     boost::filesystem::path _mount_dir;
     struct Impl;
     std::shared_ptr<Impl> _impl;
+    std::string _page_index_token;
 };
 
 #else // ifdef WITH_OUISYNC
