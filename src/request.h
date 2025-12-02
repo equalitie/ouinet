@@ -11,21 +11,16 @@
 
 namespace ouinet {
 
-// Cache request sent either to the origin through injector or to peers.
-//
-// * Injector and peers can see the request in plain text
-// * Non white listed headers are removed
-// * Only GET or HEAD requests are allowed
-// * Request body is removed (if present)
-// * GET arguments (`?...`) are removed from the request target
-// * Requests containing the http_::request_private_hdr field are not allowed
-// * Requests must contain the http_::request_group_hdr unless on Apple devices
-class CacheRetrieveRequest {
-public:
-    CacheRetrieveRequest(const CacheRetrieveRequest&) = default;
-    CacheRetrieveRequest(CacheRetrieveRequest&&) = default;
+//--------------------------------------------------------------------
 
-    http::verb method() const;
+class CachePeerRetrieveRequest {
+public:
+    CachePeerRetrieveRequest(const CachePeerRetrieveRequest&) = default;
+    CachePeerRetrieveRequest(CachePeerRetrieveRequest&&) = default;
+
+    http::verb method() const {
+        return _method;
+    }
 
     const cache::ResourceId& resource_id() const {
         return _resource_id;
@@ -36,9 +31,9 @@ public:
     }
 
 private:
-    friend class CacheRequest;
+    friend class CacheRetrieveRequest;
 
-    CacheRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group) :
+    CachePeerRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group) :
         _method(method),
         _resource_id(std::move(resource_id)),
         _dht_group(std::move(dht_group))
@@ -48,6 +43,73 @@ private:
     cache::ResourceId _resource_id;
     std::string _dht_group;
 };
+
+//--------------------------------------------------------------------
+
+class CacheOuisyncRetrieveRequest {
+public:
+    CacheOuisyncRetrieveRequest(const CacheOuisyncRetrieveRequest&) = default;
+    CacheOuisyncRetrieveRequest(CacheOuisyncRetrieveRequest&&) = default;
+
+    http::verb method() const {
+        return _method;
+    }
+
+    const cache::ResourceId& resource_id() const {
+        return _resource_id;
+    }
+
+    const std::string& target() const {
+        return _target;
+    }
+
+private:
+    friend class CacheRetrieveRequest;
+
+    CacheOuisyncRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string target) :
+        _method(method),
+        _resource_id(std::move(resource_id)),
+        _target(std::move(target))
+    {}
+
+    http::verb _method;
+    cache::ResourceId _resource_id;
+    std::string _target;
+};
+
+//--------------------------------------------------------------------
+
+class CacheRetrieveRequest {
+public:
+    CacheRetrieveRequest(CacheRetrieveRequest const&) = default;
+    CacheRetrieveRequest(CacheRetrieveRequest &&) = default;
+
+    CachePeerRetrieveRequest to_peer_request() const {
+        return CachePeerRetrieveRequest(_method, _resource_id, _dht_group);
+    }
+
+    CacheOuisyncRetrieveRequest to_ouisync_request() const {
+        return CacheOuisyncRetrieveRequest(_method, _resource_id, _target);
+    }
+
+private:
+    friend class CacheRequest;
+
+    CacheRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group, std::string target):
+        _method(method),
+        _resource_id(std::move(resource_id)),
+        _dht_group(std::move(dht_group)),
+        _target(std::move(target))
+    {}
+
+private:
+    http::verb _method;
+    cache::ResourceId _resource_id;
+    std::string _dht_group;
+    std::string _target;
+};
+
+//--------------------------------------------------------------------
 
 class CacheInjectRequest {
 public:
@@ -102,6 +164,8 @@ private:
     std::string _dht_group;
 };
 
+//--------------------------------------------------------------------
+
 class CacheRequest {
 public:
     // TODO: This is only used in tests now, use it also when constructing the message.
@@ -137,7 +201,7 @@ private:
     std::string _dht_group;
 };
 
-//----
+//--------------------------------------------------------------------
 
 // Sent through the injector and to the origin when the original request from
 // the user agent is not a secure HTTPS (i.e. http://...). In such case the
@@ -173,7 +237,7 @@ private:
     http::request<http::string_body> _request;
 };
 
-//----
+//--------------------------------------------------------------------
 
 using PublicInjectorRequestAlternatives = std::variant<CacheInjectRequest, InsecureRequest>;
 

@@ -248,6 +248,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
         else if (type_str == "ouisync" || type_str == "") {
             if (auto token_opt = as_optional<string>(vm, "ouisync-page-index")) {
+                _cache_type = CacheType::Ouisync;
                 _ouisync = OuisyncCacheConfig { *token_opt };
             } else {
                 throw error("Argument --cache-type=ouisync requires --ouisync-page-index=<page_index_repo_read_token>");

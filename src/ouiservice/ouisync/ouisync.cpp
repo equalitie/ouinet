@@ -153,7 +153,7 @@ void reply_error(const Request& rq, sys::system_error e, GenericStream& con, Yie
     util::http_reply(con, rs, yield.native());
 }
 
-void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, YieldContext yield_) {
+ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContext yield_) {
     auto yield = yield_.throwing();
 
     try {
@@ -169,12 +169,10 @@ void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, YieldC
 
         auto repo = _impl->resolve(url->host, yield.tag("resolve"));
 
-        auto resource_id = cache::ResourceId::from_url(rq.target(), yield).value();
-
         // TODO: Use constants from http_store.cpp instead of these hardcoded
         // strings
         fs::path root = "data-v3";
-        fs::path path = cache::path_from_resource_id(root, resource_id);
+        fs::path path = cache::path_from_resource_id(root, rq.resource_id());
         auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield.native());
         auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield.native());
         auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield.native());
@@ -188,7 +186,6 @@ void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, YieldC
             boost::optional<cache::Range>() // range
         );
 
-        // TODO: Use cancel
         Cancel cancel;
         auto session = ouinet::Session::create(
             std::move(reader),
@@ -197,15 +194,15 @@ void Ouisync::serve(GenericStream& con, const http::request_header<>& rq, YieldC
             yield.native()
         );
 
-        session.flush_response(con, cancel, yield.native());
+        session
+            .response_header()
+            .set(http_::response_source_hdr, http_::response_source_hdr_ouisync);
+
+        return session;
     }
     catch (const sys::system_error& e) {
         LOG_WARN("Ouisync::serve exception: ", e.what());
-        sys::error_code ec;
-        reply_error(rq, e, con, yield_[ec]);
-        if (ec) {
-            return or_throw(yield_, e.code());
-        }
+        return or_throw<ouinet::Session>(yield_, e.code());
     }
 }
 

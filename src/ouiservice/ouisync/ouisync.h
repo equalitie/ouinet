@@ -7,6 +7,8 @@
 #include "namespaces.h"
 #include "or_throw.h"
 #include "util/yield.h"
+#include "request.h"
+#include "session.h"
 
 namespace ouinet {
     class GenericStream; 
@@ -28,9 +30,8 @@ public:
 
     bool is_running() const;
 
-    void serve(
-        GenericStream&,
-        const http::request_header<>&,
+    Session load(
+        const CacheOuisyncRetrieveRequest&,
         YieldContext
     );
 

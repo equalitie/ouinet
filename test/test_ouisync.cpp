@@ -234,13 +234,14 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
         BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
+        // Create a repo and copy the fetched content into it
         auto page_repo = session.create_repository(test_url.host, yield);
         page_repo.mount(yield);
         page_repo.set_sync_enabled(true, yield);
 
         fs::copy(
             seeder_dir.path() / "bep5_http",
-            ouisync_service_dir.path()/"mount"/test_url.host,
+            ouisync_service_dir.path() / "mount" / test_url.host,
             fs::copy_options::recursive |
             // Files in the source directory have '-rw------' permissions, but
             // Ouisync currently doesn't support changing the defaults which
@@ -249,16 +250,17 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
             fs::copy_options::ignore_attribute_errors
         );
 
+        // Create an entry in the `page_index` repo with the new repo
         auto page_token = page_repo.share(ouisync::AccessMode::READ, yield).value;
         auto file = page_index.create_file("/" + test_url.host, yield);
-        file.write(0, std::vector<uint8_t>(page_token.begin(), page_token.end()), yield);
+        file.write(0, {page_token.begin(), page_token.end()}, yield);
         file.close(yield);
 
-        // The "leecher" client fetches the signed content from the "seeder"
+        // The "leecher" client fetches the content from the Ouisync `session`
         auto rs2 = fetch_through_client(leecher, rq, yield);
 
         BOOST_CHECK_EQUAL(rs2.result(), http::status::ok);
-        //BOOST_CHECK_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
+        BOOST_CHECK_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_ouisync);
         BOOST_CHECK_EQUAL(rs2.body(), control_body);
 
         injector.stop();

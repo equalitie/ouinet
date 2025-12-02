@@ -766,47 +766,60 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
 
     sys::error_code ec;
 
-    wait_for_cache(timeout_cancel, yield[ec]);
-    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
+    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+        wait_for_cache(timeout_cancel, yield[ec]);
+        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
+    }
 
     auto c = get_cache();
 
-    const bool cache_is_disabled
-        = !c
-       || !_config.is_cache_access_enabled();
+    auto get_date = [](auto& hdr) {
+        auto tsh = util::http_injection_ts(hdr);
+        auto ts = parse::number<time_t>(tsh);
+        return ts ? boost::posix_time::from_time_t(*ts)
+                  : boost::posix_time::not_a_date_time;
+    };
 
-    if (cache_is_disabled) {
+    if (c && _config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+        auto rq = request.to_peer_request();
+        auto key = rq.resource_id();
+
+        auto s = c->load( move(key)
+                        , rq.dht_group()
+                        , rq.method() == http::verb::head
+                        , _metrics
+                        , timeout_cancel, yield[ec].tag("load"));
+
+        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
+
+        auto& hdr = s.response_header();
+
+        if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
+            // The cached resource cannot be used, treat it like
+            // not being found.
+            return or_throw<CacheEntry>(yield, asio::error::not_found);
+
+        maybe_add_proto_version_warning(hdr);
+        assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
+        auto date = get_date(hdr);
+        return CacheEntry{date, move(s)};
+    }
+    else if(_ouisync && _ouisync->is_running() && _config.cache_type() == ClientConfig::CacheType::Ouisync) {
+        auto rq = request.to_ouisync_request();
+        sys::error_code ec;
+        auto session = _ouisync->load(rq, yield[ec]);
+        if (ec) {
+            return or_throw<CacheEntry>(yield, ec);
+        }
+        auto date = get_date(session.response_header());
+        return CacheEntry{date, move(session)};
+    }
+    else {
         _YDEBUG(yield, "Cache is disabled");
         return or_throw<CacheEntry>( yield
                                    , asio::error::operation_not_supported);
     }
 
-    auto key = request.resource_id();
-
-    auto s = c->load( move(key)
-                    , request.dht_group()
-                    , request.method() == http::verb::head
-                    , _metrics
-                    , timeout_cancel, yield[ec].tag("load"));
-
-    fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
-
-    auto& hdr = s.response_header();
-
-    if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
-        // The cached resource cannot be used, treat it like
-        // not being found.
-        return or_throw<CacheEntry>(yield, asio::error::not_found);
-
-    auto tsh = util::http_injection_ts(hdr);
-    auto ts = parse::number<time_t>(tsh);
-    auto date = ( ts
-                ? boost::posix_time::from_time_t(*ts)
-                : boost::posix_time::not_a_date_time);
-
-    maybe_add_proto_version_warning(hdr);
-    assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
-    return CacheEntry{date, move(s)};
 }
 
 //------------------------------------------------------------------------------
@@ -2464,16 +2477,6 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         auto request_config = request_route::route_choose_config(req, _config);
 
         Transaction tnx(con, req);
-
-        // TODO: This shouldn't be here, just testing...
-        if (_ouisync && _ouisync->is_running()) {
-            sys::error_code ec;
-            _ouisync->serve(con, req, yield[ec]);
-            if (ec || cancel) {
-                break;
-            }
-            continue;
-        }
 
         if (request_config.fresh_channels.empty()) {
             _YDEBUG(yield, "Abort due to no route");

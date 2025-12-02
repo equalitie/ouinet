@@ -101,12 +101,9 @@ void CacheInjectRequest::set_druid(std::string_view druid) {
 //----
 
 CacheRetrieveRequest CacheRequest::to_retrieve_request() const {
-    return CacheRetrieveRequest(_header.method(), _resource_id, _dht_group);
+    return CacheRetrieveRequest(_header.method(), _resource_id, _dht_group, _header.target());
 }
 
-http::verb CacheRetrieveRequest::method() const {
-    return _method;
-}
 
 CacheInjectRequest CacheRequest::to_inject_request() const {
     return CacheInjectRequest(_header, _resource_id, _dht_group);
