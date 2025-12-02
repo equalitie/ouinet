@@ -199,7 +199,10 @@ class OuinetProcess(object):
     async def stdout_listening_task(self):
         try:
             while True:
-                self.assert_process_is_alive()
+                if not self._term_signal_sent:
+                    self.assert_process_is_alive()
+                else:
+                    return
 
                 line: str = await asyncio.to_thread(self.output.__next__)
                 assert isinstance(line, str)

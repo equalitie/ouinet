@@ -25,6 +25,7 @@ import random
 import requests
 import socket
 from requests import Response as Reqresponse
+from requests import ReadTimeout
 from urllib.parse import urlparse
 
 import logging
@@ -130,6 +131,7 @@ def run_tcp_client(name, args):
                 TestFixtures.FRESH_SUCCESS_REGEX,
                 TestFixtures.DHT_INITIALIZED_REGEX,
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
+                TestFixtures.RESPONSE_RECEIVED_FROM_CACHE,
             ],
         ),
     )
@@ -139,7 +141,7 @@ def run_tcp_client(name, args):
     return client
 
 
-def request_echo(proxy_port, echo_content):
+def request_echo(proxy_port, echo_content) -> Reqresponse:
     """
     Send a get request to request the test server to echo the content
     """
@@ -155,7 +157,25 @@ def request_url(port, url) -> Reqresponse:
     proxies = {"http": f"http://127.0.0.1:{port}"}
     host = urlparse(url).hostname
     headers = {"X-Ouinet-Group": host}
-    return requests.get(url, proxies=proxies, headers=headers)
+    print("sending request to", url)
+    try:
+        timeout = 10
+        response = requests.get(url, proxies=proxies, headers=headers, timeout=timeout)
+    except ReadTimeout:
+        raise IOError(
+            f"Client has took more than {timeout} seconds to respond. It is possible that the client is having a problem but does not report it via http codes."
+        )
+
+    return response
+
+
+async def wait_for_dht_ready(client):
+    print("[WARNING] Waiting for DHT to initialize, this can take 1-5 minutes")
+    timestamp = time()
+    await wait_for_benchmark(client, TestFixtures.DHT_INITIALIZED_REGEX)
+    print(
+        "[INFO] for DHT to get a WAN endpoint it took: ", time() - timestamp, "seconds"
+    )
 
 
 # Compatibility functions, not needed in newer tests
@@ -284,111 +304,104 @@ async def test_tcp_transport(
     assertEquals(response.text, content)
 
 
-# def test_tcp_cache(certificate_file, proc_list):
-#     """
-#     Starts an echoing http server, a injector and a two clients and client1 send a unique http
-#     request to the echoing http server through the g client --tcp--> injector -> http server
-#     and make sure it gets the correct echo. The test waits for the response to be cached.
-#     Then the second client request the same request makes sure that
-#     the response is served from cache.
-#     """
-#     # Injector (caching by default)
-#     cache_injector: OuinetBEP5CacheInjector = run_tcp_injector(
-#         ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
-#     )
+@pytest.mark.timeout(TestFixtures.BEP44_CACHE_TIMEOUT)
+@pytest.mark.asyncio
+async def test_tcp_cache(
+    repo_janitor, proc_list_janitor, certificate_file, http_server
+):
+    """
+    Starts an echoing http server, a injector and a two clients and client1 send a unique http
+    request to the echoing http server through the g client --tcp--> injector -> http server
+    and make sure it gets the correct echo. The test waits for the response to be cached.
+    Then the second client request the same request makes sure that
+    the response is served from cache.
+    """
+    # Injector (caching by default)
+    injector: OuinetBEP5CacheInjector = run_tcp_injector(
+        ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
+    )
+    await wait_for_benchmark(injector, TestFixtures.TCP_INJECTOR_PORT_READY_REGEX)
 
-#     # Wait for the injector to have a key
-#     success = yield cache_injector.callbacks[TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX]
-#     assertTrue(success)
+    # Wait for the injector to have a key
+    await wait_for_benchmark(injector, TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX)
+    index_key = injector.get_index_key()
+    assert len(index_key) > 0
 
-#     index_key = cache_injector.get_index_key()
-#     assert len(index_key) > 0
+    ## Client, use only Injector mechanism
+    client = run_tcp_client(
+        name=TestFixtures.CACHE_CLIENT[0]["name"],
+        args=[
+            "--cache-type",
+            "bep5-http",
+            "--cache-http-public-key",
+            str(index_key),
+            "--disable-origin-access",
+            "--disable-proxy-access",
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
+            "--front-end-ep",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["fe_port"]),
+            "--injector-ep",
+            "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
+        ],
+    )
 
-#     # # Injector client, use only Injector mechanism
-#     client = run_tcp_client(
-#         name=TestFixtures.CACHE_CLIENT[0]["name"],
-#         args=[
-#             "--cache-type",
-#             "bep5-http",
-#             "--cache-http-public-key",
-#             str(index_key),
-#             "--disable-origin-access",
-#             "--disable-proxy-access",
-#             "--listen-on-tcp",
-#             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
-#             "--front-end-ep",
-#             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["fe_port"]),
-#             "--injector-ep",
-#             "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
-#         ],
-#         proc_list=proc_list,
-#     )
+    # Wait for the client to open the port
+    await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
-#     success = yield client.callbacks[TestFixtures.TCP_CLIENT_PORT_READY_REGEX]
-#     # Wait for the client to open the port
-#     assertTrue(success)
+    content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
+    response: Reqresponse = request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+    assertEquals(response.status_code, 200)
+    assertEquals(response.text, content)
 
-#     sleep(2)
+    # Shut injector down to ensure it does not seed content to the cache client
+    await injector.stop()
 
-#     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-#     response: Reqresponse = request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
-#     assertEquals(response.status_code, 200)
+    # Now waiting for client to annouce caching the response
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX)
 
-#     # raise Exception("hell")
+    # Start cache client which supposed to read the response from cache, use only Cache mechanism
+    cache_client = run_tcp_client(
+        TestFixtures.CACHE_CLIENT[1]["name"],
+        args=[
+            "--cache-type",
+            "bep5-http",
+            "--cache-http-public-key",
+            str(index_key),
+            "--disable-origin-access",
+            "--disable-proxy-access",
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
+            "--front-end-ep",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["fe_port"]),
+            "--injector-ep",
+            "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
+        ],
+    )
 
-#     assertEquals(response.text, content)
+    # Make sure that the client2 is ready to access the cache
+    await wait_for_benchmark(cache_client, TestFixtures.TCP_CLIENT_DISCOVERY_START)
+    await wait_for_dht_ready(cache_client)
+    await wait_for_benchmark(cache_client, TestFixtures.DHT_CONTACTS_STORED_REGEX)
 
-#     # shut injector down to ensure it does not seed content to the cache client
-#     cache_injector.stop()
-#     # now waiting for client to annouce caching the response
+    # Now request the same page from second client
+    for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
+        try:
+            response: Reqresponse = request_echo(
+                TestFixtures.CACHE_CLIENT[1]["port"], content
+            )
+        except Exception:
+            # print("[WARNING] failing to retrieve from cache with error", str(e))
+            continue
+        if response.status_code == 200:
+            break
 
-#     sleep(10)
-#     success = yield client.callbacks[TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX]
-#     assertTrue(success)
+    assertEquals(response.status_code, 200)
+    assertEquals(response.text, content)
 
-#     # Start cache client which supposed to read the response from cache, use only Cache mechanism
-#     cache_client = run_tcp_client(
-#         TestFixtures.CACHE_CLIENT[1]["name"],
-#         args=[
-#             "--cache-type",
-#             "bep5-http",
-#             "--cache-http-public-key",
-#             str(index_key),
-#             "--disable-origin-access",
-#             "--disable-proxy-access",
-#             "--listen-on-tcp",
-#             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
-#             "--front-end-ep",
-#             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["fe_port"]),
-#             "--injector-ep",
-#             "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
-#         ],
-#     )
-#     sleep(7)
-#     # make sure that the client2 is ready to access the cache
-#     success = yield cache_client.callbacks[TestFixtures.TCP_CLIENT_DISCOVERY_START]
-#     index_resolution_done_time_stamp = time.time()
-#     assertTrue(success)
-
-#     # now request the same page from second client
-#     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
-#         try:
-#             response: Reqresponse = request_echo(
-#                 TestFixtures.CACHE_CLIENT[1]["port"], content
-#             )
-#         except Exception:
-#             continue
-#         if response.status_code == 200:
-#             break
-
-#     assertEquals(response.status_code, 200)
-#     assertEquals(response.text, content)
-
-#     print("all ok, now waiting")
-
-#     # make sure it was served from cache
-#     success = yield client.callbacks[TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED]
-#     assertTrue(success)
+    # # make sure it was served from cache
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
+    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
 
 
 @pytest.mark.timeout(TestFixtures.BEP44_CACHE_TIMEOUT)
@@ -422,13 +435,7 @@ async def test_wikipedia_mainline_dht(
 
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
-    print("[WARNING] Waiting for DHT to initialize, this can take 1-5 minutes")
-    timestamp = time()
-    await wait_for_benchmark(client, TestFixtures.DHT_INITIALIZED_REGEX)
-    print(
-        "[INFO] for DHT to get a WAN endpoint it took: ", time() - timestamp, "seconds"
-    )
-
+    await wait_for_dht_ready(client)
     await wait_for_benchmark(client, TestFixtures.DHT_CONTACTS_STORED_REGEX)
     # Peer candidates will necessarily be after DHT storing contacts
     await wait_for_injector_peer_candidates(frontend_port)

@@ -70,6 +70,8 @@ class TestFixtures:
     CACHE_CLIENT_UTP_REQUEST_SERVED = "[\s\S]*serve_utp_req/serve_local END[\s\S]*"
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
+    RESPONSE_RECEIVED_FROM_CACHE = "[\s\S]*X-Ouinet-Source: dist-cache[\s\S]*"
+
     IPNS_ID_ANNOUNCE_REGEX = "[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
     BEP44_PUBK_ANNOUNCE_REGEX = "[\s\S]*BEP44 Index: ([0-9A-Fa-f]+)[\s\S]*"
     # BEP5_PUBK_ANNOUNCE_REGEX = "HTTP signing public key \(Ed25519\): ([a-zA-Z0-9]+)"
