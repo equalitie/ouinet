@@ -203,12 +203,13 @@ proc_list: List[OuinetProcess] = []
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def proc_list_janitor() -> List[OuinetProcess]:
+async def process_janitor() -> List[OuinetProcess]:
     """
     This fixture is teardown-only, otherwise it forces too much async in code
+    It is using repo janitor to make sure repos are cleaned after it and
+    not before
     """
     yield
-
     for cur_proc in proc_list:
         print("stopping process", cur_proc)
         await cur_proc.stop()
@@ -216,17 +217,14 @@ async def proc_list_janitor() -> List[OuinetProcess]:
     print("Done, no processes left")
     proc_list.clear()
 
+    # Cleaning up process files
+    # After processes quit so that they do not write anything
+    repofolder = TestFixtures.REPO_FOLDER_NAME
 
-@pytest.fixture(autouse=True)
-def repo_janitor() -> List[OuinetProcess]:
-    """
-    This fixture is teardown-only
-    """
-    yield
-
-    print("cleaning up the folder", TestFixtures.REPO_FOLDER_NAME)
-    if exists(TestFixtures.REPO_FOLDER_NAME):
-        rmtree(TestFixtures.REPO_FOLDER_NAME)
+    print("cleaning up the folder", repofolder)
+    if exists(repofolder):
+        rmtree(repofolder)
+    assert not exists(repofolder)
 
 
 @pytest.fixture()
