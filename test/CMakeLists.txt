@@ -142,5 +142,7 @@ add_executable(test_fetch "test_fetch.cpp")
 target_link_libraries(test_fetch injector_lib client_lib)
 
 ######################################################################
-add_executable(test_ouisync "test_ouisync.cpp")
-target_link_libraries(test_ouisync injector_lib client_lib)
+if (WITH_OUISYNC)
+    add_executable(test_ouisync "test_ouisync.cpp")
+    target_link_libraries(test_ouisync injector_lib client_lib)
+endif()

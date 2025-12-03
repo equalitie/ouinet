@@ -48,7 +48,7 @@ private:
  
 class Ouisync {
 public:
-    Ouisync(boost::filesystem::path) {}
+    Ouisync(boost::filesystem::path, std::string page_index_token) {}
     Ouisync(const Ouisync&) = delete;
     Ouisync(Ouisync&&) = default;
     Ouisync operator=(const Ouisync&) = delete;
@@ -61,12 +61,11 @@ public:
 
     bool is_running() const { return false; }
 
-    void serve(
-        GenericStream&,
-        const http::request_header<>&,
-        YieldContext
+    Session load(
+        const CacheOuisyncRetrieveRequest&,
+        YieldContext yield
     ) {
-        return or_throw(yield, asio::error::operation_not_supported);
+        return or_throw<Session>(yield, asio::error::operation_not_supported);
     }
 };
 

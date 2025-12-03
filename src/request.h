@@ -84,6 +84,10 @@ public:
     CacheRetrieveRequest(CacheRetrieveRequest const&) = default;
     CacheRetrieveRequest(CacheRetrieveRequest &&) = default;
 
+    cache::ResourceId const& resource_id() const {
+        return _resource_id;
+    }
+
     CachePeerRetrieveRequest to_peer_request() const {
         return CachePeerRetrieveRequest(_method, _resource_id, _dht_group);
     }

@@ -19,7 +19,7 @@
 #include "client.h"
 #include "util/str.h"
 
-BOOST_AUTO_TEST_SUITE(ouinet_cpp_integration_tests)
+BOOST_AUTO_TEST_SUITE(ouinet_ouisync_integration_tests)
 
 using namespace std;
 using namespace ouinet;

@@ -211,23 +211,26 @@ file(GLOB client_sources
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/connect_proxy.cpp"
-    ${OUISERVICE_OUISYNC_CPP_FILES}
     "./src/cache/*.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
     "./src/util/reachability.cpp"
+    ${OUISERVICE_OUISYNC_CPP_FILES}
     ${VERSION_CPP}
 )
 
 add_library(client_lib SHARED ${client_sources})
 set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 
+if (WITH_OUISYNC)
+    set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)
+endif()
+
 target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
-        cpp_ouisync_client
-        cpp_ouisync_service
+        ${OUINET_OUISYNC_LIBS}
 )
 
 if (WIN32 OR MINGW)

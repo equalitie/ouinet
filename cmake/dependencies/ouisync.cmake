@@ -12,6 +12,9 @@ if (WITH_OUISYNC)
     # For use in Ouinet code
     add_compile_definitions(WITH_OUISYNC)
 
+    # Tell Ouisync cmake file we're using a separately Boost.Asio library
+    set(OUISYNC_BOOST_ASIO_SEPARATE_COMPILATION ON CACHE BOOL "" FORCE)
+
     if (OUISYNC_SRC_DIR)
         # Use this to debug with local Ouisync sources
         add_subdirectory("${OUISYNC_SRC_DIR}/bindings/cpp" "ouisync" EXCLUDE_FROM_ALL)
@@ -40,8 +43,5 @@ if (WITH_OUISYNC)
 else()
     set(CPP_OUISYNC_LIBRARIES)
     set(OUISERVICE_OUISYNC_CPP_FILES)
-    if (OUISYNC_SRC_DIR)
-        message(FATAL_ERROR "OUISYNC_SRC_DIR is set to '${OUISYNC_SRC_DIR}' but WITH_OUISYNC is '${WITH_OUISYNC}'")
-    endif()
 endif()
 
