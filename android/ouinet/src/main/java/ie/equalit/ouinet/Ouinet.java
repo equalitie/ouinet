@@ -128,6 +128,7 @@ public class Ouinet {
         maybeAdd(args, "--front-end-ep",           config.getFrontEndEp());
         maybeAdd(args, "--front-end-access-token", config.getFrontEndAccessToken());
         maybeAdd(args, "--proxy-access-token",     config.getProxyAccessToken());
+        maybeAdd(args, "--client-credentials",     config.getClientCredentials());
         maybeAdd(args, "--udp-mux-port",           config.getUdpMuxPort());
         maybeAdd(args, "--max-cached-age",         config.getMaxCachedAge());
         maybeAdd(args, "--local-domain",           config.getLocalDomain());
