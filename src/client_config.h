@@ -205,7 +205,7 @@ private:
         services.add_options()
            ("listen-on-tcp"
             , po::value<string>()->default_value("127.0.0.1:8077")
-            , "HTTP proxy endpoint (in <IP>:<PORT> format)")
+            , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
            ("udp-mux-port"
            , po::value<uint16_t>()
            , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
@@ -215,7 +215,7 @@ private:
             , "Path to the CA certificate store file")
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
-            , "Front-end's endpoint (in <IP>:<PORT> format)")
+            , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
            ("front-end-access-token"
             , po::value<string>()
             , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
