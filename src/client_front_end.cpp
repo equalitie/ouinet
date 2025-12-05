@@ -921,6 +921,7 @@ void ClientFrontEnd::handle_api_endpoints(const ClientConfig& config, Response& 
             config.front_end_endpoint().address().to_string(),
             config.front_end_endpoint().port()
             )},
+        {"frontend_unix_socket_endpoint", config.front_end_unix_socket_endpoint().path()},
     };
 
     ss << response;

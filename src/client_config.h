@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <boost/asio/ssl/context.hpp>
+#include <boost/asio/local/stream_protocol.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -127,6 +128,10 @@ public:
         return _front_end_endpoint;
     }
 
+    asio::local::stream_protocol::endpoint front_end_unix_socket_endpoint() const {
+        return _front_end_unix_socket_endpoint;
+    }
+
     const boost::optional<std::string>& front_end_access_token() const {
         return _front_end_access_token;
     }
@@ -216,6 +221,9 @@ private:
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+            ("front-end-unix-socket-ep"
+            , po::value<string>()
+            , "Path to the front-end Unix socket. Absolute or relative to repo root.")
            ("front-end-access-token"
             , po::value<string>()
             , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
@@ -477,6 +485,7 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    asio::local::stream_protocol::endpoint _front_end_unix_socket_endpoint;
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
