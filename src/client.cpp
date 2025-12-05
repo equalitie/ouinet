@@ -2819,6 +2819,12 @@ void Client::State::setup_cache(asio::yield_context yield)
 #undef fail_on_error
 }
 
+#ifdef _WIN32
+namespace boost::asio {
+    typedef detail::socket_option::boolean<SOL_SOCKET, SO_EXCLUSIVEADDRUSE> socket_base__exclusive_address_use;
+}
+#endif
+
 //------------------------------------------------------------------------------
 tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
                                           , const char* service) const
@@ -2833,7 +2839,19 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
         throw runtime_error(util::str("Failed to open TCP acceptor for service: ", service, "; ec=", ec));
     }
 
+    // Windows and Unix have a completely different understanding of what SO_REUSEADDR means.
+    // On Unix it means that you can close a bound socket and then open a new one and bind it to the same port right away.
+    // On Windows it means that several unrelated programs from different users can bind to the same port.
+    // According to MSDN "Once the second socket has successfully bound, the behavior for all sockets bound to that port is indeterminate".
+    // https://learn.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
+    // Let us not do that on Windows. Closest Unix equivalent of SO_REUSEADDR on Windows is SO_DONTLINGER.
+    // Also set SO_EXCLUSIVEADDRUSE, to prevent other sockets from binding to the same port.
+#ifdef _WIN32
+    acceptor.set_option(asio::socket_base::linger(false, 0));
+    acceptor.set_option(asio::socket_base__exclusive_address_use(true));
+#else
     acceptor.set_option(asio::socket_base::reuse_address(true));
+#endif
 
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
