@@ -2618,12 +2618,17 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         }
 #endif
 
-        bool auth = yield[ec].tag("auth").run([&] (auto y) {
-            return authenticate(req, con, _config.client_credentials(), y);
-        });
-        if (!auth) {
-            _YWARN(yield, "Request authentication failed, discarding");
-            continue;
+        // "authenticate" function strips proxy_authorization headers.
+        // Authentication is needed only for the outer HTTP SSL CONNECT request,
+        // not the inner HTTP GET inside the SSL.
+        if (!mitm) {
+            bool auth = yield[ec].tag("auth").run([&] (auto y) {
+                return authenticate(req, con, _config.client_credentials(), y);
+            });
+            if (!auth) {
+                _YWARN(yield, "Request authentication failed, discarding");
+                continue;
+            }
         }
         assert(!ec); ec = {};
 
