@@ -3157,8 +3157,8 @@ void Client::State::start()
             listen_unix_socket( yield[ec]
                       , move(acceptor)
                       , [this, self]
-                        (GenericStream c, asio::yield_context yield_) {
-                  OuinetYield yield(_ctx, yield_, "frontend_u_s");
+                        (GenericStream c, YieldContext yield_) {
+                  YieldContext yield = yield_.tag("frontend_u_s");
                   sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
