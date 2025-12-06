@@ -997,7 +997,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         path.remove_prefix(metrics_api_path.size());
         sys::error_code e;
         handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
-    } else if (path.starts_with(handle_api_endpoints)) {
+    } else if (path.starts_with(endpoints_api_path)) {
         handle_api_endpoints(config, res, ss);
     } else {
         sys::error_code e;
