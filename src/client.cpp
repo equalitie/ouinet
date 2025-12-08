@@ -2699,6 +2699,8 @@ void Client::State::serve_request( GenericStream&& con
         // Based on <https://stackoverflow.com/a/50359998>.
         http::request_parser<Request::body_type> reqhp;
         reqhp.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        reqhp.header_limit(16*1024);
+
 
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests
