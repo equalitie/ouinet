@@ -912,11 +912,11 @@ void ClientFrontEnd::handle_api_endpoints(const ClientConfig& config, Response& 
     res.set(http::field::content_type, "application/json");
 
     json response = {
-        {"proxy_endpoint", (boost::format("%s:%s")
+        {"proxy_endpoint", boost::str(boost::format("%s:%s")
             % config.local_endpoint().address().to_string()
             % config.local_endpoint().port())},
 
-        {"frontend_tcp_endpoint", (boost::format("%s:%s")
+        {"frontend_tcp_endpoint", boost::str(boost::format("%s:%s")
             % config.front_end_endpoint().address().to_string()
             % config.front_end_endpoint().port())},
 
