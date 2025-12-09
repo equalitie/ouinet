@@ -10,6 +10,7 @@
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tokenizer.hpp>
+#include "../src/constants.h"
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util/str.h"
@@ -164,8 +165,9 @@ int main(int argc, const char** argv)
 
     auto metrics = metrics::Client::noop();
     bool do_doh = true;
+    uint64_t rx_limit = default_udp_mux_rx_limit;
 
-    unique_ptr<MainlineDht> dht(new MainlineDht(ctx.get_executor(), metrics.mainline_dht(), do_doh));
+    unique_ptr<MainlineDht> dht(new MainlineDht(ctx.get_executor(), metrics.mainline_dht(), do_doh, rx_limit));
 
     vector<string> args;
 
