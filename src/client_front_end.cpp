@@ -912,15 +912,14 @@ void ClientFrontEnd::handle_api_endpoints(const ClientConfig& config, Response& 
     res.set(http::field::content_type, "application/json");
 
     json response = {
-        {"proxy_endpoint", std::format("{}:{}",
-            config.local_endpoint().address().to_string(),
-            config.local_endpoint().port()
-            )},
+        {"proxy_endpoint", boost::str(boost::format("%s:%s")
+            % config.local_endpoint().address().to_string()
+            % config.local_endpoint().port())},
 
-        {"frontend_tcp_endpoint", std::format("{}:{}",
-            config.front_end_endpoint().address().to_string(),
-            config.front_end_endpoint().port()
-            )},
+        {"frontend_tcp_endpoint", boost::str(boost::format("%s:%s")
+            % config.front_end_endpoint().address().to_string()
+            % config.front_end_endpoint().port())},
+
         {"frontend_unix_socket_endpoint", config.front_end_unix_socket_endpoint().path()},
     };
 
@@ -998,7 +997,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         path.remove_prefix(metrics_api_path.size());
         sys::error_code e;
         handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
-    } else if (path.starts_with(handle_api_endpoints)) {
+    } else if (path.starts_with(endpoints_api_path)) {
         handle_api_endpoints(config, res, ss);
     } else {
         sys::error_code e;
