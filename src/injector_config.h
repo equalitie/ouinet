@@ -8,6 +8,7 @@
 #include <boost/regex.hpp>
 #include <boost/program_options.hpp>
 
+#include "constants.h"
 #include "logger.h"
 #include "http_logger.h"
 #include "util/crypto.h"
@@ -38,6 +39,11 @@ public:
 
     const ExtraBtBsServers& bt_bootstrap_extras() const {
         return _bt_bootstrap_extras;
+    }
+
+    uint64_t udp_mux_rx_limit() const {
+        // The value is set in Kbps in the configuration.
+        return _udp_mux_rx_limit * 1000 / 8;
     }
 
     boost::optional<size_t> open_file_limit() const
@@ -141,6 +147,7 @@ private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
     ExtraBtBsServers _bt_bootstrap_extras;
+    uint64_t _udp_mux_rx_limit = default_udp_mux_rx_limit;
     boost::optional<size_t> _open_file_limit;
 #ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
@@ -189,6 +196,11 @@ InjectorConfig::options_description()
            "to start the DHT (can be used several times). "
            "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
            "This option is persistent.")
+        ("udp-mux-rx-limit"
+         , po::value<uint64_t>()->default_value(500)
+         , "Max rate limit that's allowed for incoming packets to the "
+           "UDP multiplexer. The value is expressed in Kbps. To leave it "
+           "unlimited, set it to zero.")
 
         // Injector options
         ("open-file-limit"
@@ -307,6 +319,11 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
             _bt_bootstrap_extras.insert(*btbs_addr);
         }
     }
+
+    if (vm.count("udp-mux-rx-limit")) {
+        _udp_mux_rx_limit =  vm["udp-mux-rx-limit"].as<uint64_t>();
+    }
+
 
     if (vm.count("open-file-limit")) {
         _open_file_limit = vm["open-file-limit"].as<unsigned int>();
