@@ -205,12 +205,14 @@ static bool read_nodes( bool is_v4
 DhtNode::DhtNode( const AsioExecutor& exec
                 , metrics::DhtNode metrics
                 , bool do_doh
+                , const uint64_t mux_rx_limit
                 , fs::path storage_dir
                 , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
     _do_doh(do_doh),
+    _mux_rx_limit(mux_rx_limit),
     _storage_dir(std::move(storage_dir)),
     _extra_bs(std::move(extra_bs)),
     _metrics(std::move(metrics))
@@ -233,7 +235,7 @@ void DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
 
 void DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
 {
-    _multiplexer = std::make_unique<UdpMultiplexer>(move(m));
+    _multiplexer = std::make_unique<UdpMultiplexer>(move(m), _mux_rx_limit);
 
     _tracker = std::make_unique<Tracker>(_exec);
     _data_store = std::make_unique<DataStore>(_exec);
@@ -2561,10 +2563,12 @@ void DhtNode::tracker_do_search_peers(
 MainlineDht::MainlineDht( const AsioExecutor& exec
                         , metrics::MainlineDht metrics
                         , bool do_doh
+                        , uint64_t mux_rx_limit
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)
     , _do_doh(do_doh)
+    , _mux_rx_limit(mux_rx_limit)
     , _storage_dir(std::move(storage_dir))
     , _extra_bs(std::move(extra_bs))
     , _metrics(std::move(metrics))
@@ -2621,7 +2625,7 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
     }
 
     _nodes[local_ep] = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()),
-                                            _do_doh, _storage_dir);
+                                            _do_doh, _mux_rx_limit, _storage_dir);
 
     TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();
@@ -2665,7 +2669,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
     }
 
     auto node = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()),
-                                     _do_doh, _storage_dir, _extra_bs);
+                                     _do_doh, _mux_rx_limit, _storage_dir, _extra_bs);
 
     auto cc = _cancel.connect([&] { node = nullptr; });
 
