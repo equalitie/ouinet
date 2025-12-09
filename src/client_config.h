@@ -83,6 +83,11 @@ public:
         return _udp_mux_port;
     }
 
+    uint64_t udp_mux_rx_limit() const {
+        // The value is set in Kbps in the configuration.
+        return _udp_mux_rx_limit * 1000 / 8;
+    }
+
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
 
@@ -209,6 +214,11 @@ private:
            ("udp-mux-port"
            , po::value<uint16_t>()
            , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
+           ("udp-mux-rx-limit"
+           , po::value<uint64_t>()->default_value(500)
+           , "Max rate limit that's allowed for incoming packets to the "
+             "UDP multiplexer. The value is expressed in Kbps. To leave it "
+             "unlimited, set it to zero.")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
@@ -468,6 +478,7 @@ private:
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
+    uint64_t _udp_mux_rx_limit = 500; // Defaults to 500 Kbps
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
