@@ -83,7 +83,7 @@ public:
         return _udp_mux_port;
     }
 
-    uint64_t udp_mux_rx_limit() const {
+    uint32_t udp_mux_rx_limit() const {
         // The value is set in Kbps in the configuration but required in bytes
         // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
         return _udp_mux_rx_limit * 1000 / 8;
@@ -479,7 +479,7 @@ private:
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
-    uint64_t _udp_mux_rx_limit = default_udp_mux_rx_limit;
+    uint32_t _udp_mux_rx_limit = default_udp_mux_rx_limit;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;

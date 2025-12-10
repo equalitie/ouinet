@@ -148,7 +148,7 @@ private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
     ExtraBtBsServers _bt_bootstrap_extras;
-    uint64_t _udp_mux_rx_limit = default_udp_mux_rx_limit;
+    uint32_t _udp_mux_rx_limit = default_udp_mux_rx_limit;
     boost::optional<size_t> _open_file_limit;
 #ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
@@ -322,7 +322,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     }
 
     if (vm.count("udp-mux-rx-limit")) {
-        _udp_mux_rx_limit =  vm["udp-mux-rx-limit"].as<uint64_t>();
+        _udp_mux_rx_limit =  vm["udp-mux-rx-limit"].as<uint32_t>();
     }
 
 

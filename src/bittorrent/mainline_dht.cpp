@@ -205,7 +205,7 @@ static bool read_nodes( bool is_v4
 DhtNode::DhtNode( const AsioExecutor& exec
                 , metrics::DhtNode metrics
                 , bool do_doh
-                , const uint64_t mux_rx_limit
+                , const uint32_t mux_rx_limit
                 , fs::path storage_dir
                 , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
@@ -2563,7 +2563,7 @@ void DhtNode::tracker_do_search_peers(
 MainlineDht::MainlineDht( const AsioExecutor& exec
                         , metrics::MainlineDht metrics
                         , bool do_doh
-                        , uint64_t mux_rx_limit
+                        , uint32_t mux_rx_limit
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)

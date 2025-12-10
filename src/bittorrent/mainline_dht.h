@@ -43,7 +43,7 @@ class MainlineDht : public DhtBase {
     MainlineDht( const AsioExecutor&
                , metrics::MainlineDht
                , bool do_doh
-               , uint64_t mux_rx_limit
+               , uint32_t mux_rx_limit
                , boost::filesystem::path storage_dir = {}
                , std::set<bootstrap::Address> extra_bs = {});
 
@@ -119,7 +119,7 @@ class MainlineDht : public DhtBase {
     std::map<udp::endpoint, std::unique_ptr<DhtNode>> _nodes;
     Cancel _cancel;
     bool _do_doh;
-    uint64_t _mux_rx_limit;
+    uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
     metrics::MainlineDht _metrics;

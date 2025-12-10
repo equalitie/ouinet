@@ -41,7 +41,7 @@ private:
     };
 
 public:
-    UdpMultiplexer(asio_utp::udp_multiplexer&&, uint64_t);
+    UdpMultiplexer(asio_utp::udp_multiplexer&&, uint32_t);
 
     AsioExecutor get_executor();
 
@@ -79,13 +79,13 @@ private:
     asio::steady_timer _rate_limiting_timer;
     RateCounter _rc_rx;
     RateCounter _rc_tx;
-    uint64_t _rx_limit;
+    uint32_t _rx_limit;
     float sent = 0;
     float recv = 0;
 };
 
 inline
-UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint64_t rx_limit = 0):
+UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_limit = 0):
     _socket(std::move(s)),
     _send_queue_nonempty(_socket.get_executor()),
     _rate_limiting_timer(_socket.get_executor()),

@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     bool do_doh = true;
-    uint64_t rx_limit = default_udp_mux_rx_limit;
+    uint32_t rx_limit = default_udp_mux_rx_limit;
 
     DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
 
@@ -110,7 +110,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     bool do_doh = true;
-    uint64_t rx_limit = default_udp_mux_rx_limit;
+    uint32_t rx_limit = default_udp_mux_rx_limit;
 
     DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
 
