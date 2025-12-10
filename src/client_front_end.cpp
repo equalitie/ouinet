@@ -746,7 +746,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
         {"doh_enabled", config.is_doh_enabled()},
-        {"udp-mux-rx-limit", config.udp_mux_rx_limit()},
+        {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
