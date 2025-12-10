@@ -221,7 +221,7 @@ private:
            , po::value<uint16_t>()
            , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
            ("udp-mux-rx-limit"
-           , po::value<uint64_t>()->default_value(500)
+           , po::value<uint32_t>()->default_value(500)
            , "Max rate limit that's allowed for incoming packets to the "
              "UDP multiplexer. The value is expressed in Kbps. To leave it "
              "unlimited, set it to zero.")

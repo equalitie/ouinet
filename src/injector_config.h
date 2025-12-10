@@ -41,7 +41,7 @@ public:
         return _bt_bootstrap_extras;
     }
 
-    uint64_t udp_mux_rx_limit_in_bytes() const {
+    uint32_t udp_mux_rx_limit_in_bytes() const {
         // The value is set in Kbps in the configuration but required in bytes
         // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
         return _udp_mux_rx_limit * 1000 / 8;
@@ -198,7 +198,7 @@ InjectorConfig::options_description()
            "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
            "This option is persistent.")
         ("udp-mux-rx-limit"
-         , po::value<uint64_t>()->default_value(500)
+         , po::value<uint32_t>()->default_value(500)
          , "Max rate limit that's allowed for incoming packets to the "
            "UDP multiplexer. The value is expressed in Kbps. To leave it "
            "unlimited, set it to zero.")
