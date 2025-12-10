@@ -944,7 +944,7 @@ Injector::Injector(
             ( ex
             , metrics::Client::noop().mainline_dht()
             , config.is_doh_enabled()
-            , config.udp_mux_rx_limit()
+            , config.udp_mux_rx_limit_in_bytes()
             , fs::path{}
             , _config.bt_bootstrap_extras());  // default storage dir
     }
