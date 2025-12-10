@@ -68,7 +68,7 @@ class DhtNode {
     DhtNode( const AsioExecutor&
            , metrics::DhtNode
            , bool do_doh
-           , uint64_t mux_rx_limit = 0
+           , uint64_t mux_rx_limit
            , boost::filesystem::path storage_dir = {}
            , std::set<bootstrap::Address> extra_bs = {});
 
