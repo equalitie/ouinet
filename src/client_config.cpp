@@ -127,7 +127,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _udp_mux_port = *opt;
     }
 
-    if (auto opt = as_optional<uint64_t>(vm, "udp-mux-rx-limit")) {
+    if (auto opt = as_optional<uint32_t>(vm, "udp-mux-rx-limit")) {
         _udp_mux_rx_limit = *opt;
     }
 
