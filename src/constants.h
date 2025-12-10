@@ -105,6 +105,6 @@ static const std::string request_druid_hdr = "X-Ouinet-DRUID";
 
 static const uint16_t default_udp_port = 28729;
 static const uint16_t random_port_selection = 0;
-static constexpr uint64_t default_udp_mux_rx_limit = 500;
+static constexpr uint64_t default_udp_mux_rx_limit = 500; // Kbps
 
 } // ouinet namespace

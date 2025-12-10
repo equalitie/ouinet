@@ -42,7 +42,8 @@ public:
     }
 
     uint64_t udp_mux_rx_limit() const {
-        // The value is set in Kbps in the configuration.
+        // The value is set in Kbps in the configuration but required in bytes
+        // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
         return _udp_mux_rx_limit * 1000 / 8;
     }
 
