@@ -484,7 +484,7 @@ private:
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
-    uint32_t _udp_mux_rx_limit = default_udp_mux_rx_limit;
+    uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;

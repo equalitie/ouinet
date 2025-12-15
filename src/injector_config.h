@@ -148,7 +148,7 @@ private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
     ExtraBtBsServers _bt_bootstrap_extras;
-    uint32_t _udp_mux_rx_limit = default_udp_mux_rx_limit;
+    uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_injector;
     boost::optional<size_t> _open_file_limit;
 #ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
