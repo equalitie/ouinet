@@ -627,6 +627,16 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           : "disabled" )
        << ".<br><br>\n";
 
+    {
+        auto rx_limit = config.udp_mux_rx_limit();
+        ss << "UDP Multiplexer Rx Limit: "
+           << std::to_string(rx_limit)
+           << ( rx_limit == 0
+              ? " (Means unlimited)"
+              : " Kbps" )
+           << "<br><br>\n";
+    }
+
     ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
                    , "bt_extra_bootstraps"
                    , "HOST1 HOST2:PORT ..."
@@ -740,7 +750,8 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
-        {"doh_enabled", config.is_doh_enabled()}
+        {"doh_enabled", config.is_doh_enabled()},
+        {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);

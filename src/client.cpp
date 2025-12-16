@@ -336,6 +336,7 @@ public:
             bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                       , _metrics.mainline_dht()
                                                       , _config.is_doh_enabled()
+                                                      , _config.udp_mux_rx_limit_in_bytes()
                                                       , _config.repo_root() / "dht"
                                                       , _config.bt_bootstrap_extras());
         }
