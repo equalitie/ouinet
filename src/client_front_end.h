@@ -184,6 +184,8 @@ private:
                            , Cancel cancel
                            , YieldContext);
 
+    static void handle_api_endpoints(const ClientConfig& config, Response& res, std::ostringstream& ss);
+
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);
     void disable_log_to_file(ClientConfig&);
