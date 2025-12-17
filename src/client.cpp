@@ -3060,7 +3060,7 @@ void Client::State::start()
 
     boost::optional<asio::local::stream_protocol::acceptor> front_end_unix_socket_acceptor;
     if (_config.front_end_unix_socket_endpoint() != asio::local::stream_protocol::endpoint()) {
-        LOG_DEBUG("front_end_unix_socket endpoint: %s", _config.front_end_unix_socket_endpoint());
+        LOG_DEBUG("front_end_unix_socket endpoint: ", _config.front_end_unix_socket_endpoint());
         front_end_unix_socket_acceptor = make_acceptor(_config.front_end_unix_socket_endpoint(), "frontend_unix_socket");
         _frontend_unix_socket_endpoint = front_end_unix_socket_acceptor->local_endpoint().path();
     }
