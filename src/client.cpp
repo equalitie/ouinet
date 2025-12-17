@@ -2917,6 +2917,11 @@ asio::local::stream_protocol::acceptor Client::State::make_acceptor(
         throw runtime_error(util::str("Failed to bind Unix Socket acceptor for service: ", service, "; ec=", ec));
     }
 
+    fs::permissions(socket_path, fs::perms::owner_all, ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to chmod 700 the Unix Socket: ", service, "; ec=", ec));
+    }
+
     // Start listening for connections
     acceptor.listen(asio::socket_base::max_listen_connections, ec);
     if (ec) {
