@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.0) - 2025-12-18
+
+### Added
+
+- Expose `/api/endpoints` on Ouinet's frontend interface. !150
+- New config option `front-end-unix-socket-ep` to serve frontend via
+unix socket. !150
+- Rate limit mechanism for Rx traffic controlled by the `udp-mux-rx-limit`
+config option. !151
+- Scrutiny and control of DHT bootstrap process to address timing issues. !136
+
+### Changed
+
+- Tests no longer involve twisted framework and were rewritten for robustness
+and error handling clarity. !136
+
+### Fixed
+
+- Missing python dependencies in the CI Docker images. !149
+- Fix `client-credentials` for SSL connections, it allows for standard
+proxy authorization. !150
+
+
 ## [v1.5.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.5.1) - 2025-11-27
 
 ### Fixed
