@@ -18,8 +18,8 @@ BOOST_AUTO_TEST_CASE(valid_name) {
     spawn(ctx, [](yield_context yield) {
         dns::Resolver resolver;
 
-        auto expected = ip::address_v4({23, 215, 0, 136});
-        auto actual = resolver.resolve("example.com", yield);
+        auto expected = ip::address_v4({9, 9, 9, 9});
+        auto actual = resolver.resolve("dns9.quad9.net", yield);
 
         BOOST_REQUIRE(std::find(actual.begin(), actual.end(), expected) != actual.end());
     }, [](auto e) {
