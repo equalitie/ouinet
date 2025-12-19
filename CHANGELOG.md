@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.1) - 2025-12-18
+
+### Fixed
+
+- Remove the default attribute of `udp-mux-rx-limit` option from the Client
+settings. !152
+- Fixed `test-dns.cpp` by replacing the test domain used in `valid_name`
+test. !152
+
+
 ## [v1.6.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.0) - 2025-12-18
 
 ### Added
