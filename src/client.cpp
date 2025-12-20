@@ -1052,6 +1052,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldConte
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , metrics_controller
+                               , _proxy_endpoint, _frontend_endpoint, _frontend_unix_socket_endpoint
                                , cancel
                                , yield[ec].tag("serve_frontend"));
 
