@@ -678,6 +678,8 @@ private:
     metrics::Client _metrics;
 
     asio::ip::tcp::endpoint _proxy_endpoint;
+    // _proxy_endpoint_address is a string version of _proxy_endpoint.
+    std::string _proxy_endpoint_address;
     std::string _frontend_endpoint;
     std::string _frontend_unix_socket_endpoint;
 };
@@ -1052,7 +1054,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldConte
                                , _bt_dht.get()
                                , _udp_reachability.get()
                                , metrics_controller
-                               , _proxy_endpoint, _frontend_endpoint, _frontend_unix_socket_endpoint
+                               , _proxy_endpoint_address, _frontend_endpoint, _frontend_unix_socket_endpoint
                                , cancel
                                , yield[ec].tag("serve_frontend"));
 
@@ -3057,6 +3059,8 @@ void Client::State::start()
     // These may throw if the endpoints are busy.
     auto proxy_acceptor = make_acceptor(_config.local_endpoint(), "browser requests");
     _proxy_endpoint = proxy_acceptor.local_endpoint();
+    _proxy_endpoint_address = std::string(_proxy_endpoint.address().to_string()) + ":" + to_string(_proxy_endpoint.port());
+
     boost::optional<tcp::acceptor> front_end_acceptor;
     if (_config.front_end_endpoint() != tcp::endpoint())
     {
