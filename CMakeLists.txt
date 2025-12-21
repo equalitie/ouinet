@@ -213,7 +213,9 @@ file(GLOB client_sources
 )
 
 add_library(client_lib SHARED ${client_sources})
-set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+if (NOT WIN32 AND NOT MINGW)
+    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+endif ()
 
 target_link_libraries(client_lib
     PUBLIC
