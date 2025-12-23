@@ -160,119 +160,65 @@ public:
 
     GenericStream& lowest_layer() { return *this; }
 
-    bool has_implementation() const { return _impl != nullptr; }
+    bool has_implementation() const { return _shared && _shared->impl; }
 
-    void* id() const { return _impl.get(); }
+    void* id() const {
+        if (!_shared) return nullptr;
+        return _shared->impl.get();
+    }
 
 public:
-    GenericStream() {
-        if (_debug) {
-            std::cerr << this << " " << _impl
-                      << " GenericStream::destroy_implementation()"
-                      << std::endl;
-        }
-    }
+    GenericStream() {}
 
     template<class AsyncRWStream>
     GenericStream(AsyncRWStream&& impl, std::string remote_ep = "")
         : _executor(impl.get_executor())
-        , _impl(new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl)))
+        , _shared(std::make_shared<Shared>(
+                    new Wrapper<AsyncRWStream>(std::forward<AsyncRWStream>(impl))))
         , _remote_endpoint(std::move(remote_ep))
-    {
-        if (_debug) {
-            std::cerr << this << " " << (void*)nullptr
-                      << " GenericStream::GenericStream(&& "
-                      << typeid(AsyncRWStream).name() << " "
-                      << _impl << ")" << std::endl;
-        }
-    }
+    { }
 
     template<class AsyncRWStream, class Shutter>
     GenericStream( AsyncRWStream&& impl
                  , Shutter shutter
                  , std::string remote_ep = "")
         : _executor(generic_stream_detail::deref(impl).get_executor())
-        , _impl(new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
-                                          , std::move(shutter)))
+        , _shared(std::make_shared<Shared>(
+                    new Wrapper<AsyncRWStream>( std::forward<AsyncRWStream>(impl)
+                                              , std::move(shutter))))
         , _remote_endpoint(std::move(remote_ep))
     {
-        if (_debug) {
-            std::cerr << this << " " << (void*)nullptr
-                      << " GenericStream::GenericStream(&& "
-                      << typeid(AsyncRWStream).name() << " "
-                      << _impl <<  ", shutter)" << std::endl;
-        }
     }
 
-    GenericStream(GenericStream&& other)
-        : _executor(std::move(other._executor))
-        , _impl(std::move(other._impl))
-        , _remote_endpoint(std::move(other._remote_endpoint))
-    {
-        if (_debug) {
-            std::cerr << this << " " << (void*)nullptr
-                      << " GenericStream::GenericStream(&& "
-                      << &other << " " << _impl <<  ")" << std::endl;
-        }
-    }
+    GenericStream(GenericStream&& other) = default;
 
-    GenericStream& operator=(GenericStream&& other) {
-        _executor = std::move(other._executor);
-        _remote_endpoint = std::move(other._remote_endpoint);
-
-        if (_debug) {
-            std::cerr << this << " " << _impl
-                      << " GenericStream::operator=("
-                      << &other << " " << other._impl <<  ")" << std::endl;
-        }
-
-        _impl = std::move(other._impl);
-        return *this;
-    }
+    GenericStream& operator=(GenericStream&& other) = default;
 
     ~GenericStream() {
-        if (_debug) {
-            std::cerr << this << " " << _impl
-                      << " GenericStream::~GenericStream()" << std::endl;
-        }
-        try {
-            if (_impl) {
-                _impl->close();
-            }
-        }
-        catch (...) {
-            assert(0 && "Uncaught exception when closing GenericStream");
+        // Don't call explicit `close` on `_impl` here as that would interfere
+        // with inner streams that only hold references to real streams.
+        if (_shared) {
+            _shared->impl = nullptr;
         }
     }
 
-#if BOOST_VERSION >= 107100
     executor_type get_executor()
     {
         return _executor;
     }
-#elif BOOST_VERSION >= 106700
-    executor_type get_executor()
-    {
-        assert(_impl);
-        return _impl->get_executor();
-    }
-#endif
 
     void close()
     {
-        if (_debug) {
-            std::cerr << this << " " << _impl
-                      << " GenericStream::close()" << std::endl;
-        }
-        if (!_impl) return;
-        _impl->close();
-        _impl = nullptr;
+        if (!_shared || !_shared->impl) return;
+        _shared->impl->close();
+        _shared->impl = nullptr;
+        _shared = nullptr;
     }
 
     bool is_open() const
     {
-        if (!_impl) return false;
-        return _impl->is_open();
+        if (!_shared || !_shared->impl) return false;
+        return _shared->impl->is_open();
     }
 
     // Put data in the given buffers back into the read buffers,
@@ -280,28 +226,23 @@ public:
     template<class ConstBufferSequence>
     void put_back(const ConstBufferSequence& bs, sys::error_code& ec)
     {
-        if (!_impl) {
+        if (!_shared || !_shared->impl) {
             ec = asio::error::bad_descriptor;
             return;
         }
 
-        _impl->read_buffers.resize(std::distance( asio::buffer_sequence_begin(bs)
+        _shared->impl->read_buffers.resize(std::distance( asio::buffer_sequence_begin(bs)
                                                 , asio::buffer_sequence_end(bs)));
 
         std::copy( asio::buffer_sequence_begin(bs)
                  , asio::buffer_sequence_end(bs)
-                 , _impl->read_buffers.begin());
+                 , _shared->impl->read_buffers.begin());
     }
 
     template< class MutableBufferSequence
             , class Token>
     auto async_read_some(const MutableBufferSequence& bs, Token&& token)
     {
-        if (_debug) {
-            std::cerr << this << " " << _impl
-                      << " GenericStream::async_read_some()" << std::endl;
-        }
-
         using namespace std;
 
         namespace asio   = boost::asio;
@@ -310,33 +251,33 @@ public:
         auto init = [&](auto completion_handler) {
             auto handler = make_shared<decltype(completion_handler)>(std::move(completion_handler));
 
-            if (_impl) {
-                {
-                    system::error_code ec;
-                    put_back(bs, ec);
-                    assert(!ec);
-                }
-
-                // TODO: It should not be necessary to check whether the underlying
-                // implementation has been closed (Asio itself doesn't guarantee
-                // returning an error in such cases). But it seems there may be a
-                // bug in Boost.Beast (Boost v1.67) because even if it destroys the
-                // socket it continues reading from it.
-                // Test vector: uTP x TLS x bbc.com
-                // (Same with the async_write_some operation)
-                _impl->read_impl([h = move(handler), impl = _impl]
-                                 (const system::error_code& ec, size_t size) {
-                                     if (impl->closed()) {
-                                        (*h)(asio::error::shut_down, 0);
-                                     } else {
-                                        (*h)(ec, size);
-                                     }
-                                 });
-            }
-            else {
+            if (!is_open()) {
+                // TODO: Why post and not directly execute the handler?
                 asio::post(_executor, [h = move(handler)]
                                       { (*h)(asio::error::bad_descriptor, 0); });
             }
+
+            {
+                system::error_code ec;
+                put_back(bs, ec);
+                assert(!ec);
+            }
+
+            // TODO: It should not be necessary to check whether the underlying
+            // implementation has been closed (Asio itself doesn't guarantee
+            // returning an error in such cases). But it seems there may be a
+            // bug in Boost.Beast (Boost v1.67) because even if it destroys the
+            // socket it continues reading from it.
+            // Test vector: uTP x TLS x bbc.com
+            // (Same with the async_write_some operation)
+            _shared->impl->read_impl([h = move(handler), shared = _shared]
+                             (const system::error_code& ec, size_t size) {
+                                 if (!shared->impl || shared->impl->closed()) {
+                                    (*h)(asio::error::shut_down, 0);
+                                 } else {
+                                    (*h)(ec, size);
+                                 }
+                             });
         };
 
         return boost::asio::async_initiate<
@@ -349,11 +290,6 @@ public:
             , class Token>
     auto async_write_some(const ConstBufferSequence& bs, Token&& token)
     {
-        if (_debug) {
-            std::cerr << this << " " << _impl
-                      << " GenericStream::async_write_some()" << std::endl;
-        }
-
         using namespace std;
 
         namespace asio   = boost::asio;
@@ -362,28 +298,28 @@ public:
         auto init = [&] (auto completion_handler) {
             auto handler = make_shared<decltype(completion_handler)>(std::move(completion_handler));
 
-            if (_impl) {
-                _impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
-                                                    , asio::buffer_sequence_end(bs)));
-
-                copy( asio::buffer_sequence_begin(bs)
-                    , asio::buffer_sequence_end(bs)
-                    , _impl->write_buffers.begin());
-
-                // TODO: Same as the comment in async_read_some operation
-                _impl->write_impl([h = move(handler), impl = _impl]
-                                  (const system::error_code& ec, size_t size) {
-                                     if (impl->closed()) {
-                                        (*h)(asio::error::shut_down, 0);
-                                     } else {
-                                        (*h)(ec, size);
-                                     }
-                                  });
-            }
-            else {
+            if (!is_open()) {
+                // TODO: Why post and not directly execute the handler?
                 asio::post(_executor, [h = move(handler)]
                                       { (*h)(asio::error::bad_descriptor, 0); });
             }
+
+            _shared->impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
+                                                        , asio::buffer_sequence_end(bs)));
+
+            copy( asio::buffer_sequence_begin(bs)
+                , asio::buffer_sequence_end(bs)
+                , _shared->impl->write_buffers.begin());
+
+            // TODO: Same as the comment in async_read_some operation
+            _shared->impl->write_impl([h = move(handler), shared = _shared]
+                              (const system::error_code& ec, size_t size) {
+                                 if (!shared->impl || shared->impl->closed()) {
+                                    (*h)(asio::error::shut_down, 0);
+                                 } else {
+                                    (*h)(ec, size);
+                                 }
+                              });
         };
 
         return boost::asio::async_initiate<
@@ -395,18 +331,19 @@ public:
     const std::string& remote_endpoint() const { return _remote_endpoint; }
 
 private:
-#if BOOST_VERSION >= 107100
     AsioExecutor _executor;
-#elif BOOST_VERSION >= 106700
-    asio::io_service* _ios = nullptr;
-#endif
+
+    struct Shared {
+        std::unique_ptr<Base> impl;
+
+        Shared(Base* impl) : impl(impl) {}
+    };
 
     // Note: we must use shared_ptr because some stream implementations (such
     // as the asio::ssl::stream) require that their lifetime is preserved while
     // an async action is pending on them.
-    std::shared_ptr<Base> _impl;
+    std::shared_ptr<Shared> _shared;
     std::string _remote_endpoint;
-    bool _debug = false;
 };
 
 } // ouinet namespace
