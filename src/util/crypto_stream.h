@@ -2,6 +2,9 @@
 
 #include <boost/endian.hpp>
 #include <boost/asio/read.hpp>
+#include <boost/asio/compose.hpp>
+#include "crypto_stream_key.h"
+#include "generic_stream.h"
 
 namespace ouinet {
 
@@ -158,25 +161,6 @@ private:
     std::shared_ptr<Shared> _shared;
 };
 
-template<size_t N>
-std::array<uint8_t, N> generate_random_array() {
-    std::array<uint8_t, N> array;
-    if (RAND_bytes(array.data(), array.size()) != 1) {
-        throw std::runtime_error("RAND_bytes failed");
-    }
-    return array;
-}
-
-struct CryptoStreamKey : std::array<uint8_t, 32> {
-    static CryptoStreamKey generate_random() {
-        return CryptoStreamKey{generate_random_array<32>()};
-    }
-
-    static CryptoStreamKey test_key() {
-        return CryptoStreamKey{{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}};
-    }
-};
-
 // Encrypt inner stream using AES 256 CTR mode. Note that CTR means that the
 // stream is not authenticated. This is OK for our use case where we
 // authenticate the plaintext using injector signatures.
@@ -185,7 +169,7 @@ class CryptoStream {
 private:
     struct Iv : std::array<uint8_t, 16> {
         static Iv generate_random() {
-            return Iv{generate_random_array<16>()};
+            return Iv{detail::generate_random_array<16>()};
         }
     
         std::array<uint8_t, 16> const& as_array() const { return *this; }
