@@ -8,11 +8,13 @@
 #include "../session.h"
 #include "../util/watch_dog.h"
 #include "../util/crypto.h"
+#include "../util/crypto_stream.h"
 #include "../util/intrusive_list.h"
 #include "../constants.h"
 #include "../util/set_io.h"
 #include "../util/async_job.h"
 #include "../util/condition_variable.h"
+#include "../peer_message.h"
 #include "signed_head.h"
 
 #include <random>
@@ -91,15 +93,21 @@ public:
 
     AsioExecutor _exec;
     ResourceId _resource_id;
+    CryptoStreamKey _resource_key;
     const util::Ed25519PublicKey _cache_pk;
-    std::unique_ptr<http_response::Reader> _reader;
+
+    GenericStream _connection;
+
     HashList _hash_list;
     Cancel _lifetime_cancel;
+    util::LogPath _log_path;
 
-    Peer(AsioExecutor exec, const ResourceId& resource_id, util::Ed25519PublicKey cache_pk) :
+    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, util::Ed25519PublicKey cache_pk, util::LogPath log_path) :
         _exec(exec),
         _resource_id(resource_id),
-        _cache_pk(cache_pk)
+        _resource_key(resource_key),
+        _cache_pk(cache_pk),
+        _log_path(std::move(log_path))
     {
     }
 
@@ -119,17 +127,17 @@ public:
 
     void send_block_request(size_t block_id, Cancel c, asio::yield_context yield)
     {
-        if (!_reader) return or_throw(yield, asio::error::not_connected);
+        if (!_connection.is_open()) return or_throw(yield, asio::error::not_connected);
 
         sys::error_code ec;
 
         auto cl = _lifetime_cancel.connect([&] { c(); });
-        auto cc = c.connect([&] { if (_reader) _reader->close(); });
+        auto cc = c.connect([&] { if (_connection.is_open()) _connection.close(); });
 
         Cancel tc(c);
         auto wd = watch_dog(_exec, WRITE_REQUEST_TIMEOUT, [&] { tc(); });
 
-        http::async_write(_reader->stream(), range_request(http::verb::get, block_id, _resource_id), yield[ec]);
+        http::async_write(_connection, range_request(http::verb::get, block_id, _resource_id), yield[ec]);
         fail_on_error_or_timeout(yield, c, ec, wd);
     }
 
@@ -138,26 +146,30 @@ public:
     {
         using OptBlock = boost::optional<Block>;
 
-        if (!_reader) return or_throw<OptBlock>(yield, asio::error::not_connected);
+        if (!_connection.is_open()) return or_throw<OptBlock>(yield, asio::error::not_connected);
 
         sys::error_code ec;
 
-        auto cl = _lifetime_cancel.connect([&] { c(); });
-        auto cc = c.connect([&] { if (_reader) _reader->close(); });
+        GenericStream stream = determine_incoming_stream(_connection, yield[ec]);
+        return_or_throw_on_error(yield, c, ec, OptBlock{});
 
-        auto head = _reader->timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
+        auto reader = http_response::Reader(std::move(stream));
+
+        auto cl = _lifetime_cancel.connect([&] { c(); });
+        auto cc = c.connect([&] { if (_connection.is_open()) _connection.close(); });
+
+        auto head = reader.timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
         return_or_throw_on_error(yield, c, ec, OptBlock{});
 
         if (!head || !head->is_head()) {
             return or_throw<OptBlock>(yield, Errc::expected_head);
         }
 
-        auto p = _reader->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+        auto p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
         return_or_throw_on_error(yield, c, ec, OptBlock{});
 
         // This may happen when the message has no body
         if (!p) {
-            _reader->restart();
             return boost::none;
         }
 
@@ -178,7 +190,7 @@ public:
         if (first_chunk_hdr->size) {
             // Read the block and the chunk header that comes after it.
             while (true) {
-                p = _reader->timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
+                p = reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
                 return_or_throw_on_error(yield, c, ec, OptBlock{});
 
                 auto chunk_body = p->as_chunk_body();
@@ -201,7 +213,7 @@ public:
                 }
             }
 
-            p = _reader->timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+            p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
 
             ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
@@ -228,11 +240,10 @@ public:
 
         // Read the trailer (if any), and make sure we're done with this response
         while (true) {
-            p = _reader->timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
+            p = reader.timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
             return_or_throw_on_error(yield, c, ec, OptBlock{});
             if (!p) {
                 // We're done with this request
-                _reader->restart();
                 break;
             }
             auto trailer = p->as_trailer();
@@ -289,9 +300,12 @@ public:
         http::async_write(con, request(http::verb::propfind, _resource_id), yield[ec]);
         fail_on_error_or_timeout(yield, cancel, ec, wd);
 
-        auto reader = std::make_unique<http_response::Reader>(move(con));
+        GenericStream stream = determine_incoming_stream(con, yield[ec]);
+        fail_on_error_or_timeout(yield, cancel, ec, wd);
 
-        auto hash_list = HashList::load(*reader, _cache_pk, timeout_cancel, yield[ec]);
+        auto reader = http_response::Reader(std::move(stream));
+
+        auto hash_list = HashList::load(reader, _cache_pk, timeout_cancel, yield[ec]);
         fail_on_error_or_timeout(yield, cancel, ec, wd);
 
         if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen))
@@ -300,8 +314,26 @@ public:
             return or_throw(yield, asio::error::not_found);
 
         _hash_list = move(hash_list);
-        reader->restart();
-        _reader = std::move(reader);
+        _connection = std::move(con);
+    }
+
+    // Responses may be either plain-text or cypher-text, we read which type it is here
+    // and return a generic stream that uses the input connection's reference.
+    GenericStream determine_incoming_stream(GenericStream& con, asio::yield_context yield) {
+        sys::error_code ec;
+        BlobType blob_type = async_read_blob_type(con, yield[ec]);
+
+        if (ec) return or_throw<GenericStream>(yield, ec);
+
+        switch (blob_type) {
+            case BlobType::plain_text:
+                return StreamRef<GenericStream>(con);
+            case BlobType::cypher_text:
+                return CryptoStream<StreamRef<GenericStream>>(con, _resource_key);
+        }
+
+        // Unreachable, but removes compilation warning
+        return or_throw<GenericStream>(yield, make_error_code(PeerRequestError::invalid_blob_type));
     }
 };
 
@@ -314,9 +346,10 @@ public:
          , set<udp::endpoint> lan_peer_eps
          , util::Ed25519PublicKey cache_pk
          , const ResourceId& resource_id
+         , const CryptoStreamKey& resource_key
          , std::shared_ptr<DhtLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
-         , std::optional<util::LogPath> log_path)
+         , util::LogPath log_path)
         : _exec(exec)
         , _cv(_exec)
         , _cache_pk(move(cache_pk))
@@ -324,6 +357,7 @@ public:
         , _lan_my_eps(move(lan_my_eps))
         , _wan_my_eps(move(wan_my_eps))
         , _resource_id(move(resource_id))
+        , _resource_key(resource_key)
         , _peer_lookup(move(peer_lookup))
         , _newest_proto_seen(move(newest_proto_seen))
         , _log_path(move(log_path))
@@ -346,9 +380,7 @@ public:
 
             auto peer_eps = _peer_lookup->get(c, y[ec]);
 
-            if (log_path) {
-                LOG_DEBUG(*log_path, " Peer lookup result; ec=", ec, " eps=", peer_eps);
-            }
+            LOG_DEBUG(log_path, " Peer lookup result; ec=", ec, " eps=", peer_eps);
 
             if (c) return;
 
@@ -369,10 +401,11 @@ public:
          , set<udp::endpoint> lan_peer_eps
          , util::Ed25519PublicKey cache_pk
          , const ResourceId& resource_id
+         , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
-         , std::optional<util::LogPath> log_path)
+         , util::LogPath log_path)
         : Peers( exec, move(lan_my_eps), {}, move(lan_peer_eps)
-               , move(cache_pk), resource_id, nullptr
+               , move(cache_pk), resource_id, resource_key, nullptr
                , move(newest_proto_seen), move(log_path))
     {}
 
@@ -382,27 +415,25 @@ public:
 
         auto ip = _all_peers.insert({ep, unique_ptr<Peer>()});
 
+        auto peer_log_path = _log_path.tag(util::str(ep));
+
         if (!ip.second) return; // Already inserted
 
-        ip.first->second = make_unique<Peer>(_exec, _resource_id, _cache_pk);
+        ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, peer_log_path);
         Peer* p = ip.first->second.get();
 
         _candidate_peers.push_back(*p);
 
-        task::spawn_detached(_exec, [=, this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [=, this, log_path = peer_log_path, c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
-            if (log_path) {
-                LOG_DEBUG(*log_path, " Fetching hash list from: ", ep);
-            }
+            LOG_DEBUG(log_path, " Fetching hash list from: ", ep);
 
             p->download_hash_list(ep, _lan_my_eps, _newest_proto_seen, c, y[ec]);
 
-            if (log_path) {
-                LOG_DEBUG(*log_path, " Done fetching hash list; ep=", ep
-                         , " ec=", ec, " c=", bool(c));
-            }
+            LOG_DEBUG(log_path, " Done fetching hash list; ep=", ep
+                     , " ec=", ec, " c=", bool(c));
 
             if (c) return;
 
@@ -515,9 +546,10 @@ private:
     std::set<asio::ip::udp::endpoint> _lan_my_eps;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
     ResourceId _resource_id;
+    CryptoStreamKey _resource_key;
     std::shared_ptr<DhtLookup> _peer_lookup;
     std::shared_ptr<unsigned> _newest_proto_seen;
-    std::optional<util::LogPath> _log_path;
+    util::LogPath _log_path;
 
     Cancel _lifetime_cancel;
 
@@ -527,34 +559,37 @@ private:
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
+                                , CryptoStreamKey resource_key
                                 , util::Ed25519PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , std::optional<util::LogPath> log_path)
+                                , util::LogPath log_path)
     : _executor(ex)
-    , _log_path(log_path)
+    , _log_path(std::move(log_path))
 {
     _peers = make_unique<Peers>(ex
                                , move(lan_my_eps)
                                , move(lan_peer_eps)
                                , move(cache_pk)
                                , move(resource_id)
+                               , move(resource_key)
                                , move(newest_proto_seen)
-                               , log_path);
+                               , _log_path.tag("Peers"));
 }
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
+                                , CryptoStreamKey resource_key
                                 , util::Ed25519PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::set<asio::ip::udp::endpoint> wan_my_eps
                                 , std::shared_ptr<DhtLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , std::optional<util::LogPath> log_path)
+                                , util::LogPath log_path)
     : _executor(ex)
-    , _log_path(log_path)
+    , _log_path(std::move(log_path))
 {
     _peers = make_unique<Peers>(ex
                                , move(lan_my_eps)
@@ -562,9 +597,10 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , move(lan_peer_eps)
                                , move(cache_pk)
                                , move(resource_id)
+                               , move(resource_key)
                                , move(peer_lookup)
                                , move(newest_proto_seen)
-                               , log_path);
+                               , _log_path.tag("Peers"));
 }
 
 struct MultiPeerReader::PreFetch {

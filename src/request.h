@@ -7,6 +7,7 @@
 #include <boost/beast/http/string_body.hpp>
 #include "namespaces.h"
 #include "cache/resource_id.h"
+#include "util/crypto_stream_key.h"
 
 
 namespace ouinet {
@@ -31,6 +32,10 @@ public:
         return _resource_id;
     }
 
+    const CryptoStreamKey& resource_key() const {
+        return _resource_key;
+    }
+
     const std::string& dht_group() const {
         return _dht_group;
     }
@@ -38,14 +43,16 @@ public:
 private:
     friend class CacheRequest;
 
-    CacheRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group) :
+    CacheRetrieveRequest(http::verb method, cache::ResourceId resource_id, CryptoStreamKey const& resource_key, std::string dht_group) :
         _method(method),
         _resource_id(std::move(resource_id)),
+        _resource_key(resource_key),
         _dht_group(std::move(dht_group))
     {}
 
     http::verb _method;
     cache::ResourceId _resource_id;
+    CryptoStreamKey _resource_key;
     std::string _dht_group;
 };
 
@@ -126,14 +133,16 @@ public:
     }
 
 private:
-    CacheRequest(http::request_header<> header, cache::ResourceId resource_id, std::string dht_group) :
+    CacheRequest(http::request_header<> header, cache::ResourceId resource_id, CryptoStreamKey const& resource_key, std::string dht_group) :
         _header(std::move(header)),
         _resource_id(std::move(resource_id)),
+        _resource_key(resource_key),
         _dht_group(std::move(dht_group))
     {}
 
     http::request_header<> _header;
     cache::ResourceId _resource_id;
+    CryptoStreamKey _resource_key;
     std::string _dht_group;
 };
 

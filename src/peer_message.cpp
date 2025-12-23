@@ -1,6 +1,8 @@
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/http/read.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
 #include "peer_message.h"
 #include "util/keep_alive.h"
 #include "parse/number.h"
@@ -72,6 +74,25 @@ PeerRequest PeerRequest::async_read(GenericStream& con, YieldContext yield) {
     };
 }
 
+void async_write_blob_type(BlobType blob_type, GenericStream& con, asio::yield_context yield) {
+    uint8_t is_cyphertext = blob_type == BlobType::cypher_text ? 1 : 0;
+    asio::async_write(con, asio::buffer(&is_cyphertext, 1), yield);
+}
+
+BlobType async_read_blob_type(GenericStream& con, asio::yield_context yield) {
+    uint8_t is_cyphertext = -1;
+    sys::error_code ec;
+    asio::async_read(con, asio::buffer(&is_cyphertext, 1), yield[ec]);
+
+    if (ec) return or_throw<BlobType>(yield, ec);
+
+    switch (is_cyphertext) {
+        case 0: return BlobType::plain_text;
+        case 1: return BlobType::cypher_text;
+        default: return or_throw<BlobType>(yield, make_error_code(PeerRequestError::invalid_blob_type));
+    }
+}
+
 void PeerCacheRequest::print(std::ostream& os) const {
     os << "PeerCacheRequest\n";
     os << "  method:      " << _method << "\n";
@@ -101,6 +122,7 @@ public:
             case PeerRequestError::invalid_protocol_version: return "invalid protocol version";
             case PeerRequestError::invalid_target: return "invalid target (ResourceId)";
             case PeerRequestError::invalid_range: return "invalid range";
+            case PeerRequestError::invalid_blob_type: return "invalid blob type";
         }
 
         std::snprintf(buffer, len, "Unknown error %d", ev );

@@ -771,9 +771,8 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
                                    , asio::error::operation_not_supported);
     }
 
-    auto key = request.resource_id();
-
-    auto s = c->load( move(key)
+    auto s = c->load( request.resource_id()
+                    , request.resource_key()
                     , request.dht_group()
                     , request.method() == http::verb::head
                     , _metrics
