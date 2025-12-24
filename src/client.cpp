@@ -18,6 +18,7 @@
 #include <iterator>
 #include <iostream>
 #include <cstdlib>  // for atexit()
+#include <nlohmann/json.hpp>
 
 #include "cache/client.h"
 
@@ -3074,6 +3075,16 @@ void Client::State::start()
         LOG_DEBUG("front_end_unix_socket endpoint: ", _config.front_end_unix_socket_endpoint());
         front_end_unix_socket_acceptor = make_acceptor(_config.front_end_unix_socket_endpoint(), "frontend_unix_socket");
         _frontend_unix_socket_endpoint = front_end_unix_socket_acceptor->local_endpoint().path();
+    }
+
+    {
+        const nlohmann::json endpoints_json = {
+            {"proxy_endpoint", _proxy_endpoint_address},
+            {"frontend_tcp_endpoint", _frontend_endpoint},
+            {"frontend_unix_socket_endpoint", _frontend_unix_socket_endpoint},
+        };
+        const fs::path endpoints_json_file { _config.repo_root() / "endpoints.json" };
+        boost::nowide::ofstream(endpoints_json_file) << endpoints_json;
     }
 
     ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
