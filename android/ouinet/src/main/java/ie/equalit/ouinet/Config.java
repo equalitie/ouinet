@@ -60,6 +60,7 @@ public class Config implements Parcelable {
         private String proxyAccessToken;
         private boolean debugFrontEndAccessToken;
         private String udpMuxPort;
+        private String udpMuxRxLimit;
         private boolean disableBridgeAnnouncement = false;
         private String requestBodyLimit;
         private String maxCachedAge;
@@ -167,6 +168,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setUdpMuxPort(String udpMuxPort){
             this.udpMuxPort = udpMuxPort;
+            return this;
+        }
+        public ConfigBuilder setUdpMuxRxLimit(String udpMuxRxLimit){
+            this.udpMuxRxLimit = udpMuxRxLimit;
             return this;
         }
         public ConfigBuilder setDisableBridgeAnnouncement(boolean disableBridgeAnnouncement){
@@ -409,6 +414,7 @@ public class Config implements Parcelable {
                     proxyAccessToken,
                     debugFrontEndAccessToken,
                     udpMuxPort,
+                    udpMuxRxLimit,
                     disableBridgeAnnouncement,
                     requestBodyLimit,
                     maxCachedAge,
@@ -447,6 +453,7 @@ public class Config implements Parcelable {
     private String proxyAccessToken;
     private boolean debugFrontEndAccessToken;
     private String udpMuxPort;
+    private String udpMuxRxLimit;
     private boolean disableBridgeAnnouncement;
     private String requestBodyLimit;
     private String maxCachedAge;
@@ -483,6 +490,7 @@ public class Config implements Parcelable {
                   String proxyAccessToken,
                   boolean debugFrontEndAccessToken,
                   String udpMuxPort,
+                  String udpMuxRxLimit,
                   boolean disableBridgeAnnouncement,
                   String requestBodyLimit,
                   String maxCachedAge,
@@ -518,6 +526,7 @@ public class Config implements Parcelable {
         this.proxyAccessToken = proxyAccessToken;
         this.debugFrontEndAccessToken = debugFrontEndAccessToken;
         this.udpMuxPort = udpMuxPort;
+        this.udpMuxRxLimit = udpMuxRxLimit;
         this.disableBridgeAnnouncement = disableBridgeAnnouncement;
         this.requestBodyLimit = requestBodyLimit;
         this.maxCachedAge = maxCachedAge;
@@ -591,6 +600,9 @@ public class Config implements Parcelable {
     }
     public String getUdpMuxPort() {
         return udpMuxPort;
+    }
+    public String getUdpMuxRxLimit() {
+        return udpMuxRxLimit;
     }
     public boolean getDisableBridgeAnnouncement() {
         return disableBridgeAnnouncement;
@@ -678,6 +690,7 @@ public class Config implements Parcelable {
         out.writeString(proxyAccessToken);
         out.writeInt(debugFrontEndAccessToken ? 1 : 0);
         out.writeString(udpMuxPort);
+        out.writeString(udpMuxRxLimit);
         out.writeInt(disableBridgeAnnouncement ? 1 : 0);
         out.writeString(requestBodyLimit);
         out.writeString(maxCachedAge);
@@ -724,6 +737,7 @@ public class Config implements Parcelable {
         proxyAccessToken = in.readString();
         debugFrontEndAccessToken = in.readInt() != 0;
         udpMuxPort = in.readString();
+        udpMuxRxLimit = in.readString();
         disableBridgeAnnouncement = in.readInt() != 0;
         requestBodyLimit = in.readString();
         maxCachedAge = in.readString();

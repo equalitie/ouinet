@@ -339,6 +339,7 @@ public:
             bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                       , _metrics.mainline_dht()
                                                       , _config.is_doh_enabled()
+                                                      , _config.udp_mux_rx_limit_in_bytes()
                                                       , _config.repo_root() / "dht"
                                                       , _config.bt_bootstrap_extras());
         }
@@ -1044,6 +1045,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldConte
                                , rq
                                , get_state()
                                , _cache.get()
+                               , _bep5_client
                                , *_ca_certificate
                                , local_ep
                                , _upnps_ptr
