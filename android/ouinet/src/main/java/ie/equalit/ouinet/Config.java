@@ -58,6 +58,7 @@ public class Config implements Parcelable {
         private String frontEndEp;
         private String frontEndAccessToken;
         private String proxyAccessToken;
+        private String clientCredentials;
         private boolean debugFrontEndAccessToken;
         private String udpMuxPort;
         private String udpMuxRxLimit;
@@ -160,6 +161,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setProxyAccessToken(String token){
             this.proxyAccessToken = token;
+            return this;
+        }
+        public ConfigBuilder setClientCredentials(String clientCredentials){
+            this.clientCredentials = clientCredentials;
             return this;
         }
         public ConfigBuilder setDebugFrontEndAccessToken(boolean enable){
@@ -412,6 +417,7 @@ public class Config implements Parcelable {
                     frontEndEp,
                     frontEndAccessToken,
                     proxyAccessToken,
+                    clientCredentials,
                     debugFrontEndAccessToken,
                     udpMuxPort,
                     udpMuxRxLimit,
@@ -451,6 +457,7 @@ public class Config implements Parcelable {
     private String frontEndEp;
     private String frontEndAccessToken;
     private String proxyAccessToken;
+    private String clientCredentials;
     private boolean debugFrontEndAccessToken;
     private String udpMuxPort;
     private String udpMuxRxLimit;
@@ -488,6 +495,7 @@ public class Config implements Parcelable {
                   String frontEndEp,
                   String frontEndAccessToken,
                   String proxyAccessToken,
+                  String clientCredentials,
                   boolean debugFrontEndAccessToken,
                   String udpMuxPort,
                   String udpMuxRxLimit,
@@ -524,6 +532,7 @@ public class Config implements Parcelable {
         this.frontEndEp = frontEndEp;
         this.frontEndAccessToken = frontEndAccessToken;
         this.proxyAccessToken = proxyAccessToken;
+        this.clientCredentials = clientCredentials;
         this.debugFrontEndAccessToken = debugFrontEndAccessToken;
         this.udpMuxPort = udpMuxPort;
         this.udpMuxRxLimit = udpMuxRxLimit;
@@ -594,6 +603,9 @@ public class Config implements Parcelable {
     }
     public String getProxyAccessToken() {
         return proxyAccessToken;
+    }
+    public String getClientCredentials() {
+        return clientCredentials;
     }
     public boolean getDebugFrontEndAccessToken() {
         return debugFrontEndAccessToken;
@@ -688,6 +700,7 @@ public class Config implements Parcelable {
         out.writeString(frontEndEp);
         out.writeString(frontEndAccessToken);
         out.writeString(proxyAccessToken);
+        out.writeString(clientCredentials);
         out.writeInt(debugFrontEndAccessToken ? 1 : 0);
         out.writeString(udpMuxPort);
         out.writeString(udpMuxRxLimit);
@@ -735,6 +748,7 @@ public class Config implements Parcelable {
         frontEndEp = in.readString();
         frontEndAccessToken = in.readString();
         proxyAccessToken = in.readString();
+        clientCredentials = in.readString();
         debugFrontEndAccessToken = in.readInt() != 0;
         udpMuxPort = in.readString();
         udpMuxRxLimit = in.readString();

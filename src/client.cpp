@@ -493,9 +493,17 @@ private:
     tcp::acceptor make_acceptor( const tcp::endpoint&
                                , const char* service) const;
 
+    asio::local::stream_protocol::acceptor make_acceptor(
+            const asio::local::stream_protocol::endpoint& local_endpoint,
+            const char* service) const;
+
     void listen_tcp( asio::yield_context
                    , tcp::acceptor
                    , function<void(GenericStream, YieldContext)>);
+
+    void listen_unix_socket(asio::yield_context
+                          , asio::local::stream_protocol::acceptor
+                          , function<void(GenericStream, asio::yield_context)>);
 
     void setup_injector(asio::yield_context);
 
@@ -674,6 +682,7 @@ private:
 
     asio::ip::tcp::endpoint _proxy_endpoint;
     std::string _frontend_endpoint;
+    std::string _frontend_unix_socket_endpoint;
 
 #ifdef __EXPERIMENTAL__
     //this could be start either because of cache or injector
@@ -2628,12 +2637,17 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         }
 #endif
 
-        bool auth = yield[ec].tag("auth").run([&] (auto y) {
-            return authenticate(req, con, _config.client_credentials(), y);
-        });
-        if (!auth) {
-            _YWARN(yield, "Request authentication failed, discarding");
-            continue;
+        // "authenticate" function strips proxy_authorization headers.
+        // Authentication is needed only for the outer HTTP SSL CONNECT request,
+        // not the inner HTTP GET inside the SSL.
+        if (!mitm) {
+            bool auth = yield[ec].tag("auth").run([&] (auto y) {
+                return authenticate(req, con, _config.client_credentials(), y);
+            });
+            if (!auth) {
+                _YWARN(yield, "Request authentication failed, discarding");
+                continue;
+            }
         }
         assert(!ec); ec = {};
 
@@ -2825,7 +2839,7 @@ void Client::State::setup_cache(asio::yield_context yield)
       // set _upnps just to prevent crashes when displaying its status in the frontend interface
       _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
-      //with both services, we check if i2p ouiservice has already started      
+      //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
       }
@@ -2839,6 +2853,12 @@ void Client::State::setup_cache(asio::yield_context yield)
     }
 
 }
+
+#ifdef _WIN32
+namespace boost::asio {
+    typedef detail::socket_option::boolean<SOL_SOCKET, SO_EXCLUSIVEADDRUSE> socket_base__exclusive_address_use;
+}
+#endif
 
 //------------------------------------------------------------------------------
 tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
@@ -2854,7 +2874,19 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
         throw runtime_error(util::str("Failed to open TCP acceptor for service: ", service, "; ec=", ec));
     }
 
+    // Windows and Unix have a completely different understanding of what SO_REUSEADDR means.
+    // On Unix it means that you can close a bound socket and then open a new one and bind it to the same port right away.
+    // On Windows it means that several unrelated programs from different users can bind to the same port.
+    // According to MSDN "Once the second socket has successfully bound, the behavior for all sockets bound to that port is indeterminate".
+    // https://learn.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
+    // Let us not do that on Windows. Closest Unix equivalent of SO_REUSEADDR on Windows is SO_DONTLINGER.
+    // Also set SO_EXCLUSIVEADDRUSE, to prevent other sockets from binding to the same port.
+#ifdef _WIN32
+    acceptor.set_option(asio::socket_base::linger(false, 0));
+    acceptor.set_option(asio::socket_base__exclusive_address_use(true));
+#else
     acceptor.set_option(asio::socket_base::reuse_address(true));
+#endif
 
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
@@ -2873,6 +2905,60 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
     }
 
     LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
+
+    return acceptor;
+}
+
+//------------------------------------------------------------------------------
+asio::local::stream_protocol::acceptor Client::State::make_acceptor(
+    const asio::local::stream_protocol::endpoint& local_endpoint,
+    const char* service) const
+{
+    sys::error_code ec;
+
+    // Open the acceptor
+    asio::local::stream_protocol::acceptor acceptor(_ctx);
+
+    acceptor.open(local_endpoint.protocol(), ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to open Unix Socket acceptor for service: ", service, "; ec=", ec));
+    }
+
+    acceptor.set_option(asio::socket_base::reuse_address(false));
+
+    const fs::path socket_path(local_endpoint.path());
+    const fs::file_status socket_status = fs::status(socket_path);
+    if (fs::exists(socket_status)) {
+        // On windows boost::filesystem::is_socket does not detect af_unix sockets.
+        // std::filesystem::is_socket is also oblivious to af_unix sockets on windows.
+        // boost::filesystem detects it as reparse file.
+        if (fs::is_socket(socket_status) || fs::is_reparse_file(socket_status)) {
+            fs::remove(socket_path);
+        } else {
+            throw runtime_error(util::str(
+                "File already exists where frontend unix socket would be created. "
+                "Refusing to auto delete it: ", local_endpoint.path()));
+        }
+    }
+
+    // Bind to the server address
+    acceptor.bind(local_endpoint, ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to bind Unix Socket acceptor for service: ", service, "; ec=", ec));
+    }
+
+    fs::permissions(socket_path, fs::perms::owner_all, ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to chmod 700 the Unix Socket: ", service, "; ec=", ec));
+    }
+
+    // Start listening for connections
+    acceptor.listen(asio::socket_base::max_listen_connections, ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to 'listen' to service on Unix Socket acceptor: ", service, "; ec=", ec));
+    }
+
+    LOG_INFO("Client listening to ", service, " on Unix Socket:", acceptor.local_endpoint());
 
     return acceptor;
 }
@@ -2930,6 +3016,62 @@ void Client::State::listen_tcp
 }
 
 //------------------------------------------------------------------------------
+void Client::State::listen_unix_socket
+        ( asio::yield_context yield
+        , asio::local::stream_protocol::acceptor acceptor
+        , function<void(GenericStream, asio::yield_context)> handler)
+{
+    auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
+        const auto endpoint_path = fs::path(acceptor.local_endpoint().path());
+        acceptor.close();
+        if (fs::exists(endpoint_path)) {
+            fs::remove(endpoint_path);
+        }
+    });
+
+    WaitCondition wait_condition(_ctx);
+
+    for(;;)
+    {
+        sys::error_code ec;
+
+        asio::local::stream_protocol::socket socket(_ctx);
+        acceptor.async_accept(socket, yield[ec]);
+
+        if (ec) {
+            if (ec == asio::error::operation_aborted) break;
+
+            LOG_WARN("Accept failed on Unix Socket:", acceptor.local_endpoint(), "; ec=", ec);
+
+            if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
+                break;
+            }
+        } else {
+            static const auto unix_socket_shutter = [](asio::local::stream_protocol::socket& s) {
+                sys::error_code ec; // Don't throw
+                s.shutdown(asio::local::stream_protocol::socket::shutdown_both, ec);
+                s.close(ec);
+            };
+
+            GenericStream connection(move(socket) , move(unix_socket_shutter));
+
+            TRACK_SPAWN( _ctx, ([
+                this,
+                self = shared_from_this(),
+                c = move(connection),
+                handler,
+                lock = wait_condition.lock()
+            ](asio::yield_context yield) mutable {
+                if (was_stopped()) return;
+                handler(move(c), yield);
+            }));
+        }
+    }
+
+    wait_condition.wait(yield);
+}
+
+//------------------------------------------------------------------------------
 void Client::State::start()
 {
     if (_internal_state != InternalState::Created)
@@ -2949,6 +3091,13 @@ void Client::State::start()
         front_end_acceptor = make_acceptor(_config.front_end_endpoint(), "frontend");
         _frontend_endpoint = string(front_end_acceptor->local_endpoint().address().to_string()) + ":"
                            + to_string(front_end_acceptor->local_endpoint().port());
+    }
+
+    boost::optional<asio::local::stream_protocol::acceptor> front_end_unix_socket_acceptor;
+    if (_config.front_end_unix_socket_endpoint() != asio::local::stream_protocol::endpoint()) {
+        LOG_DEBUG("front_end_unix_socket endpoint: ", _config.front_end_unix_socket_endpoint());
+        front_end_unix_socket_acceptor = make_acceptor(_config.front_end_unix_socket_endpoint(), "frontend_unix_socket");
+        _frontend_unix_socket_endpoint = front_end_unix_socket_acceptor->local_endpoint().path();
     }
 
     ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
@@ -3029,6 +3178,42 @@ void Client::State::start()
         }));
     }
 
+    if (front_end_unix_socket_acceptor) {
+        TRACK_SPAWN( _ctx, ([
+            this,
+            self = shared_from_this(),
+            acceptor = move(*front_end_unix_socket_acceptor)
+        ] (asio::yield_context yield) mutable {
+            if (was_stopped()) return;
+
+            LOG_INFO("Serving front end on ", acceptor.local_endpoint());
+
+            sys::error_code ec;
+            listen_unix_socket( yield[ec]
+                      , move(acceptor)
+                      , [this, self]
+                        (GenericStream c, YieldContext yield_) {
+                  YieldContext yield = yield_.tag("frontend_u_s");
+                  sys::error_code ec;
+                  beast::flat_buffer c_rbuf;
+                  Request rq;
+                  yield[ec].tag("read_req_u_s").run([&] (auto y) {
+                      http::async_read(c, c_rbuf, rq, y);
+                  });
+
+                  if (ec) return;
+
+                  auto rs = fetch_fresh_from_front_end(rq, yield[ec].tag("get_res_u_s"));
+
+                  if (ec) return;
+
+                  yield[ec].tag("write_res_u_s").run([&] (auto y) {
+                      http::async_write(c, rs, y);
+                  });
+            });
+        }));
+    }
+
     TRACK_SPAWN(_ctx, ([
         this
     ] (asio::yield_context yield) {
@@ -3092,10 +3277,10 @@ void Client::State::setup_injector(asio::yield_context yield)
 
 #ifdef __EXPERIMENTAL__
     if (injector_ep->type == Endpoint::I2pEndpoint)
-        
+
     {
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
-      //with both services, we check if i2p ouiservice has already started      
+      //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
@@ -3237,6 +3422,11 @@ asio::ip::tcp::endpoint Client::get_proxy_endpoint() const noexcept
 std::string Client::get_frontend_endpoint() const noexcept
 {
     return _state->_frontend_endpoint;
+}
+
+std::string Client::get_frontend_unix_socket_endpoint() const noexcept
+{
+    return _state->_frontend_unix_socket_endpoint;
 }
 
 AsioExecutor Client::get_executor() const noexcept

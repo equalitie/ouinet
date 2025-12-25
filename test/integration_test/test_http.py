@@ -8,9 +8,9 @@ from typing import List, Generator, Optional
 import string
 
 import sys
-from os import rename
 from os import remove
 from os.path import exists
+from shutil import copyfile
 from shutil import rmtree
 from time import time
 from math import floor
@@ -383,7 +383,7 @@ def certificate_file() -> Generator[str, None, None]:
         TestFixtures.INJECTOR_CERT_PATH = file.name + ".pem"
         file.flush()
         # it will be deleted otherwise but we do not want it to be deleted yet
-        rename(file.name, TestFixtures.INJECTOR_CERT_PATH)
+        copyfile(file.name, TestFixtures.INJECTOR_CERT_PATH)
 
     yield TestFixtures.INJECTOR_CERT_PATH
 

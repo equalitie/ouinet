@@ -154,6 +154,17 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _front_end_endpoint = *opt_fe_ep;
     }
 
+    if (auto opt = as_optional<string>(vm, "front-end-unix-socket-ep")) {
+        if (opt->empty()) {
+            throw error("--front-end-unix-socket-ep must not be an empty string");
+        }
+        fs::path socket_path(*opt);
+        if (!socket_path.is_absolute()) {
+            socket_path = _repo_root / socket_path;
+        }
+        _front_end_unix_socket_endpoint = socket_path.generic_string();
+    }
+
     if (auto opt = as_optional<string>(vm, "front-end-access-token")) {
         if (opt->empty()) {
             throw error("--front-end-access-token must not be an empty string");

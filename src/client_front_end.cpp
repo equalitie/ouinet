@@ -919,6 +919,24 @@ void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
     res.result(http::status::bad_request);
 }
 
+void ClientFrontEnd::handle_api_endpoints(const ClientConfig& config, Response& res, ostringstream& ss) {
+    res.set(http::field::content_type, "application/json");
+
+    json response = {
+        {"proxy_endpoint", boost::str(boost::format("%s:%s")
+            % config.local_endpoint().address().to_string()
+            % config.local_endpoint().port())},
+
+        {"frontend_tcp_endpoint", boost::str(boost::format("%s:%s")
+            % config.front_end_endpoint().address().to_string()
+            % config.front_end_endpoint().port())},
+
+        {"frontend_unix_socket_endpoint", config.front_end_unix_socket_endpoint().path()},
+    };
+
+    ss << response;
+}
+
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , Client::RunningState client_state
@@ -967,6 +985,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     std::string_view groups_api_path = "/api/groups";
     std::string_view metrics_api_path = "/api/metrics";
     std::string_view status_api_path = "/api/status";
+    std::string_view endpoints_api_path = "/api/endpoints";
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
@@ -989,6 +1008,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
         path.remove_prefix(metrics_api_path.size());
         sys::error_code e;
         handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
+    } else if (path.starts_with(endpoints_api_path)) {
+        handle_api_endpoints(config, res, ss);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps_ptr, dht, reachability
