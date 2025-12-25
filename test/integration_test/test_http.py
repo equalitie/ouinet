@@ -4,7 +4,7 @@
 # Integration tests for Ouinet - test for http communication offered through different transports and caches
 
 
-from typing import List, Generator
+from typing import List, Generator, Optional
 import string
 
 import sys
@@ -42,8 +42,10 @@ from ouinet_process_controler import (
     OuinetClient,
     OuinetBEP5CacheInjector,
     OuinetProcess,
-    # OuinetInjector,
 )
+
+
+proc_list: List[OuinetProcess] = []
 
 
 def safe_random_str(length) -> str:
@@ -112,7 +114,6 @@ def run_i2p_injector_with_cache_pub_key(args) -> OuinetI2PInjector:
             benchmark_regexes=[
                 TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX,
                 TestFixtures.I2P_TUNNEL_READY_REGEX,
-                # TestFixtures.DHT_CONTACTS_STORED_REGEX,
             ],
         )
     )
@@ -120,16 +121,6 @@ def run_i2p_injector_with_cache_pub_key(args) -> OuinetI2PInjector:
     proc_list.append(injector)
 
     return injector
-
-
-# TODO: not sure it is actually needed
-def _cache_injector_config(timeout, evt_regexes, args) -> OuinetConfig:
-    return OuinetConfig(
-        TestFixtures.CACHE_INJECTOR_NAME,
-        timeout,
-        args,
-        benchmark_regexes=([TestFixtures.TCP_INJECTOR_PORT_READY_REGEX] + evt_regexes),
-    )
 
 
 def run_i2p_client(name, idx_key, args) -> OuinetClient:
@@ -172,263 +163,6 @@ def run_i2p_bep5_client(
     proc_list.append(client)
 
     return client
-
-
-def request_page(port, page_url) -> Response:
-    """
-    Send a get request to request test content as a page on a specific sub url
-    """
-    url = "http://%s:%d/%s" % (
-        get_nonloopback_ip(),
-        TestFixtures.TEST_HTTP_SERVER_PORT,
-        page_url,
-    )
-    return request_url(port, url)
-
-
-def request_sized_content(port, content_size) -> Response:
-    """
-    Send a get request to request the test server to send a random content of a specific size
-    """
-    url = "http://%s:%d/?content_size=%s" % (
-        get_nonloopback_ip(),
-        TestFixtures.TEST_HTTP_SERVER_PORT,
-        str(content_size),
-    )
-    return request_url(port, url)
-
-
-@pytest.mark.parametrize("size_of_transported_blob", [None, 1024, 1024 * 1024])
-@pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
-@pytest.mark.asyncio
-async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
-    """
-    Starts an echoing http server, an injector and a client and send a unique http
-    request to the echoing http server through the client --i2p--> injector -> http server
-    and make sure it gets the correct echo. The unique request makes sure that
-    the response is from the http server and is not cached.
-    """
-    # injector events
-    i2pinjector = run_i2p_injector(
-        args=[
-            "--listen-on-i2p",
-            "true",
-            "--i2p-hops-per-tunnel",
-            str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
-            "--log-level",
-            "DEBUG",
-        ]
-    )  # "--disable-cache"
-
-    # wait for the injector tunnel to be advertised
-    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
-    # Gets generated only when injector is ready
-    injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
-    assert injector_i2p_public_id
-
-    # Wait so the injector id gets advertised on the DHT
-    # TODO: Consider waiting for a debug line instead of period
-    print(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
-    )
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-
-    # client
-    # use only Proxy or Injector mechanisms
-    current_client = run_i2p_client(
-        name=TestFixtures.I2P_CLIENT["name"],
-        idx_key=None,
-        args=[
-            "--disable-origin-access",
-            "--disable-cache",
-            "--listen-on-tcp",
-            "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
-            "--injector-ep",
-            "i2p:" + injector_i2p_public_id,
-            "--i2p-hops-per-tunnel",
-            str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
-        ],
-    )
-    # wait for the client tunnel to connect to the injector
-    await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
-
-    if size_of_transported_blob == None:
-        content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        await try_fetch_over_i2p(content)
-    else:
-        await try_fetch_bytes_over_i2p(size_of_transported_blob)
-
-
-from typing import Optional
-
-
-def assert_ok(response: Response, content: Optional[str] = None):
-    assert response.status_code == 200
-    assertEquals(response.text, content)
-
-
-async def try_fetch_over_i2p(content) -> Response:
-    errors: List[Exception] = []
-    for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
-        print("request attempt no " + str(i + 1) + "...")
-        try:
-            response = request_echo(TestFixtures.I2P_CLIENT["port"], content)
-            assert_ok(response, content)
-            return response
-        except Exception as e:
-            errors.append(e)
-            print("request attempt no " + str(i + 1) + " failed. with" + str(e))
-            await asyncio.sleep(TestFixtures.I2P_TUNNEL_HEALING_PERIOD)
-    raise IOError("failed to retrieve from I2P", errors)
-
-
-async def try_fetch_bytes_over_i2p(size: int) -> Response:
-    errors = []
-
-    for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
-        try:
-            print("request attempt no " + str(i + 1) + "...")
-
-            request_start = time()
-            response = request_sized_content(TestFixtures.I2P_CLIENT["port"], size)
-            response.raise_for_status()
-
-            print(
-                "Retrieving %.3e bytes through I2P tunnel took %f seconds."
-                % (size, time() - request_start)
-            )
-            if i == 0:
-                print("repeating speed test for more accurate speed test result...")
-                continue
-
-            return response
-
-        except Exception as e:
-            errors.append(e)
-            print(
-                f"request attempt no {i + 1} failed. with code {response.status_code}"
-            )
-            await asyncio.sleep(TestFixtures.I2P_TUNNEL_HEALING_PERIOD)
-
-    raise IOError("all attempts to fetch a sized request failed: ", errors)
-
-
-@pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
-@pytest.mark.asyncio
-async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
-    """
-    Starts an echoing http server, an injector and client1 and send a unique http
-    request to the echoing http server through the client1 --i2p--> injector -> http server
-    and make sure it gets the correct echo. Then start client2 which does not know the injecter
-    and request the same url over bep5 dht and the test makes sure that client2 also gets
-    the content
-    """
-    # Injector
-    i2pinjector = run_i2p_injector_with_cache_pub_key(
-        args=[
-            "--listen-on-i2p",
-            "true",
-            "--i2p-hops-per-tunnel",
-            str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
-            "--log-level",
-            "DEBUG",
-        ]
-    )
-    await wait_for_benchmark(i2pinjector, TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX)
-    index_key = i2pinjector.get_index_key()
-    assert index_key
-    print("Index key is: " + index_key)
-
-    # wait for the injector tunnel to be advertised
-
-    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
-    injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
-    # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
-    # empty public id means injector coludn't read the endpoint file
-    assert injector_i2p_public_id
-
-    # wait so the injector id gets advertised on the DHT
-    logging.debug(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
-    )
-
-    # TODO: do not wait a fixed time, check for output
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-
-    # client. We try and retry making the client until it is okay
-    content_delivered_over_i2p = False
-    for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
-        # use only Proxy or Injector mechanisms
-        current_client = run_i2p_client(
-            name=TestFixtures.I2P_CLIENT["name"],
-            idx_key=None,
-            args=[
-                "--disable-origin-access",
-                "--cache-type",
-                "bep5-http",
-                "--cache-private",
-                "--cache-http-public-key",
-                index_key,
-                "--listen-on-tcp",
-                "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
-                "--injector-ep",
-                "i2p:" + injector_i2p_public_id,
-                "--i2p-hops-per-tunnel",
-                str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
-            ],
-        )
-
-        # wait for the client tunnel to connect to the injector
-        await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
-        content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        try:
-            response = await try_fetch_over_i2p(content)
-            assert_ok(response, content)
-            content_delivered_over_i2p = True
-        except:
-            i2pclient: OuinetProcess = proc_list.pop()
-            await i2pclient.stop()
-        if content_delivered_over_i2p:
-            break
-
-    assertTrue(content_delivered_over_i2p)
-
-    # Start cache client which supposed to read the response from cache, use only Cache mechanism
-    cache_client = run_tcp_client(
-        name=TestFixtures.CACHE_CLIENT[1]["name"],
-        args=[
-            "--disable-origin-access",
-            "--disable-proxy-access",
-            "--cache-type",
-            "bep5-http",
-            "--cache-http-public-key",
-            str(index_key),
-            "--listen-on-tcp",
-            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
-            "--front-end-ep",
-            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["fe_port"]),
-        ],
-    )
-
-    await wait_for_dht_ready(cache_client)
-    port = TestFixtures.CACHE_CLIENT[1]["port"]
-    assert isinstance(port, int)
-    get_cached_echo(port, content)
-
-    # Make sure it was served from cache
-    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
-
-
-async def wait_for_benchmark(process: OuinetProcess, benchmark: str) -> None:
-    start = time()
-    while not process.callbacks[benchmark]:
-        print("waiting for", benchmark, "-", floor(time() - start), "s", end="\r")
-        await asyncio.sleep(1)
-    print("successfully waited for", benchmark, "\n\n")
 
 
 def run_tcp_injector(args) -> OuinetBEP5CacheInjector:
@@ -482,6 +216,72 @@ def run_tcp_client(name, args) -> OuinetClient:
     return client
 
 
+async def try_fetch_over_i2p(content) -> Response:
+    errors: List[Exception] = []
+    for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
+        print("request attempt no " + str(i + 1) + "...")
+        try:
+            response = request_echo(TestFixtures.I2P_CLIENT["port"], content)
+            assert_ok(response, content)
+            return response
+        except Exception as e:
+            errors.append(e)
+            print("request attempt no " + str(i + 1) + " failed. with" + str(e))
+            await asyncio.sleep(TestFixtures.I2P_TUNNEL_HEALING_PERIOD)
+    raise IOError("failed to retrieve from I2P", errors)
+
+
+async def try_fetch_bytes_over_i2p(size: int) -> Response:
+    errors = []
+
+    for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
+        try:
+            print("request attempt no " + str(i + 1) + "...")
+
+            request_start = time()
+            response = request_sized_content(TestFixtures.I2P_CLIENT["port"], size)
+            response.raise_for_status()
+
+            print(
+                "Retrieving %.3e bytes through I2P tunnel took %f seconds."
+                % (size, time() - request_start)
+            )
+            if i == 0:
+                print("Repeating speed test for more accurate speed test result...")
+                continue
+
+            return response
+
+        except Exception as e:
+            errors.append(e)
+            print(
+                f"Request attempt no {i + 1} failed. with code {response.status_code}"
+            )
+            await asyncio.sleep(TestFixtures.I2P_TUNNEL_HEALING_PERIOD)
+
+    raise IOError("All attempts to fetch a sized request failed: ", errors)
+
+
+async def wait_for_benchmark(process: OuinetProcess, benchmark: str) -> None:
+    start = time()
+    while not process.callbacks[benchmark]:
+        print("waiting for", benchmark, "-", floor(time() - start), "s", end="\r")
+        await asyncio.sleep(1)
+    print("successfully waited for", benchmark, "\n\n")
+
+
+def request_sized_content(port, content_size) -> Response:
+    """
+    Send a get request to request the test server to send a random content of a specific size
+    """
+    url = "http://%s:%d/?content_size=%s" % (
+        get_nonloopback_ip(),
+        TestFixtures.TEST_HTTP_SERVER_PORT,
+        str(content_size),
+    )
+    return request_url(port, url)
+
+
 def request_echo(proxy_port, echo_content) -> Response:
     """
     Send a get request to request the test server to echo the content
@@ -523,6 +323,11 @@ async def wait_for_dht_ready(client):
     await wait_for_benchmark(client, TestFixtures.DHT_CONTACTS_STORED_REGEX)
 
 
+def assert_ok(response: Response, content: Optional[str] = None):
+    assert response.status_code == 200
+    assertEquals(response.text, content)
+
+
 # Compatibility functions, not needed in newer tests
 def assertTrue(value):
     assert value
@@ -542,9 +347,6 @@ def http_server() -> Generator[Process, None, None]:
     server.terminate()
     server.join(timeout=2)
     print("http server terminated")
-
-
-proc_list: List[OuinetProcess] = []
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -782,3 +584,174 @@ async def test_wikipedia_mainline_dht(http_server, certificate_file):
 
     # Confirm that it was fresh
     await wait_for_benchmark(client, TestFixtures.FRESH_SUCCESS_REGEX)
+
+
+@pytest.mark.parametrize("size_of_transported_blob", [None, 1024, 1024 * 1024])
+@pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
+@pytest.mark.asyncio
+async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
+    """
+    Starts an echoing http server, an injector and a client and send a unique http
+    request to the echoing http server through the client --i2p--> injector -> http server
+    and make sure it gets the correct echo. The unique request makes sure that
+    the response is from the http server and is not cached.
+    """
+    # injector events
+    i2pinjector = run_i2p_injector(
+        args=[
+            "--listen-on-i2p",
+            "true",
+            "--i2p-hops-per-tunnel",
+            str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
+            "--log-level",
+            "DEBUG",
+        ]
+    )  # "--disable-cache"
+
+    # wait for the injector tunnel to be advertised
+    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    # Gets generated only when injector is ready
+    injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
+    assert injector_i2p_public_id
+
+    # Wait so the injector id gets advertised on the DHT
+    # TODO: Consider waiting for a debug line instead of period
+    print(
+        "waiting "
+        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+        + " secs for the tunnel to get advertised on the DHT..."
+    )
+    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+
+    # client
+    # use only Proxy or Injector mechanisms
+    current_client = run_i2p_client(
+        name=TestFixtures.I2P_CLIENT["name"],
+        idx_key=None,
+        args=[
+            "--disable-origin-access",
+            "--disable-cache",
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
+            "--injector-ep",
+            "i2p:" + injector_i2p_public_id,
+            "--i2p-hops-per-tunnel",
+            str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
+        ],
+    )
+    # wait for the client tunnel to connect to the injector
+    await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+
+    if size_of_transported_blob == None:
+        content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        await try_fetch_over_i2p(content)
+    else:
+        await try_fetch_bytes_over_i2p(size_of_transported_blob)
+
+
+@pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
+@pytest.mark.asyncio
+async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
+    """
+    Starts an echoing http server, an injector and client1 and send a unique http
+    request to the echoing http server through the client1 --i2p--> injector -> http server
+    and make sure it gets the correct echo. Then start client2 which does not know the injecter
+    and request the same url over bep5 dht and the test makes sure that client2 also gets
+    the content
+    """
+    # Injector
+    i2pinjector = run_i2p_injector_with_cache_pub_key(
+        args=[
+            "--listen-on-i2p",
+            "true",
+            "--i2p-hops-per-tunnel",
+            str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
+            "--log-level",
+            "DEBUG",
+        ]
+    )
+    await wait_for_benchmark(i2pinjector, TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX)
+    index_key = i2pinjector.get_index_key()
+    assert index_key
+    print("Index key is: " + index_key)
+
+    # wait for the injector tunnel to be advertised
+
+    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
+    # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
+    # empty public id means injector coludn't read the endpoint file
+    assert injector_i2p_public_id
+
+    # wait so the injector id gets advertised on the DHT
+    logging.debug(
+        "waiting "
+        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+        + " secs for the tunnel to get advertised on the DHT..."
+    )
+
+    # TODO: do not wait a fixed time, check for output
+    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+
+    # client. We try and retry making the client until it is okay
+    content_delivered_over_i2p = False
+    for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
+        # use only Proxy or Injector mechanisms
+        current_client = run_i2p_client(
+            name=TestFixtures.I2P_CLIENT["name"],
+            idx_key=None,
+            args=[
+                "--disable-origin-access",
+                "--cache-type",
+                "bep5-http",
+                "--cache-private",
+                "--cache-http-public-key",
+                index_key,
+                "--listen-on-tcp",
+                "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
+                "--injector-ep",
+                "i2p:" + injector_i2p_public_id,
+                "--i2p-hops-per-tunnel",
+                str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
+            ],
+        )
+
+        # wait for the client tunnel to connect to the injector
+        await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+        content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        try:
+            response = await try_fetch_over_i2p(content)
+            assert_ok(response, content)
+            content_delivered_over_i2p = True
+        except:
+            i2pclient: OuinetProcess = proc_list.pop()
+            await i2pclient.stop()
+        if content_delivered_over_i2p:
+            break
+
+    assertTrue(content_delivered_over_i2p)
+
+    # Start cache client which supposed to read the response from cache, use only Cache mechanism
+    cache_client = run_tcp_client(
+        name=TestFixtures.CACHE_CLIENT[1]["name"],
+        args=[
+            "--disable-origin-access",
+            "--disable-proxy-access",
+            "--cache-type",
+            "bep5-http",
+            "--cache-http-public-key",
+            str(index_key),
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
+            "--front-end-ep",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["fe_port"]),
+        ],
+    )
+
+    await wait_for_dht_ready(cache_client)
+    port = TestFixtures.CACHE_CLIENT[1]["port"]
+    assert isinstance(port, int)
+    get_cached_echo(port, content)
+
+    # Make sure it was served from cache
+    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
