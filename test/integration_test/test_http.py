@@ -198,25 +198,10 @@ def request_sized_content(port, content_size) -> Response:
     return request_url(port, url)
 
 
+@pytest.mark.parametrize("size_of_transported_blob", [None, 1024, 1024 * 1024])
 @pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
 @pytest.mark.asyncio
-async def test_i2p_transport(http_server) -> None:
-    await _test_i2p_transport(None)
-
-
-@pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
-@pytest.mark.asyncio
-async def test_i2p_transport_speed_1MB(http_server) -> None:
-    await _test_i2p_transport(size_of_transported_blob=1024 * 1024)
-
-
-@pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
-@pytest.mark.asyncio
-async def test_i2p_transport_speed_1KB(http_server) -> None:
-    await _test_i2p_transport(size_of_transported_blob=1024)
-
-
-async def _test_i2p_transport(size_of_transported_blob=None) -> None:
+async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
     """
     Starts an echoing http server, an injector and a client and send a unique http
     request to the echoing http server through the client --i2p--> injector -> http server
@@ -239,12 +224,11 @@ async def _test_i2p_transport(size_of_transported_blob=None) -> None:
     await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
     # Gets generated only when injector is ready
     injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
-    # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID #fake injector
     assert injector_i2p_public_id
 
-    # wait so the injector id gets advertised on the DHT
-    # consider waiting for a debug line instead of period
-    logging.debug(
+    # Wait so the injector id gets advertised on the DHT
+    # TODO: Consider waiting for a debug line instead of period
+    print(
         "waiting "
         + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
         + " secs for the tunnel to get advertised on the DHT..."
@@ -252,47 +236,29 @@ async def _test_i2p_transport(size_of_transported_blob=None) -> None:
     await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
 
     # client
-    test_passed = False
-    errors: List[Exception] = []
-    for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
-        # use only Proxy or Injector mechanisms
-        current_client = run_i2p_client(
-            name=TestFixtures.I2P_CLIENT["name"],
-            idx_key=None,
-            args=[
-                "--disable-origin-access",
-                "--disable-cache",
-                "--listen-on-tcp",
-                "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
-                "--injector-ep",
-                "i2p:" + injector_i2p_public_id,
-                "--i2p-hops-per-tunnel",
-                str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
-            ],
-        )
-        # wait for the client tunnel to connect to the injector
-        await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    # use only Proxy or Injector mechanisms
+    current_client = run_i2p_client(
+        name=TestFixtures.I2P_CLIENT["name"],
+        idx_key=None,
+        args=[
+            "--disable-origin-access",
+            "--disable-cache",
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
+            "--injector-ep",
+            "i2p:" + injector_i2p_public_id,
+            "--i2p-hops-per-tunnel",
+            str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
+        ],
+    )
+    # wait for the client tunnel to connect to the injector
+    await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
 
-        try:
-            if size_of_transported_blob == None:
-                content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-                await try_fetch_over_i2p(content)
-            else:
-                await try_fetch_bytes_over_i2p(size_of_transported_blob)
-            test_passed = True
-            break
-        except Exception as e:
-            raise e  # XXX
-            errors.append(e)
-            print(format_error(e))
-            i2pclient = proc_list.pop()
-            await i2pclient.stop()  # stop the i2p client so we can start a new one
-    if not test_passed:
-        raise IOError(errors) from errors[0]
-
-
-def format_error(error: Exception) -> str:
-    return f"{type(error).__name__}: {error}"
+    if size_of_transported_blob == None:
+        content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
+        await try_fetch_over_i2p(content)
+    else:
+        await try_fetch_bytes_over_i2p(size_of_transported_blob)
 
 
 from typing import Optional
