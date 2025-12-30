@@ -2,6 +2,7 @@
 
 #include <boost/endian.hpp>
 #include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/asio/compose.hpp>
 #include "crypto_stream_key.h"
 #include "generic_stream.h"

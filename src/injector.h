@@ -1,4 +1,5 @@
 #include <boost/beast/core.hpp>
+#include <boost/asio/ssl/context.hpp>
 
 #include "cache/http_sign.h"
 #include "namespaces.h"

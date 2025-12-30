@@ -12,6 +12,7 @@
 #include "../generic_stream.h"
 #include "../or_throw.h"
 #include "../util/signal.h"
+#include "../util/ssl_stream.h"
 
 
 namespace ouinet { namespace ssl { namespace util {
@@ -65,7 +66,7 @@ client_handshake( Stream&& con
 
     boost::system::error_code ec;
 
-    auto ssl_sock = make_unique<ssl::stream<Stream>>(move(con), ssl_context);
+    auto ssl_sock = SslStream<Stream>(move(con), ssl_context);
     bool check_host = host.length() > 0;
 
     if (check_host)
@@ -82,13 +83,7 @@ client_handshake( Stream&& con
     }
     return_or_throw_on_error(yield, abort_signal, ec, GenericStream{});
 
-    static const auto ssl_shutter = [](ssl::stream<Stream>& s) {
-        // Just close the underlying connection
-        // (TLS has no message exchange for shutdown).
-        s.next_layer().close();
-    };
-
-    return GenericStream(move(ssl_sock), move(ssl_shutter));
+    return GenericStream(move(ssl_sock));
 }
 
 static inline
