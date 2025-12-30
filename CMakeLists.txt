@@ -168,8 +168,6 @@ file(GLOB ouinet_common_sources
     "./src/ouiservice/multi_utp_server.cpp"
     "./src/util/persistent_lru_cache.cpp"
     "./src/endpoint.cpp"
-    "./src/request.cpp"
-    "./src/peer_message.cpp"
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     ${EXPERIMENTAL_SOURCES}
@@ -216,6 +214,8 @@ file(GLOB client_sources
     "./src/util/temp_dir.cpp"
     "./src/util/reachability.cpp"
     "./src/doh.cpp"
+    "./src/request.cpp"
+    "./src/peer_message.cpp"
     ${VERSION_CPP}
 )
 
@@ -248,6 +248,7 @@ endif()
 ################################################################################
 file(GLOB injector_sources
     "./src/injector.cpp"
+    "./src/injector_config.cpp"
     "./src/ouiservice/bep5/server.cpp"
     "./src/endpoint.cpp"
     "./src/cache/http_sign.cpp"
