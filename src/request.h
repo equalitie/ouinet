@@ -8,6 +8,7 @@
 #include "namespaces.h"
 #include "cache/resource_id.h"
 #include "util/crypto_stream_key.h"
+#include "util/yield.h"
 
 
 namespace ouinet {
