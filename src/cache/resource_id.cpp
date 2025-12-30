@@ -40,9 +40,9 @@ ResourceId::ResourceId(std::string repr)
     assert(_repr.size() == BYTE_SIZE * 2);
 }
 
-std::optional<ResourceId> ResourceId::from_url(std::string_view url_str) {
+ResourceId ResourceId::from_url(std::string_view url_str) {
     util::SHA1 hash;
-    hash.update("ouinet-resource-id");
+    hash.update("ouinet-resource-id-salt");
     hash.update(url_str);
     return ResourceId(util::bytes::to_hex(hash.close()));
 }

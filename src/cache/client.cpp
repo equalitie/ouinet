@@ -189,7 +189,7 @@ struct Client::Impl {
             CryptoStreamKey key;
 
             if (!ec) {
-                auto opt_key = resource_key::from(hl.signed_head);
+                auto opt_key = resource_key::from_cached_header(hl.signed_head);
                 if (!opt_key) {
                     ec = asio::error::not_found;
                 } else {
@@ -261,7 +261,7 @@ struct Client::Impl {
         CryptoStreamKey key;
 
         if (!ec) {
-            auto opt_key = resource_key::from(s.response_header());
+            auto opt_key = resource_key::from_cached_header(s.response_header());
             if (!opt_key) {
                 ec = asio::error::not_found;
             } else {

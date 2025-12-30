@@ -8,7 +8,7 @@
 
 namespace ouinet::cache::resource_key {
 
-CryptoStreamKey from(std::string_view url);
-std::optional<CryptoStreamKey> from(http::response_header<> const& hdr);
+CryptoStreamKey from_url(std::string_view url);
+std::optional<CryptoStreamKey> from_cached_header(http::response_header<> const& hdr);
 
 } // namespace

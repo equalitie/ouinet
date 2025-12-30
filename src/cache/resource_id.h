@@ -12,7 +12,7 @@ namespace ouinet::cache {
 // out of it without brute force or guessing.
 class ResourceId {
 public:
-    static std::optional<ResourceId> from_url(std::string_view url);
+    static ResourceId from_url(std::string_view url);
 
     static std::optional<ResourceId> from_hex(std::string_view hex);
     static std::optional<ResourceId> from_hex(std::wstring_view hex);

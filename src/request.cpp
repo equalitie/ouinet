@@ -82,13 +82,9 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
 
     auto resource_id = cache::ResourceId::from_url(hdr->target());
 
-    if (!resource_id) {
-        return {};
-    }
+    auto resource_key = cache::resource_key::from_url(hdr->target());
 
-    auto resource_key = cache::resource_key::from(hdr->target());
-
-    return CacheRequest(std::move(*hdr), std::move(*resource_id), resource_key, std::move(*dht_group));
+    return CacheRequest(std::move(*hdr), std::move(resource_id), resource_key, std::move(*dht_group));
 }
 
 //----
