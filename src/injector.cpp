@@ -801,7 +801,7 @@ void listen( const InjectorConfig& config
         task::spawn_detached(exec, [
             connection = std::move(connection),
             &ssl_ctx,
-            &cancel,
+            cancel,
             &config,
             &genuuid,
             &origin_pools,
