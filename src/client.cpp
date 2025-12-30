@@ -2541,7 +2541,6 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         if (auto& token = _config.proxy_access_token()) {
             std::string_view header_key = "X-Ouinet-Proxy-Token";
             if (*token != req[header_key]) {
-                sys::error_code ec_;
                 auto message = "The request is missing a valid "
                     + std::string(header_key)
                     + " HTTP header\n";

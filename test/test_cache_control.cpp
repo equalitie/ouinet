@@ -34,7 +34,7 @@ static posix_time::ptime current_time() {
 }
 
 template<class F> static void run_spawned(asio::io_context& ctx, F&& f) {
-    task::spawn_detached(ctx, [&ctx, f = forward<F>(f)](auto yield) {
+    task::spawn_detached(ctx, [f = forward<F>(f)](auto yield) {
             try {
                 f(YieldContext(yield));
             }

@@ -278,7 +278,7 @@ struct Client::Impl {
 
         auto crypto_sink = make_crypto_sink(key);
 
-        s.flush_response(cancel, yield.tag("flush")[ec].native(), [&crypto_sink, &key, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
+        s.flush_response(cancel, yield.tag("flush")[ec].native(), [&crypto_sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
             sys::error_code ee;
             part.async_write(crypto_sink, cc, yy[ee]);
             return_or_throw_on_error(yy, cc, ee);
