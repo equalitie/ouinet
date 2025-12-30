@@ -184,8 +184,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
     unsigned origin_check = 0;
 
     run_spawned(ctx, [&](auto yield) {
-        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
-        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
+        auto old_resource_id = cache::ResourceId::from_url("http://old");
+        auto new_resource_id = cache::ResourceId::from_url("http://new");
 
         cc.fetch_stored = [&](auto rq, auto&, auto y) {
             cache_check++;
@@ -248,8 +248,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
     unsigned origin_check = 0;
 
     run_spawned(ctx, [&](auto yield) {
-        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
-        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
+        auto old_resource_id = cache::ResourceId::from_url("http://old");
+        auto new_resource_id = cache::ResourceId::from_url("http://new");
 
         cc.fetch_stored = [&](auto rq, auto&, auto y) {
             cache_check++;
@@ -321,8 +321,8 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
     };
 
     run_spawned(ctx, [&](auto yield) {
-        auto old_resource_id = cache::ResourceId::from_url("http://old", yield).value();
-        auto new_resource_id = cache::ResourceId::from_url("http://new", yield).value();
+        auto old_resource_id = cache::ResourceId::from_url("http://old");
+        auto new_resource_id = cache::ResourceId::from_url("http://new");
 
         cc.fetch_stored = [&](auto rq, auto&, auto y) {
             cache_check++;
