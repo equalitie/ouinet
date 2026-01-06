@@ -95,7 +95,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
 
     LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
-#if 0
+#if 1
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
             using namespace std::chrono;
             using std::cerr;
