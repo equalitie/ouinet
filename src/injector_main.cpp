@@ -13,14 +13,14 @@ int main(int argc, const char* argv[])
     try {
         config = InjectorConfig(argc, argv);
     }
-    catch(const exception& e) {
+    catch(const std::exception& e) {
         LOG_ABORT(e.what());
         return 1;
     }
 
     if (config.is_help()) {
-        cout << "Usage: injector [OPTION...]" << endl;
-        cout << config.options_description() << endl;
+        std::cout << "Usage: injector [OPTION...]" << std::endl;
+        std::cout << config.options_description() << std::endl;
         return EXIT_SUCCESS;
     }
 
@@ -30,13 +30,13 @@ int main(int argc, const char* argv[])
 
     asio::signal_set signals(ctx.get_executor(), SIGINT, SIGTERM);
 
-    unique_ptr<ForceExitOnSignal> force_exit;
+    std::unique_ptr<ForceExitOnSignal> force_exit;
 
     signals.async_wait([&injector, &signals, &force_exit]
                        (const sys::error_code& ec, int signal_number) {
             injector.stop();
             signals.clear();
-            force_exit = make_unique<ForceExitOnSignal>();
+            force_exit = std::make_unique<ForceExitOnSignal>();
         });
 
     ctx.run();

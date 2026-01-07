@@ -11,10 +11,6 @@
 #include "injector_config.h"
 #include "bittorrent/mock_dht.h"
 
-
-// TODO: Don't do this in global namespaces nor headers
-using namespace std;
-
 namespace ouinet {
 
 using TcpLookup = asio::ip::tcp::resolver::results_type;
