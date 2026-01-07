@@ -255,6 +255,11 @@ endif ()
 
 target_link_libraries(injector_lib ouinet_common)
 
+if (WIN32 OR MINGW)
+    target_compile_definitions(injector_lib PRIVATE -DOUINET_DECL_EXPORT)
+endif()
+
+
 if ((NOT ANDROID) AND (NOT IOS))
     add_executable(injector "./src/injector_main.cpp")
     target_link_libraries(injector injector_lib)
