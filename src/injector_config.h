@@ -54,11 +54,11 @@ public:
     boost::filesystem::path repo_root() const
     { return _repo_root; }
 
-    inline bool _is_http_log_file_enabled() const {
+    bool _is_http_log_file_enabled() const {
         return http_logger.get_log_file() != nullptr;
     }
 
-    inline void _is_http_log_file_enabled(bool v) {
+    void _is_http_log_file_enabled(bool v) {
         if (!v) {
             http_logger.log_to_file("");
             return;
