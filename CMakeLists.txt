@@ -213,7 +213,9 @@ file(GLOB client_sources
 )
 
 add_library(client_lib SHARED ${client_sources})
-set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+if (NOT WIN32 AND NOT MINGW)
+    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+endif ()
 
 target_link_libraries(client_lib
     PUBLIC
@@ -246,8 +248,11 @@ file(GLOB injector_sources
     ${EXPERIMENTAL_SOURCES}
 )
 
-add_library(injector_lib ${injector_sources})
-set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
+add_library(injector_lib SHARED ${injector_sources})
+if (NOT WIN32 AND NOT MINGW)
+    set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
+endif ()
+
 target_link_libraries(injector_lib ouinet_common)
 
 if ((NOT ANDROID) AND (NOT IOS))
