@@ -1,11 +1,4 @@
-# Not using `if (ANDROID)` because that's available only since cmake 3.7
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    # CMAKE_ANDROID_STANDALONE_TOOLCHAIN (and likely other cross compilation
-    # android variables) was only introduced in v3.7
-    cmake_minimum_required (VERSION 3.7)
-else()
-    cmake_minimum_required (VERSION 3.5)
-endif()
+cmake_minimum_required (VERSION 3.10)
 
 # Set cmake policies to avoid warnings in newer versions of cmake
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
