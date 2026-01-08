@@ -20,6 +20,7 @@ endif()
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
+option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
 ################################################################################
 # Global build flags
@@ -43,6 +44,11 @@ if ((NOT ANDROID) AND (NOT IOS))
     # when building dynamic ones). It's needed on x86 when linking the
     # `client_lib` target.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+if (OUINET_MEASURE_BUILD_TIMES)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/measure_time.sh")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CMAKE_CURRENT_SOURCE_DIR}/cmake/measure_time.sh")
 endif()
 
 ################################################################################
