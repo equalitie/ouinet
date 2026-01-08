@@ -132,7 +132,7 @@ linux / build-prod-image:
 linux / build-experimental:
   variables:
     TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-experimental'
     BOOST_VERSION: "1.88.0"
     WITH_EXPERIMENTAL: "ON"
     CMAKE_VERSION: "3.31.7-linux-x86_64"
@@ -146,7 +146,7 @@ linux / build-experimental:
 linux / integration-test-experimental:
   variables:
     TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-experimental'
     BOOST_VERSION: "1.88.0"
     WITH_EXPERIMENTAL: "ON"
     CMAKE_VERSION: "3.31.7-linux-x86_64"
