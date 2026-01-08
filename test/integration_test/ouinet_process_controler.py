@@ -11,7 +11,7 @@ from typing import Generator
 from traceback import format_stack
 import asyncio
 from subprocess import TimeoutExpired
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE, STDOUT, check_output
 
 from test_fixtures import TestFixtures
 
@@ -326,10 +326,22 @@ class OuinetInjector(OuinetProcess):
         super(OuinetInjector, self).__init__(injector_config)
         # Isn't it supposed to do it BEFORE initializing the superclass?
         self.config.argv = [
-            os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector"),
+            OuinetInjector.injector_path(),
             "--repo",
             self.config.config_folder_name,
         ] + self.config.argv
+
+    @staticmethod
+    def has_i2p() -> bool:
+        output = check_output([OuinetInjector.injector_path(), "--help"]).decode(
+            "utf-8"
+        )
+        return "i2p" in output
+
+    @staticmethod
+    def injector_path() -> str:
+        """Helper function for injector capabilities check"""
+        return os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector")
 
     def get_index_key(self) -> str:
         """Return a key string used to access the cache index created by this injector."""

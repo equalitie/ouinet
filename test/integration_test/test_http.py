@@ -41,9 +41,15 @@ from ouinet_process_controler import (
     OuinetConfig,
     OuinetClient,
     OuinetBEP5CacheInjector,
+    OuinetInjector,
     OuinetProcess,
 )
 
+IS_I2P_BUILD = OuinetInjector.has_i2p()
+if IS_I2P_BUILD:
+    print("this build has i2p enabled")
+else:
+    print("i2p is not enabled, testing without it")
 
 proc_list: List[OuinetProcess] = []
 
@@ -586,6 +592,9 @@ async def test_wikipedia_mainline_dht(http_server, certificate_file):
     await wait_for_benchmark(client, TestFixtures.FRESH_SUCCESS_REGEX)
 
 
+@pytest.mark.skipif(
+    not IS_I2P_BUILD, reason="skipping i2p because this build has no i2p"
+)
 @pytest.mark.parametrize("size_of_transported_blob", [None, 1024, 1024 * 1024])
 @pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
 @pytest.mark.asyncio
@@ -649,6 +658,9 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
         await try_fetch_bytes_over_i2p(size_of_transported_blob)
 
 
+@pytest.mark.skipif(
+    not IS_I2P_BUILD, reason="skipping i2p because this build has no i2p"
+)
 @pytest.mark.timeout(TestFixtures.I2P_TRANSPORT_TIMEOUT)
 @pytest.mark.asyncio
 async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
