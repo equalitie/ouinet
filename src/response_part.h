@@ -288,15 +288,5 @@ struct Part : public detail::PartVariant
     { return detail::async_write_c(this, s, d, c, y); }
 };
 
-inline
-std::ostream& operator<<(std::ostream& os, Part::Type type) {
-    switch (type) {
-        case Part::Type::HEAD: return os << "HEAD";
-        case Part::Type::BODY: return os << "BODY";
-        case Part::Type::CHUNK_HDR: return os << "CHUNK_HDR";
-        case Part::Type::CHUNK_BODY: return os << "CHUNK_BODY";
-        case Part::Type::TRAILER: return os << "CHUNK_TRAILER";
-    }
-}
 
 }} // namespace ouinet::http_response

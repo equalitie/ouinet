@@ -3,7 +3,6 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/filesystem.hpp>
 
-#include "declspec.h"
 #include "constants.h"
 #include "namespaces.h"
 #include "client_config.h"
@@ -14,7 +13,7 @@ namespace ouinet {
 
 class ClientConfig;
 
-class OUINET_DECL Client {
+class Client {
 private:
     class State;
     class ClientCacheControl;

@@ -16,8 +16,9 @@
 
 #define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
 
+namespace ouinet {
+
 using namespace std;
-using namespace ouinet;
 
 namespace posix_time = boost::posix_time;
 
@@ -739,3 +740,5 @@ bool CacheControl::ok_to_cache( const http::request_header<>&  request
 
     return true;
 }
+
+} // namespace ouinet

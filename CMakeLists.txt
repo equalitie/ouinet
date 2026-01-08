@@ -34,7 +34,7 @@ endif()
 
 add_compile_options("-Wall")
 
-if(WIN32)
+if(WIN32 OR MINGW)
     add_compile_options("-O1")
     add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
 endif()
@@ -107,7 +107,6 @@ option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
 option(UTP_DEBUG_LOGGING               "" OFF)
 add_subdirectory(./modules/asio-utp)
-add_library(lib::asio_utp ALIAS asio_utp)
 
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
@@ -157,6 +156,9 @@ file(GLOB ouinet_common_sources
     "./src/util/hash.cpp"
     "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
+    "./src/util/yield.cpp"
+    "./src/cache/http_sign.cpp"
+    "./src/cache/signed_head.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/bittorrent/*.cpp"
     "./src/bep5_swarms.cpp"
@@ -167,8 +169,10 @@ file(GLOB ouinet_common_sources
     "./src/ouiservice/multi_utp_server.cpp"
     "./src/util/persistent_lru_cache.cpp"
     "./src/endpoint.cpp"
+    "./src/session.cpp"
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
+    "./src/response_reader.cpp"
     ${EXPERIMENTAL_SOURCES}
 )
 
@@ -179,15 +183,15 @@ add_library(ouinet_common STATIC ${ouinet_common_sources})
 
 target_link_libraries(ouinet_common
     PRIVATE
-        ouinet_dependencies
         lib::url
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
+        ouinet_dependencies
         Boost::iostreams
         lib::gcrypt
         lib::json
-        lib::asio_utp
+        asio_utp
         ouinet_rs
         ouinet_logger
         # Boost::asio_ssl is public for Android because the ClientConfig used
@@ -208,7 +212,16 @@ file(GLOB client_sources
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/connect_proxy.cpp"
-    "./src/cache/*.cpp"
+    "./src/cache/announcer.cpp"
+    "./src/cache/client.cpp"
+    "./src/cache/dht_groups.cpp"
+    "./src/cache/hash_list.cpp"
+    "./src/cache/http_store.cpp"
+    "./src/cache/local_peer_discovery.cpp"
+    "./src/cache/multi_peer_reader.cpp"
+    "./src/cache/multi_peer_reader_error.cpp"
+    "./src/cache/resource_id.cpp"
+    "./src/cache/resource_key.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
     "./src/util/reachability.cpp"
@@ -218,7 +231,7 @@ file(GLOB client_sources
     ${VERSION_CPP}
 )
 
-add_library(client_lib SHARED ${client_sources})
+add_library(client_lib STATIC ${client_sources})
 set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 
 target_link_libraries(client_lib
@@ -249,13 +262,14 @@ file(GLOB injector_sources
     "./src/injector.cpp"
     "./src/injector_config.cpp"
     "./src/ouiservice/bep5/server.cpp"
-    "./src/endpoint.cpp"
     "./src/cache/http_sign.cpp"
+    "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
+    "./src/dns_resolve.cpp"
     ${EXPERIMENTAL_SOURCES}
 )
 
-add_library(injector_lib ${injector_sources})
+add_library(injector_lib STATIC ${injector_sources})
 set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
 target_link_libraries(injector_lib ouinet_common)
 

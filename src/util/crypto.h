@@ -1,6 +1,6 @@
 #pragma once
 
-#include <boost/optional.hpp>
+#include <boost/optional/optional.hpp>
 #include <boost/utility/string_view.hpp>
 #include <array>
 #include <stdint.h>

@@ -109,12 +109,6 @@ void YieldContext::log(Args&&... args)
     YieldContext::log(INFO, boost::string_view(util::str(std::forward<Args>(args)...)));
 }
 
-inline
-void YieldContext::log(boost::string_view str)
-{
-    YieldContext::log(INFO, str);
-}
-
 template<class... Args>
 inline
 void YieldContext::log(log_level_t log_level, Args&&... args)
@@ -123,27 +117,6 @@ void YieldContext::log(log_level_t log_level, Args&&... args)
         return;  // avoid string conversion early
 
     YieldContext::log(log_level, boost::string_view(util::str(std::forward<Args>(args)...)));
-}
-
-inline
-void YieldContext::log(log_level_t log_level, boost::string_view str)
-{
-    using boost::string_view;
-
-    if (logger.get_threshold() > log_level)
-        return;
-
-    while (str.size()) {
-        auto endl = str.find('\n');
-
-        logger.log(log_level, util::str(_log_path, " ", str.substr(0, endl)));
-
-        if (endl == std::string::npos) {
-            break;
-        }
-
-        str = str.substr(endl+1);
-    }
 }
 
 

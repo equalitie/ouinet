@@ -9,7 +9,6 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
-#include "declspec.h"
 #include "namespaces.h"
 #include "cache_control.h"
 #include "doh.h"
@@ -45,7 +44,7 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
-class OUINET_DECL ClientConfig {
+class ClientConfig {
 public:
     enum class CacheType { None, Bep5Http };
 

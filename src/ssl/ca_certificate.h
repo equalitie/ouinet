@@ -9,7 +9,6 @@
 
 #include "detail/ca_certificate.h"
 
-
 namespace ouinet {
 
 // TODO: Properly split CA and end certificate machinery and interface

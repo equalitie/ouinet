@@ -21,7 +21,7 @@ add_executable(test_crypto_stream "test_crypto_stream.cpp")
 
 ######################################################################
 add_executable(test-cache "test_cache_control.cpp")
-target_link_libraries(test-cache client_lib)
+target_link_libraries(test-cache injector_lib client_lib)
 
 ######################################################################
 add_executable(test-wait-condition "test_wait_condition.cpp")
@@ -34,6 +34,7 @@ add_executable(test-timeout-stream "test_timeout_stream.cpp")
 
 ######################################################################
 add_executable(test-response-reader "test-response-reader.cpp")
+target_link_libraries(test-response-reader ouinet_common)
 
 ######################################################################
 add_executable(test-response-writer "test-response-writer.cpp")
@@ -46,6 +47,7 @@ endif ()
 ################################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
     add_executable(test-bittorrent "test_bittorrent.cpp")
+    target_link_libraries(test-bittorrent ouinet_common)
 endif()
 
 ################################################################################
@@ -92,21 +94,16 @@ add_executable(oui-client "ouiservice-client.cpp")
 add_executable(test-http-util "test_http_util.cpp")
 
 ######################################################################
-add_executable(test-http-sign
-    "test_http_sign.cpp"
-    "../src/cache/http_sign.cpp"
-)
+add_executable(test-http-sign "test_http_sign.cpp")
+target_link_libraries(test-http-sign injector_lib)
 
 ######################################################################
 add_executable(test-http-store "test_http_store.cpp")
-target_link_libraries(test-http-store client_lib)
+target_link_libraries(test-http-store client_lib injector_lib)
 
 ######################################################################
-add_executable(test-atomic-temp
-    "test_atomic_temp.cpp"
-    "../src/util/atomic_dir.cpp"
-    "../src/util/temp_dir.cpp"
-)
+add_executable(test-atomic-temp "test_atomic_temp.cpp")
+target_link_libraries(test-atomic-temp client_lib)
 
 ######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
@@ -115,15 +112,11 @@ if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
         "../test/util/bittorrent_utils.cpp")
 endif()
 
-add_executable(test-bencoding
-    "test_bencoding.cpp"
-    "../src/bittorrent/bencoding.cpp")
+add_executable(test-bencoding "test_bencoding.cpp")
+target_link_libraries(test-bencoding ouinet_common)
 
 ######################################################################
-add_executable(test-file-io
-    "test_file_io.cpp"
-    "util/base_fixture.hpp"
-)
+add_executable(test-file-io "test_file_io.cpp")
 
 ######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")

@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace ouinet { namespace util { namespace random {
+namespace ouinet::util::random {
 
 void data(void*, unsigned int);
 std::string string(unsigned int size);
@@ -15,4 +15,4 @@ inline N number()
     return ret;
 }
 
-}}} // namespace
+} // namespace
