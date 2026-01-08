@@ -45,6 +45,8 @@ linux / unit-rust-test:
 
 linux / unit-test-experimental:
   variables:
+    TARGET_PLATFORM: 'linux'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-experimental'
     WITH_EXPERIMENTAL: "ON"
   extends:
     .linux-unit-cpp-test
