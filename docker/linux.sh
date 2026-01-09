@@ -155,7 +155,11 @@ function is_container_running (
 )
 
 function copy_local_sources (
-    rsync_exclude_dirs=('/build' '.git')
+    rsync_exclude_dirs=(
+        '/build'
+        '/rust/target'
+        '.git'
+    )
 
     rsync -e "docker $docker_host exec -i" \
         -av --no-links --delete \
