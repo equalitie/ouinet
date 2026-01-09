@@ -204,7 +204,21 @@ fi
 exe -w $build_dir cmake $work_dir "${cmake_configure_options[@]}"
 exe -w $build_dir cmake --build . -v -j $(exe nproc)
 
-### Test
+### Rust Tests
+
+# Only on Linux because `cargo` would look for libouinet_asio.so which is not
+# built for Windows (only dll).
+if [ "$target_os" == linux ]; then
+    env=(
+        CXXFLAGS="-I$build_dir/boost/install/include"
+        LD_LIBRARY_PATH="$build_dir"
+        LIBRARY_PATH="$build_dir"
+        RUST_BACKTRACE=1
+        RUST_LOG=ouinet_rs=debug
+    )
+    exe ${env[@]/#/-e } cargo test --verbose --manifest-path $work_dir/rust/Cargo.toml -- --nocapture
+fi
+
 ### C++ Tests
 
 if [ "$run_tests" = y ]; then
@@ -233,7 +247,7 @@ if [ "$run_tests" = y ]; then
             $build_dir/gpg_error/out/bin
             /usr/lib/gcc/x86_64-w64-mingw32/14-win32
         )
-        env+=(-e WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
+        env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
     fi
 
     for test in ${test_targets[@]}; do
@@ -242,6 +256,6 @@ if [ "$run_tests" = y ]; then
             continue
         fi
         echo "::: Running test: $test"
-        exe ${env[@]} $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
+        exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
     done
 fi
