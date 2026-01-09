@@ -169,8 +169,10 @@ template<class InnerStream>
 class CryptoStream {
 private:
     struct Iv : std::array<uint8_t, 16> {
-        static Iv generate_random() {
-            return Iv{detail::generate_random_array<16>()};
+        static sys::result<Iv> generate_random() {
+            auto array = detail::generate_random_array<16>();
+            if (!array) return array.error();
+            return Iv{*array};
         }
     
         std::array<uint8_t, 16> const& as_array() const { return *this; }
@@ -246,7 +248,12 @@ public:
                 }
 
                 if (!shared->encrypt_iv) {
-                    shared->encrypt_iv = Iv::generate_random();
+                    auto iv = Iv::generate_random();
+                    if (!iv) {
+                        self.complete(iv.error(), n);
+                        return;
+                    }
+                    shared->encrypt_iv = *iv;
                     asio::async_write(shared->stream, asio::buffer(shared->encrypt_iv->as_array()), std::move(self));
                     return;
                 }

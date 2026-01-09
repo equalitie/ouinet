@@ -170,6 +170,7 @@ file(GLOB ouinet_common_sources
     "./src/util/persistent_lru_cache.cpp"
     "./src/endpoint.cpp"
     "./src/session.cpp"
+    "./src/error.cpp"
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"

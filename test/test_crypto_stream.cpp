@@ -138,7 +138,7 @@ BOOST_AUTO_TEST_CASE(test_crypto_stream) {
 
         using S = asio::ip::tcp::socket;
 
-        auto key = CryptoStreamKey::generate_random();
+        auto key = *CryptoStreamKey::generate_random();
 
         auto s1 = CryptoStream<S>(std::move(socket1), key);
         auto s2 = CryptoStream<S>(std::move(socket2), key);

@@ -2,28 +2,38 @@
 
 #include <array>
 #include <openssl/rand.h>
+#include <boost/system/result.hpp>
+#include "error.h"
 
 namespace ouinet {
 
 namespace detail {
     template<size_t N>
-    std::array<uint8_t, N> generate_random_array() {
+    boost::system::result<std::array<uint8_t, N>> generate_random_array() {
         std::array<uint8_t, N> array;
         if (RAND_bytes(array.data(), array.size()) != 1) {
-            throw std::runtime_error("RAND_bytes failed");
+            return OuinetError::openssl_failed_to_generate_random_data;
         }
         return array;
     }
 }
 
 struct CryptoStreamKey : std::array<uint8_t, 32> {
-    static CryptoStreamKey generate_random() {
-        return CryptoStreamKey{detail::generate_random_array<32>()};
+    static boost::system::result<CryptoStreamKey> generate_random() {
+        auto array = detail::generate_random_array<32>();
+        if (!array) return array.error();
+        return CryptoStreamKey{*array};
     }
 
-    static CryptoStreamKey test_key() {
-        return CryptoStreamKey{{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}};
-    }
+    // For testing
+    //static CryptoStreamKey test_key() {
+    //    return CryptoStreamKey{{
+    //        0,0,0,0,0,0,0,0,
+    //        0,0,0,0,0,0,0,0,
+    //        0,0,0,0,0,0,0,0,
+    //        0,0,0,0,0,0,0,0
+    //    }};
+    //}
 };
 
 } // namespace
