@@ -3,12 +3,13 @@
 #include <boost/test/included/unit_test.hpp>
 
 #include "../src/injector.h"
-#include "../src/dns_resolve.h"
+#include "../src/util/dns.h"
 #include <boost/beast/http/string_body.hpp>
 
 using namespace std;
 using namespace ouinet;
 using Request = http::request<http::string_body>;
+using ouinet::util::resolve_target;
 
 static const string public_host[] = {
     "ouinet.work",
@@ -28,10 +29,14 @@ BOOST_DATA_TEST_CASE(test_resolve_target_public,
     Cancel cancel;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
+        bool allow_private_targets = false;
+        bool do_doh = true;
         Request req;
         req.set(http::field::host, hostname);
         YieldContext y(std::move(yield), util::LogPath("PUBLIC"));
-        BOOST_CHECK_NO_THROW(resolve_target(req, false, ctx.get_executor(), cancel, y));
+        BOOST_CHECK_NO_THROW(resolve_target( req
+                                           , allow_private_targets, do_doh
+                                           , ctx.get_executor(), cancel, y));
     });
     ctx.run();
 }
@@ -57,11 +62,16 @@ BOOST_DATA_TEST_CASE(test_resolve_target_loopback,
     Cancel cancel;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
+        bool allow_private_targets = false;
+        bool do_doh = true;
         Request req;
         req.set(http::field::host, hostname);
         YieldContext y(std::move(yield), util::LogPath("LOOPBACK"));
         BOOST_CHECK_THROW(
-            resolve_target(req, false, ctx.get_executor(), cancel, y),
+            resolve_target( req
+                          , allow_private_targets
+                          , do_doh, ctx.get_executor()
+                          , cancel, y),
             boost::system::system_error);
     });
     ctx.run();
@@ -88,11 +98,17 @@ BOOST_DATA_TEST_CASE(test_resolve_target_restrict_private,
     Cancel cancel;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
+        bool allow_private_targets = false;
+        bool do_doh = true;
         Request req;
         req.set(http::field::host, hostname);
         YieldContext y(std::move(yield), util::LogPath("PRIVATE"));
         BOOST_CHECK_THROW(
-            resolve_target(req, false, ctx.get_executor(), cancel, y),
+            resolve_target( req
+                          , allow_private_targets
+                          , do_doh
+                          , ctx.get_executor()
+                          , cancel, y),
             boost::system::system_error);
     });
     ctx.run();
@@ -106,10 +122,16 @@ BOOST_DATA_TEST_CASE(test_resolve_target_allow_private,
     Cancel cancel;
     task::spawn_detached(ctx, [&](asio::yield_context yield)
     {
+        bool allow_private_targets = true;
+        bool do_doh = true;
         Request req;
         req.set(http::field::host, hostname);
         YieldContext y(std::move(yield), util::LogPath("PRIVATE"));
-        BOOST_CHECK_NO_THROW(resolve_target(req, true, ctx.get_executor(), cancel, y));
+        BOOST_CHECK_NO_THROW(resolve_target( req
+                                           , allow_private_targets
+                                           , do_doh
+                                           , ctx.get_executor()
+                                           , cancel, y));
     });
     ctx.run();
 }

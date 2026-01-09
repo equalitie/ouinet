@@ -225,7 +225,6 @@ file(GLOB client_sources
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
     "./src/util/reachability.cpp"
-    "./src/doh.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
     ${VERSION_CPP}
@@ -238,8 +237,6 @@ target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
-    PRIVATE
-        lib::zdnsparser
 )
 
 if (WIN32 OR MINGW)
@@ -265,7 +262,7 @@ file(GLOB injector_sources
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
-    "./src/dns_resolve.cpp"
+    "./src/util/dns.cpp"
     ${EXPERIMENTAL_SOURCES}
 )
 

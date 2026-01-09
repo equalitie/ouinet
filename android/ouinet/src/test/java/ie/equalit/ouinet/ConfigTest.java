@@ -43,10 +43,11 @@ public class ConfigTest {
     private static final String LISTEN_ON_TCP = "0.0.0.0:8077";
     private static final String FRONT_END_EP = "0.0.0.0:8078";
     private static final String UDP_MUX_PORT = "24842";
+    private static final String UDP_MUX_RX_LIMIT = "500";
     private static final boolean DISABLE_BRIDGE_ANNOUNCEMENT = true;
     private static final String MAX_CACHED_AGE = "120";
     private static final String LOCAL_DOMAIN = "local.domain";
-    private static final String ORIGIN_DOH_BASE = "0.0.0.0:8079";
+    private static final boolean DISABLE_DOH = true;
 
     static {
         BT_BOOTSTRAP_EXTRAS.add("192.0.2.1");
@@ -102,10 +103,11 @@ public class ConfigTest {
                 .setListenOnTcp(LISTEN_ON_TCP)
                 .setFrontEndEp(FRONT_END_EP)
                 .setUdpMuxPort(UDP_MUX_PORT)
+                .setUdpMuxRxLimit(UDP_MUX_RX_LIMIT)
                 .setDisableBridgeAnnouncement(DISABLE_BRIDGE_ANNOUNCEMENT)
                 .setMaxCachedAge(MAX_CACHED_AGE)
                 .setLocalDomain(LOCAL_DOMAIN)
-                .setOriginDohBase(ORIGIN_DOH_BASE)
+                .setDisableDoH(DISABLE_DOH)
                 .build();
 
         assertThat(config.getOuinetDirectory(), is(ouinetDir));
@@ -118,10 +120,11 @@ public class ConfigTest {
         assertThat(config.getCacheStaticContentPath(), is(cacheStaticContentPath));
 
         assertThat(config.getListenOnTcp(), is(LISTEN_ON_TCP));
+        assertThat(config.getUdpMuxRxLimit(), is(UDP_MUX_RX_LIMIT));
         assertThat(config.getFrontEndEp(), is(FRONT_END_EP));
         assertThat(config.getMaxCachedAge(), is(MAX_CACHED_AGE));
         assertThat(config.getLocalDomain(), is(LOCAL_DOMAIN));
-        assertThat(config.getOriginDohBase(), is(ORIGIN_DOH_BASE));
+        assertThat(config.getDisableDoH(), is(DISABLE_DOH));
 
         assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));
         assertThat(contentOf(new File(config.getTlsCaCertStorePath())), is(TLS_CA_CERT));

@@ -22,15 +22,15 @@ shift $((OPTIND -1))
 # Please read `doc/android-sdk-versions.md` and keep in sync with it.
 OUINET_TARGET_API=36
 if [ "$ABI" = "armeabi-v7a" ]; then
-    OUINET_MIN_API=23
+    OUINET_MIN_API=21
 elif [ "$ABI" = "arm64-v8a" ]; then
-    OUINET_MIN_API=23
+    OUINET_MIN_API=21
 elif [ "$ABI" = "x86" ]; then
-    OUINET_MIN_API=23
+    OUINET_MIN_API=21
 elif [ "$ABI" = "x86_64" ]; then
-    OUINET_MIN_API=23
+    OUINET_MIN_API=21
 elif [ "$ABI" = "omni" ]; then
-    OUINET_MIN_API=23
+    OUINET_MIN_API=21
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1
@@ -104,7 +104,7 @@ function check_mode {
 
 ######################################################################
 function maybe_install_sdk {
-    local toolsfile=commandlinetools-linux-6858069_latest.zip
+    local toolsfile=commandlinetools-linux-13114758_latest.zip
 
     # Reuse downloaded SDK stuff from old versions of this script.
     if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then

@@ -7,6 +7,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/regex.hpp>
 #include <boost/filesystem/path.hpp>
+#include "constants.h"
 #include "bittorrent/bootstrap.h"
 #include "util/crypto.h"
 
@@ -32,6 +33,12 @@ public:
 
     const ExtraBtBsServers& bt_bootstrap_extras() const {
         return _bt_bootstrap_extras;
+    }
+
+    uint32_t udp_mux_rx_limit_in_bytes() const {
+        // The value is set in Kbps in the configuration but required in bytes
+        // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
+        return _udp_mux_rx_limit * 1000 / 8;
     }
 
     boost::optional<size_t> open_file_limit() const
@@ -95,6 +102,9 @@ public:
     bool is_private_target_allowed() const
     { return _allow_private_targets; }
 
+    bool is_doh_enabled() const
+    { return !_disable_doh; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -112,6 +122,7 @@ private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
     ExtraBtBsServers _bt_bootstrap_extras;
+    uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_injector;
     boost::optional<size_t> _open_file_limit;
 #ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
@@ -133,6 +144,7 @@ private:
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
+    bool _disable_doh = false;
     util::Ed25519PrivateKey _ed25519_private_key;
 };
 

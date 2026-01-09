@@ -10,6 +10,7 @@
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tokenizer.hpp>
+#include "../src/constants.h"
 #include "../src/util/crypto.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util/str.h"
@@ -163,8 +164,10 @@ int main(int argc, const char** argv)
     asio::io_context ctx;
 
     auto metrics = metrics::Client::noop();
+    bool do_doh = true;
+    uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    unique_ptr<MainlineDht> dht(new MainlineDht(ctx.get_executor(), metrics.mainline_dht()));
+    unique_ptr<MainlineDht> dht(new MainlineDht(ctx.get_executor(), metrics.mainline_dht(), do_doh, rx_limit));
 
     vector<string> args;
 

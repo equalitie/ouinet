@@ -34,6 +34,11 @@ boost::program_options::options_description InjectorConfig::options_description(
            "to start the DHT (can be used several times). "
            "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
            "This option is persistent.")
+        ("udp-mux-rx-limit"
+         , po::value<uint32_t>()->default_value(500)
+         , "Max rate limit that's allowed for incoming packets to the "
+           "UDP multiplexer. The value is expressed in Kbps. To leave it "
+           "unlimited, set it to zero.")
 
         // Injector options
         ("open-file-limit"
@@ -68,6 +73,10 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
          , "Allows the injection of targets resolving to private addresses. "
            "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
+        ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+         , "Disable DNS over HTTPS for domain name resolution. "
+           "When this option is present the injector will fallback to the default DNS mechanism "
+           "provided by the operating system.")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
@@ -169,6 +178,11 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         }
     }
 
+    if (vm.count("udp-mux-rx-limit")) {
+        _udp_mux_rx_limit =  vm["udp-mux-rx-limit"].as<uint32_t>();
+    }
+
+
     if (vm.count("open-file-limit")) {
         _open_file_limit = vm["open-file-limit"].as<unsigned int>();
     }
@@ -190,6 +204,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm["allow-private-targets"].as<bool>()) {
         _allow_private_targets = true;
+    }
+
+    if (vm["disable-doh"].as<bool>()) {
+        _disable_doh = true;
     }
 
 #ifdef __EXPERIMENTAL__

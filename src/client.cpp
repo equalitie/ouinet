@@ -23,7 +23,7 @@
 
 #include "namespaces.h"
 #include "origin_pools.h"
-#include "doh.h"
+#include "cxx/dns.h"
 #include "http_util.h"
 #include "client_front_end.h"
 #include "connect_to_host.h"
@@ -41,6 +41,7 @@
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
+#include "util/dns.h"
 #include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
@@ -270,6 +271,8 @@ public:
         else {
             bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                       , _metrics.mainline_dht()
+                                                      , _config.is_doh_enabled()
+                                                      , _config.udp_mux_rx_limit_in_bytes()
                                                       , _config.repo_root() / "dht"
                                                       , _config.bt_bootstrap_extras());
         }
@@ -419,9 +422,17 @@ private:
     tcp::acceptor make_acceptor( const tcp::endpoint&
                                , const char* service) const;
 
+    asio::local::stream_protocol::acceptor make_acceptor(
+            const asio::local::stream_protocol::endpoint& local_endpoint,
+            const char* service) const;
+
     void listen_tcp( asio::yield_context
                    , tcp::acceptor
                    , function<void(GenericStream, YieldContext)>);
+
+    void listen_unix_socket(asio::yield_context
+                          , asio::local::stream_protocol::acceptor
+                          , function<void(GenericStream, YieldContext)>);
 
     void setup_injector(asio::yield_context);
 
@@ -464,9 +475,6 @@ private:
 
     // Resolve host and port strings.
     TcpLookup resolve_tcp_dns( const std::string&, const std::string&
-                             , Cancel&, YieldContext);
-    TcpLookup resolve_tcp_doh( const std::string&, const std::string&
-                             , const doh::Endpoint&
                              , Cancel&, YieldContext);
 
     GenericStream connect_to_origin( const http::request_header<>&
@@ -602,6 +610,7 @@ private:
 
     asio::ip::tcp::endpoint _proxy_endpoint;
     std::string _frontend_endpoint;
+    std::string _frontend_unix_socket_endpoint;
 };
 
 //------------------------------------------------------------------------------
@@ -860,129 +869,13 @@ Client::State::fetch_via_self( Rq request
     });
 }
 
-// Transforms addresses to endpoints with the given port.
-template<class Addrs, class Endpoint>
-class AddrsAsEndpoints {
-public:
-    using value_type = Endpoint;
-    using addrs_iterator = typename Addrs::const_iterator;
-
-    AddrsAsEndpoints(const Addrs& addrs, unsigned short port)
-        : _addrs(addrs), _port(port)
-    {}
-
-    class const_iterator {
-    public:
-        // Iterator requirements
-        using iterator_category = std::input_iterator_tag;
-        using value_type        = Endpoint;
-        using difference_type   = std::ptrdiff_t;
-        using pointer           = value_type*;
-        using reference         = value_type&;
-
-        const_iterator(const addrs_iterator& it, unsigned short port)
-            : _it(it), _port(port)
-        {}
-
-        value_type operator*() const { return {*_it, _port}; }
-        const_iterator& operator++() { ++_it; return *this; }
-        bool operator==(const const_iterator& other) const { return _it == other._it; }
-        bool operator!=(const const_iterator& other) const { return _it != other._it; }
-    private:
-        addrs_iterator _it;
-        unsigned short _port;
-    };
-
-    const_iterator begin() const { return {_addrs.begin(), _port}; };
-    const_iterator end() const { return {_addrs.end(), _port}; };
-
-private:
-    const Addrs& _addrs;
-    unsigned short _port;
-};
-
-TcpLookup
-Client::State::resolve_tcp_doh( const std::string& host
-                              , const std::string& port
-                              , const doh::Endpoint& ep
-                              , Cancel& cancel
-                              , YieldContext yield)
-{
-    using TcpEndpoint = typename TcpLookup::endpoint_type;
-
-    boost::string_view portsv(port);
-    auto portn_o = parse::number<unsigned short>(portsv);
-    if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    // Build and return lookup if `host` is already a network address.
-    {
-        sys::error_code e;
-        auto addr = asio::ip::make_address(host, e);
-        if (!e) return TcpLookup::create(TcpEndpoint{move(addr), *portn_o}, host, port);
-    }
-
-    // TODO: When to disable queries for IPv4 or IPv6 addresses?
-    auto rq4_o = doh::build_request_ipv4(host, ep);
-    auto rq6_o = doh::build_request_ipv6(host, ep);
-    if (!rq4_o || !rq6_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
-
-    sys::error_code ec4, ec6;
-    doh::Response rs4, rs6;
-
-    WaitCondition wc(_ctx);
-
-    // By passing user agent metadata as is,
-    // we ensure that the DoH request is done with the same browsing mode
-    // as the content request that triggered it,
-    // and is announced under the same group.
-    // TODO: Handle redirects.
-#define SPAWN_QUERY(VER) \
-    TRACK_SPAWN(_ctx, ([ \
-        this, \
-        rq = move(*rq##VER##_o), &ec##VER, &rs##VER, \
-        &cancel, &yield, lock = wc.lock() \
-    ] (asio::yield_context y_) { \
-        sys::error_code ec; \
-        auto y = YieldContext(y_, yield.log_path()); \
-        auto s = fetch_via_self(move(rq), cancel, y[ec].tag("fetch##VER")); \
-        if (ec) { ec##VER = ec; return; } \
-        rs##VER = y[ec].tag("slurp##VER").run([&] (auto yy) { \
-            return http_response::slurp_response<doh::Response::body_type> \
-                (s, doh::payload_size, cancel, yy); \
-        }); \
-        if (ec) { ec##VER = ec; return; } \
-    }));
-    SPAWN_QUERY(4);
-    SPAWN_QUERY(6);
-
-    yield.tag("wait").run([&] (auto y) {
-        wc.wait(y);
-    });
-
-    _YDEBUG(yield, "DoH query; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    doh::Answers answers4, answers6;
-    if (!ec4) answers4 = doh::parse_response(rs4, host, ec4);
-    if (!ec6) answers6 = doh::parse_response(rs6, host, ec6);
-
-    _YDEBUG(yield, "DoH parse; ip4_ec=", ec4, " ip6_ec=", ec6);
-    if (ec4 && ec6) return or_throw<TcpLookup>(yield, ec4 /* arbitrary */);
-
-    answers4.insert( answers4.end()
-                   , std::make_move_iterator(answers6.begin())
-                   , std::make_move_iterator(answers6.end()));
-    AddrsAsEndpoints<doh::Answers, TcpEndpoint> eps{answers4, *portn_o};
-    return TcpLookup::create(eps.begin(), eps.end(), host, port);
-}
-
 TcpLookup
 Client::State::resolve_tcp_dns( const std::string& host
                               , const std::string& port
                               , Cancel& cancel
                               , YieldContext yield)
 {
-    return util::tcp_async_resolve( host, port
+    return util::resolve_tcp_async( host, port
                                   , _ctx.get_executor()
                                   , cancel
                                   , yield.native());
@@ -999,11 +892,9 @@ Client::State::connect_to_origin( const http::request_header<>& rq
 
     sys::error_code ec;
 
-    // Resolve using DoH if configured and not resolving the resolver's address itself.
-    auto doh_ep_o = _config.origin_doh_endpoint();
-    bool do_doh = doh_ep_o && !rq.target().starts_with(*doh_ep_o);
+    auto do_doh = _config.is_doh_enabled();
     auto lookup = do_doh
-        ? resolve_tcp_doh(host, port, *doh_ep_o, cancel, yield[ec].tag("resolve_doh"))
+        ? util::resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
         : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);
@@ -1080,6 +971,7 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldConte
                                , rq
                                , get_state()
                                , _cache.get()
+                               , _bep5_client
                                , *_ca_certificate
                                , local_ep
                                , _upnps_ptr
@@ -2468,12 +2360,17 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         }
 #endif
 
-        bool auth = yield[ec].tag("auth").run([&] (auto y) {
-            return authenticate(req, con, _config.client_credentials(), y);
-        });
-        if (!auth) {
-            _YWARN(yield, "Request authentication failed, discarding");
-            continue;
+        // "authenticate" function strips proxy_authorization headers.
+        // Authentication is needed only for the outer HTTP SSL CONNECT request,
+        // not the inner HTTP GET inside the SSL.
+        if (!mitm) {
+            bool auth = yield[ec].tag("auth").run([&] (auto y) {
+                return authenticate(req, con, _config.client_credentials(), y);
+            });
+            if (!auth) {
+                _YWARN(yield, "Request authentication failed, discarding");
+                continue;
+            }
         }
         assert(!ec); ec = {};
 
@@ -2662,6 +2559,12 @@ void Client::State::setup_cache(asio::yield_context yield)
 #undef fail_on_error
 }
 
+#ifdef _WIN32
+namespace boost::asio {
+    typedef detail::socket_option::boolean<SOL_SOCKET, SO_EXCLUSIVEADDRUSE> socket_base__exclusive_address_use;
+}
+#endif
+
 //------------------------------------------------------------------------------
 tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
                                           , const char* service) const
@@ -2676,7 +2579,19 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
         throw runtime_error(util::str("Failed to open TCP acceptor for service: ", service, "; ec=", ec));
     }
 
+    // Windows and Unix have a completely different understanding of what SO_REUSEADDR means.
+    // On Unix it means that you can close a bound socket and then open a new one and bind it to the same port right away.
+    // On Windows it means that several unrelated programs from different users can bind to the same port.
+    // According to MSDN "Once the second socket has successfully bound, the behavior for all sockets bound to that port is indeterminate".
+    // https://learn.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
+    // Let us not do that on Windows. Closest Unix equivalent of SO_REUSEADDR on Windows is SO_DONTLINGER.
+    // Also set SO_EXCLUSIVEADDRUSE, to prevent other sockets from binding to the same port.
+#ifdef _WIN32
+    acceptor.set_option(asio::socket_base::linger(false, 0));
+    acceptor.set_option(asio::socket_base__exclusive_address_use(true));
+#else
     acceptor.set_option(asio::socket_base::reuse_address(true));
+#endif
 
     // Bind to the server address
     acceptor.bind(local_endpoint, ec);
@@ -2691,6 +2606,60 @@ tcp::acceptor Client::State::make_acceptor( const tcp::endpoint& local_endpoint
     }
 
     LOG_INFO("Client listening to ", service, " on TCP:", acceptor.local_endpoint());
+
+    return acceptor;
+}
+
+//------------------------------------------------------------------------------
+asio::local::stream_protocol::acceptor Client::State::make_acceptor(
+    const asio::local::stream_protocol::endpoint& local_endpoint,
+    const char* service) const
+{
+    sys::error_code ec;
+
+    // Open the acceptor
+    asio::local::stream_protocol::acceptor acceptor(_ctx);
+
+    acceptor.open(local_endpoint.protocol(), ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to open Unix Socket acceptor for service: ", service, "; ec=", ec));
+    }
+
+    acceptor.set_option(asio::socket_base::reuse_address(false));
+
+    const fs::path socket_path(local_endpoint.path());
+    const fs::file_status socket_status = fs::status(socket_path);
+    if (fs::exists(socket_status)) {
+        // On windows boost::filesystem::is_socket does not detect af_unix sockets.
+        // std::filesystem::is_socket is also oblivious to af_unix sockets on windows.
+        // boost::filesystem detects it as reparse file.
+        if (fs::is_socket(socket_status) || fs::is_reparse_file(socket_status)) {
+            fs::remove(socket_path);
+        } else {
+            throw runtime_error(util::str(
+                "File already exists where frontend unix socket would be created. "
+                "Refusing to auto delete it: ", local_endpoint.path()));
+        }
+    }
+
+    // Bind to the server address
+    acceptor.bind(local_endpoint, ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to bind Unix Socket acceptor for service: ", service, "; ec=", ec));
+    }
+
+    fs::permissions(socket_path, fs::perms::owner_all, ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to chmod 700 the Unix Socket: ", service, "; ec=", ec));
+    }
+
+    // Start listening for connections
+    acceptor.listen(asio::socket_base::max_listen_connections, ec);
+    if (ec) {
+        throw runtime_error(util::str("Failed to 'listen' to service on Unix Socket acceptor: ", service, "; ec=", ec));
+    }
+
+    LOG_INFO("Client listening to ", service, " on Unix Socket:", acceptor.local_endpoint());
 
     return acceptor;
 }
@@ -2748,6 +2717,62 @@ void Client::State::listen_tcp
 }
 
 //------------------------------------------------------------------------------
+void Client::State::listen_unix_socket
+        ( asio::yield_context yield
+        , asio::local::stream_protocol::acceptor acceptor
+        , function<void(GenericStream, YieldContext)> handler)
+{
+    auto shutdown_acceptor_slot = _shutdown_signal.connect([&acceptor] {
+        const auto endpoint_path = fs::path(acceptor.local_endpoint().path());
+        acceptor.close();
+        if (fs::exists(endpoint_path)) {
+            fs::remove(endpoint_path);
+        }
+    });
+
+    WaitCondition wait_condition(_ctx);
+
+    for(;;)
+    {
+        sys::error_code ec;
+
+        asio::local::stream_protocol::socket socket(_ctx);
+        acceptor.async_accept(socket, yield[ec]);
+
+        if (ec) {
+            if (ec == asio::error::operation_aborted) break;
+
+            LOG_WARN("Accept failed on Unix Socket:", acceptor.local_endpoint(), "; ec=", ec);
+
+            if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
+                break;
+            }
+        } else {
+            static const auto unix_socket_shutter = [](asio::local::stream_protocol::socket& s) {
+                sys::error_code ec; // Don't throw
+                s.shutdown(asio::local::stream_protocol::socket::shutdown_both, ec);
+                s.close(ec);
+            };
+
+            GenericStream connection(move(socket) , move(unix_socket_shutter));
+
+            TRACK_SPAWN( _ctx, ([
+                this,
+                self = shared_from_this(),
+                c = move(connection),
+                handler,
+                lock = wait_condition.lock()
+            ](asio::yield_context yield) mutable {
+                if (was_stopped()) return;
+                handler(move(c), YieldContext(yield, util::LogPath("unix_socket")));
+            }));
+        }
+    }
+
+    wait_condition.wait(yield);
+}
+
+//------------------------------------------------------------------------------
 void Client::State::start()
 {
     if (_internal_state != InternalState::Created)
@@ -2767,6 +2792,13 @@ void Client::State::start()
         front_end_acceptor = make_acceptor(_config.front_end_endpoint(), "frontend");
         _frontend_endpoint = string(front_end_acceptor->local_endpoint().address().to_string()) + ":"
                            + to_string(front_end_acceptor->local_endpoint().port());
+    }
+
+    boost::optional<asio::local::stream_protocol::acceptor> front_end_unix_socket_acceptor;
+    if (_config.front_end_unix_socket_endpoint() != asio::local::stream_protocol::endpoint()) {
+        LOG_DEBUG("front_end_unix_socket endpoint: ", _config.front_end_unix_socket_endpoint());
+        front_end_unix_socket_acceptor = make_acceptor(_config.front_end_unix_socket_endpoint(), "frontend_unix_socket");
+        _frontend_unix_socket_endpoint = front_end_unix_socket_acceptor->local_endpoint().path();
     }
 
     ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
@@ -2841,6 +2873,42 @@ void Client::State::start()
                   if (ec) return;
 
                   yield[ec].tag("write_res").run([&] (auto y) {
+                      http::async_write(c, rs, y);
+                  });
+            });
+        }));
+    }
+
+    if (front_end_unix_socket_acceptor) {
+        TRACK_SPAWN( _ctx, ([
+            this,
+            self = shared_from_this(),
+            acceptor = move(*front_end_unix_socket_acceptor)
+        ] (asio::yield_context yield) mutable {
+            if (was_stopped()) return;
+
+            LOG_INFO("Serving front end on ", acceptor.local_endpoint());
+
+            sys::error_code ec;
+            listen_unix_socket( yield[ec]
+                      , move(acceptor)
+                      , [this, self]
+                        (GenericStream c, YieldContext yield_) {
+                  YieldContext yield = yield_.tag("frontend_u_s");
+                  sys::error_code ec;
+                  beast::flat_buffer c_rbuf;
+                  Request rq;
+                  yield[ec].tag("read_req_u_s").run([&] (auto y) {
+                      http::async_read(c, c_rbuf, rq, y);
+                  });
+
+                  if (ec) return;
+
+                  auto rs = fetch_fresh_from_front_end(rq, yield[ec].tag("get_res_u_s"));
+
+                  if (ec) return;
+
+                  yield[ec].tag("write_res_u_s").run([&] (auto y) {
                       http::async_write(c, rs, y);
                   });
             });
@@ -3047,6 +3115,11 @@ asio::ip::tcp::endpoint Client::get_proxy_endpoint() const noexcept
 std::string Client::get_frontend_endpoint() const noexcept
 {
     return _state->_frontend_endpoint;
+}
+
+std::string Client::get_frontend_unix_socket_endpoint() const noexcept
+{
+    return _state->_frontend_unix_socket_endpoint;
 }
 
 AsioExecutor Client::get_executor() const noexcept

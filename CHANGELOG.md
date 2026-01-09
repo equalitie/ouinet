@@ -9,6 +9,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.1) - 2025-12-18
+
+### Fixed
+
+- Remove the default attribute of `udp-mux-rx-limit` option from the Client
+settings. !152
+- Fixed `test-dns.cpp` by replacing the test domain used in `valid_name`
+test. !152
+
+
+## [v1.6.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.0) - 2025-12-18
+
+### Added
+
+- Expose `/api/endpoints` on Ouinet's frontend interface. !150
+- New config option `front-end-unix-socket-ep` to serve frontend via
+unix socket. !150
+- Rate limit mechanism for Rx traffic controlled by the `udp-mux-rx-limit`
+config option. !151
+- Scrutiny and control of DHT bootstrap process to address timing issues. !136
+
+### Changed
+
+- Tests no longer involve twisted framework and were rewritten for robustness
+and error handling clarity. !136
+
+### Fixed
+
+- Missing python dependencies in the CI Docker images. !149
+- Fix `client-credentials` for SSL connections, it allows for standard
+proxy authorization. !150
+
+
+## [v1.5.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.5.1) - 2025-11-27
+
+### Fixed
+
+- Add `ec` to `yield` when calling injector's `resolve_tcp_doh` method. !148
+
+
+## [v1.5.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.5.0) - 2025-11-26
+
+### Added
+
+- New config value named `request-body-limit` which is useful to control
+the allowed size of the Body section of POST/PUT requests. !138 !141
+- DNS over HTTPS is the new default resolver. !137 !144
+- CPP integration tests to cover Ouinet fetch mechanisms. !140
+
+### Changed
+
+- Refactoring of Dht and DhtNode code to make it usable with the new CPP
+integration tests. !140
+- Refactor URL parsing. !140
+- CMake refactoring and Asio lib targets renaming. !140
+- General refactoring to use `YieldContext` instead of `asio::yield_context`. !140
+
+### Fixed
+
+- OpenSSL Android warnings. !135
+- Building in Windows docker containers. !140
+- Fix gradle warnings. !143
+
+
+## [v1.4.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.2) - 2025-11-14
+
+### Fixed
+
+-  Fix "connection reset by peer" coming through the private route. !142
+
+
 ## [v1.4.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.4.1) - 2025-10-21
 
 ### Added

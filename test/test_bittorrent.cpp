@@ -11,6 +11,8 @@
 #include <bittorrent/dht_node.h>
 #include <bittorrent/code.h>
 #include <util/hash.h>
+
+#include "constants.h"
 #include "task.h"
 #include "cxx/metrics.h"
 
@@ -63,8 +65,10 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
+    uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4());
+    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
 
     task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
@@ -105,8 +109,10 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
+    uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4());
+    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
 
     auto mutable_data = []( const string& value
                           , const string& salt

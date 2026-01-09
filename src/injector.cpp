@@ -49,6 +49,7 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
+#include "util/dns.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/yield.h"
@@ -81,6 +82,7 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 // TODO: Get rid of this
 static bool g_allow_private_targets = false;
+static bool g_do_doh = true;
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -151,7 +153,11 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target(req, g_allow_private_targets, exec, cancel, yield[ec].tag("resolve"));
+    auto lookup = util::resolve_target( req
+                                      , g_allow_private_targets
+                                      , g_do_doh
+                                      , exec
+                                      , cancel, yield[ec].tag("resolve"));
 
     if (ec) {
         sys::error_code he_ec;
@@ -257,7 +263,11 @@ class InjectorCacheControl {
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target(rq, g_allow_private_targets, executor, cancel, yield[ec]);
+        auto lookup = util::resolve_target( rq
+                                          , g_allow_private_targets
+                                          , g_do_doh
+                                          , executor
+                                          , cancel, yield[ec]);
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -807,6 +817,10 @@ Injector::Injector(
         LOG_INFO(log_path, "Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
+    if (!config.is_doh_enabled()) {
+        LOG_INFO("DNS over HTTPS is disabled.");
+        g_do_doh = false;
+    }
 
     auto proxy_server = std::make_unique<OuiServiceServer>(ex);
 
@@ -872,6 +886,8 @@ Injector::Injector(
         _dht = std::make_shared<bt::MainlineDht>
             ( ex
             , metrics::Client::noop().mainline_dht()
+            , config.is_doh_enabled()
+            , config.udp_mux_rx_limit_in_bytes()
             , fs::path{}
             , _config.bt_bootstrap_extras());  // default storage dir
     }

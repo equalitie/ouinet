@@ -127,6 +127,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _udp_mux_port = *opt;
     }
 
+    if (auto opt = as_optional<uint32_t>(vm, "udp-mux-rx-limit")) {
+        _udp_mux_rx_limit = *opt;
+    }
+
     if (auto opt = as_optional<string>(vm, "injector-ep")) {
         auto injector_ep_str = *opt;
 
@@ -148,6 +152,17 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw error("Failed to parse '--front-end-ep' argument");
         }
         _front_end_endpoint = *opt_fe_ep;
+    }
+
+    if (auto opt = as_optional<string>(vm, "front-end-unix-socket-ep")) {
+        if (opt->empty()) {
+            throw error("--front-end-unix-socket-ep must not be an empty string");
+        }
+        fs::path socket_path(*opt);
+        if (!socket_path.is_absolute()) {
+            socket_path = _repo_root / socket_path;
+        }
+        _front_end_unix_socket_endpoint = socket_path.generic_string();
     }
 
     if (auto opt = as_optional<string>(vm, "front-end-access-token")) {
@@ -309,12 +324,8 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
-    if (auto opt = as_optional<string>(vm, "origin-doh-base")) {
-        auto doh_base = *opt;
-        _origin_doh_endpoint = doh::endpoint_from_base(doh_base);
-        if (!_origin_doh_endpoint)
-            throw error(util::str(
-                    "Invalid URL for '--origin-doh-base': ", doh_base));
+    if (vm["disable-doh"].as<bool>()) {
+        _disable_doh = true;
     }
 
     if (vm["allow-private-targets"].as<bool>()) {

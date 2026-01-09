@@ -11,6 +11,7 @@
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
+#include "ouiservice/bep5/client.h"
 
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -20,6 +21,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
+#include <memory>
 #include <nlohmann/json.hpp>
 
 
@@ -617,9 +619,22 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<br>\n";
 
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
-    if (auto doh_ep = config.origin_doh_endpoint()) {
-        ss << "Origin <abbr title=\"DNS over HTTPS\">DoH</abbr> endpoint URL:"
-           << " <samp>" << as_safe_html(*doh_ep) << "</samp><br>\n";
+    ss << "<br>\n";
+
+    ss << "DNS over HTTPS: "
+       << ( config.is_doh_enabled()
+          ? "enabled"
+          : "disabled" )
+       << ".<br><br>\n";
+
+    {
+        auto rx_limit = config.udp_mux_rx_limit();
+        ss << "UDP Multiplexer Rx Limit: "
+           << std::to_string(rx_limit)
+           << ( rx_limit == 0
+              ? " (Means unlimited)"
+              : " Kbps" )
+           << "<br><br>\n";
     }
 
     ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
@@ -712,6 +727,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
                                       , cache::Client* cache_client
+                                      , std::shared_ptr<ouiservice::Bep5Client> client
                                       , ClientFrontEndMetricsController& metrics
                                       , Cancel cancel
                                       , YieldContext yield)
@@ -723,6 +739,8 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_access", config.is_injector_access_enabled()},
+        {"injector_peers_n", client -> injector_candidates_n()},
+        {"injector_ready", client -> injector_candidates_n() > 1},
         {"distributed_cache", config.is_cache_access_enabled()},
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
@@ -731,7 +749,9 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
-        {"metrics_enabled", metrics.is_enabled()}
+        {"metrics_enabled", metrics.is_enabled()},
+        {"doh_enabled", config.is_doh_enabled()},
+        {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
@@ -899,10 +919,29 @@ void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
     res.result(http::status::bad_request);
 }
 
+void ClientFrontEnd::handle_api_endpoints(const ClientConfig& config, Response& res, ostringstream& ss) {
+    res.set(http::field::content_type, "application/json");
+
+    json response = {
+        {"proxy_endpoint", boost::str(boost::format("%s:%s")
+            % config.local_endpoint().address().to_string()
+            % config.local_endpoint().port())},
+
+        {"frontend_tcp_endpoint", boost::str(boost::format("%s:%s")
+            % config.front_end_endpoint().address().to_string()
+            % config.front_end_endpoint().port())},
+
+        {"frontend_unix_socket_endpoint", config.front_end_unix_socket_endpoint().path()},
+    };
+
+    ss << response;
+}
+
 Response ClientFrontEnd::serve( ClientConfig& config
                               , const Request& req
                               , Client::RunningState client_state
                               , cache::Client* cache_client
+                              , std::shared_ptr<ouiservice::Bep5Client> client
                               , const CACertificate& ca
                               , boost::optional<UdpEndpoint> local_ep
                               , const std::shared_ptr<UPnPs>& upnps_ptr
@@ -946,6 +985,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     std::string_view groups_api_path = "/api/groups";
     std::string_view metrics_api_path = "/api/metrics";
     std::string_view status_api_path = "/api/status";
+    std::string_view endpoints_api_path = "/api/endpoints";
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
@@ -959,7 +999,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (path == status_api_path) {
         sys::error_code e;
         handle_api_status( config, client_state, local_ep, upnps_ptr, dht, reachability
-                         , req, res, ss, cache_client, metrics, cancel
+                         , req, res, ss, cache_client, client, metrics, cancel
                          , yield[e]);
     } else if (path.starts_with(groups_api_path)) {
         path.remove_prefix(groups_api_path.size());
@@ -968,6 +1008,8 @@ Response ClientFrontEnd::serve( ClientConfig& config
         path.remove_prefix(metrics_api_path.size());
         sys::error_code e;
         handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
+    } else if (path.starts_with(endpoints_api_path)) {
+        handle_api_endpoints(config, res, ss);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps_ptr, dht, reachability

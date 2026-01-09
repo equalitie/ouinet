@@ -3,7 +3,6 @@
 #include <boost/beast/core.hpp>
 #include <boost/asio/ssl/context.hpp>
 
-#include "dns_resolve.h"
 #include "cache/http_sign.h"
 #include "namespaces.h"
 #include "util.h"

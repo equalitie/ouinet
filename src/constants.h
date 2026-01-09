@@ -116,5 +116,7 @@ static const std::string request_private_true = "true";  // case insensitive
 
 static const uint16_t default_udp_port = 28729;
 static const uint16_t random_port_selection = 0;
+static constexpr uint32_t udp_mux_rx_limit_client = 0; // Unlimited
+static constexpr uint32_t udp_mux_rx_limit_injector = 500; // Kbps
 
 } // ouinet namespace

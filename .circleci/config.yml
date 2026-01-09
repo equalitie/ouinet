@@ -29,7 +29,9 @@ jobs:
                 ninja-build \
                 openjdk-11-jdk-headless \
                 pkg-config \
-                python-twisted \
+                python3-pytest \
+                python3-pytest-asyncio \
+                python3-pytest-timeout \
                 rsync \
                 texinfo \
                 unzip \

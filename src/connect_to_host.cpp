@@ -1,8 +1,8 @@
 #include "connect_to_host.h"
 
-#include "util.h"
 #include "http_util.h"
 #include "or_throw.h"
+#include "util/dns.h"
 #include "util/timeout.h"
 
 #include <boost/asio/connect.hpp>
@@ -24,7 +24,7 @@ ouinet::connect_to_host( const AsioExecutor& ex
 {
     sys::error_code ec;
 
-    auto const lookup = util::tcp_async_resolve( host, port
+    auto const lookup = util::resolve_tcp_async( host, port
                                                , ex, cancel_signal
                                                , yield[ec]);
     return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
