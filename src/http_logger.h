@@ -3,6 +3,7 @@
 #include <boost/beast/http.hpp>
 #include <boost/filesystem.hpp>
 
+#include "declspec.h"
 #include "generic_stream.h"
 #include "namespaces.h"
 #include "session.h"
@@ -14,7 +15,7 @@ using Request = http::request<http::string_body>;
 using GenericStream = ouinet::GenericStream;
 using Session = ouinet::Session;
 
-class HTTPLogger {
+class OUINET_DECL HTTPLogger {
 
 public:
     HTTPLogger() = default;
@@ -33,6 +34,6 @@ private:
     boost::optional<std::fstream> log_file;
 };
 
-extern HTTPLogger http_logger;
+OUINET_DECL extern HTTPLogger http_logger;
 
 } // namespaces

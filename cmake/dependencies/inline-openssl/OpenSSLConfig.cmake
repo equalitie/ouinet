@@ -15,7 +15,12 @@ if (NOT TARGET OpenSSL::Crypto)
     )
 
     if (WIN32)
-        target_link_libraries(openssl_crypto INTERFACE crypt32)
+        target_link_libraries(openssl_crypto
+            INTERFACE
+                crypt32
+                ws2_32
+                mswsock
+        )
     endif()
 
     add_library(openssl_crypto_ INTERFACE)

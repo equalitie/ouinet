@@ -8,6 +8,7 @@
 #include <boost/regex.hpp>
 #include <boost/program_options.hpp>
 
+#include "declspec.h"
 #include "constants.h"
 #include "logger.h"
 #include "http_logger.h"
@@ -21,7 +22,7 @@ namespace ouinet {
 #define _HTTP_LOG_FILE_NAME "access.log"
 static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
 
-class InjectorConfig {
+class OUINET_DECL InjectorConfig {
 public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 
@@ -53,11 +54,11 @@ public:
     boost::filesystem::path repo_root() const
     { return _repo_root; }
 
-    inline bool _is_http_log_file_enabled() const {
+    bool _is_http_log_file_enabled() const {
         return http_logger.get_log_file() != nullptr;
     }
 
-    inline void _is_http_log_file_enabled(bool v) {
+    void _is_http_log_file_enabled(bool v) {
         if (!v) {
             http_logger.log_to_file("");
             return;
