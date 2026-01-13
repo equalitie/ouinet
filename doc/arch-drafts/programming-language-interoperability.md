@@ -71,7 +71,6 @@ String frontEndEp
 String listenOnTcp
 String localDomain
 String maxCachedAge
-String originDohBase
 String ouinetDirectory
 ```
 
@@ -236,9 +235,7 @@ The following list points to the main Ouinet components classified and organized
 
 1. Considering that the functionality of the BEP5 DHT is critical in the current implementation of Ouinet this component appears in the top of the list of components to refactor. Processes using the DHT are complex and difficult to optimize and maintain, reusing [btdht](https://github.com/equalitie/btdht) could improve the performance and reduce the amount of time to find and fix bugs.
 
-2. DNS over HTTPS is implemented but not optimized, as the feature is not actively used becomes a good candidate to implement with a well maintained library like [doh-server](https://github.com/DNSCrypt/doh-server).
-
-3. The HTTP Proxy which could be implemented with a custom crate that relies on the native Rust library `http` and a crate for dealing with the TLS encryption.
+2. The HTTP Proxy which could be implemented with a custom crate that relies on the native Rust library `http` and a crate for dealing with the TLS encryption.
 
 ### Prerequisites of the refactoring
 

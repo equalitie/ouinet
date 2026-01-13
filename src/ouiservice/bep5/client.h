@@ -10,7 +10,7 @@
 namespace ouinet {
 
 namespace bittorrent {
-    class MainlineDht;
+    class DhtBase;
 }
 
 namespace ouiservice {
@@ -34,15 +34,19 @@ private:
         asio::ip::udp::endpoint endpoint;
         std::shared_ptr<AbstractClient> client;
         Target target;
+
+        friend std::ostream& operator<<(std::ostream& os, const Candidate& c) {
+            return os << "Candidate{ endpoint:" << c.endpoint << ", client:" << c.client.get() << ", target:" << c.target << "}";
+        }
     };
 
 public:
-    Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
+    Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , asio::ssl::context*
               , Target targets = helpers | injectors);
 
-    Bep5Client( std::shared_ptr<bittorrent::MainlineDht>
+    Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , std::string helpers_swarm_name
               , bool helper_announcement_enabled
@@ -51,6 +55,7 @@ public:
 
     void start(asio::yield_context) override;
     void stop() override;
+    size_t injector_candidates_n() const noexcept;
 
     GenericStream connect(asio::yield_context, Cancel&) override;
     GenericStream connect(asio::yield_context, Cancel&, bool tls, Target);
@@ -66,7 +71,7 @@ private:
     GenericStream connect_single(AbstractClient&, bool tls, Cancel&, asio::yield_context);
 
 private:
-    std::shared_ptr<bittorrent::MainlineDht> _dht;
+    std::shared_ptr<bittorrent::DhtBase> _dht;
 
     std::string _injector_swarm_name;
     std::string _helpers_swarm_name;

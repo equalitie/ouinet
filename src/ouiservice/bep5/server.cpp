@@ -1,7 +1,7 @@
 #include "server.h"
 #include "../utp.h"
 #include "../tls.h"
-#include "../../bittorrent/dht.h"
+#include "../../bittorrent/mainline_dht.h"
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../logger.h"
 #include "../../util/hash.h"
@@ -12,7 +12,7 @@ using namespace ouiservice;
 
 namespace bt = bittorrent;
 
-Bep5Server::Bep5Server( shared_ptr<bt::MainlineDht> dht
+Bep5Server::Bep5Server( shared_ptr<bt::DhtBase> dht
                       , boost::asio::ssl::context* ssl_context
                       , string swarm_name)
 {

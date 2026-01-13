@@ -1,10 +1,8 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/signal_set.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
-#include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -15,8 +13,6 @@
 
 #include "cache/http_sign.h"
 
-#include "bittorrent/dht.h"
-
 #include "namespaces.h"
 #include "util.h"
 #include "connect_to_host.h"
@@ -24,14 +20,13 @@
 #include "generic_stream.h"
 #include "split_string.h"
 #include "async_sleep.h"
+#include "bittorrent/mainline_dht.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
 #include "full_duplex_forward.h"
 #include "injector.h"
-#include "injector_config.h"
 #include "authenticate.h"
-#include "force_exit_on_signal.h"
 #include "http_util.h"
 #include "http_logger.h"
 #include "origin_pools.h"
@@ -55,6 +50,7 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
+#include "util/dns.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/yield.h"
@@ -78,19 +74,22 @@ namespace bt = bittorrent;
 using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
-using TcpLookup   = asio::ip::tcp::resolver::results_type;
 using ouinet::util::AsioExecutor;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
+// TODO: Get rid of this
+static bool g_allow_private_targets = false;
+static bool g_do_doh = true;
+
 //------------------------------------------------------------------------------
 template<class Res>
 static
 void send_response( GenericStream& con
                   , const Res& res
-                  , Yield yield)
+                  , YieldContext yield)
 {
     yield.log("=== Sending back response ===");
     yield.log(res);
@@ -104,7 +103,7 @@ void handle_error( GenericStream& con
                  , http::status status
                  , const string& proto_error
                  , const string& message
-                 , Yield yield)
+                 , YieldContext yield)
 {
     auto res = util::http_error( req, status
                                , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
@@ -116,7 +115,7 @@ void handle_error( GenericStream& con
                  , const Request& req
                  , http::status status
                  , const string& message
-                 , Yield yield)
+                 , YieldContext yield)
 {
     return handle_error(con, req, status, "", message, yield);
 }
@@ -124,11 +123,69 @@ void handle_error( GenericStream& con
 static
 void handle_no_proxy( GenericStream& con
                     , const Request& req
-                    , Yield yield)
+                    , YieldContext yield)
 {
     return handle_error( con, req, http::status::forbidden
                        , http_::response_error_hdr_proxy_disabled, "Proxy disabled"
                        , yield);
+}
+
+
+//------------------------------------------------------------------------------
+// Resolve request target address, check whether it is valid
+// and return lookup results.
+// If not valid, set error code
+// (the returned lookup may not be usable then).
+TcpLookup
+ouinet::resolve_target(const http::request_header<>& req
+                      , bool allow_private_targets
+                      , bool do_doh
+                      , AsioExecutor exec
+                      , Cancel& cancel
+                      , YieldContext yield)
+{
+    TcpLookup lookup;
+    sys::error_code ec;
+
+    string host, port;
+    tie(host, port) = util::get_host_port(req);
+
+    // First test trivial cases (like "localhost" or "127.1.2.3").
+    bool local = boost::regex_match(host, util::localhost_rx);
+    bool priv = boost::regex_match(host, util::private_addr_rx);
+
+    // Resolve address and also use result for more sophisticaded checking.
+    if (!local && (!priv || allow_private_targets))
+    {
+        lookup = do_doh
+               ? util::resolve_tcp_doh( host, port, cancel, yield[ec] )
+               : util::resolve_tcp_async( host, port
+                                        , exec
+                                        , cancel
+                                        , static_cast<asio::yield_context>(yield[ec]));
+    }
+
+    if (ec) return or_throw<TcpLookup>(yield, ec);
+
+    // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
+    for (auto r : lookup)
+    {
+        if ((local = boost::regex_match(r.endpoint().address().to_string()
+                                        , util::localhost_rx)))
+            break;
+        if ((priv = boost::regex_match(r.endpoint().address().to_string()
+                                      , util::private_addr_rx)))
+            if (!allow_private_targets)
+                break;
+    }
+
+    if (local || (priv && !allow_private_targets))
+    {
+        ec = asio::error::invalid_argument;
+        return or_throw<TcpLookup>(yield, ec);
+    }
+
+    return or_throw(yield, ec, move(lookup));
 }
 
 //------------------------------------------------------------------------------
@@ -143,7 +200,7 @@ void handle_connect_request( GenericStream client_c
                            , beast::flat_buffer client_c_rbuf
                            , const Request& req
                            , Cancel& cancel
-                           , Yield yield)
+                           , YieldContext yield)
 {
     sys::error_code ec;
 
@@ -153,7 +210,11 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target(req, exec, cancel, yield[ec].tag("resolve"));
+    TcpLookup lookup = resolve_target( req
+                                     , g_allow_private_targets
+                                     , g_do_doh
+                                     , exec
+                                     , cancel, yield[ec].tag("resolve"));
 
     if (ec) {
         sys::error_code he_ec;
@@ -219,8 +280,8 @@ void handle_connect_request( GenericStream client_c
     // Send the client an OK message indicating that the tunnel
     // has been established.
     http::response<http::empty_body> res{http::status::ok, req.version()};
-    // No ``res.prepare_payload()`` since no payload is allowed for CONNECT:
-    // <https://tools.ietf.org/html/rfc7231#section-6.3.1>.
+    res.prepare_payload();
+
     send_response(client_c, res, yield[ec].tag("write_res"));
 
     if (ec) {
@@ -233,10 +294,9 @@ void handle_connect_request( GenericStream client_c
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    auto c2o_o2c = yield[ec].tag("full_duplex").run([&] (auto y) {
-        return full_duplex(move(client_c), move(origin_c), cancel, y);
-    });
-    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) = c2o_o2c;
+    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) =
+        full_duplex(move(client_c), move(origin_c), cancel, yield[ec].tag("full_duplex"));
+
     return or_throw(yield, ec);
 }
 
@@ -246,12 +306,12 @@ class InjectorCacheControl {
 
     GenericStream connect( const Request& rq
                          , Cancel& cancel
-                         , Yield yield)
+                         , YieldContext yield)
     {
         // Parse the URL to tell HTTP/HTTPS, host, port.
-        util::url_match url;
+        auto url = util::Url::from(rq.target());
 
-        if (!util::match_http_url(rq.target(), url)) {
+        if (!url) {
             yield.log("Unsupported target URL");
             return or_throw<GenericStream>( yield
                                           , asio::error::operation_not_supported);
@@ -260,7 +320,11 @@ class InjectorCacheControl {
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target(rq, executor, cancel, yield[ec]);
+        TcpLookup lookup = resolve_target( rq
+                                         , g_allow_private_targets
+                                         , g_do_doh
+                                         , executor
+                                         , cancel, yield[ec]);
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -271,10 +335,10 @@ class InjectorCacheControl {
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
-        if (url.scheme == "https") {
+        if (url->scheme == "https") {
             auto c = ssl::util::client_handshake( move(socket)
                                                 , ssl_ctx
-                                                , url.host
+                                                , url->host
                                                 , cancel
                                                 , static_cast<asio::yield_context>(yield[ec]));
 
@@ -305,7 +369,7 @@ private:
                      , const Request& cache_rq
                      , bool rq_keep_alive
                      , Cancel& cancel
-                     , Yield yield)
+                     , YieldContext yield)
     {
         yield.log("BEGIN");
 
@@ -403,7 +467,7 @@ public:
     void fetch( GenericStream& con
               , Request rq
               , Cancel cancel
-              , Yield yield)
+              , YieldContext yield)
     {
         sys::error_code ec;
         bool rq_keep_alive = rq.keep_alive();
@@ -425,7 +489,7 @@ public:
         return or_throw(yield, ec);
     }
 
-    Connection get_connection(const Request& rq_, Cancel& cancel, Yield yield) {
+    Connection get_connection(const Request& rq_, Cancel& cancel, YieldContext yield) {
         Connection connection;
         sys::error_code ec;
 
@@ -471,7 +535,7 @@ bool is_request_to_this(const Request& rq) {
 }
 
 //------------------------------------------------------------------------------
-void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
+void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
 {
     if (rq.target() == "/api/ok") {
         http::response<http::empty_body> rs{http::status::ok, rq.version()};
@@ -493,14 +557,13 @@ void handle_request_to_this(Request& rq, GenericStream& con, Yield yield)
 
 //------------------------------------------------------------------------------
 static
-void serve( InjectorConfig& config
-          , uint64_t connection_id
+void serve( const InjectorConfig& config
           , GenericStream con
           , asio::ssl::context& ssl_ctx
           , OriginPools& origin_pools
           , uuid_generator& genuuid
           , Cancel& cancel
-          , asio::yield_context yield_)
+          , YieldContext yield_)
 {
     auto close_connection_slot = cancel.connect([&con] {
         con.close();
@@ -522,9 +585,11 @@ void serve( InjectorConfig& config
     bool is_first_request = true;
     beast::flat_buffer con_rbuf;  // accumulate reads across iterations here
 
+    uint64_t next_request_id = 0;
+
     for (;;) {
         sys::error_code ec;
-        Yield yield(con.get_executor(), yield_, util::str('C', connection_id));
+        YieldContext yield = yield_.tag(util::str('R', next_request_id++));
 
         Request req;
         {
@@ -684,14 +749,16 @@ void serve( InjectorConfig& config
             if (opt_err_res) {
                 send_response( con, *opt_err_res
                              , yield[ec].tag("inject/write_proto_version_error"));
-            } else if (is_restricted_target(req.target()))
+            } else if (is_restricted_target(req.target())) {
                 handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed
                             , "Target not allowed"
                             , yield[ec].tag("inject/handle_restricted"));
-            else
+            }
+            else {
                 cc.fetch( con, move(req)
                         , cancel, yield[ec].tag("inject/fetch"));
+            }
         }
 
         if (ec || !req_keep_alive) break;
@@ -700,10 +767,10 @@ void serve( InjectorConfig& config
 
 //------------------------------------------------------------------------------
 static
-void listen( InjectorConfig& config
+void listen( const InjectorConfig& config
            , OuiServiceServer& proxy_server
            , Cancel& cancel
-           , asio::yield_context yield)
+           , YieldContext yield)
 {
     uuid_generator genuuid;
 
@@ -714,9 +781,9 @@ void listen( InjectorConfig& config
     AsioExecutor exec = proxy_server.get_executor();
 
     sys::error_code ec;
-    proxy_server.start_listen(yield[ec]);
+    proxy_server.start_listen(yield[ec].native());
     if (ec) {
-        LOG_ERROR("Failed to setup ouiservice proxy server; ec=", ec);
+        LOG_ERROR(yield, " Failed to setup ouiservice proxy server; ec=", ec);
         return;
     }
 
@@ -733,11 +800,11 @@ void listen( InjectorConfig& config
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
 
     while (true) {
-        GenericStream connection = proxy_server.accept(yield[ec]);
+        GenericStream connection = proxy_server.accept(yield[ec].native());
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield)) {
+            if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield.native())) {
                 break;
             }
             ec = {};
@@ -753,22 +820,23 @@ void listen( InjectorConfig& config
             &config,
             &genuuid,
             &origin_pools,
+            &yield,
             connection_id,
             lock = shutdown_connections.lock()
-        ] (boost::asio::yield_context yield) mutable {
+        ] (boost::asio::yield_context asio_yield) mutable {
             sys::error_code leaked_ec;
+            auto y = YieldContext(asio_yield, yield.log_path().tag(util::str('C', connection_id)));
             serve( config
-                 , connection_id
                  , std::move(connection)
                  , ssl_ctx
                  , origin_pools
                  , genuuid
                  , cancel
-                 , yield[leaked_ec]);
+                 , y[leaked_ec]);
             if (leaked_ec) {
                 // The convention is that `serve` does not throw errors,
                 // so complain otherwise but avoid crashing in production.
-                LOG_ERROR("Connection serve leaked an error; ec=", leaked_ec);
+                LOG_ERROR(y, " Connection serve leaked an error; ec=", leaked_ec);
                 assert(0);
             }
         });
@@ -776,187 +844,162 @@ void listen( InjectorConfig& config
 }
 
 //------------------------------------------------------------------------------
-int main(int argc, const char* argv[])
+Injector::Injector(
+        InjectorConfig config,
+        asio::io_context& ctx,
+        util::LogPath log_path,
+        std::shared_ptr<bittorrent::MockDht> dht) :
+    _config(std::move(config))
 {
-    util::crypto_init();
-
-    InjectorConfig config;
-
-    try {
-        config = InjectorConfig(argc, argv);
+    #ifndef __WIN32
+    if (_config.open_file_limit()) {
+        increase_open_file_limit(*_config.open_file_limit());
     }
-    catch(const exception& e) {
-        LOG_ABORT(e.what());
-        return 1;
-    }
-
-    if (config.is_help()) {
-        cout << "Usage: injector [OPTION...]" << endl;
-        cout << config.options_description() << endl;
-        return EXIT_SUCCESS;
-    }
-
-#ifndef __WIN32
-    if (config.open_file_limit()) {
-        increase_open_file_limit(*config.open_file_limit());
-    }
-#endif
+    #endif
 
     // Create or load the TLS certificate.
     auto tls_certificate = get_or_gen_tls_cert<EndCertificate>
         ( "localhost"
-        , config.repo_root() / OUINET_TLS_CERT_FILE
-        , config.repo_root() / OUINET_TLS_KEY_FILE
-        , config.repo_root() / OUINET_TLS_DH_FILE );
+        , _config.repo_root() / OUINET_TLS_CERT_FILE
+        , _config.repo_root() / OUINET_TLS_KEY_FILE
+        , _config.repo_root() / OUINET_TLS_DH_FILE );
 
-    // The io_context is required for all I/O
-    asio::io_context ioc;
-    AsioExecutor ex = ioc.get_executor();
+    AsioExecutor ex = ctx.get_executor();
 
-    shared_ptr<bt::MainlineDht> bt_dht_ptr;
-
-    auto bittorrent_dht = [&bt_dht_ptr, &config, ex] {
-        if (bt_dht_ptr) return bt_dht_ptr;
-        // Although injectors are usually run in networks
-        // without connectivity restrictions,
-        // using extra BT bootstrap servers may be useful
-        // in environments like isolated LANs or community networks.
-
-        bt_dht_ptr = std::make_shared<bt::MainlineDht>
-            ( ex
-            , metrics::Client::noop().mainline_dht()
-            , fs::path{}
-            , config.bt_bootstrap_extras());  // default storage dir
-                                              //
-        bt_dht_ptr->set_endpoints({config.bittorrent_endpoint()});
-        assert(!bt_dht_ptr->local_endpoints().empty());
-        return bt_dht_ptr;
-    };
-
-    if (!config.is_proxy_enabled())
-        LOG_INFO("Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
-    if (auto target_rx_o = config.target_rx())
-        LOG_INFO("Target URIs restricted to regular expression: ", *target_rx_o);
-    if (config.is_private_target_allowed()) {
-        LOG_INFO("Allowing injection of private targets.");
-        allow_private_targets = true;
+    if (!_config.is_proxy_enabled())
+        LOG_INFO(log_path, "Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+    if (auto target_rx_o = _config.target_rx())
+        LOG_INFO(log_path, "Target URIs restricted to regular expression: ", *target_rx_o);
+    if (_config.is_private_target_allowed()) {
+        LOG_INFO(log_path, "Allowing injection of private targets.");
+        g_allow_private_targets = true;
+    }
+    if (!config.is_doh_enabled()) {
+        LOG_INFO("DNS over HTTPS is disabled.");
+        g_do_doh = false;
     }
 
-    OuiServiceServer proxy_server(ex);
+    auto proxy_server = std::make_unique<OuiServiceServer>(ex);
 
-    if (config.tcp_endpoint()) {
-        tcp::endpoint endpoint = *config.tcp_endpoint();
-        LOG_INFO("TCP address: ", endpoint);
+    if (_config.tcp_endpoint()) {
+        tcp::endpoint endpoint = *_config.tcp_endpoint();
+        LOG_INFO(log_path, " TCP address: ", endpoint);
 
-        util::create_state_file( config.repo_root()/"endpoint-tcp"
+        util::create_state_file( _config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint));
+        proxy_server->add(make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint));
     }
 
-    auto read_ssl_certs = [&] {
-        return ssl::util::get_server_context
-            ( tls_certificate->pem_certificate()
-            , tls_certificate->pem_private_key()
-            , tls_certificate->pem_dh_param());
-    };
+    _ssl_context = std::make_unique<asio::ssl::context>(
+            ssl::util::get_server_context(
+                tls_certificate->pem_certificate(),
+                tls_certificate->pem_private_key(),
+                tls_certificate->pem_dh_param()));
 
-    asio::ssl::context ssl_context{asio::ssl::context::tls_server};
-    if (config.tcp_tls_endpoint()) {
-        ssl_context = read_ssl_certs();
-
-        tcp::endpoint endpoint = *config.tcp_tls_endpoint();
-        LOG_INFO("TCP/TLS address: ", endpoint);
-        util::create_state_file( config.repo_root()/"endpoint-tcp-tls"
+    if (_config.tcp_tls_endpoint()) {
+        tcp::endpoint endpoint = *_config.tcp_tls_endpoint();
+        LOG_INFO(log_path, " TCP/TLS address: ", endpoint);
+        util::create_state_file( _config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint);
-        proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
+        proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *_ssl_context));
     }
 
-    if (config.utp_endpoint()) {
-        udp::endpoint endpoint = *config.utp_endpoint();
-        LOG_INFO("uTP address: ", endpoint);
+    if (_config.utp_endpoint()) {
+        udp::endpoint endpoint = *_config.utp_endpoint();
+        LOG_INFO(log_path, "uTP address: ", endpoint);
 
-        util::create_state_file( config.repo_root()/"endpoint-utp"
+        util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
         auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
-        proxy_server.add(move(srv));
+        proxy_server->add(move(srv));
     }
 
-    if (config.utp_tls_endpoint()) {
-        ssl_context = read_ssl_certs();
+    if (_config.utp_tls_endpoint()) {
 
-        udp::endpoint endpoint = *config.utp_tls_endpoint();
+        udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
 
         auto local_ep = base->local_endpoint();
 
         if (local_ep) {
-            LOG_INFO("uTP/TLS address: ", *local_ep);
-            util::create_state_file( config.repo_root()/"endpoint-utp-tls"
+            LOG_INFO(log_path, "uTP/TLS address: ", *local_ep);
+            util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
-            proxy_server.add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), ssl_context));
+            proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *_ssl_context));
 
         } else {
-            LOG_ERROR("Failed to start uTP/TLS service on ", *config.utp_tls_endpoint());
+            LOG_ERROR(log_path, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
         }
     }
 
-    {
-        ssl_context = read_ssl_certs();
-        auto dht = bittorrent_dht();
-        assert(dht);
-        assert(!dht->local_endpoints().empty());
-        if (dht->local_endpoints().empty())
-            LOG_ERROR("Failed to bind the BitTorrent DHT to any local endpoint");
-        proxy_server.add(make_unique<ouiservice::Bep5Server>
-                (move(dht), &ssl_context, config.bep5_injector_swarm_name()));
+    if (dht) {
+        _dht = dht;
+    } else {
+        _dht = std::make_shared<bt::MainlineDht>
+            ( ex
+            , metrics::Client::noop().mainline_dht()
+            , config.is_doh_enabled()
+            , config.udp_mux_rx_limit_in_bytes()
+            , fs::path{}
+            , _config.bt_bootstrap_extras());  // default storage dir
     }
 
-#ifdef __EXPERIMENTAL__
-/*
-    if (config.lampshade_endpoint()) {
-        tcp::endpoint endpoint = *config.lampshade_endpoint();
-        util::create_state_file( config.repo_root()/"endpoint-lampshade"
-                               , util::str(endpoint));
+    _dht->set_endpoints({_config.bittorrent_endpoint()});
 
-        unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
-            make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, config.repo_root()/"lampshade-server");
-        LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
+    assert(!_dht->local_endpoints().empty());
 
-        proxy_server.add(std::move(server));
-    }
-*/
+    if (_dht->local_endpoints().empty())
+        LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
 
-    if (config.obfs2_endpoint()) {
-        tcp::endpoint endpoint = *config.obfs2_endpoint();
+    proxy_server->add(make_unique<ouiservice::Bep5Server>
+            (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
+
+    #ifdef __EXPERIMENTAL__
+    /*
+        if (_config.lampshade_endpoint()) {
+            tcp::endpoint endpoint = *_config.lampshade_endpoint();
+            util::create_state_file( _config.repo_root()/"endpoint-lampshade"
+                                   , util::str(endpoint));
+    
+            unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
+                make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, _config.repo_root()/"lampshade-server");
+            LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
+    
+            proxy_server->add(std::move(server));
+        }
+    */
+
+    if (_config.obfs2_endpoint()) {
+        tcp::endpoint endpoint = *_config.obfs2_endpoint();
         LOG_INFO("obfs2 address: ", endpoint);
-        util::create_state_file( config.repo_root()/"endpoint-obfs2"
+        util::create_state_file( _config.repo_root()/"endpoint-obfs2"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::Obfs2OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs2-server"));
+        proxy_server->add(make_unique<ouiservice::Obfs2OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs2-server"));
     }
 
-    if (config.obfs3_endpoint()) {
-        tcp::endpoint endpoint = *config.obfs3_endpoint();
+    if (_config.obfs3_endpoint()) {
+        tcp::endpoint endpoint = *_config.obfs3_endpoint();
         LOG_INFO("obfs3 address: ", endpoint);
-        util::create_state_file( config.repo_root()/"endpoint-obfs3"
+        util::create_state_file( _config.repo_root()/"endpoint-obfs3"
                                , util::str(endpoint));
 
-        proxy_server.add(make_unique<ouiservice::Obfs3OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs3-server"));
+        proxy_server->add(make_unique<ouiservice::Obfs3OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs3-server"));
     }
 
-    if (config.obfs4_endpoint()) {
-        tcp::endpoint endpoint = *config.obfs4_endpoint();
+    if (_config.obfs4_endpoint()) {
+        tcp::endpoint endpoint = *_config.obfs4_endpoint();
 
-        util::create_state_file( config.repo_root()/"endpoint-obfs4"
+        util::create_state_file( _config.repo_root()/"endpoint-obfs4"
                                , util::str(endpoint));
 
         unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
-            make_unique<ouiservice::Obfs4OuiServiceServer>(ioc, endpoint, config.repo_root()/"obfs4-server");
+            make_unique<ouiservice::Obfs4OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs4-server");
         task::spawn_detached(ex, [
             obfs4 = server.get(),
             endpoint
@@ -967,50 +1010,43 @@ int main(int argc, const char* argv[])
                 LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
             }
         });
-        proxy_server.add(std::move(server));
+        proxy_server->add(std::move(server));
     }
 
-    if (config.listen_on_i2p()) {
-        auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ex);
+    if (_config.listen_on_i2p()) {
+        auto i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), ex);
         std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
         LOG_INFO("I2P public ID: ", ep);
-        util::create_state_file(config.repo_root()/"endpoint-i2p", ep);
+        util::create_state_file(_config.repo_root()/"endpoint-i2p", ep);
 
-        proxy_server.add(std::move(i2p_server));
+        proxy_server->add(std::move(i2p_server));
     }
-#endif // ifdef __EXPERIMENTAL__
+    #endif // ifdef __EXPERIMENTAL__
 
-    LOG_INFO("HTTP signing public key (Ed25519): ", config.cache_private_key().public_key());
-
-    Cancel cancel;
+    LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
     task::spawn_detached(ex, [
-        &proxy_server,
-        &config,
-        &cancel
-    ] (asio::yield_context yield) {
+        this,
+        proxy_server = std::move(proxy_server),
+        cancel = _cancel,
+        log_path
+    ] (asio::yield_context yield) mutable {
         sys::error_code ec;
-        listen(config, proxy_server, cancel, yield[ec]);
+        listen(_config, *proxy_server, cancel, YieldContext(yield, log_path)[ec]);
     });
+}
 
-    asio::signal_set signals(ex, SIGINT, SIGTERM);
+void Injector::stop() {
+    if (_dht) {
+        _dht->stop();
+        _dht = nullptr;
+    }
+    _cancel();
+    _cancel = Cancel();
+}
 
-    unique_ptr<ForceExitOnSignal> force_exit;
-
-    signals.async_wait([&cancel, &signals, &force_exit, &bt_dht_ptr]
-                       (const sys::error_code& ec, int signal_number) {
-            if (bt_dht_ptr) {
-                bt_dht_ptr->stop();
-                bt_dht_ptr = nullptr;
-            }
-            cancel();
-            signals.clear();
-            force_exit = make_unique<ForceExitOnSignal>();
-        });
-
-    ioc.run();
-
-    return EXIT_SUCCESS;
+Injector::~Injector() {
+    stop();
 }

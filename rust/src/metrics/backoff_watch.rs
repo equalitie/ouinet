@@ -1,6 +1,7 @@
 use tokio::{
+    runtime,
     sync::watch,
-    task::{spawn, JoinHandle},
+    task::JoinHandle,
     time::{self, Duration, Instant},
 };
 
@@ -12,11 +13,11 @@ pub struct ConstantBackoffWatchSender {
 }
 
 impl ConstantBackoffWatchSender {
-    pub fn new(delay: Duration) -> Self {
+    pub fn new(runtime: &runtime::Handle, delay: Duration) -> Self {
         let (runner_tx, mut runner_rx) = watch::channel(());
         let (user_tx, _user_rx) = watch::channel(());
 
-        let runner = spawn({
+        let runner = runtime.spawn({
             let user_tx = user_tx.clone();
 
             async move {
@@ -83,7 +84,7 @@ mod tests {
     #[tokio::test]
     async fn sanity() {
         let delay = Duration::from_millis(500);
-        let tx = ConstantBackoffWatchSender::new(delay);
+        let tx = ConstantBackoffWatchSender::new(&runtime::Handle::current(), delay);
         let mut rx = tx.subscribe();
 
         let start = Instant::now();
@@ -106,7 +107,7 @@ mod tests {
     #[tokio::test]
     async fn dont_accumulate_sends_during_timeout() {
         let delay = Duration::from_millis(200);
-        let tx = ConstantBackoffWatchSender::new(delay);
+        let tx = ConstantBackoffWatchSender::new(&runtime::Handle::current(), delay);
         let mut rx = tx.subscribe();
 
         // The first send will be received immediatelly.

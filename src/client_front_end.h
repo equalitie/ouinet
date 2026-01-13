@@ -8,6 +8,7 @@
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"
+#include "ouiservice/bep5/client.h"
 #include "ssl/ca_certificate.h"
 #include "util/reachability.h"
 #include "util/yield.h"
@@ -25,7 +26,7 @@ class ClientConfig;
 class UPnPUpdater;
 
 namespace bittorrent {
-class MainlineDht;
+class DhtBase;
 }
 
 class ClientFrontEndMetricsController {
@@ -95,14 +96,15 @@ public:
                   , const http::request<http::string_body>&
                   , Client::RunningState
                   , cache::Client*
+                  , std::shared_ptr<ouiservice::Bep5Client> client
                   , const CACertificate&
                   , boost::optional<UdpEndpoint> local_ep
                   , const std::shared_ptr<UPnPs>&
-                  , const bittorrent::MainlineDht* dht
+                  , const bittorrent::DhtBase* dht
                   , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
                   , Cancel
-                  , Yield yield);
+                  , YieldContext yield);
 
     Task notify_task(const std::string& task_name)
     {
@@ -149,7 +151,7 @@ private:
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>& upnps_ptr
-                      , const bittorrent::MainlineDht*
+                      , const bittorrent::DhtBase*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
@@ -157,21 +159,22 @@ private:
                       , cache::Client*
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
-                      , Yield);
+                      , YieldContext);
 
     void handle_api_status( ClientConfig&
                       , Client::RunningState
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>&
-                      , const bittorrent::MainlineDht*
+                      , const bittorrent::DhtBase*
                       , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
                       , std::ostringstream&
                       , cache::Client*
+                      , std::shared_ptr<ouiservice::Bep5Client> client
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
-                      , Yield);
+                      , YieldContext);
 
     void handle_api_metrics( std::string_view sub_path
                            , const Request&
@@ -179,7 +182,9 @@ private:
                            , std::ostringstream&
                            , ClientFrontEndMetricsController& metrics
                            , Cancel cancel
-                           , Yield);
+                           , YieldContext);
+
+    static void handle_api_endpoints(const ClientConfig& config, Response& res, std::ostringstream& ss);
 
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);

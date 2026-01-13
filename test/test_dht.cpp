@@ -3,12 +3,14 @@
 #include <boost/asio.hpp>
 
 #include <chrono>
+#include <constants.h>
 #include <util/hash.h>
 
 #define private public
-#include <bittorrent/dht.h>
-#include <bittorrent/node_id.h>
+#include <bittorrent/mainline_dht.h>
 #include <bittorrent/udp_multiplexer.h>
+#include <bittorrent/dht_storage.h>
+#include <bittorrent/dht_node.h>
 
 BOOST_AUTO_TEST_SUITE(dht)
 
@@ -16,7 +18,6 @@ using namespace std;
 using namespace chrono;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
-using namespace ouinet::bittorrent::dht;
 
 using Clock = chrono::steady_clock;
 
@@ -104,8 +105,10 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
+    bool do_doh = true;
+    uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht_node(ctx, metrics_dht.dht_node_ipv4());
+    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
 
     init_without_bootstrapping(ctx, dht_node);
     bootstrap(ctx, dht_node);

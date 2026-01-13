@@ -5,13 +5,14 @@
 #include <vector>
 
 #include <boost/asio/ssl/context.hpp>
+#include <boost/asio/local/stream_protocol.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
+#include "declspec.h"
 #include "namespaces.h"
 #include "cache_control.h"
-#include "doh.h"
 #include "util.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
@@ -36,7 +37,7 @@ static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
 struct MetricsConfig {
     bool enable_on_start = false;
-    util::url_match server_url;
+    util::Url server_url;
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     metrics::EncryptionKey encryption_key;
@@ -44,14 +45,14 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
-class ClientConfig {
+class OUINET_DECL ClientConfig {
 public:
     enum class CacheType { None, Bep5Http };
 
     ClientConfig() = default;
 
     // Throws on error
-    ClientConfig(int argc, char* argv[]);
+    ClientConfig(int argc, const char* argv[]);
 
     ClientConfig(ClientConfig&&) = default;
     ClientConfig& operator=(ClientConfig&&) = default;
@@ -81,6 +82,17 @@ public:
 
     boost::optional<uint16_t> udp_mux_port() const {
         return _udp_mux_port;
+    }
+
+    uint32_t udp_mux_rx_limit() const {
+        // Value in Kbps
+        return _udp_mux_rx_limit;
+    }
+
+    uint32_t udp_mux_rx_limit_in_bytes() const {
+        // The value is set in Kbps in the configuration but required in bytes
+        // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
+        return _udp_mux_rx_limit * 1000 / 8;
     }
 
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
@@ -127,6 +139,10 @@ public:
         return _front_end_endpoint;
     }
 
+    asio::local::stream_protocol::endpoint front_end_unix_socket_endpoint() const {
+        return _front_end_unix_socket_endpoint;
+    }
+
     const boost::optional<std::string>& front_end_access_token() const {
         return _front_end_access_token;
     }
@@ -143,8 +159,14 @@ public:
 
     std::string local_domain() const { return _local_domain; }
 
-    boost::optional<std::string> origin_doh_endpoint() const {
-        return _origin_doh_endpoint;
+    bool is_doh_enabled() const {
+        return !_disable_doh;
+    }
+
+    uint64_t max_request_body_size() const {
+        // The value is set in KiB in the configuration
+        // and used in bytes by boost::beast
+        return _max_req_body_size * 1024;
     }
 
     bool is_help() const { return _is_help; }
@@ -199,17 +221,25 @@ private:
         services.add_options()
            ("listen-on-tcp"
             , po::value<string>()->default_value("127.0.0.1:8077")
-            , "HTTP proxy endpoint (in <IP>:<PORT> format)")
+            , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
            ("udp-mux-port"
            , po::value<uint16_t>()
            , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
+           ("udp-mux-rx-limit"
+           , po::value<uint32_t>()
+           , "Max rate limit that's allowed for incoming packets to the "
+             "UDP multiplexer. The value is expressed in Kbps. To leave it "
+             "unlimited, set it to zero.")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
             , "Path to the CA certificate store file")
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
-            , "Front-end's endpoint (in <IP>:<PORT> format)")
+            , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+            ("front-end-unix-socket-ep"
+            , po::value<string>()
+            , "Path to the front-end Unix socket. Absolute or relative to repo root.")
            ("front-end-access-token"
             , po::value<string>()
             , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
@@ -222,6 +252,11 @@ private:
             , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
             , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
               "Previous announcements could take up to an hour to expire.")
+           ("request-body-limit"
+            , po::value<uint64_t>()->default_value(_max_req_body_size)
+            , "Set the max size of body requests in KiB. This could be "
+              "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
+              "uploads, etc. To leave it unlimited, set it to zero.")
            ;
 
         po::options_description injector("Injector options");
@@ -300,9 +335,10 @@ private:
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
-           ("origin-doh-base", po::value<string>()
-            , "If given, enable DNS over HTTPS for origin access using the given base URL; "
-              "the \"dns=...\" query argument will be added for the GET request.")
+           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
+              "When this option is present the client will fallback to the default DNS mechanism "
+              "provided by the operating system.")
             ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
             , "Allows using non-origin channels, like injectors, dist-cache, etc, "
               "to fetch targets using private addresses. "
@@ -456,6 +492,7 @@ private:
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
+    uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
@@ -465,6 +502,7 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    asio::local::stream_protocol::endpoint _front_end_unix_socket_endpoint;
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
@@ -473,6 +511,7 @@ private:
         = default_max_cached_age;
     size_t _max_simultaneous_announcements
         = default_max_simultaneous_announcements;
+    uint64_t _max_req_body_size = 102400;
     bool _cache_private = false;
 
     std::string _client_credentials;
@@ -483,7 +522,7 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
-    boost::optional<doh::Endpoint> _origin_doh_endpoint;
+    bool _disable_doh = false;
     bool _allow_private_targets = false;
 
     std::unique_ptr<MetricsConfig> _metrics;

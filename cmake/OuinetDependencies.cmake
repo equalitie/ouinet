@@ -5,9 +5,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/dependencies/openssl.cmake)
 # This is used all over Ouinet's source.
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/boost.cmake)
 
-# For internal DNS-over-HTTPS support.
-include(${CMAKE_CURRENT_LIST_DIR}/dependencies/zdnsparser.cmake)
-
 # For crypto, hash and random utilities.
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/gcrypt.cmake)
 

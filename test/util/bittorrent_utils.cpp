@@ -1,6 +1,7 @@
 #include <boost/asio/spawn.hpp>
 
-#include "bittorrent/dht.h"
+#include "util/wait_condition.h"
+#include "bittorrent/mainline_dht.h"
 #include "create_udp_multiplexer.h"
 
 using namespace std;
@@ -28,8 +29,11 @@ public:
         auto lock = _bt_dht_wc.lock();
 
         auto metrics_client = metrics::Client::noop();
+        bool do_doh = true;
+        uint32_t rx_limit = udp_mux_rx_limit_client;
 
-        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor(), metrics_client.mainline_dht());
+        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor(), metrics_client.mainline_dht(),
+                                                         do_doh, rx_limit);
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);

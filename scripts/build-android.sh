@@ -104,7 +104,7 @@ function check_mode {
 
 ######################################################################
 function maybe_install_sdk {
-    local toolsfile=commandlinetools-linux-6858069_latest.zip
+    local toolsfile=commandlinetools-linux-13114758_latest.zip
 
     # Reuse downloaded SDK stuff from old versions of this script.
     if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then

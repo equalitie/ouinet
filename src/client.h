@@ -1,10 +1,15 @@
 #pragma once
 
+#include <boost/asio/io_context.hpp>
 #include <boost/filesystem.hpp>
 
+#include "declspec.h"
 #include "constants.h"
 
 #include "namespaces.h"
+#include "client_config.h"
+#include "bittorrent/mock_dht.h"
+#include "util/log_path.h"
 
 namespace ouinet {
 
@@ -25,12 +30,17 @@ static const std::string request_private_true = "true";  // case insensitive
 
 }
 
+namespace bittorrent {
+    class DhtBase;
+}
+
 class ClientConfig;
 
-class Client {
+class OUINET_DECL Client {
 private:
     class State;
     class ClientCacheControl;
+    using MockDhtBuilder = std::function<std::shared_ptr<bittorrent::MockDht> ()>;
 
 public:
     enum class RunningState {
@@ -45,15 +55,22 @@ public:
 
     static boost::filesystem::path get_or_gen_ca_root_cert(const std::string repo_root);
 
-    Client(asio::io_context&, ClientConfig);
+    Client(
+        asio::io_context&,
+        ClientConfig,
+        // For use in tests
+        util::LogPath log_path = {},
+        std::optional<MockDhtBuilder> dht_builder = {});
 
     ~Client();
 
     void start();
     void stop();
     RunningState get_state() const noexcept;
-    std::string get_proxy_endpoint() const noexcept;
+    asio::ip::tcp::endpoint get_proxy_endpoint() const noexcept;
     std::string get_frontend_endpoint() const noexcept;
+    std::string get_frontend_unix_socket_endpoint() const noexcept;
+    AsioExecutor get_executor() const noexcept;
 
     void charging_state_change(bool is_charging);
     void wifi_state_change(bool is_wifi_connected);
@@ -62,8 +79,26 @@ public:
     boost::filesystem::path get_pid_path() const;
     boost::filesystem::path ca_cert_path() const;
 
+    ClientConfig const& config() const;
+
+    std::shared_ptr<bittorrent::DhtBase> get_dht() const;
+
 private:
     std::shared_ptr<State> _state;
 };
+
+inline std::ostream& operator<<(std::ostream& os, Client::RunningState state) {
+    using S = Client::RunningState;
+    switch (state) {
+        case S::Created: return os << "Created";
+        case S::Failed: return os << "Failed";
+        case S::Starting: return os << "Starting";
+        case S::Degraded: return os << "Degraded";
+        case S::Started: return os << "Started";
+        case S::Stopping: return os << "Stopping";
+        case S::Stopped: return os << "Stopped";
+        default: return os << "???";
+    }
+}
 
 } // ouinet namespace

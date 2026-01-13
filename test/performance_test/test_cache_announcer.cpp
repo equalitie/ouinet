@@ -11,7 +11,6 @@
 using namespace chrono;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
-using namespace ouinet::bittorrent::dht;
 using namespace ouinet::cache;
 using namespace ouinet::util;
 using namespace std;
