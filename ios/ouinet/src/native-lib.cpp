@@ -103,7 +103,7 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
             }
 
             try {
-                ClientConfig cfg(args_.size(), (char**) args_.data());
+                ClientConfig cfg(args_.size(), const_cast<const char**>(args_.data()));
                 g_client = make_unique<ouinet::Client>(g_ctx, move(cfg));
                 g_client->start();
             }

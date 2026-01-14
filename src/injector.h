@@ -42,7 +42,7 @@ public:
     }
 
     std::string cache_http_public_key() const {
-        std::ifstream file(_config.repo_root() / "ed25519-public-key");
+        std::ifstream file((_config.repo_root() / "ed25519-public-key").string());
         if (!file) throw std::runtime_error("File not found");
         std::stringstream buffer;
         buffer << file.rdbuf();
