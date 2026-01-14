@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <boost/endian.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
