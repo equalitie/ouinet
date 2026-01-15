@@ -7,7 +7,7 @@ if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja" AND NOT "${CMAKE_GENERATOR}" STREQ
     set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
 endif()
 
-set(OPENSSL_VERSION_Android "1.1.1q")
+set(OPENSSL_VERSION_Android "3.6.0")
 set(OPENSSL_VERSION_iOS     "1.1.1q")
 set(OPENSSL_VERSION_Windows "3.4.1")
 set(OPENSSL_VERSION ${OPENSSL_VERSION_${CMAKE_SYSTEM_NAME}})
@@ -18,6 +18,7 @@ if (DEFINED OPENSSL_VERSION)
 
     set(OPENSSL_URL_HASH_1.1.1q SHA256=d7939ce614029cdff0b6c20f0e2e5703158a489a72b2507b8bd51bf8c8fd10ca)
     set(OPENSSL_URL_HASH_3.4.1  SHA256=002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3)
+    set(OPENSSL_URL_HASH_3.6.0  SHA256=b6a5f44b7eb69e3fa35dbf15524405b44837a481d43d81daddde3ff21fcbb8e9)
     set(OPENSSL_URL_HASH ${OPENSSL_URL_HASH_${OPENSSL_VERSION}})
 
     set(OPENSSL_TARGET_Android_armv7-a    "android-arm")
@@ -47,7 +48,7 @@ if (DEFINED OPENSSL_VERSION)
     # XXX: the -no-* options might actually be ignored as the documentation doesn't list them
     #      with the leading dash and says every misspelled option will be ignored
     #      https://wiki.openssl.org/index.php/Compilation_and_Installation
-    set(OPENSSL_CONFIGURE_FLAGS_Android no-shared -no-ssl2 -no-ssl3 -no-comp -no-hw -no-engine)
+    set(OPENSSL_CONFIGURE_FLAGS_Android no-shared -no-ssl3 -no-comp -no-engine)
     set(OPENSSL_CONFIGURE_FLAGS_iOS     no-shared -no-dso -no-hw -no-engine -fembed-bitcode)
     set(OPENSSL_CONFIGURE_FLAGS_Windows -no-shared -no-ssl3 -no-comp -no-engine)
     set(OPENSSL_CONFIGURE_FLAGS ${OPENSSL_CONFIGURE_FLAGS_${CMAKE_SYSTEM_NAME}})
@@ -60,7 +61,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
+            && export ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK}
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
@@ -75,7 +76,6 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
                 -D__ANDROID_API__=${ANDROID_PLATFORM_LEVEL}
         BUILD_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make depend
             && make build_libs
@@ -87,7 +87,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make install_dev
     )
- elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     externalproject_add(built_openssl
         URL ${OPENSSL_URL}
         URL_HASH ${OPENSSL_URL_HASH}
