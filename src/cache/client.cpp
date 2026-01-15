@@ -1,5 +1,6 @@
 #include "client.h"
 #include "announcer.h"
+#include "bep3announcer.h"
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
 #include "http_sign.h"
@@ -18,6 +19,7 @@
 #include "../bep5_swarms.h"
 #include "multi_peer_reader.h"
 #include <map>
+#include <string>
 
 #define _LOGPFX "cache/client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -101,6 +103,7 @@ struct Client::Impl {
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
     std::unique_ptr<Announcer> _announcer;
+    std::unique_ptr<Bep3Announcer> _bep3_announcer;
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
@@ -138,6 +141,8 @@ struct Client::Impl {
                 group);
     }
 
+  bool enable_bep3_announcer(string Tracker_id) {}
+    }
     bool enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
         if (_dht || _announcer) return false;
 
@@ -531,6 +536,11 @@ struct Client::Impl {
         if (!_announcer) return;
         if (_announcer->add(compute_swarm_name(group)))
             _VERBOSE("Start announcing group: ", group);
+
+        if (!_bep3_announcer) return;        
+        if (_bep3_announcer->add(compute_swarm_name(group)))
+            _VERBOSE("Start announcing group: ", group);
+
     }
 
     http::response_header<>
@@ -578,10 +588,16 @@ struct Client::Impl {
     {
         auto empty_groups = _groups->remove(key, group_pinned);
         if (!_announcer || group_pinned) return;
-        for (const auto& eg : empty_groups)
+        for (const auto& eg : empty_groups) {
             if (_announcer->remove(compute_swarm_name(eg)))
-                _VERBOSE("Stop announcing group: ", eg);;
-    }
+              _VERBOSE("Stop announcing group: ", eg);
+
+            if (_bep3_announcer) {
+              if (bep3_announcer->remove(compute_swarm_name(eg)))
+                _VERBOSE("Stop announcing group: ", eg);
+            }
+        }
+    }        
 
     // Return whether the entry should be kept in storage.
     bool keep_cache_entry(cache::reader_uptr rr, asio::yield_context yield)

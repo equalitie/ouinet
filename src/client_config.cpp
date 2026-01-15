@@ -316,7 +316,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw std::runtime_error(
                 "The '--i2p-hops-per-tunnel' argument must be used with "
                 "'--injector-ep' with an i2p injector or with "
-                "--cache-type=bep5-http-over-i2p ");
+                "--cache-type=bep3-http-over-i2p ");
           }
 
         _i2p_hops_per_tunnel = no_of_hops_per_tunnel;

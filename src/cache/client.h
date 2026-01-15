@@ -81,6 +81,8 @@ public:
     // false otherwise.
     bool enable_dht(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
+    // Check if i2p is enabled and setup the basics of bep3 on i2p announcer
+    bool enable_bep3_announcer(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
     // This may add a response source header.
     Session load( const std::string& key
