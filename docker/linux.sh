@@ -9,6 +9,7 @@ target_oss=()
 run_tests=
 enter_on_exit=
 excluded_test_targets=()
+artifact_dir=
 
 function print_help (
     echo "Utility to build Ouinet in a Docker container"
@@ -48,6 +49,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --enter-on-exit)
             enter_on_exit=y
+            ;;
+        --artifact-dir)
+            artifact_dir=$2; shift;
+            mkdir -p $artifact_dir
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -235,81 +240,125 @@ exe bash -c "mkdir -p $src_dir"
 
 copy_local_sources
 
+# ---
 
 for target_os in ${target_oss[@]}; do
     ### Build
 
-    build_dir=$work_dir/build.$target_os
-
-    exe bash -c "mkdir -p $build_dir"
-
-    cmake_configure_options=(
-        -DCMAKE_BUILD_TYPE=Debug
-        -DWITH_ASAN=OFF
-        -DWITH_EXPERIMENTAL=OFF
-        -DCORROSION_BUILD_TESTS=ON
-        -DWITH_OUISYNC=OFF
-        # For testing with custom Ouisync sources
-        #-DOUISYNC_SRC_DIR=$HOME/work/ouisync
-        -DOUINET_MEASURE_BUILD_TIMES=OFF
-    )
-    
-    if [ "$target_os" == windows ]; then
-        cmake_configure_options+=(
-            -DCMAKE_TOOLCHAIN_FILE=$src_dir/cmake/toolchain-mingw64.cmake
-        )
-    fi
-    
     if [ "$target_os" == linux -o "$target_os" == windows ]; then
+        build_dir=$work_dir/build.$target_os
+
+        exe bash -c "mkdir -p $build_dir"
+
+        cmake_configure_options=(
+            -DCMAKE_BUILD_TYPE=Debug
+            -DWITH_ASAN=OFF
+            -DWITH_EXPERIMENTAL=OFF
+            -DCORROSION_BUILD_TESTS=ON
+            -DWITH_OUISYNC=OFF
+            # For testing with custom Ouisync sources
+            #-DOUISYNC_SRC_DIR=$HOME/work/ouisync
+            -DOUINET_MEASURE_BUILD_TIMES=OFF
+        )
+        
+        if [ "$target_os" == windows ]; then
+            cmake_configure_options+=(
+                -DCMAKE_TOOLCHAIN_FILE=$src_dir/cmake/toolchain-mingw64.cmake
+            )
+        fi
+    
         exe -w $build_dir cmake $src_dir "${cmake_configure_options[@]}"
         exe -w $build_dir cmake --build . -v -j $(exe nproc)
     else
         exe -w $src_dir ./scripts/build-android.sh
     fi
     
-    ### Rust Tests
+    ### Test
     
-    # Only on Linux because `cargo` would look for libouinet_asio.so which is not
-    # built for Windows (only dll).
-    if [ "$target_os" == linux ]; then
-        env=(
-            CXXFLAGS="-I$build_dir/boost/install/include"
-            LD_LIBRARY_PATH="$build_dir"
-            LIBRARY_PATH="$build_dir"
-            RUST_BACKTRACE=1
-            RUST_LOG=ouinet_rs=debug
-        )
-        exe ${env[@]/#/-e } cargo test --verbose --manifest-path $src_dir/rust/Cargo.toml -- --nocapture
-    fi
-    
-    ### C++ Tests
-    
-    if [ "$run_tests" = y -a "$target_os" != android ]; then
-        test_targets=$(exe cmake --build $build_dir --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g')
-    
-        binary_suffix=
-        env=()
-        lanucher=
-    
-        if [ "$target_os" == windows ]; then
-            launcher="wine"
-            binary_suffix=.exe
-            winepaths=(
-                $build_dir
-                $build_dir/gcrypt/out/bin
-                $build_dir/gpg_error/out/bin
-                /usr/lib/gcc/x86_64-w64-mingw32/14-win32
+    if [ "$run_tests" == y ]; then
+        ### Rust Tests
+
+        # Only on Linux because `cargo` would look for libouinet_asio.so which is not
+        # built for Windows (only dll).
+        if [ "$target_os" == linux ]; then
+            env=(
+                CXXFLAGS="-I$build_dir/boost/install/include"
+                LD_LIBRARY_PATH="$build_dir"
+                LIBRARY_PATH="$build_dir"
+                RUST_BACKTRACE=1
+                RUST_LOG=ouinet_rs=debug
             )
-            env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
+            exe ${env[@]/#/-e } cargo test --verbose --manifest-path $src_dir/rust/Cargo.toml -- --nocapture
         fi
-    
-        for test in ${test_targets[@]}; do
-            if is_in $test ${excluded_test_targets[@]} ; then
-                echo "::: Skipping excluded test $test"
-                continue
+        
+        ### C++ Tests
+        
+        if [ "$target_os" != android ]; then
+            test_targets=$(exe cmake --build $build_dir --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g')
+        
+            binary_suffix=
+            env=()
+            lanucher=
+        
+            if [ "$target_os" == windows ]; then
+                launcher="wine"
+                binary_suffix=.exe
+                winepaths=(
+                    $build_dir
+                    $build_dir/gcrypt/out/bin
+                    $build_dir/gpg_error/out/bin
+                    /usr/lib/gcc/x86_64-w64-mingw32/14-win32
+                )
+                env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
             fi
-            echo "::: Running test: $test"
-            exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
+        
+            for test in ${test_targets[@]}; do
+                if is_in $test ${excluded_test_targets[@]} ; then
+                    echo "::: Skipping excluded test $test"
+                    continue
+                fi
+                echo "::: Running test: $test"
+                exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
+            done
+        fi
+    fi
+
+    ### Download artifacts
+
+    if [ -n "$artifact_dir" ]; then
+        case "$target_os" in
+            linux)
+                artifacts=(
+                    $build_dir/client
+                    $build_dir/injector
+                    $build_dir/libgcrypt.so.20.5.0
+                    $build_dir/libgpg-error.so.0.38.0
+                    $build_dir/libouinet_asio.so
+                    $build_dir/libouinet_asio_ssl.so
+                )
+                ;;
+            windows)
+                artifacts=(
+                    $build_dir/client.exe
+                    $build_dir/injector.exe
+                    $build_dir/gcrypt/out/bin/libgcrypt-20.dll
+                    $build_dir/gpg_error/out/bin/libgpg-error-0.dll
+                    $build_dir/libouinet_asio.dll
+                    $build_dir/libouinet_asio_ssl.dll
+                )
+                ;;
+            android)
+                artifacts=(
+                    $src_dir/build-android-omni-debug/ouinet/outputs/aar/ouinet-debug.aar
+                )
+                ;;
+        esac
+
+        dst_dir=$artifact_dir/$target_os
+        mkdir -p $dst_dir
+
+        for artifact in "${artifacts[@]}"; do
+            dock container cp $container_name:$artifact $dst_dir/$(basename $artifact)
         done
     fi
 done
