@@ -5,7 +5,7 @@ set -e
 host=
 docker_host=
 clean=
-target_os=
+target_oss=()
 run_tests=
 enter_on_exit=
 excluded_test_targets=()
@@ -38,7 +38,7 @@ while [[ "$#" -gt 0 ]]; do
             docker_host="--host=ssh://$host"
             ;;
         --target-os|-t)
-            target_os=$(parse_target_os $2); shift
+            target_oss+=($(parse_target_os $2)); shift
             ;;
         --run-tests)
             run_tests=y
@@ -55,19 +55,18 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-if [ -z "$target_os" ]; then
+if [ -z "$target_oss" ]; then
     error "Missing --target-os parameter"
 fi
 
 image_name=$USER.ouinet.build
 container_name=$USER.ouinet.build
 
-home_dir=/opt
-work_dir=$home_dir/ouinet
-build_dir=$home_dir/build.$target_os
+work_dir=/opt
+src_dir=$work_dir/ouinet
 
 echo "Host:           $docker_host"
-echo "Target OS:      $target_os"
+echo "Target OS:      ${target_oss[*]}"
 echo "Image name:     $image_name"
 echo "Container name: $container_name"
 echo ""
@@ -96,29 +95,65 @@ function host_cpu_arch (
 function build_image (
     rust_arch=$(map_cpu_arch_for_rust $(host_cpu_arch))
 
-    rust_toolchains=(
-        1.92.0-$rust_arch-unknown-linux-gnu
+    rust_version=1.92.0
+
+    rust_target=(
         aarch64-linux-android
+        armv7-linux-androideabi
         x86_64-pc-windows-gnu
+        x86_64-linux-android
     )
 
+    apt_dependencies=(
+        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev
+        # For building Ouisync
+        pkg-config libfuse3-dev
+        # For building Windows binaries
+        mingw-w64-x86-64-dev g++-mingw-w64-x86-64 libz-mingw-w64-dev gettext locales wine64
+        # For building Android binaries
+        wget unzip openjdk-21-jdk ninja-build
+        # For integration tests
+        python3 python3-pip python-is-python3
+    )
+
+    # These would be downloaded automatically during building of Android
+    # binaries, but it's good to have them in the image
+    android_sdk_packages=(
+        "cmdline-tools;latest"
+        "build-tools;35.0.0"
+        "ndk;28.2.13676358"
+        "platform-tools"
+        "platforms;android-36"
+    )
+
+    # https://developer.android.com/studio#command-tools
+    android_sdk_version=13114758
+    android_home=$src_dir/sdk
+
     dockerfile=(
-        "FROM rust:slim-trixie"
+        "FROM debian:trixie-slim"
+
         "RUN apt update"
-        "RUN apt install -y rsync build-essential cmake zlib1g-dev libssl-dev git gdb"
-        "RUN apt install -y pkg-config libfuse3-dev"
-    
-        # MingW requirements
-        "RUN apt install -y mingw-w64-x86-64-dev g++-mingw-w64-x86-64 libz-mingw-w64-dev gettext locales wine64"
-        "RUN rustup target add --toolchain ${rust_toolchains[*]}"
-    
-        # Needed when building for Android
-        "RUN apt install -y wget unzip openjdk-25-jdk ninja-build"
-    
-        "RUN git config --global --add safe.directory '*'"
-    
-        "ENV HOME=$home_dir"
-        'WORKDIR $HOME'
+        "RUN apt install -y ${apt_dependencies[*]}"
+
+        # Install Rust
+        "RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=$rust_version"
+        'ENV PATH="${PATH}:/root/.cargo/bin"'
+        "RUN rustup target add ${rust_target[*]}"
+
+        # Setup Android dev environment
+        "ENV ANDROID_HOME=$android_home"
+        "RUN mkdir -p ${android_home}/cmdline-tools"
+        "RUN wget -q https://dl.google.com/android/repository/commandlinetools-linux-${android_sdk_version}_latest.zip"
+        "RUN unzip *tools*linux*.zip -d ${android_home}/cmdline-tools"
+        "RUN mv ${android_home}/cmdline-tools/cmdline-tools ${android_home}/cmdline-tools/tools"
+        "RUN rm commandlinetools-linux-*_latest.zip"
+        'ENV PATH="${ANDROID_HOME}/cmdline-tools/tools/bin:${PATH}"'
+        "RUN yes | sdkmanager --licenses"
+        "RUN sdkmanager --install $(printf '"%s" ' "${android_sdk_packages[@]}")"
+        'ENV PATH="${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/emulator:${PATH}"'
+
+        'WORKDIR $work_dir'
         "RUN echo 'PS1=\"\\h/$container_name:\\W \\u$ \"' >> ~/.bashrc"
     )
 
@@ -127,13 +162,13 @@ function build_image (
 
 # Shortcut for `docker $docker_host exec ... $container_name ...`
 function exe (
-    opt_workdir=
+    opt_w=
     opt_i=
     opt_t=
     opt_e=()
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            -w) opt_workdir="-w=$2"; shift ;;
+            -w) opt_w="-w=$2"; shift ;;
             -i) opt_i="-i" ;;
             -t) opt_t="-t" ;;
             -it) opt_i="-i"; opt_t="-t" ;;
@@ -142,8 +177,7 @@ function exe (
         esac
         shift
     done
-    #echo "$*" | dock exec -i $container_name dd of="$home_dir/.bash_history" conv=notrunc oflag=append
-    dock exec $opt_workdir $opt_i $opt_t ${opt_e[@]/#/'-e '} $container_name "$@"
+    dock exec $opt_w $opt_i $opt_t ${opt_e[@]/#/'-e '} $container_name "$@"
 )
 
 function enter (
@@ -158,18 +192,33 @@ function copy_local_sources (
     rsync_exclude_dirs=(
         '/build'
         '/rust/target'
+        '/sdk'
+        '/_gradle-home'
+        '/build-android-*'
+        '/gradle-*'
         '.git'
     )
 
     rsync -e "docker $docker_host exec -i" \
         -av --no-links --delete \
         ${rsync_exclude_dirs[@]/#/--exclude=} \
-        $(pwd)/ $container_name:$work_dir
+        $(pwd)/ $container_name:$src_dir
 )
+
+# Test whether the first arg is in the rest of the args
+function is_in (
+    item=$1; shift
+    list="$@"
+    for i in ${list[@]}; do
+        if [ "$item" == "$i" ]; then return 0; fi
+    done
+    return 1
+)
+
+# ---
 
 if [ "$clean" = y ]; then
     dock container rm -f $container_name 2>/dev/null || true
-    #dock image rm $image_name || true
 fi
 
 build_image
@@ -182,84 +231,85 @@ if [ "$enter_on_exit" = y ]; then
     trap enter EXIT
 fi
 
-exe bash -c "mkdir -p $work_dir $build_dir"
+exe bash -c "mkdir -p $src_dir"
 
 copy_local_sources
 
-### Build
 
-cmake_configure_options=(
-    -DCMAKE_BUILD_TYPE=Debug
-    -DWITH_ASAN=OFF
-    -DWITH_EXPERIMENTAL=OFF
-    -DCORROSION_BUILD_TESTS=ON
-    -DWITH_OUISYNC=OFF
-    # For testing with custom Ouisync sources
-    #-DOUISYNC_SRC_DIR=$HOME/work/ouisync
-    -DOUINET_MEASURE_BUILD_TIMES=OFF
-)
+for target_os in ${target_oss[@]}; do
+    ### Build
 
-if [ "$target_os" == windows ]; then
-    cmake_configure_options+=(
-        -DCMAKE_TOOLCHAIN_FILE=$work_dir/cmake/toolchain-mingw64.cmake
+    build_dir=$work_dir/build.$target_os
+
+    exe bash -c "mkdir -p $build_dir"
+
+    cmake_configure_options=(
+        -DCMAKE_BUILD_TYPE=Debug
+        -DWITH_ASAN=OFF
+        -DWITH_EXPERIMENTAL=OFF
+        -DCORROSION_BUILD_TESTS=ON
+        -DWITH_OUISYNC=OFF
+        # For testing with custom Ouisync sources
+        #-DOUISYNC_SRC_DIR=$HOME/work/ouisync
+        -DOUINET_MEASURE_BUILD_TIMES=OFF
     )
-fi
-
-exe -w $build_dir cmake $work_dir "${cmake_configure_options[@]}"
-exe -w $build_dir cmake --build . -v -j $(exe nproc)
-
-### Rust Tests
-
-# Only on Linux because `cargo` would look for libouinet_asio.so which is not
-# built for Windows (only dll).
-if [ "$target_os" == linux ]; then
-    env=(
-        CXXFLAGS="-I$build_dir/boost/install/include"
-        LD_LIBRARY_PATH="$build_dir"
-        LIBRARY_PATH="$build_dir"
-        RUST_BACKTRACE=1
-        RUST_LOG=ouinet_rs=debug
-    )
-    exe ${env[@]/#/-e } cargo test --verbose --manifest-path $work_dir/rust/Cargo.toml -- --nocapture
-fi
-
-### C++ Tests
-
-if [ "$run_tests" = y ]; then
-    test_targets=$(exe cmake --build $build_dir --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g')
-
-    # Test whether the first arg is in the rest of the args
-    function is_in (
-        item=$1; shift
-        list="$@"
-        for i in ${list[@]}; do
-            if [ "$item" == "$i" ]; then return 0; fi
-        done
-        return 1
-    )
-
-    binary_suffix=
-    env=()
-    lanucher=
-
+    
     if [ "$target_os" == windows ]; then
-        launcher="wine"
-        binary_suffix=.exe
-        winepaths=(
-            $build_dir
-            $build_dir/gcrypt/out/bin
-            $build_dir/gpg_error/out/bin
-            /usr/lib/gcc/x86_64-w64-mingw32/14-win32
+        cmake_configure_options+=(
+            -DCMAKE_TOOLCHAIN_FILE=$src_dir/cmake/toolchain-mingw64.cmake
         )
-        env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
     fi
-
-    for test in ${test_targets[@]}; do
-        if is_in $test ${excluded_test_targets[@]} ; then
-            echo "::: Skipping excluded test $test"
-            continue
+    
+    if [ "$target_os" == linux -o "$target_os" == windows ]; then
+        exe -w $build_dir cmake $src_dir "${cmake_configure_options[@]}"
+        exe -w $build_dir cmake --build . -v -j $(exe nproc)
+    else
+        exe -w $src_dir ./scripts/build-android.sh
+    fi
+    
+    ### Rust Tests
+    
+    # Only on Linux because `cargo` would look for libouinet_asio.so which is not
+    # built for Windows (only dll).
+    if [ "$target_os" == linux ]; then
+        env=(
+            CXXFLAGS="-I$build_dir/boost/install/include"
+            LD_LIBRARY_PATH="$build_dir"
+            LIBRARY_PATH="$build_dir"
+            RUST_BACKTRACE=1
+            RUST_LOG=ouinet_rs=debug
+        )
+        exe ${env[@]/#/-e } cargo test --verbose --manifest-path $src_dir/rust/Cargo.toml -- --nocapture
+    fi
+    
+    ### C++ Tests
+    
+    if [ "$run_tests" = y -a "$target_os" != android ]; then
+        test_targets=$(exe cmake --build $build_dir --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g')
+    
+        binary_suffix=
+        env=()
+        lanucher=
+    
+        if [ "$target_os" == windows ]; then
+            launcher="wine"
+            binary_suffix=.exe
+            winepaths=(
+                $build_dir
+                $build_dir/gcrypt/out/bin
+                $build_dir/gpg_error/out/bin
+                /usr/lib/gcc/x86_64-w64-mingw32/14-win32
+            )
+            env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
         fi
-        echo "::: Running test: $test"
-        exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
-    done
-fi
+    
+        for test in ${test_targets[@]}; do
+            if is_in $test ${excluded_test_targets[@]} ; then
+                echo "::: Skipping excluded test $test"
+                continue
+            fi
+            echo "::: Running test: $test"
+            exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
+        done
+    fi
+done
