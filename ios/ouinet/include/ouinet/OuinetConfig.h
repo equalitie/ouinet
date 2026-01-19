@@ -24,6 +24,8 @@
 
 - (OuinetConfig*)setDisableBridgeAnnouncement:(BOOL)value;
 
+- (OuinetConfig*)setDisableDoH:(BOOL)value;
+
 - (OuinetConfig*)setLogLevel:(NSString*)level;
 
 - (NSString*)getOuinetDirectory;
@@ -51,5 +53,7 @@
 - (BOOL)getDisableInjectorAccess;
 
 - (BOOL)getDisableBridgeAnnouncement;
+
+- (BOOL)getDisableDoH;
 
 @end
