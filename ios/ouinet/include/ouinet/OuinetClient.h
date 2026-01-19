@@ -9,4 +9,7 @@
 - (void)start;
 - (void)stop;
 
+- (NSString*)getProxyEndpoint;
+- (NSString*)getFrontendEndpoint;
+
 @end

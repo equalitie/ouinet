@@ -194,3 +194,16 @@ std::string NativeLib::helloOuinet()
 {
     return std::string("Hello Ouinet, this libary was definitely compiled inside of the ouinet cmake build system, cool");
 }
+
+
+std::string NativeLib::getProxyEndpoint() const noexcept {
+    if (!g_client) return "";
+    auto ep = g_client->get_proxy_endpoint();
+    auto ep_str = string(ep.address().to_string()) + ":" + to_string(ep.port());
+    return ep_str;
+}
+
+std::string NativeLib::getFrontendEndpoint() const noexcept {
+    if (!g_client) return "";
+    return g_client->get_frontend_endpoint();
+}

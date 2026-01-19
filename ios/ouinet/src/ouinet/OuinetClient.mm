@@ -85,4 +85,16 @@ NativeLib _n;
   return args;
 }
 
+- (NSString*)getProxyEndpoint
+{
+  std::string endpoint = _n.getProxyEndpoint();
+  return [NSString stringWithUTF8String:endpoint.c_str()];
+}
+
+- (NSString*)getFrontendEndpoint
+{
+  std::string endpoint = _n.getFrontendEndpoint();
+  return [NSString stringWithUTF8String:endpoint.c_str()];
+}
+
 @end
