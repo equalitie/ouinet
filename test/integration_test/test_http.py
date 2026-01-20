@@ -8,8 +8,8 @@ from typing import List, Generator, Optional
 import string
 
 import sys
-from os import remove
-from os.path import exists
+from os import remove, makedirs
+from os.path import exists, join
 from shutil import copyfile
 from shutil import rmtree
 from time import time
@@ -353,6 +353,12 @@ def http_server() -> Generator[Process, None, None]:
     server.terminate()
     server.join(timeout=2)
     print("http server terminated")
+
+
+@pytest_asyncio.fixture(autouse=True)
+def all_dirs():
+    i2p_dir = join(TestFixtures.REPO_FOLDER_NAME, "i2p")
+    makedirs(i2p_dir)
 
 
 @pytest_asyncio.fixture(autouse=True)
