@@ -1,6 +1,6 @@
 # Ouinet integration tests
 
-Ouinet integration tests are implemented in python twisted framework.
+Ouinet integration tests are implemented in python pytest framework.
 
 
 ## How to run the integration tests
@@ -13,24 +13,18 @@ $ export OUINET_BUILD_DIR=$HOME/ouinet/build/
 
 Then you could run the tests by
 
+```bash
+$ python -m pytest -svvx 
 ```
-$ cd test/integration_test
-$ python -m twisted.trial ./test_http.py
+
+Where s and v are for verbosity and x tells pytest to stop after first failure
+
+to run  a single test:
+```bash
+$ python -m pytest  -svv test_http.py::test_tcp_transport
 ```
 
-or to run  a single test:
-```
-$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport
-```
-to run the speedtests, use:
-
-$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport_speed_1KB
-
-or
-
-$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport_speed_1MB
-
-and look for the line:
+To check speed of i2p in i2p tests look for the line:
 
 `Retrieving 1.049e+06 bytes through I2P tunnel took 15.810519 seconds..`
 
