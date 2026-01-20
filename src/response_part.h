@@ -17,9 +17,7 @@
 #include "namespaces.h"
 #include "or_throw.h"
 
-namespace ouinet {
-
-namespace http_response {
+namespace ouinet::http_response {
 
 namespace detail {
     template<class P, class S>
@@ -288,5 +286,12 @@ struct Part : public detail::PartVariant
     { return detail::async_write_c(this, s, d, c, y); }
 };
 
+std::ostream& operator<<(std::ostream& os, ouinet::http_response::Part::Type);
+std::ostream& operator<<(std::ostream& os, Part const&);
+std::ostream& operator<<(std::ostream& os, Head const&);
+std::ostream& operator<<(std::ostream& os, ChunkHdr const&);
+std::ostream& operator<<(std::ostream& os, ChunkBody const&);
+std::ostream& operator<<(std::ostream& os, Body const&);
+std::ostream& operator<<(std::ostream& os, Trailer const&);
 
-}} // namespace ouinet::http_response
+} // namespace ouinet::http_response
