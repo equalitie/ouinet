@@ -90,7 +90,6 @@ size_t OuisyncFile::async_read_some_y(Buffer& buffer, boost::asio::yield_context
     }
     
     if (to_read == 0) {
-        close();
         return or_throw(yield, {}, 0);
     }
 
