@@ -7,15 +7,37 @@ namespace ouinet {
 
 class TestDir {
 public:
+    struct Builder {
+        bool _delete_if_exists = false;
+
+        Builder delete_if_exists(bool value) {
+            _delete_if_exists = value;
+            return *this;
+        }
+
+        TestDir build(fs::path path) const {
+            return TestDir(path, *this);
+        }
+    };
+
+public:
+#ifdef BOOST_TEST_MODULE
     TestDir()
         : _tempdir(fs::temp_directory_path() / "ouinet-cpp-tests" / suite_name() / test_name() / fs::unique_path())
     {
         fs::create_directories(_tempdir);
     }
+#endif
 
-    TestDir(fs::path deterministic_path)
-        : _tempdir(std::move(deterministic_path))
+    TestDir(fs::path path, std::optional<Builder> builder = {})
+        : _tempdir(std::move(path))
     {
+        if (builder) {
+            if (builder->_delete_if_exists && fs::exists(_tempdir)) {
+                fs::remove_all(_tempdir);
+            }
+        }
+
         fs::create_directories(_tempdir);
     }
 
@@ -64,6 +86,7 @@ public:
     }
 
 private:
+#ifdef BOOST_TEST_MODULE
     static auto const& current_test_case() {
         return boost::unit_test::framework::current_test_case();
     }
@@ -75,6 +98,7 @@ private:
     static std::string suite_name() {
         return boost::unit_test::framework::get<boost::unit_test::test_suite>(current_test_case().p_parent_id).p_name;
     }
+#endif
 
 private:
     fs::path _tempdir;
