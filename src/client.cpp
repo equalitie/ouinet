@@ -1772,34 +1772,34 @@ public:
                 _YERROR(yield, "Failed to write response to user agent; ec=", ec);
         }));
 
-        yield[ec].tag("flush").run([&] (auto yy) {
-            session.flush_response(cancel, yy,
-                [&] ( Part&& part
-                    , Cancel& cancel
-                    , asio::yield_context y)
-                {
-                    // If the user agent closed its connection, stop getting data from the injector too.
-                    // Otherwise, besides continuing to transfer data to the local cache,
-                    // it will also accumulate in memory (at the `qag` queue, which is no longer read),
-                    // with both being especially problematic with big resources like videos.
-                    //
-                    // Please note that this will cause an incomplete response to be stored;
-                    // hopefully the Injector mechanism may be faster to respond
-                    // if the client tries to download the same resource again.
-                    // Another fix would be to have the local cache participate in multi-peer downloads.
-                    if (!tnx.is_open())
-                        return or_throw(y, asio::error::broken_pipe);
-                    if (do_cache) qst.push_back(part);
-                    qag.push_back(std::move(part));
-                }, default_timeout::activity());
-        });
+        auto tag = yield.log_path().tag("flush");
+        session.flush_response(cancel, yield[ec].tag("flush").native(),
+            [&] ( Part&& part
+                , Cancel& cancel
+                , asio::yield_context y)
+            {
+                // If the user agent closed its connection, stop getting data from the injector too.
+                // Otherwise, besides continuing to transfer data to the local cache,
+                // it will also accumulate in memory (at the `qag` queue, which is no longer read),
+                // with both being especially problematic with big resources like videos.
+                //
+                // Please note that this will cause an incomplete response to be stored;
+                // hopefully the Injector mechanism may be faster to respond
+                // if the client tries to download the same resource again.
+                // Another fix would be to have the local cache participate in multi-peer downloads.
+                if (!tnx.is_open()) {
+                    return or_throw(y, asio::error::broken_pipe);
+                }
+                if (do_cache) qst.push_back(part);
+                qag.push_back(std::move(part));
+            },
+            default_timeout::activity());
 
         if (do_cache) qst.push_back(boost::none);
         qag.push_back(boost::none);
 
-        yield.tag("wait").run([&] (auto y) {
-            wc.wait(y);
-        });
+        // Wait for the spawned tasks to finish
+        wc.wait(yield.tag("wait").native());
 
         _YDEBUG(yield, "Finish; ec=", ec);
 
