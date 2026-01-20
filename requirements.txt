@@ -1,1 +1,4 @@
-twisted
+pytest
+pytest-timeout
+pytest-asyncio
+requests
