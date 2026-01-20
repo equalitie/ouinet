@@ -203,10 +203,9 @@ class OuinetProcess(object):
     async def stdout_listening_task(self):
         try:
             while True:
-                if not self._term_signal_sent:
-                    self.assert_process_is_alive()
-                else:
+                if self._term_signal_sent:
                     return
+                self.assert_process_is_alive()
 
                 line: str = await asyncio.to_thread(self.output.__next__)
                 assert isinstance(line, str)
@@ -243,7 +242,8 @@ class OuinetProcess(object):
             listener.cancel()
             await listener
 
-    def is_teardown(self) -> bool:
+    # It is not is_teardown to avoid self-detection
+    def is_tearingdown(self) -> bool:
         tb = "\n".join(format_stack())
         if "teardown" in tb.lower():
             return True
@@ -256,7 +256,7 @@ class OuinetProcess(object):
             print("process " + self.config.app_name + " stopping")
 
             # Introspection for extra debug details
-            if self.is_teardown():
+            if self.is_tearingdown():
                 print("this is happening as a part of teardown")
             else:
                 print("the process is being stopped from inside the test body")
