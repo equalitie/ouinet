@@ -2775,7 +2775,12 @@ void Client::State::setup_cache(asio::yield_context yield)
         do_notify_ready();
     });
 
-    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http
+#ifdef __EXPERIMENTAL__
+        ||
+        _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P
+#endif // ifdef __EXPERIMENTAL__
+        ) {
       LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
 #define fail_on_error(__msg) { \
@@ -2789,7 +2794,7 @@ void Client::State::setup_cache(asio::yield_context yield)
         ? cache::Client::build( _ctx.get_executor()
                               , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
-                              , _config.repo_root()/"bep5_http"
+                                , _config.repo_root()/"bep5_http" //TODO gives this a more inclusive name covering bothe bep5 and bep3 caches
                               , _config.max_cached_age()
                               , yield[ec])
         : cache::Client::build( _ctx.get_executor()
@@ -2809,13 +2814,12 @@ void Client::State::setup_cache(asio::yield_context yield)
     // but they will still report and error code to the caller.
     do_notify_ready();
 
-    auto dht = bittorrent_dht(yield[ec]);
-    fail_on_error("Failed to initialize BT DHT for cache::Client");
+    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+      auto dht = bittorrent_dht(yield[ec]);
+      fail_on_error("Failed to initialize BT DHT for cache::Client");
 
-    if (!_cache->enable_dht(dht, _config.max_simultaneous_announcements())) ec = asio::error::invalid_argument;
-    fail_on_error("Failed to enable BT DHT in cache::Client");
-
-#undef fail_on_error
+      if (!_cache->enable_dht(dht, _config.max_simultaneous_announcements())) ec = asio::error::invalid_argument;
+      fail_on_error("Failed to enable BT DHT in cache::Client");
     }
 #ifdef __EXPERIMENTAL__
     //setup Bep3HTTPOverI2P cache
@@ -2823,15 +2827,22 @@ void Client::State::setup_cache(asio::yield_context yield)
       // set _upnps just to prevent crashes when displaying its status in the frontend interface
       _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
-      //with both services, we check if i2p ouiservice has already started      
+      //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
       }
 
+      if (!_cache->enable_bep3_announcer(*_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements())) {
+          ec = asio::error::invalid_argument;
+      }
+      fail_on_error("Failed to enable BEP3 announcer in cache::Client");
     }
 #endif // ifdef __EXPERIMENTAL__
+
+#undef fail_on_error
+    }
     //unsupported cache type
-	else {
+    else {
         ec = asio::error::operation_not_supported;
         return;
     }

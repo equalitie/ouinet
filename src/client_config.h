@@ -84,6 +84,10 @@ public:
     size_t i2p_hops_per_tunnel() const {
       return _i2p_hops_per_tunnel;
     }
+
+    const boost::optional<std::string>& i2p_bep3_tracker() const {
+      return _i2p_bep3_tracker;
+    }
 #endif // ifdef __EXPERIMENTAL__
 
     const asio::ip::tcp::endpoint& local_endpoint() const {
@@ -270,6 +274,9 @@ private:
 #ifdef __EXPERIMENTAL__
           ("i2p-hops-per-tunnel", po::value<size_t>()
             , "number intermediary hops to be used for I2P garlic routing.")
+          ("i2p-bep3-tracker", po::value<string>()
+            , "I2P address of the BEP3 tracker "
+              "(<B32_PUBKEY>.b32.i2p or <B64_PUBKEY>)")
 #endif // ifdef __EXPERIMENTAL__
            ;
 
@@ -519,6 +526,7 @@ private:
 
 #ifdef __EXPERIMENTAL__
     size_t _i2p_hops_per_tunnel = 3;
+    boost::optional<std::string> _i2p_bep3_tracker;
 #endif // ifdef __EXPERIMENTAL__
   
 };

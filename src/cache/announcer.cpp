@@ -49,12 +49,11 @@ struct Entry {
 };
 
 //--------------------------------------------------------------------
-// Loop
+// Base Loop
 struct Announcer::Loop {
     using Entries = util::AsyncQueue<Entry, std::list>;
 
     AsioExecutor ex;
-    shared_ptr<bt::DhtBase> dht;
     Entries entries;
     size_t _simultaneous_announcements;
     Cancel _cancel;
@@ -63,9 +62,8 @@ struct Announcer::Loop {
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements)
-        : ex(dht->get_executor())
-        , dht(move(dht))
+    Loop(AsioExecutor ex, size_t simultaneous_announcements)
+        : ex(ex)
         , entries(ex)
         , _simultaneous_announcements(simultaneous_announcements)
     { }
@@ -183,7 +181,8 @@ struct Announcer::Loop {
     }
 
     Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
-    {        auto end = entries.end();
+    {
+        auto end = entries.end();
 
         while (!cancel) {
             if (entries.empty()) {
@@ -217,7 +216,7 @@ struct Announcer::Loop {
 
     void start()
     {
-        TRACK_SPAWN(dht->get_executor(), [&] (asio::yield_context yield) {
+        TRACK_SPAWN(ex, [this] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
             loop(cancel, yield[ec]);
@@ -226,20 +225,11 @@ struct Announcer::Loop {
 
     void loop(Cancel& cancel, asio::yield_context yield)
     {
-        {
-            // XXX: Temporary handler tracking as this coroutine sometimes
-            // fails to exit.
-            TRACK_HANDLER();
-            sys::error_code ec;
-            _DEBUG("Waiting for DHT");
-            dht->wait_all_ready(cancel, yield[ec]);
-        }
-
         auto on_exit = defer([&] {
             _DEBUG("Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
-        WaitCondition wcon(dht->get_executor());
+        WaitCondition wcon(ex);
 
         while (!cancel) {
             sys::error_code ec_wcon;
@@ -259,13 +249,13 @@ struct Announcer::Loop {
                     continue;
                 }
 
-                TRACK_SPAWN(dht->get_executor(), ([&, lock = wcon.lock()] (asio::yield_context yield) {
+                TRACK_SPAWN(ex, ([this, &cancel, &wcon, lock = wcon.lock()] (asio::yield_context yield) {
                     sys::error_code ec_coro;
 
                     // Try inserting three times before moving to the next entry
                     bool success = false;
 
-                    Entry e = move(ei->first);
+                    Entry e = move(entries.begin()->first);
                     for (int i = 0; i != 3; ++i) {
                         // XXX: Temporary handler tracking as this coroutine sometimes
                         // fails to exit.
@@ -298,28 +288,90 @@ struct Announcer::Loop {
         return or_throw(yield, asio::error::operation_aborted);
     }
 
-    void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
+    // Virtual announce method - to be overridden by children
+    virtual void announce(Entry& e, Cancel& cancel, asio::yield_context yield) = 0;
+
+    virtual ~Loop() { _cancel(); }
+};
+
+//--------------------------------------------------------------------
+// Bep5Loop - announces to DHT
+struct Bep5Loop : public Announcer::Loop {
+    shared_ptr<bt::DhtBase> dht;
+
+    Bep5Loop(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements)
+        : Loop(dht->get_executor(), simultaneous_announcements)
+        , dht(move(dht))
+    { }
+
+    void start()
     {
-        _DEBUG("Announcing: ", e.key, "...");
+        TRACK_SPAWN(ex, [this] (asio::yield_context yield) {
+            Cancel cancel(_cancel);
+            sys::error_code ec;
+
+            // Wait for DHT to be ready before starting the loop
+            {
+                TRACK_HANDLER();
+                _DEBUG("Waiting for DHT");
+                dht->wait_all_ready(cancel, yield[ec]);
+            }
+
+            loop(cancel, yield[ec]);
+        });
+    }
+
+    void announce(Entry& e, Cancel& cancel, asio::yield_context yield) override
+    {
+        _DEBUG("Announcing (BEP5/DHT): ", e.key, "...");
 
         sys::error_code ec;
         auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
-        _DEBUG("Announcing: ", e_key, ": done; ec=", ec);
+        _DEBUG("Announcing (BEP5/DHT): ", e_key, ": done; ec=", ec);
 
         return or_throw(yield, ec);
     }
-
-    ~Loop() { _cancel(); }
 };
 
+#ifdef __EXPERIMENTAL__
 //--------------------------------------------------------------------
-// Announcer
-Announcer::Announcer(std::shared_ptr<bittorrent::DhtBase> dht, size_t simultaneous_announcements)
-    : _loop(new Loop(std::move(dht), simultaneous_announcements))
+// Bep3Loop - announces via HTTP to tracker
+struct Bep3Loop : public Announcer::Loop {
+    string tracker_url;
+
+    Bep3Loop(AsioExecutor ex, string tracker_url, size_t simultaneous_announcements)
+        : Loop(ex, simultaneous_announcements)
+        , tracker_url(move(tracker_url))
+    { }
+
+    void announce(Entry& e, Cancel& cancel, asio::yield_context yield) override
+    {
+        _DEBUG("Announcing (BEP3/HTTP): ", e.key, " to tracker ", tracker_url, "...");
+
+        sys::error_code ec;
+        auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
+
+        // TODO: Implement HTTP announce to tracker
+        // This should make an HTTP GET request to the tracker with:
+        // - info_hash: e.infohash
+        // - peer_id: generated peer id
+        // - port: listening port
+        // - event: started/completed/stopped
+
+        _DEBUG("Announcing (BEP3/HTTP): ", e_key, ": done; ec=", ec);
+
+        return or_throw(yield, ec);
+    }
+};
+#endif // __EXPERIMENTAL__
+
+//--------------------------------------------------------------------
+// Base Announcer
+Announcer::Announcer(AsioExecutor ex, size_t simultaneous_announcements)
+    : _loop(nullptr)
 {
-    _loop->start();
 }
 
 bool Announcer::add(Key key)
@@ -332,3 +384,27 @@ bool Announcer::remove(const Key& key) {
 }
 
 Announcer::~Announcer() {}
+
+//--------------------------------------------------------------------
+// Bep5Announcer
+Bep5Announcer::Bep5Announcer(std::shared_ptr<bittorrent::DhtBase> dht, size_t simultaneous_announcements)
+    : Announcer(dht->get_executor(), simultaneous_announcements)
+{
+    _loop = make_unique<Bep5Loop>(move(dht), simultaneous_announcements);
+    static_cast<Bep5Loop*>(_loop.get())->start();
+}
+
+Bep5Announcer::~Bep5Announcer() {}
+
+#ifdef __EXPERIMENTAL__
+//--------------------------------------------------------------------
+// Bep3Announcer
+Bep3Announcer::Bep3Announcer(AsioExecutor ex, std::string tracker_url, size_t simultaneous_announcements)
+    : Announcer(ex, simultaneous_announcements)
+{
+    _loop = make_unique<Bep3Loop>(ex, move(tracker_url), simultaneous_announcements);
+    _loop->start();
+}
+
+Bep3Announcer::~Bep3Announcer() {}
+#endif // __EXPERIMENTAL__

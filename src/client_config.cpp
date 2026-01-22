@@ -323,6 +323,21 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     }
 #endif // ifdef __EXPERIMENTAL__ _i2p_hops_
 
+#ifdef __EXPERIMENTAL__
+    if (auto opt = as_optional<string>(vm, "i2p-bep3-tracker")) {
+        if (_cache_type != CacheType::Bep3HTTPOverI2P) {
+            throw std::runtime_error(
+                "'--i2p-bep3-tracker' can only be used with '--cache-type=bep3-http-over-i2p'");
+        }
+        _i2p_bep3_tracker = *opt;
+    }
+
+    if (_cache_type == CacheType::Bep3HTTPOverI2P && !_i2p_bep3_tracker) {
+        throw std::runtime_error(
+            "'--cache-type=bep3-http-over-i2p' requires '--i2p-bep3-tracker' to be set");
+    }
+#endif // ifdef __EXPERIMENTAL__
+
     if (_cache_type == CacheType::None) {
         LOG_WARN("Not using d-cache");
     }

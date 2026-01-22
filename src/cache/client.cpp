@@ -1,6 +1,5 @@
 #include "client.h"
 #include "announcer.h"
-#include "bep3announcer.h"
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
 #include "http_sign.h"
@@ -102,8 +101,10 @@ struct Client::Impl {
     unique_ptr<cache::HttpStore> _http_store;
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
-    std::unique_ptr<Announcer> _announcer;
+    std::unique_ptr<Bep5Announcer> _bep5_announcer;
+#ifdef __EXPERIMENTAL__
     std::unique_ptr<Bep3Announcer> _bep3_announcer;
+#endif // __EXPERIMENTAL__
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
@@ -141,17 +142,30 @@ struct Client::Impl {
                 group);
     }
 
-  bool enable_bep3_announcer(string Tracker_id) {}
-    }
-    bool enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
-        if (_dht || _announcer) return false;
+#ifdef __EXPERIMENTAL__
+    bool enable_bep3_announcer(string tracker_id, size_t simultaneous_announcements) {
+        if (_bep3_announcer) return false;
 
-        _dht = move(dht);
-        _announcer = std::make_unique<Announcer>(_dht, simultaneous_announcements);
+        _bep3_announcer = std::make_unique<Bep3Announcer>(_ex, std::move(tracker_id), simultaneous_announcements);
 
         // Announce all groups.
         for (auto& group_name : _groups->groups())
-            if (_announcer->add(compute_swarm_name(group_name)))
+            if (_bep3_announcer->add(compute_swarm_name(group_name)))
+                _VERBOSE("Start BEP3 announcing group: ", group_name);
+
+        return true;
+    }
+#endif // __EXPERIMENTAL__
+
+    bool enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
+        if (_dht || _bep5_announcer) return false;
+
+        _dht = move(dht);
+        _bep5_announcer = std::make_unique<Bep5Announcer>(_dht, simultaneous_announcements);
+
+        // Announce all groups.
+        for (auto& group_name : _groups->groups())
+            if (_bep5_announcer->add(compute_swarm_name(group_name)))
                 _VERBOSE("Start announcing group: ", group_name);
 
         return true;
@@ -533,14 +547,17 @@ struct Client::Impl {
         _groups->add(group, key, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        if (!_announcer) return;
-        if (_announcer->add(compute_swarm_name(group)))
-            _VERBOSE("Start announcing group: ", group);
+        if (_bep5_announcer) {
+            if (_bep5_announcer->add(compute_swarm_name(group)))
+                _VERBOSE("Start announcing group: ", group);
+        }
 
-        if (!_bep3_announcer) return;        
-        if (_bep3_announcer->add(compute_swarm_name(group)))
-            _VERBOSE("Start announcing group: ", group);
-
+#ifdef __EXPERIMENTAL__
+        if (_bep3_announcer) {
+            if (_bep3_announcer->add(compute_swarm_name(group)))
+                _VERBOSE("Start BEP3 announcing group: ", group);
+        }
+#endif // __EXPERIMENTAL__
     }
 
     http::response_header<>
@@ -587,15 +604,22 @@ struct Client::Impl {
     void unpublish_cache_entry(const std::string& key, bool& group_pinned)
     {
         auto empty_groups = _groups->remove(key, group_pinned);
-        if (!_announcer || group_pinned) return;
-        for (const auto& eg : empty_groups) {
-            if (_announcer->remove(compute_swarm_name(eg)))
-              _VERBOSE("Stop announcing group: ", eg);
+        if (group_pinned) return;
 
-            if (_bep3_announcer) {
-              if (bep3_announcer->remove(compute_swarm_name(eg)))
+#ifdef __EXPERIMENTAL__
+        if (!_bep5_announcer && !_bep3_announcer) return;
+#else
+        if (!_bep5_announcer) return;
+#endif // __EXPERIMENTAL__
+
+        for (const auto& eg : empty_groups) {
+            if (_bep5_announcer && _bep5_announcer->remove(compute_swarm_name(eg)))
                 _VERBOSE("Stop announcing group: ", eg);
-            }
+
+#ifdef __EXPERIMENTAL__
+            if (_bep3_announcer && _bep3_announcer->remove(compute_swarm_name(eg)))
+                _VERBOSE("Stop BEP3 announcing group: ", eg);
+#endif // __EXPERIMENTAL__
         }
     }        
 
@@ -804,6 +828,12 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
     return _impl->enable_dht(move(dht),
                              simultaneous_announcements);
 }
+
+#ifdef __EXPERIMENTAL__
+bool Client::enable_bep3_announcer(std::string tracker_id, size_t simultaneous_announcements) {
+    return _impl->enable_bep3_announcer(std::move(tracker_id), simultaneous_announcements);
+}
+#endif // __EXPERIMENTAL__
 
 Session Client::load( const std::string& key
                     , const GroupName& group
