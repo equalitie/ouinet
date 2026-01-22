@@ -160,7 +160,7 @@ ouinet::resolve_target(const http::request_header<>& req
     if (!local && (!priv || allow_private_targets))
     {
         lookup = do_doh
-               ? util::resolve_tcp_doh( host, port, cancel, yield )
+               ? util::resolve_tcp_doh( host, port, cancel, yield[ec] )
                : util::resolve_tcp_async( host, port
                                         , exec
                                         , cancel
@@ -946,6 +946,7 @@ Injector::Injector(
             ( ex
             , metrics::Client::noop().mainline_dht()
             , config.is_doh_enabled()
+            , config.udp_mux_rx_limit_in_bytes()
             , fs::path{}
             , _config.bt_bootstrap_extras());  // default storage dir
     }

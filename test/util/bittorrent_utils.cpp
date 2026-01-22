@@ -30,8 +30,10 @@ public:
 
         auto metrics_client = metrics::Client::noop();
         bool do_doh = true;
+        uint32_t rx_limit = udp_mux_rx_limit_client;
 
-        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor(), metrics_client.mainline_dht(), do_doh);
+        auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor(), metrics_client.mainline_dht(),
+                                                         do_doh, rx_limit);
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);

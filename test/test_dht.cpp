@@ -3,6 +3,7 @@
 #include <boost/asio.hpp>
 
 #include <chrono>
+#include <constants.h>
 #include <util/hash.h>
 
 #define private public
@@ -105,8 +106,9 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     bool do_doh = true;
+    uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh);
+    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
 
     init_without_bootstrapping(ctx, dht_node);
     bootstrap(ctx, dht_node);

@@ -55,6 +55,7 @@ public:
 
     void start(asio::yield_context) override;
     void stop() override;
+    size_t injector_candidates_n() const noexcept;
 
     GenericStream connect(asio::yield_context, Cancel&) override;
     GenericStream connect(asio::yield_context, Cancel&, bool tls, Target);

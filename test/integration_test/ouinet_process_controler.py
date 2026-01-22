@@ -7,10 +7,14 @@
 import os
 import logging
 from typing import List
+from typing import Generator
+from traceback import format_stack
+import asyncio
+from subprocess import TimeoutExpired
+from subprocess import Popen, PIPE, STDOUT, check_output
 
 from test_fixtures import TestFixtures
 
-from twisted.internet import reactor, defer, task
 from ouinet_process_protocol import (
     OuinetBEP5CacheProcessProtocol,
     OuinetProcessProtocol,
@@ -59,6 +63,33 @@ class OuinetConfig(object):
         self.benchmark_regexes = benchmark_regexes
 
 
+def spawn(command: List[str]) -> Popen:
+    print("running command :", " ".join(command))
+    handle = Popen(
+        command,
+        shell=False,
+        stdin=PIPE,
+        stdout=PIPE,
+        stderr=STDOUT,
+    )
+    if handle.stdout is None:
+        raise ValueError("could not run command: ", command)
+    return handle
+
+
+def output_yielder(handle: Popen) -> Generator[str, None, None]:
+    with handle:
+        try:
+            if not handle.stdout:
+                raise IOError("no stdout on process")
+            for line in iter(handle.stdout.readline, ""):
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
+                yield line
+        except:
+            pass
+
+
 class OuinetProcess(object):
     def __init__(self, ouinet_config):
         """
@@ -72,7 +103,7 @@ class OuinetProcess(object):
                                  related to this process
         """
         self.config = ouinet_config
-        # in case the communication process protocol is not explicitly set 
+        # in case the communication process protocol is not explicitly set
         # starts a default process protocol to check on Fatal errors
         # TODO: This option apparently has been removed. Check if we ever need
         # preset process protocol.
@@ -101,6 +132,19 @@ class OuinetProcess(object):
         ) as conf_file:
             conf_file.write(self.config.config_file_content)
 
+    def abort_task_because_exception(self, task: asyncio.Task):
+        """
+        Using this makes sure we have enough debugging information
+        """
+        if not task.done():
+            raise ValueError(f"Task {task} failed to mark itself done when aborting")
+        if not task.exception():
+            raise ValueError(f"Task {task} failed to set up exception when aborting")
+
+        print(f"Properly aborted the task {task}, now stopping the loop")
+        loop = asyncio.get_running_loop()
+        loop.stop()
+
     def make_config_folder(self):
         if not os.path.exists(TestFixtures.REPO_FOLDER_NAME):
             os.makedirs(TestFixtures.REPO_FOLDER_NAME)
@@ -123,10 +167,9 @@ class OuinetProcess(object):
 
         Args
           argv: command line arguments where argv[0] should be the name of the
-                executable program with its code
-          process_protoco: twisted process protocol which deals with processing
-                           the output of the ouinet process. If None, a generic
-                           Ouinet Process
+                executable binary
+          process_protocol: deals with processing the output of the ouinet process.
+                If None, a generic Ouinet Process
         """
         # do not start twice
         if self._has_started:
@@ -134,59 +177,105 @@ class OuinetProcess(object):
 
         self._proc_protocol.app_name = self.config.app_name
 
-        logging.debug("Spawning process " + " ".join(self.config.argv))        
-        self._proc = reactor.spawnProcess(self._proc_protocol,
-                                          self.config.argv[0],
-                                          self.config.argv,
-                                          env=ouinet_env)
+        self.command = self.config.argv
+        print("Spawning process " + " ".join(self.command))
+
+        self._proc = spawn(self.command)
+        self.output = output_yielder(self._proc)
+        self.listener: asyncio.Task = asyncio.create_task(self.stdout_listening_task())
+        print("spawned")
+
         self._has_started = True
 
-        # we add a twisted timer to kill the process after timeout
-        logging.debug(
-            self.config.app_name
-            + " times out in "
-            + str(self.config.timeout)
-            + " seconds"
-        )
-        self.timeout_killer = reactor.callLater(self.config.timeout, self.stop)
+    def assert_process_is_alive(self):
+        if self._proc.poll() is not None:
+            print("sudden death of ", self.command[0])
+            stdout, stderr = self._proc.communicate(timeout=5)
+            raise IOError(
+                "process",
+                self.command,
+                "has unexpectedly died, stdout:",
+                stdout,
+                "stderr:",
+                stderr,
+            )
 
-        # send a pulse to keep the output of the proccess alive
-        self.pulse_timer = task.LoopingCall(self._proc_protocol.pulse_out)
-        self.pulse_timer.start(
-            TestFixtures.KEEP_IO_ALIVE_PULSE_INTERVAL
-        )  # call every second
+    async def stdout_listening_task(self):
+        try:
+            while True:
+                if self._term_signal_sent:
+                    return
+                self.assert_process_is_alive()
 
-        # we *might* need to make sure that the process has ended before
-        # ending the test because Twisted Trial might get mad otherwise
-        self.proc_end = defer.Deferred()
-        self._proc_protocol.onExit = self.proc_end
+                line: str = await asyncio.to_thread(self.output.__next__)
+                assert isinstance(line, str)
+                self._proc_protocol.errReceived(line)
+
+            print("exited listening loop for ", self)
+        except asyncio.CancelledError:
+            print("Cancelled listening to process ", self.command[0])
+            return
+
+        except Exception as e:
+            # stopping the test to return the error
+            print("setting an exception for ", self.command)
+
+            task = asyncio.current_task()
+            asyncio.get_running_loop().call_soon(
+                self.abort_task_because_exception, task
+            )
+            print("scheduled loopstop")
+            raise IOError("Error while listening to stdout") from e
 
     def send_term_signal(self):
         if not self._term_signal_sent:
             logging.debug("Sending term signal to " + self.config.app_name)
             self._term_signal_sent = True
-            self._proc.signalProcess("TERM")
+            self._proc.terminate()
 
-    def stop(self):
-        if self._has_started:  # stop only if started
+    async def stop_listening(self):
+        listener = self.listener
+        if listener.done() and listener.exception():
+            raise IOError("Error while running the process:") from listener.exception()
+        print("no error reported, cancelling listening task")
+        if not listener.get_loop().is_closed():
+            listener.cancel()
+            await listener
+
+    # It is not is_teardown to avoid self-detection
+    def is_tearingdown(self) -> bool:
+        tb = "\n".join(format_stack())
+        if "teardown" in tb.lower():
+            return True
+        return False
+
+    async def stop(self):
+        if self._has_started and not self._term_signal_sent:  # stop only if started
             self._has_started = False
             logging.debug("process " + self.config.app_name + " stopping")
+            print("process " + self.config.app_name + " stopping")
 
-            if self.timeout_killer.active():
-                self.timeout_killer.cancel()
+            # Introspection for extra debug details
+            if self.is_tearingdown():
+                print("this is happening as a part of teardown")
+            else:
+                print("the process is being stopped from inside the test body")
 
-            self.pulse_timer.stop()
+            await self.stop_listening()
 
             self.send_term_signal()
-
-            # Don't do this because we may lose some important debug
-            # information that gets printed between now and when the app
-            # actually exits.
-            # self._proc_protocol.transport.loseConnection()
+            print("waiting for termination of", self.command[0])
+            # Waiting for the process to actually terminate
+            try:
+                self._proc.wait(timeout=5)
+            except TimeoutExpired:
+                print("[WARNING] termination unsuccessfull, killing", self.command[0])
+                self._proc.kill()
+                self._proc.communicate()
 
     @property
     def callbacks(self):
-        return self._proc_protocol.callbacks
+        return self._proc_protocol.benchmarks
 
 
 class OuinetClient(OuinetProcess):
@@ -199,7 +288,7 @@ class OuinetClient(OuinetProcess):
             os.path.join(ouinet_env["OUINET_BUILD_DIR"], "client"),
             "--repo",
             self.config.config_folder_name,
-            "--log-level=DEBUG",
+            "--log-level=SILLY",
             "--enable-log-file",
         ] + self.config.argv
 
@@ -229,25 +318,30 @@ class OuinetInjector(OuinetProcess):
     """
     As above, but for the 'injector'
     Starts an injector process by passing the args to the service
-
-    Args
-    injector_name: the name of the injector which determines the config folder
-                   name
-    timeout: how long before killing the injector process
-    args: list containing command line arguments passed directly to the injector
-    i2p_ready: is a Deferred object whose callback is being called when i2p
-              tunnel is ready
     """
 
     def __init__(self, injector_config):
         injector_config.config_file_name = TestFixtures.INJECTOR_CONF_FILE_NAME
         injector_config.config_file_content = TestFixtures.INJECTOR_CONF_FILE_CONTENT
         super(OuinetInjector, self).__init__(injector_config)
+        # Isn't it supposed to do it BEFORE initializing the superclass?
         self.config.argv = [
-            os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector"),
+            OuinetInjector.injector_path(),
             "--repo",
             self.config.config_folder_name,
         ] + self.config.argv
+
+    @staticmethod
+    def has_i2p() -> bool:
+        output = check_output([OuinetInjector.injector_path(), "--help"]).decode(
+            "utf-8"
+        )
+        return "i2p" in output
+
+    @staticmethod
+    def injector_path() -> str:
+        """Helper function for injector capabilities check"""
+        return os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector")
 
     def get_index_key(self) -> str:
         """Return a key string used to access the cache index created by this injector."""
@@ -269,13 +363,15 @@ class OuinetBEP5CacheInjector(OuinetInjector):
         )
 
     def get_index_key(self):
-        return self._proc_protocol.public_key
+        return self._proc_protocol.bep5_public_key
+
 
 class OuinetI2PInjector(OuinetInjector):
     """
-    As above, but for the 'injector' 
+    As above, but for the 'injector'
     It is a child of Ouinetinjector with i2p ouiservice
     """
+
     def __init__(self, injector_config, private_key_blob=None):
         super(OuinetI2PInjector, self).__init__(injector_config)
         # we use cache process protocol to be able to store
@@ -290,18 +386,20 @@ class OuinetI2PInjector(OuinetInjector):
         self._setup_i2p_private_key(private_key_blob)
 
     def _setup_i2p_private_key(self, private_key_blob):
-        if not os.path.exists(self.config.config_folder_name+"/i2p"):
-            os.makedirs(self.config.config_folder_name+"/i2p")
+        if not os.path.exists(self.config.config_folder_name + "/i2p"):
+            os.makedirs(self.config.config_folder_name + "/i2p")
 
-        if (private_key_blob):
-            with open(self.config.config_folder_name+"/i2p/i2p-private-key", "w") \
-              as private_key_file:
+        if private_key_blob:
+            with open(
+                self.config.config_folder_name + "/i2p/i2p-private-key", "w"
+            ) as private_key_file:
                 private_key_file.write(private_key_blob)
 
     def get_I2P_public_ID(self):
         try:
-            with open(self.config.config_folder_name+"/endpoint-i2p", "r") \
-              as public_id_file:
+            with open(
+                self.config.config_folder_name + "/endpoint-i2p", "r"
+            ) as public_id_file:
                 return public_id_file.read().rstrip()
         except:
             return None

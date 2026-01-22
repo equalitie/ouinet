@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <boost/asio/ssl/context.hpp>
+#include <boost/asio/local/stream_protocol.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -94,6 +95,17 @@ public:
         return _udp_mux_port;
     }
 
+    uint32_t udp_mux_rx_limit() const {
+        // Value in Kbps
+        return _udp_mux_rx_limit;
+    }
+
+    uint32_t udp_mux_rx_limit_in_bytes() const {
+        // The value is set in Kbps in the configuration but required in bytes
+        // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
+        return _udp_mux_rx_limit * 1000 / 8;
+    }
+
     bool is_cache_enabled() const { return _cache_type != CacheType::None; }
     CacheType cache_type() const { return _cache_type; }
     bool is_cache_bep5() const { return _cache_type == CacheType::Bep5Http; }
@@ -137,6 +149,10 @@ public:
 
     asio::ip::tcp::endpoint front_end_endpoint() const {
         return _front_end_endpoint;
+    }
+
+    asio::local::stream_protocol::endpoint front_end_unix_socket_endpoint() const {
+        return _front_end_unix_socket_endpoint;
     }
 
     const boost::optional<std::string>& front_end_access_token() const {
@@ -217,17 +233,25 @@ private:
         services.add_options()
            ("listen-on-tcp"
             , po::value<string>()->default_value("127.0.0.1:8077")
-            , "HTTP proxy endpoint (in <IP>:<PORT> format)")
+            , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
            ("udp-mux-port"
            , po::value<uint16_t>()
            , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
+           ("udp-mux-rx-limit"
+           , po::value<uint32_t>()
+           , "Max rate limit that's allowed for incoming packets to the "
+             "UDP multiplexer. The value is expressed in Kbps. To leave it "
+             "unlimited, set it to zero.")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
             , "Path to the CA certificate store file")
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
-            , "Front-end's endpoint (in <IP>:<PORT> format)")
+            , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+            ("front-end-unix-socket-ep"
+            , po::value<string>()
+            , "Path to the front-end Unix socket. Absolute or relative to repo root.")
            ("front-end-access-token"
             , po::value<string>()
             , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
@@ -484,6 +508,7 @@ private:
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
+    uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
@@ -493,6 +518,7 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    asio::local::stream_protocol::endpoint _front_end_unix_socket_endpoint;
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
