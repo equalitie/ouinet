@@ -40,7 +40,7 @@ and then
 
 ```
 $ cd test/integration_test
-$ python i2p_browser_test.py
+$ python try_i2p_at_browser.py
 ```
 
 You need to wait first for the injector i2p tunnel and then for the client tunnel to get established. When both tunnels are established, you need to set your browser to use `127.0.0.1:3888` as both HTTP and HTTPS proxy.
@@ -51,7 +51,7 @@ from there on you should be able to use your browser to browser websites through
 
 ### I2P Browser tests without relaying on the Python script.
 
-The `i2p_browser_test.py` test print the parameters you need to run the injector and client to act as HTTP over I2P proxy. Using these parameters then you could run the injector and the client on different machine to simulate more of a real world situation.
+The `try_i2p_at_browser.py` script prints the parameters you need to run the injector and client to act as HTTP over I2P proxy. Using these parameters then you could run the injector and the client on different machine to simulate more of a real world situation.
 
 More specifically to run the ouinet injector on the injector machine, create the sub-folder folder `repos/i2p_injector_i2p` in current folder and then run
 
