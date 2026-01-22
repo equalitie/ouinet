@@ -357,8 +357,16 @@ def http_server() -> Generator[Process, None, None]:
 
 @pytest_asyncio.fixture(autouse=True)
 def all_dirs():
-    i2p_dir = join(TestFixtures.REPO_FOLDER_NAME, "i2p")
-    makedirs(i2p_dir)
+    _all_dirs()
+
+
+def _all_dirs():
+    """
+    Broken out for non-pytest use
+    """
+    i2p_dir = join(TestFixtures.REPO_FOLDER_NAME, "i2p_client", "i2p")
+    if not exists(i2p_dir):
+        makedirs(i2p_dir)
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -369,6 +377,14 @@ async def process_janitor():
     not before
     """
     yield
+    await cleanup()
+
+
+async def cleanup():
+    """
+    Broken out for non-pytest use
+    """
+
     for cur_proc in proc_list:
         print("stopping process", cur_proc)
         await cur_proc.stop()
