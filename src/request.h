@@ -63,18 +63,24 @@ public:
         return _target;
     }
 
+    const std::string& dht_group() const {
+        return _dht_group;
+    }
+
 private:
     friend class CacheRetrieveRequest;
 
-    CacheOuisyncRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string target) :
+    CacheOuisyncRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string target, std::string dht_group) :
         _method(method),
         _resource_id(std::move(resource_id)),
-        _target(std::move(target))
+        _target(std::move(target)),
+        _dht_group(std::move(dht_group))
     {}
 
     http::verb _method;
     cache::ResourceId _resource_id;
     std::string _target;
+    std::string _dht_group;
 };
 
 //--------------------------------------------------------------------
@@ -93,7 +99,7 @@ public:
     }
 
     CacheOuisyncRetrieveRequest to_ouisync_request() const {
-        return CacheOuisyncRetrieveRequest(_method, _resource_id, _target);
+        return CacheOuisyncRetrieveRequest(_method, _resource_id, _target, _dht_group);
     }
 
 private:

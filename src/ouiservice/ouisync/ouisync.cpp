@@ -167,7 +167,7 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
             throw_error(asio::error::invalid_argument);
         }
 
-        auto repo = _impl->resolve(url->host, yield.tag("resolve"));
+        auto repo = _impl->resolve(rq.dht_group(), yield.tag("resolve"));
 
         // TODO: Use constants from http_store.cpp instead of these hardcoded
         // strings
@@ -201,7 +201,7 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
         return session;
     }
     catch (const sys::system_error& e) {
-        LOG_WARN("Ouisync::serve exception: ", e.what());
+        LOG_WARN(yield_, " Ouisync::serve exception: ", e.what());
         return or_throw<ouinet::Session>(yield_, e.code());
     }
 }

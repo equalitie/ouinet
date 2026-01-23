@@ -19,8 +19,6 @@
 #include "client.h"
 #include "util/str.h"
 
-BOOST_AUTO_TEST_SUITE(ouinet_ouisync_integration_tests)
-
 using namespace std;
 using namespace ouinet;
 using namespace std::chrono_literals;
@@ -45,15 +43,15 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-Request build_cache_request() {
+Request build_cache_request(util::Url url, std::string group) {
     int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.reassemble();
+    std::string host = url.host;
+    std::string target = url.reassemble();
 
     Request req{http::verb::get, target, version};
     req.set(http::field::host, host);
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http_::request_group_hdr, target);
+    req.set(http_::request_group_hdr, group);
     return req;
 }
 
@@ -92,9 +90,7 @@ ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, ssl::
     return stream;
 }
 
-Response fetch_from_origin(asio::yield_context yield) {
-    auto url = test_url;
-
+Response fetch_from_origin(util::Url url, asio::yield_context yield) {
     if (url.port.empty()) url.port = "443";
     if (url.path.empty()) url.path = "/";
 
@@ -148,12 +144,10 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
     asio::io_context ctx;
 
     TestDir root;
-    //TestDir root("/tmp/ouinet/stable-ouisync-test");
-    //root.delete_content();
-    //root.delete_on_exit(false);
 
     const std::string injector_credentials = "username:password";
 
+    auto group = "test_group";
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     asio::spawn(ctx, [&] (asio::yield_context yield) {
@@ -223,9 +217,9 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
         seeder.start();
         leecher.start();
 
-        auto control_body = fetch_from_origin(yield).body();
+        auto control_body = fetch_from_origin(test_url, yield).body();
 
-        auto rq = build_cache_request();
+        auto rq = build_cache_request(test_url, group);
 
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(seeder, rq, yield);
@@ -235,13 +229,13 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
         // Create a repo and copy the fetched content into it
-        auto page_repo = session.create_repository(test_url.host, yield);
+        auto page_repo = session.create_repository(group, yield);
         page_repo.mount(yield);
         page_repo.set_sync_enabled(true, yield);
 
         fs::copy(
             seeder_dir.path() / "bep5_http",
-            ouisync_service_dir.path() / "mount" / test_url.host,
+            ouisync_service_dir.path() / "mount" / group,
             fs::copy_options::recursive |
             // Files in the source directory have '-rw------' permissions, but
             // Ouisync currently doesn't support changing the defaults which
@@ -252,7 +246,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
         // Create an entry in the `page_index` repo with the new repo
         auto page_token = page_repo.share(ouisync::AccessMode::READ, yield).value;
-        auto file = page_index.create_file("/" + test_url.host, yield);
+        auto file = page_index.create_file("/"s + group, yield);
         file.write(0, {page_token.begin(), page_token.end()}, yield);
         file.close(yield);
 
@@ -271,6 +265,4 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
     ctx.run();
 }
-
-BOOST_AUTO_TEST_SUITE_END()
 
