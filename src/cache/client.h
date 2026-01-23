@@ -39,7 +39,7 @@ private:
          , boost::posix_time::time_duration max_cached_age
          , opt_path static_cache_dir
          , opt_path static_cache_content_dir
-         , asio::yield_context);
+         , YieldContext);
 
 public:
     using GroupName = BaseDhtGroups::GroupName;
@@ -51,7 +51,7 @@ public:
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
-         , asio::yield_context yield)
+         , YieldContext yield)
     {
         return build( ex, std::move(lan_my_endpoints), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
@@ -67,7 +67,7 @@ public:
          , boost::posix_time::time_duration max_cached_age
          , fs::path static_cache_dir
          , fs::path static_cache_content_dir
-         , asio::yield_context yield)
+         , YieldContext yield)
     {
         assert(!static_cache_dir.empty());
         assert(!static_cache_content_dir.empty());
@@ -108,8 +108,7 @@ public:
     std::size_t local_size( Cancel
                           , asio::yield_context) const;
 
-    void local_purge( Cancel
-                    , asio::yield_context);
+    void local_purge(Cancel, YieldContext);
     bool pin_group(const std::string& group_name, sys::error_code& ec);
     bool unpin_group(const std::string& group_name, sys::error_code&);
     bool is_pinned_group(const std::string& group_name, sys::error_code&);

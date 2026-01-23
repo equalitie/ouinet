@@ -191,7 +191,7 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
             std::move(reader),
             rq.method() == http::verb::head,
             cancel,
-            yield.native()
+            yield
         );
 
         session

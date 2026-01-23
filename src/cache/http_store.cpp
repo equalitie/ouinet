@@ -380,22 +380,25 @@ body_size_external( const fs::path& dirp
 static
 reader_uptr
 _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
-                  , AsioExecutor ex
                   , boost::optional<std::size_t> range_first
                   , boost::optional<std::size_t> range_last
-                  , sys::error_code& ec)
+                  , Cancel& cancel
+                  , YieldContext yield)
 {
+    sys::error_code ec;
     assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
+
+    auto ex = yield.get_executor();
 
     // XXX: Actually the RFC7233 allows for range_last to be undefined
     // https://tools.ietf.org/html/rfc7233#section-2.1
     assert((!range_first && !range_last) || (range_first && range_last));
 
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
-    if (ec) return nullptr;
+    if (ec) return or_throw<reader_uptr>(yield, ec);
 
     auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
-    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+    if (ec && ec != sys::errc::no_such_file_or_directory) return or_throw<reader_uptr>(yield, ec);
     ec = {};
 
     auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
@@ -403,7 +406,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
         ec = {};
         bodyf = open_body_external(ex, dirp, *cdirp, ec);
     }
-    if (ec && ec != sys::errc::no_such_file_or_directory) return nullptr;
+    if (ec && ec != sys::errc::no_such_file_or_directory) return or_throw<reader_uptr>(yield, ec);
     ec = {};
 
     boost::optional<Range> range;
@@ -416,7 +419,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
         if (begin > end) {
             _WARN("Inverted range boundaries: ", *range_first, " > ", *range_last);
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-            return nullptr;
+            return or_throw<reader_uptr>(yield, ec);
         }
         if (!bodyf.is_open()) {
             if (begin > 0) {
@@ -426,12 +429,12 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
             end = 0;
         } else {
             auto body_size = util::file_io::file_size(bodyf, ec);
-            if (ec) return nullptr;
+            if (ec) return or_throw<reader_uptr>(yield, ec);
             if (begin > 0 &&  begin >= body_size) {
                 _WARN( "Requested range 'first' goes beyond stored data: "
                      , util::HttpResponseByteRange{*range_first, *range_last, body_size});
                 ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-                return nullptr;
+                return or_throw<reader_uptr>(yield, ec);
             }
             // https://tools.ietf.org/html/rfc7233#section-2.1
             // Quote from the above link: If the last-byte-pos value is absent,
@@ -450,37 +453,35 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
 }
 
 reader_uptr
-http_store_reader( const fs::path& dirp, AsioExecutor ex
-                 , sys::error_code& ec)
+http_store_reader( const fs::path& dirp, Cancel& cancel, YieldContext yield)
 {
     return _http_store_reader
-        (dirp, boost::none, std::move(ex), {}, {}, ec);
+        (dirp, boost::none, {}, {}, cancel, yield);
 }
 
 reader_uptr
-http_store_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor ex
-                 , sys::error_code& ec)
+http_store_reader( const fs::path& dirp, const fs::path& cdirp, Cancel& cancel, YieldContext yield)
 {
     return _http_store_reader
-        (dirp, cdirp, std::move(ex), {}, {}, ec);
+        (dirp, cdirp, {}, {}, cancel, yield);
 }
 
 reader_uptr
-http_store_range_reader( const fs::path& dirp, AsioExecutor ex
+http_store_range_reader( const fs::path& dirp
                        , std::size_t first, std::size_t last
-                       , sys::error_code& ec)
+                       , Cancel& cancel, YieldContext yield)
 {
     return _http_store_reader
-        (dirp, boost::none, std::move(ex), first, last, ec);
+        (dirp, boost::none, first, last, cancel, yield);
 }
 
 reader_uptr
-http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor ex
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp
                        , std::size_t first, std::size_t last
-                       , sys::error_code& ec)
+                       , Cancel& cancel, YieldContext yield)
 {
     return _http_store_reader
-        (dirp, cdirp, std::move(ex), first, last, ec);
+        (dirp, cdirp, first, last, cancel, yield);
 }
 
 std::size_t
@@ -595,27 +596,29 @@ public:
     ~HttpReadStore() = default;
 
     reader_uptr
-    reader(const ResourceId& resource_id, sys::error_code& ec) override
+    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        return http_store_reader(kpath, executor, ec);
+        return http_store_reader(kpath, cancel, yield);
     }
 
     ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
+    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        auto rr = http_store_reader(kpath, executor, ec);
-        if (ec) return {};
+        sys::error_code ec;
+        auto rr = http_store_reader(kpath, cancel, yield[ec]);
+        if (ec) return or_throw<ReaderAndSize>(yield, ec);
         auto bs = http_store_body_size(kpath, executor, ec);
+        if (ec) return or_throw<ReaderAndSize>(yield, ec);
         return {std::move(rr), bs};
     }
 
     reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        return http_store_range_reader(kpath, executor, first, last, ec);
+        return http_store_range_reader(kpath, first, last, cancel, yield);
     }
 
     std::size_t
@@ -657,29 +660,33 @@ public:
     ~StaticHttpStore() = default;
 
     reader_uptr
-    reader(const ResourceId& resource_id, sys::error_code& ec) override
+    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
         // Always verifying the response not only
         // protects the agent against malicions content in the static cache, it also
         // acts as a good citizen and avoids spreading such content to others.
-        return std::make_unique<VerifyingReader>
-            (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
+        sys::error_code ec;
+        auto rr = http_store_reader(kpath, content_path, cancel, yield[ec]);
+        if (ec) return or_throw<reader_uptr>(yield, ec);
+        return std::make_unique<VerifyingReader>(std::move(rr), verif_pubk);
     }
 
     ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
+    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
     {
+        sys::error_code ec;
         auto kpath = path_from_resource_id(path, resource_id);
         auto rr = std::make_unique<VerifyingReader>
-            (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
-        if (ec) return {};
+            (http_store_reader(kpath, content_path, cancel, yield[ec]), verif_pubk);
+        if (ec) return or_throw<ReaderAndSize>(yield, ec);
         auto bs = http_store_body_size(kpath, content_path, executor, ec);
+        if (ec) return or_throw<ReaderAndSize>(yield, ec);
         return {std::move(rr), bs};
     }
 
     reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
         // TODO: Signature verification should be implemented here too,
@@ -692,7 +699,7 @@ public:
         // with raw range requests, but this is not currently the case in Ouinet.
         // Also, the client does not currently issue partial reads to the local cache
         // to be served to the agent.
-        return http_store_range_reader(kpath, content_path, executor, first, last, ec);
+        return http_store_range_reader(kpath, content_path, first, last, cancel, yield);
     }
 
     std::size_t
@@ -790,23 +797,23 @@ public:
     ~FullHttpStore() = default;
 
     void
-    for_each(keep_func, Cancel, asio::yield_context) override;
+    for_each(keep_func, Cancel, YieldContext) override;
 
     void
     store( const ResourceId& resource_id, http_response::AbstractReader&
          , Cancel, asio::yield_context) override;
 
     reader_uptr
-    reader(const ResourceId& resource_id, sys::error_code& ec) override
-    { return read_store->reader(resource_id, ec); }
+    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    { return read_store->reader(resource_id, cancel, yield); }
 
     ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
-    { return read_store->reader_and_size(resource_id, ec); }
+    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    { return read_store->reader_and_size(resource_id, cancel, yield); }
 
     reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
-    { return read_store->range_reader(resource_id, first, last, ec); }
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
+    { return read_store->range_reader(resource_id, first, last, cancel, yield); }
 
     std::size_t
     body_size(const ResourceId& resource_id, sys::error_code& ec) const override
@@ -828,7 +835,7 @@ protected:
 
 void
 FullHttpStore::for_each( keep_func keep
-                       , Cancel cancel, asio::yield_context yield)
+                       , Cancel cancel, YieldContext yield)
 {
     for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
         if (!fs::is_directory(pp)) {
@@ -874,14 +881,14 @@ FullHttpStore::for_each( keep_func keep
 
             sys::error_code ec;
 
-            auto rr = http_store_reader(p, executor, ec);
+            auto rr = http_store_reader(p, cancel, yield[ec]);
             if (ec) {
                _WARN("Failed to open cached response: ", p, "; ec=", ec);
                try_remove(p); continue;
             }
             assert(rr);
 
-            auto keep_entry = keep(*resource_id, std::move(rr), yield[ec]);
+            auto keep_entry = keep(*resource_id, std::move(rr), yield.native()[ec]);
             ec = compute_error_code(ec, cancel);
             if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {
@@ -940,30 +947,33 @@ public:
     ~BackedHttpStore() = default;
 
     reader_uptr
-    reader(const ResourceId& resource_id, sys::error_code& ec) override
+    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
     {
-        auto ret = FullHttpStore::reader(resource_id, ec);
+        sys::error_code ec;
+        auto ret = FullHttpStore::reader(resource_id, cancel, yield[ec]);
         if (!ec) return ret;
         _DEBUG("Failed to create reader for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->reader(resource_id, ec = {});
+        return fallback_store->reader(resource_id, cancel, yield);
     }
 
     ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
+    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
     {
-        auto ret = FullHttpStore::reader_and_size(resource_id, ec);
+        sys::error_code ec;
+        auto ret = FullHttpStore::reader_and_size(resource_id, cancel, yield[ec]);
         if (!ec) return ret;
         _DEBUG("Failed to create reader for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->reader_and_size(resource_id, ec = {});
+        return fallback_store->reader_and_size(resource_id, cancel, yield);
     }
 
     reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
     {
-        auto ret = FullHttpStore::range_reader(resource_id, first, last, ec);
+        sys::error_code ec;
+        auto ret = FullHttpStore::range_reader(resource_id, first, last, cancel, yield[ec]);
         if (!ec) return ret;
         _DEBUG("Failed to create range reader for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->range_reader(resource_id, first, last, ec = {});
+        return fallback_store->range_reader(resource_id, first, last, cancel, yield);
     }
 
     std::size_t

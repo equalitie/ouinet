@@ -5,6 +5,7 @@
 #include "signal.h"
 #include "condition_variable.h"
 #include "../or_throw.h"
+#include "yield.h"
 
 namespace ouinet {
 
@@ -69,6 +70,14 @@ public:
 
     void wait(boost::asio::yield_context yield);
     void wait(Cancel&, boost::asio::yield_context yield);
+
+    void wait(YieldContext yield) {
+        wait(yield.native());
+    }
+
+    void wait(Cancel& cancel, YieldContext yield) {
+        wait(cancel, yield.native());
+    }
 
     Lock lock();
 

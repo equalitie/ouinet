@@ -85,6 +85,18 @@ public:
         return std::forward<F>(f)(_asio_yield);
     }
 
+    template<class F> void spawn_detached(F&& lambda) {
+        auto log_path = _log_path.tag("spawn");
+        task::spawn_detached(
+            _asio_yield.get_executor(),
+            [ f = std::move(lambda)
+            , log_path = std::move(log_path)
+            ]
+            (asio::yield_context yield) mutable {
+                f(YieldContext(yield, log_path));
+            });
+    }
+
     // Log for the given level, when enabled.
     template<class... Args>
     void log(log_level_t, Args&&...);

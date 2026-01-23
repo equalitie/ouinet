@@ -244,7 +244,7 @@ public:
         return Client::RunningState::Started;
     }
 
-    void setup_cache(asio::yield_context);
+    void setup_cache(YieldContext);
 
     const asio_utp::udp_multiplexer& common_udp_multiplexer()
     {
@@ -878,10 +878,8 @@ Client::State::fetch_via_self( Rq request
         return or_throw<Session>(yield, ec);
     }
 
-    return yield.tag("read_hdr").run([&] (auto y) {
-        return Session::create( move(con), request.method() == http::verb::head
-                              , cancel, y);
-    });
+    return Session::create( move(con), request.method() == http::verb::head
+                          , cancel, yield.tag("read_hdr"));
 }
 
 TcpLookup
@@ -1053,11 +1051,9 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
         return or_throw<Session>(yield, ec);
     }
 
-    auto ret = yield[ec].tag("read_hdr").run([&] (auto y) {
-        return Session::create( std::move(con), rq.method() == http::verb::head
-                              , move(metrics)
-                              , timeout_cancel, y);
-    });
+    auto ret = Session::create( std::move(con), rq.method() == http::verb::head
+                          , move(metrics)
+                          , timeout_cancel, yield[ec].tag("read_hdr"));
 
     if (ec = compute_error_code(ec, cancel, watch_dog)) {
         return or_throw<Session>(yield, ec);
@@ -1210,12 +1206,10 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
         return or_throw<Session>(yield, ec);
     }
 
-    auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
-        return Session::create( move(con)
-                              , rq.method() == http::verb::head
-                              , std::move(metrics)
-                              , timeout_cancel, y);
-    });
+    auto session = Session::create( move(con)
+                                  , rq.method() == http::verb::head
+                                  , std::move(metrics)
+                                  , timeout_cancel, yield[ec].tag("read_hdr"));
 
     ec = compute_error_code(ec, cancel, watch_dog);
     if (ec) {
@@ -1313,11 +1307,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
     cancel_slot = {};
 
     // Receive response
-    auto session = yield[ec].tag("read_hdr").run([&] (auto y) {
-        return Session::create( move(con), request.method() == http::verb::head
-                              , move(metrics)
-                              , timeout_cancel, y);
-    });
+    auto session = Session::create( move(con), request.method() == http::verb::head
+                                  , move(metrics)
+                                  , timeout_cancel, yield[ec].tag("read_hdr"));
 
     auto& hdr = session.response_header();
 
@@ -2512,7 +2504,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_cache(asio::yield_context yield)
+void Client::State::setup_cache(YieldContext yield)
 {
     // Remember to always set before return in case of error,
     // or the notification may not pass the right error code to listeners.
@@ -2559,14 +2551,14 @@ void Client::State::setup_cache(asio::yield_context yield)
                               , yield[ec]);
     fail_on_error("Failed to initialize cache::Client");
 
-    idempotent_start_accepting_on_utp(yield[ec]);
+    idempotent_start_accepting_on_utp(yield[ec].native());
     fail_on_error("Failed to start accepting on uTP for cache::Client");
 
     // Subsequent calls below will not alter cache start result,
     // but they will still report and error code to the caller.
     do_notify_ready();
 
-    auto dht = bittorrent_dht(yield[ec]);
+    auto dht = bittorrent_dht(yield[ec].native());
     fail_on_error("Failed to initialize BT DHT for cache::Client");
 
     if (!_cache->enable_dht(dht, _config.max_simultaneous_announcements())) ec = asio::error::invalid_argument;
@@ -2797,7 +2789,7 @@ void Client::State::start_ouinet()
         if (was_stopped()) return;
 
         sys::error_code ec;
-        setup_cache(yield[ec]);
+        setup_cache(YieldContext(yield, _log_path.tag("setup_cache"))[ec]);
 
         if (ec && ec != asio::error::operation_aborted)
             LOG_ERROR("Failed to setup cache; ec=", ec);

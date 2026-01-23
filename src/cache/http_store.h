@@ -92,7 +92,7 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // when no more body data is available.
 // To detect such cases beforehand, use `http_store_body_size`.
 reader_uptr
-http_store_reader(const fs::path& dirp, AsioExecutor, sys::error_code&);
+http_store_reader(const fs::path& dirp, Cancel&, YieldContext);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -105,7 +105,7 @@ http_store_reader(const fs::path& dirp, AsioExecutor, sys::error_code&);
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 reader_uptr
 http_store_reader( const fs::path& dirp, const fs::path& cdirp
-                 , AsioExecutor, sys::error_code&);
+                 , Cancel&, YieldContext);
 
 // Same as above, but allow specifying a contiguous range of data to read
 // instead of the whole response.
@@ -123,9 +123,9 @@ http_store_reader( const fs::path& dirp, const fs::path& cdirp
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 reader_uptr
-http_store_range_reader( const fs::path& dirp, AsioExecutor
+http_store_range_reader( const fs::path& dirp
                        , std::size_t first, std::size_t last
-                       , sys::error_code&);
+                       , Cancel&, YieldContext);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -137,9 +137,9 @@ http_store_range_reader( const fs::path& dirp, AsioExecutor
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 reader_uptr
-http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp
                        , std::size_t first, std::size_t last
-                       , sys::error_code&);
+                       , Cancel&, YieldContext);
 
 // Return the size of body data currently stored for a response under the given directory `dirp`.
 //
@@ -193,16 +193,16 @@ public:
     // so this is also convenient for reading just the response head if present
     // (i.e. for a `HEAD` request).
     virtual reader_uptr
-    reader(const ResourceId&, sys::error_code&) = 0;
+    reader(const ResourceId&, Cancel&, YieldContext) = 0;
 
     // This is similar to `reader` above,
     // but it also returns the size of stored body data.
     // Also, an `asio::error::no_data` error is reported if the body is missing.
     virtual ReaderAndSize
-    reader_and_size(const ResourceId&, sys::error_code&) = 0;
+    reader_and_size(const ResourceId&, Cancel&, YieldContext) = 0;
 
     virtual reader_uptr
-    range_reader(const ResourceId&, size_t first, size_t last, sys::error_code&) = 0;
+    range_reader(const ResourceId&, size_t first, size_t last, Cancel&, YieldContext) = 0;
 
     virtual std::size_t
     body_size(const ResourceId&, sys::error_code&) const = 0;
@@ -239,7 +239,7 @@ public:
     virtual ~HttpStore() = default;
 
     virtual void
-    for_each(keep_func, Cancel, asio::yield_context) = 0;
+    for_each(keep_func, Cancel, YieldContext) = 0;
 
     virtual void
     store( const ResourceId&, http_response::AbstractReader&

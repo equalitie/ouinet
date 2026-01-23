@@ -3,6 +3,7 @@
 #include "generic_stream.h"
 #include "response_reader.h"
 #include "util/watch_dog.h"
+#include "util/yield.h"
 #include <cxx/metrics.h>
 
 namespace ouinet {
@@ -49,6 +50,21 @@ public:
     template<class Reader>
     static Session create(std::unique_ptr<Reader>&&, bool is_head_response, std::optional<metrics::Request>, Cancel, asio::yield_context);
 
+    // Overloads for YieldContext
+    static Session create(GenericStream s, bool is_head_response, Cancel cancel, YieldContext yield)
+    { return create(std::move(s), is_head_response, std::move(cancel), yield.native()); }
+
+    static Session create(GenericStream s, bool is_head_response, std::optional<metrics::Request> rq, Cancel cancel, YieldContext yield)
+    { return create(std::move(s), is_head_response, std::move(rq), std::move(cancel), yield.native()); }
+
+    template<class Reader>
+    static Session create(std::unique_ptr<Reader>&& r, bool is_head_response, Cancel cancel, YieldContext yield)
+    { return create(std::forward<std::unique_ptr<Reader>>(r), is_head_response, std::move(cancel), yield.native()); }
+
+    template<class Reader>
+    static Session create(std::unique_ptr<Reader>&& r, bool is_head_response, std::optional<metrics::Request> rq, Cancel cancel, YieldContext yield)
+    { return create(std::forward<std::unique_ptr<Reader>>(r), is_head_response, std::move(rq), std::move(cancel), yield.native()); }
+
     const bool head_was_read() const { return _head_was_read; }
 
           http_response::Head& response_header()       { return _head; }
@@ -72,6 +88,29 @@ public:
     void flush_response( Cancel&, asio::yield_context
                        , Handler&& h, TimeoutDuration);
 
+    // Overloads for YieldContext
+    template<class SinkStream>
+    void flush_response(
+            SinkStream& s,
+            Cancel& cancel,
+            YieldContext yield,
+            PartModifier part_modifier = PartModifier::DoNothing) {
+        flush_response(s, cancel, yield.native(), part_modifier);
+    }
+
+    template<class Handler>
+    void flush_response(Cancel cancel, YieldContext yield, Handler&& h) {
+        flush_response(std::move(cancel), yield.native(), std::forward<Handler>(h));
+    }
+    // The timeout will get reset with each successful send/recv operation,
+    // so that the exchange does not get stuck for too long.
+    template<class Handler, class TimeoutDuration>
+    void flush_response( Cancel& cancel, YieldContext yield
+                       , Handler&& h, TimeoutDuration duration) {
+        flush_response(cancel, yield.native(), std::forward<Handler>(h), duration);
+    }
+
+ 
     bool is_done() const override {
         if (!_reader) return false;
         return _reader->is_done();

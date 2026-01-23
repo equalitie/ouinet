@@ -186,7 +186,7 @@ template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
     task::spawn_detached(ctx, [f = forward<F>(f)] (auto yield) {
             try {
-                f(yield);
+                f(YieldContext(yield));
             }
             catch (const std::exception& e) {
                 BOOST_ERROR(string("Test ended with exception: ") + e.what());
@@ -196,7 +196,7 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
 }
 
 void store_response( const fs::path& tmpdir, bool complete
-                   , asio::io_context& ctx, asio::yield_context yield) {
+                   , asio::io_context& ctx, YieldContext yield) {
     asio::ip::tcp::socket
         signed_w(ctx), signed_r(ctx);
     tie(signed_w, signed_r) = util::connected_pair(yield);
@@ -252,7 +252,7 @@ void store_response( const fs::path& tmpdir, bool complete
 }
 
 void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
-                            , asio::io_context& ctx, asio::yield_context yield) {
+                            , asio::io_context& ctx, YieldContext yield) {
     store_response(tmpdir, true, ctx, yield);
 
     // Move body to external file, point `body-path` to it.
@@ -269,7 +269,7 @@ void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
         std::string crpath_str = crpath.string();
         auto crpath_b = asio::const_buffer(crpath_str.data(), crpath_str.size());
         Cancel cancel;
-        util::file_io::write(body_path_f, crpath_b, cancel, yield);
+        util::file_io::write(body_path_f, crpath_b, cancel, yield.native());
     }
 }
 
@@ -288,7 +288,7 @@ static const string ers_last_chunk_ext = // dummy value for test
   ";ouisig=\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"";
 
 void store_empty_response( const fs::path& tmpdir
-                         , asio::io_context& ctx, asio::yield_context yield) {
+                         , asio::io_context& ctx, YieldContext yield) {
     asio::ip::tcp::socket
         signed_w(ctx), signed_r(ctx);
     tie(signed_w, signed_r) = util::connected_pair(yield);
@@ -417,7 +417,7 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
             if (e) return or_throw(y, e, "");
 
             std::string fdata(fsz, '\0');
-            util::file_io::read(f, asio::buffer(fdata), c, y[e]);
+            util::file_io::read(f, asio::buffer(fdata), c, y.native()[e]);
             return_or_throw_on_error(y, c, e, "");
 
             return fdata;
@@ -441,12 +441,16 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
 }
 
 BOOST_AUTO_TEST_CASE(test_read_response_missing) {
-    auto tmpdir = fs::unique_path();
     asio::io_context ctx;
-    sys::error_code ec;
-    auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), ec);
-    BOOST_CHECK(!store_rr);
-    BOOST_CHECK_EQUAL(ec, sys::errc::no_such_file_or_directory);
+    run_spawned(ctx, [&] (auto yield) {
+        auto tmpdir = fs::unique_path();
+        asio::io_context ctx;
+        sys::error_code ec;
+        Cancel cancel;
+        auto store_rr = cache::http_store_reader(tmpdir, cancel, yield[ec]);
+        BOOST_CHECK(!store_rr);
+        BOOST_CHECK_EQUAL(ec, sys::errc::no_such_file_or_directory);
+    });
 }
 
 
@@ -503,11 +507,11 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
         WaitCondition wc(ctx);
 
         // Load response.
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir, complete
+        yield.spawn_detached([ &loaded_w, &tmpdir, complete
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader(tmpdir, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -518,14 +522,14 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r), complete
+        yield.spawn_detached([ loaded_r = std::move(loaded_r), complete
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
             http_response::Reader loaded_rr(std::move(loaded_r));
 
             // Head.
-            auto part = loaded_rr.async_read_part(c, y[e]);
+            auto part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
@@ -535,7 +539,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             // Chunk headers and bodies (one chunk per block).
             unsigned bi;
             for (bi = 0; bi < rs_block_data.size(); ++bi) {
-                part = loaded_rr.async_read_part(c, y[e]);
+                part = loaded_rr.async_read_part(c, y.native()[e]);
                 BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
                 BOOST_REQUIRE(part);
                 BOOST_REQUIRE(part->is_chunk_hdr());
@@ -546,13 +550,13 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
                 // For the incomplete test, the last block signature should be missing,
                 // so we will not get its data.
                 if (!complete && bi == rs_block_data.size() - 1) {
-                    part = loaded_rr.async_read_part(c, y[e]);
+                    part = loaded_rr.async_read_part(c, y.native()[e]);
                     BOOST_REQUIRE(!part);
                     break;
                 }
                 std::vector<uint8_t> bd;  // accumulate data here
                 for (bool done = false; !done; ) {
-                    part = loaded_rr.async_read_part(c, y[e]);
+                    part = loaded_rr.async_read_part(c, y.native()[e]);
                     BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
                     BOOST_REQUIRE(part);
                     BOOST_REQUIRE(part->is_chunk_body());
@@ -567,7 +571,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             if (!complete) return;
 
             // Last chunk header.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_chunk_hdr());
@@ -576,7 +580,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
                                                         , rrs_chunk_ext[bi]));
 
             // Trailer.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
@@ -617,11 +621,11 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
         WaitCondition wc(ctx);
 
         // Load response.
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir, &tmpcdir
+        yield.spawn_detached([ &loaded_w, &tmpdir, &tmpcdir
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -632,14 +636,14 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
+        yield.spawn_detached([ loaded_r = std::move(loaded_r)
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
             http_response::Reader loaded_rr(std::move(loaded_r));
 
             // Head.
-            auto part = loaded_rr.async_read_part(c, y[e]);
+            auto part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
@@ -649,7 +653,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             // Chunk headers and bodies (one chunk per block).
             unsigned bi;
             for (bi = 0; bi < rs_block_data.size(); ++bi) {
-                part = loaded_rr.async_read_part(c, y[e]);
+                part = loaded_rr.async_read_part(c, y.native()[e]);
                 BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
                 BOOST_REQUIRE(part);
                 BOOST_REQUIRE(part->is_chunk_hdr());
@@ -659,7 +663,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
 
                 std::vector<uint8_t> bd;  // accumulate data here
                 for (bool done = false; !done; ) {
-                    part = loaded_rr.async_read_part(c, y[e]);
+                    part = loaded_rr.async_read_part(c, y.native()[e]);
                     BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
                     BOOST_REQUIRE(part);
                     BOOST_REQUIRE(part->is_chunk_body());
@@ -672,7 +676,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             }
 
             // Last chunk header.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_chunk_hdr());
@@ -681,7 +685,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
                                                         , rrs_chunk_ext[bi]));
 
             // Trailer.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
@@ -722,11 +726,11 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
         WaitCondition wc(ctx);
 
         // Load response.
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir
+        yield.spawn_detached([ &loaded_w, &tmpdir
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader(tmpdir, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -737,14 +741,14 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
+        yield.spawn_detached([ loaded_r = std::move(loaded_r)
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
             http_response::Reader loaded_rr(std::move(loaded_r));
 
             // Head.
-            auto part = loaded_rr.async_read_part(c, y[e]);
+            auto part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
@@ -752,7 +756,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
                                , errs_head_complete);
 
             // Last chunk header.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_chunk_hdr());
@@ -761,7 +765,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
                                                         , errs_last_chunk_ext));
 
             // Trailer.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
@@ -835,7 +839,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
         // when first and last blocks match.
         unsigned first_block, last_block;
         tie(first_block, last_block) = firstb_lastb;
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir
+        yield.spawn_detached([ &loaded_w, &tmpdir
                          , first_block, last_block
                          , &ctx, lock = wc.lock()] (auto y) {
             Cancel c;
@@ -843,7 +847,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             size_t first = (first_block * http_::response_data_block) + rs_block_data[first_block].size() / 2;
             size_t last = (last_block * http_::response_data_block) + rs_block_data[last_block].size() / 2;
             auto store_rr = cache::http_store_range_reader
-                (tmpdir, ctx.get_executor(), first, last, e);
+                (tmpdir, first, last, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -854,7 +858,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
+        yield.spawn_detached([ loaded_r = std::move(loaded_r)
                          , first_block, last_block
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
@@ -862,7 +866,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             http_response::Reader loaded_rr(std::move(loaded_r));
 
             // Head.
-            auto part = loaded_rr.async_read_part(c, y[e]);
+            auto part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
@@ -874,7 +878,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             bool first_chunk = true;
             unsigned bi;
             for (bi = first_block; bi <= last_block; ++bi, first_chunk=false) {
-                part = loaded_rr.async_read_part(c, y[e]);
+                part = loaded_rr.async_read_part(c, y.native()[e]);
                 BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
                 BOOST_REQUIRE(part);
                 BOOST_REQUIRE(part->is_chunk_hdr());
@@ -884,7 +888,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
 
                 std::vector<uint8_t> bd;  // accumulate data here
                 for (bool done = false; !done; ) {
-                    part = loaded_rr.async_read_part(c, y[e]);
+                    part = loaded_rr.async_read_part(c, y.native()[e]);
                     BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
                     BOOST_REQUIRE(part);
                     BOOST_REQUIRE(part->is_chunk_body());
@@ -897,7 +901,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
             }
 
             // Last chunk header.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_chunk_hdr());
@@ -906,7 +910,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
                                                         , rrs_chunk_ext[bi]));
 
             // Trailer.
-            part = loaded_rr.async_read_part(c, y[e]);
+            part = loaded_rr.async_read_part(c, y.native()[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_trailer());
@@ -930,10 +934,11 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
         store_response(tmpdir, true, ctx, yield);
 
         sys::error_code e;
+        Cancel c;
         auto store_rr = cache::http_store_range_reader
-            ( tmpdir, ctx.get_executor()
+            ( tmpdir
             , 0, 42'000'000  // off limits
-            , e);
+            , c, yield[e]);
         BOOST_CHECK(!e);
         BOOST_CHECK(store_rr);
     });
@@ -954,7 +959,7 @@ BOOST_DATA_TEST_CASE(test_hash_list, boost::unit_test::data::make(true_false), c
 
     run_spawned(ctx, [&] (auto yield) {
         store_response(tmpdir, complete, ctx, yield);
-        cache::HashList hl = cache::http_store_load_hash_list(tmpdir, exec, cancel, yield);
+        cache::HashList hl = cache::http_store_load_hash_list(tmpdir, exec, cancel, yield.native());
         BOOST_REQUIRE(hl.verify());
     });
 }
