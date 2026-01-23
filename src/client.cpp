@@ -542,10 +542,6 @@ private:
                                        , Request&
                                        , YieldContext);
 
-    // Resolve host and port strings.
-    TcpLookup resolve_tcp_dns( const std::string&, const std::string&
-                             , Cancel&, YieldContext);
-
     GenericStream connect_to_origin( const http::request_header<>&
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
@@ -945,18 +941,6 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     });
 }
 
-TcpLookup
-Client::State::resolve_tcp_dns( const std::string& host
-                              , const std::string& port
-                              , Cancel& cancel
-                              , YieldContext yield)
-{
-    return util::resolve_tcp_async( host, port
-                                  , _ctx.get_executor()
-                                  , cancel
-                                  , static_cast<asio::yield_context>(yield));
-}
-
 GenericStream
 Client::State::connect_to_origin( const http::request_header<>& rq
                                 , const UserAgentMetaData& meta
@@ -970,9 +954,8 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     sys::error_code ec;
 
     auto do_doh = _config.is_doh_enabled();
-    auto lookup = do_doh
-        ? util::resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
-        : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
+    auto lookup = util::resolve( host, port, do_doh,
+                                 cancel, yield[ec].tag("resolve"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);
     return_or_throw_on_error(yield, cancel, ec, GenericStream());

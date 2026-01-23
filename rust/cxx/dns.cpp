@@ -94,7 +94,9 @@ private:
 
 } // namespace bridge
 
-Resolver::Resolver() : _impl(bridge::new_resolver()) {}
+Resolver::Resolver() : _impl(bridge::new_resolver(false)) {}
+
+Resolver::Resolver(bool doh) : _impl(bridge::new_resolver(doh)) {}
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
     auto cancellation_slot = yield.get_cancellation_slot();

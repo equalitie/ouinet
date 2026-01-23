@@ -35,7 +35,7 @@ mod ffi {
     extern "Rust" {
         type Resolver;
 
-        fn new_resolver() -> Box<Resolver>;
+        fn new_resolver(doh: bool) -> Box<Resolver>;
         fn resolve(&mut self, name: &str, completer: UniquePtr<BasicCompleter>);
     }
 
@@ -61,11 +61,18 @@ pub struct Resolver {
 }
 
 impl Resolver {
-    fn new() -> Self {
+    fn new(doh: bool) -> Self {
         // TODO: consider making the nameservers configurable
-        let mut name_servers = NameServerConfigGroup::quad9_https();
-        name_servers.merge(NameServerConfigGroup::cloudflare_https());
-        name_servers.merge(NameServerConfigGroup::google_https());
+        let mut name_servers:NameServerConfigGroup;
+        if doh {
+            name_servers = NameServerConfigGroup::quad9_https();
+            name_servers.merge(NameServerConfigGroup::cloudflare_https());
+            name_servers.merge(NameServerConfigGroup::google_https());
+        } else {
+            name_servers = NameServerConfigGroup::quad9();
+            name_servers.merge(NameServerConfigGroup::cloudflare());
+            name_servers.merge(NameServerConfigGroup::google());
+        }
 
         let inner = TokioResolver::builder_with_config(
             ResolverConfig::from_parts(None, vec![], name_servers),
@@ -137,8 +144,8 @@ impl Resolver {
     }
 }
 
-fn new_resolver() -> Box<Resolver> {
-    Box::new(Resolver::new())
+fn new_resolver(doh: bool) -> Box<Resolver> {
+    Box::new(Resolver::new(doh))
 }
 
 // Cancels the operation if cancellation has been triggered by the caller.

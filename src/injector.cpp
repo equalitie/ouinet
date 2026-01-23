@@ -157,12 +157,10 @@ ouinet::resolve_target(const http::request_header<>& req
     // Resolve address and also use result for more sophisticaded checking.
     if (!local && (!priv || allow_private_targets))
     {
-        lookup = do_doh
-               ? util::resolve_tcp_doh( host, port, cancel, yield[ec] )
-               : util::resolve_tcp_async( host, port
-                                        , exec
-                                        , cancel
-                                        , static_cast<asio::yield_context>(yield[ec]));
+        lookup = util::resolve( host, port
+                              , do_doh
+                              , cancel
+                              , yield[ec]);
     }
 
     if (ec) return or_throw<TcpLookup>(yield, ec);

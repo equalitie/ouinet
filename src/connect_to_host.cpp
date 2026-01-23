@@ -24,9 +24,11 @@ ouinet::connect_to_host( const AsioExecutor& ex
 {
     sys::error_code ec;
 
-    auto const lookup = util::resolve_tcp_async( host, port
-                                               , ex, cancel_signal
-                                               , yield[ec]);
+    bool do_doh = false;
+    auto const lookup = util::resolve( host, port
+                                     , do_doh
+                                     , cancel_signal
+                                     , yield[ec]);
     return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
 
     return connect_to_host(lookup, ex, cancel_signal, yield);

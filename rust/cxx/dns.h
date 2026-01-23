@@ -23,6 +23,8 @@ public:
 
     Resolver();
 
+    Resolver(bool doh);
+
     Resolver(const Resolver&) = delete;
     Resolver& operator=(const Resolver&) = delete;
 
