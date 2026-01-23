@@ -17,7 +17,7 @@ if (WITH_OUISYNC)
 
     if (OUISYNC_SRC_DIR)
         # Use this to debug with local Ouisync sources
-        add_subdirectory("${OUISYNC_SRC_DIR}/bindings/cpp" "ouisync" EXCLUDE_FROM_ALL)
+        set(OUISYNC_CPP_SRC_DIR "${OUISYNC_SRC_DIR}/bindings/cpp")
     else()
         # Otherwise download from Git
         # Inspired by https://crascit.com/2015/07/25/cmake-gtest/
@@ -38,8 +38,10 @@ if (WITH_OUISYNC)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/ouisync/download"
         )
         # Import targets
-        add_subdirectory("${CMAKE_BINARY_DIR}/ouisync/src/bindings/cpp")
+        set(OUISYNC_CPP_SRC_DIR "${CMAKE_BINARY_DIR}/ouisync/src/bindings/cpp")
     endif()
+
+    add_subdirectory("${OUISYNC_CPP_SRC_DIR}" "ouisync" EXCLUDE_FROM_ALL)
 else()
     set(CPP_OUISYNC_LIBRARIES)
     set(OUISERVICE_OUISYNC_CPP_FILES)
