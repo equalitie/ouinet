@@ -146,24 +146,14 @@ public:
         return std::move(*head_o);
     }
 
-public:
-    http_response::Head
-    parse_head(Cancel cancel, asio::yield_context yield)
+private:
+    http_response::Head prepare_head(sys::error_code& ec)
     {
-        sys::error_code ec;
-        auto head = read_signed_head(headf, cancel, yield[ec]);
-
-        if (ec) {
-            if (ec != asio::error::operation_aborted) {
-                CACHE_RESOURCE_ERROR("Failed to parse stored response head");
-            }
-            return or_throw<http_response::Head>(yield, ec);
-        }
-
         uri = std::string(head[http_::response_uri_hdr]);
         if (uri.empty()) {
             CACHE_RESOURCE_ERROR("Missing URI in stored head");
-            return or_throw<http_response::Head>(yield, asio::error::bad_descriptor);
+            ec = asio::error::bad_descriptor;
+            return {};
         }
 
         block_size = head.block_size();
@@ -191,7 +181,7 @@ public:
             // Clip range end to actual file size.
             size_t ds = 0;
             if (bodyf.is_open()) ds = util::file_io::file_size(bodyf, ec);
-            if (ec) return or_throw<http_response::Head>(yield, ec);
+            if (ec) return {};
             if (range->end > ds) range->end = ds;
 
             // Report resulting range.
@@ -326,11 +316,11 @@ private:
     }
 
 public:
-    GenericResourceReader( File headf
+    GenericResourceReader( SignedHead head
                          , File sigsf
                          , File bodyf
                          , boost::optional<Range> range)
-        : headf(std::move(headf))
+        : head(std::move(head))
         , sigsf(std::move(sigsf))
         , bodyf(std::move(bodyf))
         , range(range)
@@ -346,7 +336,7 @@ public:
         sys::error_code ec;
 
         if (!_is_head_done) {
-            auto head = parse_head(cancel, yield[ec]);
+            auto head = prepare_head(ec);
             return_or_throw_on_error(yield, cancel, ec, boost::none);
             _is_head_done = true;
             seek_to_range_begin(cancel, yield[ec]);
@@ -375,7 +365,7 @@ public:
 
     AsioExecutor get_executor() override
     {
-        return headf.get_executor();
+        return sigsf.get_executor();
     }
 
     bool
@@ -388,13 +378,12 @@ public:
     close() override
     {
         _is_open = false;
-        headf.close();
         sigsf.close();
         bodyf.close();
     }
 
 protected:
-    File headf;
+    SignedHead head;
     File sigsf;
     File bodyf;
 

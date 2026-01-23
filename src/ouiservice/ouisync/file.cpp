@@ -11,9 +11,29 @@ OuisyncFile OuisyncFile::init(ouisync::File inner, asio::yield_context yield) {
 
     return OuisyncFile (
         yield.get_executor(),
-        file_size,
-        std::move(inner)
+        std::make_shared<State>(
+            file_size,
+            0, // offset
+            false, // closed
+            std::make_unique<ouisync::File>(std::move(inner))
+        )
     );
+}
+
+OuisyncFile OuisyncFile::empty(asio::any_io_executor exec) {
+    return OuisyncFile (
+        exec,
+        std::make_shared<State>(
+            0, // file_size
+            0, // offset
+            false, // closed
+            nullptr
+        )
+    );
+}
+
+OuisyncFile::~OuisyncFile() {
+    close();
 }
 
 } // namespace ouinet::ouisync_service

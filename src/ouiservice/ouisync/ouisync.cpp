@@ -153,6 +153,26 @@ void reply_error(const Request& rq, sys::system_error e, GenericStream& con, Yie
     util::http_reply(con, rs, yield.native());
 }
 
+static bool has_body(http::response_header<> const& hdr) {
+    auto i = hdr.find("X-Ouinet-Data-Size");
+    if (i == hdr.end()) {
+        return false;
+    }
+    // TODO: Parse integer
+    if (i->value() == "0") {
+        return false;
+    }
+    return true;
+}
+
+static bool has_sigs(http::response_header<> const& hdr) {
+    auto i = hdr.find("X-Ouinet-Data-Size");
+    if (i == hdr.end()) {
+        return false;
+    }
+    return true;
+}
+
 ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContext yield_) {
     auto yield = yield_.throwing();
 
@@ -173,20 +193,34 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
         // strings
         fs::path root = "data-v3";
         fs::path path = cache::path_from_resource_id(root, rq.resource_id());
-        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield.native());
-        auto sigs_file = OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield.native());
-        auto body_file = OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield.native());
 
         using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;
 
+        Cancel cancel;
+        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield.native());
+        auto head = Reader::read_signed_head(head_file, cancel, yield.native());
+        head_file.close(yield.native());
+
+        std::optional<OuisyncFile> sigs_file, body_file;
+
+        if (has_sigs(head)) {
+            sigs_file.emplace(OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield.native()));
+        } else {
+            sigs_file.emplace(OuisyncFile::empty(yield.get_executor()));
+        }
+        if (has_body(head)) {
+            body_file.emplace(OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield.native()));
+        } else {
+            body_file.emplace(OuisyncFile::empty(yield.get_executor()));
+        }
+
         auto reader = std::make_unique<Reader>(
-            std::move(head_file),
-            std::move(sigs_file),
-            std::move(body_file),
+            std::move(head),
+            std::move(*sigs_file),
+            std::move(*body_file),
             boost::optional<cache::Range>() // range
         );
 
-        Cancel cancel;
         auto session = ouinet::Session::create(
             std::move(reader),
             rq.method() == http::verb::head,

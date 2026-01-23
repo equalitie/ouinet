@@ -397,6 +397,15 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return or_throw<reader_uptr>(yield, ec);
 
+    auto head = ResourceReader::read_signed_head(headf, cancel, yield.native());
+
+    if (ec) {
+        if (ec != asio::error::operation_aborted) {
+            CACHE_RESOURCE_ERROR("Failed to parse stored response head");
+        }
+        return or_throw<reader_uptr>(yield, ec);
+    }
+
     auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
     if (ec && ec != sys::errc::no_such_file_or_directory) return or_throw<reader_uptr>(yield, ec);
     ec = {};
@@ -449,7 +458,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
     }
 
     return std::make_unique<ResourceReader>
-        (std::move(headf), std::move(sigsf), std::move(bodyf), range);
+        (std::move(head), std::move(sigsf), std::move(bodyf), range);
 }
 
 reader_uptr
