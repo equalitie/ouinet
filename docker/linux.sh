@@ -8,6 +8,7 @@ clean=
 target_oss=()
 run_all_tests=
 run_cpp_tests=()
+run_python_tests=
 enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
@@ -44,6 +45,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --run-cpp-test)
             run_cpp_tests+=($2); shift
+            ;;
+        --run-python-tests)
+            run_python_tests=y
             ;;
         --run-all-tests)
             run_all_tests=y
@@ -122,7 +126,7 @@ function build_image (
         # For building Android binaries
         wget unzip openjdk-21-jdk ninja-build
         # For integration tests
-        python3 python3-pip python-is-python3
+        python3 python3-pip python3.13-venv python-is-python3
     )
 
     # These would be downloaded automatically during building of Android
@@ -278,6 +282,7 @@ for target_os in ${target_oss[@]}; do
     fi
     
     ### Rust Tests
+
     if [ "$run_all_tests" == y ]; then
         # Only on Linux because `cargo` would look for libouinet_asio.so which is not
         # built for Windows (only dll).
@@ -327,6 +332,26 @@ for target_os in ${target_oss[@]}; do
                 exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
             done
         fi
+    fi
+
+    ### Python Tests
+    
+    if [ "$run_python_tests" = y -o "$run_all_tests" = y ]; then
+        script=(
+            "if [ ! -d $build_dir/venv ]; then"
+            "    python3 -m venv $build_dir/venv;"
+            "fi;"
+            "source $build_dir/venv/bin/activate;"
+            "pip install twisted pytest requests pytest_asyncio;"
+        
+            #"export LD_LIBRARY_PATH='$build_dir:/usr/local/lib';"
+            "export OUINET_BUILD_DIR=$build_dir;"
+            "export OUINET_REPO_DIR=$src_dir;"
+        
+            "$src_dir/scripts/run_integration_tests.sh;"
+        )
+        
+        exe bash -c "${script[*]}"
     fi
 
     ### Download artifacts
