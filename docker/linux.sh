@@ -6,7 +6,8 @@ host=
 docker_host=
 clean=
 target_oss=()
-run_tests=
+run_all_tests=
+run_cpp_tests=()
 enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
@@ -41,8 +42,11 @@ while [[ "$#" -gt 0 ]]; do
         --target-os|-t)
             target_oss+=($(parse_target_os $2)); shift
             ;;
-        --run-tests)
-            run_tests=y
+        --run-cpp-test)
+            run_cpp_tests+=($2); shift
+            ;;
+        --run-all-tests)
+            run_all_tests=y
             ;;
         --exclude-test)
             excluded_test_targets+=($2); shift
@@ -273,11 +277,8 @@ for target_os in ${target_oss[@]}; do
         exe -w $src_dir ./scripts/build-android.sh
     fi
     
-    ### Test
-    
-    if [ "$run_tests" == y ]; then
-        ### Rust Tests
-
+    ### Rust Tests
+    if [ "$run_all_tests" == y ]; then
         # Only on Linux because `cargo` would look for libouinet_asio.so which is not
         # built for Windows (only dll).
         if [ "$target_os" == linux ]; then
@@ -290,11 +291,16 @@ for target_os in ${target_oss[@]}; do
             )
             exe ${env[@]/#/-e } cargo test --verbose --manifest-path $src_dir/rust/Cargo.toml -- --nocapture
         fi
+    fi
         
-        ### C++ Tests
-        
+    ### C++ Tests
+    if [ "$run_all_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
         if [ "$target_os" != android ]; then
-            test_targets=$(exe cmake --build $build_dir --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g')
+            if [ "$run_all_tests" == y ]; then
+                test_targets=$(exe cmake --build $build_dir --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g')
+            else
+                test_targets=${run_cpp_tests[@]}
+            fi
         
             binary_suffix=
             env=()
