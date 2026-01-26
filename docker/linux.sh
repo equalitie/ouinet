@@ -201,23 +201,6 @@ function is_container_running (
     [ -n "$(dock ps -a -q -f name=$container_name 2>/dev/null)" ]
 )
 
-function copy_local_sources (
-    rsync_exclude_dirs=(
-        '/build'
-        '/rust/target'
-        '/sdk'
-        '/_gradle-home'
-        '/build-android-*'
-        '/gradle-*'
-        '.git'
-    )
-
-    rsync -e "docker $docker_host exec -i" \
-        -av --no-links --delete \
-        ${rsync_exclude_dirs[@]/#/--exclude=} \
-        $(pwd)/ $container_name:$src_dir
-)
-
 # Test whether the first arg is in the rest of the args
 function is_in (
     item=$1; shift
@@ -226,6 +209,27 @@ function is_in (
         if [ "$item" == "$i" ]; then return 0; fi
     done
     return 1
+)
+
+function copy_local_sources (
+    rsync_exclude_dirs=(
+        '/build'
+        '/rust/target'
+        '/sdk'
+        '/_gradle-home'
+        '/build-android-*'
+        '/gradle-*'
+    )
+
+    if ! is_in android ${target_oss[@]}; then
+        # Only Android building requires the .git/ directory
+        rsync_exclude_dirs+=(.git)
+    fi
+
+    rsync -e "docker $docker_host exec -i" \
+        -av --no-links --delete \
+        ${rsync_exclude_dirs[@]/#/--exclude=} \
+        $(pwd)/ $container_name:$src_dir
 )
 
 # ---
