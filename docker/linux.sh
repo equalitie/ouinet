@@ -166,7 +166,7 @@ function build_image (
         "RUN sdkmanager --install $(printf '"%s" ' "${android_sdk_packages[@]}")"
         'ENV PATH="${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/emulator:${PATH}"'
 
-        'WORKDIR $work_dir'
+        "WORKDIR $work_dir"
         "RUN echo 'PS1=\"\\h/$container_name:\\W \\u$ \"' >> ~/.bashrc"
     )
 
@@ -340,22 +340,24 @@ for target_os in ${target_oss[@]}; do
 
     ### Python Tests
     
-    if [ "$run_python_tests" = y -o "$run_all_tests" = y ]; then
-        script=(
-            "if [ ! -d $build_dir/venv ]; then"
-            "    python3 -m venv $build_dir/venv;"
-            "fi;"
-            "source $build_dir/venv/bin/activate;"
-            "pip install twisted pytest requests pytest_asyncio;"
-        
-            #"export LD_LIBRARY_PATH='$build_dir:/usr/local/lib';"
-            "export OUINET_BUILD_DIR=$build_dir;"
-            "export OUINET_REPO_DIR=$src_dir;"
-        
-            "$src_dir/scripts/run_integration_tests.sh;"
-        )
-        
-        exe bash -c "${script[*]}"
+    # TODO: Run these when `$target_os = windows` as well (through Wine)
+    if [ "$target_os" = linux ]; then
+        if [ "$run_python_tests" = y -o "$run_all_tests" = y ]; then
+            script=(
+                "if [ ! -d $build_dir/venv ]; then"
+                "    python3 -m venv $build_dir/venv;"
+                "fi;"
+                "source $build_dir/venv/bin/activate;"
+                "pip install twisted pytest requests pytest_asyncio;"
+            
+                "export OUINET_BUILD_DIR=$build_dir;"
+                "export OUINET_REPO_DIR=$src_dir;"
+            
+                "$src_dir/scripts/run_integration_tests.sh;"
+            )
+            
+            exe bash -c "${script[*]}"
+        fi
     fi
 
     ### Download artifacts
