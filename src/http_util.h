@@ -412,6 +412,12 @@ bool req_ensure_host(Request& req) {
     return true;
 }
 
+inline
+std::string canonical_url(Url urlm) {
+    if (!urlm.fragment.empty()) urlm.fragment = {};
+    return urlm.reassemble();  // TODO: make canonical
+}
+
 // Make the given request canonical.
 //
 // This only leaves a minimum set of non-privacy sensitive headers,

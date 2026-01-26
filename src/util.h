@@ -22,13 +22,6 @@
 
 namespace ouinet { namespace util {
 
-inline
-std::string canonical_url(Url urlm) {
-    if (!urlm.query.empty()) urlm.query = {};
-    if (!urlm.fragment.empty()) urlm.fragment = {};
-    return urlm.reassemble();  // TODO: make canonical
-}
-
 // Get the source IPv4 address used when communicating with external hosts.
 boost::optional<asio::ip::address> get_local_ipv4_address();
 
