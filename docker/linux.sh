@@ -88,26 +88,7 @@ function dock (
     docker $docker_host "$@"
 )
 
-function map_cpu_arch_for_rust (
-    arch=$1
-    case $arch in
-        x86_64) echo $arch; ;;
-        arm64) echo aarch64; ;;
-        *) error "Unrecognized host CPU architecture: $arch"
-    esac
-)
-
-function host_cpu_arch (
-    if [ -n "$host" ]; then
-        ssh $host uname -m
-    else
-        uname -m
-    fi
-)
-
 function build_image (
-    rust_arch=$(map_cpu_arch_for_rust $(host_cpu_arch))
-
     rust_version=1.92.0
 
     rust_target=(
@@ -232,6 +213,58 @@ function copy_local_sources (
         $(pwd)/ $container_name:$src_dir
 )
 
+function list_artifacts_for_target_os (
+    target_os=$1
+    case "$target_os" in
+        linux)
+            artifacts=(
+                $build_dir/client
+                $build_dir/injector
+                $build_dir/libgcrypt.so.20.5.0
+                $build_dir/libgpg-error.so.0.38.0
+                $build_dir/libouinet_asio.so
+                $build_dir/libouinet_asio_ssl.so
+                $build_dir/libouinet_asio_ssl.so
+                $build_dir/libclient.so
+                $build_dir/libinjector.so
+            )
+            ;;
+        windows)
+            artifacts=(
+                $build_dir/client.exe
+                $build_dir/injector.exe
+                $build_dir/gcrypt/out/bin/libgcrypt-20.dll
+                $build_dir/gpg_error/out/bin/libgpg-error-0.dll
+                $build_dir/libouinet_asio.dll
+                $build_dir/libouinet_asio_ssl.dll
+                $build_dir/libclient_lib.dll
+                $build_dir/libinjector_lib.dll
+            )
+            ;;
+        android)
+            artifacts=(
+                $src_dir/build-android-omni-debug/ouinet/outputs/aar/ouinet-debug.aar
+            )
+            ;;
+        *) error "Invalid target_os ($target_os) in 'list_artifacts_for_target_os'"
+    esac
+    echo ${artifacts[@]}
+)
+
+function check_artifacts_exist_for_target_os (
+    target_os=$1
+    missing=()
+    for artifact in $(list_artifacts_for_target_os $target_os); do
+        if [ ! -f "$artifact" ]; then
+            missing+=($artifact)
+        fi
+    done
+    if [ -f "${missing[*]}" ]; then
+        error "Missing artifacts for $target_os: ${missing[@]}"
+    fi
+
+)
+
 # ---
 
 if [ "$clean" = y ]; then
@@ -284,6 +317,8 @@ for target_os in ${target_oss[@]}; do
     else
         exe -w $src_dir ./scripts/build-android.sh
     fi
+
+    check_artifacts_exist_for_target_os $target_os
     
     ### Rust Tests
 
@@ -363,33 +398,7 @@ for target_os in ${target_oss[@]}; do
     ### Download artifacts
 
     if [ -n "$artifact_dir" ]; then
-        case "$target_os" in
-            linux)
-                artifacts=(
-                    $build_dir/client
-                    $build_dir/injector
-                    $build_dir/libgcrypt.so.20.5.0
-                    $build_dir/libgpg-error.so.0.38.0
-                    $build_dir/libouinet_asio.so
-                    $build_dir/libouinet_asio_ssl.so
-                )
-                ;;
-            windows)
-                artifacts=(
-                    $build_dir/client.exe
-                    $build_dir/injector.exe
-                    $build_dir/gcrypt/out/bin/libgcrypt-20.dll
-                    $build_dir/gpg_error/out/bin/libgpg-error-0.dll
-                    $build_dir/libouinet_asio.dll
-                    $build_dir/libouinet_asio_ssl.dll
-                )
-                ;;
-            android)
-                artifacts=(
-                    $src_dir/build-android-omni-debug/ouinet/outputs/aar/ouinet-debug.aar
-                )
-                ;;
-        esac
+        artifacts=$(list_artifacts_for_target_os $target_os)
 
         dst_dir=$artifact_dir/$target_os
         mkdir -p $dst_dir
