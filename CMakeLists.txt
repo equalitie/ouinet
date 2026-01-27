@@ -160,6 +160,7 @@ file(GLOB ouinet_common_sources
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/ssl/ca_certificate.cpp"
+    "./src/ssl/util.cpp"
     "./src/bittorrent/*.cpp"
     "./src/bep5_swarms.cpp"
     "./src/ouiservice.cpp"

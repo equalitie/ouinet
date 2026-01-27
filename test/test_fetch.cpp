@@ -16,15 +16,13 @@
 #include "injector.h"
 #include "client.h"
 #include "util/str.h"
-
-BOOST_AUTO_TEST_SUITE(ouinet_cpp_integration_tests)
+#include "ssl/util.h"
 
 using namespace std;
 using namespace ouinet;
 using namespace std::chrono_literals;
 using namespace boost::asio::ip;
 using bittorrent::MockDht;
-namespace ssl = asio::ssl;
 using tcp = asio::ip::tcp;
 
 template<class Config>
@@ -91,15 +89,15 @@ Response fetch_through_client(const Client& client, Request req, asio::yield_con
     return res;
 }
 
-ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, ssl::context& ctx, std::string host) {
-    ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
+asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, asio::ssl::context& ctx, std::string host) {
+    asio::ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
     if(! SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
         sys::error_code ec;
         ec.assign(static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category());
         static boost::source_location loc = BOOST_CURRENT_LOCATION;
         sys::throw_exception_from_error(ec, loc);
     }
-    stream.set_verify_callback(ssl::host_name_verification(host));
+    stream.set_verify_callback(asio::ssl::host_name_verification(host));
     return stream;
 }
 
@@ -114,9 +112,9 @@ Response fetch_from_origin(asio::yield_context yield) {
     tcp::resolver resolver(exec);
     auto const results = resolver.async_resolve(url.host, url.port, yield);
 
-    ssl::context ctx{ssl::context::tlsv12_client};
-    ctx.set_default_verify_paths();
-    ctx.set_verify_mode(ssl::verify_peer);
+    asio::ssl::context ctx{asio::ssl::context::tls_client};
+    ouinet::ssl::util::set_default_verify_paths(ctx);
+    ctx.set_verify_mode(asio::ssl::verify_peer);
 
     auto req = build_origin_request();
     std::string host = req[http::field::host];
@@ -125,7 +123,7 @@ Response fetch_from_origin(asio::yield_context yield) {
     asio::async_connect(socket, results, yield);
 
     auto stream = setup_tls_stream(std::move(socket), ctx, host);
-    stream.async_handshake(ssl::stream_base::client, yield);
+    stream.async_handshake(asio::ssl::stream_base::client, yield);
 
     http::async_write(stream, req, yield);
 
@@ -151,6 +149,51 @@ void check_exception(std::exception_ptr e) {
     } catch (...) {
         BOOST_FAIL("Test failed with unknown exception");
     }
+}
+
+BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    const std::string injector_credentials = "username:password";
+
+    auto swarms = std::make_shared<MockDht::Swarms>();
+
+    Client client(ctx, make_config<ClientConfig>({
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("client").string(),
+            "--cache-type=none"s,
+            // Bind to random ports to avoid clashes
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
+        }),
+        util::LogPath("client"),
+        [&ctx, swarms] () {
+            return std::make_shared<MockDht>("client", ctx.get_executor(), swarms);
+        });
+
+    // Clients are started explicitly
+    client.start();
+
+    asio::spawn(ctx, [&] (asio::yield_context yield) {
+        auto control_body = fetch_from_origin(yield).body();
+
+        auto rq = build_cache_request();
+
+        // The "seeder" fetches the signed content through the "injector"
+        auto rs1 = fetch_through_client(client, rq, yield);
+
+        BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
+        BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_origin);
+        BOOST_CHECK_EQUAL(rs1.body(), control_body);
+
+        client.stop();
+    },
+    check_exception);
+
+    ctx.run();
 }
 
 // An integration test with three identities: the 'injector', a 'seeder' client
@@ -278,9 +321,9 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
         auto rq = build_private_request();
 
-        ssl::context ctx{ssl::context::tlsv12_client};
-        ctx.set_default_verify_paths();
-        ctx.set_verify_mode(ssl::verify_peer);
+        asio::ssl::context ctx{asio::ssl::context::tls_client};
+        ouinet::ssl::util::set_default_verify_paths(ctx);
+        ctx.set_verify_mode(asio::ssl::verify_peer);
 
         for (uint16_t i = 0; i < 30; ++i) {
             // Connect to injector and establish HTTP CONNECT tunnel
@@ -307,7 +350,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
             // Do TLS handshake with the origin over the established tunnel
             auto stream = setup_tls_stream(std::move(socket), ctx, test_url.host);
-            stream.async_handshake(ssl::stream_base::client, yield);
+            stream.async_handshake(asio::ssl::stream_base::client, yield);
 
             // Send and receive through the secure tunnel
             http::async_write(stream, rq, yield);
@@ -385,6 +428,3 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
 
     ctx.run();
 }
-
-BOOST_AUTO_TEST_SUITE_END()
-

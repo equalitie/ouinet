@@ -144,7 +144,7 @@ public:
     {
         LOG_INFO("Repo root: ", _config.repo_root());
 
-        pub_ctx.set_default_verify_paths();
+        ssl::util::set_default_verify_paths(pub_ctx);
         pub_ctx.set_verify_mode(asio::ssl::verify_peer);
 
         // We do *not* want to do this since

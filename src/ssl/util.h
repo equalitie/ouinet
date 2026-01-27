@@ -15,7 +15,7 @@
 #include "../util/ssl_stream.h"
 
 
-namespace ouinet { namespace ssl { namespace util {
+namespace ouinet::ssl::util {
 
 static const long ONE_HOUR = 60*60;
 static const long ONE_YEAR = 60*60*24*365;
@@ -145,4 +145,6 @@ void load_tls_ca_certificates( asio::ssl::context& ctx
     ctx.add_certificate_authority(asio::buffer(ss.str()));
 }
 
-}}} // namespaces
+void set_default_verify_paths(asio::ssl::context&);
+
+} // namespace

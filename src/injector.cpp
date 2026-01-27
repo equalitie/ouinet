@@ -737,7 +737,7 @@ void listen( const InjectorConfig& config
     OriginPools origin_pools;
 
     asio::ssl::context ssl_ctx{asio::ssl::context::tls_client};
-    ssl_ctx.set_default_verify_paths();
+    ssl::util::set_default_verify_paths(ssl_ctx);
     ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
 
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
