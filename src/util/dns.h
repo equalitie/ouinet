@@ -4,6 +4,7 @@
 
 #include <boost/beast/http/message.hpp>
 #include "../parse/number.h"
+#include "../declspec.h"
 #include "util/signal.h"
 #include "yield.h"
 
@@ -167,6 +168,7 @@ namespace ouinet::util
         return TcpLookup::create(eps.begin(), eps.end(), host, port);
     }
 
+    OUINET_DECL
     TcpLookup
     resolve_target( const http::request_header<>& req
                   , bool allow_private_targets

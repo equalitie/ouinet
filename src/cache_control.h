@@ -8,6 +8,7 @@
 #include "cache/cache_entry.h"
 #include "request.h"
 #include "namespaces.h"
+#include "declspec.h"
 
 namespace ouinet {
 using ouinet::util::AsioExecutor;
@@ -24,7 +25,7 @@ static const boost::posix_time::time_duration default_max_cached_age
 
 class GenericStream;
 
-class CacheControl {
+class OUINET_DECL CacheControl {
 private:
     struct FetchState;
 

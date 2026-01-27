@@ -15,6 +15,7 @@
 #include "../util/signal.h"
 
 #include "../namespaces.h"
+#include "../declspec.h"
 
 namespace ouinet { namespace cache {
 
@@ -71,6 +72,7 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 // with forward slashes as path separators, without `.` or `..` components,
 // and without a final new line.
 // Such responses need to be stored using external tools.
+OUINET_DECL
 void http_store( http_response::AbstractReader&, const fs::path&
                , const AsioExecutor&, Cancel, asio::yield_context);
 // TODO: This format is both inefficient for multi-peer downloads (Base64 decoding needed)
@@ -91,6 +93,7 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // but cause `boost::asio::error::connection_aborted` ("Software caused connection abort")
 // when no more body data is available.
 // To detect such cases beforehand, use `http_store_body_size`.
+OUINET_DECL
 reader_uptr
 http_store_reader(const fs::path& dirp, AsioExecutor, sys::error_code&);
 
@@ -103,6 +106,7 @@ http_store_reader(const fs::path& dirp, AsioExecutor, sys::error_code&);
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
+OUINET_DECL
 reader_uptr
 http_store_reader( const fs::path& dirp, const fs::path& cdirp
                  , AsioExecutor, sys::error_code&);
@@ -122,6 +126,7 @@ http_store_reader( const fs::path& dirp, const fs::path& cdirp
 // If the range would cover data which is not stored,
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
+OUINET_DECL
 reader_uptr
 http_store_range_reader( const fs::path& dirp, AsioExecutor
                        , std::size_t first, std::size_t last
@@ -136,6 +141,7 @@ http_store_range_reader( const fs::path& dirp, AsioExecutor
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
+OUINET_DECL
 reader_uptr
 http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
                        , std::size_t first, std::size_t last
@@ -149,6 +155,7 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecut
 // a `sys::errc::no_such_file_or_directory` error is reported.
 // If the response exists, but it is missing body data,
 // an `asio::error::no_data` error is reported.
+OUINET_DECL
 std::size_t
 http_store_body_size( const fs::path& dirp, AsioExecutor
                     , sys::error_code&);
@@ -162,10 +169,12 @@ http_store_body_size( const fs::path& dirp, AsioExecutor
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
+OUINET_DECL
 std::size_t
 http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
                     , sys::error_code&);
 
+OUINET_DECL
 HashList
 http_store_load_hash_list(const fs::path&, AsioExecutor, Cancel&, asio::yield_context);
 

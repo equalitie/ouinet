@@ -63,10 +63,9 @@ const std::string& ResourceId::hex_string() const {
     return _repr;
 }
 
+std::ostream& operator<<(std::ostream& os, const ouinet::cache::ResourceId& id) {
+    return os << id.hex_string();
+}
+
 } // namespace ouinet::cache
 
-namespace std {
-    std::ostream& operator<<(std::ostream& os, const ouinet::cache::ResourceId& id) {
-        return os << id.hex_string();
-    }
-} // namespace std

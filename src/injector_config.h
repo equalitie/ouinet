@@ -7,13 +7,14 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/regex.hpp>
 #include <boost/filesystem/path.hpp>
+#include "declspec.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
 #include "util/crypto.h"
 
 namespace ouinet {
 
-class InjectorConfig {
+class OUINET_DECL InjectorConfig {
 public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 

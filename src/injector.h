@@ -3,6 +3,7 @@
 #include <boost/beast/core.hpp>
 #include <boost/asio/ssl/context.hpp>
 
+#include "declspec.h"
 #include "cache/http_sign.h"
 #include "namespaces.h"
 #include "util.h"
@@ -17,7 +18,7 @@ namespace ouinet {
 
 // This class needs to outlive the `asio::io_context`. Mainly because of the
 // `ssl::context` which is passed to `ssl::stream`s by reference.
-class Injector {
+class OUINET_DECL Injector {
 public:
     Injector(
         InjectorConfig config,

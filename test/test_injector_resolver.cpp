@@ -11,7 +11,7 @@ using namespace ouinet;
 using Request = http::request<http::string_body>;
 using ouinet::util::resolve_target;
 
-static const string public_host[] = {
+static const std::string public_host[] = {
     "ouinet.work",
     "ceno.app",
     "example.com",
@@ -41,7 +41,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_public,
     ctx.run();
 }
 
-static const string loopback_host[] = {
+static const std::string loopback_host[] = {
     // ipv4
     "localhost",
     "host.localdomain",
@@ -77,7 +77,7 @@ BOOST_DATA_TEST_CASE(test_resolve_target_loopback,
     ctx.run();
 }
 
-static const string private_host[] = {
+static const std::string private_host[] = {
     // ipv4
     "192.168.0.1",
     "172.17.0.1",

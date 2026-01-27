@@ -9,7 +9,7 @@
 #include "cache/resource_id.h"
 #include "util/crypto_stream_key.h"
 #include "util/yield.h"
-
+#include "declspec.h"
 
 namespace ouinet {
 
@@ -110,7 +110,7 @@ private:
     std::string _dht_group;
 };
 
-class CacheRequest {
+class OUINET_DECL CacheRequest {
 public:
     // TODO: This is only used in tests now, use it also when constructing the message.
     static const uint8_t HTTP_VERSION = 11;

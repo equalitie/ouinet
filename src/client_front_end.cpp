@@ -919,19 +919,17 @@ void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
     res.result(http::status::bad_request);
 }
 
-void ClientFrontEnd::handle_api_endpoints(const ClientConfig& config, Response& res, ostringstream& ss) {
+void ClientFrontEnd::handle_api_endpoints(const std::string_view proxy_endpoint
+                                        , const std::string_view frontend_endpoint
+                                        , const std::string_view frontend_unix_socket_endpoint
+                                        , Response& res
+                                        , ostringstream& ss) {
     res.set(http::field::content_type, "application/json");
 
     json response = {
-        {"proxy_endpoint", boost::str(boost::format("%s:%s")
-            % config.local_endpoint().address().to_string()
-            % config.local_endpoint().port())},
-
-        {"frontend_tcp_endpoint", boost::str(boost::format("%s:%s")
-            % config.front_end_endpoint().address().to_string()
-            % config.front_end_endpoint().port())},
-
-        {"frontend_unix_socket_endpoint", config.front_end_unix_socket_endpoint().path()},
+        {"proxy_endpoint", proxy_endpoint},
+        {"frontend_tcp_endpoint", frontend_endpoint},
+        {"frontend_unix_socket_endpoint", frontend_unix_socket_endpoint},
     };
 
     ss << response;
@@ -948,6 +946,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , const bittorrent::DhtBase* dht
                               , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
+                              , const std::string_view proxy_endpoint
+                              , const std::string_view frontend_endpoint
+                              , const std::string_view frontend_unix_socket_endpoint
                               , Cancel cancel
                               , YieldContext yield)
 {
@@ -1009,7 +1010,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         sys::error_code e;
         handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
     } else if (path.starts_with(endpoints_api_path)) {
-        handle_api_endpoints(config, res, ss);
+        handle_api_endpoints(proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
     } else {
         sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps_ptr, dht, reachability

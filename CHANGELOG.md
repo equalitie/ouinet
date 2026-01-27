@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.2) - 2026-01-12
+
+### Fixed
+
+- Fixes the port number shown by `/api/endpoints` when its automatically
+selected by the OS. !153
+- Prevent naming collisions when building injector and client libs in
+Windows. !156
+- Fixes linking issues in injector's headers and tests. !156
+
+### Changed
+
+- Windows artifacts are built now by default with OpenSSL v3.6.0. !156
+
+
 ## [v1.6.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.1) - 2025-12-18
 
 ### Fixed

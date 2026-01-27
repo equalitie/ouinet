@@ -5,6 +5,7 @@
 
 #include "constants.h"
 #include "namespaces.h"
+#include "declspec.h"
 #include "client_config.h"
 #include "bittorrent/mock_dht.h"
 #include "util/log_path.h"
@@ -13,7 +14,7 @@ namespace ouinet {
 
 class ClientConfig;
 
-class Client {
+class OUINET_DECL Client {
 private:
     class State;
     class ClientCacheControl;
