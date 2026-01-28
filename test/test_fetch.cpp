@@ -151,6 +151,30 @@ void check_exception(std::exception_ptr e) {
     }
 }
 
+template<class F>
+void run(asio::io_context& ctx, F&& async_test) {
+    using namespace std::chrono;
+
+    std::optional<steady_clock::time_point> spawn_end;
+
+    asio::spawn(ctx, [&spawn_end, async_test = std::move(async_test)] (asio::yield_context yield) {
+            async_test(yield);
+            spawn_end = steady_clock::now();
+        },
+        check_exception);
+
+    ctx.run();
+
+    // Test that after the test ended, the `ctx.run()` function exited in a timely manner.
+    // If `!spawn_end` then the test threw an exception which already makes the test fail.
+    if (spawn_end) {
+        auto test_end = steady_clock::now();
+        auto elapsed_ms = duration_cast<milliseconds>(test_end - *spawn_end).count();
+        // TODO: Keep reducing the allowed timeout
+        BOOST_REQUIRE_LT(elapsed_ms, 5000);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     asio::io_context ctx;
 
@@ -177,7 +201,7 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     // Clients are started explicitly
     client.start();
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    run(ctx, [&] (asio::yield_context yield) {
         auto control_body = fetch_from_origin(yield).body();
 
         auto rq = build_cache_request();
@@ -190,10 +214,7 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
         client.stop();
-    },
-    check_exception);
-
-    ctx.run();
+    });
 }
 
 // An integration test with three identities: the 'injector', a 'seeder' client
@@ -263,7 +284,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     seeder.start();
     leecher.start();
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    run(ctx, [&] (asio::yield_context yield) {
         auto control_body = fetch_from_origin(yield).body();
 
         auto rq = build_cache_request();
@@ -285,10 +306,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         injector.stop();
         seeder.stop();
         leecher.stop();
-    },
-    check_exception);
-
-    ctx.run();
+    });
 }
 
 // Test fetching without the Ouinet client involved. That is, start the injector
@@ -316,7 +334,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
         util::LogPath("injector"),
         std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    run(ctx, [&] (asio::yield_context yield) {
         auto control_body = fetch_from_origin(yield).body();
 
         auto rq = build_private_request();
@@ -363,10 +381,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
         }
 
         injector.stop();
-    },
-    check_exception);
-
-    ctx.run();
+    });
 }
 
 BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
@@ -408,7 +423,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
     // Clients are started explicitly
     client.start();
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    run(ctx, [&] (asio::yield_context yield) {
         auto control_body = fetch_from_origin(yield).body();
 
         auto rq = build_private_request();
@@ -423,8 +438,5 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
 
         injector.stop();
         client.stop();
-    },
-    check_exception);
-
-    ctx.run();
+    });
 }
