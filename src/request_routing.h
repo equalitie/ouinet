@@ -43,6 +43,9 @@ struct Config {
     // attempt those channels in order until one succeeds.
     // If it was the Injector channel, the response may get cached.
     std::deque<fresh_channel> fresh_channels;
+
+    friend
+    std::ostream& operator<<(std::ostream&, const ouinet::request_route::Config&);
 };
 
 // Route the provided request according to the list of channels associated
@@ -51,7 +54,3 @@ struct Config {
 Config route_choose_config(const http::request_header<>&, const ClientConfig&);
 
 } // namespace ouinet::request_route
-
-namespace std {
-    std::ostream& operator<<(std::ostream&, const ouinet::request_route::Config&);
-} // namespace std
