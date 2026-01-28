@@ -47,6 +47,7 @@ struct MetricsConfig {
 
 class OUINET_DECL ClientConfig {
 public:
+    using DnsProtocols = std::set<std::string>;
     enum class CacheType { None, Bep5Http };
 
     ClientConfig() = default;
@@ -161,6 +162,11 @@ public:
 
     bool is_doh_enabled() const {
         return !_disable_doh;
+    }
+
+    DnsProtocols dns_protocols() const
+    {
+        return _dns_protocols;
     }
 
     uint64_t max_request_body_size() const {
@@ -335,14 +341,24 @@ private:
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
-           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
-            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
-              "When this option is present the client will fallback to the default DNS mechanism "
-              "provided by the operating system.")
             ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
             , "Allows using non-origin channels, like injectors, dist-cache, etc, "
               "to fetch targets using private addresses. "
               "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
+            ;
+
+        po::options_description dns("DNS options");
+        dns.add_options()
+           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
+              "When this option is present the client will fallback to the default DNS mechanism "
+              "provided by the operating system.")
+           ("dns-protocol", po::value<vector<string>>()
+                                ->composing()
+                                ->default_value({"plain"}, "plain")
+            ,"DNS protocols used by the resolver. This option can be set to: plain or https. "
+              "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
+              "the nameservers. The option can be used multiple times to select more than one protocol.")
            ;
 
         po::options_description metrics("Metrics options");
@@ -374,6 +390,7 @@ private:
             .add(injector)
             .add(cache)
             .add(requests)
+            .add(dns)
             .add(metrics);
         return desc;
     }
@@ -524,6 +541,8 @@ private:
     std::string _local_domain;
     bool _disable_doh = false;
     bool _allow_private_targets = false;
+
+    DnsProtocols _dns_protocols;
 
     std::unique_ptr<MetricsConfig> _metrics;
 };

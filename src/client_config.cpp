@@ -316,6 +316,12 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _disable_doh = true;
     }
 
+    if (auto opt = as_optional<vector<string>>(vm, "dns-protocols")) {
+        for (const auto& dnsproto : *opt) {
+            _dns_protocols.insert(dnsproto);
+        }
+    }
+
     if (vm["allow-private-targets"].as<bool>()) {
         _allow_private_targets = true;
     }
