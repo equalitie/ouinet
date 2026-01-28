@@ -27,6 +27,11 @@ elseif (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
     list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
 
+# These are not related to boost version, it fixes issues we started seeting
+# after Mingw upgrade.
+list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-decltype.patch)
+list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-bad-executor-vtable.patch)
+
 set(BOOST_COMPONENTS
     context
     ${BOOST_COROUTINE_BACKEND}
