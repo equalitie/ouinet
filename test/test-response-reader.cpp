@@ -9,7 +9,6 @@
 #include "../src/task.h"
 #include "../src/or_throw.h"
 #include "../src/response_reader.h"
-#include "../src/util/part_io.h"
 #include "../src/util/wait_condition.h"
 
 using namespace std;
