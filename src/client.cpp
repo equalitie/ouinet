@@ -132,6 +132,7 @@ public:
         , _injector_starting{get_executor()}
         , _cache_starting{get_executor()}
         , _front_end(_config)
+        , _origin_pools(OriginPools())
         , pub_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
         , _log_path(std::move(log_path))
@@ -194,6 +195,7 @@ public:
             _udp_reachability->stop();
             _udp_reachability = nullptr;
         }
+        _origin_pools = {};
     }
 
     Client::RunningState get_state() const noexcept {
@@ -587,7 +589,7 @@ private:
     uint64_t _next_connection_id = 0;
     ConnectionPool<Endpoint> _injector_connections;
     ConnectionPool<bool> _self_connections;  // stored value is unused
-    OriginPools _origin_pools;
+    std::optional<OriginPools> _origin_pools;
 
     asio::ssl::context pub_ctx;
     asio::ssl::context inj_ctx;
@@ -1011,9 +1013,15 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
 
     sys::error_code ec;
 
-    auto maybe_con = _origin_pools.get_connection(rq);
 
     OriginPools::Connection con;
+
+
+    if (!_origin_pools) {
+        return or_throw<Session>(yield, asio::error::operation_aborted);
+    }
+
+    auto maybe_con = _origin_pools->get_connection(rq);
 
     if (maybe_con) {
         con = std::move(*maybe_con);
@@ -1025,7 +1033,7 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
             return or_throw<Session>(yield, ec);
         }
 
-        con = _origin_pools.wrap(rq, std::move(stream));
+        con = _origin_pools->wrap(rq, std::move(stream));
     }
 
     // Transform request from absolute-form to origin-form
