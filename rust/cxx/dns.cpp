@@ -1,5 +1,6 @@
 #include "dns.h"
-#include <iostream>
+#include "util/address.h"
+#include "parse/number.h"
 
 namespace ouinet::dns {
 
@@ -125,6 +126,37 @@ Resolver::Output Resolver::resolve(const std::string& name, yield_context yield)
         },
         yield
     );
+}
+
+
+TcpLookup Resolver::resolve( const std::string& host
+                           , const std::string& port
+                           , const Cancel& cancel
+                           , YieldContext yield)
+{
+    using TcpEndpoint = TcpLookup::endpoint_type;
+
+    boost::string_view portsv(port);
+    auto portn_o = parse::number<unsigned short>(portsv);
+    if (!portn_o) return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+
+    // Build and return lookup if `host` is already a network address.
+    {
+        sys::error_code e;
+        auto addr = asio::ip::make_address(host, e);
+        if (!e) return TcpLookup::create(TcpEndpoint{std::move(addr), *portn_o}, host, port);
+    }
+
+    sys::error_code ec;
+    const auto answers46 = yield[ec].tag("resolve host").run([&](auto y)
+    {
+        return resolve(host, y[ec]);
+    });
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<TcpLookup>(yield, ec);
+
+    const util::AddrsAsEndpoints<util::Answers, TcpEndpoint> eps{answers46, *portn_o};
+    return TcpLookup::create(eps.begin(), eps.end(), host, port);
 }
 
 void Resolver::close() {

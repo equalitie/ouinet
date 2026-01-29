@@ -50,7 +50,6 @@
 #include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/crypto.h"
-#include "util/dns.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/yield.h"
@@ -59,6 +58,7 @@
 #include "defer.h"
 #include "http_util.h"
 
+#include "cxx/dns.h"
 #include "cxx/metrics.h"
 
 using namespace std;
@@ -157,10 +157,10 @@ ouinet::resolve_target(const http::request_header<>& req
     // Resolve address and also use result for more sophisticaded checking.
     if (!local && (!priv || allow_private_targets))
     {
-        lookup = util::resolve( host, port
-                              , do_doh
-                              , cancel
-                              , yield[ec]);
+        // TODO: Pass DNS protocols to Resolver constructor
+        lookup = dns::Resolver{}.resolve( host, port
+                                        , cancel
+                                        , yield[ec]);
     }
 
     if (ec) return or_throw<TcpLookup>(yield, ec);

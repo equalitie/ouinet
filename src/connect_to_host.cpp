@@ -2,7 +2,7 @@
 
 #include "http_util.h"
 #include "or_throw.h"
-#include "util/dns.h"
+#include "cxx/dns.h"
 #include "util/timeout.h"
 
 #include <boost/asio/connect.hpp>
@@ -25,10 +25,10 @@ ouinet::connect_to_host( const AsioExecutor& ex
     sys::error_code ec;
 
     bool do_doh = false;
-    auto const lookup = util::resolve( host, port
-                                     , do_doh
-                                     , cancel_signal
-                                     , yield[ec]);
+    // TODO: Pass DNS protocols to Resolver constructor
+    auto const lookup = dns::Resolver{}.resolve( host, port
+                                               , cancel_signal
+                                               , yield[ec]);
     return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
 
     return connect_to_host(lookup, ex, cancel_signal, yield);

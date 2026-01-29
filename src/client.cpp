@@ -40,7 +40,6 @@
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
-#include "util/dns.h"
 #include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
@@ -954,8 +953,9 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     sys::error_code ec;
 
     auto do_doh = _config.is_doh_enabled();
-    auto lookup = util::resolve( host, port, do_doh,
-                                 cancel, yield[ec].tag("resolve"));
+    // TODO: Pass DNS protocols to Resolver constructor
+    auto lookup = dns::Resolver{}.resolve( host, port,
+                                           cancel, yield[ec].tag("resolve"));
     _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
            , host, "; naddrs=", lookup.size(), " ec=", ec);
     return_or_throw_on_error(yield, cancel, ec, GenericStream());

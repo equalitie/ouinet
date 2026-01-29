@@ -12,6 +12,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
+#include <boost/intrusive/list.hpp>
 
 namespace ouinet {
 

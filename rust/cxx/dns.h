@@ -2,8 +2,12 @@
 
 #include <functional>
 #include <boost/asio/ip/address.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/system.hpp>
+
+#include "util/signal.h"
+#include "util/yield.h"
 
 // Forward declarations for dns.rs.h
 namespace ouinet::dns::bridge {
@@ -15,6 +19,7 @@ namespace ouinet::dns::bridge {
 namespace ouinet::dns {
 
 using bridge::Error;
+using TcpLookup = boost::asio::ip::tcp::resolver::results_type;
 
 /// A DNS resolver
 class Resolver {
@@ -33,6 +38,13 @@ public:
 
     /// Resolve the given DNS name.
     Output resolve(const std::string& name, boost::asio::yield_context);
+
+    /// Resolve and return a TCP endpoint
+    TcpLookup resolve( const std::string& host
+                     , const std::string& port
+                     , const Cancel& cancel
+                     , YieldContext yield);
+
 
     /// Close this DNS resolver, cancelling any ongoing lookups. Any subsequent lookups return with
     /// a `NotFound` error.
