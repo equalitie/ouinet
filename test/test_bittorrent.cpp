@@ -86,10 +86,10 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
         BOOST_REQUIRE(!ec);
 
         dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
-        BOOST_REQUIRE(!ec);
+        BOOST_REQUIRE_MESSAGE(!ec, "Announcing failed with: " << ec.message());
 
         auto peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
-        BOOST_REQUIRE(!ec);
+        BOOST_REQUIRE_MESSAGE(!ec, "Get peers failed with: " << ec.message());
 
         BOOST_REQUIRE(peers.count(dht.wan_endpoint()));
 
