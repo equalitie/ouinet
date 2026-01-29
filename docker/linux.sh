@@ -12,6 +12,7 @@ run_python_tests=
 enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
+with_asan=n
 
 function print_help (
     echo "Utility to build Ouinet in a Docker container"
@@ -57,6 +58,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --enter-on-exit)
             enter_on_exit=y
+            ;;
+        --with-asan)
+            with_asan=y
             ;;
         --artifact-dir)
             artifact_dir=$2; shift;
@@ -297,7 +301,7 @@ for target_os in ${target_oss[@]}; do
 
         cmake_configure_options=(
             -DCMAKE_BUILD_TYPE=Debug
-            -DWITH_ASAN=OFF
+            -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DWITH_EXPERIMENTAL=OFF
             -DCORROSION_BUILD_TESTS=ON
             -DWITH_OUISYNC=OFF
@@ -362,6 +366,12 @@ for target_os in ${target_oss[@]}; do
                 env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
             fi
         
+            if [ "$with_asan" = y ]; then
+                # TODO: We are violating the "One Definition Rule" because the
+                # client and injector libraries share a lot of code.
+                env+=(ASAN_OPTIONS=detect_odr_violation=0)
+            fi
+
             for test in ${test_targets[@]}; do
                 if is_in $test ${excluded_test_targets[@]} ; then
                     echo "::: Skipping excluded test $test"
