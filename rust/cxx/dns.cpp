@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "dns.h"
 #include "util/address.h"
 #include "parse/number.h"
@@ -94,6 +95,17 @@ private:
 };
 
 } // namespace bridge
+
+Protocols::Protocols() : Protocols{dns_default_protocols} {};
+
+Protocols::Protocols(const std::vector<std::string>& proto_names)
+{
+    for (auto proto_name : proto_names)
+    {
+        this->emplace_back(str_to_enum(proto_name));
+    }
+}
+
 
 Resolver::Resolver() : _impl(bridge::new_resolver(false)) {}
 
