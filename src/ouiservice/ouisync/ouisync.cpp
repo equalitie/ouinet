@@ -181,12 +181,6 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
             throw_error(asio::error::not_connected);
         }
 
-        auto url = util::Url::from(rq.target());
-
-        if (!url) {
-            throw_error(asio::error::invalid_argument);
-        }
-
         auto repo = _impl->resolve(rq.dht_group(), yield.tag("resolve"));
 
         // TODO: Use constants from http_store.cpp instead of these hardcoded

@@ -41,7 +41,7 @@ private:
     };
 
 public:
-    UdpMultiplexer(asio_utp::udp_multiplexer&&);
+    UdpMultiplexer(asio_utp::udp_multiplexer&&, uint32_t);
 
     AsioExecutor get_executor();
 
@@ -79,31 +79,33 @@ private:
     asio::steady_timer _rate_limiting_timer;
     RateCounter _rc_rx;
     RateCounter _rc_tx;
+    uint32_t _rx_limit;
     float sent = 0;
     float recv = 0;
 };
 
 inline
-UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
+UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_limit = 0):
     _socket(std::move(s)),
     _send_queue_nonempty(_socket.get_executor()),
-    _rate_limiting_timer(_socket.get_executor())
+    _rate_limiting_timer(_socket.get_executor()),
+    _rx_limit(rx_limit)
 {
     assert(_socket.is_open());
 
     LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
-    task::spawn_detached(), [this] (asio::yield_context yield) {
+    task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
             using namespace std::chrono;
             using std::cerr;
 
             Cancel cancel(_terminate_signal);
 
             auto print_rate = [](float r) {
-                if      (r >= 1000000) cerr << (r / 1000000) << "MiB/s";
-                else if (r >= 1000)    cerr << (r / 1000)    << "KiB/s";
-                else                   cerr << (r)           << "B/s";
+                if      (r >= 1000000) cerr << (r / 1000000) << " MiB/s";
+                else if (r >= 1000)    cerr << (r / 1000)    << " KiB/s";
+                else                   cerr << (r)           << " B/s";
             };
 
             while (true) {
@@ -111,11 +113,19 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
                 async_sleep(get_executor(), seconds(1), cancel, yield[ec]);
                 if (cancel) return;
 
-                cerr << "Current BT rate rx:";
+                cerr << "Current BT rate ";
+
+                cerr << "rx: ";
                 print_rate(_rc_rx.rate());
-                cerr << " (" << recv << ") tx:";
+                cerr << " (" << recv << ")" ;
+                cerr << " receive_queue size: " << _receive_queue.size();
+                cerr << " rx_limit: " << _rx_limit;
+
+                cerr << " tx: ";
                 print_rate(_rc_tx.rate());
-                cerr << " (" << sent << ") send_queue size:" << _send_queue.size();
+                cerr << " (" << sent << ")";
+                cerr << " send_queue size: " << _send_queue.size();
+
                 cerr << "\n";
                 sent = 0;
                 recv = 0;
@@ -182,6 +192,9 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s):
 
             _rc_rx.update(size);
             recv += size;
+            if (_rx_limit > 0) {
+                maintain_max_rate_bytes_per_sec(_rc_rx.rate(), _rx_limit, yield[ec]);
+            }
 
             for (auto& entry : std::move(_receive_queue)) {
                 entry.handler(ec, boost::string_view((char*)&buf[0], size), from);

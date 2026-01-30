@@ -295,5 +295,3 @@ std::ostream& operator<<(std::ostream& os, Body const&);
 std::ostream& operator<<(std::ostream& os, Trailer const&);
 
 } // namespace ouinet::http_response
-
-

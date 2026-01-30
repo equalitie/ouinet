@@ -11,7 +11,6 @@ if [ -z "$OUINET_REPO_DIR" ]; then
 fi
 
 [ -z "$OUINET_BUILD_DIR" ] && OUINET_BUILD_DIR="$OUINET_REPO_DIR/scripts/ouinet-local-build/"
-PYTHONPATH="$PYTHONPATH:$OUINET_REPO_DIR/test/integration_test/"
 
 if [ ! -f "$OUINET_BUILD_DIR/client" ] || [ ! -f "$OUINET_BUILD_DIR/injector" ]; then
     echo "Cannot find the client or the injector in the build directory $OUINET_BUILD_DIR"
@@ -19,6 +18,4 @@ if [ ! -f "$OUINET_BUILD_DIR/client" ] || [ ! -f "$OUINET_BUILD_DIR/injector" ];
     exit 1
 fi
 
-export OUINET_BUILD_DIR PYTHONPATH
-
-python -m twisted.trial test_http
+python -m pytest -s -vvx $OUINET_REPO_DIR/test/integration_test

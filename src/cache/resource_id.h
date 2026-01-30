@@ -2,14 +2,18 @@
 
 #include <string>
 #include <optional>
-#include "util/yield.h"
-#include "util/scrypt.h"
+#include "declspec.h"
 
 namespace ouinet::cache {
 
-class ResourceId {
+// ResourceId identifies HTTP resource, it's derived from the resource URL. It
+// is sent to peers to request particular resource. The idea is that while the
+// URL is or might be a secret, the ResourceId is not. Thus unless the peer has
+// the corresponding resource, they should not be able to obtain back the URL
+// out of it without brute force or guessing.
+class OUINET_DECL ResourceId {
 public:
-    static std::optional<ResourceId> from_url(std::string_view url, YieldContext);
+    static ResourceId from_url(std::string_view url);
 
     static std::optional<ResourceId> from_hex(std::string_view hex);
     static std::optional<ResourceId> from_hex(std::wstring_view hex);
@@ -30,14 +34,13 @@ public:
     }
 
 private:
-    explicit ResourceId(std::string repr) : _repr(std::move(repr)) {}
+    explicit ResourceId(std::string repr);
 
 private:
     std::string _repr;
 };
 
+OUINET_DECL std::ostream& operator<<(std::ostream&, const ouinet::cache::ResourceId&);
+
 } // namespace ouinet::cache
 
-namespace std {
-    std::ostream& operator<<(std::ostream&, const ouinet::cache::ResourceId&);
-} // namespace std

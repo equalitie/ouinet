@@ -3,9 +3,9 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/filesystem.hpp>
 
-#include "declspec.h"
 #include "constants.h"
 #include "namespaces.h"
+#include "declspec.h"
 #include "client_config.h"
 #include "bittorrent/mock_dht.h"
 #include "util/log_path.h"
@@ -47,6 +47,7 @@ public:
     RunningState get_state() const noexcept;
     asio::ip::tcp::endpoint get_proxy_endpoint() const noexcept;
     std::string get_frontend_endpoint() const noexcept;
+    std::string get_frontend_unix_socket_endpoint() const noexcept;
     AsioExecutor get_executor() const noexcept;
 
     void charging_state_change(bool is_charging);

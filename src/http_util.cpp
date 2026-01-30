@@ -130,47 +130,6 @@ ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
     return ranges;
 }
 
-#ifdef __SANITIZE_ADDRESS__
-static
-boost::optional<posix_time::ptime>
-parse_date_rfc1123(beast::string_view s)
-{
-    static const char * months[12] = {
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    };
-
-    struct tm g = {0};
-    char M[4];
-    time_t t;
-    int i;
-
-    char buf[128];
-
-    if (s.size() >= sizeof(buf)) return boost::none;
-
-    memcpy(buf, s.data(), s.size());
-    buf[s.size()] = 0;
-
-    sscanf(buf, "%*[a-zA-Z,] %d %3s %d %d:%d:%d",
-	   & g.tm_mday, M, & g.tm_year,
-	   & g.tm_hour, & g.tm_min, & g.tm_sec);
-    for (i = 0; i < 12; i++) {
-	    if (strncmp (M, months[i], 3) == 0) {
-	        g.tm_mon = i;
-	        break;
-	    }
-    }
-
-    if (g.tm_year == 0) return boost::none;
-
-    g.tm_year -= 1900;
-    t = timegm (& g);
-
-    return posix_time::from_time_t(t);
-}
-#endif
-
 posix_time::ptime
 ouinet::util::parse_date(beast::string_view s)
 {
@@ -178,17 +137,6 @@ ouinet::util::parse_date(beast::string_view s)
 
     // Trim quotes from the beginning
     while (s.starts_with('"') || s.starts_with(' ')) s.remove_prefix(1);
-
-    // The date parsing code below internally throws and catches exceptions.
-    // This confuses the address sanitizer when combined with Boost.Coroutine
-    // and causes the app exit with false positive log from Asan.
-#   ifdef __SANITIZE_ADDRESS__
-    {
-        auto t = parse_date_rfc1123(s);
-        if (!t) return bt::ptime();
-        return *t;
-    }
-#   endif
 
     static const auto format = [](const char* fmt) {
         using std::locale;

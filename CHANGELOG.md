@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.2) - 2026-01-12
+
+### Fixed
+
+- Fixes the port number shown by `/api/endpoints` when its automatically
+selected by the OS. !153
+- Prevent naming collisions when building injector and client libs in
+Windows. !156
+- Fixes linking issues in injector's headers and tests. !156
+
+### Changed
+
+- Windows artifacts are built now by default with OpenSSL v3.6.0. !156
+
+
+## [v1.6.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.1) - 2025-12-18
+
+### Fixed
+
+- Remove the default attribute of `udp-mux-rx-limit` option from the Client
+settings. !152
+- Fixed `test-dns.cpp` by replacing the test domain used in `valid_name`
+test. !152
+
+
+## [v1.6.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.0) - 2025-12-18
+
+### Added
+
+- Expose `/api/endpoints` on Ouinet's frontend interface. !150
+- New config option `front-end-unix-socket-ep` to serve frontend via
+unix socket. !150
+- Rate limit mechanism for Rx traffic controlled by the `udp-mux-rx-limit`
+config option. !151
+- Scrutiny and control of DHT bootstrap process to address timing issues. !136
+
+### Changed
+
+- Tests no longer involve twisted framework and were rewritten for robustness
+and error handling clarity. !136
+
+### Fixed
+
+- Missing python dependencies in the CI Docker images. !149
+- Fix `client-credentials` for SSL connections, it allows for standard
+proxy authorization. !150
+
+
+## [v1.5.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.5.1) - 2025-11-27
+
+### Fixed
+
+- Add `ec` to `yield` when calling injector's `resolve_tcp_doh` method. !148
+
+
 ## [v1.5.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.5.0) - 2025-11-26
 
 ### Added

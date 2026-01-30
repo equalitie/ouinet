@@ -19,7 +19,6 @@
 #include <session.h>
 #include <util/bytes.h>
 #include <util/file_io.h>
-#include <util/part_io.h>
 #include <util/str.h>
 
 #include <namespaces.h>

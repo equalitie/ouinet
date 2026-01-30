@@ -15,6 +15,7 @@
 #include "resource_id.h"
 #include "dht_groups.h"
 #include "peer_message.h"
+#include "util/crypto_stream_key.h"
 
 namespace ouinet {
 
@@ -85,6 +86,7 @@ public:
 
     // This may add a response source header.
     Session load( const ResourceId&
+                , const CryptoStreamKey&
                 , const GroupName& group
                 , bool is_head_request
                 , metrics::Client& metrics

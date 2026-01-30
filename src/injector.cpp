@@ -11,7 +11,6 @@
 #include <fstream>
 #include <string>
 
-#include "cache/http_sign.h"
 
 #include "namespaces.h"
 #include "util.h"
@@ -61,8 +60,9 @@
 
 #include "cxx/metrics.h"
 
+namespace ouinet {
+
 using namespace std;
-using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using udp         = asio::ip::udp;
@@ -74,7 +74,7 @@ namespace bt = bittorrent;
 using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
-using ouinet::util::AsioExecutor;
+using util::AsioExecutor;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
@@ -132,63 +132,6 @@ void handle_no_proxy( GenericStream& con
 
 
 //------------------------------------------------------------------------------
-// Resolve request target address, check whether it is valid
-// and return lookup results.
-// If not valid, set error code
-// (the returned lookup may not be usable then).
-TcpLookup
-ouinet::resolve_target(const http::request_header<>& req
-                      , bool allow_private_targets
-                      , bool do_doh
-                      , AsioExecutor exec
-                      , Cancel& cancel
-                      , YieldContext yield)
-{
-    TcpLookup lookup;
-    sys::error_code ec;
-
-    string host, port;
-    tie(host, port) = util::get_host_port(req);
-
-    // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = boost::regex_match(host, util::localhost_rx);
-    bool priv = boost::regex_match(host, util::private_addr_rx);
-
-    // Resolve address and also use result for more sophisticaded checking.
-    if (!local && (!priv || allow_private_targets))
-    {
-        lookup = do_doh
-               ? util::resolve_tcp_doh( host, port, cancel, yield[ec] )
-               : util::resolve_tcp_async( host, port
-                                        , exec
-                                        , cancel
-                                        , yield[ec].native());
-    }
-
-    if (ec) return or_throw<TcpLookup>(yield, ec);
-
-    // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
-    for (auto r : lookup)
-    {
-        if ((local = boost::regex_match(r.endpoint().address().to_string()
-                                        , util::localhost_rx)))
-            break;
-        if ((priv = boost::regex_match(r.endpoint().address().to_string()
-                                      , util::private_addr_rx)))
-            if (!allow_private_targets)
-                break;
-    }
-
-    if (local || (priv && !allow_private_targets))
-    {
-        ec = asio::error::invalid_argument;
-        return or_throw<TcpLookup>(yield, ec);
-    }
-
-    return or_throw(yield, ec, move(lookup));
-}
-
-//------------------------------------------------------------------------------
 // Note: the connection is attempted towards
 // the already resolved endpoints in `lookup`,
 // only headers are used from `req`.
@@ -210,11 +153,11 @@ void handle_connect_request( GenericStream client_c
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target( req
-                                     , g_allow_private_targets
-                                     , g_do_doh
-                                     , exec
-                                     , cancel, yield[ec].tag("resolve"));
+    auto lookup = util::resolve_target( req
+                                      , g_allow_private_targets
+                                      , g_do_doh
+                                      , exec
+                                      , cancel, yield[ec].tag("resolve"));
 
     if (ec) {
         sys::error_code he_ec;
@@ -320,11 +263,11 @@ class InjectorCacheControl {
         sys::error_code ec;
 
         // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target( rq
-                                         , g_allow_private_targets
-                                         , g_do_doh
-                                         , executor
-                                         , cancel, yield[ec]);
+        auto lookup = util::resolve_target( rq
+                                          , g_allow_private_targets
+                                          , g_do_doh
+                                          , executor
+                                          , cancel, yield[ec]);
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -791,7 +734,7 @@ void listen( const InjectorConfig& config
     OriginPools origin_pools;
 
     asio::ssl::context ssl_ctx{asio::ssl::context::tls_client};
-    ssl_ctx.set_default_verify_paths();
+    ssl::util::set_default_verify_paths(ssl_ctx);
     ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
 
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
@@ -813,7 +756,7 @@ void listen( const InjectorConfig& config
         task::spawn_detached(exec, [
             connection = std::move(connection),
             &ssl_ctx,
-            &cancel,
+            cancel,
             &config,
             &genuuid,
             &origin_pools,
@@ -941,6 +884,7 @@ Injector::Injector(
             ( ex
             , metrics::Client::noop().mainline_dht()
             , config.is_doh_enabled()
+            , config.udp_mux_rx_limit_in_bytes()
             , fs::path{}
             , _config.bt_bootstrap_extras());  // default storage dir
     }
@@ -1046,3 +990,5 @@ void Injector::stop() {
 Injector::~Injector() {
     stop();
 }
+
+} // namespace ouinet

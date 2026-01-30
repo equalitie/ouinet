@@ -403,20 +403,18 @@ route_choose_config(const http::request_header<>& req, const ClientConfig& confi
     return default_request_config;
 }
 
+std::ostream& operator<<(std::ostream& os, const ouinet::request_route::Config& config) {
+    os << "{";
+    bool is_first = true;
+    for (auto channel : config.fresh_channels) {
+        if (!is_first) {
+            os << ", ";
+        }
+        is_first = false;
+        os << channel;
+    }
+    return os << "}";
+}
+
 } // request_route namespace
 } // ouinet namespace
-
-namespace std {
-    std::ostream& operator<<(std::ostream& os, const ouinet::request_route::Config& config) {
-        os << "{";
-        bool is_first = true;
-        for (auto channel : config.fresh_channels) {
-            if (!is_first) {
-                os << ", ";
-            }
-            is_first = false;
-            os << channel;
-        }
-        return os << "}";
-    }
-}

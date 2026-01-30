@@ -70,12 +70,21 @@ public:
     PeerRequest static async_read(GenericStream&, YieldContext yield);
 };
 
+enum class BlobType {
+    plain_text,
+    cypher_text,
+};
+
+void async_write_blob_type(BlobType, GenericStream&, asio::yield_context);
+BlobType async_read_blob_type(GenericStream&, asio::yield_context);
+
 enum PeerRequestError {
     success = 0,
     invalid_method,
     invalid_protocol_version,
     invalid_target,
     invalid_range,
+    invalid_blob_type,
 };
 
 sys::error_category const& peer_request_error_category();

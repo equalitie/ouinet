@@ -10,6 +10,7 @@
 #include "../util/log_path.h"
 #include "../session.h"
 #include "resource_id.h"
+#include "util/crypto_stream_key.h"
 
 namespace ouinet { namespace cache {
 
@@ -28,22 +29,24 @@ public:
     // Use this for local cache and LAN retrieval only.
     MultiPeerReader( AsioExecutor ex
                    , ResourceId
+                   , CryptoStreamKey
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
                    , std::shared_ptr<unsigned> newest_proto_seen
-                   , std::optional<util::LogPath>);
+                   , util::LogPath);
 
     // Use this to include peers on the Internet.
     MultiPeerReader( AsioExecutor ex
                    , ResourceId
+                   , CryptoStreamKey
                    , util::Ed25519PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
                    , std::set<asio::ip::udp::endpoint> wan_my_endpoints
                    , std::shared_ptr<DhtLookup> peer_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen
-                   , std::optional<util::LogPath>);
+                   , util::LogPath);
 
     MultiPeerReader(MultiPeerReader&&) = delete;
     MultiPeerReader(const MultiPeerReader&) = delete;
@@ -80,7 +83,7 @@ private:
 
     boost::optional<HashList> _reference_hash_list;
     std::unique_ptr<Peers> _peers;
-    std::optional<util::LogPath> _log_path;
+    util::LogPath _log_path;
     bool _head_sent = false;
     size_t _block_id = 0;
 

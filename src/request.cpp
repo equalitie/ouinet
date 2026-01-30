@@ -2,6 +2,7 @@
 #include "http_util.h"
 #include "authenticate.h"
 #include "cache/cache_entry.h"
+#include "cache/resource_key.h"
 
 namespace ouinet {
 
@@ -79,13 +80,11 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
         return {};
     }
 
-    auto resource_id = cache::ResourceId::from_url(hdr->target(), yield);
+    auto resource_id = cache::ResourceId::from_url(hdr->target());
 
-    if (!resource_id) {
-        return {};
-    }
+    auto resource_key = cache::resource_key::from_url(hdr->target());
 
-    return CacheRequest(std::move(*hdr), std::move(*resource_id), std::move(*dht_group));
+    return CacheRequest(std::move(*hdr), std::move(resource_id), resource_key, std::move(*dht_group));
 }
 
 //----
@@ -101,7 +100,7 @@ void CacheInjectRequest::set_druid(std::string_view druid) {
 //----
 
 CacheRetrieveRequest CacheRequest::to_retrieve_request() const {
-    return CacheRetrieveRequest(_header.method(), _resource_id, _dht_group, _header.target());
+    return CacheRetrieveRequest(_header.method(), _resource_id, _resource_key, _dht_group);
 }
 
 

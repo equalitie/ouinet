@@ -2,7 +2,10 @@
 
 #include <iterator>
 
+#include <boost/beast/http/message.hpp>
 #include "../parse/number.h"
+#include "../declspec.h"
+#include "util/signal.h"
 #include "yield.h"
 
 #include "cxx/dns.h"
@@ -164,4 +167,14 @@ namespace ouinet::util
         AddrsAsEndpoints<Answers, TcpEndpoint> eps{answers46, *portn_o};
         return TcpLookup::create(eps.begin(), eps.end(), host, port);
     }
+
+    OUINET_DECL
+    TcpLookup
+    resolve_target( const http::request_header<>& req
+                  , bool allow_private_targets
+                  , bool do_doh
+                  , boost::asio::any_io_executor exec
+                  , Cancel& cancel
+                  , YieldContext yield);
+
 }

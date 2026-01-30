@@ -23,15 +23,17 @@ public:
     LogPath tag(std::string tag);
 
     friend std::ostream& operator<<(std::ostream& os, LogPath const& l) {
-        print_from_root(os, l._node);
+        print_from_root(os, l._node.get());
         return os;
     }
+
+    void start_monitor_changes(std::ostream&) const;
 
 private:
     LogPath(std::shared_ptr<Node> node) : _node(std::move(node)) {}
 
     static
-    void print_from_root(std::ostream&, const std::shared_ptr<Node>&);
+    void print_from_root(std::ostream&, const Node*);
 
 private:
     std::shared_ptr<Node> _node;

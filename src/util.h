@@ -22,13 +22,6 @@
 
 namespace ouinet { namespace util {
 
-inline
-std::string canonical_url(Url urlm) {
-    if (!urlm.query.empty()) urlm.query = {};
-    if (!urlm.fragment.empty()) urlm.fragment = {};
-    return urlm.reassemble();  // TODO: make canonical
-}
-
 // Get the source IPv4 address used when communicating with external hosts.
 boost::optional<asio::ip::address> get_local_ipv4_address();
 
@@ -106,12 +99,14 @@ template<class In>
 std::string base32up_encode(const In& in) {  // unpadded!
     return detail::base32up_encode(reinterpret_cast<const char*>(in.data()), in.size());
 }
+
 std::string base32_decode(const boost::string_view);
 
 template<class In>
 std::string base64_encode(const In& in) {
     return detail::base64_encode(reinterpret_cast<const char*>(in.data()), in.size());
 }
+
 std::string base64_decode(const boost::string_view);
 
 bool base64_decode(const boost::string_view in, uint8_t* out, size_t out_size);

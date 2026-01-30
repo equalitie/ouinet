@@ -9,6 +9,7 @@
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"
+#include "ouiservice/bep5/client.h"
 #include "ssl/ca_certificate.h"
 #include "util/reachability.h"
 #include "util/yield.h"
@@ -96,12 +97,16 @@ public:
                   , const http::request<http::string_body>&
                   , Client::RunningState
                   , cache::Client*
+                  , std::shared_ptr<ouiservice::Bep5Client> client
                   , const CACertificate&
                   , boost::optional<UdpEndpoint> local_ep
                   , const std::shared_ptr<UPnPs>&
                   , const bittorrent::DhtBase* dht
                   , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
+                  , std::string_view proxy_endpoint
+                  , std::string_view frontend_endpoint
+                  , std::string_view frontend_unix_socket_endpoint
                   , Cancel
                   , YieldContext yield);
 
@@ -170,6 +175,7 @@ private:
                       , Response&
                       , std::ostringstream&
                       , cache::Client*
+                      , std::shared_ptr<ouiservice::Bep5Client> client
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
                       , YieldContext);
@@ -181,6 +187,11 @@ private:
                            , ClientFrontEndMetricsController& metrics
                            , Cancel cancel
                            , YieldContext);
+
+    static void handle_api_endpoints(std::string_view proxy_endpoint
+                                   , std::string_view frontend_endpoint
+                                   , std::string_view frontend_unix_socket_endpoint
+                                   , Response& res, std::ostringstream& ss);
 
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);

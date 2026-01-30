@@ -6,7 +6,9 @@
 #include "../util/file_io.h"
 #include "../util/hash.h"
 #include "../util.h"
+#include "../parse/number.h"
 #include "../response_reader.h"
+#include "../http_util.h"
 #include "http_sign.h"
 #include "signed_head.h"
 
