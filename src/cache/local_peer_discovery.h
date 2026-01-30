@@ -27,8 +27,7 @@ public:
 
 private:
     AsioExecutor _ex;
-    std::unique_ptr<Impl> _impl;
-    Cancel _lifetime_cancel;
+    std::shared_ptr<Impl> _impl;
 };
 
 } // namespace
