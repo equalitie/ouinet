@@ -355,7 +355,8 @@ private:
               "provided by the operating system.")
            ("dns-protocol", po::value<vector<string>>()
                                 ->composing()
-                                ->default_value({"plain"}, "plain")
+                                ->default_value(dns_default_protocols,
+                                                util::join(dns_default_protocols, ","))
             ,"DNS protocols used by the resolver. This option can be set to: plain or https. "
               "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
               "the nameservers. The option can be used multiple times to select more than one protocol.")
