@@ -27,6 +27,8 @@
 #include "util.h"
 #include "bittorrent/bootstrap.h"
 
+#include "cxx/dns.h"
+
 namespace ouinet {
 
 #define _LOG_FILE_NAME "log.txt"
@@ -47,7 +49,6 @@ struct MetricsConfig {
 
 class OUINET_DECL ClientConfig {
 public:
-    using DnsProtocols = std::set<std::string>;
     enum class CacheType { None, Bep5Http };
 
     ClientConfig() = default;
@@ -164,7 +165,7 @@ public:
         return !_disable_doh;
     }
 
-    DnsProtocols dns_protocols() const
+    dns::Protocols dns_protocols() const
     {
         return _dns_protocols;
     }
@@ -543,7 +544,7 @@ private:
     bool _disable_doh = false;
     bool _allow_private_targets = false;
 
-    DnsProtocols _dns_protocols;
+    dns::Protocols _dns_protocols;
 
     std::unique_ptr<MetricsConfig> _metrics;
 };

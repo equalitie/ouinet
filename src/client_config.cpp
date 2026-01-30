@@ -317,8 +317,8 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     }
 
     if (auto opt = as_optional<vector<string>>(vm, "dns-protocols")) {
-        for (const auto& dnsproto : *opt) {
-            _dns_protocols.insert(dnsproto);
+        for (const auto& proto_name : *opt) {
+            _dns_protocols.emplace_back(dns::Protocols::str_to_enum(proto_name));
         }
     }
 
