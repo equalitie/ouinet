@@ -46,8 +46,6 @@ if(WIN32)
 endif()
 
 if(APPLE AND NOT IOS)
-    # Suppress linker warnings about deployment target version mismatches
-    add_link_options("-Wl,-w")
     # Boost.Stacktrace doesn't need _GNU_SOURCE on macOS
     add_definitions(-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED)
 endif()
