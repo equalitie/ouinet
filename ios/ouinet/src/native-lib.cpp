@@ -14,6 +14,9 @@
 #include <util/signal.h>
 #include <util/crypto.h>
 #include <condition_variable>
+#include <future>
+#include <mutex>
+#include <atomic>
 
 #include <fcntl.h>
 #include <stdlib.h>
@@ -38,6 +41,12 @@ std::unique_ptr<ouinet::Client> g_client;
 ouinet::asio::io_context g_ctx;
 thread g_client_thread;
 bool g_crypto_initialized = false;
+
+// Thread-safe cached values for cross-thread access
+std::atomic<bool> g_client_ready{false};
+std::string g_proxy_endpoint_cached;
+std::string g_frontend_endpoint_cached;
+std::mutex g_endpoint_mutex;
 
 void start_client_thread(const std::vector<std::string>& args) //, const vector<string>& extra_path)
 {
@@ -106,6 +115,15 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
                 ClientConfig cfg(args_.size(), const_cast<const char**>(args_.data()));
                 g_client = make_unique<ouinet::Client>(g_ctx, move(cfg));
                 g_client->start();
+
+                // Cache endpoints for thread-safe access
+                {
+                    std::lock_guard<std::mutex> lock(g_endpoint_mutex);
+                    auto ep = g_client->get_proxy_endpoint();
+                    g_proxy_endpoint_cached = ep.address().to_string() + ":" + to_string(ep.port());
+                    g_frontend_endpoint_cached = g_client->get_frontend_endpoint();
+                }
+                g_client_ready = true;
             }
             catch (const std::exception& e) {
                 //debug("Failed to start Ouinet client:");
@@ -128,6 +146,12 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
 
             //debug("Ouinet's main loop stopped.");
             std::cout<<"Ouinet's main loop stopped."<<std::endl;
+            g_client_ready = false;
+            {
+                std::lock_guard<std::mutex> lock(g_endpoint_mutex);
+                g_proxy_endpoint_cached.clear();
+                g_frontend_endpoint_cached.clear();
+            }
             g_client.reset();
         });
 }
@@ -135,18 +159,28 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
 int NativeLib::getClientState()
 {
     // TODO: Avoid needing to keep this in sync by hand.
-    if (!g_client)
+    if (!g_client_ready)
         return g_ctx.stopped() ? 6 /* stopped */ : -1 /* missing */;
-    switch (g_client->get_state()) {
-    case ouinet::Client::RunningState::Created:  return 0;
-    case ouinet::Client::RunningState::Failed:   return 1;
-    case ouinet::Client::RunningState::Starting: return 2;
-    case ouinet::Client::RunningState::Degraded: return 3;
-    case ouinet::Client::RunningState::Started:  return 4;
-    case ouinet::Client::RunningState::Stopping: return 5;
-    case ouinet::Client::RunningState::Stopped:  return 6;
-    }
-    return -1 /* missing */;
+
+    // Post to io_context thread and wait for result
+    std::promise<int> promise;
+    ouinet::asio::post(g_ctx, [&promise] {
+        if (!g_client) {
+            promise.set_value(-1);
+            return;
+        }
+        switch (g_client->get_state()) {
+        case ouinet::Client::RunningState::Created:  promise.set_value(0); break;
+        case ouinet::Client::RunningState::Failed:   promise.set_value(1); break;
+        case ouinet::Client::RunningState::Starting: promise.set_value(2); break;
+        case ouinet::Client::RunningState::Degraded: promise.set_value(3); break;
+        case ouinet::Client::RunningState::Started:  promise.set_value(4); break;
+        case ouinet::Client::RunningState::Stopping: promise.set_value(5); break;
+        case ouinet::Client::RunningState::Stopped:  promise.set_value(6); break;
+        default: promise.set_value(-1); break;
+        }
+    });
+    return promise.get_future().get();
 }
 
 void NativeLib::startClient(const std::vector<std::string>& args)//, const vector<string>& extra_path)
@@ -181,13 +215,16 @@ void NativeLib::startClient(const std::vector<std::string>& args)//, const vecto
 
 void NativeLib::stopClient()
 {
-    if (!g_client) return;
-    g_client->stop();
-    g_client.reset();
-    
-    if (g_client_thread.joinable()) {
-        g_client_thread.join();
-    }
+    if (!g_client_thread.joinable()) return;
+
+    // Post stop() to io_context thread to ensure thread-safe access
+    ouinet::asio::post(g_ctx, [] {
+        if (g_client) g_client->stop();
+    });
+
+    g_client_thread.join();
+    g_client_thread = thread();
+    // Note: g_client.reset() happens inside the thread after g_ctx.run() returns
 }
 
 std::string NativeLib::helloOuinet()
@@ -197,13 +234,13 @@ std::string NativeLib::helloOuinet()
 
 
 std::string NativeLib::getProxyEndpoint() const noexcept {
-    if (!g_client) return "";
-    auto ep = g_client->get_proxy_endpoint();
-    auto ep_str = string(ep.address().to_string()) + ":" + to_string(ep.port());
-    return ep_str;
+    if (!g_client_ready) return "";
+    std::lock_guard<std::mutex> lock(g_endpoint_mutex);
+    return g_proxy_endpoint_cached;
 }
 
 std::string NativeLib::getFrontendEndpoint() const noexcept {
-    if (!g_client) return "";
-    return g_client->get_frontend_endpoint();
+    if (!g_client_ready) return "";
+    std::lock_guard<std::mutex> lock(g_endpoint_mutex);
+    return g_frontend_endpoint_cached;
 }
