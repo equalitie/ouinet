@@ -61,9 +61,7 @@ namespace std {
     }
 }
 
-struct LocalPeerDiscovery::Impl
-    : public std::enable_shared_from_this<LocalPeerDiscovery::Impl>
-{
+struct LocalPeerDiscovery::Impl {
     struct Peer {
         udp::endpoint discovery_ep;
         set<udp::endpoint> advertised_eps;
@@ -74,19 +72,15 @@ struct LocalPeerDiscovery::Impl
     PeerId _id;
     set<udp::endpoint> _advertised_eps;
     map<PeerId, Peer> _peers;
-    Cancel _cancel;
 
     Impl( const AsioExecutor& ex
         , uint64_t id
-        , set<udp::endpoint> advertised_eps)
+        , set<udp::endpoint> advertised_eps
+        , Cancel& cancel)
         : _ex(ex)
         , _socket(ex)
         , _id(id)
         , _advertised_eps(move(advertised_eps))
-    {
-    }
-
-    void start()
     {
         sys::error_code ec;
 
@@ -106,8 +100,8 @@ struct LocalPeerDiscovery::Impl
             LOG_DEBUG("LocalPeerDiscovery: bound to ", multicast_ep);
         }
 
-        start_listening_to_broadcast();
-        broadcast_search_query();
+        start_listening_to_broadcast(cancel);
+        broadcast_search_query(cancel);
     }
 
     void say_bye() {
@@ -115,38 +109,40 @@ struct LocalPeerDiscovery::Impl
         _socket.send_to(asio::buffer(bye_message()), multicast_ep, 0, ec);
     }
 
-    void broadcast_search_query() {
-        auto self = shared_from_this();
-        TRACK_SPAWN(_ex, ([this, self] (asio::yield_context yield) {
+    void broadcast_search_query(Cancel& cancel) {
+        TRACK_SPAWN(_ex, ([&, cancel = cancel] (asio::yield_context yield) {
             sys::error_code ec;
             udp::endpoint ep = multicast_ep;
             _socket.async_send_to( asio::buffer(query_message())
                                  , ep
                                  , yield[ec]);
-            if (ec && !_cancel) {
+            if (ec && !cancel) {
                 LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query;"
                           " ec=", ec, " ep=", ep);
             }
         }));
     }
 
-    void start_listening_to_broadcast() {
-        auto self = shared_from_this();
-        TRACK_SPAWN(_ex, ([this, self] (asio::yield_context yield) mutable {
+    void start_listening_to_broadcast(Cancel& cancel) {
+        TRACK_SPAWN(_ex, ([&, cancel = cancel] (asio::yield_context yield) mutable {
             sys::error_code ec;
-            if (_cancel) return;
-            listen_to_broadcast(yield[ec]);
+            if (cancel) return;
+            listen_to_broadcast(cancel, yield[ec]);
         }));
     }
 
-    void listen_to_broadcast(asio::yield_context yield) {
+    void listen_to_broadcast(Cancel& cancel, asio::yield_context yield) {
         string data(256*128, '\0');
         udp::endpoint sender_ep;
 
-        auto cancel_slot = _cancel.connect([&] {
-            sys::error_code ec;
-            _socket.close(ec);
-        });
+//        bool foo = false;
+//        auto cancel_slot = cancel.connect([&] {
+//                foo = true;
+//                sys::error_code ec;
+//                _socket.close(ec);
+//            });
+
+//        auto cc = cancel.connect([&] { _socket.close(); });
 
         while (true) {
             sys::error_code ec;
@@ -154,21 +150,22 @@ struct LocalPeerDiscovery::Impl
             size_t size = _socket.async_receive_from( asio::buffer(data)
                                                     , sender_ep
                                                     , yield[ec]);
-            if (_cancel) break;
+            if (cancel) break;
 
             if (ec) {
                 LOG_ERROR("LocalPeerDiscovery: failed to receive;"
                           " ec=", ec);
-                async_sleep(_ex, chrono::seconds(1), _cancel, yield);
-                if (_cancel) break;
+                async_sleep(_ex, chrono::seconds(1), cancel, yield);
+                if (cancel) break;
                 continue;
             }
 
             on_broadcast_receive( boost::string_view(data.data(), size)
                                 , sender_ep
+                                , cancel
                                 , yield[ec]);
 
-            if (_cancel) break;
+            if (cancel) break;
             assert(ec != asio::error::operation_aborted);
         }
     }
@@ -195,6 +192,7 @@ struct LocalPeerDiscovery::Impl
 
     void on_broadcast_receive( boost::string_view sv
                              , udp::endpoint from
+                             , Cancel& cancel
                              , asio::yield_context yield)
     {
         if (!consume(sv, MSG_PREFIX)) return;
@@ -205,7 +203,7 @@ struct LocalPeerDiscovery::Impl
         if (!consume(sv, ":")) return;
 
         if (consume(sv, MSG_QUERY_CMD)) {
-            handle_query(sv, *opt_peer_id, from, yield);
+            handle_query(sv, *opt_peer_id, from, cancel, yield);
         } else if (consume(sv, MSG_REPLY_CMD)) {
             handle_reply(sv, *opt_peer_id, from);
         } else if (consume(sv, MSG_BYE_CMD)) {
@@ -216,6 +214,7 @@ struct LocalPeerDiscovery::Impl
     void handle_query( boost::string_view sv
                      , PeerId peer_id
                      , udp::endpoint peer_ep
+                     , Cancel& cancel
                      , asio::yield_context yield)
     {
         auto opt_eps = consume_endpoints(sv, peer_ep.address());
@@ -281,12 +280,11 @@ LocalPeerDiscovery::LocalPeerDiscovery( const AsioExecutor& ex
     : _ex(ex)
 {
     auto id = util::random::number<uint64_t>();
-    _impl = make_shared<Impl>(_ex, id, advertised_eps);
-    _impl->start();
+    _impl = make_unique<Impl>(_ex, id, advertised_eps, _lifetime_cancel);
 }
 
 void LocalPeerDiscovery::stop() {
-    if (_impl) _impl->_cancel();
+    _lifetime_cancel();
 }
 
 LocalPeerDiscovery::~LocalPeerDiscovery() {
