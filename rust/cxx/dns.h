@@ -20,13 +20,7 @@ namespace ouinet::dns {
 
 using bridge::Error;
 using TcpLookup = boost::asio::ip::tcp::resolver::results_type;
-
-enum class Protocol
-{
-    Undefined,
-    Plain,
-    Https,
-};
+using bridge::Protocol;
 
 class Protocols : public std::vector<Protocol>
 {

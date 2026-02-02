@@ -32,6 +32,15 @@ mod ffi {
         Other = 4,
     }
 
+    enum Protocol {
+        // Unencrypted DNS queries via UDP or TCP
+        Plain = 0,
+        // DNS over HTTPS
+        Https = 1,
+        // Not defined
+        Undefined = 99,
+    }
+
     extern "Rust" {
         type Resolver;
 
