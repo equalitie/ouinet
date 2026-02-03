@@ -96,20 +96,10 @@ private:
 
 } // namespace bridge
 
-Protocols::Protocols() : Protocols{dns_default_protocols} {};
 
-Protocols::Protocols(const std::vector<std::string>& proto_names)
-{
-    for (auto proto_name : proto_names)
-    {
-        this->emplace_back(str_to_enum(proto_name));
-    }
+Resolver::Resolver(dns::Config config)
+    : _impl(bridge::new_resolver(config)) {
 }
-
-
-Resolver::Resolver() : _impl(bridge::new_resolver(false)) {}
-
-Resolver::Resolver(bool doh) : _impl(bridge::new_resolver(doh)) {}
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
     auto cancellation_slot = yield.get_cancellation_slot();

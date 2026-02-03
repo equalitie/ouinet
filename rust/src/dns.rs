@@ -9,7 +9,7 @@ use hickory_resolver::{
     IntoName, ResolveError, ResolveErrorKind, TokioResolver,
 };
 use tokio::{select, sync::Notify, task::JoinSet};
-
+use crate::dns::ffi::{Config, Protocol};
 use crate::runtime;
 
 #[cxx::bridge(namespace = "ouinet::dns::bridge")]
@@ -41,11 +41,16 @@ mod ffi {
         Undefined = 99,
     }
 
+    struct Config {
+        protocols: Vec<Protocol>,
+    }
+
     extern "Rust" {
         type Resolver;
 
-        fn new_resolver(doh: bool) -> Box<Resolver>;
+        fn new_resolver(cfg: Config) -> Box<Resolver>;
         fn resolve(&mut self, name: &str, completer: UniquePtr<BasicCompleter>);
+        fn str_to_proto(s: &str) -> Protocol;
     }
 
     extern "Rust" {
@@ -63,6 +68,14 @@ mod ffi {
     }
 }
 
+fn str_to_proto(s: &str) -> Protocol {
+    match s {
+        "plain" => Protocol::Plain,
+        "https" => Protocol::Https,
+        _ => Protocol::Undefined
+    }
+}
+
 /// DNS resolver.
 pub struct Resolver {
     inner: Arc<TokioResolver>,
@@ -70,10 +83,11 @@ pub struct Resolver {
 }
 
 impl Resolver {
-    fn new(doh: bool) -> Self {
+    fn new(cfg: Config) -> Self {
         // TODO: consider making the nameservers configurable
         let mut name_servers:NameServerConfigGroup;
-        if doh {
+
+        if cfg.protocols.contains(&Protocol::Https) {
             name_servers = NameServerConfigGroup::quad9_https();
             name_servers.merge(NameServerConfigGroup::cloudflare_https());
             name_servers.merge(NameServerConfigGroup::google_https());
@@ -153,8 +167,8 @@ impl Resolver {
     }
 }
 
-fn new_resolver(doh: bool) -> Box<Resolver> {
-    Box::new(Resolver::new(doh))
+fn new_resolver(cfg: Config) -> Box<Resolver> {
+    Box::new(Resolver::new(cfg))
 }
 
 // Cancels the operation if cancellation has been triggered by the caller.

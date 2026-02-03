@@ -18,43 +18,17 @@ namespace ouinet::dns::bridge {
 
 namespace ouinet::dns {
 
+using bridge::Config;
 using bridge::Error;
 using TcpLookup = boost::asio::ip::tcp::resolver::results_type;
-using bridge::Protocol;
 
-class Protocols : public std::vector<Protocol>
-{
-public:
-    Protocols();
-    explicit Protocols(const std::vector<std::string>&);
-
-    static Protocol str_to_enum(const std::string& proto_name)
-    {
-        if (proto_name == "plain")
-            return Protocol::Plain;
-        if (proto_name == "https")
-            return Protocol::Https;
-        return Protocol::Undefined;
-    }
-
-    static std::string enum_to_str(Protocol proto)
-    {
-        if (proto == Protocol::Plain)
-            return "plain";
-        if (proto == Protocol::Https)
-            return "https";
-        return "undefined";
-    }
-};
 
 /// A DNS resolver
 class Resolver {
 public:
     using Output = std::vector<boost::asio::ip::address>;
 
-    Resolver();
-
-    Resolver(bool doh);
+    Resolver(Config config);
 
     Resolver(const Resolver&) = delete;
     Resolver& operator=(const Resolver&) = delete;

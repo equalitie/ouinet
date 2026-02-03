@@ -165,9 +165,9 @@ public:
         return !_disable_doh;
     }
 
-    dns::Protocols dns_protocols() const
+    dns::Config dns_config() const
     {
-        return _dns_protocols;
+        return _dns_config;
     }
 
     uint64_t max_request_body_size() const {
@@ -544,7 +544,7 @@ private:
     bool _disable_doh = false;
     bool _allow_private_targets = false;
 
-    dns::Protocols _dns_protocols;
+    dns::Config _dns_config;
 
     std::unique_ptr<MetricsConfig> _metrics;
 };

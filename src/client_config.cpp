@@ -316,9 +316,11 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _disable_doh = true;
     }
 
-    if (auto opt = as_optional<vector<string>>(vm, "dns-protocols")) {
+    if (auto opt = as_optional<vector<string>>(vm, "dns-protocol")) {
         for (const auto& proto_name : *opt) {
-            _dns_protocols.emplace_back(dns::Protocols::str_to_enum(proto_name));
+            _dns_config.protocols.emplace_back(
+                dns::bridge::str_to_proto(proto_name)
+            );
         }
     }
 
