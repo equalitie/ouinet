@@ -97,8 +97,22 @@ private:
 } // namespace bridge
 
 
-Resolver::Resolver(dns::Config config)
+Resolver::Resolver()
+    : _impl(bridge::new_resolver(default_config())){
+}
+
+Resolver::Resolver(const Config& config)
     : _impl(bridge::new_resolver(config)) {
+}
+
+Config Resolver::default_config() {
+    Config cfg{};
+    for (auto proto_name : dns_default_protocols ) {
+        cfg.protocols.emplace_back(
+            bridge::str_to_proto(proto_name)
+        );
+    }
+    return cfg;
 }
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {

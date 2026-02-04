@@ -28,13 +28,16 @@ class Resolver {
 public:
     using Output = std::vector<boost::asio::ip::address>;
 
-    Resolver(Config config);
+    Resolver();
+    Resolver(const Config& config);
 
     Resolver(const Resolver&) = delete;
     Resolver& operator=(const Resolver&) = delete;
 
     Resolver(Resolver&&) = default;
     Resolver& operator=(Resolver&&) = default;
+
+    static Config default_config();
 
     /// Resolve the given DNS name.
     Output resolve(const std::string& name, boost::asio::yield_context);
