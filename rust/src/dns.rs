@@ -84,17 +84,22 @@ pub struct Resolver {
 
 impl Resolver {
     fn new(cfg: Config) -> Self {
-        // TODO: consider making the nameservers configurable
-        let mut name_servers:NameServerConfigGroup;
+        let mut name_servers: NameServerConfigGroup = NameServerConfigGroup::new();
 
-        if cfg.protocols.contains(&Protocol::Https) {
-            name_servers = NameServerConfigGroup::quad9_https();
-            name_servers.merge(NameServerConfigGroup::cloudflare_https());
-            name_servers.merge(NameServerConfigGroup::google_https());
-        } else {
-            name_servers = NameServerConfigGroup::quad9();
-            name_servers.merge(NameServerConfigGroup::cloudflare());
-            name_servers.merge(NameServerConfigGroup::google());
+        // TODO: consider making the nameservers configurable
+        for proto in cfg.protocols {
+            match proto {
+                Protocol::Https => {
+                    name_servers.merge(NameServerConfigGroup::quad9_https());
+                    name_servers.merge(NameServerConfigGroup::cloudflare_https());
+                    name_servers.merge(NameServerConfigGroup::google_https());
+                }
+                _ => { // Protocol::Plain and Protocol::Undefined
+                    name_servers.merge(NameServerConfigGroup::quad9());
+                    name_servers.merge(NameServerConfigGroup::cloudflare());
+                    name_servers.merge(NameServerConfigGroup::google());
+                }
+            }
         }
 
         let inner = TokioResolver::builder_with_config(
