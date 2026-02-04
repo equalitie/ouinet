@@ -39,6 +39,8 @@ public:
 
     static Config default_config();
 
+    static std::string protos_to_str(rust::Vec<bridge::Protocol> protos);
+
     /// Resolve the given DNS name.
     Output resolve(const std::string& name, boost::asio::yield_context);
 

@@ -115,6 +115,16 @@ Config Resolver::default_config() {
     return cfg;
 }
 
+std::string Resolver::protos_to_str(rust::Vec<bridge::Protocol> protos) {
+    std::string proto_str;
+    for (const auto proto : protos) {
+        proto_str +=
+            (proto_str.empty() ? "" : ", ") +
+            std::string(proto_to_str(proto));
+    }
+    return proto_str;
+}
+
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
     auto cancellation_slot = yield.get_cancellation_slot();
 

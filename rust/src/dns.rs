@@ -51,6 +51,8 @@ mod ffi {
         fn new_resolver(cfg: Config) -> Box<Resolver>;
         fn resolve(&mut self, name: &str, completer: UniquePtr<BasicCompleter>);
         fn str_to_proto(s: &str) -> Protocol;
+
+        fn proto_to_str(p: Protocol) -> String;
     }
 
     extern "Rust" {
@@ -73,6 +75,14 @@ fn str_to_proto(s: &str) -> Protocol {
         "plain" => Protocol::Plain,
         "https" => Protocol::Https,
         _ => Protocol::Undefined
+    }
+}
+
+fn proto_to_str(p: Protocol) -> String {
+    match p {
+        Protocol::Plain => "plain".to_string(),
+        Protocol::Https => "https".to_string(),
+        _ => "undefined".to_string(),
     }
 }
 
