@@ -205,6 +205,7 @@ public:
                     ? metrics::Client( _config.repo_root() / "metrics"
                                      , std::move(_config.metrics()->encryption_key))
                     : metrics::Client::noop())
+        , _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
     {
         LOG_INFO("Repo root: ", _config.repo_root());
 
@@ -335,7 +336,7 @@ public:
         else {
             bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                       , _metrics.mainline_dht()
-                                                      , _config.is_doh_enabled()
+                                                      , _dns_resolver
                                                       , _config.udp_mux_rx_limit_in_bytes()
                                                       , _config.repo_root() / "dht"
                                                       , _config.bt_bootstrap_extras());
@@ -678,6 +679,8 @@ private:
     std::string _proxy_endpoint_address;
     std::string _frontend_endpoint;
     std::string _frontend_unix_socket_endpoint;
+
+    shared_ptr<dns::Resolver> _dns_resolver;
 };
 
 //------------------------------------------------------------------------------
