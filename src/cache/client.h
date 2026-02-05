@@ -21,6 +21,12 @@ namespace bittorrent {
     class DhtBase;
 }
 
+#ifdef __EXPERIMENTAL__
+namespace ouiservice::i2poui {
+    class Service;
+}
+#endif
+
 class Session;
 
 namespace cache {
@@ -82,8 +88,10 @@ public:
     bool enable_dht(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
 #ifdef __EXPERIMENTAL__
-    // Check if i2p is enabled and setup the basics of bep3 on i2p announcer
-    bool enable_bep3_announcer(std::string tracker_id, size_t simultaneous_announcements);
+    // Check if i2p is enabled and setup the BEP3 announcer over I2P
+    bool enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+                              , std::string tracker_id
+                              , size_t simultaneous_announcements);
 #endif // __EXPERIMENTAL__
 
     // This may add a response source header.

@@ -1,18 +1,25 @@
 #pragma once
 
-#include "bittorrent/bep5_announcer.h"
-#include "util/hash.h"
+#include "../bittorrent/bep5_announcer.h"
+#include "../util/hash.h"
+#include "../util/executor.h"
 #include "namespaces.h"
 #include <memory>
+
+namespace ouinet { namespace cache {
+using util::AsioExecutor;
+}} // namespaces
+
+#ifdef __EXPERIMENTAL__
+namespace ouinet::ouiservice::i2poui { class Client; }
+#endif
 
 namespace ouinet { namespace cache {
 
 // Base Announcer class with shared announcement loop logic
 class Announcer {
-protected:
-    struct Loop;
-
 public:
+    struct Loop;
     using Key = std::string;
 
     Announcer(AsioExecutor ex, size_t simultaneous_announcements);
@@ -36,10 +43,12 @@ public:
 };
 
 #ifdef __EXPERIMENTAL__
-// BEP3 Announcer - announces via HTTP to tracker
+// BEP3 Announcer - announces via HTTP to tracker over I2P
 class Bep3Announcer : public Announcer {
 public:
-    Bep3Announcer(AsioExecutor ex, std::string tracker_url, size_t simultaneous_announcements);
+    Bep3Announcer( std::unique_ptr<ouiservice::i2poui::Client> i2p_client
+                 , std::string serving_i2p_id
+                 , size_t simultaneous_announcements);
     ~Bep3Announcer();
 };
 #endif // __EXPERIMENTAL__

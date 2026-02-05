@@ -141,6 +141,9 @@ base64_decode(const boost::string_view in) {
 // Returns an empty string on error (or empty input).
 std::string percent_decode(const boost::string_view);
 
+// Percent-encode a string (for URL query parameters).
+std::string percent_encode(const boost::string_view);
+
 ///////////////////////////////////////////////////////////////////////////////
 // Conversions between various `string_view` implementations.
 

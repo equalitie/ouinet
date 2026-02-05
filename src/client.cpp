@@ -2832,7 +2832,7 @@ void Client::State::setup_cache(asio::yield_context yield)
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
       }
 
-      if (!_cache->enable_bep3_announcer(*_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements())) {
+      if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements())) {
           ec = asio::error::invalid_argument;
       }
       fail_on_error("Failed to enable BEP3 announcer in cache::Client");

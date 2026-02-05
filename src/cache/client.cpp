@@ -11,6 +11,9 @@
 #include "../util/lru_cache.h"
 #include "../util/handler_tracker.h"
 #include "../ouiservice/utp.h"
+#ifdef __EXPERIMENTAL__
+#include "../ouiservice/i2p/service.h"
+#endif
 #include "../logger.h"
 #include "../async_sleep.h"
 #include "../constants.h"
@@ -143,10 +146,21 @@ struct Client::Impl {
     }
 
 #ifdef __EXPERIMENTAL__
-    bool enable_bep3_announcer(string tracker_id, size_t simultaneous_announcements) {
+    bool enable_bep3_announcer( shared_ptr<ouiservice::i2poui::Service> i2p_service
+                              , string tracker_id
+                              , size_t simultaneous_announcements) {
         if (_bep3_announcer) return false;
+        if (!i2p_service) return false;  // i2p not enabled
 
-        _bep3_announcer = std::make_unique<Bep3Announcer>(_ex, std::move(tracker_id), simultaneous_announcements);
+        // Build the i2p client for connecting to the tracker
+        auto i2p_client = i2p_service->build_client(tracker_id);
+
+        // Build the i2p server to get our public identity for peer connections
+        auto i2p_server = i2p_service->build_server("bep3-server-key");
+        string serving_i2p_id = i2p_server->public_identity();
+
+        _bep3_announcer = std::make_unique<Bep3Announcer>(
+            std::move(i2p_client), std::move(serving_i2p_id), simultaneous_announcements);
 
         // Announce all groups.
         for (auto& group_name : _groups->groups())
@@ -830,8 +844,10 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
 }
 
 #ifdef __EXPERIMENTAL__
-bool Client::enable_bep3_announcer(std::string tracker_id, size_t simultaneous_announcements) {
-    return _impl->enable_bep3_announcer(std::move(tracker_id), simultaneous_announcements);
+bool Client::enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+                                  , std::string tracker_id
+                                  , size_t simultaneous_announcements) {
+    return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), simultaneous_announcements);
 }
 #endif // __EXPERIMENTAL__
 

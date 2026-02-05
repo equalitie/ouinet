@@ -29,6 +29,9 @@ public:
     GenericStream
     connect(asio::yield_context yield, Signal<void()>& cancel) override;
 
+    // Returns the target I2P address this client connects to
+    const std::string& get_target_id() const { return _target_id; }
+
     // Used only in tests
     GenericStream
     connect_without_handshake(asio::yield_context yield, Signal<void()>& cancel);
