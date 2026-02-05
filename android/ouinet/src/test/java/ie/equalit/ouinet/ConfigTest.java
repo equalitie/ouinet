@@ -43,6 +43,7 @@ public class ConfigTest {
     private static final String LISTEN_ON_TCP = "0.0.0.0:8077";
     private static final String FRONT_END_EP = "0.0.0.0:8078";
     private static final String UDP_MUX_PORT = "24842";
+    private static final String UDP_MUX_RX_LIMIT = "500";
     private static final boolean DISABLE_BRIDGE_ANNOUNCEMENT = true;
     private static final String MAX_CACHED_AGE = "120";
     private static final String LOCAL_DOMAIN = "local.domain";
@@ -102,6 +103,7 @@ public class ConfigTest {
                 .setListenOnTcp(LISTEN_ON_TCP)
                 .setFrontEndEp(FRONT_END_EP)
                 .setUdpMuxPort(UDP_MUX_PORT)
+                .setUdpMuxRxLimit(UDP_MUX_RX_LIMIT)
                 .setDisableBridgeAnnouncement(DISABLE_BRIDGE_ANNOUNCEMENT)
                 .setMaxCachedAge(MAX_CACHED_AGE)
                 .setLocalDomain(LOCAL_DOMAIN)
@@ -118,6 +120,7 @@ public class ConfigTest {
         assertThat(config.getCacheStaticContentPath(), is(cacheStaticContentPath));
 
         assertThat(config.getListenOnTcp(), is(LISTEN_ON_TCP));
+        assertThat(config.getUdpMuxRxLimit(), is(UDP_MUX_RX_LIMIT));
         assertThat(config.getFrontEndEp(), is(FRONT_END_EP));
         assertThat(config.getMaxCachedAge(), is(MAX_CACHED_AGE));
         assertThat(config.getLocalDomain(), is(LOCAL_DOMAIN));

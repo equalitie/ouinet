@@ -300,6 +300,10 @@ public:
         _injector_was_seen = true;
     }
 
+    bool has_injector_been_seen()
+    {
+        return _injector_was_seen;
+    }
 private:
     void loop(asio::yield_context yield) {
         Cancel cancel(_lifetime_cancel);
@@ -456,7 +460,7 @@ Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
     assert(_helpers_swarm_name.size());
 }
 
-void Bep5Client::start(asio::yield_context)
+void Bep5Client::start(asio::yield_context yield)
 {
     {
         bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
@@ -475,6 +479,11 @@ void Bep5Client::start(asio::yield_context)
         _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, _cancel, true));
         _helpers_swarm->start();
 
+        _helpers_swarm->wait_for_ready(_cancel, yield);
+        if (_cancel) return;
+        _injector_swarm->wait_for_ready(_cancel, yield);
+        if (_cancel) return;
+
         _injector_pinger.reset(new InjectorPinger(  _injector_swarm
                                                   , _helpers_swarm_name
                                                   , _helper_announcement_enabled
@@ -487,6 +496,10 @@ void Bep5Client::start(asio::yield_context)
         sys::error_code ec;
         status_loop(yield[ec]);
     });
+}
+
+size_t Bep5Client::injector_candidates_n() const noexcept {
+    return _injector_swarm -> peers().size();
 }
 
 void Bep5Client::stop()
@@ -642,6 +655,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
                 if (spawn_cancel) return;
             }
 
+            _DEBUG("trying to contact", peer.endpoint);
             auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
             assert(!spawn_cancel || ec == asio::error::operation_aborted);
             if (spawn_cancel || ec) return;

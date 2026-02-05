@@ -8,6 +8,7 @@
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"
+#include "ouiservice/bep5/client.h"
 #include "ssl/ca_certificate.h"
 #include "util/reachability.h"
 #include "util/yield.h"
@@ -95,6 +96,7 @@ public:
                   , const http::request<http::string_body>&
                   , Client::RunningState
                   , cache::Client*
+                  , std::shared_ptr<ouiservice::Bep5Client> client
                   , const CACertificate&
                   , boost::optional<UdpEndpoint> local_ep
                   , const std::shared_ptr<UPnPs>&
@@ -169,6 +171,7 @@ private:
                       , Response&
                       , std::ostringstream&
                       , cache::Client*
+                      , std::shared_ptr<ouiservice::Bep5Client> client
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
                       , YieldContext);
@@ -180,6 +183,8 @@ private:
                            , ClientFrontEndMetricsController& metrics
                            , Cancel cancel
                            , YieldContext);
+
+    static void handle_api_endpoints(const ClientConfig& config, Response& res, std::ostringstream& ss);
 
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);

@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
+#include "../src/constants.h"
 #include "../src/bittorrent/mainline_dht.h"
 #include "../src/bittorrent/dht_node.h"
 #include "../src/util/crypto.h"
@@ -104,8 +105,9 @@ int main(int argc, const char** argv)
     auto metrics_client = metrics::Client::noop();
     auto metrics_dht = metrics_client.mainline_dht();
     bool do_doh = true;
+    uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht {ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh};
+    DhtNode dht {ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit};
 
     vector<string> args;
 

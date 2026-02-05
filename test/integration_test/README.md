@@ -1,6 +1,6 @@
 # Ouinet integration tests
 
-Ouinet integration tests are implemented in python twisted framework.
+Ouinet integration tests are implemented in python pytest framework.
 
 
 ## How to run the integration tests
@@ -13,24 +13,18 @@ $ export OUINET_BUILD_DIR=$HOME/ouinet/build/
 
 Then you could run the tests by
 
+```bash
+$ python -m pytest -svvx 
 ```
-$ cd test/integration_test
-$ python -m twisted.trial ./test_http.py
+
+Where s and v are for verbosity and x tells pytest to stop after first failure
+
+to run  a single test:
+```bash
+$ python -m pytest  -svv test_http.py::test_tcp_transport
 ```
 
-or to run  a single test:
-```
-$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport
-```
-to run the speedtests, use:
-
-$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport_speed_1KB
-
-or
-
-$ python -m twisted.trial test_http.OuinetTests.test_i2p_transport_speed_1MB
-
-and look for the line:
+To check speed of i2p in i2p tests look for the line:
 
 `Retrieving 1.049e+06 bytes through I2P tunnel took 15.810519 seconds..`
 
@@ -46,7 +40,7 @@ and then
 
 ```
 $ cd test/integration_test
-$ python i2p_browser_test.py
+$ python try_i2p_at_browser.py
 ```
 
 You need to wait first for the injector i2p tunnel and then for the client tunnel to get established. When both tunnels are established, you need to set your browser to use `127.0.0.1:3888` as both HTTP and HTTPS proxy.
@@ -57,7 +51,7 @@ from there on you should be able to use your browser to browser websites through
 
 ### I2P Browser tests without relaying on the Python script.
 
-The `i2p_browser_test.py` test print the parameters you need to run the injector and client to act as HTTP over I2P proxy. Using these parameters then you could run the injector and the client on different machine to simulate more of a real world situation.
+The `try_i2p_at_browser.py` script prints the parameters you need to run the injector and client to act as HTTP over I2P proxy. Using these parameters then you could run the injector and the client on different machine to simulate more of a real world situation.
 
 More specifically to run the ouinet injector on the injector machine, create the sub-folder folder `repos/i2p_injector_i2p` in current folder and then run
 
