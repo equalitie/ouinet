@@ -1597,31 +1597,20 @@ asio::ip::udp::endpoint resolve(
     using UdpEndpoint = typename UdpLookup::endpoint_type;
     using Answers = std::vector<asio::ip::address>;
     UdpLookup results;
-    if (do_doh)
-    {
-        dns::Resolver resolver;
+    /// TODO: Pass DNS settings to the Resolver constructor
+    dns::Resolver resolver{};
 
-        auto answers = resolver.resolve(addr, yield[ec]);
-        if (!ec) {
-            string_view port_strv = port;
-            auto port_int = parse::number<uint16_t>(port_strv).get();
-            util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
-            results = UdpLookup::create(eps.begin(), eps.end(),
-                                        addr, port);
-        }
-
-        if (cancel_signal) ec = asio::error::operation_aborted;
-    } else
-    {
-        udp::resolver resolver(exec);
-
-        auto cancelled = cancel_signal.connect([&] {
-            resolver.cancel();
-        });
-        results = resolver.async_resolve(addr, port, yield[ec]);
-
-        if (cancelled) ec = asio::error::operation_aborted;
+    auto answers = resolver.resolve(addr, yield[ec]);
+    if (!ec) {
+        string_view port_strv = port;
+        auto port_int = parse::number<uint16_t>(port_strv).get();
+        util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
+        results = UdpLookup::create(eps.begin(), eps.end(),
+                                    addr, port);
     }
+
+    if (cancel_signal) ec = asio::error::operation_aborted;
+
     if (ec) {
         return or_throw<udp::endpoint>(yield, ec);
     }
