@@ -108,6 +108,6 @@ static const uint16_t random_port_selection = 0;
 static constexpr uint32_t udp_mux_rx_limit_client = 0; // Unlimited
 static constexpr uint32_t udp_mux_rx_limit_injector = 500; // Kbps
 
-static const std::vector<std::string> dns_default_protocols({"plain", "https"});
+static const std::vector<std::string> dns_default_protocols({"https"});
 
 } // ouinet namespace
