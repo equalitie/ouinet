@@ -955,15 +955,14 @@ Client::State::connect_to_origin( const http::request_header<>& rq
 
     sys::error_code ec;
 
-    auto cfg = _config.dns_config();
-    auto lookup = dns::Resolver{cfg}.resolve(
+    auto lookup = _dns_resolver->resolve(
         host,
         port,
         cancel,
         yield[ec].tag("resolve")
     );
     _YDEBUG( yield,  "DNS name resolution with protocols: [",
-        dns::Resolver::protos_to_str(cfg.protocols), "]; ",
+        dns::Resolver::protos_to_str(_config.dns_config().protocols), "]; ",
         host, "; naddrs=", lookup.size(), " ec=", ec);
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
