@@ -84,8 +84,14 @@ void start_client_thread(const std::vector<std::string>& args) //, const vector<
     }
     */
 
-    // if (g_client_thread.get_id() != thread::id()) return;
-    if (g_client) return;
+    // Already running — nothing to do.
+    if (g_client_ready) return;
+
+    // If the previous thread finished but was never joined, join it now
+    // so that assigning a new thread won't call std::terminate().
+    if (g_client_thread.joinable()) {
+        g_client_thread.join();
+    }
 
     std::cout<<"Ouinet config:"<<std::endl;
     for (std::string arg: args) {
