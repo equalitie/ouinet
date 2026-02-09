@@ -17,6 +17,8 @@
 #include "bep5_swarms.h"
 #include "bittorrent/bootstrap.h"
 
+#include "cxx/dns.h"
+
 namespace ouinet {
 
 #define _HTTP_LOG_FILE_NAME "access.log"
@@ -136,6 +138,9 @@ public:
     bool is_doh_enabled() const
     { return !_disable_doh; }
 
+    dns::Config dns_config() const
+    { return _dns_config; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -173,6 +178,8 @@ private:
     bool _allow_private_targets = false;
     bool _disable_doh = false;
     util::Ed25519PrivateKey _ed25519_private_key;
+
+    dns::Config _dns_config;
 };
 
 inline
@@ -241,6 +248,13 @@ InjectorConfig::options_description()
          , "Disable DNS over HTTPS for domain name resolution. "
            "When this option is present the injector will fallback to the default DNS mechanism "
            "provided by the operating system.")
+        ("dns-protocol", po::value<std::vector<string>>()
+                             ->composing()
+                             ->default_value(dns_default_protocols,
+                                             util::join(dns_default_protocols, ","))
+         , "DNS protocols used by the resolver. This option can be set to: plain or https. "
+           "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
+           "the nameservers. The option can be used multiple times to select more than one protocol.")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
@@ -352,6 +366,16 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm["disable-doh"].as<bool>()) {
         _disable_doh = true;
+    }
+
+    if (vm.contains("dns-protocol")) {
+        for ( auto opt = vm["dns-protocol"].as<std::vector<string>>();
+              const auto& proto_name : opt )
+        {
+            _dns_config.protocols.emplace_back(
+                dns::bridge::str_to_proto(proto_name)
+            );
+        }
     }
 
 #ifdef __EXPERIMENTAL__
