@@ -357,10 +357,10 @@ def http_server() -> Generator[Process, None, None]:
 
 @pytest_asyncio.fixture(autouse=True)
 def all_dirs():
-    _all_dirs()
+    all_dirs()
 
 
-def _all_dirs():
+def all_dirs():
     """
     Broken out for non-pytest use
     """
