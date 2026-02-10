@@ -143,15 +143,41 @@ if(WITH_EXPERIMENTAL)
     # command. For some reason we get unresolved libz dependencies otherwise.
     add_library(test-i2p-link-last INTERFACE)
     target_link_libraries(test-i2p-link-last INTERFACE z)
+    # add_library(test-i2p-common INTERFACE)
 
-    add_executable(test-i2p
-        "test-i2p.cpp"
-        "../src/ouiservice.cpp"
-        "../src/ouiservice/i2p/service.cpp"
-        "../src/ouiservice/i2p/client.cpp"
-        "../src/ouiservice/i2p/server.cpp"
-        "../src/util/handler_tracker.cpp"
+    set(I2P_SOURCES
+    "../src/ouiservice.cpp"
+    "../src/ouiservice/i2p/service.cpp"
+    "../src/ouiservice/i2p/client.cpp"
+    "../src/ouiservice/i2p/server.cpp"
+    "../src/util/handler_tracker.cpp"
     )
-    target_link_libraries(test-i2p ouinet::ouiservice-i2p test-i2p-link-last)
-    target_compile_definitions(test-i2p INTERFACE -D__EXPERIMENTAL__)
+
+    function(add_i2p_test TARGET_NAME TEST_SOURCE)
+            add_executable(${TARGET_NAME}
+                ${TEST_SOURCE}
+                ${I2P_SOURCES}
+            )
+            # target_link_libraries(${TARGET_NAME} PRIVATE i2p_test_common)
+            target_link_libraries(${TARGET_NAME} ouinet::ouiservice-i2p test-i2p-link-last)
+            target_compile_definitions(${TARGET_NAME} INTERFACE -D__EXPERIMENTAL__)
+        endfunction()
+
+
+    add_i2p_test(test-i2p-connect-and-exchange
+        "test-i2p-connect-and-exchange.cpp"
+    )
+
+    add_i2p_test(test-i2p-connect-with-retry-and-exchage
+        "test-i2p-connect-with-retry-and-exchage.cpp"
+    )
+
+    add_i2p_test(test-i2p-speed
+        "test-i2p-speed.cpp"
+    )
+
+    add_i2p_test(test-i2p-subsequent-connection-speed
+        "test-i2p-subsequent-connection-speed.cpp"
+    )
+
 endif()
