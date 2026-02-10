@@ -139,7 +139,7 @@ void handle_no_proxy( GenericStream& con
 TcpLookup
 ouinet::resolve_target(const http::request_header<>& req
                       , bool allow_private_targets
-                      , bool do_doh
+                      , std::shared_ptr<dns::Resolver> dns_resolver
                       , AsioExecutor exec
                       , Cancel& cancel
                       , YieldContext yield)
@@ -157,10 +157,9 @@ ouinet::resolve_target(const http::request_header<>& req
     // Resolve address and also use result for more sophisticaded checking.
     if (!local && (!priv || allow_private_targets))
     {
-        // TODO: Pass DNS protocols to Resolver constructor
-        lookup = dns::Resolver{}.resolve( host, port
-                                        , cancel
-                                        , yield[ec]);
+        lookup = dns_resolver->resolve( host, port
+                                      , cancel
+                                      , yield[ec]);
     }
 
     if (ec) return or_throw<TcpLookup>(yield, ec);
@@ -197,6 +196,7 @@ static
 void handle_connect_request( GenericStream client_c
                            , beast::flat_buffer client_c_rbuf
                            , const Request& req
+                           , std::shared_ptr<dns::Resolver> dns_resolver
                            , Cancel& cancel
                            , YieldContext yield)
 {
@@ -210,7 +210,7 @@ void handle_connect_request( GenericStream client_c
 
     TcpLookup lookup = resolve_target( req
                                      , g_allow_private_targets
-                                     , g_do_doh
+                                     , std::move(dns_resolver)
                                      , exec
                                      , cancel, yield[ec].tag("resolve"));
 
@@ -303,6 +303,7 @@ class InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
     GenericStream connect( const Request& rq
+                         , std::shared_ptr<dns::Resolver> dns_resolver
                          , Cancel& cancel
                          , YieldContext yield)
     {
@@ -320,7 +321,7 @@ class InjectorCacheControl {
         // Resolve target endpoint and check its validity.
         TcpLookup lookup = resolve_target( rq
                                          , g_allow_private_targets
-                                         , g_do_doh
+                                         , std::move(dns_resolver)
                                          , executor
                                          , cancel, yield[ec]);
 
@@ -366,6 +367,7 @@ private:
     void inject_fresh( GenericStream& con
                      , const Request& cache_rq
                      , bool rq_keep_alive
+                     , shared_ptr<dns::Resolver> dns_resolver
                      , Cancel& cancel
                      , YieldContext yield)
     {
@@ -386,7 +388,7 @@ private:
             // Start a short timeout for initial fetch.
             auto fetch_wd = watch_dog(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
 
-            auto orig_con = get_connection(cache_rq, timeout_cancel, yield.tag("connect")[ec]);
+            auto orig_con = get_connection(cache_rq, dns_resolver, timeout_cancel, yield.tag("connect")[ec]);
             if (ec = compute_error_code(ec, cancel, fetch_wd)) {
                 yield.log("Failed to get connection; ec=", ec);
                 return or_throw(yield, ec);
@@ -464,6 +466,7 @@ private:
 public:
     void fetch( GenericStream& con
               , Request rq
+              , std::shared_ptr<dns::Resolver> dns_resolver
               , Cancel cancel
               , YieldContext yield)
     {
@@ -483,11 +486,12 @@ public:
         }
 
         // Cache requests do not contain keep-alive information, hence the explicit argument.
-        if (!ec) inject_fresh(con, *crq, rq_keep_alive, cancel, yield[ec]);
+        if (!ec) inject_fresh(con, *crq, rq_keep_alive, dns_resolver, cancel, yield[ec]);
         return or_throw(yield, ec);
     }
 
-    Connection get_connection(const Request& rq_, Cancel& cancel, YieldContext yield) {
+    Connection get_connection( const Request& rq_, const std::shared_ptr<dns::Resolver>& dns_resolver
+                             , Cancel& cancel, YieldContext yield) {
         Connection connection;
         sys::error_code ec;
 
@@ -495,7 +499,7 @@ public:
         if (maybe_connection) {
             connection = std::move(*maybe_connection);
         } else {
-            auto stream = connect(rq_, cancel, yield[ec].tag("connect"));
+            auto stream = connect(rq_, dns_resolver, cancel, yield[ec].tag("connect"));
 
             if (ec) return or_throw<Connection>(yield, ec);
 
@@ -556,6 +560,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
 //------------------------------------------------------------------------------
 static
 void serve( const InjectorConfig& config
+          , std::shared_ptr<dns::Resolver> dns_resolver
           , GenericStream con
           , asio::ssl::context& ssl_ctx
           , OriginPools& origin_pools
@@ -637,6 +642,7 @@ void serve( const InjectorConfig& config
             }
             return handle_connect_request( move(con), move(con_rbuf)
                                          , req
+                                         , dns_resolver
                                          , cancel  // do not propagate error
                                          , yield[ec].tag("proxy/connect/handle_connect"));
         }
@@ -678,7 +684,7 @@ void serve( const InjectorConfig& config
                 pyield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
             });
 
-            auto orig_con = cc.get_connection(req, cancel, pyield[ec].tag("get_connection"));
+            auto orig_con = cc.get_connection(req, dns_resolver, cancel, pyield[ec].tag("get_connection"));
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
@@ -755,6 +761,7 @@ void serve( const InjectorConfig& config
             }
             else {
                 cc.fetch( con, move(req)
+                        , dns_resolver
                         , cancel, yield[ec].tag("inject/fetch"));
             }
         }
@@ -766,6 +773,7 @@ void serve( const InjectorConfig& config
 //------------------------------------------------------------------------------
 static
 void listen( const InjectorConfig& config
+           , std::shared_ptr<dns::Resolver> dns_resolver
            , OuiServiceServer& proxy_server
            , Cancel& cancel
            , YieldContext yield)
@@ -816,6 +824,7 @@ void listen( const InjectorConfig& config
             &ssl_ctx,
             &cancel,
             &config,
+            &dns_resolver,
             &genuuid,
             &origin_pools,
             &yield,
@@ -825,6 +834,7 @@ void listen( const InjectorConfig& config
             sys::error_code leaked_ec;
             auto y = YieldContext(asio_yield, yield.log_path().tag(util::str('C', connection_id)));
             serve( config
+                 , dns_resolver
                  , std::move(connection)
                  , ssl_ctx
                  , origin_pools
@@ -847,7 +857,8 @@ Injector::Injector(
         asio::io_context& ctx,
         util::LogPath log_path,
         std::shared_ptr<bittorrent::MockDht> dht) :
-    _config(std::move(config))
+    _config(std::move(config)),
+    _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
 {
     #ifndef __WIN32
     if (_config.open_file_limit()) {
@@ -876,6 +887,9 @@ Injector::Injector(
         LOG_INFO("DNS over HTTPS is disabled.");
         g_do_doh = false;
     }
+    LOG_INFO( "DNS protocols enabled: ["
+            , dns::Resolver::protos_to_str(config.dns_config().protocols)
+            , "].");
 
     auto proxy_server = std::make_unique<OuiServiceServer>(ex);
 
@@ -941,7 +955,7 @@ Injector::Injector(
         _dht = std::make_shared<bt::MainlineDht>
             ( ex
             , metrics::Client::noop().mainline_dht()
-            , config.is_doh_enabled()
+            , _dns_resolver
             , config.udp_mux_rx_limit_in_bytes()
             , fs::path{}
             , _config.bt_bootstrap_extras());  // default storage dir
@@ -1032,7 +1046,7 @@ Injector::Injector(
         log_path
     ] (asio::yield_context yield) mutable {
         sys::error_code ec;
-        listen(_config, *proxy_server, cancel, YieldContext(yield, log_path)[ec]);
+        listen(_config, _dns_resolver, *proxy_server, cancel, YieldContext(yield, log_path)[ec]);
     });
 }
 
