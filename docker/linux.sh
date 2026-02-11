@@ -257,16 +257,22 @@ function list_artifacts_for_target_os (
 
 function check_artifacts_exist_for_target_os (
     target_os=$1
-    missing=()
-    for artifact in $(list_artifacts_for_target_os $target_os); do
-        if [ ! -f "$artifact" ]; then
-            missing+=($artifact)
-        fi
-    done
-    if [ -f "${missing[*]}" ]; then
+
+    script=(
+        "missing=();"
+        "for artifact in $(list_artifacts_for_target_os $target_os); do"
+        "    if [ ! -f \$artifact ]; then"
+        "       missing+=(\$artifact);"
+        "    fi"
+        "done;"
+        "echo \${missing[*]}"
+    )
+
+    missing=$(exe bash -c "${script[*]}")
+
+    if [ -n "${missing[*]}" ]; then
         error "Missing artifacts for $target_os: ${missing[@]}"
     fi
-
 )
 
 # ---
