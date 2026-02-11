@@ -12,6 +12,7 @@ run_python_tests=
 enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
+with_ouisync=n
 with_asan=n
 
 function print_help (
@@ -58,6 +59,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --enter-on-exit)
             enter_on_exit=y
+            ;;
+        --with-ouisync)
+            with_ouisync=y
             ;;
         --with-asan)
             with_asan=y
@@ -106,7 +110,7 @@ function build_image (
         rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev
         # For building Ouisync
         pkg-config libfuse3-dev libmsgpack-cxx-dev
-        # For building Windows binaries
+        # For building and testing Windows binaries
         mingw-w64-x86-64-dev g++-mingw-w64-x86-64 libz-mingw-w64-dev gettext locales wine64
         # For building Android binaries
         wget unzip openjdk-21-jdk ninja-build
@@ -310,7 +314,7 @@ for target_os in ${target_oss[@]}; do
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DWITH_EXPERIMENTAL=OFF
             -DCORROSION_BUILD_TESTS=ON
-            -DWITH_OUISYNC=OFF
+            -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
             # For testing with custom Ouisync sources
             #-DOUISYNC_SRC_DIR=$HOME/work/ouisync
             -DOUINET_MEASURE_BUILD_TIMES=OFF
