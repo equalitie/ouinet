@@ -363,7 +363,6 @@ class DhtNode {
 
     class Stats;
     std::unique_ptr<Stats> _stats;
-    bool _do_doh;
     std::shared_ptr<dns::Resolver> _dns_resolver;
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;

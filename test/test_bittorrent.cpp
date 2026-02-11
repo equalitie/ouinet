@@ -111,7 +111,6 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
-    bool do_doh = true;
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
     DhtNode dht(ctx.get_executor()

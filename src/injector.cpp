@@ -82,7 +82,6 @@ static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 // TODO: Get rid of this
 static bool g_allow_private_targets = false;
-static bool g_do_doh = true;
 
 //------------------------------------------------------------------------------
 template<class Res>
@@ -885,7 +884,6 @@ Injector::Injector(
     }
     if (!config.is_doh_enabled()) {
         LOG_INFO("DNS over HTTPS is disabled.");
-        g_do_doh = false;
     }
     LOG_INFO( "DNS protocols enabled: ["
             , dns::Resolver::protos_to_str(config.dns_config().protocols)
