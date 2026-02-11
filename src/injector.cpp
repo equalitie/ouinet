@@ -882,11 +882,11 @@ Injector::Injector(
         LOG_INFO(log_path, "Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
-    if (!config.is_doh_enabled()) {
+    if (!_config.is_doh_enabled()) {
         LOG_INFO("DNS over HTTPS is disabled.");
     }
     LOG_INFO( "DNS protocols enabled: ["
-            , dns::Resolver::protos_to_str(config.dns_config().protocols)
+            , dns::Resolver::protos_to_str(_config.dns_config().protocols)
             , "].");
 
     auto proxy_server = std::make_unique<OuiServiceServer>(ex);

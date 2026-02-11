@@ -176,6 +176,7 @@ private:
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
+    [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
     util::Ed25519PrivateKey _ed25519_private_key;
 
@@ -247,7 +248,7 @@ InjectorConfig::options_description()
         ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
          , "Disable DNS over HTTPS for domain name resolution. "
            "When this option is present the injector will fallback to the default DNS mechanism "
-           "provided by the operating system.")
+           "provided by the operating system. Deprecated, use --dns-protocol instead.")
         ("dns-protocol", po::value<std::vector<string>>()
                              ->composing()
                              ->default_value(dns_default_protocols,
@@ -364,19 +365,33 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _allow_private_targets = true;
     }
 
+    // Pre-load opt_protos to keep compatibility with disable-doh
+    auto opt_protos = vm["dns-protocol"].as<std::vector<string>>();
+
+    // If disable-doh is present 'https' is removed from protocols selected by 'dns-protocols`
+    // the mechanism makes sure that at least one protocol is selected otherwise adds
+    // 'plain' to 'dns-protocols' list.
+    // This code will be deleted too when the deprecated option `disable-doh` is removed.
     if (vm["disable-doh"].as<bool>()) {
+        LOG_WARN("Option '--disable-doh' is deprecated, use '--dns-protocol' instead");
+        auto doh = std::find( opt_protos.begin(), opt_protos.end(), "https");
+        if (doh != opt_protos.end())
+            opt_protos.erase(doh);
+        if (opt_protos.empty())
+            opt_protos.emplace_back("plain");
         _disable_doh = true;
     }
 
-    if (vm.contains("dns-protocol")) {
-        for ( auto opt = vm["dns-protocol"].as<std::vector<string>>();
-              const auto& proto_name : opt )
-        {
-            _dns_config.protocols.emplace_back(
-                dns::bridge::str_to_proto(proto_name)
-            );
-        }
+    for (const auto& proto_name : opt_protos) {
+        _dns_config.protocols.emplace_back(
+            dns::bridge::str_to_proto(proto_name)
+        );
     }
+
+    LOG_DEBUG( "DNS protocols enabled: ["
+             , dns::Resolver::protos_to_str(_dns_config.protocols)
+             , "]");
+
 
 #ifdef __EXPERIMENTAL__
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without

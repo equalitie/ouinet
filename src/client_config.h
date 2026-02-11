@@ -353,7 +353,7 @@ private:
            ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
             , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
               "When this option is present the client will fallback to the default DNS mechanism "
-              "provided by the operating system.")
+              "provided by the operating system. Deprecated, use --dns-protocol instead.")
            ("dns-protocol", po::value<vector<string>>()
                                 ->composing()
                                 ->default_value(dns_default_protocols,
@@ -541,6 +541,7 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
+    [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
     bool _allow_private_targets = false;
 
