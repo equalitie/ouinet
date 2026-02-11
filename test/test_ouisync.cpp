@@ -188,19 +188,28 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
         session.bind_network({"quic/0.0.0.0:0"}, yield);
         session.set_store_dirs({ouisync_service_dir.make_subdir("store").string()}, yield);
-        session.set_mount_root(ouisync_service_dir.make_subdir("mount").string(), yield);
+        //session.set_mount_root(ouisync_service_dir.make_subdir("mount").string(), yield);
         session.set_local_discovery_enabled(true, yield);
 
-        auto page_index = session.create_repository("page_index", yield);
-        page_index.mount(yield);
-        page_index.set_sync_enabled(true, yield);
+        auto page_index = session.create_repository(
+                "page_index",
+                {},    // read secret
+                {},    // write secret
+                {},    // token
+                true,  // sync enabled
+                false, // dht enabled
+                false, // pex_enabled
+                yield);
+
+        //page_index.mount(yield);
+        //page_index.set_sync_enabled(true, yield);
 
         Client leecher(ctx, make_config<ClientConfig>({
                 "./no_client_exec"s,
                 "--log-level=DEBUG"s,
                 "--repo"s, root.make_subdir("leecher").string(),
                 "--cache-type=ouisync"s,
-                "--ouisync-page-index"s, page_index.share(ouisync::AccessMode::READ, yield).value,
+                "--ouisync-page-index"s, page_index.share(ouisync::AccessMode::READ, {}, yield).value,
                 "--disable-origin-access"s,
                 // Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
@@ -229,23 +238,27 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
         // Create a repo and copy the fetched content into it
-        auto page_repo = session.create_repository(group, yield);
-        page_repo.mount(yield);
-        page_repo.set_sync_enabled(true, yield);
+        auto page_repo = session.create_repository(
+                group,
+                {},    // read secret
+                {},    // write secret
+                {},    // token
+                true,  // sync enabled
+                false, // dht enabled
+                false, // pex_enabled
+                yield);
+        //page_repo.mount(yield);
+        //page_repo.set_sync_enabled(true, yield);
 
-        fs::copy(
-            seeder_dir.path() / "bep5_http",
-            ouisync_service_dir.path() / "mount" / group,
-            fs::copy_options::recursive |
-            // Files in the source directory have '-rw------' permissions, but
-            // Ouisync currently doesn't support changing the defaults which
-            // are '-rw-rw-r--' and returns an `operation_not_supported` error
-            // when attempted to change it.
-            fs::copy_options::ignore_attribute_errors
-        );
+        session.copy(
+            {},                                                     // `src_repo`
+            (seeder_dir.path() / "bep5_http" / "data-v3").string(), // `src_path`
+            group,                                                  // `dst_repo`
+            "/",                                                    // `dst_path`
+            yield);
 
         // Create an entry in the `page_index` repo with the new repo
-        auto page_token = page_repo.share(ouisync::AccessMode::READ, yield).value;
+        auto page_token = page_repo.share(ouisync::AccessMode::READ, {}, yield).value;
         auto file = page_index.create_file("/"s + group, yield);
         file.write(0, {page_token.begin(), page_token.end()}, yield);
         file.close(yield);

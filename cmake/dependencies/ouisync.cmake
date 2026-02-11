@@ -15,6 +15,9 @@ if (WITH_OUISYNC)
     # Tell Ouisync cmake file we're using a separately Boost.Asio library
     set(OUISYNC_BOOST_ASIO_SEPARATE_COMPILATION ON CACHE BOOL "" FORCE)
 
+    # Enable/Disable mounting (Virtual File System)
+    set(OUISYNC_WITH_VFS OFF CACHE BOOL "" FORCE)
+
     if (OUISYNC_SRC_DIR)
         # Use this to debug with local Ouisync sources
         set(OUISYNC_CPP_SRC_DIR "${OUISYNC_SRC_DIR}/bindings/cpp")
@@ -37,10 +40,10 @@ if (WITH_OUISYNC)
             COMMAND "${CMAKE_COMMAND}" --build .
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/ouisync/download"
         )
-        # Import targets
         set(OUISYNC_CPP_SRC_DIR "${CMAKE_BINARY_DIR}/ouisync/src/bindings/cpp")
     endif()
 
+    # Import targets
     add_subdirectory("${OUISYNC_CPP_SRC_DIR}" "ouisync" EXCLUDE_FROM_ALL)
 else()
     set(CPP_OUISYNC_LIBRARIES)

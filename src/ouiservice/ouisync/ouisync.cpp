@@ -22,6 +22,7 @@ using ouisync::File;
 using ouisync::ShareToken;
 using ouisync::RepositorySubscription;
 
+// TODO: Set through cmd args as these may differ in tests and in production
 static const bool SYNC_ENABLED = true;
 static const bool DHT_ENABLED = true;
 static const bool PEX_ENABLED = true;
@@ -34,11 +35,11 @@ Repository open_or_create_repo(Session& session, std::string_view name, const Sh
     try {
         return session.create_repository(
             name_str,
-            yield,
             {},
             {},
             token,
-            SYNC_ENABLED, DHT_ENABLED, PEX_ENABLED);
+            SYNC_ENABLED, DHT_ENABLED, PEX_ENABLED,
+            yield);
     }
     catch (const sys::system_error& e) {
         if (e.code() != ouisync::error::ALREADY_EXISTS) {
@@ -49,8 +50,10 @@ Repository open_or_create_repo(Session& session, std::string_view name, const Sh
     }
 }
 
-void set_repo_defaults(Repository& repo, asio::yield_context yield) {
-    repo.mount(yield);
+void set_repo_defaults(Repository& repo, bool can_mount, asio::yield_context yield) {
+    if (can_mount) {
+        repo.mount(yield);
+    }
     repo.set_sync_enabled(true, yield);
     repo.set_pex_enabled(true, yield);
 }
@@ -102,6 +105,7 @@ struct Ouisync::Impl {
     ouisync::Session session;
     ouisync::Repository page_index;
     Sites sites;
+    bool can_mount; // Whether Ouisync was compiled with mount support
 
     std::shared_ptr<Repository> resolve(std::string repo_name, YieldContext yield) {
         auto repo_i = sites.find(repo_name);
@@ -115,7 +119,7 @@ struct Ouisync::Impl {
         auto token = ShareToken{std::string(token_vec.begin(), token_vec.end())};
 
         auto repo = open_or_create_repo(session, repo_name, token, yield.native());
-        set_repo_defaults(repo, yield.native());
+        set_repo_defaults(repo, can_mount, yield.native());
         auto repo_ptr = std::make_shared<Repository>(std::move(repo));
 
         sites[std::move(repo_name)] = repo_ptr;
@@ -143,17 +147,23 @@ void Ouisync::start(asio::yield_context yield)
 
     session.bind_network({"quic/0.0.0.0:0"}, yield);
     session.set_store_dirs({_store_dir.string()}, yield);
-    session.set_mount_root(_mount_dir.string(), yield);
+    bool can_mount = true;
+    try {
+        session.set_mount_root(_mount_dir.string(), yield);
+    } catch (std::exception& e) {
+        can_mount = false;
+    }
     session.set_local_discovery_enabled(true, yield);
 
     auto page_index = open_or_create_repo(session, "page_index", ShareToken{_page_index_token}, yield);
-    set_repo_defaults(page_index, yield);
+    set_repo_defaults(page_index, can_mount, yield);
 
     _impl = std::make_shared<Impl>(Impl {
         std::move(service),
         std::move(session),
         std::move(page_index),
-        {}
+        {},
+        can_mount
     });
 }
 
