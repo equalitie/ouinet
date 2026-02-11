@@ -59,18 +59,37 @@ File open_file(Repository& repo, std::string const& path, YieldContext yield) {
     RepositorySubscription sub;
     sub.subscribe(repo, yield.native());
 
+    bool is_fully_loaded = false;
+
     while (true) {
         try {
             return repo.open_file(path, yield.native());
         }
         catch (const sys::system_error& e) {
-            // We get STORE_ERROR when the file is there but it's first block
+            if (is_fully_loaded) {
+                throw;
+            }
+
+            // We get STORE_ERROR when the file is there but its first block
             // has not yet been downloaded.
             if (e.code() != ouisync::error::NOT_FOUND &&
                     e.code() != ouisync::error::STORE_ERROR) {
                 throw;
             }
-            // TODO: Break if the repo has been fully synced
+
+            auto progress = repo.get_sync_progress(yield.native());
+
+            // If `progress.total == 0`, then the repo has been imported but no
+            // syncing happened yet. Otherwise if `progress.total !=
+            // progress.value` then the repos hasn't synced fully yet and new
+            // data may still arrive.
+            if (progress.total != 0 && progress.total == progress.value) {
+                // Since `total == value` could have happened after
+                // `open_file`, we try one more time.
+                is_fully_loaded = true;
+                continue;
+            }
+
             sub.state_changed(yield.native());
         }
     }
