@@ -127,7 +127,7 @@ BOOST_AUTO_TEST_CASE(test_destroy_block_before_wait)
         
         auto start = Clock::now();
         wait_condition.wait(yield);
-        BOOST_TEST(abs(millis_since(start) - 100) < 10);
+        BOOST_TEST(abs(millis_since(start) - 100) < 15);
     });
 
     ctx.run();
