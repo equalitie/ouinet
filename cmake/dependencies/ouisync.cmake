@@ -58,7 +58,7 @@ if (WITH_OUISYNC)
     endif()
 
     # Import targets
-    add_subdirectory("${OUISYNC_CPP_SRC_DIR}" "ouisync" EXCLUDE_FROM_ALL)
+    add_subdirectory("${OUISYNC_CPP_SRC_DIR}" "ouisync/output" EXCLUDE_FROM_ALL)
 
     target_link_libraries(cpp_ouisync_service PRIVATE ouinet_asio)
     target_link_libraries(cpp_ouisync_client PRIVATE ouinet_asio)
