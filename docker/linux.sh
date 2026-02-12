@@ -13,6 +13,7 @@ enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
 with_ouisync=n
+host_ouisync_dir=
 with_asan=n
 
 function print_help (
@@ -62,6 +63,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --with-ouisync)
             with_ouisync=y
+            ;;
+        --use-ouisync-dir)
+            host_ouisync_dir=$2; shift;
             ;;
         --with-asan)
             with_asan=y
@@ -201,6 +205,9 @@ function is_in (
 )
 
 function copy_local_sources (
+    host_src_dir=${1%/}
+    container_dst_dir=$2
+
     rsync_exclude_dirs=(
         '/build'
         '/rust/target'
@@ -208,6 +215,10 @@ function copy_local_sources (
         '/_gradle-home'
         '/build-android-*'
         '/gradle-*'
+        '/target'
+        '/bindings/cpp/build'
+        '/bindings/cpp/examples/build'
+        '/bindings/kotlin/build'
     )
 
     if ! is_in android ${target_oss[@]}; then
@@ -218,7 +229,7 @@ function copy_local_sources (
     rsync -e "docker $docker_host exec -i" \
         -av --no-links --delete \
         ${rsync_exclude_dirs[@]/#/--exclude=} \
-        $(pwd)/ $container_name:$src_dir
+        $host_src_dir/ $container_name:$container_dst_dir
 )
 
 function list_artifacts_for_target_os (
@@ -295,9 +306,16 @@ if [ "$enter_on_exit" = y ]; then
     trap enter EXIT
 fi
 
+# ---
+
 exe bash -c "mkdir -p $src_dir"
 
-copy_local_sources
+copy_local_sources $(pwd) $src_dir
+
+if [ -n "$host_ouisync_dir" ]; then
+    container_ouisync_dir=$work_dir/ouisync
+    copy_local_sources $host_ouisync_dir $container_ouisync_dir
+fi
 
 # ---
 
@@ -326,8 +344,12 @@ for target_os in ${target_oss[@]}; do
             )
         fi
     
+        if [ -n "$container_ouisync_dir" ]; then
+            cmake_configure_options+=(-DOUISYNC_SRC_DIR=$container_ouisync_dir)
+        fi
+
         exe -w $build_dir cmake $src_dir "${cmake_configure_options[@]}"
-        exe -w $build_dir cmake --build . -v -j $(exe nproc)
+        exe -w $build_dir cmake --build . -j $(exe nproc)
     else
         exe -w $src_dir ./scripts/build-android.sh
     fi
