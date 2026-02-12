@@ -376,6 +376,16 @@ client_state(Client::RunningState cstate) {
     return "(unknown)";
 }
 
+static
+std::vector<std::string>
+dns_protocols(const ClientConfig& config)
+{
+    std::vector<std::string> protos;
+    for (const auto& prt : config.dns_config().protocols)
+        protos.emplace_back(dns::bridge::proto_to_str(prt).c_str());
+    return protos;
+}
+
 void ClientFrontEnd::handle_group_list( const Request&
                                       , Response& res
                                       , std::ostringstream& ss
@@ -621,6 +631,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
     ss << "<br>\n";
 
+    ss << "DNS protocols enabled: "
+       << dns::Resolver::protos_to_str(config.dns_config().protocols)
+       << ".<br><br>\n";
+
     ss << "DNS over HTTPS: "
        << ( config.is_doh_enabled()
           ? "enabled"
@@ -751,6 +765,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
         {"doh_enabled", config.is_doh_enabled()},
+        {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
 
