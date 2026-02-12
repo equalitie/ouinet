@@ -1,6 +1,7 @@
 #include "../test/util/i2p_utils.hpp"
 #include <boost/asio/spawn.hpp>
 #include <cstdio>
+#include "task.h"
 
 BOOST_AUTO_TEST_SUITE(ouinet_i2p)
 
@@ -29,8 +30,9 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchange) {
     auto shared = make_shared<SharedState>(setup, ctx.get_executor());
 
     printf("scheduling spawning the server\n");
+
     // Server
-    asio::spawn(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
         printf("hello ffs");
         auto server = shared->service->build_server("i2p-private-key");
 
@@ -56,38 +58,35 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchange) {
     });
 
 
-    // Client
-    // asio::spawn(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
-    //     BOOST_TEST_MESSAGE("Await server_ready (this may take a while)");
-    //     shared->server_ready.wait(yield);
-    //     BOOST_TEST_MESSAGE("Server is ready");
+    //Client
+    task::spawn_detached(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
+        BOOST_TEST_MESSAGE("Await server_ready (this may take a while)");
+        shared->server_ready.wait(yield);
+        BOOST_TEST_MESSAGE("Server is ready");
 
-    //     auto client = shared->service->build_client(shared->server_ep);
+        auto client = shared->service->build_client(shared->server_ep);
 
-    //     sys::error_code ec;
+        sys::error_code ec;
 
-    //     BOOST_TEST_MESSAGE("Client starting");
-    //     client->start(yield[ec]);
-    //     BOOST_TEST_REQUIRE(!ec, ec.message());
+        BOOST_TEST_MESSAGE("Client starting");
+        client->start(yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, ec.message());
 
-    //     Cancel cancel;
+        Cancel cancel;
 
-    //     BOOST_TEST_MESSAGE("Client connecting");
-    //     auto conn = client->connect_without_handshake(yield[ec], cancel);
-    //     BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
+        BOOST_TEST_MESSAGE("Client connecting");
+        auto conn = client->connect_without_handshake(yield[ec], cancel);
+        BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
 
-    //     BOOST_TEST_MESSAGE("Client reading hello message");
-    //     std::string buffer(hello_message.size(), 'X');
-    //     asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-    //     BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
+        BOOST_TEST_MESSAGE("Client reading hello message");
+        std::string buffer(hello_message.size(), 'X');
+        asio::async_read(conn, asio::buffer(buffer), yield[ec]);
+        BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
 
-    //     BOOST_REQUIRE_EQUAL(buffer, hello_message);
+        BOOST_REQUIRE_EQUAL(buffer, hello_message);
 
-    //     shared->client_finished_lock.release();
-    // });
-
-    // ensure that we actually have things to run
-    BOOST_TEST_REQUIRE(!ctx.poll());
+        shared->client_finished_lock.release();
+    });
 
     printf("running context\n");
     ctx.run();
