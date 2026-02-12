@@ -24,24 +24,23 @@ if (WITH_OUISYNC)
         # Otherwise download from Git
         # Inspired by https://crascit.com/2015/07/25/cmake-gtest/
 
-        file(WRITE ouisync/download/CMakeLists.txt [=[
-            cmake_minimum_required(VERSION 2.8.2)
-            project(ouisync-download NONE)
-            
-            include(ExternalProject)
-            externalproject_add(ouisync
-              GIT_REPOSITORY    https://github.com/equalitie/ouisync
-              GIT_TAG           c2c4ff578f6728c068ba5a7577dce4f51f0aabea
-              GIT_SHALLOW       true
-              SOURCE_DIR        "${CMAKE_BINARY_DIR}/ouisync/src"
-              BINARY_DIR        "${CMAKE_BINARY_DIR}/ouisync/build"
-              # No building, that's done outside of this externalproject_add
-              CONFIGURE_COMMAND ""
-              BUILD_COMMAND     ""
-              INSTALL_COMMAND   ""
-              TEST_COMMAND      ""
-            )
-        ]=])
+        file(WRITE ${CMAKE_BINARY_DIR}/ouisync/download/CMakeLists.txt
+            "cmake_minimum_required(VERSION 2.8.2)\n"
+            "project(ouisync-download NONE)\n"
+            ""
+            "include(ExternalProject)\n"
+            "externalproject_add(ouisync\n"
+            "  GIT_REPOSITORY    https://github.com/equalitie/ouisync\n"
+            "  GIT_TAG           70aede9aa446c5610211439486ebed5acd6aae7d\n"
+            "  SOURCE_DIR        ${CMAKE_BINARY_DIR}/ouisync/src\n"
+            "  BINARY_DIR        ${CMAKE_BINARY_DIR}/ouisync/build\n"
+            "  # No building, that's done outside of this externalproject_add\n"
+            "  CONFIGURE_COMMAND \"\"\n"
+            "  BUILD_COMMAND     \"\"\n"
+            "  INSTALL_COMMAND   \"\"\n"
+            "  TEST_COMMAND      \"\"\n"
+            ")"
+        )
 
         # Configure
         execute_process(
@@ -60,6 +59,9 @@ if (WITH_OUISYNC)
 
     # Import targets
     add_subdirectory("${OUISYNC_CPP_SRC_DIR}" "ouisync" EXCLUDE_FROM_ALL)
+
+    target_link_libraries(cpp_ouisync_service PRIVATE ouinet_asio)
+    target_link_libraries(cpp_ouisync_client PRIVATE ouinet_asio)
 else()
     set(CPP_OUISYNC_LIBRARIES)
     set(OUISERVICE_OUISYNC_CPP_FILES)

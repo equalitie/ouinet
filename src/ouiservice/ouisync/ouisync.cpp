@@ -42,7 +42,7 @@ Repository open_or_create_repo(Session& session, std::string_view name, const Sh
             yield);
     }
     catch (const sys::system_error& e) {
-        if (e.code() != ouisync::error::ALREADY_EXISTS) {
+        if (e.code() != ouisync::error::Service::already_exists) {
             throw;
         }
         // TODO: Check the returned repo corresponds to the `token`.
@@ -75,8 +75,8 @@ File open_file(Repository& repo, std::string const& path, YieldContext yield) {
 
             // We get STORE_ERROR when the file is there but its first block
             // has not yet been downloaded.
-            if (e.code() != ouisync::error::NOT_FOUND &&
-                    e.code() != ouisync::error::STORE_ERROR) {
+            if (e.code() != ouisync::error::Service::not_found &&
+                    e.code() != ouisync::error::Service::store_error) {
                 throw;
             }
 

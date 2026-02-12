@@ -209,7 +209,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 "--log-level=DEBUG"s,
                 "--repo"s, root.make_subdir("leecher").string(),
                 "--cache-type=ouisync"s,
-                "--ouisync-page-index"s, page_index.share(ouisync::AccessMode::READ, {}, yield).value,
+                "--ouisync-page-index"s, page_index.share(ouisync::AccessMode::read, {}, yield).value,
                 "--disable-origin-access"s,
                 // Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
@@ -258,7 +258,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
             yield);
 
         // Create an entry in the `page_index` repo with the new repo
-        auto page_token = page_repo.share(ouisync::AccessMode::READ, {}, yield).value;
+        auto page_token = page_repo.share(ouisync::AccessMode::read, {}, yield).value;
         auto file = page_index.create_file("/"s + group, yield);
         file.write(0, {page_token.begin(), page_token.end()}, yield);
         file.close(yield);

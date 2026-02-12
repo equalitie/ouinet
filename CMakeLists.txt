@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.13)
 
 # Set cmake policies to avoid warnings in newer versions of cmake
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
