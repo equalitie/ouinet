@@ -28,6 +28,7 @@
 #include <util/wait_condition.h>
 
 #include "service.h"
+#include "task.h"
 
 using namespace std;
 using namespace chrono;

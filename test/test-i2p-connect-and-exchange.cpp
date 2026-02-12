@@ -1,7 +1,4 @@
 #include "../test/util/i2p_utils.hpp"
-#include <boost/asio/spawn.hpp>
-#include <cstdio>
-#include "task.h"
 
 BOOST_AUTO_TEST_SUITE(ouinet_i2p)
 
