@@ -18,8 +18,8 @@ variables:
       - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
       - $BUILD_PATH/lib*.so.*
-      - $BUILD_PATH/test/bt-*
-      - $BUILD_PATH/test/test-*
+      - $BUILD_PATH/test/bt_*
+      - $BUILD_PATH/test/test_*
     expire_in: 6h
   cache:
     key: single
@@ -45,7 +45,7 @@ variables:
       - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
       - $BUILD_PATH/lib*.so.*
-      - $BUILD_PATH/test/test-*
+      - $BUILD_PATH/test/test_*
     expire_in: 6h
   image: $BUILDER_IMAGE
   script:
