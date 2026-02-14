@@ -26,6 +26,7 @@
 #include "bep5_swarms.h"
 #include "util.h"
 #include "bittorrent/bootstrap.h"
+#include "cxx/dns.h"
 
 namespace ouinet {
 
@@ -41,6 +42,7 @@ struct MetricsConfig {
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     metrics::EncryptionKey encryption_key;
+    uint64_t delete_after_seconds;
 
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
@@ -349,6 +351,10 @@ private:
         metrics.add_options()
            ("metrics-enable-on-start", po::bool_switch()->default_value(false)
             , "Enable metrics at startup. Must be used with --metrics-server-url")
+           ("metrics-delete-after"
+            , po::value<uint64_t>()->default_value(metrics::default_delete_after_seconds)
+            , "Metrics records older than this duration will be deleted. "
+              "The value is expressed in seconds.")
            ("metrics-server-url", po::value<string>()
             , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
            ("metrics-server-token", po::value<string>()

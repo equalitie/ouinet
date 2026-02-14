@@ -204,7 +204,8 @@ public:
         , _multi_utp_server_wc(_ctx)
         , _metrics(_config.metrics()
                     ? metrics::Client( _config.repo_root() / "metrics"
-                                     , std::move(_config.metrics()->encryption_key))
+                                     , std::move(_config.metrics()->encryption_key)
+                                     , _config.metrics()->delete_after_seconds)
                     : metrics::Client::noop())
     {
         LOG_INFO("Repo root: ", _config.repo_root());
