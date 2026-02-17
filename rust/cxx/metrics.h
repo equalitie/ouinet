@@ -28,7 +28,7 @@ enum class SetAuxResult {
 };
 
 // Records older than this duration will be deleted.
-constexpr u_int64_t default_delete_after_seconds{60 * 60 * 24 * 7};
+constexpr uint64_t default_delete_after_seconds{60 * 60 * 24 * 7};
 
 class Client {
 public:
