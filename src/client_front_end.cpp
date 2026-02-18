@@ -710,6 +710,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<h2>Metrics</h2>\n";
     ss << ToggleInput{"<u>M</u>etrics",'m', "metrics", metrics.is_enabled()};
 
+    ss << "Delete records after: "
+       << std::to_string(config.metrics()->delete_after_seconds)
+       << " seconds <br><br>\n";
+
     // Highlight the label/form containing the input selected via the URL fragment.
     ss << "<script>var eid = window.location.hash.substr(1); "
           "if (eid) { var e = document.getElementById(eid); "
@@ -750,6 +754,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
+        {"metrics_delete_after", config.metrics()->delete_after_seconds},
         {"doh_enabled", config.is_doh_enabled()},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
