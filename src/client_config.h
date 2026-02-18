@@ -351,10 +351,6 @@ private:
         metrics.add_options()
            ("metrics-enable-on-start", po::bool_switch()->default_value(false)
             , "Enable metrics at startup. Must be used with --metrics-server-url")
-           ("metrics-delete-after"
-            , po::value<uint64_t>()->default_value(metrics::default_delete_after_seconds)
-            , "Metrics records older than this duration will be deleted. "
-              "The value is expressed in seconds.")
            ("metrics-server-url", po::value<string>()
             , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
            ("metrics-server-token", po::value<string>()
@@ -371,6 +367,10 @@ private:
               "   Then get the public encryption key:\n"
               "     `openssl pkey -in private_key.pem -pubout -out public_key.pem`"
               )
+           ("metrics-delete-after"
+            , po::value<uint64_t>()->default_value(metrics::default_delete_after_seconds)
+            , "Metrics records older than this duration will be deleted. "
+              "The value is expressed in seconds.")
            ;
 
         po::options_description desc;
