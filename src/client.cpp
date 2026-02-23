@@ -2356,7 +2356,9 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
           || ec == asio::error::operation_aborted) break;
 
         if (ec) {
-            LOG_WARN(yield.log_path(), " Failed to read request; ec=", ec);
+            if (!cancel) {
+                LOG_WARN(yield.log_path(), " Failed to read request; ec=", ec);
+            }
             break;
         }
 
@@ -2504,7 +2506,9 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         cache_control.mixed_fetch(tnx, request_config, yield[ec].tag("mixed_fetch"));
 
         if (ec) {
-            _YERROR(yield, "Error writing back response; ec=", ec);
+            if (!cancel || ec != asio::error::operation_aborted) {
+                _YERROR(yield, "Error writing back response; ec=", ec);
+            }
 
             if (tnx.user_agent_was_written_to())
                 con.close();  // it may already be closed
