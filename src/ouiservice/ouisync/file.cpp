@@ -1,4 +1,5 @@
 #include "file.h"
+#include "or_throw.h"
 
 namespace ouinet::ouisync_service {
 
