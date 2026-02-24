@@ -29,7 +29,7 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchange) {
     auto shared = make_shared<SharedState>(setup, ctx.get_executor());
 
     // Server
-    asio::spawn(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
         BOOST_TEST_MESSAGE("Server spawned");
         auto server = shared->service->build_server("i2p-private-key");
 
@@ -53,7 +53,7 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchange) {
 
 
     // Client
-    asio::spawn(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
         BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
         shared->server_ready.wait(yield);
         BOOST_TEST_MESSAGE("Server is ready");
@@ -69,6 +69,10 @@ BOOST_AUTO_TEST_CASE(test_connect_with_retry_and_exchange) {
         BOOST_TEST_MESSAGE("Client connecting");
         client->connect(yield[ec], shared->cancel);
         BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+
+        BOOST_TEST_MESSAGE("waiting for 2 seconds to avoid a race condition");
+        asio::steady_timer timer(shared->exec, asio::chrono::seconds(2));
+        timer.async_wait(yield[ec]);
 
         // Tell the server we're done.
         shared->client_finished_lock.release();
