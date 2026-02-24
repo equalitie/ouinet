@@ -202,7 +202,6 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 yield);
 
         //page_index.mount(yield);
-        //page_index.set_sync_enabled(true, yield);
 
         Client leecher(ctx, make_config<ClientConfig>({
                 "./no_client_exec"s,
@@ -247,8 +246,8 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 false, // dht enabled
                 false, // pex_enabled
                 yield);
+
         //page_repo.mount(yield);
-        //page_repo.set_sync_enabled(true, yield);
 
         session.copy(
             {},                                                     // `src_repo`

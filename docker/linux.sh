@@ -113,7 +113,7 @@ function build_image (
     apt_dependencies=(
         rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev
         # For building Ouisync
-        pkg-config libfuse3-dev
+        pkg-config
         # For building and testing Windows binaries
         mingw-w64-x86-64-dev g++-mingw-w64-x86-64 libz-mingw-w64-dev gettext locales wine64
         # For building Android binaries
@@ -369,7 +369,7 @@ for target_os in ${target_oss[@]}; do
                 RUST_BACKTRACE=1
                 RUST_LOG=ouinet_rs=debug
             )
-            exe ${env[@]/#/-e } cargo test --verbose --manifest-path $src_dir/rust/Cargo.toml -- --nocapture
+            exe ${env[@]/#/-e } cargo test --manifest-path $src_dir/rust/Cargo.toml -- --nocapture
         fi
     fi
         
