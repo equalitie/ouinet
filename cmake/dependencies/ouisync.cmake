@@ -31,7 +31,7 @@ if (WITH_OUISYNC)
             "include(ExternalProject)\n"
             "externalproject_add(ouisync\n"
             "  GIT_REPOSITORY    https://github.com/equalitie/ouisync\n"
-            "  GIT_TAG           29b45dfd3fe35ce715e1a09a2ae8d45a089459bc\n"
+            "  GIT_TAG           c9a6fa072934e8e7a65e8afd4f88f75af6dc6fb0\n"
             "  SOURCE_DIR        ${CMAKE_BINARY_DIR}/ouisync/src\n"
             "  BINARY_DIR        ${CMAKE_BINARY_DIR}/ouisync/build\n"
             "  # No building, that's done outside of this externalproject_add\n"
