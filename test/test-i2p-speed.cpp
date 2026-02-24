@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
     auto shared = make_shared<SharedState>(setup, ctx.get_executor());
 
     // Server
-    asio::spawn(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
         BOOST_TEST_MESSAGE("Server spawned");
         auto server = shared->service->build_server("i2p-private-key");
 
@@ -82,7 +82,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
 
     // Client
-    asio::spawn(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
         BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
         shared->server_ready.wait(yield);
         BOOST_TEST_MESSAGE("Server is ready");
