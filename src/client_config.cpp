@@ -377,7 +377,12 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
 
     if (server_url) {
         if (auto opt = as_optional<std::string>(vm, "metrics-encryption-key")) {
-            encryption_key = metrics::EncryptionKey::validate(*opt);
+            auto key_str= *opt;
+            if ( !key_str.starts_with("-----BEGIN") ) {
+                key_str = "-----BEGIN PUBLIC KEY-----\n" + key_str + "\n"
+                          "-----END PUBLIC KEY-----\n";
+            }
+            encryption_key = metrics::EncryptionKey::validate(key_str);
             if (!encryption_key) {
                 throw error("Failed to validate --metrics-encryption-key");
             }
