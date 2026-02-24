@@ -10,7 +10,9 @@
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/variance.hpp>
 #include <boost/accumulators/statistics/variance.hpp>
+#include <boost/asio/detail/chrono.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
 
