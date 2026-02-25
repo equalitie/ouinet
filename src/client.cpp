@@ -557,7 +557,7 @@ private:
                 if (ec == asio::error::operation_aborted) return;
                 if (ec) {
                     LOG_WARN("Bep5Http: Failure to accept; ec=", ec);
-                    async_sleep(_ctx, 200ms, c, yield);
+                    async_sleep(200ms, c, yield);
                     continue;
                 }
                 TRACK_SPAWN(_ctx, ([this, con = move(con)]
@@ -1935,12 +1935,11 @@ public:
                     ? n * chrono::seconds(1)
                     : n * chrono::seconds(3);
 
-                async_sleep(exec, delay, c, yield.native());
+                async_sleep(delay, c, yield.native());
             } else if (job_type == Type::front_end) {
                 // No pause for front-end jobs.
             } else {
-                async_sleep( exec, n * chrono::seconds(3)
-                           , cancel, yield.native());
+                async_sleep(n * chrono::seconds(3), cancel, yield.native());
             }
         }
     };
@@ -2722,7 +2721,7 @@ void Client::State::listen_tcp
 
             LOG_WARN(_log_path, " Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
 
-            if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
+            if (!async_sleep(chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
             }
         } else {
@@ -2778,7 +2777,7 @@ void Client::State::listen_unix_socket
 
             LOG_WARN("Accept failed on Unix Socket:", acceptor.local_endpoint(), "; ec=", ec);
 
-            if (!async_sleep(_ctx, chrono::seconds(1), _shutdown_signal, yield)) {
+            if (!async_sleep(chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
             }
         } else {

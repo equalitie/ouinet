@@ -131,7 +131,7 @@ Tracker::Tracker(const AsioExecutor& exec):
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {
-            async_sleep(_exec, std::chrono::seconds(60), _terminate_signal, yield);
+            async_sleep(std::chrono::seconds(60), _terminate_signal, yield);
             if (terminated) {
                 break;
             }
@@ -183,7 +183,7 @@ DataStore::DataStore(const AsioExecutor& exec):
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {
-            async_sleep(_exec, std::chrono::seconds(60), _terminate_signal, yield);
+            async_sleep(std::chrono::seconds(60), _terminate_signal, yield);
             if (terminated) {
                 break;
             }

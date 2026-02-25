@@ -70,7 +70,7 @@ struct GarbageCollector {
             _DEBUG("Garbage collector started");
             while (!cancel) {
                 sys::error_code ec;
-                async_sleep(_executor, chrono::minutes(7), cancel, yield.native()[ec]);
+                async_sleep(chrono::minutes(7), cancel, yield.native()[ec]);
                 if (cancel || ec) break;
 
                 _DEBUG("Collecting garbage...");

@@ -744,7 +744,7 @@ void listen( const InjectorConfig& config
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield.native())) {
+            if (!async_sleep(std::chrono::milliseconds(100), cancel, yield.native())) {
                 break;
             }
             ec = {};

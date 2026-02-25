@@ -43,7 +43,7 @@ public:
                         LOG_WARN("UPnP Loop has thrown an exception, will restart in 5s");
                     }
                 }
-                async_sleep(exec, std::chrono::seconds(5), c, yield);
+                async_sleep(std::chrono::seconds(5), c, yield);
             }
         }));
     }
@@ -96,7 +96,7 @@ private:
                 LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting ", get_local_ipv4_attempts);
                 if ( ++get_local_ipv4_attempts >= 5) {
                     mapping_disabled();
-                    async_sleep(exec, failure_wait_time, cancel, yield);
+                    async_sleep(failure_wait_time, cancel, yield);
                 }
                 if (cancel) return;
                 continue;  // probably no connection
@@ -110,7 +110,7 @@ private:
                 _is_available = false;
                 mapping_disabled();
                 LOG_DEBUG("UPnP: No IGDs found, waiting");
-                async_sleep(exec, failure_wait_time, cancel, yield);
+                async_sleep(failure_wait_time, cancel, yield);
                 if (cancel) return;
                 continue;
             }
@@ -211,7 +211,7 @@ private:
                 return duration_cast<seconds>(success_wait_time - round_elapsed);
             }();
 
-            async_sleep(exec, wait_time, cancel, yield);
+            async_sleep(wait_time, cancel, yield);
             if (cancel) return;
         }
     }

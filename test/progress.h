@@ -16,7 +16,7 @@ struct Progress {
 
             while (!cancel) {
                 cerr << _message << "... " << p[_i++ % 4] << '\r';
-                async_sleep(ex, chrono::milliseconds(200), cancel, yield);
+                async_sleep(chrono::milliseconds(200), cancel, yield);
             }
         });
     }

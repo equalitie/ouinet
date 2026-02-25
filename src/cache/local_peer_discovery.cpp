@@ -155,7 +155,7 @@ struct LocalPeerDiscovery::Impl {
             if (ec) {
                 LOG_ERROR("LocalPeerDiscovery: failed to receive;"
                           " ec=", ec);
-                async_sleep(_ex, chrono::seconds(1), cancel, yield);
+                async_sleep(chrono::seconds(1), cancel, yield);
                 if (cancel) break;
                 continue;
             }

@@ -47,7 +47,7 @@ struct MultiUtpServer::State
                 if (cancel) break;
 
                 if (ec) {
-                    async_sleep(ex, 100ms, cancel, yield);
+                    async_sleep(100ms, cancel, yield);
                     if (cancel) break;
                     continue;
                 }
