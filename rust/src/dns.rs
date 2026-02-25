@@ -104,7 +104,7 @@ impl Resolver {
                     name_servers.merge(NameServerConfigGroup::cloudflare_https());
                     name_servers.merge(NameServerConfigGroup::google_https());
                 }
-                _ => { // Protocol::Plain and Protocol::Undefined
+                _ => { // Protocol::Plain
                     name_servers.merge(NameServerConfigGroup::quad9());
                     name_servers.merge(NameServerConfigGroup::cloudflare());
                     name_servers.merge(NameServerConfigGroup::google());

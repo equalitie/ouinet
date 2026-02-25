@@ -332,9 +332,12 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     }
 
     for (const auto& proto_name : *opt_protos) {
-        _dns_config.protocols.emplace_back(
-            dns::bridge::str_to_proto(proto_name)
-        );
+        auto proto = dns::bridge::str_to_proto(proto_name);
+        if (proto == dns::bridge::Protocol::Undefined)
+            throw error("Invalid argument for option --dns-protocol: ", proto_name);
+
+        if ( ranges::find(_dns_config.protocols, proto) ==  _dns_config.protocols.end())
+            _dns_config.protocols.emplace_back(proto);
     }
     LOG_DEBUG( "DNS protocols enabled: ["
              , dns::Resolver::protos_to_str(_dns_config.protocols)
