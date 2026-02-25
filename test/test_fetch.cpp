@@ -320,7 +320,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     tcp::endpoint injector_ep{
-        asio::ip::address_v4::any(),
+        asio::ip::address_v4::loopback(),
         4567
     };
 
