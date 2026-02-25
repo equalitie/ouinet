@@ -17,6 +17,7 @@
 #include "client.h"
 #include "util/str.h"
 #include "ssl/util.h"
+#include "async_sleep.h"
 
 using namespace std;
 using namespace ouinet;
@@ -295,6 +296,10 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
         BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
+
+        // Give "seeder" time to announce
+        Cancel cancel;
+        async_sleep(1s, cancel, yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
         auto rs2 = fetch_through_client(leecher, rq, yield);
