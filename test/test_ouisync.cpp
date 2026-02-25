@@ -18,13 +18,13 @@
 #include "injector.h"
 #include "client.h"
 #include "util/str.h"
+#include "ssl/util.h"
 
 using namespace std;
 using namespace ouinet;
 using namespace std::chrono_literals;
 using namespace boost::asio::ip;
 using bittorrent::MockDht;
-namespace ssl = asio::ssl;
 using tcp = asio::ip::tcp;
 
 template<class Config>
@@ -78,15 +78,15 @@ Response fetch_through_client(const Client& client, Request req, asio::yield_con
     return res;
 }
 
-ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, ssl::context& ctx, std::string host) {
-    ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
+asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, asio::ssl::context& ctx, std::string host) {
+    asio::ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
     if(! SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
         sys::error_code ec;
         ec.assign(static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category());
         static boost::source_location loc = BOOST_CURRENT_LOCATION;
         sys::throw_exception_from_error(ec, loc);
     }
-    stream.set_verify_callback(ssl::host_name_verification(host));
+    stream.set_verify_callback(asio::ssl::host_name_verification(host));
     return stream;
 }
 
@@ -99,9 +99,9 @@ Response fetch_from_origin(util::Url url, asio::yield_context yield) {
     tcp::resolver resolver(exec);
     auto const results = resolver.async_resolve(url.host, url.port, yield);
 
-    ssl::context ctx{ssl::context::tlsv12_client};
-    ctx.set_default_verify_paths();
-    ctx.set_verify_mode(ssl::verify_peer);
+    asio::ssl::context ctx{asio::ssl::context::tlsv12_client};
+    ouinet::ssl::util::set_default_verify_paths(ctx);
+    ctx.set_verify_mode(asio::ssl::verify_peer);
 
     auto req = build_origin_request();
     std::string host = req[http::field::host];
@@ -110,7 +110,7 @@ Response fetch_from_origin(util::Url url, asio::yield_context yield) {
     asio::async_connect(socket, results, yield);
 
     auto stream = setup_tls_stream(std::move(socket), ctx, host);
-    stream.async_handshake(ssl::stream_base::client, yield);
+    stream.async_handshake(asio::ssl::stream_base::client, yield);
 
     http::async_write(stream, req, yield);
 

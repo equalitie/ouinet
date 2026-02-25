@@ -1,42 +1,45 @@
 #include "util.h"
 
-namespace ouinet::ssl::util {
-
 #if defined(_WIN32)
-static std::optional<bool> g_is_running_on_wine;
 
-static bool is_running_on_wine() {
-    if (g_is_running_on_wine) {
-        return *g_is_running_on_wine;
+#include <wincrypt.h>
+
+static void add_windows_root_certs(boost::asio::ssl::context &ctx) {
+    HCERTSTORE hStore = CertOpenSystemStore(0, "ROOT");
+    if (hStore == NULL) {
+        return;
     }
 
-    using F = const char* (CDECL *)(void);
-
-    HMODULE hntdll = GetModuleHandle("ntdll.dll");
-
-    if(!hntdll) {
-        g_is_running_on_wine = false;
-    } else {
-        F pwine_get_version = (F) GetProcAddress(hntdll, "wine_get_version");
-        if(pwine_get_version) {
-            g_is_running_on_wine = true;
-        } else {
-            g_is_running_on_wine = false;
+    X509_STORE *store = X509_STORE_new();
+    PCCERT_CONTEXT pContext = NULL;
+    while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != NULL) {
+        X509 *x509 = d2i_X509(NULL,
+                              (const unsigned char **)&pContext->pbCertEncoded,
+                              pContext->cbCertEncoded);
+        if(x509 != NULL) {
+            X509_STORE_add_cert(store, x509);
+            X509_free(x509);
         }
     }
 
-    return *g_is_running_on_wine;
+    CertFreeCertificateContext(pContext);
+    CertCloseStore(hStore, 0);
+
+    SSL_CTX_set_cert_store(ctx.native_handle(), store);
 }
-#endif
+
+#endif // _WIN32
+
+namespace ouinet::ssl::util {
 
 void set_default_verify_paths(asio::ssl::context& ctx) {
-    ctx.set_default_verify_paths();
-
 #ifdef _WIN32
-    // The above does not load the certificates when running on Wine.
-    if (is_running_on_wine()) {
-        ctx.add_verify_path("/etc/ssl/certs");
-    }
+    // Asio's `set_default_verify_paths` doesn't work on Windows unless OpenSSL
+    // has been installed.
+    // https://stackoverflow.com/questions/39772878/reliable-way-to-get-root-ca-certificates-on-windows
+    add_windows_root_certs(ctx);
+#else
+    ctx.set_default_verify_paths();
 #endif
 }
 

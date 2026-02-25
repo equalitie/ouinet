@@ -118,13 +118,18 @@ get_server_context( const std::string& cert_chain
     return ssl_context;
 }
 
+void set_default_verify_paths(asio::ssl::context&);
+
 static inline
 void load_tls_ca_certificates( asio::ssl::context& ctx
                              , const std::string& path_str)
 {
     using namespace std;
 
-    if (path_str.empty()) return;
+    if (path_str.empty()) {
+        ssl::util::set_default_verify_paths(ctx);
+        return;
+    }
 
     fs::path path = path_str;
 
@@ -144,7 +149,5 @@ void load_tls_ca_certificates( asio::ssl::context& ctx
     ss << boost::nowide::ifstream(path).rdbuf();
     ctx.add_certificate_authority(asio::buffer(ss.str()));
 }
-
-void set_default_verify_paths(asio::ssl::context&);
 
 } // namespace
