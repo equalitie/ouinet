@@ -520,14 +520,14 @@ struct Client::Impl {
               , const GroupName& group
               , http_response::AbstractReader& r
               , Cancel cancel
-              , asio::yield_context yield)
+              , YieldContext yield)
     {
         sys::error_code ec;
         cache::KeepSignedReader fr(r);
-        _http_store->store(resource_id, fr, cancel, yield[ec]);
+        _http_store->store(resource_id, fr, cancel, yield[ec].native());
         if (ec) return or_throw(yield, ec);
 
-        _groups->add(group, resource_id, cancel, yield[ec]);
+        _groups->add(group, resource_id, cancel, yield[ec].native());
         if (ec) return or_throw(yield, ec);
 
         if (!_announcer) return;
@@ -798,7 +798,7 @@ void Client::store( const cache::ResourceId& key
                   , const GroupName& group
                   , http_response::AbstractReader& r
                   , Cancel cancel
-                  , asio::yield_context yield)
+                  , YieldContext yield)
 {
     _impl->store(key, group, r, cancel, yield);
 }

@@ -97,7 +97,7 @@ public:
               , const GroupName& group
               , http_response::AbstractReader&
               , Cancel
-              , asio::yield_context);
+              , YieldContext);
 
     // Returns true if both request and response had keep-alive == true.
     // Times out if forwarding to the sink gets stuck.

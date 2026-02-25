@@ -1037,7 +1037,6 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
 
     sys::error_code ec;
 
-
     OriginPools::Connection con;
 
 
@@ -1755,38 +1754,32 @@ public:
                                         , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
 
         if (do_cache) {
-            TRACK_SPAWN(ctx, ([
-                &, cache = std::move(cache),
-                lock = wc.lock(),
-                log_path = yield.log_path()
-            ] (asio::yield_context yield) {
+            yield.spawn_detached([ &, cache = std::move(cache), lock = wc.lock() ] (YieldContext yield) {
                 auto key = rq->resource_id();
                 AsyncQueueReader rr(qst);
                 sys::error_code ec;
-                cache->store(key, rq->dht_group(), rr, cancel, yield);
+                cache->store(key, rq->dht_group(), rr, cancel, yield[ec]);
                 if (ec && ec != asio::error::operation_aborted)
-                    LOG_ERROR(log_path, " Failed to write response to cache; ec=", ec);
-            }));
-        } else
+                    LOG_ERROR(yield, " Failed to write response to cache; ec=", ec);
+            });
+        } else {
             _YDEBUG( yield, "Not ok to cache response: "
                    , no_cache_reason
                          ? no_cache_reason
                          : (!cache ? "cache not available"
                                    : "disabled for this request/response"));
+        }
 
-        TRACK_SPAWN(ctx, ([
-            &,
-            lock = wc.lock()
-        ] (asio::yield_context yield_) {
+        yield.spawn_detached([ &, lock = wc.lock() ] (YieldContext yield) {
             sys::error_code ec;
             auto rr = std::make_unique<AsyncQueueReader>(qag);
-            Session sag = Session::create(std::move(rr), tnx.request().method() == http::verb::head, cancel, yield_[ec]);
+            Session sag = Session::create(std::move(rr), tnx.request().method() == http::verb::head, cancel, yield[ec]);
             if (cancel) return;
             if (ec) return;
-            tnx.write_to_user_agent(sag, cancel, yield_[ec]);
+            tnx.write_to_user_agent(sag, cancel, yield[ec].native());
             if (ec && ec != asio::error::operation_aborted)
                 _YERROR(yield, "Failed to write response to user agent; ec=", ec);
-        }));
+        });
 
         auto tag = yield.log_path().tag("flush");
         session.flush_response(cancel, yield[ec].tag("flush").native(),
