@@ -29,7 +29,7 @@
 #include <util/async_generator.h>
 #include <util/wait_condition.h>
 
-#include "service.h"
+#include "ouiservice/i2p/service.h"
 #include "task.h"
 
 using namespace std;
