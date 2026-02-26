@@ -950,7 +950,8 @@ Client::State::connect_to_origin( const http::request_header<>& rq
                                 , Cancel& cancel
                                 , YieldContext yield)
 {
-    std::string host, port;
+    std::string host;
+    uint16_t port;
     std::tie(host, port) = util::get_host_port(rq);
 
     sys::error_code ec;

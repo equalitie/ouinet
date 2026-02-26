@@ -46,7 +46,7 @@ public:
 
     /// Resolve and return a TCP endpoint
     TcpLookup resolve( const std::string& host
-                     , const std::string& port
+                     , uint16_t port
                      , const Cancel& cancel
                      , YieldContext yield);
 

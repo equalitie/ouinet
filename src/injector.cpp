@@ -146,7 +146,8 @@ ouinet::resolve_target(const http::request_header<>& req
     TcpLookup lookup;
     sys::error_code ec;
 
-    string host, port;
+    string host;
+    uint16_t port;
     tie(host, port) = util::get_host_port(req);
 
     // First test trivial cases (like "localhost" or "127.1.2.3").
