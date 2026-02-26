@@ -10,7 +10,9 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchange) {
     std::vector<const char*> argv({"i2pouiservice", datadir_arg.data()});
 
     i2p::api::InitI2P(argv.size(), (char**) argv.data(), argv[0]);
+    i2p::api::StopI2P();
     i2p::api::InitI2P(argv.size(), (char**) argv.data(), argv[0]);
+    i2p::api::StopI2P();
 
 }
 
