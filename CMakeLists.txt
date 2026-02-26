@@ -21,6 +21,7 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 option(WITH_OUISYNC "Build with Ouisync" OFF)
+option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
 ################################################################################
@@ -183,12 +184,17 @@ set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FL
 
 add_library(ouinet_common STATIC ${ouinet_common_sources})
 
+if (OUINET_HARDCODE_CA_CERTS)
+    set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
+endif()
+
 target_link_libraries(ouinet_common
     PRIVATE
         lib::url
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
+        ${OUINET_HARDCODED_CA_CERTS}
         ouinet_dependencies
         Boost::iostreams
         lib::gcrypt

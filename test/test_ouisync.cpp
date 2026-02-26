@@ -100,7 +100,7 @@ Response fetch_from_origin(util::Url url, asio::yield_context yield) {
     auto const results = resolver.async_resolve(url.host, url.port, yield);
 
     asio::ssl::context ctx{asio::ssl::context::tlsv12_client};
-    ouinet::ssl::util::set_default_verify_paths(ctx);
+    ouinet::ssl::util::load_tls_ca_certificates(ctx);
     ctx.set_verify_mode(asio::ssl::verify_peer);
 
     auto req = build_origin_request();

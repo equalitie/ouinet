@@ -24,3 +24,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/dependencies/ouinet-rs.cmake)
 
 # Ouisync library
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/ouisync.cmake)
+
+# Hardcoded CA certificates
+include(${CMAKE_CURRENT_LIST_DIR}/dependencies/ca-certs.cmake)
