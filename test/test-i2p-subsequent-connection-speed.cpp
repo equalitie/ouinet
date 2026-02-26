@@ -30,7 +30,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
     auto shared = make_shared<SharedState>(setup, ctx.get_executor());
 
     // Server
-    asio::spawn(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
         BOOST_TEST_MESSAGE("Server spawned");
         auto server = shared->service->build_server("i2p-private-key");
 
@@ -43,15 +43,18 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
         BOOST_TEST_MESSAGE("Server starts listening");
         server->start_listen(yield[ec]);
         BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
-
         server_ready_lock.release();
 
-        auto conn0 = server->accept(yield[ec]);
-        BOOST_TEST_REQUIRE(!ec, "Server accept #0 with retries: " << ec.message());
-
-        for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
+        // Server can accept unspecified amount of times and is meant to be cancelled
+        for (unsigned i = 0; ; i++) {
             auto conn = server->accept(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server accept #" << (i+1) << ": " << ec.message());
+            if (!shared->cancel) {
+                BOOST_TEST_REQUIRE(!ec, "Server accept #" << (i+1) << ": " << ec.message());
+            }
+            else {
+                BOOST_TEST_MESSAGE("Server is cancelled, bye");
+                return;
+            }
         }
 
         shared->client_finished.wait(yield);
@@ -59,7 +62,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 
 
     // Client
-    asio::spawn(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
+    task::spawn_detached(ctx, [shared = std::move(shared)] (asio::yield_context yield) {
         BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
         shared->server_ready.wait(yield);
         BOOST_TEST_MESSAGE("Server is ready");
@@ -85,6 +88,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
         namespace accu = boost::accumulators;
         accu::accumulator_set<float, accu::stats<accu::tag::mean, accu::tag::variance, accu::tag::min, accu::tag::max > > acc;
 
+        BOOST_TEST_MESSAGE("Starting subsequent connections");
         for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
 
             steady_clock::time_point conn_start = steady_clock::now();
@@ -96,7 +100,9 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
             BOOST_TEST_MESSAGE("Connection #" << (i+1) << " established in " << duration_s << " seconds");
 
             acc(duration_s);
+            BOOST_TEST_MESSAGE("Connection #" << (i+1) << "successfully waited for server to finish");
         }
+
 
         std::cout << "Subsequent connections:\n";
         std::cout << "    Sample count:  " << accu::count(acc) << "\n";
@@ -106,8 +112,11 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
         std::cout << "    min:           " << accu::min(acc) << "\n";
         std::cout << "    max:           " << accu::max(acc) << "\n";
 
-        // Tell the server we're done.
         shared->client_finished_lock.release();
+        BOOST_TEST_MESSAGE("waiting for 2 seconds to avoid a race condition");
+        asio::steady_timer timer(shared->exec, asio::chrono::seconds(2));
+        timer.async_wait(yield[ec]);
+        // Tell the server we're done.
         shared->cancel();
     });
 
@@ -115,4 +124,3 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
