@@ -172,10 +172,8 @@ TcpLookup Resolver::resolve( const std::string& host
     }
 
     sys::error_code ec;
-    const auto answers46 = yield[ec].tag("resolve host").run([&](auto y)
-    {
-        return resolve(host, y[ec]);
-    });
+    const auto answers46 = resolve(host, yield[ec].tag("resolve host").native());
+
     if (cancel) ec = asio::error::operation_aborted;
     if (ec) return or_throw<TcpLookup>(yield, ec);
 
