@@ -175,21 +175,20 @@ if(WITH_EXPERIMENTAL)
             target_compile_definitions(${TARGET_NAME} INTERFACE -D__EXPERIMENTAL__)
         endfunction()
 
-
     add_i2p_test(test-i2p-connect-and-exchange
         "test-i2p-connect-and-exchange.cpp"
     )
-
     add_i2p_test(test-i2p-connect-with-retry-and-exchage
         "test-i2p-connect-with-retry-and-exchage.cpp"
     )
-
     add_i2p_test(test-i2p-speed
         "test-i2p-speed.cpp"
     )
-
     add_i2p_test(test-i2p-subsequent-connection-speed
         "test-i2p-subsequent-connection-speed.cpp"
+    )
+    add_i2p_test(xxx-test-i2p-restart
+        "test-i2p-restart.cpp"
     )
 
 endif()
