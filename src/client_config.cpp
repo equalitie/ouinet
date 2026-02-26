@@ -397,7 +397,6 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         delete_after_seconds = *opt;
     }
 
-
     return std::unique_ptr<MetricsConfig>(
             new MetricsConfig {
                 enable_on_start,
