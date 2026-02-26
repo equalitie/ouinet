@@ -12,14 +12,12 @@
 #include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
-#include <boost/intrusive/list.hpp>
 
 namespace ouinet {
 
 using ouinet::util::AsioExecutor;
 
-class YieldContext : public boost::intrusive::list_base_hook
-              < boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
+class YieldContext
 {
 public:
     YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
