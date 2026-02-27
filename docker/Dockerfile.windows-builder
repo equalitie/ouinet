@@ -55,3 +55,10 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2025
         ';C:\msys64\usr\bin' + \
         ';C:\msys64\mingw64\bin'; \
       Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment\' -Name Path -Value $path;
+
+    # Download latest CA certificates from Microsoft and install them (needed for C++ tests)
+    RUN \
+        CertUtil –generateSSTFromWU C:\RootStore.sst; \
+        $file=Get-ChildItem -Path C:\Rootstore.sst; \
+        $file | Import-Certificate -CertStoreLocation 'Cert:\LocalMachine\Root\'; \
+        rm C:\RootStore.sst
