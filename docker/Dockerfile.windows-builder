@@ -39,7 +39,7 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2025
 
     # Install cmake
     # TODO: Pass CMAKE_VERSION as ARG to keep it consistent with other platforms
-    ENV CMAKE_VERSION="3.31.7"
+    ENV CMAKE_VERSION="4.2.1"
     RUN setx CMAKE_FILE_BASE "cmake-$env:CMAKE_VERSION-windows-x86_64"
     RUN setx CMAKE_FILE_ZIP ($env:CMAKE_FILE_BASE + '.zip')
     RUN setx CMAKE_URL "https://github.com/Kitware/CMake/releases/download/v$env:CMAKE_VERSION/$env:CMAKE_FILE_ZIP"
