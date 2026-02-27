@@ -25,13 +25,13 @@ if (WITH_OUISYNC)
         # Inspired by https://crascit.com/2015/07/25/cmake-gtest/
 
         file(WRITE ${CMAKE_BINARY_DIR}/ouisync/download/CMakeLists.txt
-            "cmake_minimum_required(VERSION 2.8.2)\n"
+            "cmake_minimum_required(VERSION 3.10)\n"
             "project(ouisync-download NONE)\n"
             ""
             "include(ExternalProject)\n"
             "externalproject_add(ouisync\n"
             "  GIT_REPOSITORY    https://github.com/equalitie/ouisync\n"
-            "  GIT_TAG           967826e5deb847fdeb328b703f0efcdac8c7bcd1\n"
+            "  GIT_TAG           03d28fb950fb57df25d9d679e30e7aadfaf8f8cd\n"
             "  SOURCE_DIR        ${CMAKE_BINARY_DIR}/ouisync/src\n"
             "  BINARY_DIR        ${CMAKE_BINARY_DIR}/ouisync/build\n"
             "  # No building, that's done outside of this externalproject_add\n"
