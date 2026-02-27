@@ -6,6 +6,7 @@ windows / build:
   tags:
     - windows-shell
   script:
+    - cmake --version
     - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DWITH_OUISYNC=ON
     - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
     - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
