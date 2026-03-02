@@ -200,6 +200,7 @@ file(GLOB client_sources
     "./src/client.cpp"
     "./src/client_config.cpp"
     "./src/client_front_end.cpp"
+    "./src/client_lib.cpp"
     "./src/cache_control.cpp"
     "./src/request_routing.cpp"
     "./src/ssl/dummy_certificate.cpp"
