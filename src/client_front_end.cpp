@@ -710,9 +710,12 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<h2>Metrics</h2>\n";
     ss << ToggleInput{"<u>M</u>etrics",'m', "metrics", metrics.is_enabled()};
 
-    ss << "Delete records after: "
-       << std::to_string(config.metrics()->delete_after_seconds)
-       << " seconds <br><br>\n";
+    if (metrics.is_enabled())
+    {
+        ss << "Delete records after: "
+           << std::to_string(config.metrics()->delete_after_seconds)
+           << " seconds <br><br>\n";
+    }
 
     // Highlight the label/form containing the input selected via the URL fragment.
     ss << "<script>var eid = window.location.hash.substr(1); "
@@ -754,7 +757,6 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
-        {"metrics_delete_after", config.metrics()->delete_after_seconds},
         {"doh_enabled", config.is_doh_enabled()},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
@@ -775,6 +777,10 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
     response["bt_extra_bootstraps"] = bt_extra_bootstraps(config);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
+
+    if  (metrics.is_enabled()) {
+        response["metrics_delete_after"] = config.metrics()->delete_after_seconds;
+    }
 
     if (auto record_id = metrics.current_record_id(); record_id.has_value()) {
         response["current_metrics_record_id"] = *record_id;
