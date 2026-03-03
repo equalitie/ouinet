@@ -16,14 +16,8 @@ Client Client::noop() {
 }
 
 Client::Client(const fs::path& repo_root_path, EncryptionKey encryption_key)
-    : _impl({ bridge::new_client(
-#ifdef _WIN32
-                  rust::String(repo_root_path.string())
-#else
-                  rust::String(repo_root_path.native())
-#endif
-                , std::move(*encryption_key._impl)
-                , default_delete_after_seconds)})
+    : Client{ repo_root_path, std::move(encryption_key)
+            , default_delete_after_seconds}
 {
 }
 
