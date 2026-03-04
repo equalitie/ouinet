@@ -19,6 +19,7 @@ windows / build:
       - $BUILD_PATH/*lib*
       - $BUILD_PATH/test/test-*
       - $BUILD_PATH/test/bt-*
+      - src/client_lib.h
     expire_in: 6h
   needs:
     []
@@ -36,6 +37,7 @@ windows / unit-test:
       - $BUILD_PATH/injector.exe
       - $BUILD_PATH/*lib*
       - $BUILD_PATH/test/test-*
+      - src/client_lib.h
     expire_in: 6h
   script:
     - $env:PATH = "${CI_PROJECT_DIR}\${BUILD_PATH};$env:PATH"
