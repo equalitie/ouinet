@@ -177,6 +177,13 @@ public class Ouinet {
 
         nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));
 
+        Set<String> dnsProtocols = config.getDnsProtocols();
+        if (dnsProtocols != null) {
+            for (String x : dnsProtocols) {
+                args.add("--dns-protocol=" + x);
+            }
+        }
+
         //registerBroadcastReceivers();
     }
 

@@ -18,7 +18,7 @@ using TcpLookup = asio::ip::tcp::resolver::results_type;
 OUINET_DECL TcpLookup
 resolve_target(const http::request_header<>& req
               , bool allow_private_targets
-              , bool do_doh
+              , std::shared_ptr<dns::Resolver> dns_resolver
               , AsioExecutor exec
               , Cancel& cancel
               , YieldContext yield);
@@ -55,6 +55,7 @@ public:
 
 private:
     InjectorConfig _config;
+    std::shared_ptr<dns::Resolver> _dns_resolver;
     Cancel _cancel;
     std::shared_ptr<bittorrent::DhtBase> _dht;
     std::unique_ptr<asio::ssl::context> _ssl_context;

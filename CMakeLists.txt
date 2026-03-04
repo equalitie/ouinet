@@ -137,10 +137,14 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
-# This is separate from `ouinet_common` because it's also required by
+# These are separate from `ouinet_common` because they're also required by
 # `ouinet_rs`
-add_library(ouinet_logger STATIC "./src/logger.cpp")
-target_link_libraries(ouinet_logger PUBLIC Boost::filesystem)
+add_library(ouinet_common_public
+    STATIC
+    "./src/logger.cpp"
+    "./src/util/log_path.cpp"
+)
+target_link_libraries(ouinet_common_public PUBLIC Boost::filesystem)
 
 ################################################################################
 
@@ -186,7 +190,7 @@ target_link_libraries(ouinet_common
         lib::json
         lib::asio_utp
         ouinet_rs
-        ouinet_logger
+        ouinet_common_public
         # Boost::asio_ssl is public for Android because the ClientConfig used
         # in native-lib.cpp contains ssl::context and we need its move
         # constructor and destructor implementations.

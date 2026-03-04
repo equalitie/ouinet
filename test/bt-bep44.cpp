@@ -164,10 +164,10 @@ int main(int argc, const char** argv)
     asio::io_context ctx;
 
     auto metrics = metrics::Client::noop();
-    bool do_doh = true;
+    auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    unique_ptr<MainlineDht> dht(new MainlineDht(ctx.get_executor(), metrics.mainline_dht(), do_doh, rx_limit));
+    unique_ptr<MainlineDht> dht(new MainlineDht(ctx.get_executor(), metrics.mainline_dht(), dns_resolver, rx_limit));
 
     vector<string> args;
 

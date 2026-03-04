@@ -28,6 +28,8 @@
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
 
+#include "cxx/dns.h"
+
 namespace ouinet {
 
 #define _LOG_FILE_NAME "log.txt"
@@ -163,6 +165,11 @@ public:
 
     bool is_doh_enabled() const {
         return !_disable_doh;
+    }
+
+    dns::Config dns_config() const
+    {
+        return _dns_config;
     }
 
     uint64_t max_request_body_size() const {
@@ -337,14 +344,25 @@ private:
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
-           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
-            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
-              "When this option is present the client will fallback to the default DNS mechanism "
-              "provided by the operating system.")
             ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
             , "Allows using non-origin channels, like injectors, dist-cache, etc, "
               "to fetch targets using private addresses. "
               "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
+            ;
+
+        po::options_description dns("DNS options");
+        dns.add_options()
+           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
+              "When this option is present the client will fallback to the default DNS mechanism "
+              "provided by the operating system. Deprecated, use --dns-protocol instead.")
+           ("dns-protocol", po::value<vector<string>>()
+                                ->composing()
+                                ->default_value(dns_default_protocols,
+                                                util::join(dns_default_protocols, ","))
+            ,"DNS protocols used by the resolver. This option can be set to: plain or https. "
+              "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
+              "the nameservers. The option can be used multiple times to select more than one protocol.")
            ;
 
         po::options_description metrics("Metrics options");
@@ -380,6 +398,7 @@ private:
             .add(injector)
             .add(cache)
             .add(requests)
+            .add(dns)
             .add(metrics);
         return desc;
     }
@@ -528,8 +547,11 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
+    [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
     bool _allow_private_targets = false;
+
+    dns::Config _dns_config;
 
     std::unique_ptr<MetricsConfig> _metrics;
 };

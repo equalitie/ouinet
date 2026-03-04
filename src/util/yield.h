@@ -1,24 +1,19 @@
 #pragma once
 
-#include <sstream>
 #include "../namespaces.h"
 #include "../util/executor.h"
 #include "../util/str.h"
 #include "../util/log_path.h"
 #include "../logger.h"
 #include "../or_throw.h"
-#include "../task.h"
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
-#include <boost/optional.hpp>
 
 namespace ouinet {
 
 using ouinet::util::AsioExecutor;
 
-class YieldContext : public boost::intrusive::list_base_hook
-              < boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
+class YieldContext
 {
 public:
     YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})

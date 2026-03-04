@@ -40,7 +40,6 @@
 #include "default_timeout.h"
 #include "constants.h"
 #include "util/async_queue_reader.h"
-#include "util/dns.h"
 #include "util/queue_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
@@ -207,6 +206,7 @@ public:
                                      , std::move(_config.metrics()->encryption_key)
                                      , _config.metrics()->delete_after_seconds)
                     : metrics::Client::noop())
+        , _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
     {
         LOG_INFO("Repo root: ", _config.repo_root());
 
@@ -337,7 +337,7 @@ public:
         else {
             bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                       , _metrics.mainline_dht()
-                                                      , _config.is_doh_enabled()
+                                                      , _dns_resolver
                                                       , _config.udp_mux_rx_limit_in_bytes()
                                                       , _config.repo_root() / "dht"
                                                       , _config.bt_bootstrap_extras());
@@ -543,10 +543,6 @@ private:
                                        , Request&
                                        , YieldContext);
 
-    // Resolve host and port strings.
-    TcpLookup resolve_tcp_dns( const std::string&, const std::string&
-                             , Cancel&, YieldContext);
-
     GenericStream connect_to_origin( const http::request_header<>&
                                    , const UserAgentMetaData&
                                    , asio::ssl::context&
@@ -684,6 +680,8 @@ private:
     std::string _proxy_endpoint_address;
     std::string _frontend_endpoint;
     std::string _frontend_unix_socket_endpoint;
+
+    shared_ptr<dns::Resolver> _dns_resolver;
 };
 
 //------------------------------------------------------------------------------
@@ -946,18 +944,6 @@ Client::State::fetch_via_self( Rq request, const UserAgentMetaData& meta
     });
 }
 
-TcpLookup
-Client::State::resolve_tcp_dns( const std::string& host
-                              , const std::string& port
-                              , Cancel& cancel
-                              , YieldContext yield)
-{
-    return util::resolve_tcp_async( host, port
-                                  , _ctx.get_executor()
-                                  , cancel
-                                  , static_cast<asio::yield_context>(yield));
-}
-
 GenericStream
 Client::State::connect_to_origin( const http::request_header<>& rq
                                 , const UserAgentMetaData& meta
@@ -965,17 +951,21 @@ Client::State::connect_to_origin( const http::request_header<>& rq
                                 , Cancel& cancel
                                 , YieldContext yield)
 {
-    std::string host, port;
+    std::string host;
+    uint16_t port;
     std::tie(host, port) = util::get_host_port(rq);
 
     sys::error_code ec;
 
-    auto do_doh = _config.is_doh_enabled();
-    auto lookup = do_doh
-        ? util::resolve_tcp_doh(host, port, cancel, yield[ec].tag("resolve_doh"))
-        : resolve_tcp_dns(host, port, cancel, yield[ec].tag("resolve_dns"));
-    _YDEBUG( yield,  do_doh ? "DoH name resolution: " : "DNS name resolution: "
-           , host, "; naddrs=", lookup.size(), " ec=", ec);
+    auto lookup = _dns_resolver->resolve(
+        host,
+        port,
+        cancel,
+        yield[ec].tag("resolve")
+    );
+    _YDEBUG( yield,  "DNS name resolution with protocols: [",
+        dns::Resolver::protos_to_str(_config.dns_config().protocols), "]; ",
+        host, "; naddrs=", lookup.size(), " ec=", ec);
     return_or_throw_on_error(yield, cancel, ec, GenericStream());
 
     auto sock = connect_to_host( lookup, _ctx.get_executor()
