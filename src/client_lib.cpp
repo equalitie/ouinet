@@ -1,5 +1,4 @@
 #include <atomic>
-#include <format>
 #include <thread>
 
 #include "client_lib.h"
@@ -55,7 +54,7 @@ public:
     }
 
     const std::string & set(const std::string_view prefix, const std::string_view value) {
-        return set(std::format("{}{}", prefix, value));
+        return set((boost::format("%1%%2%") % prefix % value).str());
     }
 };
 static AtomicString ouinet_client_error;
@@ -276,7 +275,7 @@ const char *ouinet_client_get_proxy_endpoint() {
     asio::post(g_ctx, [&value_is_known] {
         if (g_client) {
             const auto ep = g_client->get_proxy_endpoint();
-            ouinet_client_c_str_storage.set(std::format("{}:{}", ep.address().to_string(), ep.port()));
+            ouinet_client_c_str_storage.set((boost::format("%1%:%2%") % ep.address().to_string() % ep.port()).str());
         } else
             ouinet_client_c_str_storage.set("");
         value_is_known.test_and_set();
