@@ -1,0 +1,49 @@
+#pragma once
+
+#include <set>
+#include <string>
+#include <memory>
+#include <boost/asio/spawn.hpp>
+#include "node_id.h"
+#include "namespaces.h"
+#include "util/signal.h"
+
+namespace ouinet::ouiservice::i2poui { class Client; class Service; }
+
+namespace ouinet { namespace bittorrent {
+
+// Encapsulates the BEP3 HTTP tracker protocol over I2P,
+// analogous to how DhtBase encapsulates the DHT protocol.
+class Bep3Tracker {
+public:
+    using Executor = boost::asio::any_io_executor;
+    Bep3Tracker( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+               , std::string tracker_id
+               , std::string serving_i2p_id);
+
+    // Start the I2P tunnel if not already started, no-op otherwise
+    void ensure_started(Cancel&, asio::yield_context);
+
+    void tracker_announce(NodeID infohash, Cancel&, asio::yield_context);
+
+    std::set<std::string> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
+
+    Executor get_executor();
+
+private:
+    // Send an HTTP GET request to the tracker per the BEP 3 tracker protocol
+    // (https://www.bittorrent.org/beps/bep_0003.html) with I2P amendments
+    // (https://geti2p.net/en/docs/applications/bittorrent):
+    // the ip field carries the Base64 I2P Destination instead of an IP address.
+    // Builds common query parameters and appends extra_params,
+    // returns the response body.
+    std::string send_request(const std::string& extra_params, Cancel&, asio::yield_context);
+
+    static NodeID generate_random_peer_id();
+
+    std::shared_ptr<ouiservice::i2poui::Client> _i2p_client;
+    std::string _serving_i2p_id;
+    bool _started = false;
+};
+
+}} // namespaces

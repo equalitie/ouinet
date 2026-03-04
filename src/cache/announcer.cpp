@@ -14,10 +14,7 @@
 #include <boost/utility/string_view.hpp>
 
 #ifdef __EXPERIMENTAL__
-#include "ouiservice/i2p/client.h"
-#include "../util.h"
-#include <boost/beast/http.hpp>
-#include <boost/beast/core/flat_buffer.hpp>
+#include <bittorrent/bep3_tracker.h>
 #endif
 
 #define _LOGPFX "Announcer: "
@@ -349,33 +346,13 @@ struct Bep5Loop : public Announcer::Loop {
 // Bep3Loop - announces via HTTP to tracker over I2P
 
 struct Bep3Loop : public Announcer::Loop {
-    unique_ptr<ouiservice::i2poui::Client> i2p_client;
-    string serving_i2p_id;  // Base64 I2P address for peer connections
-    bt::NodeID peer_id;
+    shared_ptr<bt::Bep3Tracker> tracker;
 
-    Bep3Loop( unique_ptr<ouiservice::i2poui::Client> i2p_client
-            , string serving_i2p_id
+    Bep3Loop( shared_ptr<bt::Bep3Tracker> tracker
             , size_t simultaneous_announcements)
-        : Loop(i2p_client->get_executor(), simultaneous_announcements)
-        , i2p_client(move(i2p_client))
-        , serving_i2p_id(move(serving_i2p_id))
-        , peer_id(generate_random_peer_id())
+        : Loop(tracker->get_executor(), simultaneous_announcements)
+        , tracker(move(tracker))
     { }
-
-    // Generate a random 20-byte peer ID with Ouinet client prefix
-    static bt::NodeID generate_random_peer_id() {
-        bt::NodeID::Buffer buf;
-        std::srand(std::time(nullptr));
-        for (auto& b : buf) {
-            b = std::rand() % 256;
-        }
-        // Set a client identifier prefix (e.g., "-OU0001-" for Ouinet)
-        const char* prefix = "-OU0001-";
-        for (size_t i = 0; i < 8 && i < buf.size(); ++i) {
-            buf[i] = static_cast<uint8_t>(prefix[i]);
-        }
-        return bt::NodeID(buf);
-    }
 
     void start()
     {
@@ -383,11 +360,10 @@ struct Bep3Loop : public Announcer::Loop {
             Cancel cancel(_cancel);
             sys::error_code ec;
 
-            // Start the I2P client (establishes the tunnel)
             {
                 TRACK_HANDLER();
                 _DEBUG("Starting I2P client for BEP3 tracker");
-                i2p_client->start(yield[ec]);
+                tracker->ensure_started(cancel, yield[ec]);
             }
 
             if (ec) {
@@ -406,61 +382,7 @@ struct Bep3Loop : public Announcer::Loop {
         sys::error_code ec;
         auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
 
-        // Connect to get a stream
-        auto stream = i2p_client->connect(yield[ec], cancel);
-        if (ec) {
-            _DEBUG("Announcing (BEP3/I2P): ", e_key, ": failed to connect; ec=", ec);
-            return or_throw(yield, ec);
-        }
-
-        // Build the announce URL query string
-        string info_hash_encoded = util::percent_encode(e.infohash.to_bytestring());
-        string peer_id_encoded = util::percent_encode(peer_id.to_bytestring());
-
-        // Fake port for compatibility with older trackers.
-        // Trackers may ignore this parameter and should not require it.
-        uint16_t fake_port = 6881;
-
-        ostringstream target;
-        target << "/a"
-               << "?info_hash=" << info_hash_encoded
-               << "&peer_id=" << peer_id_encoded
-               << "&port=" << fake_port
-               << "&ip=" << serving_i2p_id << ".i2p"
-               << "&uploaded=0"
-               << "&downloaded=0"
-               << "&left=1"
-               << "&compact=1"
-               << "&event=started"
-               << "&numwant=24";
-
-        // Create HTTP request
-        http::request<http::empty_body> req{http::verb::get, target.str(), 11};
-        req.set(http::field::host, i2p_client->get_target_id());
-        req.set(http::field::user_agent, "Ouinet/1.0");
-
-        // Send the request
-        auto cancelled = cancel.connect([&] { stream.close(); });
-        http::async_write(stream, req, yield[ec]);
-        if (ec) {
-            _DEBUG("Announcing (BEP3/I2P): ", e_key, ": failed to send request; ec=", ec);
-            return or_throw(yield, ec);
-        }
-
-        // Read the response
-        beast::flat_buffer buffer;
-        http::response<http::string_body> res;
-        http::async_read(stream, buffer, res, yield[ec]);
-        if (ec) {
-            _DEBUG("Announcing (BEP3/I2P): ", e_key, ": failed to read response; ec=", ec);
-            return or_throw(yield, ec);
-        }
-
-        // Check response status
-        if (res.result() != http::status::ok) {
-            _DEBUG("Announcing (BEP3/I2P): ", e_key, ": tracker returned status ", static_cast<int>(res.result()));
-            return or_throw(yield, asio::error::connection_refused);
-        }
+        tracker->tracker_announce(e.infohash, cancel, yield[ec]);
 
         _DEBUG("Announcing (BEP3/I2P): ", e_key, ": done; ec=", ec);
 
@@ -501,12 +423,11 @@ Bep5Announcer::~Bep5Announcer() {}
 #ifdef __EXPERIMENTAL__
 //--------------------------------------------------------------------
 // Bep3Announcer
-Bep3Announcer::Bep3Announcer( std::unique_ptr<ouiservice::i2poui::Client> i2p_client
-                            , std::string serving_i2p_id
+Bep3Announcer::Bep3Announcer( std::shared_ptr<bt::Bep3Tracker> tracker
                             , size_t simultaneous_announcements)
-    : Announcer(i2p_client->get_executor(), simultaneous_announcements)
+    : Announcer(tracker->get_executor(), simultaneous_announcements)
 {
-    _loop = make_unique<Bep3Loop>(move(i2p_client), move(serving_i2p_id), simultaneous_announcements);
+    _loop = make_unique<Bep3Loop>(move(tracker), simultaneous_announcements);
     static_cast<Bep3Loop*>(_loop.get())->start();
 }
 

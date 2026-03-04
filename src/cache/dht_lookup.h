@@ -2,9 +2,8 @@
 
 #include <functional>
 #include <set>
-#include <util/async_job.h>
-#include <util/hash.h>
 #include <bittorrent/mainline_dht.h>
+#include "peer_lookup.h"
 
 namespace std {
     template<> struct hash<ouinet::bittorrent::NodeID> {
@@ -16,149 +15,38 @@ namespace std {
 
 namespace ouinet { namespace cache {
 
-class DhtLookup {
-private:
-    using Clock = std::chrono::steady_clock;
+class DhtLookup : public PeerLookup<std::set<asio::ip::udp::endpoint>> {
     using udp = asio::ip::udp;
-    using tcp = asio::ip::tcp;
-    using Ret = std::set<udp::endpoint>;
-    using Job = AsyncJob<boost::none_t>;
-    using NodeID = bittorrent::NodeID;
-
-    struct Result {
-        sys::error_code   ec = asio::error::no_data;
-        Ret               value;
-        Clock::time_point time;
-
-        bool is_fresh() const {
-            using namespace std::chrono_literals;
-            if (ec) return false;
-            return time + 5min >= Clock::now();
-        }
-    };
-
-    static Clock::duration timeout() {
-#ifndef NDEBUG // debug
-        return std::chrono::minutes(1);
-#else // release
-        return std::chrono::minutes(3);
-#endif
-    }
 
 public:
     DhtLookup(DhtLookup&&) = delete;
 
     DhtLookup(std::weak_ptr<bittorrent::DhtBase> dht_w, std::string swarm_name)
-        : _swarm_name(std::move(swarm_name))
-        , _infohash(util::sha1_digest(_swarm_name))
-        , _exec(dht_w.lock()->get_executor())
+        : PeerLookup(std::move(swarm_name), dht_w.lock()->get_executor())
         , _dht_w(dht_w)
-        , _cv(_exec)
-    { }
-
-    Ret get(Cancel c, asio::yield_context y) {
-        // * Start a new job if one isn't already running
-        // * Use previously returned result if it's not older than 5mins
-        // * Otherwise wait for the running job to finish
-
-        auto cancel_con = _lifetime_cancel.connect([&] { c(); });
-
-        if (!_job) {
-            _job = make_job();
-        }
-
-        if (_last_result.is_fresh()) {
-            return _last_result.value;
-        }
-
-#ifndef NDEBUG
-        auto wd = watch_dog(_exec, timeout() + std::chrono::seconds(5), [&] {
-                LOG_ERROR("DHT BEP5 DhtLookup::get failed to time out");
-            });
-#endif
-
-        sys::error_code ec;
-        _cv.wait(c, y[ec]);
-
-        return_or_throw_on_error(y, c, ec, Ret{});
-
-        // (ec == operation_aborted) implies (c == true)
-        assert(_last_result.ec != asio::error::operation_aborted || c);
-
-        return or_throw(y, _last_result.ec, _last_result.value);
-    }
-
-    ~DhtLookup() { _lifetime_cancel(); }
-
-    NodeID infohash() const {
-        return _infohash;
-    }
-
-    const std::string& swarm_name() const {
-        return _swarm_name;
+    {
+        _lookup_strategy_name = "DHT BEP5";
     }
 
     std::shared_ptr<bittorrent::DhtBase> get_dht_lock() {
         return _dht_w.lock();
     }
 
-private:
+protected:
+    Ret do_lookup(Cancel& c, asio::yield_context y) override {
+        auto dht = _dht_w.lock();
+        assert(dht);
 
-    std::unique_ptr<Job> make_job() {
-        auto job = std::make_unique<Job>(_exec);
+        if (!dht)
+            return or_throw(y, asio::error::operation_aborted, Ret{});
 
-        job->start([ self = this
-                   , dht_w = _dht_w
-                   , infohash = _infohash
-                   , lc = std::make_shared<Cancel>(_lifetime_cancel)
-                   ] (Cancel c, asio::yield_context y) mutable {
-            auto cancel_con = lc->connect([&] { c(); });
-
-            auto on_exit = defer([&] {
-                    if (*lc) return;
-                    self->_cv.notify();
-                    self->_job = nullptr;
-                });
-
-            auto wd = watch_dog(self->_exec, timeout(), [&] {
-                    LOG_WARN("DHT BEP5 lookup ", infohash, " timed out");
-                    c();
-                });
-
-            auto dht = dht_w.lock();
-            assert(dht);
-
-            if (!dht)
-                return or_throw( y
-                               , asio::error::operation_aborted
-                               , boost::none);
-
-            sys::error_code ec;
-
-            auto eps = dht->tracker_get_peers(infohash, c, y[ec]);
-
-            if (!c && !ec) {
-                self->_last_result.ec    = ec;
-                self->_last_result.value = move(eps);
-                self->_last_result.time  = Clock::now();
-            }
-
-            return or_throw(y, ec, boost::none);
-        });
-
-        return job;
+        sys::error_code ec;
+        auto eps = dht->tracker_get_peers(infohash(), c, y[ec]);
+        return or_throw(y, ec, std::move(eps));
     }
 
 private:
-    std::string _swarm_name;
-    NodeID _infohash;
-    AsioExecutor _exec;
     std::weak_ptr<bittorrent::DhtBase> _dht_w;
-    std::unique_ptr<Job> _job;
-    ConditionVariable _cv;
-    Result _last_result;
-    Cancel _lifetime_cancel;
 };
-
 
 }} // namespaces

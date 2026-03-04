@@ -65,6 +65,8 @@ choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
     return boost::none;
 }
 
+// TODO: For I2P peers, use i2p_client->connect() instead,
+// which also returns a GenericStream.
 static
 GenericStream connect( AsioExecutor exec
                      , udp::endpoint ep
@@ -268,6 +270,7 @@ public:
         return rq;
     }
 
+    // TODO: For I2P peers, we need an I2P client with set  destination instead of udp::endpoint somehow.
     void download_hash_list(
             udp::endpoint ep,
             const set<udp::endpoint>& lan_my_eps,
@@ -376,6 +379,7 @@ public:
                , move(newest_proto_seen), move(log_path))
     {}
 
+    // TODO: For I2P peers, we need an I2P client instead of udp::endpoint.
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
         if (dht.is_martian(ep)) return;
         if (_wan_my_eps.count(ep)) return;

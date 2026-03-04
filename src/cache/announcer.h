@@ -11,7 +11,7 @@ using util::AsioExecutor;
 }} // namespaces
 
 #ifdef __EXPERIMENTAL__
-namespace ouinet::ouiservice::i2poui { class Client; }
+namespace ouinet { namespace bittorrent { class Bep3Tracker; }}
 #endif
 
 namespace ouinet { namespace cache {
@@ -46,8 +46,7 @@ public:
 // BEP3 Announcer - announces via HTTP to tracker over I2P
 class Bep3Announcer : public Announcer {
 public:
-    Bep3Announcer( std::unique_ptr<ouiservice::i2poui::Client> i2p_client
-                 , std::string serving_i2p_id
+    Bep3Announcer( std::shared_ptr<bittorrent::Bep3Tracker> tracker
                  , size_t simultaneous_announcements);
     ~Bep3Announcer();
 };

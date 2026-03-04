@@ -13,6 +13,8 @@
 #include "../ouiservice/utp.h"
 #ifdef __EXPERIMENTAL__
 #include "../ouiservice/i2p/service.h"
+#include <bittorrent/bep3_tracker.h>
+#include "bep3_tracker_lookup.h"
 #endif
 #include "../logger.h"
 #include "../async_sleep.h"
@@ -106,11 +108,15 @@ struct Client::Impl {
     Cancel _lifetime_cancel;
     std::unique_ptr<Bep5Announcer> _bep5_announcer;
 #ifdef __EXPERIMENTAL__
+    std::shared_ptr<bt::Bep3Tracker> _bep3_tracker;
     std::unique_ptr<Bep3Announcer> _bep3_announcer;
 #endif // __EXPERIMENTAL__
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
-    util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
+    util::LruCache<std::string, shared_ptr<DhtLookup>> _dht_peer_lookups;
+#ifdef __EXPERIMENTAL__
+    util::LruCache<std::string, shared_ptr<Bep3TrackerLookup>> _tracker_peer_lookups;
+#endif // __EXPERIMENTAL__
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<Groups> _groups;
 
@@ -135,7 +141,10 @@ struct Client::Impl {
         , _gc(*_http_store, [&] (auto rr, auto y) {
               return keep_cache_entry(move(rr), y);
           }, _ex)
-        , _peer_lookups(256)
+        , _dht_peer_lookups(256)
+#ifdef __EXPERIMENTAL__
+        , _tracker_peer_lookups(256)
+#endif
         , _local_peer_discovery(_ex, _lan_my_endpoints)
     {}
 
@@ -152,15 +161,18 @@ struct Client::Impl {
         if (_bep3_announcer) return false;
         if (!i2p_service) return false;  // i2p not enabled
 
-        // Build the i2p client for connecting to the tracker
-        auto i2p_client = i2p_service->build_client(tracker_id);
-
         // Build the i2p server to get our public identity for peer connections
         auto i2p_server = i2p_service->build_server("bep3-server-key");
-        string serving_i2p_id = i2p_server->public_identity();
+        auto serving_i2p_id = i2p_server->public_identity();
 
+        _bep3_tracker = make_shared<bt::Bep3Tracker>(
+            move(i2p_service), move(tracker_id), move(serving_i2p_id));
+
+        // NOTE: The announcer eagerly calls ensure_started() on the tracker,
+        // to kick start the I2P tunnel, even though bep3_tracker try to start
+        // the tunnel before sending request if hasn't started anyway.
         _bep3_announcer = std::make_unique<Bep3Announcer>(
-            std::move(i2p_client), std::move(serving_i2p_id), simultaneous_announcements);
+            _bep3_tracker, simultaneous_announcements);
 
         // Announce all groups.
         for (auto& group_name : _groups->groups())
@@ -400,19 +412,36 @@ struct Client::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
-    shared_ptr<DhtLookup> peer_lookup(std::string swarm_name)
+    shared_ptr<DhtLookup> dht_peer_lookup(std::string swarm_name)
     {
         assert(_dht);
 
-        auto* lookup = _peer_lookups.get(swarm_name);
+        auto* lookup = _dht_peer_lookups.get(swarm_name);
 
         if (!lookup) {
-            lookup = _peer_lookups.put( swarm_name
+            lookup = _dht_peer_lookups.put( swarm_name
                                       , make_shared<DhtLookup>(_dht, swarm_name));
         }
 
         return *lookup;
     }
+
+#ifdef __EXPERIMENTAL__
+    shared_ptr<Bep3TrackerLookup> tracker_peer_lookup(std::string swarm_name)
+    {
+        assert(_bep3_tracker);
+
+        auto* lookup = _tracker_peer_lookups.get(swarm_name);
+
+        if (!lookup) {
+            lookup = _tracker_peer_lookups.put( swarm_name
+                , make_shared<Bep3TrackerLookup>(
+                    _bep3_tracker, swarm_name));
+        }
+
+        return *lookup;
+    }
+#endif // __EXPERIMENTAL__
 
     Session load( const std::string& key
                 , const GroupName& group
@@ -462,7 +491,7 @@ struct Client::Impl {
         if (_dht) {
             metrics = metrics_client.new_cache_in_request();
 
-            auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
+            auto peer_lookup_ = dht_peer_lookup(compute_swarm_name(group));
 
             auto local_peers = _local_peer_discovery.found_peers();
 
@@ -485,7 +514,36 @@ struct Client::Impl {
                 , move(peer_lookup_)
                 , _newest_proto_seen
                 , log_path);
-        } else {
+        }
+#ifdef __EXPERIMENTAL__
+        else if (_bep3_tracker) {
+            auto tracker_lookup_ = tracker_peer_lookup(compute_swarm_name(group));
+
+            auto local_peers = _local_peer_discovery.found_peers();
+
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Peer lookup with BEP3 tracker and local discovery:");
+                LOG_DEBUG(*log_path, "    key=         ", key);
+                LOG_DEBUG(*log_path, "    group=       ", group);
+                LOG_DEBUG(*log_path, "    swarm_name=  ", tracker_lookup_->swarm_name());
+                LOG_DEBUG(*log_path, "    infohash=    ", tracker_lookup_->infohash());
+                LOG_DEBUG(*log_path, "    local_peers= ", local_peers);
+            };
+
+            // TODO: It seems that MultiPeerReader hard coded to connects to
+            // udp::endpoint We should modify it to also connect to i2pclient
+            // perform a local lookup as place holder V
+            reader = std::make_unique<MultiPeerReader>
+                ( _ex
+                , key
+                , _cache_pk
+                , move(local_peers)
+                , _lan_my_endpoints
+                , _newest_proto_seen
+                , log_path);
+        }
+#endif // __EXPERIMENTAL__
+        else {
             auto local_peers = _local_peer_discovery.found_peers();
 
             if (log_path) {
