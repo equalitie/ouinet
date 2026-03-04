@@ -376,6 +376,16 @@ client_state(Client::RunningState cstate) {
     return "(unknown)";
 }
 
+static
+std::vector<std::string>
+dns_protocols(const ClientConfig& config)
+{
+    std::vector<std::string> protos;
+    for (const auto& prt : config.dns_config().protocols)
+        protos.emplace_back(dns::bridge::proto_to_str(prt).c_str());
+    return protos;
+}
+
 void ClientFrontEnd::handle_group_list( const Request&
                                       , Response& res
                                       , std::ostringstream& ss
@@ -621,6 +631,10 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
     ss << "<br>\n";
 
+    ss << "DNS protocols enabled: "
+       << dns::Resolver::protos_to_str(config.dns_config().protocols)
+       << ".<br><br>\n";
+
     ss << "DNS over HTTPS: "
        << ( config.is_doh_enabled()
           ? "enabled"
@@ -710,6 +724,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << "<h2>Metrics</h2>\n";
     ss << ToggleInput{"<u>M</u>etrics",'m', "metrics", metrics.is_enabled()};
 
+    if (metrics.is_enabled())
+    {
+        ss << "Delete records after: "
+           << std::to_string(config.metrics()->delete_after_seconds)
+           << " seconds <br><br>\n";
+    }
+
     // Highlight the label/form containing the input selected via the URL fragment.
     ss << "<script>var eid = window.location.hash.substr(1); "
           "if (eid) { var e = document.getElementById(eid); "
@@ -751,6 +772,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
         {"doh_enabled", config.is_doh_enabled()},
+        {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
 
@@ -770,6 +792,10 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
     response["bt_extra_bootstraps"] = bt_extra_bootstraps(config);
 
     if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
+
+    if  (metrics.is_enabled()) {
+        response["metrics_delete_after"] = config.metrics()->delete_after_seconds;
+    }
 
     if (auto record_id = metrics.current_record_id(); record_id.has_value()) {
         response["current_metrics_record_id"] = *record_id;

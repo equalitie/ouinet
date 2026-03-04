@@ -312,9 +312,39 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
+
+
+    // Pre-load opt_protos to keep compatibility with disable-doh
+    auto opt_protos = as_optional<vector<string>>(vm, "dns-protocol");
+
+    // If disable-doh is present 'https' is removed from protocols selected by 'dns-protocols`
+    // the mechanism makes sure that at least one protocol is selected otherwise adds
+    // 'plain' to 'dns-protocols' list.
+    // This code will be deleted too when the deprecated option `disable-doh` is removed.
     if (vm["disable-doh"].as<bool>()) {
+        LOG_WARN("Option '--disable-doh' is deprecated, use '--dns-protocol' instead");
+        auto doh = std::find( opt_protos->begin(), opt_protos->end(), "https");
+        if (doh != opt_protos->end())
+            opt_protos->erase(doh);
+        if (opt_protos->empty())
+            opt_protos->emplace_back("plain");
         _disable_doh = true;
     }
+
+    for (const auto& proto_name : *opt_protos) {
+        dns::bridge::Protocol proto;
+        try {
+            proto = dns::bridge::str_to_proto(proto_name);
+        } catch (const rust::Error&) {
+            throw error("Invalid argument for option --dns-protocol: ", proto_name);
+        }
+
+        if ( ranges::find(_dns_config.protocols, proto) ==  _dns_config.protocols.end())
+            _dns_config.protocols.emplace_back(proto);
+    }
+    LOG_DEBUG( "DNS protocols enabled: ["
+             , dns::Resolver::protos_to_str(_dns_config.protocols)
+             , "]");
 
     if (vm["allow-private-targets"].as<bool>()) {
         _allow_private_targets = true;
@@ -331,6 +361,7 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     std::optional<metrics::EncryptionKey> encryption_key;
+    uint64_t delete_after_seconds;
 
     if (auto opt = as_optional<std::string>(vm, "metrics-server-url")) {
         auto url = util::Url::from(*opt);
@@ -376,7 +407,12 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
 
     if (server_url) {
         if (auto opt = as_optional<std::string>(vm, "metrics-encryption-key")) {
-            encryption_key = metrics::EncryptionKey::validate(*opt);
+            auto key_str= *opt;
+            if ( !key_str.starts_with("-----BEGIN") ) {
+                key_str = "-----BEGIN PUBLIC KEY-----\n" + key_str + "\n"
+                          "-----END PUBLIC KEY-----\n";
+            }
+            encryption_key = metrics::EncryptionKey::validate(key_str);
             if (!encryption_key) {
                 throw error("Failed to validate --metrics-encryption-key");
             }
@@ -387,6 +423,10 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
 
     if (!server_url) return nullptr;
 
+    if (auto opt = as_optional<std::uint64_t>(vm, "metrics-delete-after")) {
+        delete_after_seconds = *opt;
+    }
+
     return std::unique_ptr<MetricsConfig>(
             new MetricsConfig {
                 enable_on_start,
@@ -394,6 +434,7 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
                 std::move(server_token),
                 std::move(server_cacert),
                 std::move(*encryption_key),
+                delete_after_seconds,
             });
 }
 
