@@ -80,6 +80,7 @@ public class Config implements Parcelable {
         // Set either-or, not both.
         private String metricsServerTlsCaCert;
         private String metricsServerTlsCaCertPath;
+        private String metricsDeleteAfter;
 
         public ConfigBuilder(Context context) {
             Ouinet.maybeLoadLibraries(context);
@@ -241,6 +242,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setMetricsServerTlsCaCertPath(String path) {
             this.metricsServerTlsCaCertPath = path;
+            return this;
+        }
+        public ConfigBuilder setMetricsDeleteAfter(String metricsDeleteAfter){
+            this.metricsDeleteAfter = metricsDeleteAfter;
             return this;
         }
 
@@ -436,7 +441,8 @@ public class Config implements Parcelable {
                     metricsServerToken,
                     metricsEncryptionKey,
                     metricsServerTlsCaCert,
-                    metricsServerTlsCaCertPath);
+                    metricsServerTlsCaCertPath,
+                    metricsDeleteAfter);
         }
     }
 
@@ -477,6 +483,7 @@ public class Config implements Parcelable {
     private String metricsEncryptionKey;
     private String metricsServerTlsCaCert;
     private String metricsServerTlsCaCertPath;
+    private String metricsDeleteAfter;
 
     private Config(String ouinetDirectory,
                   Set<String> btBootstrapExtras,
@@ -514,7 +521,8 @@ public class Config implements Parcelable {
                   String metricsServerToken,
                   String metricsEncryptionKey,
                   String metricsServerTlsCaCert,
-                  String metricsServerTlsCaCertPath) {
+                  String metricsServerTlsCaCertPath,
+                  String metricsDeleteAfter) {
         this.ouinetDirectory = ouinetDirectory;
         this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
         this.cacheHttpPubKey = cacheHttpPubKey;
@@ -552,6 +560,7 @@ public class Config implements Parcelable {
         this.metricsEncryptionKey = metricsEncryptionKey;
         this.metricsServerTlsCaCert = metricsServerTlsCaCert;
         this.metricsServerTlsCaCertPath = metricsServerTlsCaCertPath;
+        this.metricsDeleteAfter = metricsDeleteAfter;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -664,6 +673,9 @@ public class Config implements Parcelable {
     public String getMetricsServerTlsCaCertPath() {
         return metricsServerTlsCaCertPath;
     }
+    public String getMetricsDeleteAfter() {
+        return metricsDeleteAfter;
+    }
 
     public static final Parcelable.Creator<Config> CREATOR
             = new Parcelable.Creator<Config>() {
@@ -721,6 +733,7 @@ public class Config implements Parcelable {
         out.writeString(metricsEncryptionKey);
         out.writeString(metricsServerTlsCaCert);
         out.writeString(metricsServerTlsCaCertPath);
+        out.writeString(metricsDeleteAfter);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -773,6 +786,7 @@ public class Config implements Parcelable {
         metricsEncryptionKey = in.readString();
         metricsServerTlsCaCert = in.readString();
         metricsServerTlsCaCertPath = in.readString();
+        metricsDeleteAfter = in.readString();
     }
 
 }

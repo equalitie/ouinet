@@ -161,6 +161,7 @@ public class Ouinet {
         maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
         maybeAdd    (args, "--metrics-server-cacert",       config.getMetricsServerTlsCaCert());
         maybeAdd    (args, "--metrics-server-cacert-file",  config.getMetricsServerTlsCaCertPath());
+        maybeAdd    (args, "--metrics-delete-after",        config.getMetricsDeleteAfter());
 
         Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
         if (btBootstrapExtras != null) {
