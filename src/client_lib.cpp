@@ -7,33 +7,28 @@
 
 using namespace ouinet;
 
-// One writer, many readers.
-// Each reader has a thread local std::string copy,
-// to make sure that the c_str()'s underlying memory is not rug pulled
-// until the next invocation of get_c_str().
+// One writer, one reader.
+// Reader has a copy to make sure that the c_str()'s underlying memory
+// is not rug pulled until the next invocation of get_c_str().
 class AtomicString {
     std::string master_value;
-    std::atomic_uint readers_in_progress = 0;
+    std::string read_copy;
+    std::atomic_flag read_in_progress;
     std::atomic_flag write_in_progress;
 public:
-    // thread_local is probably extra expensive,
-    // but I need a way to return c_str() in a thread safe way,
-    // and I do not want to worry about the underlying memory being changed.
-    // This thread_safe model makes sure that the same thread can use c_str() value however long it wants,
-    // until the same thread calls for a new c_str() again.
     const char *get_c_str() {
-        thread_local std::string read_copy;
-
         bool read_lock_acquired = false;
         while (!read_lock_acquired) {
-            while (write_in_progress.test()) {
-                write_in_progress.wait(true);
+            write_in_progress.wait(true);
+
+            while (read_in_progress.test_and_set()) {
+                read_in_progress.wait(true);
             }
-            readers_in_progress.fetch_add(1);
+
             if (write_in_progress.test()) {
-                if (readers_in_progress.fetch_sub(1) == 1) {
-                    readers_in_progress.notify_one();
-                }
+                read_in_progress.clear();
+                read_in_progress.notify_one();
+
                 std::this_thread::yield();
             } else
                 read_lock_acquired = true;
@@ -41,20 +36,16 @@ public:
 
         read_copy = master_value;
 
-        if (readers_in_progress.fetch_sub(1) == 1) {
-            readers_in_progress.notify_one();
-        }
+        read_in_progress.clear();
+        read_in_progress.notify_one();
+
         return read_copy.c_str();
     }
 
     const std::string & set(const std::string_view value) {
         write_in_progress.test_and_set();
 
-        int readers_now = readers_in_progress.load();
-        while (readers_now != 0) {
-            readers_in_progress.wait(readers_now);
-            readers_now = readers_in_progress.load();
-        }
+        read_in_progress.wait(true);
 
         master_value = value;
         write_in_progress.clear();
