@@ -34,14 +34,16 @@
     #define OUINET_CLIENT_LIBRARY_API OUINET_CLIENT_DLL_IMPORT
 #endif
 
-// returns 0 on success
+// returns EXIT_SUCCESS on init success
+//  EXIT_FAILURE on init failure
 OUINET_CLIENT_EXTERN_C OUINET_CLIENT_LIBRARY_API
 int ouinet_client_run(int argc, const char *argv[], void(*on_exit_callback)(int));
 
-// Supply 0 to return without waiting for ouinet to finish
-// Subsequent ouinet_client_run will block until the previous run is complete
 OUINET_CLIENT_EXTERN_C OUINET_CLIENT_LIBRARY_API
-void ouinet_client_stop(int block_until_client_is_stopped);
+void ouinet_client_stop_and_detach();
+
+OUINET_CLIENT_EXTERN_C OUINET_CLIENT_LIBRARY_API
+void ouinet_client_stop_and_wait_for_completion();
 
 OUINET_CLIENT_EXTERN_C OUINET_CLIENT_LIBRARY_API
 const char* ouinet_client_get_error();

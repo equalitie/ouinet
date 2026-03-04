@@ -1,4 +1,5 @@
 #include <atomic>
+#include <format>
 #include <thread>
 
 #include "client_lib.h"
@@ -145,11 +146,11 @@ int ouinet_client_run(const int argc, const char *argv[], void (*on_exit_callbac
     std::atomic_flag init_is_complete;
 
     g_client_thread = std::thread([&] {
+        Destructor_AtomicFlag ouinet_client_is_already_running_guard(ouinet_client_is_already_running, false);
+
         Destructor_AtomicFlag init_is_complete_guard(init_is_complete, true);
 
         Destructor_CallOnExit on_exit_caller(on_exit_callback, EXIT_FAILURE);
-
-        Destructor_AtomicFlag ouinet_client_is_already_running_guard(ouinet_client_is_already_running, false);
 
         if (g_client) {
             LOG_ERROR(ouinet_client_error.set("Unexpected ouinet::Client reinitialization"));
@@ -179,7 +180,7 @@ int ouinet_client_run(const int argc, const char *argv[], void (*on_exit_callbac
             g_client = std::make_unique<ouinet::Client>(g_ctx, std::move(cfg));
             g_client->start();
         } catch (std::exception const &e) {
-            LOG_ABORT(ouinet_client_error.set("Exception thrown while trying to start Ouinet client: ", e.what()));
+            LOG_ERROR(ouinet_client_error.set("Error while trying to start Ouinet client: ", e.what()));
             g_client.reset();
             return;
         }
@@ -187,22 +188,29 @@ int ouinet_client_run(const int argc, const char *argv[], void (*on_exit_callbac
         init_was_success.test_and_set();
         init_is_complete_guard.set(true);
 
+        int retval = EXIT_SUCCESS;
+
         try {
             g_ctx.run();
         } catch (const std::exception &e) {
-            LOG_ABORT(ouinet_client_error.set("Exception thrown while running Ouinet client\n", e.what()));
-            g_client.reset();
+            LOG_ERROR(ouinet_client_error.set("Error while running Ouinet client\n", e.what()));
+            retval = EXIT_FAILURE;
         }
 
         LOG_DEBUG("Ouinet's main loop stopped.");
         g_client.reset();
-        on_exit_caller.call(EXIT_SUCCESS);
+        on_exit_caller.call(retval);
     });
     init_is_complete.wait(false);
-    return init_was_success.test() ? EXIT_SUCCESS : EXIT_FAILURE;
+    if (!init_was_success.test()) {
+        g_client_thread.join();
+        g_client_thread = std::thread();
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }
 
-void ouinet_client_stop(const int block_until_client_is_stopped) {
+void ouinet_client_stop_and_detach() {
     if (!g_client_thread.joinable())
         return;
 
@@ -213,15 +221,29 @@ void ouinet_client_stop(const int block_until_client_is_stopped) {
                 g_client->stop();
             }
         } catch (const std::exception &e) {
-            LOG_ABORT(ouinet_client_error.set("Failed to stop Ouinet client: ", e.what()));
+            LOG_ERROR(ouinet_client_error.set("Failed to stop Ouinet client: ", e.what()));
         }
     });
-    if (0 != block_until_client_is_stopped) {
-        g_client_thread.join();
-        g_client_thread = std::thread();
-    } else {
-        g_client_thread.detach();
-    }
+    g_client_thread.detach();
+    g_client_thread = std::thread();
+}
+
+void ouinet_client_stop_and_wait_for_completion() {
+    if (!g_client_thread.joinable())
+        return;
+
+    asio::post(g_ctx, [] {
+        try {
+            HandlerTracker::stopped();
+            if (g_client) {
+                g_client->stop();
+            }
+        } catch (const std::exception &e) {
+            LOG_ERROR(ouinet_client_error.set("Failed to stop Ouinet client: ", e.what()));
+        }
+    });
+    g_client_thread.join();
+    g_client_thread = std::thread();
 }
 
 int ouinet_client_get_client_state() {
