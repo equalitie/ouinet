@@ -1,4 +1,4 @@
-use std::{future::Future, net::IpAddr, sync::Arc};
+use std::{fmt, future::Future, net::IpAddr, sync::Arc};
 
 use cxx::UniquePtr;
 use ffi::IpAddress;
@@ -37,8 +37,6 @@ mod ffi {
         Plain = 0,
         // DNS over HTTPS
         Https = 1,
-        // Not defined
-        Undefined = 99,
     }
 
     struct Config {
@@ -50,7 +48,7 @@ mod ffi {
 
         fn new_resolver(cfg: Config) -> Box<Resolver>;
         fn resolve(&mut self, name: &str, completer: UniquePtr<BasicCompleter>);
-        fn str_to_proto(s: &str) -> Protocol;
+        fn str_to_proto(s: &str) -> Result<Protocol>;
 
         fn proto_to_str(p: Protocol) -> String;
     }
@@ -69,12 +67,11 @@ mod ffi {
         fn on_cancel(self: Pin<&mut BasicCompleter>, token: Box<CancellationToken>);
     }
 }
-
-fn str_to_proto(s: &str) -> Protocol {
+fn str_to_proto(s: &str) -> Result<Protocol, ProtocolParseError> {
     match s {
-        "plain" => Protocol::Plain,
-        "https" => Protocol::Https,
-        _ => Protocol::Undefined
+        "plain" => Ok(Protocol::Plain),
+        "https" => Ok(Protocol::Https),
+        _ => Err(ProtocolParseError)
     }
 }
 
@@ -83,6 +80,14 @@ fn proto_to_str(p: Protocol) -> String {
         Protocol::Plain => "plain".to_string(),
         Protocol::Https => "https".to_string(),
         _ => "undefined".to_string(),
+    }
+}
+
+struct ProtocolParseError;
+
+impl fmt::Display for ProtocolParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "failed to parse protocol")
     }
 }
 

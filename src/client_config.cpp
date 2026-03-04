@@ -332,9 +332,12 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     }
 
     for (const auto& proto_name : *opt_protos) {
-        auto proto = dns::bridge::str_to_proto(proto_name);
-        if (proto == dns::bridge::Protocol::Undefined)
+        dns::bridge::Protocol proto;
+        try {
+            proto = dns::bridge::str_to_proto(proto_name);
+        } catch (const rust::Error&) {
             throw error("Invalid argument for option --dns-protocol: ", proto_name);
+        }
 
         if ( ranges::find(_dns_config.protocols, proto) ==  _dns_config.protocols.end())
             _dns_config.protocols.emplace_back(proto);
