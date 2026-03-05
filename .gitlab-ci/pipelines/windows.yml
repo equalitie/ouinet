@@ -12,6 +12,7 @@ windows / build:
     - Copy-Item -Path ${BUILD_PATH}\gcrypt\out\lib\*.dll, ${BUILD_PATH}\gcrypt\out\bin\*.dll, ${BUILD_PATH}\gpg_error\out\lib\*.dll, ${BUILD_PATH}\gpg_error\out\bin\*.dll -Destination ${BUILD_PATH}
     - $libs = @("libgcc_s_seh-1", "libstdc++-6", "libwinpthread-1", "zlib1")
     - foreach ($lib in $libs) { Copy-Item C:\msys64\mingw64\bin\${lib}.dll -Destination ${BUILD_PATH} }
+    - Copy-Item -Path src/client_lib.h -Destination ${BUILD_PATH}
   artifacts:
     paths:
       - $BUILD_PATH/client.exe
@@ -19,7 +20,6 @@ windows / build:
       - $BUILD_PATH/*lib*
       - $BUILD_PATH/test/test-*
       - $BUILD_PATH/test/bt-*
-      - src/client_lib.h
     expire_in: 6h
   needs:
     []
@@ -37,7 +37,6 @@ windows / unit-test:
       - $BUILD_PATH/injector.exe
       - $BUILD_PATH/*lib*
       - $BUILD_PATH/test/test-*
-      - src/client_lib.h
     expire_in: 6h
   script:
     - $env:PATH = "${CI_PROJECT_DIR}\${BUILD_PATH};$env:PATH"
