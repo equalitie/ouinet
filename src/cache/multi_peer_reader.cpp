@@ -332,15 +332,15 @@ public:
         , _log_path(move(log_path))
         , _random_generator(_random_device())
     {
+        if (!_peer_lookup) {
+            _cv.notify();
+            return;
+        }
+
         if (auto dht_lock = _peer_lookup->get_dht_lock()) {
             for (auto ep : _lan_peer_eps) {
                 add_candidate(ep, *dht_lock);
             }
-        }
-
-        if (!_peer_lookup) {
-            _cv.notify();
-            return;
         }
 
         task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {

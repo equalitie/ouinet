@@ -261,13 +261,14 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             }
 
             // An injector can be explicitly set but it should always be an I2P endpoint
-            if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
-                throw std::runtime_error(
-                    util::str("A BEP3-I2P injector is derived implicitly"
-                              " when using '--cache-type=bep3-http-over-i2p',"
-                              " but it is already set to a non I2P endpoint: ",
-                              *_injector_ep));
-            }
+            // TODO: why? based on what logic?
+            // if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
+            //     throw std::runtime_error(
+            //         util::str("A BEP3-I2P injector is derived implicitly"
+            //                   " when using '--cache-type=bep3-http-over-i2p',"
+            //                   " but it is already set to a non I2P endpoint: ",
+            //                   *_injector_ep));
+            // }
 
             /*
              * We use an I2P endpoint here as the discovery is performed using BEP3, to support
