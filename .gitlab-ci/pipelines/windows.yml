@@ -72,5 +72,4 @@ windows / build-release:
       - $BUILD_PATH/test/bt-*
     expire_in: 6h
   needs:
-    - job: 'windows / build'
-      optional: true
+    []
