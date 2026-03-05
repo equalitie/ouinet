@@ -77,10 +77,11 @@ string Bep3Tracker::send_request( const string& extra_params
 
     string peer_id_encoded = util::percent_encode(peer_id.to_bytestring());
 
+    ///Clients generally include a fake port=6881 parameter in the announce, for compatibility with older trackers. Trackers may ignore the port parameter, and should not require it.
     ostringstream target;
     target << "/a"
            << "?peer_id=" << peer_id_encoded
-           << "&port=6881"
+           << "&port=6881" //this is just ignorred in i2p over bitttorent
            << "&ip=" << _serving_i2p_id << ".i2p"
            << "&uploaded=0"
            << "&downloaded=0"
