@@ -68,8 +68,6 @@ windows / build-release:
       - $BUILD_PATH/client.exe
       - $BUILD_PATH/injector.exe
       - $BUILD_PATH/*lib*
-      - $BUILD_PATH/test/test-*
-      - $BUILD_PATH/test/bt-*
     expire_in: 6h
   needs:
     []
