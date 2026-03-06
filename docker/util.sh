@@ -35,7 +35,7 @@ function dock (
     docker $opt_h "$@"
 )
 
-# Shortcut for `docker $docker_host exec ... $container_name ...`
+# Shorthand for `docker -H ssh://$host exec ... $container_name ...`
 function exe (
     opt_w=
     opt_i=

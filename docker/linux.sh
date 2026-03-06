@@ -3,7 +3,6 @@
 set -e
 
 host=
-docker_host=
 clean=
 target_oss=()
 run_all_tests=
@@ -36,7 +35,6 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
         --host|-H)
             host="$2"; shift
-            docker_host="--host=ssh://$host"
             ;;
         --target-os|-t)
             target_oss+=($(parse_target_os $2)); shift
@@ -85,7 +83,7 @@ container_name=$(choose_docker_container_name)
 work_dir=/opt
 ouinet_dir=$work_dir/ouinet
 
-echo "Host:           $docker_host"
+echo "Host:           $host"
 echo "Target OS:      ${target_oss[*]}"
 echo "Image name:     $image_name"
 echo "Container name: $container_name"
