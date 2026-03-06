@@ -115,6 +115,9 @@ struct std::hash<asio::ip::udp::endpoint>
     }
 };
 
+constexpr chrono::duration ERROR_WAIT_DURATION = 1s;
+constexpr chrono::duration SUCCESS_WAIT_DURATION = 1min;
+
 struct Bep5Client::Swarm
 {
 private:
@@ -126,7 +129,7 @@ private:
     shared_ptr<bt::DhtBase> _dht;
     bt::NodeID _infohash;
     Cancel _lifetime_cancel;
-    size_t _get_peers_call_count = 0;
+    std::optional<chrono::steady_clock::time_point> _last_success_time;
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
     const bool _connect_proxy;
@@ -161,8 +164,14 @@ public:
 
     const Peers& peers() const { return _peers; }
 
+    bool is_ready() const {
+        if (!_last_success_time) return false;
+        auto duration = chrono::steady_clock::now() - *_last_success_time;
+        return duration < 5 * SUCCESS_WAIT_DURATION;
+    }
+
     void wait_for_ready(Cancel cancel, asio::yield_context yield) {
-        if (_get_peers_call_count != 0) return;
+        if (is_ready()) return;
 
         WaitCondition wc(_dht->get_executor());
 
@@ -200,13 +209,12 @@ private:
 
             if (cancel) break;
 
-            _get_peers_call_count++;
-            _wait_condition_locks.clear();
-
             if (ec) {
-                async_sleep(ex, 1s, cancel, yield);
+                async_sleep(ex, ERROR_WAIT_DURATION, cancel, yield);
                 continue;
             }
+
+            _last_success_time = chrono::steady_clock::now();
 
             if (log_debug()) {
                 _DEBUG("New endpoints: ", endpoints.size());
@@ -216,9 +224,12 @@ private:
             }
 
             add_peers(move(endpoints));
+            _wait_condition_locks.clear();
 
-            async_sleep(ex, 1min, cancel, yield);
+            async_sleep(ex, SUCCESS_WAIT_DURATION, cancel, yield);
         }
+
+        _wait_condition_locks.clear();
     }
 
     bool log_debug() {
@@ -611,6 +622,11 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     sys::error_code ec;
 
+    // TODO: With this simple logic, we need to wait for both swarms to get
+    // ready and only then attempt to connect to whatever peers they return.
+    // It is to avoid the case when the first-ready swarm only gives us faulty
+    // or unreachable peers.  Ideally, though, we should start connecting in
+    // parallel starting with whichever swarm is ready first.
     if (_injector_swarm && (target & Target::injectors)) {
         _injector_swarm->wait_for_ready(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, GenericStream());
