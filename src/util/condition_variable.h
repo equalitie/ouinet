@@ -10,6 +10,22 @@
 
 namespace ouinet {
 
+// NOTE: This class has similar purpose as WaitCondition but different API.
+// It is also trickier to use because calling `notify` _before_ `wait` will
+// cause the latter to wait indefinitely. Consider following code:
+//
+//     ConditionVariable cv(exec);
+//     asio::spawn(exec, [&cv] (asio::yield_context yield) {
+//         some_async_action(yield);
+//         cv.notify();
+//     });
+//     cv.wait(yield);
+//
+// Above, if `some_async_action` executes immediatelly, the `notify` function
+// will be called _before_ `cv.wait`. Thus not "notifying".
+//
+// Prefer to use `WaitCondition` which covers this problem.
+
 using ouinet::util::AsioExecutor;
 
 class ConditionVariable {
