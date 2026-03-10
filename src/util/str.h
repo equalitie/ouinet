@@ -49,4 +49,18 @@ std::string str(Args&&... args) {
     return ss.str();
 }
 
+template<class Arg>
+inline
+std::string join( const Arg& parts
+                , const std::string& delimiter="")
+{
+    std::ostringstream ss;
+    for (size_t i=0; i<parts.size(); i++)
+    {
+        auto part = parts[i];
+        ss << ( i > 0 ? delimiter : "") << part;
+    }
+    return ss.str();
+}
+
 }} // namespaces

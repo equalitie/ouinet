@@ -14,7 +14,7 @@ but also functional on a local or national network. Peer-to-peer transports
 are used for communications.
 
 Ouinet's primary integration and its initial _raison d'etre_ is to power the
-[Ceno Browser](https://censorship.no) - utilized for accessing web content
+[Ceno Browser](https://ceno.app) - utilized for accessing web content
 behind national firewalls. Supporting infrastructure on this project is
 provided by [eQualitie](https://equalit.ie), offering injection and
 authentication of web content into a decentralized p2p network, using the
@@ -329,5 +329,5 @@ You can find additional information to control the
 - [Whitepaper](doc/ouinet-network-whitepaper.md)
 - [Matrix channel](https://matrix.to/#/#ouinet:matrix.org)
 - [Integration Examples](https://gitlab.com/equalitie/ouinet-examples)
-- [Ceno Browser](https://gitlab.com/censorship-no/ceno-browser/)
-- [Ceno Docker Client](https://github.com/censorship-no/ceno-docker-client)
+- [Ceno Browser](https://gitlab.com/ceno-app/ceno-browser/)
+- [Ceno Docker Client](https://github.com/ceno-app/ceno-docker-client)

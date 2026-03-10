@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.3](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.3) - 2026-03-04
+
+### Added
+
+- A new option named `dns-protocol` was added to client/injector configuration,
+exposed via JNI and displayed in the frontend UI/API. !159
+- New configuration option `metrics-delete-after`. !160
+
+### Changed
+
+- A single DNS resolver is now used for all the requests and coroutines. !159
+- Option `metrics-encryption-key` accepts now keys without delimiters. !160
+
+### Deprecated
+
+- Option `disabled-doh` has been superseded by `dns-protocol` and will be
+removed in future versions. !159
+
+
 ## [v1.6.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.2) - 2026-01-12
 
 ### Fixed
@@ -532,7 +551,7 @@ receivers and monitors implemented in new kotlin portion of code.
 ### Fixed
 
 - Fixes a bug with the Ouinet notification not appearing upon startup, reported
-in censorship-no/ceno-browser#53 that was caused by an attempt to restart ouinet
+in ceno-app/ceno-browser#53 that was caused by an attempt to restart ouinet
 being triggered too soon after startup due to a perceived change in network
 connectivity.
 - Avoid attempting to restart ouinet on the first network availability, or

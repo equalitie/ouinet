@@ -16,13 +16,15 @@ namespace http = beast::http;
 namespace posix_time = boost::posix_time;
 
 
-pair<string, string>
+std::pair<std::string, uint16_t>
 ouinet::util::get_host_port(const http::request_header<>& req)
 {
     auto target = req.target();
-    auto defport = (target.starts_with("https:") || target.starts_with("wss:"))
-                 ? "443"
-                 : "80";
+
+    // Initialize with default port
+    uint16_t port = (target.starts_with("https:") || target.starts_with("wss:"))
+                  ? 443
+                  : 80;
 
     auto hp = (req.method() == http::verb::connect)
             ? target
@@ -31,13 +33,19 @@ ouinet::util::get_host_port(const http::request_header<>& req)
     if (hp.empty() && req.version() == 10) {
         // HTTP/1.0 proxy client with no ``Host:``, use URL.
         skyr::url url{std::string(target)};
-        return make_pair( url.hostname()
-                        , (url.port().empty() ? defport : url.port()));
+        if (!url.port().empty()) {
+            boost::string_view port_sv = url.port();
+            port = parse::number<unsigned>(port_sv).get();
+        }
+        return make_pair(url.hostname(), port);
     }
 
-    auto host_port = util::split_ep(hp);
-    return make_pair( std::string(host_port.first)
-                    , host_port.second.empty() ? defport : std::string(host_port.second));
+    auto [host, port_sv] = split_ep(hp);
+
+    if ( !port_sv.empty() ) {
+        port = parse::number<uint16_t>(port_sv).get();
+    }
+    return make_pair(std::string(host), port);
 }
 
 boost::optional<ouinet::util::HttpResponseByteRange>

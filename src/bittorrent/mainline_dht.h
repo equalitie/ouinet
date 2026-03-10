@@ -12,6 +12,7 @@
 #include "bootstrap.h"
 #include "mutable_data.h"
 #include "node_id.h"
+#include "cxx/dns.h"
 #include "cxx/metrics.h"
 #include "dht.h"
 
@@ -34,7 +35,7 @@ asio::ip::udp::endpoint resolve(
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
-    bool do_doh,
+    const std::shared_ptr<dns::Resolver>& dns_resolver,
     Cancel& cancel_signal,
     asio::yield_context yield);
 
@@ -42,7 +43,7 @@ class MainlineDht : public DhtBase {
     public:
     MainlineDht( const AsioExecutor&
                , metrics::MainlineDht
-               , bool do_doh
+               , std::shared_ptr<dns::Resolver>
                , uint32_t mux_rx_limit
                , boost::filesystem::path storage_dir = {}
                , std::set<bootstrap::Address> extra_bs = {});
@@ -118,7 +119,7 @@ class MainlineDht : public DhtBase {
     AsioExecutor _exec;
     std::map<udp::endpoint, std::unique_ptr<DhtNode>> _nodes;
     Cancel _cancel;
-    bool _do_doh;
+    std::shared_ptr<dns::Resolver> _dns_resolver;
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
