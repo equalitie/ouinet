@@ -11,6 +11,7 @@
 #include "declspec.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
+#include "parse/endpoint.h"
 #include "util/crypto.h"
 
 #include "cxx/dns.h"
