@@ -194,6 +194,11 @@ public:
         return _metrics.get();
     }
 
+    // Use when debugging to add HTTP header fields to every request
+    const std::map<std::string, std::string>& add_request_fields() const {
+        return _add_request_fields;
+    }
+
 private:
     boost::program_options::options_description description_full()
     {
@@ -266,6 +271,12 @@ private:
             , "Set the max size of body requests in KiB. This could be "
               "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
               "uploads, etc. To leave it unlimited, set it to zero.")
+           ("add-request-field"
+            , po::value<std::vector<std::string>>()->composing()
+            , "A <FIELD>:<VALUE> pair representing a HTTP header field and "
+              "value to add to every request coming from the User Agent before "
+              "Ouinet processes it. Useful for testing when using e.g. Firefox "
+              "as the UA.")
            ;
 
         po::options_description injector("Injector options");
@@ -550,6 +561,7 @@ private:
     [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
     bool _allow_private_targets = false;
+    std::map<std::string, std::string> _add_request_fields;
 
     dns::Config _dns_config;
 
