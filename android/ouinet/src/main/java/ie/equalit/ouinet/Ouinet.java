@@ -175,14 +175,14 @@ public class Ouinet {
             path.add(config.getObfs4ProxyPath());
         }
 
-        nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));
-
         Set<String> dnsProtocols = config.getDnsProtocols();
         if (dnsProtocols != null) {
             for (String x : dnsProtocols) {
                 args.add("--dns-protocol=" + x);
             }
         }
+
+        nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));
 
         //registerBroadcastReceivers();
     }
