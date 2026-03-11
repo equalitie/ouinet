@@ -2,6 +2,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
+#include "../src/task.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util/yield.h"
 #include "../src/namespaces.h"
