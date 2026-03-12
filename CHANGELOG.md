@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.4](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.4) - 2026-03-11
+
+### Fixed
+
+- Set dnsProtocol options before starting the client via JNI. !164
+
+
 ## [v1.6.3](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.3) - 2026-03-04
 
 ### Added
