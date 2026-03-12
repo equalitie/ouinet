@@ -5,6 +5,8 @@ include(ExternalProject)
 ################################################################################
 option(WITH_BINARY "" OFF)
 option(WITH_GUI "" OFF)
+
+add_definitions( -DBOOST_ASIO_DYN_LINK )
 add_subdirectory(./i2pd/build)
 
 # We link these libraries statically, which means their own dependencies must
@@ -48,7 +50,7 @@ target_link_libraries(ouiservice-i2p
         z
         OpenSSL::SSL
     PUBLIC
-        ouinet::base
+        ouinet_dependencies
 )
 
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
