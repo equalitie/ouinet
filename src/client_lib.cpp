@@ -98,28 +98,28 @@ public:
 class Destructor_CallOnExit {
     void (*callback)(int);
     const int default_exit_value;
-    bool did_call = false;
 public:
     Destructor_CallOnExit(void (*callback)(int), const int default_exit_value):
         callback(callback), default_exit_value(default_exit_value) { }
     ~Destructor_CallOnExit() {
-        if (!did_call) {
+        if (callback != nullptr) {
             callback(default_exit_value);
         }
     }
     void call(const int argument) {
-        if (did_call) {
-            throw std::logic_error("Double call in Destructor_CallOnExit");
+        if (callback) {
+            callback(argument);
+            callback = nullptr;
         }
-        callback(argument);
-        did_call = true;
     }
 };
 
 int ouinet_client_run(const int argc, const char *argv[], void (*on_exit_callback)(int)) {
     if (g_client_thread.joinable()) {
         LOG_ERROR(ouinet_client_error.set("Unexpected ouinet::Client reinitialization"));
-        on_exit_callback(EXIT_FAILURE);
+        if (on_exit_callback != nullptr) {
+            on_exit_callback(EXIT_FAILURE);
+        }
         return EXIT_FAILURE;
     }
 
