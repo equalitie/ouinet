@@ -164,14 +164,12 @@ int ouinet_client_run(const int argc, const char *argv[], void (*on_exit_callbac
 
             LOG_DEBUG("Starting new Ouinet client.");
 
-            // In case we're restarting.
-            g_ctx.restart();
-
             g_client = std::make_unique<ouinet::Client>(g_ctx, std::move(cfg));
             g_client->start();
         } catch (std::exception const &e) {
             LOG_ERROR(ouinet_client_error.set("Error while trying to start Ouinet client: ", e.what()));
             g_client.reset();
+            g_ctx.restart();
             return;
         }
 
@@ -189,6 +187,7 @@ int ouinet_client_run(const int argc, const char *argv[], void (*on_exit_callbac
 
         LOG_DEBUG("Ouinet's main loop stopped.");
         g_client.reset();
+        g_ctx.restart();
         on_exit_caller.call(retval);
     });
     init_is_complete.wait(false);
@@ -206,7 +205,6 @@ void ouinet_client_stop_and_detach() {
 
     asio::post(g_ctx, [] {
         try {
-            HandlerTracker::stopped();
             if (g_client) {
                 g_client->stop();
             }
@@ -224,7 +222,6 @@ void ouinet_client_stop_and_wait_for_completion() {
 
     asio::post(g_ctx, [] {
         try {
-            HandlerTracker::stopped();
             if (g_client) {
                 g_client->stop();
             }
