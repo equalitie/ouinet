@@ -197,7 +197,7 @@ choose the `manifest.json` file in the Extension's source tree.  Back to the
 *Add-ons* page, remember to click on *CENO Extension* and allow *Run in
 Private Windows* under *Details*.
 
-[CENO Extension]: https://gitlab.com/censorship-no/ceno-ext-settings/
+[CENO Extension]: https://gitlab.com/ceno-app/ceno-ext-settings/
 
 After visiting a page with the Origin mechanism disabled and Injector
 mechanism enabled, and waiting for a short while, you should be able to

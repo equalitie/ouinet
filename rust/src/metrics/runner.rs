@@ -340,7 +340,7 @@ mod tests {
             let tmpdir = TmpDir::new("metrics_runner_store").await.unwrap();
             let dk = DecryptionKey::random(&mut rand::rng());
             let ek = EncryptionKey::from(&dk);
-            let store = Store::new(tmpdir.as_ref().into(), ek).await.unwrap();
+            let store = Store::new(tmpdir.as_ref().into(), ek, 60).await.unwrap();
             let event_handler = EventHandler::new();
             let collector = Mutex::new(Collector::new(&runtime::Handle::current()));
 

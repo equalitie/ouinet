@@ -27,12 +27,17 @@ enum class SetAuxResult {
     Noop,
 };
 
+// Records older than this duration will be deleted.
+constexpr uint64_t default_delete_after_seconds{60 * 60 * 24 * 7};
+
 class Client {
 public:
     // Creates a metrics client which does nothing.
     static Client noop();
 
     Client(const fs::path& repo_root_path, EncryptionKey encryption_key);
+    Client( const fs::path& repo_root_path, EncryptionKey encryption_key
+          , uint64_t delete_after_seconds);
 
     void enable(util::AsioExecutor executor, AsyncCallback record_processor);
     void disable();

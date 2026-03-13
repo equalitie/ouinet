@@ -1,1 +1,4 @@
-twisted
+brotli
+pytest
+pytest-asyncio
+requests

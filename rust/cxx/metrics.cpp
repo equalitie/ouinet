@@ -8,6 +8,7 @@ namespace ouinet::metrics {
 
 namespace asio = boost::asio;
 
+
 //--------------------------------------------------------------------
 
 Client Client::noop() {
@@ -15,13 +16,22 @@ Client Client::noop() {
 }
 
 Client::Client(const fs::path& repo_root_path, EncryptionKey encryption_key)
+    : Client{ repo_root_path, std::move(encryption_key)
+            , default_delete_after_seconds}
+{
+}
+
+Client::Client( const fs::path& repo_root_path
+              , EncryptionKey encryption_key
+              , uint64_t delete_after_seconds )
     : _impl({ bridge::new_client(
 #ifdef _WIN32
                   rust::String(repo_root_path.string())
 #else
                   rust::String(repo_root_path.native())
 #endif
-                , std::move(*encryption_key._impl))})
+                , std::move(*encryption_key._impl)
+                , delete_after_seconds)})
 {
 }
 

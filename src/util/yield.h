@@ -1,17 +1,13 @@
 #pragma once
 
-#include <sstream>
 #include "../namespaces.h"
 #include "../util/executor.h"
 #include "../util/str.h"
 #include "../util/log_path.h"
 #include "../logger.h"
 #include "../or_throw.h"
-#include "../task.h"
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
-#include <boost/optional.hpp>
 
 namespace ouinet {
 
