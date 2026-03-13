@@ -99,6 +99,7 @@ class TestFixtures:
     ]
     CACHE_CLIENT_REQUEST_STORED_REGEX = "[\s\S]*HTTP store:[\s\S]*"
     CACHE_CLIENT_UTP_REQUEST_SERVED = "[\s\S]*serve_utp_req/serve_local END[\s\S]*"
+    BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*BEP3 announcer successfully initiated[\s\S]*"
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 
     RESPONSE_RECEIVED_FROM_CACHE = "[\s\S]*X-Ouinet-Source: dist-cache[\s\S]*"

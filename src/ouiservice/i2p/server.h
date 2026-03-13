@@ -10,6 +10,7 @@ namespace i2p::data {
 
 namespace i2p::client {
     class I2PServerTunnel;
+    class ClientDestination;
 }
 
 namespace ouinet::ouiservice::i2poui {
@@ -36,6 +37,9 @@ public:
 
     std::string public_identity() const;
 
+    // Returns the server's ClientDestination, available after start_listen()
+    std::shared_ptr<i2p::client::ClientDestination> get_destination() const { return _local_destination; }
+
 private:
     void load_private_key(const std::string& key_file_name);
 
@@ -45,6 +49,7 @@ private:
     std::unique_ptr<i2p::data::PrivateKeys> _private_keys;
     uint32_t _timeout;
 
+    std::shared_ptr<i2p::client::ClientDestination> _local_destination;
     std::unique_ptr<Tunnel> _server_tunnel;
     asio::ip::tcp::acceptor _tcp_acceptor;
 

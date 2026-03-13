@@ -6,6 +6,7 @@
 
 namespace i2p::client {
     class I2PClientTunnel;
+    class ClientDestination;
 }
 
 namespace ouinet::ouiservice::i2poui {
@@ -17,7 +18,8 @@ public:
     Client( std::shared_ptr<Service> service
           , const std::string& target_id
           , uint32_t timeout
-          , const AsioExecutor&);
+          , const AsioExecutor&
+          , std::shared_ptr<i2p::client::ClientDestination> destination = nullptr);
 
     ~Client();
 
@@ -32,7 +34,8 @@ public:
     // Returns the target I2P address this client connects to
     const std::string& get_target_id() const { return _target_id; }
 
-    // Used only in tests
+    // Connect without the ouinet i2p handshake protocol. Use this for test  or for communicating
+    // with non-ouinet I2P hosts such as BEP3 trackers.
     GenericStream
     connect_without_handshake(asio::yield_context yield, Signal<void()>& cancel);
 
@@ -41,6 +44,9 @@ private:
     AsioExecutor _exec;
     std::string _target_id;
     uint32_t _timeout;
+
+    // The destinaton where client requests originate from
+    std::shared_ptr<i2p::client::ClientDestination> _destination;
 
     std::unique_ptr<Tunnel> _client_tunnel; //the tunnel is a pointer because
     //the client can be stopped (tunnel gets destroyed) and started again

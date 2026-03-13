@@ -109,6 +109,8 @@ struct Client::Impl {
     std::unique_ptr<Bep5Announcer> _bep5_announcer;
 #ifdef __EXPERIMENTAL__
     std::shared_ptr<bt::Bep3Tracker> _bep3_tracker;
+    std::shared_ptr<ouiservice::i2poui::Service> _i2p_service;
+    std::unique_ptr<ouiservice::i2poui::Server> _bep3_server;
     std::unique_ptr<Bep3Announcer> _bep3_announcer;
 #endif // __EXPERIMENTAL__
     GarbageCollector _gc;
@@ -157,16 +159,36 @@ struct Client::Impl {
 #ifdef __EXPERIMENTAL__
     bool enable_bep3_announcer( shared_ptr<ouiservice::i2poui::Service> i2p_service
                               , string tracker_id
-                              , size_t simultaneous_announcements) {
-        if (_bep3_announcer) return false;
-        if (!i2p_service) return false;  // i2p not enabled
+                              , size_t simultaneous_announcements
+                              , asio::yield_context yield) {
+        if (_bep3_announcer) {
+            _DEBUG("BEP3 announcer is already enabled");
+            return false;
+        }
+        if (!i2p_service) {
+            _DEBUG("not enabling BEP3 announcer because i2p service has not been initialied");
+            return false;
+        }
 
-        // Build the i2p server to get our public identity for peer connections
-        auto i2p_server = i2p_service->build_server("bep3-server-key");
-        auto serving_i2p_id = i2p_server->public_identity();
+        _i2p_service = i2p_service;
+
+        // Starting the BEP3 server so we can use its destination for both
+        // announcing to the tracker and serving content to peers.
+        // Note that Zzzot rejects torrent announce if ip= parameter is not
+        // the same as the annnouncer's destination (set in the http header of
+        // the announce request)
+        _DEBUG("starting BEP3 server to responds to cache announces");
+        _bep3_server = i2p_service->build_server("bep3-server-key");
+        sys::error_code ec;
+        _bep3_server->start_listen(yield[ec]);
+        if (ec) {
+            _ERROR("failed to start BEP3 server; ec=", ec.message());
+            return or_throw(yield, ec, false);
+        }
+        _DEBUG("BEP3 responder server started");
 
         _bep3_tracker = make_shared<bt::Bep3Tracker>(
-            move(i2p_service), move(tracker_id), move(serving_i2p_id));
+            move(i2p_service), move(tracker_id), _bep3_server->get_destination());
 
         // NOTE: The announcer eagerly calls ensure_started() on the tracker,
         // to kick start the I2P tunnel, even though bep3_tracker try to start
@@ -179,6 +201,7 @@ struct Client::Impl {
             if (_bep3_announcer->add(compute_swarm_name(group_name)))
                 _VERBOSE("Start BEP3 announcing group: ", group_name);
 
+        _DEBUG("BEP3 announcer successfully initiated");
         return true;
     }
 #endif // __EXPERIMENTAL__
@@ -488,6 +511,8 @@ struct Client::Impl {
 
         std::optional<metrics::Request> metrics;
 
+        _DEBUG("Distributed cache lookup: dht=", (_dht ? "yes" : "no"), " bep3_tracker=", (_bep3_tracker ? "yes" : "no"));
+
         if (_dht) {
             metrics = metrics_client.new_cache_in_request();
 
@@ -530,15 +555,14 @@ struct Client::Impl {
                 LOG_DEBUG(*log_path, "    local_peers= ", local_peers);
             };
 
-            // TODO: It seems that MultiPeerReader hard coded to connects to
-            // udp::endpoint We should modify it to also connect to i2pclient
-            // perform a local lookup as place holder V
+            // Using I2P specific constructor which doesn't deal with lan endpoints
+            // for now to make it less complicated.
             reader = std::make_unique<MultiPeerReader>
                 ( _ex
                 , key
                 , _cache_pk
-                , move(local_peers)
-                , _lan_my_endpoints
+                , move(tracker_lookup_)
+                , _i2p_service
                 , _newest_proto_seen
                 , log_path);
         }
@@ -904,8 +928,9 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
 #ifdef __EXPERIMENTAL__
 bool Client::enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
                                   , std::string tracker_id
-                                  , size_t simultaneous_announcements) {
-    return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), simultaneous_announcements);
+                                  , size_t simultaneous_announcements
+                                  , asio::yield_context yield) {
+    return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), simultaneous_announcements, yield);
 }
 #endif // __EXPERIMENTAL__
 

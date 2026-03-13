@@ -85,16 +85,20 @@ void Server::start_listen(asio::yield_context yield)
 
     uint16_t port = _tcp_acceptor.local_endpoint().port();
 
-    std::shared_ptr<i2p::client::ClientDestination> local_dst = i2p::api::CreateLocalDestination(*_private_keys, true);
+    _local_destination = i2p::api::CreateLocalDestination(*_private_keys, true);
     do {
-      std::unique_ptr<i2p::client::I2PServerTunnel> i2p_server_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, local_dst);
+      std::unique_ptr<i2p::client::I2PServerTunnel> i2p_server_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, _local_destination);
     //i2p_server_tunnel->Start();
       _server_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_server_tunnel), _timeout);
-      _server_tunnel->wait_to_get_ready(yield);
+      _server_tunnel->wait_to_get_ready(yield[ec]);
+      if (ec) {
+        LOG_DEBUG("I2P server tunnel setup attempt failed; ec=", ec.message());
+      }
     } while(_server_tunnel->has_timed_out());
 
     if (ec) {
-      or_throw(yield, ec);
+      _tcp_acceptor.close();
+      return or_throw(yield, ec);
     }
 
 }

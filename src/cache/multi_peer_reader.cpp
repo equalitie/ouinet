@@ -1,6 +1,10 @@
 #include <asio_utp.hpp>
 
 #include "multi_peer_reader.h"
+#ifdef __EXPERIMENTAL__
+#include <ouiservice/i2p/client.h>
+#include <ouiservice/i2p/service.h>
+#endif
 #include "multi_peer_reader_error.h"
 #include "cache_entry.h"
 #include "http_sign.h"
@@ -270,7 +274,38 @@ public:
         return rq;
     }
 
-    // TODO: For I2P peers, we need an I2P client with set  destination instead of udp::endpoint somehow.
+    // the common logic for loading and validating hash list from an established connection
+    // for both udp::endpoint ep and i2p destinations
+    void request_hash_list(
+            GenericStream& con,
+            std::shared_ptr<unsigned> newest_proto_seen,
+            Cancel& timeout_cancel,
+            Cancel& cancel,
+            asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
+
+        http::async_write(con, request(http::verb::propfind, _key), yield[ec]);
+        if (ec || cancel) return or_throw(yield, ec ? ec : asio::error::operation_aborted);
+
+        auto reader = std::make_unique<http_response::Reader>(move(con));
+
+        auto hash_list = HashList::load(*reader, _cache_pk, timeout_cancel, yield[ec]);
+        if (ec || cancel) return or_throw(yield, ec ? ec : asio::error::operation_aborted);
+
+        if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen))
+          // The client expects an injection belonging to a supported protocol version,
+          // otherwise we just discard this copy.
+          return or_throw(yield, asio::error::not_found);
+
+        _hash_list = move(hash_list);
+        reader->restart();
+        _reader = std::move(reader);
+    }
+
+    // download_hash_list for udp::endpoint ep,
     void download_hash_list(
             udp::endpoint ep,
             const set<udp::endpoint>& lan_my_eps,
@@ -282,30 +317,45 @@ public:
 
         Cancel timeout_cancel(cancel);
 
-        auto wd = watch_dog(_exec, chrono::seconds(10), [&] { timeout_cancel(); });
+        auto wd = watch_dog(_exec, MultiPeerReader::BEP5_HASH_LIST_TIMEOUT, [&] {
+            LOG_DEBUG("BEP5 hash list download timed out for: ", ep);
+            timeout_cancel();
+        });
 
         auto con = connect(_exec, ep, lan_my_eps, timeout_cancel, yield[ec]);
         fail_on_error_or_timeout(yield, cancel, ec, wd);
 
-        auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
-
-        http::async_write(con, request(http::verb::propfind, _key), yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        auto reader = std::make_unique<http_response::Reader>(move(con));
-
-        auto hash_list = HashList::load(*reader, _cache_pk, timeout_cancel, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen))
-            // The client expects an injection belonging to a supported protocol version,
-            // otherwise we just discard this copy.
-            return or_throw(yield, asio::error::not_found);
-
-        _hash_list = move(hash_list);
-        reader->restart();
-        _reader = std::move(reader);
+        request_hash_list(con, newest_proto_seen, timeout_cancel, cancel, yield);
     }
+
+#ifdef __EXPERIMENTAL__
+    // Overloaded download_hash_list for I2P peers identified by destination string
+    void download_hash_list(
+            const string& i2p_dest,
+            shared_ptr<ouiservice::i2poui::Service> i2p_service,
+            std::shared_ptr<unsigned> newest_proto_seen,
+            Cancel cancel,
+            asio::yield_context yield)
+    {
+        sys::error_code ec;
+
+        Cancel timeout_cancel(cancel);
+
+        auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
+            LOG_DEBUG("BEP3 hash list download timed out for: ", i2p_dest);
+            timeout_cancel();
+        });
+
+        auto i2p_client = i2p_service->build_client(i2p_dest);
+        i2p_client->start(yield[ec]);
+        fail_on_error_or_timeout(yield, cancel, ec, wd);
+
+        auto con = i2p_client->connect(yield[ec], cancel);
+        fail_on_error_or_timeout(yield, cancel, ec, wd);
+
+        request_hash_list(con, newest_proto_seen, timeout_cancel, cancel, yield);
+    }
+#endif
 };
 
 
@@ -379,12 +429,95 @@ public:
                , move(newest_proto_seen), move(log_path))
     {}
 
-    // TODO: For I2P peers, we need an I2P client instead of udp::endpoint.
+#ifdef __EXPERIMENTAL__
+    // Constructor for BEP3 tracker + I2P peers
+    // LAN peers some how depends on DHT (lock?) which might have not been initiated
+    // so we don't deal with them here.
+    Peers(AsioExecutor exec
+         , util::Ed25519PublicKey cache_pk
+         , const std::string& key
+         , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
+         , std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+         , std::shared_ptr<unsigned> newest_proto_seen
+         , std::optional<util::LogPath> log_path)
+        : _exec(exec)
+        , _cv(_exec)
+        , _cache_pk(move(cache_pk))
+        , _key(move(key))
+        , _tracker_lookup(move(tracker_lookup))
+        , _i2p_service(move(i2p_service))
+        , _newest_proto_seen(move(newest_proto_seen))
+        , _log_path(move(log_path))
+        , _random_generator(_random_device())
+    {
+        task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
+            TRACK_HANDLER();
+            sys::error_code ec;
+
+            auto i2p_dests = _tracker_lookup->get(c, y[ec]);
+
+            if (log_path) {
+                LOG_DEBUG(*log_path, " BEP3 tracker lookup result; ec=", ec
+                         , " peers=", i2p_dests.size());
+            }
+
+            if (c) return;
+
+            if (!ec) {
+                for (auto& dest : i2p_dests) add_i2p_candidate(dest);
+            }
+
+            _tracker_lookup.reset();
+
+            _cv.notify();
+        });
+    }
+
+    void add_i2p_candidate(const string& i2p_dest) {
+        auto ip = _all_i2p_peers.insert({i2p_dest, unique_ptr<Peer>()});
+
+        if (!ip.second) return; // Already inserted
+
+        ip.first->second = make_unique<Peer>(_exec, _key, _cache_pk);
+        Peer* p = ip.first->second.get();
+
+        _candidate_peers.push_back(*p);
+
+        task::spawn_detached(_exec, [=, this, log_path = _log_path,
+                                     i2p_service = _i2p_service,
+                                     c = _lifetime_cancel] (auto y) mutable {
+            TRACK_HANDLER();
+            sys::error_code ec;
+
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Fetching hash list from I2P: ", i2p_dest);
+            }
+
+            //TODO: Actually makes the connection works on the server side.
+            //otherwise this code has not been tested.
+            p->download_hash_list(i2p_dest, i2p_service, _newest_proto_seen, c, y[ec]);
+
+            if (log_path) {
+                LOG_DEBUG(*log_path, " Done fetching hash list; i2p_dest=", i2p_dest
+                         , " ec=", ec, " c=", bool(c));
+            }
+
+            if (c) return;
+
+            p->_candidate_hook.unlink();
+
+            if (!ec) _good_peers.push_back(*p);
+
+            _cv.notify();
+        });
+    }
+#endif
+
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
         if (dht.is_martian(ep)) return;
         if (_wan_my_eps.count(ep)) return;
 
-        auto ip = _all_peers.insert({ep, unique_ptr<Peer>()});
+        auto ip = _all_udp_peers.insert({ep, unique_ptr<Peer>()});
 
         if (!ip.second) return; // Already inserted
 
@@ -419,7 +552,11 @@ public:
     }
 
     bool still_waiting_for_candidates() const {
-        return _peer_lookup || !_candidate_peers.empty();
+        if (_peer_lookup || !_candidate_peers.empty()) return true;
+#ifdef __EXPERIMENTAL__
+        if (_tracker_lookup) return true;
+#endif
+        return false;
     }
 
     bool has_enough_good_peers() const {
@@ -504,9 +641,12 @@ public:
     }
 
 private:
-    // Peers that are in _all_peers but are not in either _candidate_peers
-    // nor _good_peers are considered as failed.
-    std::map<udp::endpoint, unique_ptr<Peer>> _all_peers;
+    // Peers that are in _all_udp_peers/_all_i2p_peers but are not in either
+    // _candidate_peers nor _good_peers are considered as failed.
+    std::map<udp::endpoint, unique_ptr<Peer>> _all_udp_peers;
+#ifdef __EXPERIMENTAL__
+    std::map<string, unique_ptr<Peer>> _all_i2p_peers;
+#endif
 
     util::intrusive::list<Peer, &Peer::_candidate_hook> _candidate_peers;
     util::intrusive::list<Peer, &Peer::_good_peer_hook> _good_peers;
@@ -520,6 +660,10 @@ private:
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
     std::string _key;
     std::shared_ptr<DhtLookup> _peer_lookup;
+#ifdef __EXPERIMENTAL__
+    std::shared_ptr<Bep3TrackerLookup> _tracker_lookup;
+    std::shared_ptr<ouiservice::i2poui::Service> _i2p_service;
+#endif
     std::shared_ptr<unsigned> _newest_proto_seen;
     std::optional<util::LogPath> _log_path;
 
@@ -570,6 +714,27 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , move(newest_proto_seen)
                                , log_path);
 }
+
+#ifdef __EXPERIMENTAL__
+MultiPeerReader::MultiPeerReader( AsioExecutor ex
+                                , std::string key
+                                , util::Ed25519PublicKey cache_pk
+                                , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
+                                , std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+                                , std::shared_ptr<unsigned> newest_proto_seen
+                                , std::optional<util::LogPath> log_path)
+    : _executor(ex)
+    , _log_path(log_path)
+{
+    _peers = make_unique<Peers>(ex
+                               , move(cache_pk)
+                               , move(key)
+                               , move(tracker_lookup)
+                               , move(i2p_service)
+                               , move(newest_proto_seen)
+                               , log_path);
+}
+#endif
 
 struct MultiPeerReader::PreFetch {
     using OptBlock = boost::optional<MultiPeerReader::Block>;

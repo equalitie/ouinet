@@ -8,6 +8,7 @@
 #include "namespaces.h"
 #include "util/signal.h"
 
+namespace i2p::client { class ClientDestination; }
 namespace ouinet::ouiservice::i2poui { class Client; class Service; }
 
 namespace ouinet { namespace bittorrent {
@@ -19,7 +20,7 @@ public:
     using Executor = boost::asio::any_io_executor;
     Bep3Tracker( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
                , std::string tracker_id
-               , std::string serving_i2p_id);
+               , std::shared_ptr<i2p::client::ClientDestination> destination);
 
     // Start the I2P tunnel if not already started, no-op otherwise
     void ensure_started(Cancel&, asio::yield_context);
@@ -42,6 +43,7 @@ private:
     static NodeID generate_random_peer_id();
 
     std::shared_ptr<ouiservice::i2poui::Client> _i2p_client;
+    std::shared_ptr<i2p::client::ClientDestination> _destination;
     std::string _serving_i2p_id;
     bool _started = false;
 };
