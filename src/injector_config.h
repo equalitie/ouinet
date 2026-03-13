@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <set>
 
 #include <boost/program_options.hpp>
@@ -12,7 +13,18 @@
 #include "bittorrent/bootstrap.h"
 #include "util/crypto.h"
 
+#include "cxx/dns.h"
+
 namespace ouinet {
+
+template<class... Args>
+inline
+std::runtime_error error(Args&&... args) {
+    return std::runtime_error(util::str(std::forward<Args>(args)...));
+}
+
+#define _HTTP_LOG_FILE_NAME "access.log"
+static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
 
 class OUINET_DECL InjectorConfig {
 public:
@@ -106,6 +118,9 @@ public:
     bool is_doh_enabled() const
     { return !_disable_doh; }
 
+    dns::Config dns_config() const
+    { return _dns_config; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -145,8 +160,11 @@ private:
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
+    [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
     util::Ed25519PrivateKey _ed25519_private_key;
+
+    dns::Config _dns_config;
 };
 
 } // ouinet namespace

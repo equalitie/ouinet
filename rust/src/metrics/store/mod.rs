@@ -25,14 +25,20 @@ pub struct Store {
     encryption_key: EncryptionKey,
     pub record_id: RecordIdStore,
     pub backoff: Backoff,
+    pub delete_after: Duration,
 }
 
 impl Store {
-    pub async fn new(root_path: PathBuf, encryption_key: EncryptionKey) -> io::Result<Self> {
+    pub async fn new(
+        root_path: PathBuf,
+        encryption_key: EncryptionKey,
+        delete_after_seconds: u64,
+    ) -> io::Result<Self> {
         let records_dir_path = root_path.join("records");
         let device_id_path = root_path.join("device_id.json");
         let record_number_path = root_path.join("record_number.json");
         let backoff_path = root_path.join("backoff.json");
+        let delete_after = Duration::from_secs(delete_after_seconds);
 
         fs::create_dir_all(&records_dir_path).await?;
 
@@ -44,6 +50,7 @@ impl Store {
             encryption_key,
             record_id,
             backoff,
+            delete_after,
         })
     }
 
@@ -151,7 +158,7 @@ impl Store {
 
             match created.elapsed() {
                 Ok(duration) => {
-                    if duration >= constants::DELETE_RECORDS_AFTER {
+                    if duration >= self.delete_after {
                         log::warn!("Record {name:?} is too old ({duration:?}), removing it");
                         fs::remove_file(&path).await?;
                         continue;
