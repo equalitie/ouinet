@@ -5,6 +5,7 @@
 #include "../src/util/wait_condition.h"
 #include "../src/util/yield.h"
 #include "../src/namespaces.h"
+#include "../src/task.h"
 
 namespace ouinet { namespace util {
 

@@ -3,13 +3,11 @@
 #include <boost/test/included/unit_test.hpp>
 
 #include "../src/injector.h"
-#include "../src/util/dns.h"
 #include <boost/beast/http/string_body.hpp>
 
 using namespace std;
 using namespace ouinet;
 using Request = http::request<http::string_body>;
-using ouinet::util::resolve_target;
 
 static const std::string public_host[] = {
     "ouinet.work",

@@ -136,7 +136,7 @@ void handle_no_proxy( GenericStream& con
 // If not valid, set error code
 // (the returned lookup may not be usable then).
 TcpLookup
-ouinet::resolve_target(const http::request_header<>& req
+resolve_target(const http::request_header<>& req
                       , bool allow_private_targets
                       , std::shared_ptr<dns::Resolver> dns_resolver
                       , AsioExecutor exec
