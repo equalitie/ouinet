@@ -270,7 +270,6 @@ file(GLOB injector_sources
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
-    "./src/util/dns.cpp"
     ${EXPERIMENTAL_SOURCES}
 )
 

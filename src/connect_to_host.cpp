@@ -26,7 +26,7 @@ ouinet::connect_to_host( const AsioExecutor& ex
 
     auto const lookup = dns_resolver->resolve( host, port
                                              , cancel_signal
-                                             , yield[ec]);
+                                             , YieldContext(yield[ec]));
     return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
 
     return connect_to_host(lookup, ex, cancel_signal, yield);
