@@ -4,6 +4,7 @@
 #include "../util/watch_dog.h"
 #include "../util/handler_tracker.h"
 #include "../async_sleep.h"
+#include "../util/ssl_stream.h"
 #include <iostream>
 
 namespace ouinet {
@@ -13,8 +14,6 @@ using namespace std;
 
 void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
 {
-    using SslStream = asio::ssl::stream<GenericStream>;
-
     _base->start_listen(yield);
 
     TRACK_SPAWN(_ex, ([&] (asio::yield_context yield) {
@@ -35,8 +34,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                     continue;
                 }
 
-                auto tls_con = make_unique<SslStream>( move(base_con)
-                                                     , _ssl_context);
+                auto tls_con = SslStream(move(base_con), _ssl_context);
 
                 // Spawn a new coroutine to avoid blocking accept of the next
                 // socket.
@@ -57,13 +55,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                     ec = compute_error_code(ec, cancel, wd);
                     if (ec) return;  // do not propagate error
 
-                    static const auto shutter = [](SslStream& s) {
-                        // Just close the underlying connection
-                        // (TLS has no message exchange for shutdown).
-                        s.next_layer().close();
-                    };
-
-                    q.async_push( GenericStream(move(tls_con), move(shutter))
+                    q.async_push( GenericStream(move(tls_con))
                                 , cancel
                                 , yield[ec]);  // do not propagate error
                 }));

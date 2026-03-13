@@ -29,12 +29,20 @@ namespace detail {
     template<> struct Unsigned<2> { using type = uint16_t; };
     template<> struct Unsigned<4> { using type = uint32_t; };
     template<> struct Unsigned<8> { using type = uint64_t; };
+
+    // `char` is unsigned on arm64 but signed x86. Thus
+    // `parse::number<char>(...)` would have inconsistent results on different
+    // architectures. Use `int8_t` instead.
+    //
+    // https://news.ycombinator.com/item?id=18269886
+    template<typename T> struct IsAllowed : std::true_type {};
+    template<> struct IsAllowed<char> : std::false_type {};
 }
 
 //--------------------------------------------------------------------
 
 template<class T>
-std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value
+std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value && detail::IsAllowed<T>::value
                 , boost::optional<T>
                 >
 number(boost::string_view& s)
@@ -107,7 +115,7 @@ number(boost::string_view& s)
 // or just stop supporting old boost versions.
 #if BOOST_VERSION >= 108000
 template<class T>
-std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value
+std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value && detail::IsAllowed<T>::value
                 , boost::optional<T>
                 >
 number(beast::string_view& s)
@@ -122,7 +130,7 @@ number(beast::string_view& s)
 //--------------------------------------------------------------------
 
 template<class T>
-std::enable_if_t< std::is_signed<T>::value && std::is_integral<T>::value
+std::enable_if_t< std::is_signed<T>::value && std::is_integral<T>::value && detail::IsAllowed<T>::value
                 , boost::optional<T>
                 >
 number(boost::string_view& s)

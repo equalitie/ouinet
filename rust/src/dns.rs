@@ -1,4 +1,4 @@
-use std::{future::Future, net::IpAddr, sync::Arc};
+use std::{fmt, future::Future, net::IpAddr, sync::Arc};
 
 use cxx::UniquePtr;
 use ffi::IpAddress;
@@ -9,7 +9,7 @@ use hickory_resolver::{
     IntoName, ResolveError, ResolveErrorKind, TokioResolver,
 };
 use tokio::{select, sync::Notify, task::JoinSet};
-
+use crate::dns::ffi::{Config, Protocol};
 use crate::runtime;
 
 #[cxx::bridge(namespace = "ouinet::dns::bridge")]
@@ -32,11 +32,25 @@ mod ffi {
         Other = 4,
     }
 
+    enum Protocol {
+        // Unencrypted DNS queries via UDP or TCP
+        Plain = 0,
+        // DNS over HTTPS
+        Https = 1,
+    }
+
+    struct Config {
+        protocols: Vec<Protocol>,
+    }
+
     extern "Rust" {
         type Resolver;
 
-        fn new_resolver() -> Box<Resolver>;
+        fn new_resolver(cfg: Config) -> Box<Resolver>;
         fn resolve(&mut self, name: &str, completer: UniquePtr<BasicCompleter>);
+        fn str_to_proto(s: &str) -> Result<Protocol>;
+
+        fn proto_to_str(p: Protocol) -> String;
     }
 
     extern "Rust" {
@@ -53,6 +67,29 @@ mod ffi {
         fn on_cancel(self: Pin<&mut BasicCompleter>, token: Box<CancellationToken>);
     }
 }
+fn str_to_proto(s: &str) -> Result<Protocol, ProtocolParseError> {
+    match s {
+        "plain" => Ok(Protocol::Plain),
+        "https" => Ok(Protocol::Https),
+        _ => Err(ProtocolParseError)
+    }
+}
+
+fn proto_to_str(p: Protocol) -> String {
+    match p {
+        Protocol::Plain => "plain".to_string(),
+        Protocol::Https => "https".to_string(),
+        _ => "undefined".to_string(),
+    }
+}
+
+struct ProtocolParseError;
+
+impl fmt::Display for ProtocolParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "failed to parse protocol")
+    }
+}
 
 /// DNS resolver.
 pub struct Resolver {
@@ -61,11 +98,24 @@ pub struct Resolver {
 }
 
 impl Resolver {
-    fn new() -> Self {
+    fn new(cfg: Config) -> Self {
+        let mut name_servers: NameServerConfigGroup = NameServerConfigGroup::new();
+
         // TODO: consider making the nameservers configurable
-        let mut name_servers = NameServerConfigGroup::quad9_https();
-        name_servers.merge(NameServerConfigGroup::cloudflare_https());
-        name_servers.merge(NameServerConfigGroup::google_https());
+        for proto in cfg.protocols {
+            match proto {
+                Protocol::Https => {
+                    name_servers.merge(NameServerConfigGroup::quad9_https());
+                    name_servers.merge(NameServerConfigGroup::cloudflare_https());
+                    name_servers.merge(NameServerConfigGroup::google_https());
+                }
+                _ => { // Protocol::Plain
+                    name_servers.merge(NameServerConfigGroup::quad9());
+                    name_servers.merge(NameServerConfigGroup::cloudflare());
+                    name_servers.merge(NameServerConfigGroup::google());
+                }
+            }
+        }
 
         let inner = TokioResolver::builder_with_config(
             ResolverConfig::from_parts(None, vec![], name_servers),
@@ -137,8 +187,8 @@ impl Resolver {
     }
 }
 
-fn new_resolver() -> Box<Resolver> {
-    Box::new(Resolver::new())
+fn new_resolver(cfg: Config) -> Box<Resolver> {
+    Box::new(Resolver::new(cfg))
 }
 
 // Cancels the operation if cancellation has been triggered by the caller.

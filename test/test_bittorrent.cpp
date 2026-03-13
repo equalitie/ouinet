@@ -65,10 +65,12 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
-    bool do_doh = true;
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
+    DhtNode dht(ctx.get_executor()
+        , metrics_dht.dht_node_ipv4()
+        , std::make_shared<dns::Resolver>()
+        , rx_limit);
 
     task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
@@ -86,10 +88,10 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
         BOOST_REQUIRE(!ec);
 
         dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
-        BOOST_REQUIRE(!ec);
+        BOOST_REQUIRE_MESSAGE(!ec, "Announcing failed with: " << ec.message());
 
         auto peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
-        BOOST_REQUIRE(!ec);
+        BOOST_REQUIRE_MESSAGE(!ec, "Get peers failed with: " << ec.message());
 
         BOOST_REQUIRE(peers.count(dht.wan_endpoint()));
 
@@ -109,10 +111,12 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
-    bool do_doh = true;
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit);
+    DhtNode dht(ctx.get_executor()
+        , metrics_dht.dht_node_ipv4()
+        , std::make_shared<dns::Resolver>()
+        , rx_limit);
 
     auto mutable_data = []( const string& value
                           , const string& salt

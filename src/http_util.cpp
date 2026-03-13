@@ -16,13 +16,15 @@ namespace http = beast::http;
 namespace posix_time = boost::posix_time;
 
 
-pair<string, string>
+std::pair<std::string, uint16_t>
 ouinet::util::get_host_port(const http::request_header<>& req)
 {
     auto target = req.target();
-    auto defport = (target.starts_with("https:") || target.starts_with("wss:"))
-                 ? "443"
-                 : "80";
+
+    // Initialize with default port
+    uint16_t port = (target.starts_with("https:") || target.starts_with("wss:"))
+                  ? 443
+                  : 80;
 
     auto hp = (req.method() == http::verb::connect)
             ? target
@@ -31,13 +33,19 @@ ouinet::util::get_host_port(const http::request_header<>& req)
     if (hp.empty() && req.version() == 10) {
         // HTTP/1.0 proxy client with no ``Host:``, use URL.
         skyr::url url{std::string(target)};
-        return make_pair( url.hostname()
-                        , (url.port().empty() ? defport : url.port()));
+        if (!url.port().empty()) {
+            boost::string_view port_sv = url.port();
+            port = parse::number<unsigned>(port_sv).get();
+        }
+        return make_pair(url.hostname(), port);
     }
 
-    auto host_port = util::split_ep(hp);
-    return make_pair( std::string(host_port.first)
-                    , host_port.second.empty() ? defport : std::string(host_port.second));
+    auto [host, port_sv] = split_ep(hp);
+
+    if ( !port_sv.empty() ) {
+        port = parse::number<uint16_t>(port_sv).get();
+    }
+    return make_pair(std::string(host), port);
 }
 
 boost::optional<ouinet::util::HttpResponseByteRange>
@@ -90,7 +98,7 @@ ouinet::util::operator<<( std::ostream& os
     return os << '*';
 }
 
-boost::optional<std::vector<ouinet::util::HttpRequestByteRange>>
+std::optional<std::vector<ouinet::util::HttpRequestByteRange>>
 ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
 {
     using Ranges = std::vector<ouinet::util::HttpRequestByteRange>;
@@ -106,21 +114,21 @@ ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
     };
 
     trim_ws(s);
-    if (!consume(s, "bytes")) return boost::none;
+    if (!consume(s, "bytes")) return {};
     trim_ws(s);
-    if (!consume(s, "=")) return boost::none;
+    if (!consume(s, "=")) return {};
     trim_ws(s);
 
     Ranges ranges;
 
     while (true) {
         auto first = parse::number<size_t>(s);
-        if (!first) return boost::none;
+        if (!first) return {};
         trim_ws(s);
-        if (!consume(s, "-")) return boost::none;
+        if (!consume(s, "-")) return {};
         trim_ws(s);
         auto last = parse::number<size_t>(s);
-        if (!last) return boost::none;
+        if (!last) return {};
         ranges.push_back({*first, *last});
         trim_ws(s);
         if (!consume(s, ",")) break;
@@ -130,47 +138,6 @@ ouinet::util::HttpRequestByteRange::parse(boost::string_view s)
     return ranges;
 }
 
-#ifdef __SANITIZE_ADDRESS__
-static
-boost::optional<posix_time::ptime>
-parse_date_rfc1123(beast::string_view s)
-{
-    static const char * months[12] = {
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    };
-
-    struct tm g = {0};
-    char M[4];
-    time_t t;
-    int i;
-
-    char buf[128];
-
-    if (s.size() >= sizeof(buf)) return boost::none;
-
-    memcpy(buf, s.data(), s.size());
-    buf[s.size()] = 0;
-
-    sscanf(buf, "%*[a-zA-Z,] %d %3s %d %d:%d:%d",
-	   & g.tm_mday, M, & g.tm_year,
-	   & g.tm_hour, & g.tm_min, & g.tm_sec);
-    for (i = 0; i < 12; i++) {
-	    if (strncmp (M, months[i], 3) == 0) {
-	        g.tm_mon = i;
-	        break;
-	    }
-    }
-
-    if (g.tm_year == 0) return boost::none;
-
-    g.tm_year -= 1900;
-    t = timegm (& g);
-
-    return posix_time::from_time_t(t);
-}
-#endif
-
 posix_time::ptime
 ouinet::util::parse_date(beast::string_view s)
 {
@@ -178,17 +145,6 @@ ouinet::util::parse_date(beast::string_view s)
 
     // Trim quotes from the beginning
     while (s.starts_with('"') || s.starts_with(' ')) s.remove_prefix(1);
-
-    // The date parsing code below internally throws and catches exceptions.
-    // This confuses the address sanitizer when combined with Boost.Coroutine
-    // and causes the app exit with false positive log from Asan.
-#   ifdef __SANITIZE_ADDRESS__
-    {
-        auto t = parse_date_rfc1123(s);
-        if (!t) return bt::ptime();
-        return *t;
-    }
-#   endif
 
     static const auto format = [](const char* fmt) {
         using std::locale;

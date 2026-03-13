@@ -22,8 +22,6 @@ windows / build:
     expire_in: 6h
   needs:
     []
-  when: manual
-  allow_failure: true
 
 windows / unit-test:
   variables:
@@ -48,5 +46,3 @@ windows / unit-test:
     - if ($testsFailed) { exit 1 }
   needs:
     ['windows / build']
-  when: manual
-  allow_failure: true
