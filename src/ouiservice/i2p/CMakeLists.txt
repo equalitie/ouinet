@@ -3,20 +3,20 @@ cmake_minimum_required (VERSION 3.5)
 include(ExternalProject)
 
 ################################################################################
-option(WITH_BINARY "" OFF)
-option(WITH_GUI "" OFF)
-add_subdirectory(./i2pd/build)
-
-# We link these libraries statically, which means their own dependencies must
-# be listed explicitly on the libraries themselves rather than ouiservice-i2p.
-set_target_properties(libi2pd PROPERTIES
-    INTERFACE_LINK_LIBRARIES
-        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system;OpenSSL::Crypto;OpenSSL::SSL"
-)
-set_target_properties(libi2pdclient PROPERTIES
-    INTERFACE_LINK_LIBRARIES
-        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system;OpenSSL::Crypto;OpenSSL::SSL"
-)
+block()
+    set(WITH_BINARY OFF)
+    set(WITH_GUI OFF)
+    set(BUILD_SHARED_LIBS ON)
+    add_definitions(-DBOOST_ASIO_DYN_LINK)
+    add_subdirectory(./i2pd/build)
+    if(POLICY CMP0079 )
+        # Allows adding the libraries below
+        # https://stackoverflow.com/a/75246115/273348
+        cmake_policy(SET CMP0079 NEW)
+    endif()
+    target_link_libraries(libi2pd PRIVATE Boost::program_options)
+    target_link_libraries(libi2pdclient PRIVATE Boost::program_options)
+endblock()
 
 # i2pd messes with CMAKE_MODULE_PATH, which breaks automatic dependency handling.
 # Work around this issue by setting them by hand.
