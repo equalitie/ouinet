@@ -687,7 +687,7 @@ In addition to transferring cache entries between different participants in the 
 
 To circulate cached content out of band, formats for data at rest are defined.  A *static cache repository* is a directory consisting of two subdirectories:
 
-* One to hold cache entries; for version 3 of the signed HTTP storage format, this is called `data-v3`.
+* One to hold cache entries; for version 4 of the signed HTTP storage format, this is called `data-v4`.
 * One to hold resource group information; for version 0 of the DHT group storage format, this is called `dht_groups`.
 
 Each resource group with a distinctive bytestring `<resource-group>` has a group directory named `dht_groups/<lower-hex(sha1(resource-group))>` containing:
@@ -695,7 +695,7 @@ Each resource group with a distinctive bytestring `<resource-group>` has a group
 * A `group_name` file with `<resource-group>` as its only content (no trailing newline).
 * An `items` subdirectory with one file per cache entry having that belongs to the group; the file contains the entry's `<resource-uri>` as its only content (no trailing newline) and is named `<lower-hex(sha1(resource-uri))>`.
 
-Each cache entry with a `<resource-uri>` and thus `<uri-hash=lower-hex(sha1(resource-uri))>` has a directory named `data-v3/<uri-hash[0:2]>/<uri-hash[2:]>`. The splitting of the directory name avoids having too many entries directly under `data-v3`. The entry's directory contains:
+Each cache entry with a `<resource-uri>` and thus `<uri-hash=lower-hex(sha1(resource-uri))>` has a directory named `data-v4/<uri-hash[0:2]>/<uri-hash[2:]>`. The splitting of the directory name avoids having too many entries directly under `data-v4`. The entry's directory contains:
 
 * A `head` file holding the whole raw HTTP head with response status and headers (except framing), and `X-Ouinet-*` headers conforming its signature (as described in the [Signature computation](#signature-computation) section). Lines are CRLF-terminated and a final empty line is included.
 * If the resource has a non-empty body, a `sigs` file with one fixed-width, LF-terminated line per data block. The i-th line corresponds to the i-th block and has this content: `<padded-offset(i)> <base64(block-signature(i))> <base64(hash(i))> <base64(chained-hash(i-1))>`, where `padded-offset(i)` is the offset of the block in lower-case hexadecimal zero-padded to 16 characters, separators are a single space, and hashes and signatures are those defined in the [Stream signatures](#stream-signatures) section; `chained-hash(-1)` is defined as a hash-length string of NUL bytes.
