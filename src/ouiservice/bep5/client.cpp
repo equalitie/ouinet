@@ -499,6 +499,10 @@ void Bep5Client::start(asio::yield_context yield)
 }
 
 size_t Bep5Client::injector_candidates_n() const noexcept {
+    if (!_injector_swarm){
+        return 0;
+    }
+
     return _injector_swarm -> peers().size();
 }
 
