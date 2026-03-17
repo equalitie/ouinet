@@ -67,6 +67,7 @@ public class Config implements Parcelable {
         private String maxCachedAge;
         private String localDomain;
         private boolean disableDoH = false;
+        private Set<String> dnsProtocols = null;
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
         private boolean disableInjectorAccess = false;
@@ -80,6 +81,7 @@ public class Config implements Parcelable {
         // Set either-or, not both.
         private String metricsServerTlsCaCert;
         private String metricsServerTlsCaCertPath;
+        private String metricsDeleteAfter;
 
         public ConfigBuilder(Context context) {
             Ouinet.maybeLoadLibraries(context);
@@ -199,6 +201,23 @@ public class Config implements Parcelable {
             this.disableDoH = disableDoH;
             return this;
         }
+
+        public ConfigBuilder addDnsProtocol(String dnsProtocol){
+            if (dnsProtocol == null)
+                return this;
+
+            if (this.dnsProtocols == null)
+                this.dnsProtocols = new HashSet<>();
+            // Leave validation to the client.
+            this.dnsProtocols.add(dnsProtocol);
+            return this;
+        }
+        public ConfigBuilder setDnsProtocols(Set<String> dnsProtocols){
+            // Leave validation to the client.
+            this.dnsProtocols = (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
+            return this;
+        }
+
         public ConfigBuilder setDisableOriginAccess(boolean disableOriginAccess){
             this.disableOriginAccess = disableOriginAccess;
             return this;
@@ -241,6 +260,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setMetricsServerTlsCaCertPath(String path) {
             this.metricsServerTlsCaCertPath = path;
+            return this;
+        }
+        public ConfigBuilder setMetricsDeleteAfter(String metricsDeleteAfter){
+            this.metricsDeleteAfter = metricsDeleteAfter;
             return this;
         }
 
@@ -426,6 +449,7 @@ public class Config implements Parcelable {
                     maxCachedAge,
                     localDomain,
                     disableDoH,
+                    dnsProtocols,
                     disableOriginAccess,
                     disableProxyAccess,
                     disableInjectorAccess,
@@ -436,7 +460,8 @@ public class Config implements Parcelable {
                     metricsServerToken,
                     metricsEncryptionKey,
                     metricsServerTlsCaCert,
-                    metricsServerTlsCaCertPath);
+                    metricsServerTlsCaCertPath,
+                    metricsDeleteAfter);
         }
     }
 
@@ -466,6 +491,7 @@ public class Config implements Parcelable {
     private String maxCachedAge;
     private String localDomain;
     private boolean disableDoH;
+    private Set<String> dnsProtocols;
     private boolean disableOriginAccess;
     private boolean disableProxyAccess;
     private boolean disableInjectorAccess;
@@ -477,6 +503,7 @@ public class Config implements Parcelable {
     private String metricsEncryptionKey;
     private String metricsServerTlsCaCert;
     private String metricsServerTlsCaCertPath;
+    private String metricsDeleteAfter;
 
     private Config(String ouinetDirectory,
                   Set<String> btBootstrapExtras,
@@ -504,6 +531,7 @@ public class Config implements Parcelable {
                   String maxCachedAge,
                   String localDomain,
                   boolean disableDoH,
+                  Set<String> dnsProtocols,
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
                   boolean disableInjectorAccess,
@@ -514,7 +542,8 @@ public class Config implements Parcelable {
                   String metricsServerToken,
                   String metricsEncryptionKey,
                   String metricsServerTlsCaCert,
-                  String metricsServerTlsCaCertPath) {
+                  String metricsServerTlsCaCertPath,
+                  String metricsDeleteAfter) {
         this.ouinetDirectory = ouinetDirectory;
         this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
         this.cacheHttpPubKey = cacheHttpPubKey;
@@ -541,6 +570,7 @@ public class Config implements Parcelable {
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
         this.disableDoH = disableDoH;
+        this.dnsProtocols = (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
         this.disableOriginAccess = disableOriginAccess;
         this.disableProxyAccess = disableProxyAccess;
         this.disableInjectorAccess = disableInjectorAccess;
@@ -552,6 +582,7 @@ public class Config implements Parcelable {
         this.metricsEncryptionKey = metricsEncryptionKey;
         this.metricsServerTlsCaCert = metricsServerTlsCaCert;
         this.metricsServerTlsCaCertPath = metricsServerTlsCaCertPath;
+        this.metricsDeleteAfter = metricsDeleteAfter;
     }
     public String getOuinetDirectory() {
         return ouinetDirectory;
@@ -631,6 +662,9 @@ public class Config implements Parcelable {
     public boolean getDisableDoH() {
         return disableDoH;
     }
+    public Set<String> getDnsProtocols() {
+        return (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
+    }
     public boolean getDisableOriginAccess() {
         return disableOriginAccess;
     }
@@ -663,6 +697,9 @@ public class Config implements Parcelable {
     }
     public String getMetricsServerTlsCaCertPath() {
         return metricsServerTlsCaCertPath;
+    }
+    public String getMetricsDeleteAfter() {
+        return metricsDeleteAfter;
     }
 
     public static final Parcelable.Creator<Config> CREATOR
@@ -709,6 +746,7 @@ public class Config implements Parcelable {
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
         out.writeInt(disableDoH ? 1 : 0);
+        out.writeStringArray(dnsProtocols == null ? null : dnsProtocols.toArray(new String[0]));
         out.writeInt(disableOriginAccess ? 1 : 0);
         out.writeInt(disableProxyAccess ? 1 : 0);
         out.writeInt(disableInjectorAccess ? 1 : 0);
@@ -721,6 +759,7 @@ public class Config implements Parcelable {
         out.writeString(metricsEncryptionKey);
         out.writeString(metricsServerTlsCaCert);
         out.writeString(metricsServerTlsCaCertPath);
+        out.writeString(metricsDeleteAfter);
     }
     private Config(Parcel in) {
         ouinetDirectory = in.readString();
@@ -758,6 +797,14 @@ public class Config implements Parcelable {
         localDomain = in.readString();
         disableDoH = in.readInt() != 0;
 
+        String[] dnsProtocolsArray = in.createStringArray();
+        if (dnsProtocolsArray == null)
+            dnsProtocols = null;
+        else {
+            dnsProtocols = new HashSet<>();
+            Collections.addAll(dnsProtocols, dnsProtocolsArray);
+        }
+
         disableOriginAccess   = in.readInt() != 0;
         disableProxyAccess    = in.readInt() != 0;
         disableInjectorAccess = in.readInt() != 0;
@@ -773,6 +820,7 @@ public class Config implements Parcelable {
         metricsEncryptionKey = in.readString();
         metricsServerTlsCaCert = in.readString();
         metricsServerTlsCaCertPath = in.readString();
+        metricsDeleteAfter = in.readString();
     }
 
 }

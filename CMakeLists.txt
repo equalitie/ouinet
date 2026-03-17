@@ -137,10 +137,14 @@ if(WITH_EXPERIMENTAL)
 endif()
 
 ################################################################################
-# This is separate from `ouinet_common` because it's also required by
+# These are separate from `ouinet_common` because they're also required by
 # `ouinet_rs`
-add_library(ouinet_logger STATIC "./src/logger.cpp")
-target_link_libraries(ouinet_logger PUBLIC Boost::filesystem)
+add_library(ouinet_common_public
+    STATIC
+    "./src/logger.cpp"
+    "./src/util/log_path.cpp"
+)
+target_link_libraries(ouinet_common_public PUBLIC Boost::filesystem)
 
 ################################################################################
 
@@ -186,7 +190,7 @@ target_link_libraries(ouinet_common
         lib::json
         lib::asio_utp
         ouinet_rs
-        ouinet_logger
+        ouinet_common_public
         # Boost::asio_ssl is public for Android because the ClientConfig used
         # in native-lib.cpp contains ssl::context and we need its move
         # constructor and destructor implementations.
@@ -213,7 +217,9 @@ file(GLOB client_sources
 )
 
 add_library(client_lib SHARED ${client_sources})
-set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+if (NOT WIN32 AND NOT MINGW)
+    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+endif ()
 
 target_link_libraries(client_lib
     PUBLIC
@@ -246,9 +252,17 @@ file(GLOB injector_sources
     ${EXPERIMENTAL_SOURCES}
 )
 
-add_library(injector_lib ${injector_sources})
-set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
+add_library(injector_lib SHARED ${injector_sources})
+if (NOT WIN32 AND NOT MINGW)
+    set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
+endif ()
+
 target_link_libraries(injector_lib ouinet_common)
+
+if (WIN32 OR MINGW)
+    target_compile_definitions(injector_lib PRIVATE -DOUINET_DECL_EXPORT)
+endif()
+
 
 if ((NOT ANDROID) AND (NOT IOS))
     add_executable(injector "./src/injector_main.cpp")

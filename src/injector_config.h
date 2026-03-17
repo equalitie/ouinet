@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <set>
 #include <vector>
 
@@ -8,6 +9,7 @@
 #include <boost/regex.hpp>
 #include <boost/program_options.hpp>
 
+#include "declspec.h"
 #include "constants.h"
 #include "logger.h"
 #include "http_logger.h"
@@ -16,12 +18,20 @@
 #include "bep5_swarms.h"
 #include "bittorrent/bootstrap.h"
 
+#include "cxx/dns.h"
+
 namespace ouinet {
+
+template<class... Args>
+inline
+std::runtime_error error(Args&&... args) {
+    return std::runtime_error(util::str(std::forward<Args>(args)...));
+}
 
 #define _HTTP_LOG_FILE_NAME "access.log"
 static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
 
-class InjectorConfig {
+class OUINET_DECL InjectorConfig {
 public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 
@@ -53,11 +63,11 @@ public:
     boost::filesystem::path repo_root() const
     { return _repo_root; }
 
-    inline bool _is_http_log_file_enabled() const {
+    bool _is_http_log_file_enabled() const {
         return http_logger.get_log_file() != nullptr;
     }
 
-    inline void _is_http_log_file_enabled(bool v) {
+    void _is_http_log_file_enabled(bool v) {
         if (!v) {
             http_logger.log_to_file("");
             return;
@@ -135,6 +145,9 @@ public:
     bool is_doh_enabled() const
     { return !_disable_doh; }
 
+    dns::Config dns_config() const
+    { return _dns_config; }
+
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
@@ -170,8 +183,11 @@ private:
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
+    [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
     util::Ed25519PrivateKey _ed25519_private_key;
+
+    dns::Config _dns_config;
 };
 
 inline
@@ -239,7 +255,14 @@ InjectorConfig::options_description()
         ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
          , "Disable DNS over HTTPS for domain name resolution. "
            "When this option is present the injector will fallback to the default DNS mechanism "
-           "provided by the operating system.")
+           "provided by the operating system. Deprecated, use --dns-protocol instead.")
+        ("dns-protocol", po::value<std::vector<string>>()
+                             ->composing()
+                             ->default_value(dns_default_protocols,
+                                             util::join(dns_default_protocols, ","))
+         , "DNS protocols used by the resolver. This option can be set to: plain or https. "
+           "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
+           "the nameservers. The option can be used multiple times to select more than one protocol.")
 
         ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
          , "Path to the CA certificate store file")
@@ -349,9 +372,39 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _allow_private_targets = true;
     }
 
+    // Pre-load opt_protos to keep compatibility with disable-doh
+    auto opt_protos = vm["dns-protocol"].as<std::vector<string>>();
+
+    // If disable-doh is present 'https' is removed from protocols selected by 'dns-protocols`
+    // the mechanism makes sure that at least one protocol is selected otherwise adds
+    // 'plain' to 'dns-protocols' list.
+    // This code will be deleted too when the deprecated option `disable-doh` is removed.
     if (vm["disable-doh"].as<bool>()) {
+        LOG_WARN("Option '--disable-doh' is deprecated, use '--dns-protocol' instead");
+        auto doh = std::find( opt_protos.begin(), opt_protos.end(), "https");
+        if (doh != opt_protos.end())
+            opt_protos.erase(doh);
+        if (opt_protos.empty())
+            opt_protos.emplace_back("plain");
         _disable_doh = true;
     }
+
+    for (const auto& proto_name : opt_protos) {
+        dns::bridge::Protocol proto;
+        try {
+            proto = dns::bridge::str_to_proto(proto_name);
+        } catch (const rust::Error&) {
+            throw error("Invalid argument for option --dns-protocol: ", proto_name);
+        }
+
+        if ( std::ranges::find(_dns_config.protocols, proto) ==  _dns_config.protocols.end())
+            _dns_config.protocols.emplace_back(proto);
+    }
+
+    LOG_DEBUG( "DNS protocols enabled: ["
+             , dns::Resolver::protos_to_str(_dns_config.protocols)
+             , "]");
+
 
 #ifdef __EXPERIMENTAL__
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without
