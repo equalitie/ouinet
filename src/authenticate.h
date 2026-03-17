@@ -56,9 +56,10 @@ bool authenticate( Request& req
       
         int invalid;
         std::string computed = parse_auth(auth_i->value());
-        if (credentials.size() != computed.size() || credentials.size() <= 0) {
+        if (credentials.size() <= 0) {
             invalid = 1;
         } else {
+            computed.resize(credentials.size());
             // Constant time memory compare from OpenSSL to avoid timing attachs
             invalid = CRYPTO_memcmp(credentials.data(), computed.data(), credentials.size());
         }
