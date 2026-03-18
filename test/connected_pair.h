@@ -5,13 +5,16 @@
 #include "../src/util/wait_condition.h"
 #include "../src/util/yield.h"
 #include "../src/namespaces.h"
+#include "../src/task.h"
 
 namespace ouinet { namespace util {
 
 inline
 std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(const AsioExecutor& ex, asio::yield_context yield)
+connected_pair(asio::yield_context yield)
 {
+    auto ex = yield.get_executor();
+
     using namespace std;
     using tcp = asio::ip::tcp;
     using Ret = pair<tcp::socket, tcp::socket>;
@@ -40,23 +43,9 @@ connected_pair(const AsioExecutor& ex, asio::yield_context yield)
 
 inline
 std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(asio::io_context& ctx, asio::yield_context yield)
+connected_pair(YieldContext yield)
 {
-    return connected_pair(ctx.get_executor(), yield);
-}
-
-inline
-std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(const AsioExecutor& ex, YieldContext yield)
-{
-    return connected_pair(ex, static_cast<asio::yield_context>(yield));
-}
-
-inline
-std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(asio::io_context& ctx, YieldContext yield)
-{
-    return connected_pair(ctx, static_cast<asio::yield_context>(yield));
+    return connected_pair(yield.native());
 }
 
 }} // namespaces

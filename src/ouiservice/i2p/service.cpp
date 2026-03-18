@@ -49,7 +49,7 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
 
     LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be " + no_of_tunnel_hops_str);
     // we set ack delay to 20 ms, because this outnet is considered as low-latency
-    std::map<std::string, std::string> params =
+    i2p::util::Mapping params =
     {
       { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, no_of_tunnel_hops_str},
       { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},

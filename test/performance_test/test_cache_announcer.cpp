@@ -5,7 +5,7 @@
 
 #include "../test/util/bittorrent_utils.cpp"
 
-#define private public
+#define protected public
 #include "cache/announcer.cpp"
 
 using namespace chrono;
@@ -21,7 +21,7 @@ const size_t N_GROUPS = 128;
 const size_t TEST_SIMULTANEOUS_ANNOUNCEMENTS = 64;
 
 shared_ptr<MainlineDht> btdht;
-std::unique_ptr<Announcer> announcer;
+std::unique_ptr<Bep5Announcer> announcer;
 Clock::time_point start;
 Clock::time_point now;
 
@@ -34,7 +34,7 @@ void start_btdht(asio::io_context& ctx, BtUtils& btu) {
 
 void start_announcer_loop(asio::io_context& ctx) {
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        announcer = std::make_unique<Announcer>(btdht, TEST_SIMULTANEOUS_ANNOUNCEMENTS);
+        announcer = std::make_unique<Bep5Announcer>(btdht, TEST_SIMULTANEOUS_ANNOUNCEMENTS);
 
         start = Clock::now();
         for (size_t n = 0; n < N_GROUPS; n++) {

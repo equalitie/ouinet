@@ -2,7 +2,6 @@
 
 #include "http_util.h"
 #include "or_throw.h"
-#include "util/dns.h"
 #include "util/timeout.h"
 
 #include <boost/asio/connect.hpp>
@@ -18,15 +17,16 @@ using TcpLookup = asio::ip::tcp::resolver::results_type;
 tcp::socket
 ouinet::connect_to_host( const AsioExecutor& ex
                        , const string& host
-                       , const string& port
+                       , const uint16_t port
+                       , std::shared_ptr<dns::Resolver> dns_resolver
                        , Signal<void()>& cancel_signal
                        , asio::yield_context yield)
 {
     sys::error_code ec;
 
-    auto const lookup = util::resolve_tcp_async( host, port
-                                               , ex, cancel_signal
-                                               , yield[ec]);
+    auto const lookup = dns_resolver->resolve( host, port
+                                             , cancel_signal
+                                             , YieldContext(yield[ec]));
     return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
 
     return connect_to_host(lookup, ex, cancel_signal, yield);

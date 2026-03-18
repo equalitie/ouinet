@@ -105,7 +105,7 @@ SDK version:
 - The oldest platform supported by `android-ndk-r19b`, as installed by
   `build-android.sh`, is `android-16`.
   However, no application that implements Ouinet supports an SDK lower than 21,
-  (e.g. see Ceno Browser [buildSrc/src/main/java/Config.kt](https://gitlab.com/censorship-no/ceno-browser/-/blob/main/buildSrc/src/main/java/Config.kt#L13)).
+  (e.g. see Ceno Browser [buildSrc/src/main/java/Config.kt](https://gitlab.com/ceno-app/ceno-browser/-/blob/main/buildSrc/src/main/java/Config.kt#L13)).
 
 Thus:
 

@@ -161,6 +161,7 @@ public class Ouinet {
         maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
         maybeAdd    (args, "--metrics-server-cacert",       config.getMetricsServerTlsCaCert());
         maybeAdd    (args, "--metrics-server-cacert-file",  config.getMetricsServerTlsCaCertPath());
+        maybeAdd    (args, "--metrics-delete-after",        config.getMetricsDeleteAfter());
 
         Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
         if (btBootstrapExtras != null) {
@@ -172,6 +173,13 @@ public class Ouinet {
         List<String> path = new ArrayList<>();
         if (config.getObfs4ProxyPath() != null) {
             path.add(config.getObfs4ProxyPath());
+        }
+
+        Set<String> dnsProtocols = config.getDnsProtocols();
+        if (dnsProtocols != null) {
+            for (String x : dnsProtocols) {
+                args.add("--dns-protocol=" + x);
+            }
         }
 
         nStartClient(args.toArray(new String[0]), path.toArray(new String[0]));

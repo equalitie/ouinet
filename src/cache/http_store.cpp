@@ -925,10 +925,9 @@ http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor 
 
 static
 fs::path
-path_from_key(fs::path dir, const std::string& key)
+path_from_resource_id(fs::path dir, const ResourceId& resource_id)
 {
-    auto key_digest = util::sha1_digest(key);
-    auto hex_digest = util::bytes::to_hex(key_digest);
+    auto hex_digest = resource_id.hex_string();
     boost::string_view hd0(hex_digest); hd0.remove_suffix(hex_digest.size() - 2);
     boost::string_view hd1(hex_digest); hd1.remove_prefix(2);
     return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
@@ -991,16 +990,16 @@ public:
     ~HttpReadStore() = default;
 
     reader_uptr
-    reader(const std::string& key, sys::error_code& ec) override
+    reader(const ResourceId& resource_id, sys::error_code& ec) override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         return http_store_reader(kpath, executor, ec);
     }
 
     ReaderAndSize
-    reader_and_size(const std::string& key, sys::error_code& ec) override
+    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         auto rr = http_store_reader(kpath, executor, ec);
         if (ec) return {};
         auto bs = http_store_body_size(kpath, executor, ec);
@@ -1008,16 +1007,16 @@ public:
     }
 
     reader_uptr
-    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         return http_store_range_reader(kpath, executor, first, last, ec);
     }
 
     std::size_t
-    body_size(const std::string& key, sys::error_code& ec) const override
+    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         return http_store_body_size(kpath, executor, ec);
     }
 
@@ -1032,9 +1031,9 @@ public:
     }
 
     HashList
-    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    load_hash_list(const ResourceId& resource_id, Cancel cancel, asio::yield_context yield) const override
     {
-        auto dir = path_from_key(path, key);
+        auto dir = path_from_resource_id(path, resource_id);
         return http_store_load_hash_list(dir, executor, cancel, yield);
     }
 
@@ -1053,9 +1052,9 @@ public:
     ~StaticHttpStore() = default;
 
     reader_uptr
-    reader(const std::string& key, sys::error_code& ec) override
+    reader(const ResourceId& resource_id, sys::error_code& ec) override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         // Always verifying the response not only
         // protects the agent against malicions content in the static cache, it also
         // acts as a good citizen and avoids spreading such content to others.
@@ -1064,9 +1063,9 @@ public:
     }
 
     ReaderAndSize
-    reader_and_size(const std::string& key, sys::error_code& ec) override
+    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         auto rr = std::make_unique<VerifyingReader>
             (http_store_reader(kpath, content_path, executor, ec), verif_pubk);
         if (ec) return {};
@@ -1075,9 +1074,9 @@ public:
     }
 
     reader_uptr
-    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         // TODO: Signature verification should be implemented here too,
         // but verification of partial responses not going through multi-peer download is broken.
         // Fortunately, for agent retrieval of responses in the static cache,
@@ -1092,9 +1091,9 @@ public:
     }
 
     std::size_t
-    body_size(const std::string& key, sys::error_code& ec) const override
+    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
     {
-        auto kpath = path_from_key(path, key);
+        auto kpath = path_from_resource_id(path, resource_id);
         return http_store_body_size(kpath, content_path, executor, ec);
     }
 
@@ -1189,32 +1188,32 @@ public:
     for_each(keep_func, Cancel, asio::yield_context) override;
 
     void
-    store( const std::string& key, http_response::AbstractReader&
+    store( const ResourceId& resource_id, http_response::AbstractReader&
          , Cancel, asio::yield_context) override;
 
     reader_uptr
-    reader(const std::string& key, sys::error_code& ec) override
-    { return read_store->reader(key, ec); }
+    reader(const ResourceId& resource_id, sys::error_code& ec) override
+    { return read_store->reader(resource_id, ec); }
 
     ReaderAndSize
-    reader_and_size(const std::string& key, sys::error_code& ec) override
-    { return read_store->reader_and_size(key, ec); }
+    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
+    { return read_store->reader_and_size(resource_id, ec); }
 
     reader_uptr
-    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
-    { return read_store->range_reader(key, first, last, ec); }
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
+    { return read_store->range_reader(resource_id, first, last, ec); }
 
     std::size_t
-    body_size(const std::string& key, sys::error_code& ec) const override
-    { return read_store->body_size(key, ec); }
+    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
+    { return read_store->body_size(resource_id, ec); }
 
     std::size_t
     size(Cancel cancel, asio::yield_context ec) const override
     { return read_store->size(cancel, ec); }
 
     HashList
-    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
-    { return read_store->load_hash_list(key, cancel, yield); }
+    load_hash_list(const ResourceId& resource_id, Cancel cancel, asio::yield_context yield) const override
+    { return read_store->load_hash_list(resource_id, cancel, yield); }
 
 protected:
     fs::path path;
@@ -1261,6 +1260,13 @@ FullHttpStore::for_each( keep_func keep
                 continue;
             }
 
+            auto resource_id = cache::ResourceId::from_hex(pp_name_s + p_name_s);
+
+            if (!resource_id) {
+                _WARN("Item directory is not a valid ResourceId: ", p.path());
+                continue;
+            }
+
             sys::error_code ec;
 
             auto rr = http_store_reader(p, executor, ec);
@@ -1270,7 +1276,7 @@ FullHttpStore::for_each( keep_func keep
             }
             assert(rr);
 
-            auto keep_entry = keep(std::move(rr), yield[ec]);
+            auto keep_entry = keep(*resource_id, std::move(rr), yield[ec]);
             ec = compute_error_code(ec, cancel);
             if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {
@@ -1285,12 +1291,12 @@ FullHttpStore::for_each( keep_func keep
 }
 
 void
-FullHttpStore::store( const std::string& key, http_response::AbstractReader& r
+FullHttpStore::store( const ResourceId& resource_id, http_response::AbstractReader& r
                     , Cancel cancel, asio::yield_context yield)
 {
     sys::error_code ec;
 
-    auto kpath = path_from_key(path, key);
+    auto kpath = path_from_resource_id(path, resource_id);
 
     auto kpath_parent = kpath.parent_path();
     fs::create_directory(kpath_parent, ec);
@@ -1304,8 +1310,8 @@ FullHttpStore::store( const std::string& key, http_response::AbstractReader& r
     // A new version of the response may still slip in here,
     // but it may be ok since it will probably be recent enough.
     if (!ec) dir->commit(ec);
-    if (!ec) _DEBUG("Stored to directory; key=", key, " path=", kpath);
-    else _ERROR( "Failed to store response; key=", key, " path=", kpath
+    if (!ec) _DEBUG("Stored to directory; resource_id=", resource_id, " path=", kpath);
+    else _ERROR( "Failed to store response; resource_id=", resource_id, " path=", kpath
                , " ec=", ec);
     return or_throw(yield, ec);
 }
@@ -1329,39 +1335,39 @@ public:
     ~BackedHttpStore() = default;
 
     reader_uptr
-    reader(const std::string& key, sys::error_code& ec) override
+    reader(const ResourceId& resource_id, sys::error_code& ec) override
     {
-        auto ret = FullHttpStore::reader(key, ec);
+        auto ret = FullHttpStore::reader(resource_id, ec);
         if (!ec) return ret;
-        _DEBUG("Failed to create reader for key, trying fallback store: ", key);
-        return fallback_store->reader(key, ec = {});
+        _DEBUG("Failed to create reader for resource_id, trying fallback store: ", resource_id);
+        return fallback_store->reader(resource_id, ec = {});
     }
 
     ReaderAndSize
-    reader_and_size(const std::string& key, sys::error_code& ec) override
+    reader_and_size(const ResourceId& resource_id, sys::error_code& ec) override
     {
-        auto ret = FullHttpStore::reader_and_size(key, ec);
+        auto ret = FullHttpStore::reader_and_size(resource_id, ec);
         if (!ec) return ret;
-        _DEBUG("Failed to create reader for key, trying fallback store: ", key);
-        return fallback_store->reader_and_size(key, ec = {});
+        _DEBUG("Failed to create reader for resource_id, trying fallback store: ", resource_id);
+        return fallback_store->reader_and_size(resource_id, ec = {});
     }
 
     reader_uptr
-    range_reader(const std::string& key, size_t first, size_t last, sys::error_code& ec) override
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, sys::error_code& ec) override
     {
-        auto ret = FullHttpStore::range_reader(key, first, last, ec);
+        auto ret = FullHttpStore::range_reader(resource_id, first, last, ec);
         if (!ec) return ret;
-        _DEBUG("Failed to create range reader for key, trying fallback store: ", key);
-        return fallback_store->range_reader(key, first, last, ec = {});
+        _DEBUG("Failed to create range reader for resource_id, trying fallback store: ", resource_id);
+        return fallback_store->range_reader(resource_id, first, last, ec = {});
     }
 
     std::size_t
-    body_size(const std::string& key, sys::error_code& ec) const override
+    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
     {
-        auto ret = FullHttpStore::body_size(key, ec);
+        auto ret = FullHttpStore::body_size(resource_id, ec);
         if (!ec) return ret;
-        _DEBUG("Failed to get body size for key, trying fallback store: ", key);
-        return fallback_store->body_size(key, ec = {});
+        _DEBUG("Failed to get body size for resource_id, trying fallback store: ", resource_id);
+        return fallback_store->body_size(resource_id, ec = {});
     }
 
     std::size_t
@@ -1376,14 +1382,14 @@ public:
     }
 
     HashList
-    load_hash_list(const std::string& key, Cancel cancel, asio::yield_context yield) const override
+    load_hash_list(const ResourceId& resource_id, Cancel cancel, asio::yield_context yield) const override
     {
         sys::error_code ec;
-        auto ret = FullHttpStore::load_hash_list(key, cancel, yield[ec]);
+        auto ret = FullHttpStore::load_hash_list(resource_id, cancel, yield[ec]);
         if (!ec) return ret;
         if (cancel) return or_throw<HashList>(yield, asio::error::operation_aborted);
-        _DEBUG("Failed to load hash list for key, trying fallback store: ", key);
-        return fallback_store->load_hash_list(key, cancel, yield);
+        _DEBUG("Failed to load hash list for resource_id, trying fallback store: ", resource_id);
+        return fallback_store->load_hash_list(resource_id, cancel, yield);
     }
 
 private:

@@ -18,11 +18,11 @@
 #include "../parse/endpoint.h"
 #include "../or_throw.h"
 #include "../util.h"
+#include "../util/address.h"
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto.h"
-#include "../util/dns.h"
 #include "../util/str.h"
 #include "../util/success_condition.h"
 #include "../util/file_io.h"
@@ -204,14 +204,14 @@ static bool read_nodes( bool is_v4
 
 DhtNode::DhtNode( const AsioExecutor& exec
                 , metrics::DhtNode metrics
-                , bool do_doh
+                , std::shared_ptr<dns::Resolver> dns_resolver
                 , const uint32_t mux_rx_limit
                 , fs::path storage_dir
                 , std::set<bootstrap::Address> extra_bs):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
-    _do_doh(do_doh),
+    _dns_resolver(std::move(dns_resolver)),
     _mux_rx_limit(mux_rx_limit),
     _storage_dir(std::move(storage_dir)),
     _extra_bs(std::move(extra_bs)),
@@ -1587,7 +1587,7 @@ asio::ip::udp::endpoint resolve(
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
-    bool do_doh,
+    const std::shared_ptr<dns::Resolver>& dns_resolver,
     Cancel& cancel_signal,
     asio::yield_context yield
 ) {
@@ -1597,31 +1597,18 @@ asio::ip::udp::endpoint resolve(
     using UdpEndpoint = typename UdpLookup::endpoint_type;
     using Answers = std::vector<asio::ip::address>;
     UdpLookup results;
-    if (do_doh)
-    {
-        dns::Resolver resolver;
 
-        auto answers = resolver.resolve(addr, yield[ec]);
-        if (!ec) {
-            string_view port_strv = port;
-            auto port_int = parse::number<uint16_t>(port_strv).get();
-            util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
-            results = UdpLookup::create(eps.begin(), eps.end(),
-                                        addr, port);
-        }
-
-        if (cancel_signal) ec = asio::error::operation_aborted;
-    } else
-    {
-        udp::resolver resolver(exec);
-
-        auto cancelled = cancel_signal.connect([&] {
-            resolver.cancel();
-        });
-        results = resolver.async_resolve(addr, port, yield[ec]);
-
-        if (cancelled) ec = asio::error::operation_aborted;
+    auto answers = dns_resolver->resolve(addr, yield[ec]);
+    if (!ec) {
+        string_view port_strv = port;
+        auto port_int = parse::number<uint16_t>(port_strv).get();
+        util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
+        results = UdpLookup::create(eps.begin(), eps.end(),
+                                    addr, port);
     }
+
+    if (cancel_signal) ec = asio::error::operation_aborted;
+
     if (ec) {
         return or_throw<udp::endpoint>(yield, ec);
     }
@@ -1667,7 +1654,7 @@ DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
                 _multiplexer->is_v4() ? udp::v4() : udp::v6(),
                 std::string(host),
                 port.empty() ? util::str(bootstrap::default_port) : std::string(port),
-                _do_doh,
+                _dns_resolver,
                 cancel,
                 yield[ec]
             );
@@ -2562,12 +2549,12 @@ void DhtNode::tracker_do_search_peers(
 
 MainlineDht::MainlineDht( const AsioExecutor& exec
                         , metrics::MainlineDht metrics
-                        , bool do_doh
+                        , std::shared_ptr<dns::Resolver> dns_resolver
                         , uint32_t mux_rx_limit
                         , fs::path storage_dir
                         , std::set<bootstrap::Address> extra_bs)
     : _exec(exec)
-    , _do_doh(do_doh)
+    , _dns_resolver(std::move(dns_resolver))
     , _mux_rx_limit(mux_rx_limit)
     , _storage_dir(std::move(storage_dir))
     , _extra_bs(std::move(extra_bs))
@@ -2625,7 +2612,7 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
     }
 
     _nodes[local_ep] = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()),
-                                            _do_doh, _mux_rx_limit, _storage_dir);
+                                            _dns_resolver, _mux_rx_limit, _storage_dir);
 
     TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
         auto ep = m.local_endpoint();
@@ -2669,7 +2656,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
     }
 
     auto node = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()),
-                                     _do_doh, _mux_rx_limit, _storage_dir, _extra_bs);
+                                     _dns_resolver, _mux_rx_limit, _storage_dir, _extra_bs);
 
     auto cc = _cancel.connect([&] { node = nullptr; });
 

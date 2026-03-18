@@ -104,10 +104,10 @@ int main(int argc, const char** argv)
 
     auto metrics_client = metrics::Client::noop();
     auto metrics_dht = metrics_client.mainline_dht();
-    bool do_doh = true;
+    auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht {ctx.get_executor(), metrics_dht.dht_node_ipv4(), do_doh, rx_limit};
+    DhtNode dht {ctx.get_executor(), metrics_dht.dht_node_ipv4(), dns_resolver, rx_limit};
 
     vector<string> args;
 
@@ -136,7 +136,7 @@ int main(int argc, const char** argv)
                          , udp::v4()
                          , "router.bittorrent.com"
                          , "6881"
-                         , do_doh
+                         , dns_resolver
                          , cancel
                          , yield[ec]);
 

@@ -1,5 +1,7 @@
+#include "constants.h"
 #include "dns.h"
-#include <iostream>
+#include "util/address.h"
+#include "parse/number.h"
 
 namespace ouinet::dns {
 
@@ -94,7 +96,34 @@ private:
 
 } // namespace bridge
 
-Resolver::Resolver() : _impl(bridge::new_resolver()) {}
+
+Resolver::Resolver()
+    : _impl(bridge::new_resolver(default_config())){
+}
+
+Resolver::Resolver(const Config& config)
+    : _impl(bridge::new_resolver(config)) {
+}
+
+Config Resolver::default_config() {
+    Config cfg{};
+    for (auto proto_name : dns_default_protocols ) {
+        cfg.protocols.emplace_back(
+            bridge::str_to_proto(proto_name)
+        );
+    }
+    return cfg;
+}
+
+std::string Resolver::protos_to_str(rust::Vec<bridge::Protocol> protos) {
+    std::string proto_str;
+    for (const auto proto : protos) {
+        proto_str +=
+            (proto_str.empty() ? "" : ", ") +
+            std::string(proto_to_str(proto));
+    }
+    return proto_str;
+}
 
 Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
     auto cancellation_slot = yield.get_cancellation_slot();
@@ -123,6 +152,36 @@ Resolver::Output Resolver::resolve(const std::string& name, yield_context yield)
         },
         yield
     );
+}
+
+
+TcpLookup Resolver::resolve( const std::string& host
+                           , const uint16_t port
+                           , const Cancel& cancel
+                           , YieldContext yield)
+{
+    using TcpEndpoint = TcpLookup::endpoint_type;
+
+    // Build and return lookup if `host` is already a network address.
+    {
+        sys::error_code e;
+        auto addr = asio::ip::make_address(host, e);
+        if (!e) return TcpLookup::create( TcpEndpoint{std::move(addr), port}
+                                        , host
+                                        , std::to_string(port));
+    }
+
+    sys::error_code ec;
+    const auto answers46 = resolve(host, yield[ec].tag("resolve host").native());
+
+    if (cancel) ec = asio::error::operation_aborted;
+    if (ec) return or_throw<TcpLookup>(yield, ec);
+
+    const util::AddrsAsEndpoints<util::Answers, TcpEndpoint> eps{answers46, port};
+    return TcpLookup::create( eps.begin()
+                            , eps.end()
+                            , host
+                            , std::to_string(port));
 }
 
 void Resolver::close() {

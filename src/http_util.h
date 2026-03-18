@@ -28,7 +28,7 @@ namespace util {
 // Get the host and port a request refers to,
 // either from the ``Host:`` header or from the target URI.
 // IPv6 addresses are returned without brackets.
-std::pair<std::string, std::string>
+std::pair<std::string, uint16_t>
 get_host_port(const http::request_header<>&);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -57,10 +57,14 @@ struct HttpRequestByteRange {
     size_t first;
     size_t last;
 
-    // Returns boost::none on parse error
+    // Returns none on parse error
     static
-    boost::optional<std::vector<HttpRequestByteRange>>
+    std::optional<std::vector<HttpRequestByteRange>>
     parse(boost::string_view);
+
+    friend std::ostream& operator<<(std::ostream& os, HttpRequestByteRange const& r) {
+        return os << "{ first: " << r.first << ", last: " << r.last << "}";
+    }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -184,16 +188,15 @@ bool http_proto_version_check_trusted( const Message& message
 // with the given `status`, `server` header and `message` body (text/plain).
 // If `proto_error` is not empty,
 // make this a Ouinet protocol message with that error.
-template<class Request>
 inline
 http::response<http::string_body>
-http_error( const Request& rq
+http_error( bool keep_alive
           , http::status status
           , const char* server
           , const std::string& proto_error
           , const std::string& message = "")
 {
-    http::response<http::string_body> rs{status, rq.version()};
+    http::response<http::string_body> rs{status, 11};
 
     if (!proto_error.empty()) {
         assert(boost::regex_match(proto_error, http_::response_error_rx));
@@ -202,7 +205,7 @@ http_error( const Request& rq
     }
     rs.set(http::field::server, server);
     rs.set(http::field::content_type, "text/plain");
-    rs.keep_alive(rq.keep_alive());
+    rs.keep_alive(keep_alive);
     rs.body() = message;
     rs.prepare_payload();
 
@@ -307,8 +310,7 @@ template<class Message, class... Fields>
 static Message filter_fields(Message message, const Fields&... keep_fields)
 {
     for (auto fit = message.begin(); fit != message.end();) {
-        if (!( field_is_one_of(*fit, keep_fields...)
-               || boost::istarts_with(fit->name_string(), http_::header_prefix))) {
+        if (!field_is_one_of(*fit, keep_fields...)) {
             fit = message.erase(fit);
         } else {
             fit++;
@@ -402,12 +404,19 @@ template<class Request>
 bool req_ensure_host(Request& req) {
     if (!req[http::field::host].empty()) return true;
 
-    std::string host, port;
+    std::string host;
+    uint16_t port;
     std::tie(host, port) = util::get_host_port(req);
-    auto hosth = detail::http_host_header(host, port);
+    auto hosth = detail::http_host_header(host, std::to_string(port));
     if (hosth.empty()) return false;  // error
     req.set(http::field::host, hosth);
     return true;
+}
+
+inline
+std::string canonical_url(Url urlm) {
+    if (!urlm.fragment.empty()) urlm.fragment = {};
+    return urlm.reassemble();  // TODO: make canonical
 }
 
 // Make the given request canonical.
@@ -420,7 +429,7 @@ bool req_ensure_host(Request& req) {
 // If the request is invalid, none is returned.
 template<class Request, class... Fields>
 static boost::optional<Request>
-to_canonical_request(Request rq, const Fields&... keep_fields) {
+_to_canonical_request(Request rq, const Fields&... keep_fields) {
     auto url = Url::from(rq.target());
     if (!url) return boost::none;
     auto rq_host = url->port.empty() ? url->host : url->host + ":" + url->port;
@@ -443,6 +452,7 @@ to_canonical_request(Request rq, const Fields&... keep_fields) {
     return filter_fields( move(rq)
                         // Still DROP some fields that may break browsing for others
                         // and which have no sensible default (for all).
+                        , http::field::connection
                         , http::field::host
                         , http::field::accept
                         //, http::field::accept_datetime  // DROP
@@ -469,9 +479,8 @@ to_injector_request(Request rq) {
     // The Ouinet version header hints the endpoint
     // to behave like an injector instead of a proxy.
     rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-    // Some cache back-ends may use trailers for hashes, signatures, etc.
-    rq.set(http::field::te, "trailers");
-    return to_canonical_request( move(rq)
+
+    return _to_canonical_request( move(rq)
                                // PROXY AUTHENTICATION HEADERS (PASS)
                                , http::field::proxy_authorization
                                // CACHING AND RANGE HEADERS (PASS)
@@ -483,6 +492,8 @@ to_injector_request(Request rq) {
                                , http::field::if_unmodified_since
                                , http::field::pragma
                                , http::field::range
+                               , http::string_to_field(http_::request_druid_hdr)
+                               , http::string_to_field(http_::protocol_version_hdr)
                                );
 }
 
@@ -507,8 +518,7 @@ static Request to_origin_request(Request rq) {
 template<class Request>
 static boost::optional<Request>
 to_cache_request(Request rq) {
-    rq = remove_ouinet_fields(move(rq));
-    return to_canonical_request(move(rq));
+    return _to_canonical_request(move(rq));
 }
 
 // Make the given response ready to be sent to the cache.

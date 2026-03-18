@@ -19,7 +19,6 @@
 #include <session.h>
 #include <util/bytes.h>
 #include <util/file_io.h>
-#include <util/part_io.h>
 #include <util/str.h>
 
 #include <namespaces.h>
@@ -199,7 +198,7 @@ void store_response( const fs::path& tmpdir, bool complete
                    , asio::io_context& ctx, asio::yield_context yield) {
     asio::ip::tcp::socket
         signed_w(ctx), signed_r(ctx);
-    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+    tie(signed_w, signed_r) = util::connected_pair(yield);
 
     WaitCondition wc(ctx);
 
@@ -291,7 +290,7 @@ void store_empty_response( const fs::path& tmpdir
                          , asio::io_context& ctx, asio::yield_context yield) {
     asio::ip::tcp::socket
         signed_w(ctx), signed_r(ctx);
-    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+    tie(signed_w, signed_r) = util::connected_pair(yield);
 
     WaitCondition wc(ctx);
 
@@ -328,7 +327,7 @@ void store_response_head( const fs::path& tmpdir, const string& head_s
                         , asio::io_context& ctx, asio::yield_context yield) {
     asio::ip::tcp::socket
         signed_w(ctx), signed_r(ctx);
-    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+    tie(signed_w, signed_r) = util::connected_pair(yield);
 
     WaitCondition wc(ctx);
 
@@ -498,7 +497,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+        tie(loaded_w, loaded_r) = util::connected_pair(yield);
 
         WaitCondition wc(ctx);
 
@@ -612,7 +611,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+        tie(loaded_w, loaded_r) = util::connected_pair(yield);
 
         WaitCondition wc(ctx);
 
@@ -717,7 +716,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+        tie(loaded_w, loaded_r) = util::connected_pair(yield);
 
         WaitCondition wc(ctx);
 
@@ -824,7 +823,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
 
         asio::ip::tcp::socket
             loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+        tie(loaded_w, loaded_r) = util::connected_pair(yield);
 
         WaitCondition wc(ctx);
 

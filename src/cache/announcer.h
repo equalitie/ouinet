@@ -36,7 +36,7 @@ protected:
 };
 
 // BEP5 Announcer - announces to DHT
-class Bep5Announcer : public Announcer {
+class Bep5Announcer final : public Announcer {
 public:
     Bep5Announcer(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
     ~Bep5Announcer();
@@ -44,7 +44,7 @@ public:
 
 #ifdef __EXPERIMENTAL__
 // BEP3 Announcer - announces via HTTP to tracker over I2P
-class Bep3Announcer : public Announcer {
+class Bep3Announcer final : public Announcer {
 public:
     Bep3Announcer( std::shared_ptr<bittorrent::Bep3Tracker> tracker
                  , size_t simultaneous_announcements);

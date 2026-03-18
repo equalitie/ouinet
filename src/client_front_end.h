@@ -5,6 +5,7 @@
 #include <boost/beast.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
+#include <map>
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"
@@ -103,6 +104,9 @@ public:
                   , const bittorrent::DhtBase* dht
                   , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
+                  , std::string_view proxy_endpoint
+                  , std::string_view frontend_endpoint
+                  , std::string_view frontend_unix_socket_endpoint
                   , Cancel
                   , YieldContext yield);
 
@@ -184,7 +188,10 @@ private:
                            , Cancel cancel
                            , YieldContext);
 
-    static void handle_api_endpoints(const ClientConfig& config, Response& res, std::ostringstream& ss);
+    static void handle_api_endpoints(std::string_view proxy_endpoint
+                                   , std::string_view frontend_endpoint
+                                   , std::string_view frontend_unix_socket_endpoint
+                                   , Response& res, std::ostringstream& ss);
 
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);
