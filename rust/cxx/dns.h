@@ -2,8 +2,12 @@
 
 #include <functional>
 #include <boost/asio/ip/address.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/system.hpp>
+
+#include "util/signal.h"
+#include "util/yield.h"
 
 // Forward declarations for dns.rs.h
 namespace ouinet::dns::bridge {
@@ -14,7 +18,10 @@ namespace ouinet::dns::bridge {
 
 namespace ouinet::dns {
 
+using bridge::Config;
 using bridge::Error;
+using TcpLookup = boost::asio::ip::tcp::resolver::results_type;
+
 
 /// A DNS resolver
 class Resolver {
@@ -22,6 +29,7 @@ public:
     using Output = std::vector<boost::asio::ip::address>;
 
     Resolver();
+    Resolver(const Config& config);
 
     Resolver(const Resolver&) = delete;
     Resolver& operator=(const Resolver&) = delete;
@@ -29,8 +37,19 @@ public:
     Resolver(Resolver&&) = default;
     Resolver& operator=(Resolver&&) = default;
 
+    static Config default_config();
+
+    static std::string protos_to_str(rust::Vec<bridge::Protocol> protos);
+
     /// Resolve the given DNS name.
     Output resolve(const std::string& name, boost::asio::yield_context);
+
+    /// Resolve and return a TCP endpoint
+    TcpLookup resolve( const std::string& host
+                     , uint16_t port
+                     , const Cancel& cancel
+                     , YieldContext yield);
+
 
     /// Close this DNS resolver, cancelling any ongoing lookups. Any subsequent lookups return with
     /// a `NotFound` error.
@@ -59,6 +78,8 @@ public:
     virtual void complete(Error error_code, rust::Vec<IpAddress> addresses) = 0;
 
     void on_cancel(rust::Box<CancellationToken>);
+
+    virtual ~BasicCompleter() {};
 
 private:
     boost::asio::cancellation_slot _cancellation_slot;

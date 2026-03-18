@@ -8,17 +8,10 @@ namespace ouinet::util {
 
 // To help keep track about which coroutine we're logging from.
 class LogPath {
+private:
+    struct Node;
+
 public:
-    class Node {
-        std::string _tag;
-        std::shared_ptr<Node> _parent;
-
-        friend class LogPath;
-
-    public:
-        Node(std::string tag, std::shared_ptr<Node> parent);
-    };
-
     LogPath() = default;
     LogPath(std::string tag);
 
@@ -30,15 +23,17 @@ public:
     LogPath tag(std::string tag);
 
     friend std::ostream& operator<<(std::ostream& os, LogPath const& l) {
-        print_from_root(os, l._node);
+        print_from_root(os, l._node.get());
         return os;
     }
+
+    void start_monitor_changes(std::ostream&) const;
 
 private:
     LogPath(std::shared_ptr<Node> node) : _node(std::move(node)) {}
 
     static
-    void print_from_root(std::ostream&, const std::shared_ptr<LogPath::Node>&);
+    void print_from_root(std::ostream&, const Node*);
 
 private:
     std::shared_ptr<Node> _node;

@@ -30,7 +30,7 @@ mod ffi {
         //------------------------------------------------------------
         type Client;
 
-        fn new_client(store_path: String, encryption_key: Box<EncryptionKey>) -> Box<Client>;
+        fn new_client(store_path: String, encryption_key: Box<EncryptionKey>, delete_after_seconds: u64) -> Box<Client>;
         fn new_mainline_dht(self: &Client) -> Box<MainlineDht>;
         fn new_origin_request(self: &Client) -> Box<Request>;
         fn new_private_injector_request(self: &Client) -> Box<Request>;
@@ -146,12 +146,17 @@ fn new_client(
     store_path: String,
     // False positive: we need to box the key because its opaque to C++
     #[expect(clippy::boxed_local)] encryption_key: Box<EncryptionKey>,
+    delete_after_seconds: u64,
 ) -> Box<Client> {
     logger::init_idempotent();
 
     stop_current_client();
 
-    Box::new(Client::new(PathBuf::from(store_path), *encryption_key))
+    Box::new(Client::new(
+        PathBuf::from(store_path),
+        *encryption_key,
+        delete_after_seconds
+    ))
 }
 
 // -------------------------------------------------------------------
@@ -161,13 +166,21 @@ pub struct Client {
 }
 
 impl Client {
-    fn new(store_path: PathBuf, encryption_key: EncryptionKey) -> Self {
+    fn new(
+        store_path: PathBuf,
+        encryption_key: EncryptionKey,
+        delete_after_seconds: u64
+    ) -> Self {
         let runtime = runtime::handle();
 
         let (processor_tx, processor_rx) = mpsc::unbounded_channel();
 
         let collector = Arc::new(Mutex::new(Collector::new(&runtime)));
-        let store = runtime.block_on(Store::new(store_path, encryption_key));
+        let store = runtime.block_on(Store::new(
+            store_path,
+            encryption_key,
+            delete_after_seconds
+        ));
 
         let (runner, record_id_rx) = match store {
             Ok(store) => {

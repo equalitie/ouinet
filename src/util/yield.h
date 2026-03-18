@@ -1,27 +1,22 @@
 #pragma once
 
-#include <sstream>
 #include "../namespaces.h"
 #include "../util/executor.h"
 #include "../util/str.h"
 #include "../util/log_path.h"
 #include "../logger.h"
 #include "../or_throw.h"
-#include "../task.h"
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/utility/string_view.hpp>
-#include <boost/optional.hpp>
 
 namespace ouinet {
 
 using ouinet::util::AsioExecutor;
 
-class YieldContext : public boost::intrusive::list_base_hook
-              < boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
+class YieldContext
 {
 public:
-    YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
+    explicit YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
         : _asio_yield(asio_yield)
         , _ignored_error(std::make_shared<sys::error_code>())
         , _log_path(std::move(log_path))
@@ -49,11 +44,6 @@ public:
 
     asio::yield_context native() const {
         return _asio_yield;
-    }
-
-    explicit operator asio::yield_context() const
-    {
-        return native();
     }
 
     YieldContext ignore_error()
@@ -115,12 +105,6 @@ void YieldContext::log(Args&&... args)
     YieldContext::log(INFO, boost::string_view(util::str(std::forward<Args>(args)...)));
 }
 
-inline
-void YieldContext::log(boost::string_view str)
-{
-    YieldContext::log(INFO, str);
-}
-
 template<class... Args>
 inline
 void YieldContext::log(log_level_t log_level, Args&&... args)
@@ -131,27 +115,6 @@ void YieldContext::log(log_level_t log_level, Args&&... args)
     YieldContext::log(log_level, boost::string_view(util::str(std::forward<Args>(args)...)));
 }
 
-inline
-void YieldContext::log(log_level_t log_level, boost::string_view str)
-{
-    using boost::string_view;
-
-    if (logger.get_threshold() > log_level)
-        return;
-
-    while (str.size()) {
-        auto endl = str.find('\n');
-
-        logger.log(log_level, util::str(_log_path, " ", str.substr(0, endl)));
-
-        if (endl == std::string::npos) {
-            break;
-        }
-
-        str = str.substr(endl+1);
-    }
-}
-
 
 template<class Ret>
 inline
@@ -159,14 +122,14 @@ Ret or_throw( YieldContext yield
             , const sys::error_code& ec
             , Ret&& ret = {})
 {
-    return or_throw(static_cast<asio::yield_context>(yield), ec, std::forward<Ret>(ret));
+    return or_throw(yield.native(), ec, std::forward<Ret>(ret));
 }
 
 inline
 void or_throw( YieldContext yield
              , const sys::error_code& ec)
 {
-    return or_throw(static_cast<asio::yield_context>(yield), ec);
+    return or_throw(yield.native(), ec);
 }
 
 } // ouinet namespace

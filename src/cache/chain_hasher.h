@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../util/crypto.h"
+#include "../util/bytes.h"
 
 namespace ouinet { namespace cache {
 

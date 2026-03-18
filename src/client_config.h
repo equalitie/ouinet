@@ -10,10 +10,10 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
-#include "declspec.h"
 #include "namespaces.h"
 #include "cache_control.h"
 #include "util.h"
+#include "declspec.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"
@@ -26,6 +26,9 @@
 #include "bep5_swarms.h"
 #include "util.h"
 #include "bittorrent/bootstrap.h"
+#include "cxx/dns.h"
+
+#include "cxx/dns.h"
 
 namespace ouinet {
 
@@ -46,6 +49,7 @@ struct MetricsConfig {
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     metrics::EncryptionKey encryption_key;
+    uint64_t delete_after_seconds;
 
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
@@ -179,6 +183,11 @@ public:
         return !_disable_doh;
     }
 
+    dns::Config dns_config() const
+    {
+        return _dns_config;
+    }
+
     uint64_t max_request_body_size() const {
         // The value is set in KiB in the configuration
         // and used in bytes by boost::beast
@@ -199,6 +208,11 @@ public:
     // Is `nullptr` if metrics is disabled
     MetricsConfig* metrics() {
         return _metrics.get();
+    }
+
+    // Use when debugging to add HTTP header fields to every request
+    const std::map<std::string, std::string>& add_request_fields() const {
+        return _add_request_fields;
     }
 
 private:
@@ -273,6 +287,12 @@ private:
             , "Set the max size of body requests in KiB. This could be "
               "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
               "uploads, etc. To leave it unlimited, set it to zero.")
+           ("add-request-field"
+            , po::value<std::vector<std::string>>()->composing()
+            , "A <FIELD>:<VALUE> pair representing a HTTP header field and "
+              "value to add to every request coming from the User Agent before "
+              "Ouinet processes it. Useful for testing when using e.g. Firefox "
+              "as the UA.")
            ;
 
         po::options_description injector("Injector options");
@@ -358,14 +378,25 @@ private:
            ("local-domain"
             , po::value<string>()->default_value("local")
             , "Always use origin access and never use cache for this TLD")
-           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
-            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
-              "When this option is present the client will fallback to the default DNS mechanism "
-              "provided by the operating system.")
             ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
             , "Allows using non-origin channels, like injectors, dist-cache, etc, "
               "to fetch targets using private addresses. "
               "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
+            ;
+
+        po::options_description dns("DNS options");
+        dns.add_options()
+           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
+            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
+              "When this option is present the client will fallback to the default DNS mechanism "
+              "provided by the operating system. Deprecated, use --dns-protocol instead.")
+           ("dns-protocol", po::value<vector<string>>()
+                                ->composing()
+                                ->default_value(dns_default_protocols,
+                                                util::join(dns_default_protocols, ","))
+            ,"DNS protocols used by the resolver. This option can be set to: plain or https. "
+              "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
+              "the nameservers. The option can be used multiple times to select more than one protocol.")
            ;
 
         po::options_description metrics("Metrics options");
@@ -388,6 +419,10 @@ private:
               "   Then get the public encryption key:\n"
               "     `openssl pkey -in private_key.pem -pubout -out public_key.pem`"
               )
+           ("metrics-delete-after"
+            , po::value<uint64_t>()->default_value(metrics::default_delete_after_seconds)
+            , "Metrics records older than this duration will be deleted. "
+              "The value is expressed in seconds.")
            ;
 
         po::options_description desc;
@@ -397,6 +432,7 @@ private:
             .add(injector)
             .add(cache)
             .add(requests)
+            .add(dns)
             .add(metrics);
         return desc;
     }
@@ -545,8 +581,12 @@ private:
     boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
+    [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
     bool _allow_private_targets = false;
+    std::map<std::string, std::string> _add_request_fields;
+
+    dns::Config _dns_config;
 
     std::unique_ptr<MetricsConfig> _metrics;
 
