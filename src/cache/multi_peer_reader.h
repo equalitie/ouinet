@@ -18,7 +18,7 @@
 namespace ouinet::ouiservice::i2poui { class Service; }
 #endif
 
-namespace ouinet { namespace cache {
+namespace ouinet::cache {
 
 class MultiPeerReader : public http_response::AbstractReader {
 private:
@@ -117,4 +117,4 @@ private:
     std::unique_ptr<PreFetch> _pre_fetch;
 };
 
-}}
+} // namespaces

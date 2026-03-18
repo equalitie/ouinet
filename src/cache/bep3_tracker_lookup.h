@@ -5,7 +5,7 @@
 #include <bittorrent/bep3_tracker.h>
 #include "peer_lookup.h"
 
-namespace ouinet { namespace cache {
+namespace ouinet::cache {
 
 class Bep3TrackerLookup : public PeerLookup<std::set<std::string>> {
 public:
@@ -30,4 +30,4 @@ private:
     std::shared_ptr<bittorrent::Bep3Tracker> _tracker;
 };
 
-}} // namespaces
+} // namespaces

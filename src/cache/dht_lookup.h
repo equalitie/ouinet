@@ -13,7 +13,7 @@ namespace std {
     };
 }
 
-namespace ouinet { namespace cache {
+namespace ouinet::cache {
 
 class DhtLookup : public PeerLookup<std::set<asio::ip::udp::endpoint>> {
     using udp = asio::ip::udp;
@@ -49,4 +49,4 @@ private:
     std::weak_ptr<bittorrent::DhtBase> _dht_w;
 };
 
-}} // namespaces
+} // namespaces

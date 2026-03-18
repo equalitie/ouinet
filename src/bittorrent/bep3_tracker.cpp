@@ -33,8 +33,15 @@ Bep3Tracker::Bep3Tracker( shared_ptr<ouiservice::i2poui::Service> i2p_service
     _serving_i2p_id = _destination->GetIdentity()->ToBase64(); //We are sure _destination isn't null Q.E.D
 }
 
-void Bep3Tracker::ensure_started(Cancel& cancel, asio::yield_context yield)
+Bep3Tracker::~Bep3Tracker()
 {
+    _cancel();
+}
+
+void Bep3Tracker::ensure_started(Cancel cancel, asio::yield_context yield)
+{
+    // TODO: I2P Client needs to accept Cancel for starting tunnel
+    auto slot = _cancel.connect([&] { cancel(); });
     if (_started) return;
     sys::error_code ec;
     _i2p_client->start(yield[ec]);
@@ -49,14 +56,24 @@ Bep3Tracker::Executor Bep3Tracker::get_executor()
 
 NodeID Bep3Tracker::generate_random_peer_id()
 {
+    // From Spec: https://www.bittorrent.org/beps/bep_0003.html
+    // "
+    // peer_id
+    // A string of length 20 which this downloader uses as its id. Each downloader generates its own
+    // id at random at the start of a new download. This value will also almost certainly have to be
+    // escaped.
+    // "
+    //
+    // As we only use bittorent protocol to announce and we do not use it for downloading the cached
+    // content we opportunistically re-randomize the peer_id on each announce least we leave 
+    // unnecessary tracking traces behind.
     NodeID::Buffer buf;
-    srand(time(nullptr));
-    for (auto& b : buf) {
-        b = rand() % 256;
+    for (size_t i = 0; i < _peer_id_prefix_len && i < buf.size(); ++i) {
+        buf[i] = static_cast<uint8_t>(_peer_id_prefix[i]);
     }
-    const char* prefix = "-OU0001-";
-    for (size_t i = 0; i < 8 && i < buf.size(); ++i) {
-        buf[i] = static_cast<uint8_t>(prefix[i]);
+    srand(time(nullptr));
+    for (size_t i = _peer_id_prefix_len; i < buf.size(); ++i) {
+        buf[i] = rand() % 256;
     }
     return NodeID(buf);
 }
@@ -65,19 +82,19 @@ string Bep3Tracker::send_request( const string& extra_params
                                 , Cancel& cancel
                                 , asio::yield_context yield)
 {
+    auto slot = _cancel.connect([&] { cancel(); });
     sys::error_code ec;
 
     // Start the I2P tunnel if not already started, no-op otherwise
     ensure_started(cancel, yield[ec]);
-    if (ec || cancel) {
-        return or_throw(yield, ec ? ec : asio::error::operation_aborted, string{});
-    }
+    // Ensure that operation_aborted take precedence over ec.
+    ec = compute_error_code(ec, cancel);
+    if (ec) return or_throw(yield, ec, string{});
 
-    //tracker follows standard http protocol doesn't conform to our handshake 
+    //tracker follows standard http protocol doesn't conform to our handshake
     auto stream = _i2p_client->connect_without_handshake(yield[ec], cancel);
-    if (ec || cancel) {
-        return or_throw(yield, ec ? ec : asio::error::operation_aborted, string{});
-    }
+    ec = compute_error_code(ec, cancel);
+    if (ec) return or_throw(yield, ec, string{});
 
     auto peer_id = generate_random_peer_id();
 
@@ -105,7 +122,10 @@ string Bep3Tracker::send_request( const string& extra_params
     auto cancelled = cancel.connect([&] { stream.close(); });
 
     http::async_write(stream, req, yield[ec]);
-    if (ec) {
+    if (cancel) {
+        LOG_DEBUG("BEP3 tracker: send request cancelled");
+        return or_throw(yield, asio::error::operation_aborted, string{});
+    } else if (ec) {
         LOG_WARN("BEP3 tracker: failed to send request; ec=", ec);
         return or_throw(yield, ec, string{});
     }
@@ -113,7 +133,10 @@ string Bep3Tracker::send_request( const string& extra_params
     beast::flat_buffer buffer;
     http::response<http::string_body> res;
     http::async_read(stream, buffer, res, yield[ec]);
-    if (ec) {
+    if (cancel) {
+        LOG_DEBUG("BEP3 tracker: read response cancelled");
+        return or_throw(yield, asio::error::operation_aborted, string{});
+    } else if (ec) {
         LOG_WARN("BEP3 tracker: failed to read response; ec=", ec);
         return or_throw(yield, ec, string{});
     }
