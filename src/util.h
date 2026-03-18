@@ -60,6 +60,7 @@ static const std::string _localhost_re =
 #define _IP4_PRIV1_RE "10(?:\\.[0-9]{1,3}){3}"
 #define _IP4_PRIV2_RE "172\\.(1[6-9]|2[0-9]|3[0-1])(?:\\.[0-9]{1,3}){2}"
 #define _IP4_PRIV3_RE "192\\.168(?:\\.[0-9]{1,3}){2}"
+#define _IP4_PRIV4_RE "169\\.254(?:\\.[0-9]{1,3}){2}"
 static const std::string _private_addr_re =
     "^(?:"
     "|" _IP4_PRIV1_RE         // IPv4, e.g. 10.8.4.2
@@ -71,6 +72,9 @@ static const std::string _private_addr_re =
     "|" _IP4_PRIV3_RE         // IPv4, e.g. 192.168.2.3
     "|::ffff:" _IP4_PRIV3_RE  // IPv4-mapped IPv6
     "|::" _IP4_PRIV3_RE       // IPv4-compatible IPv6
+    "|" _IP4_PRIV4_RE         // IPv4, e.g. 169.254.2.3
+    "|::ffff:" _IP4_PRIV4_RE  // IPv4-mapped IPv6
+    "|::" _IP4_PRIV4_RE       // IPv4-compatible IPv6
     ")$";
 
 // Matches a host string which looks like a loopback address.
@@ -84,6 +88,7 @@ static const boost::regex private_addr_rx( _private_addr_re
 #undef _IP4_PRIV1_RE
 #undef _IP4_PRIV2_RE
 #undef _IP4_PRIV3_RE
+#undef _IP4_PRIV4_RE
 
 // Format host/port pair taking IPv6 into account.
 inline
