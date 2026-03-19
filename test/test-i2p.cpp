@@ -26,8 +26,6 @@
 #include <boost/accumulators/statistics/max.hpp>
 #include <boost/accumulators/statistics/variance.hpp>
 
-BOOST_AUTO_TEST_SUITE(ouinet_i2p)
-
 using namespace std;
 using namespace ouinet;
 using namespace chrono;
@@ -473,6 +471,3 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 
     ctx.run();
 }
-
-BOOST_AUTO_TEST_SUITE_END()
-
