@@ -7,6 +7,7 @@
 #include "node_id.h"
 #include "namespaces.h"
 #include "util/signal.h"
+#include "util/condition_variable.h"
 
 namespace i2p::client { class ClientDestination; }
 namespace ouinet::ouiservice::i2poui { class Client; class Service; }
@@ -51,7 +52,10 @@ private:
     std::shared_ptr<ouiservice::i2poui::Client> _i2p_client;
     std::shared_ptr<i2p::client::ClientDestination> _destination;
     std::string _serving_i2p_id;
-    bool _started = false;
+
+    enum class StartState { not_started, starting, started };
+    StartState _start_state = StartState::not_started;
+    ConditionVariable _start_cv;
 };
 
 } // namespaces

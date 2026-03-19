@@ -28,6 +28,7 @@ Bep3Tracker::Bep3Tracker( shared_ptr<ouiservice::i2poui::Service> i2p_service
                          , shared_ptr<i2p::client::ClientDestination> destination)
     : _i2p_client(i2p_service->build_client(tracker_id, destination))
     , _destination(move(destination))
+    , _start_cv(i2p_service->get_executor())
 {
     assert(_destination && "Bep3Tracker requires a valid destination");
     _serving_i2p_id = _destination->GetIdentity()->ToBase64(); //We are sure _destination isn't null Q.E.D
@@ -42,10 +43,33 @@ void Bep3Tracker::ensure_started(Cancel cancel, asio::yield_context yield)
 {
     // TODO: I2P Client needs to accept Cancel for starting tunnel
     auto slot = _cancel.connect([&] { cancel(); });
-    if (_started) return;
+
+    if (_start_state == StartState::started) return;
+
+    if (_start_state == StartState::starting) {
+        // Another coroutine is already starting, wait for it
+        sys::error_code ec;
+        _start_cv.wait(cancel, yield[ec]);
+        ec = compute_error_code(ec, cancel);
+        if (ec ||
+            //this probably should never happen (neither error nor cancelled but
+            // also not started but we leave it as saftey check. 
+            _start_state != StartState::started)
+            return or_throw(yield, ec ? ec : asio::error::operation_aborted);
+        return;
+    }
+
+    _start_state = StartState::starting;
     sys::error_code ec;
     _i2p_client->start(yield[ec]);
-    if (!ec) _started = true;
+    ec = compute_error_code(ec, cancel);
+    if (!ec) {
+        _start_state = StartState::started;
+    } else {
+        _start_state = StartState::not_started;
+    }
+
+    _start_cv.notify(ec);
     return or_throw(yield, ec);
 }
 
@@ -229,7 +253,10 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
         const auto& data = *peers_it->second.as_string();
         const size_t DEST_HASH_LEN = 32;
         for (size_t i = 0; i + DEST_HASH_LEN <= data.size(); i += DEST_HASH_LEN) {
-            std::string dest = i2p::data::ByteStreamToBase32((const uint8_t*)data.data() + i, DEST_HASH_LEN);
+            char b32[64];
+            size_t b32_len = i2p::data::ByteStreamToBase32(
+                (const uint8_t*)data.data() + i, DEST_HASH_LEN, b32, sizeof(b32));
+            std::string dest(b32, b32_len);
             dest += ".b32.i2p";
             LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
             peers.insert(move(dest));

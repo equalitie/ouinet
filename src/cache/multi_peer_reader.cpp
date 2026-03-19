@@ -285,9 +285,9 @@ public:
         return rq;
     }
 
-    // the common logic for loading and validating hash list from an established connection
-    // for both udp::endpoint ep and i2p destinations
-    void request_hash_list(
+    // Common logic for loading and validating hash list from an established connection
+    // for both udp::endpoint and i2p destinations
+    void download_hash_list(
             GenericStream& con,
             std::shared_ptr<unsigned> newest_proto_seen,
             Cancel& timeout_cancel,
@@ -319,29 +319,6 @@ public:
         _connection = std::move(con);
     }
 
-    // download_hash_list for udp::endpoint ep,
-    void download_hash_list(
-            udp::endpoint ep,
-            const set<udp::endpoint>& lan_my_eps,
-            std::shared_ptr<unsigned> newest_proto_seen,
-            Cancel cancel,
-            asio::yield_context yield)
-    {
-        sys::error_code ec;
-
-        Cancel timeout_cancel(cancel);
-
-        auto wd = watch_dog(_exec, MultiPeerReader::BEP5_HASH_LIST_TIMEOUT, [&] {
-            LOG_DEBUG("BEP5 hash list download timed out for: ", ep);
-            timeout_cancel();
-        });
-
-        auto con = connect(_exec, ep, lan_my_eps, timeout_cancel, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        request_hash_list(con, newest_proto_seen, timeout_cancel, cancel, yield);
-    }
-
     // Responses may be either plain-text or cypher-text, we read which type it is here
     // and return a generic stream that uses the input connection's reference.
     GenericStream determine_incoming_stream(GenericStream& con, asio::yield_context yield) {
@@ -361,34 +338,6 @@ public:
         return or_throw<GenericStream>(yield, make_error_code(PeerRequestError::invalid_blob_type));
     }
 
-#ifdef __EXPERIMENTAL__
-    // Overloaded download_hash_list for I2P peers identified by destination string
-    void download_hash_list(
-            const string& i2p_dest,
-            shared_ptr<ouiservice::i2poui::Service> i2p_service,
-            std::shared_ptr<unsigned> newest_proto_seen,
-            Cancel cancel,
-            asio::yield_context yield)
-    {
-        sys::error_code ec;
-
-        Cancel timeout_cancel(cancel);
-
-        auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
-            LOG_DEBUG("BEP3 hash list download timed out for: ", i2p_dest);
-            timeout_cancel();
-        });
-
-        auto i2p_client = i2p_service->build_client(i2p_dest);
-        i2p_client->start(yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        auto con = i2p_client->connect(yield[ec], cancel);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        request_hash_list(con, newest_proto_seen, timeout_cancel, cancel, yield);
-    }
-#endif
 };
 
 
@@ -498,7 +447,7 @@ public:
             if (c) return;
 
             if (!ec) {
-                for (auto& dest : i2p_dests) add_i2p_candidate(dest);
+                for (auto& dest : i2p_dests) add_candidate(dest);
             }
 
             _tracker_lookup.reset();
@@ -507,7 +456,7 @@ public:
         });
     }
 
-    void add_i2p_candidate(const string& i2p_dest) {
+    void add_candidate(const string& i2p_dest) {
         auto ip = _all_i2p_peers.insert({i2p_dest, unique_ptr<Peer>()});
 
         if (!ip.second) return; // Already inserted
@@ -525,9 +474,22 @@ public:
 
             LOG_DEBUG(log_path, " Fetching hash list from I2P: ", i2p_dest);
 
+            Cancel timeout_cancel(c);
+            auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
+                LOG_DEBUG("BEP3 hash list download timed out for: ", i2p_dest);
+                timeout_cancel();
+            });
+
+            auto i2p_client = i2p_service->build_client(i2p_dest);
+            i2p_client->start(y[ec]);
+            fail_on_error_or_timeout(y, c, ec, wd);
+
+            auto con = i2p_client->connect(y[ec], c);
+            fail_on_error_or_timeout(y, c, ec, wd);
+
             //TODO: Actually makes the connection works on the server side.
             //otherwise this code has not been tested.
-            p->download_hash_list(i2p_dest, i2p_service, _newest_proto_seen, c, y[ec]);
+            p->download_hash_list(con, _newest_proto_seen, timeout_cancel, c, y[ec]);
 
             LOG_DEBUG(log_path, " Done fetching hash list; i2p_dest=", i2p_dest
                      , " ec=", ec, " c=", bool(c));
@@ -558,13 +520,25 @@ public:
 
         _candidate_peers.push_back(*p);
 
-        task::spawn_detached(_exec, [=, this, log_path = peer_log_path, c = _lifetime_cancel] (auto y) mutable {
+        task::spawn_detached(_exec, [=, this, log_path = peer_log_path,
+                                     lan_my_eps = _lan_my_eps,
+                                     newest_proto_seen = _newest_proto_seen,
+                                     c = _lifetime_cancel] (auto y) mutable {
             TRACK_HANDLER();
             sys::error_code ec;
 
             LOG_DEBUG(log_path, " Fetching hash list from: ", ep);
 
-            p->download_hash_list(ep, _lan_my_eps, _newest_proto_seen, c, y[ec]);
+            Cancel timeout_cancel(c);
+            auto wd = watch_dog(_exec, MultiPeerReader::BEP5_HASH_LIST_TIMEOUT, [&] {
+                LOG_DEBUG("BEP5 hash list download timed out for: ", ep);
+                timeout_cancel();
+            });
+
+            auto con = connect(_exec, ep, lan_my_eps, timeout_cancel, y[ec]);
+            fail_on_error_or_timeout(y, c, ec, wd);
+
+            p->download_hash_list(con, newest_proto_seen, timeout_cancel, c, y[ec]);
 
             LOG_DEBUG(log_path, " Done fetching hash list; ep=", ep
                      , " ec=", ec, " c=", bool(c));
