@@ -80,7 +80,12 @@ static const std::string private_host[] = {
     "169.254.10.5",
     "172.17.0.1",
     "10.4.2.1",
-    // ipv6
+    // ipv6 link-local
+    "[fe80::1]",
+    "[fe80:0::1]",
+    "[fe80:0:0::1]",
+    "[fe80:0:0:0::1]",
+    // ipv6 mapped ipv4 addresses
     "::ffff:192.168.1.1:8080",
     "::ffff:172.17.0.1:8080",
     "::ffff:10.4.2.1:8080",
