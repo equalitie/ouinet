@@ -63,6 +63,8 @@ static const std::string _localhost_re =
 #define _IP4_PRIV4_RE "169\\.254(?:\\.[0-9]{1,3}){2}"
 #define _IP6_PRIV1_RE "fe80::(?:%[0-9a-zA-Z]+)?"
 #define _IP6_PRIV2_RE "fe80:(?:(?:[0-9a-f]{1,4}:)*:(?:[0-9a-f]{1,4}:)*[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}[0-9a-f]{1,4})(?:%[0-9a-zA-Z]+)?"
+#define _IP6_PRIV3_RE "f[cd][0-0a-f]{2}::(?:%[0-9a-zA-Z]+)?"
+#define _IP6_PRIV4_RE "f[cd][0-9a-f]{2}:(?:(?:[0-9a-f]{1,4}:)*:(?:[0-9a-f]{1,4}:)*[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}[0-9a-f]{1,4})(?:%[0-9a-zA-Z]+)?"
 static const std::string _private_addr_re =
     "^(?:"
     "|" _IP4_PRIV1_RE         // IPv4, e.g. 10.8.4.2
@@ -79,6 +81,8 @@ static const std::string _private_addr_re =
     "|::" _IP4_PRIV4_RE       // IPv4-compatible IPv6
     "|" _IP6_PRIV1_RE         // IPv6 link-local compact
     "|" _IP6_PRIV2_RE         // IPv6 link-local
+    "|" _IP6_PRIV3_RE         // IPv6 unique-local compact
+    "|" _IP6_PRIV4_RE         // IPv6 unique-local
     ")$";
 
 // Matches a host string which looks like a loopback address.
