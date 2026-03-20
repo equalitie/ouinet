@@ -103,9 +103,6 @@ CacheRetrieveRequest CacheRequest::to_retrieve_request() const {
     return CacheRetrieveRequest(_header.method(), _resource_id, _resource_key, _dht_group);
 }
 
-http::verb CacheRetrieveRequest::method() const {
-    return _method;
-}
 
 CacheInjectRequest CacheRequest::to_inject_request() const {
     return CacheInjectRequest(_header, _resource_id, _dht_group);

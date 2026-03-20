@@ -959,7 +959,7 @@ void DhtNode::store_contacts_loop(asio::yield_context yield)
         if (cancel) return;
 
         sys::error_code ec;
-        async_sleep(_exec, std::chrono::minutes(6), cancel, yield[ec]);
+        async_sleep(std::chrono::minutes(6), cancel, yield[ec]);
         if (cancel) return;
         return_or_throw_on_error(yield, cancel, ec);
     }
@@ -1828,7 +1828,7 @@ void DhtNode::bootstrap(asio::yield_context yield)
                 // 300ms delays.
                 k += score_of(bs);
                 if (k < SCORE_GOAL) {
-                    async_sleep(_exec, milliseconds(300), done_cancel, yield);
+                    async_sleep(milliseconds(300), done_cancel, yield);
                 }
 
                 if (done_cancel) break;
@@ -1856,7 +1856,7 @@ void DhtNode::bootstrap(asio::yield_context yield)
 
             // We could not bootstrap off any of the known nodes, wait a bit
             // and try again.
-            async_sleep(_exec, seconds(10), cancel, yield);
+            async_sleep(seconds(10), cancel, yield);
         }
     }
 
@@ -2950,7 +2950,7 @@ void MainlineDht::wait_all_ready(
     sys::error_code ec;
 
     while (!c && !all_ready()) {
-        async_sleep(_exec, std::chrono::milliseconds(200), c, yield[ec]);
+        async_sleep(std::chrono::milliseconds(200), c, yield[ec]);
     }
 
     if (c) ec = asio::error::operation_aborted;

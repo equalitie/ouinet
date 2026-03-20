@@ -294,7 +294,14 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             }
         }
 #endif // ifdef __EXPERIMENTAL__
-        
+        else if (type_str == "ouisync" || type_str == "") {
+            if (auto token_opt = as_optional<string>(vm, "ouisync-page-index")) {
+                _cache_type = CacheType::Ouisync;
+                _ouisync = OuisyncCacheConfig { *token_opt };
+            } else {
+                throw error("Argument --cache-type=ouisync requires --ouisync-page-index=<page_index_repo_read_token>");
+            }
+        }
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;
         }

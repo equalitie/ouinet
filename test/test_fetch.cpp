@@ -17,6 +17,7 @@
 #include "client.h"
 #include "util/str.h"
 #include "ssl/util.h"
+#include "async_sleep.h"
 
 using namespace std;
 using namespace ouinet;
@@ -113,7 +114,7 @@ Response fetch_from_origin(asio::yield_context yield) {
     auto const results = resolver.async_resolve(url.host, url.port, yield);
 
     asio::ssl::context ctx{asio::ssl::context::tls_client};
-    ouinet::ssl::util::set_default_verify_paths(ctx);
+    ouinet::ssl::util::load_tls_ca_certificates(ctx);
     ctx.set_verify_mode(asio::ssl::verify_peer);
 
     auto req = build_origin_request();
@@ -296,6 +297,10 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
+        // Give "seeder" time to announce
+        Cancel cancel;
+        async_sleep(1s, cancel, yield);
+
         // The "leecher" client fetches the signed content from the "seeder"
         auto rs2 = fetch_through_client(leecher, rq, yield);
 
@@ -320,7 +325,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     tcp::endpoint injector_ep{
-        asio::ip::address_v4::any(),
+        asio::ip::address_v4::loopback(),
         4567
     };
 
@@ -340,7 +345,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
         auto rq = build_private_request();
 
         asio::ssl::context ctx{asio::ssl::context::tls_client};
-        ouinet::ssl::util::set_default_verify_paths(ctx);
+        ouinet::ssl::util::load_tls_ca_certificates(ctx);
         ctx.set_verify_mode(asio::ssl::verify_peer);
 
         for (uint16_t i = 0; i < 30; ++i) {

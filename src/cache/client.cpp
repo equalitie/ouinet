@@ -44,14 +44,17 @@ struct GarbageCollector {
     cache::HttpStore& http_store;  // for looping over entries
     cache::HttpStore::keep_func keep;  // caller-provided checks
 
+    util::LogPath _log_path;
     AsioExecutor _executor;
     Cancel _cancel;
 
     GarbageCollector( cache::HttpStore& http_store
                     , cache::HttpStore::keep_func keep
+                    , util::LogPath log_path
                     , AsioExecutor ex)
         : http_store(http_store)
         , keep(move(keep))
+        , _log_path(move(log_path))
         , _executor(ex)
     {}
 
@@ -59,14 +62,15 @@ struct GarbageCollector {
 
     void start()
     {
-        task::spawn_detached(_executor, [&] (asio::yield_context yield) {
+        task::spawn_detached(_executor, [&] (asio::yield_context y) {
+            YieldContext yield(y, _log_path);
             TRACK_HANDLER();
             Cancel cancel(_cancel);
 
             _DEBUG("Garbage collector started");
             while (!cancel) {
                 sys::error_code ec;
-                async_sleep(_executor, chrono::minutes(7), cancel, yield[ec]);
+                async_sleep(chrono::minutes(7), cancel, yield.native()[ec]);
                 if (cancel || ec) break;
 
                 _DEBUG("Collecting garbage...");
@@ -109,7 +113,7 @@ struct Client::Impl {
     util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _groups;
-
+    util::LogPath _log_path;
 
     Impl( AsioExecutor ex
         , std::set<udp::endpoint> lan_my_eps
@@ -117,7 +121,8 @@ struct Client::Impl {
         , fs::path cache_dir
         , Client::opt_path static_cache_dir
         , unique_ptr<cache::HttpStore> http_store_
-        , boost::posix_time::time_duration max_cached_age)
+        , boost::posix_time::time_duration max_cached_age
+        , util::LogPath log_path)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(ex)
         , _lan_my_endpoints(move(lan_my_eps))
@@ -130,9 +135,10 @@ struct Client::Impl {
         , _max_cached_age(max_cached_age)
         , _gc(*_http_store, [&] (const auto& resource_id, auto rr, auto y) {
               return keep_cache_entry(resource_id, move(rr), y);
-          }, _ex)
+          }, log_path, _ex)
         , _peer_lookups(256)
         , _local_peer_discovery(_ex, _lan_my_endpoints)
+        , _log_path(std::move(log_path))
     {}
 
     std::string compute_swarm_name(boost::string_view group) const {
@@ -219,9 +225,9 @@ struct Client::Impl {
         cache::reader_uptr rr;
 
         if (auto range = req.range()) {
-            rr = _http_store->range_reader(req.resource_id(), range->first, range->last, ec);
+            rr = _http_store->range_reader(req.resource_id(), range->first, range->last, cancel, yield[ec]);
         } else {
-            rr = _http_store->reader(req.resource_id(), ec);
+            rr = _http_store->reader(req.resource_id(), cancel, yield[ec]);
             // We may also, depending on whether the request is `HEAD`:
             // (tru) the operation above (which may work for an entry missing a body),
             // or (false) `_http_store->reader_and_size` instead so as to choose
@@ -256,7 +262,7 @@ struct Client::Impl {
                     req.method() == http::verb::head,
                     metrics_client.new_cache_out_request(),
                     cancel,
-                    yield[ec].tag("read_hdr").native());
+                    yield[ec].tag("read_hdr"));
 
         CryptoStreamKey key;
 
@@ -297,8 +303,7 @@ struct Client::Impl {
         return _http_store->size(cancel, yield);
     }
 
-    void local_purge( Cancel cancel
-                    , asio::yield_context yield)
+    void local_purge(Cancel cancel, YieldContext yield)
     {
         // TODO: avoid overlapping with garbage collector
         _DEBUG("Purging local cache...");
@@ -309,7 +314,7 @@ struct Client::Impl {
             // for DHT groups and announcer
             // to avoid having to parse all stored heads.
             sys::error_code e;
-            auto hdr = read_response_header(*rr, yield[e]);
+            auto hdr = read_response_header(*rr, y[e]);
             if (e) return false;
 
             /*
@@ -325,8 +330,7 @@ struct Client::Impl {
             return false;  // remove entries that are not pinned
         }, cancel, yield[ec]);
         if (ec) {
-            _ERROR("Purging local cache: failed;"
-                   " ec=", ec);
+            _ERROR("Purging local cache: failed; ec=", ec);
             return or_throw(yield, ec);
         }
 
@@ -473,9 +477,7 @@ struct Client::Impl {
                 , log_path);
         }
 
-        auto s = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return Session::create(std::move(reader), is_head_request, std::move(metrics), cancel, y);
-        });
+        auto s = Session::create(std::move(reader), is_head_request, std::move(metrics), cancel, yield[ec].tag("read_hdr"));
 
         if (!ec) {
             s.response_header().set( http_::response_source_hdr  // for agent
@@ -502,13 +504,11 @@ struct Client::Impl {
         sys::error_code ec;
         cache::reader_uptr rr;
         if (is_head_request)
-            rr = _http_store->reader(resource_id, ec);
+            rr = _http_store->reader(resource_id, cancel, yield[ec]);
         else
-            std::tie(rr, body_size) = _http_store->reader_and_size(resource_id, ec);
+            std::tie(rr, body_size) = _http_store->reader_and_size(resource_id, cancel, yield[ec]);
         if (ec) return or_throw<Session>(yield, ec);
-        auto rs = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return Session::create(move(rr), is_head_request, cancel, y);
-        });
+        auto rs = Session::create(move(rr), is_head_request, cancel, yield[ec].tag("read_hdr"));
         return_or_throw_on_error(yield, cancel, ec, move(rs));
 
         rs.response_header().set( http_::response_source_hdr  // for agent
@@ -520,14 +520,14 @@ struct Client::Impl {
               , const GroupName& group
               , http_response::AbstractReader& r
               , Cancel cancel
-              , asio::yield_context yield)
+              , YieldContext yield)
     {
         sys::error_code ec;
         cache::KeepSignedReader fr(r);
-        _http_store->store(resource_id, fr, cancel, yield[ec]);
+        _http_store->store(resource_id, fr, cancel, yield[ec].native());
         if (ec) return or_throw(yield, ec);
 
-        _groups->add(group, resource_id, cancel, yield[ec]);
+        _groups->add(group, resource_id, cancel, yield[ec].native());
         if (ec) return or_throw(yield, ec);
 
         if (!_announcer) return;
@@ -622,13 +622,15 @@ struct Client::Impl {
         return true;
     }
 
-    void load_stored_groups(asio::yield_context y)
+    void load_stored_groups(YieldContext yield)
     {
         static const auto groups_curver_subdir = "dht_groups";
 
         Cancel cancel(_lifetime_cancel);
 
         sys::error_code e;
+
+        auto y = yield.native();
 
         // Use static groups if its directory is provided.
         std::unique_ptr<BaseGroups> static_groups;
@@ -650,7 +652,7 @@ struct Client::Impl {
 
         _http_store->for_each([&] (const auto& resource_id, auto rr, auto yield) {
             return keep_cache_entry(resource_id, std::move(rr), yield);
-        }, cancel, y[e]);
+        }, cancel, yield[e]);
         return_or_throw_on_error(y, cancel, e);
 
         // These checks are not bullet-proof, but they should catch some inconsistencies
@@ -662,7 +664,7 @@ struct Client::Impl {
             for (auto& group_item : _groups->items(group_name)) {
                 // TODO: This implies opening all cache items (again for local cache), make lighter.
                 sys::error_code ec;
-                if (_http_store->reader(group_item, ec) != nullptr)
+                if (_http_store->reader(group_item, cancel, yield[ec]) != nullptr)
                     good_items++;
                 else {
                     _WARN("Group resource missing from HTTP store: ", group_item, " (", group_name, ")");
@@ -707,7 +709,7 @@ Client::build( AsioExecutor ex
              , boost::posix_time::time_duration max_cached_age
              , Client::opt_path static_cache_dir
              , Client::opt_path static_cache_content_dir
-             , asio::yield_context yield)
+             , YieldContext yield)
 {
     using ClientPtr = unique_ptr<Client>;
     static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2"};
@@ -765,7 +767,7 @@ Client::build( AsioExecutor ex
 
     unique_ptr<Impl> impl(new Impl( ex, move(lan_my_eps)
                                   , cache_pk, move(cache_dir), std::move(static_cache_dir)
-                                  , move(http_store), max_cached_age));
+                                  , move(http_store), max_cached_age, yield.log_path()));
 
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
@@ -796,7 +798,7 @@ void Client::store( const cache::ResourceId& key
                   , const GroupName& group
                   , http_response::AbstractReader& r
                   , Cancel cancel
-                  , asio::yield_context yield)
+                  , YieldContext yield)
 {
     _impl->store(key, group, r, cancel, yield);
 }
@@ -816,8 +818,7 @@ std::size_t Client::local_size( Cancel cancel
     return _impl->local_size(cancel, yield);
 }
 
-void Client::local_purge( Cancel cancel
-                        , asio::yield_context yield)
+void Client::local_purge(Cancel cancel, YieldContext yield)
 {
     _impl->local_purge(cancel, yield);
 }

@@ -72,7 +72,7 @@ inline void exponential_backoff(AsioExecutor& exec, uint32_t i, Cancel& cancel, 
     if (i > constant_after) i = constant_after;
     float delay_s = powf(2, i) / 10.f;
 
-    if (!async_sleep(exec, chrono::milliseconds(long(delay_s * 1000.f)), cancel, yield)) {
+    if (!async_sleep(chrono::milliseconds(long(delay_s * 1000.f)), cancel, yield)) {
         return or_throw(yield, asio::error::operation_aborted);
     }
 }

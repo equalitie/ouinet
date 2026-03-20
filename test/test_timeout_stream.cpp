@@ -18,11 +18,10 @@ using tcp = asio::ip::tcp;
 using namespace std::chrono_literals;
 using Clock = std::chrono::steady_clock;
 
-void async_sleep( asio::io_context& ioc
-                , asio::steady_timer::duration duration
+void async_sleep( asio::steady_timer::duration duration
                 , asio::yield_context yield)
 {
-    asio::steady_timer timer(ioc);
+    asio::steady_timer timer(yield.get_executor());
     timer.expires_after(duration);
     sys::error_code ec;
     timer.async_wait(yield[ec]);
@@ -73,7 +72,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
     task::spawn_detached(ioc, [&](auto yield) {
         tcp::socket s(ioc);
         s.async_connect(acceptor.local_endpoint(), yield);
-        async_sleep(ioc, 1s, yield);
+        async_sleep(1s, yield);
     });
 
     ioc.run();
@@ -117,13 +116,13 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
         tcp::socket s(ioc);
         s.async_connect(acceptor.local_endpoint(), yield);
 
-        async_sleep(ioc, 250ms, yield);
+        async_sleep(250ms, yield);
 
         sys::error_code ec;
         string tx_buf("a");
         asio::async_write(s, asio::buffer(tx_buf), yield[ec]);
 
-        async_sleep(ioc, 1s, yield);
+        async_sleep(1s, yield);
     });
 
     ioc.run();

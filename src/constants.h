@@ -89,6 +89,7 @@ static const std::string response_source_hdr_origin = "origin";
 static const std::string response_source_hdr_proxy = "proxy";
 static const std::string response_source_hdr_injector = "injector";
 static const std::string response_source_hdr_dist_cache = "dist-cache";
+static const std::string response_source_hdr_ouisync = "ouisync";
 static const std::string response_source_hdr_local_cache = "local-cache";
 
 // Device Reasonably Unique ID (DRUID) is used to generate statistics on the

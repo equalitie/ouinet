@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.13)
 
 # Set cmake policies to avoid warnings in newer versions of cmake
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
@@ -23,6 +23,8 @@ option(WITH_TEST "Compile tests" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
+option(WITH_OUISYNC "Build with Ouisync" OFF)
+option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
 option(WITH_DEPRECATED "Build with deprecated features" OFF)
@@ -69,7 +71,6 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
-
 
 # This target needs to be linked by all code that includes ouinet headers.
 add_library(ouinet_dependencies INTERFACE)
@@ -196,6 +197,10 @@ set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FL
 
 add_library(ouinet_common STATIC ${ouinet_common_sources})
 
+if (OUINET_HARDCODE_CA_CERTS)
+    set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
+endif()
+
 target_link_libraries(ouinet_common
     PRIVATE
         lib::url
@@ -203,6 +208,7 @@ target_link_libraries(ouinet_common
         ${EXPERIMENTAL_LIBRARIES}
         ${DEPRECATED_LIBRARIES}
     PUBLIC
+        ${OUINET_HARDCODED_CA_CERTS}
         ouinet_dependencies
         Boost::iostreams
         lib::gcrypt
@@ -257,6 +263,7 @@ file(GLOB client_sources
     "./src/util/reachability.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
+    ${OUISERVICE_OUISYNC_CPP_FILES}
     ${VERSION_CPP}
 )
 
@@ -265,10 +272,15 @@ if (NOT WIN32 AND NOT MINGW)
     set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 endif ()
 
+if (WITH_OUISYNC)
+    set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)
+endif()
+
 target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
+        ${OUINET_OUISYNC_LIBS}
 )
 
 if (WIN32 OR MINGW)
