@@ -2845,7 +2845,7 @@ void Client::State::setup_cache(asio::yield_context yield)
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
-        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
+        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
       if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements(), yield)) {
