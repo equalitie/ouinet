@@ -487,6 +487,19 @@ public:
             auto con = i2p_client->connect(y[ec], c);
             fail_on_error_or_timeout(y, c, ec, wd);
 
+            Cancel timeout_cancel(c);
+            auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
+                LOG_DEBUG("BEP3 hash list download timed out for: ", i2p_dest);
+                timeout_cancel();
+            });
+
+            auto i2p_client = i2p_service->build_client(i2p_dest);
+            i2p_client->start(y[ec]);
+            fail_on_error_or_timeout(y, c, ec, wd);
+
+            auto con = i2p_client->connect(y[ec], c);
+            fail_on_error_or_timeout(y, c, ec, wd);
+
             //TODO: Actually makes the connection works on the server side.
             //otherwise this code has not been tested.
             p->download_hash_list(con, _newest_proto_seen, timeout_cancel, c, y[ec]);

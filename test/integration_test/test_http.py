@@ -230,7 +230,7 @@ async def try_fetch_over_i2p(content) -> Response:
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
         print("request attempt no " + str(i + 1) + "...")
         try:
-            response = request_echo(TestFixtures.I2P_CLIENT["port"], content)
+            response = await request_echo(TestFixtures.I2P_CLIENT["port"], content)
             assert_ok(response, content)
             return response
         except Exception as e:
@@ -291,18 +291,18 @@ def request_sized_content(port, content_size) -> Response:
     return request_url(port, url)
 
 
-def request_echo(proxy_port, echo_content) -> Response:
+async def request_echo(proxy_port, echo_content) -> Response:
     """
-    Send a get request to request the test server to echo the content
-    TODO: This should plobably be async to avoid blocking the event loop
-    So we can see the log while the request is not being served.
+    Send a get request to request the test server to echo the content.
+    Runs in a thread to avoid blocking the event loop so logs are visible.
     """
     url = "http://%s:%d/?content=%s" % (
         get_nonloopback_ip(),
         TestFixtures.TEST_HTTP_SERVER_PORT,
         echo_content,
     )
-    return request_url(proxy_port, url)
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, request_url, proxy_port, url)
 
 
 def request_url(port, url) -> Response:
@@ -477,7 +477,7 @@ async def test_tcp_transport(certificate_file, http_server):
     # TODO: No need to randomize in this particular test.
     # One can make another test to check that unique addresses are not cached
     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    response = request_echo(TestFixtures.TCP_CLIENT["port"], content)
+    response = await request_echo(TestFixtures.TCP_CLIENT["port"], content)
 
     assertEquals(response.status_code, 200)
     assertEquals(response.text, content)
@@ -486,7 +486,7 @@ async def get_cached_echo(port: int, content: str) -> Response:
     all_trials_failed = True
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
         try:
-            response = await asyncio.to_thread(request_echo, port, content)
+            response = await request_echo(port, content)
         except Exception:
             # print("[WARNING] failing to retrieve from cache with error", str(e))
             continue
@@ -545,7 +545,7 @@ async def test_tcp_cache(certificate_file, http_server):
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    response = request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+    response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
     assertEquals(response.status_code, 200)
     assertEquals(response.text, content)
 
@@ -806,12 +806,13 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
 
 @pytest.mark.timeout(TestFixtures.BEP3_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_bep3_cache_over_i2p(http_server):
+async def test_bep3_cache_over_i2p(http_server, log):
     """
     Tests BEP3 cache over I2P: client1 fetches content via TCP injector,
     caches it and announces to BEP3 tracker over I2P. After injector is stopped,
     client2 looks up peers via the same BEP3 tracker and retrieves from cache.
     """
+    logging.debug("Hello!")
     # TCP Injector (provides signing key, no I2P needed)
     injector = run_tcp_injector(
         ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
@@ -851,8 +852,19 @@ async def test_bep3_cache_over_i2p(http_server):
     # Wait for BEP3 announcer to be fully ready (server tunnel + tracker)
     await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
 
+    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
+    print(
+        "waiting "
+        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+        + " secs for the tunnel to get advertised on the DHT..."
+    )
+
+    # TODO: do not wait a fixed time, check for output
+    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+    print("done waiting")
+
     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    response = request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+    response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
     assertEquals(response.status_code, 200)
     assertEquals(response.text, content)
 
@@ -888,6 +900,17 @@ async def test_bep3_cache_over_i2p(http_server):
     await wait_for_benchmark(cache_client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
     await wait_for_benchmark(cache_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
     await wait_for_benchmark(cache_client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
+
+    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
+    print(
+        "waiting "
+        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+        + " secs for the tunnel to get advertised on the DHT..."
+    )
+
+    # TODO: do not wait a fixed time, check for output
+    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+    print("done waiting")
 
     # Retrieve cached content
     await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
