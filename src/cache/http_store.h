@@ -13,6 +13,7 @@
 #include "../response_reader.h"
 #include "../util/crypto.h"
 #include "../util/signal.h"
+#include "../util/yield.h"
 
 #include "../namespaces.h"
 #include "../declspec.h"
@@ -95,7 +96,7 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // To detect such cases beforehand, use `http_store_body_size`.
 OUINET_DECL
 reader_uptr
-http_store_reader(const fs::path& dirp, AsioExecutor, sys::error_code&);
+http_store_reader(const fs::path& dirp, Cancel&, YieldContext);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -109,7 +110,7 @@ http_store_reader(const fs::path& dirp, AsioExecutor, sys::error_code&);
 OUINET_DECL
 reader_uptr
 http_store_reader( const fs::path& dirp, const fs::path& cdirp
-                 , AsioExecutor, sys::error_code&);
+                 , Cancel&, YieldContext);
 
 // Same as above, but allow specifying a contiguous range of data to read
 // instead of the whole response.
@@ -128,9 +129,9 @@ http_store_reader( const fs::path& dirp, const fs::path& cdirp
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 OUINET_DECL
 reader_uptr
-http_store_range_reader( const fs::path& dirp, AsioExecutor
+http_store_range_reader( const fs::path& dirp
                        , std::size_t first, std::size_t last
-                       , sys::error_code&);
+                       , Cancel&, YieldContext);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -143,9 +144,9 @@ http_store_range_reader( const fs::path& dirp, AsioExecutor
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 OUINET_DECL
 reader_uptr
-http_store_range_reader( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
+http_store_range_reader( const fs::path& dirp, const fs::path& cdirp
                        , std::size_t first, std::size_t last
-                       , sys::error_code&);
+                       , Cancel&, YieldContext);
 
 // Return the size of body data currently stored for a response under the given directory `dirp`.
 //
@@ -178,6 +179,9 @@ OUINET_DECL
 HashList
 http_store_load_hash_list(const fs::path&, AsioExecutor, Cancel&, asio::yield_context);
 
+fs::path
+path_from_resource_id(fs::path dir, const ResourceId& resource_id);
+
 //// High-level classes for HTTP response storage
 
 // Store each response in a directory named `DIGEST[:2]/DIGEST[2:]` (where
@@ -199,16 +203,16 @@ public:
     // so this is also convenient for reading just the response head if present
     // (i.e. for a `HEAD` request).
     virtual reader_uptr
-    reader(const ResourceId&, sys::error_code&) = 0;
+    reader(const ResourceId&, Cancel&, YieldContext) = 0;
 
     // This is similar to `reader` above,
     // but it also returns the size of stored body data.
     // Also, an `asio::error::no_data` error is reported if the body is missing.
     virtual ReaderAndSize
-    reader_and_size(const ResourceId&, sys::error_code&) = 0;
+    reader_and_size(const ResourceId&, Cancel&, YieldContext) = 0;
 
     virtual reader_uptr
-    range_reader(const ResourceId&, size_t first, size_t last, sys::error_code&) = 0;
+    range_reader(const ResourceId&, size_t first, size_t last, Cancel&, YieldContext) = 0;
 
     virtual std::size_t
     body_size(const ResourceId&, sys::error_code&) const = 0;
@@ -245,7 +249,7 @@ public:
     virtual ~HttpStore() = default;
 
     virtual void
-    for_each(keep_func, Cancel, asio::yield_context) = 0;
+    for_each(keep_func, Cancel, YieldContext) = 0;
 
     virtual void
     store( const ResourceId&, http_response::AbstractReader&

@@ -118,33 +118,7 @@ get_server_context( const std::string& cert_chain
     return ssl_context;
 }
 
-static inline
-void load_tls_ca_certificates( asio::ssl::context& ctx
-                             , const std::string& path_str)
-{
-    using namespace std;
-
-    if (path_str.empty()) return;
-
-    fs::path path = path_str;
-
-    if (!exists(path)) {
-        ostringstream ss;
-        ss << "Can not read CA certificates from \"" << path << "\": "
-           << "No such file or directory";
-        throw runtime_error(ss.str());
-    }
-
-    if (fs::is_directory(path)) {
-        ctx.add_verify_path(path_str);
-        return;
-    }
-
-    ostringstream ss;
-    ss << boost::nowide::ifstream(path).rdbuf();
-    ctx.add_certificate_authority(asio::buffer(ss.str()));
-}
-
-void set_default_verify_paths(asio::ssl::context&);
+void load_tls_ca_certificates(asio::ssl::context& ctx);
+void load_tls_ca_certificates(asio::ssl::context& ctx, const std::string& path_str);
 
 } // namespace

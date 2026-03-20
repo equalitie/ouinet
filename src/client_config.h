@@ -49,9 +49,15 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
+struct OuisyncCacheConfig {
+    // Read token for the page index repository which contains directories one per host name
+    // and inside them crawls of corresponding websites.
+    std::string page_index_token;
+};
+
 class OUINET_DECL ClientConfig {
 public:
-    enum class CacheType { None, Bep5Http };
+    enum class CacheType { None, Bep5Http, Ouisync };
 
     ClientConfig() = default;
 
@@ -199,6 +205,10 @@ public:
         return _add_request_fields;
     }
 
+    const std::optional<OuisyncCacheConfig>& ouisync_cache_config() const {
+        return _ouisync;
+    }
+
 private:
     boost::program_options::options_description description_full()
     {
@@ -304,7 +314,7 @@ private:
         po::options_description cache("Cache options");
         cache.add_options()
            ("cache-type", po::value<string>()->default_value("none")
-            , "Type of d-cache {none, bep5-http}")
+            , "Type of d-cache {none, bep5-http, ouisync}")
            ("cache-http-public-key"
             , po::value<string>()
             , "Public key for HTTP signatures in the BEP5/HTTP cache "
@@ -336,6 +346,10 @@ private:
            , po::value<string>()
            , "Root directory for content files of the static cache. "
              "The static cache always requires this (even if empty).")
+          ("ouisync-page-index", po::value<string>(),
+           "A Ouisync repository read token. The repository contains files with names "
+           "corresponding to domains and each one contains another read token to a "
+           "repository with a scrape of that domain")
           ;
 
         po::options_description requests("Request options");
@@ -566,6 +580,7 @@ private:
     dns::Config _dns_config;
 
     std::unique_ptr<MetricsConfig> _metrics;
+    std::optional<OuisyncCacheConfig> _ouisync;
 };
 
 #undef _LOG_FILE_NAME

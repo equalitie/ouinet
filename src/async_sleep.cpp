@@ -2,8 +2,7 @@
 
 namespace ouinet {
 
-bool async_sleep( const AsioExecutor& exec
-                , asio::steady_timer::duration duration
+bool async_sleep( asio::steady_timer::duration duration
                 , Signal<void()>& cancel
                 , asio::yield_context yield)
 {
@@ -11,7 +10,7 @@ bool async_sleep( const AsioExecutor& exec
         return false;
     }
 
-    asio::steady_timer timer(exec);
+    asio::steady_timer timer(yield.get_executor());
     timer.expires_after(duration);
     sys::error_code ec;
 
