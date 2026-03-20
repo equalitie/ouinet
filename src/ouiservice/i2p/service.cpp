@@ -24,13 +24,22 @@ using namespace ouinet::ouiservice::i2poui;
 
 static const uint16_t i2cp_port = 7454;
 
+static i2p::util::Mapping make_tunnel_params(size_t hops) {
+    auto h = std::to_string(std::min(hops, (size_t)8));
+    return {
+      { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, h},
+      { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},
+      { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, h},
+      { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
+      { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
+    };
+}
+
 Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _number_of_hops_per_tunnel)
     : _exec(exec)
     , _data_dir(datadir)
+    , _tunnel_params(make_tunnel_params(_number_of_hops_per_tunnel))
 {
-    //here we are going to read the config file and
-    //set options based on those values for now we just
-    //set it up by some default values;
     LOG_INFO("Starting i2p tunnels");
 
     string datadir_arg = "--datadir=" + datadir;
@@ -44,19 +53,8 @@ Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _
     // we might change CryptoType to ECIES or to x25519 once it's available in the network
     auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519);
 
-    //i2pd does not support more than 8 hops
-    auto no_of_tunnel_hops_str = std::to_string(std::min(_number_of_hops_per_tunnel, (size_t)(8)));
-
-    LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be " + no_of_tunnel_hops_str);
-    // we set ack delay to 20 ms, because this outnet is considered as low-latency
-    _tunnel_params =
-    {
-      { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, no_of_tunnel_hops_str},
-      { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},
-      { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, no_of_tunnel_hops_str},
-      { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
-      { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
-    };
+    LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be ",
+             _number_of_hops_per_tunnel);
     _local_destination = std::make_shared<i2p::client::RunnableClientDestination>(keys, false, &_tunnel_params);
     // Start destination's thread and tunnel pool
     _local_destination->Start ();
