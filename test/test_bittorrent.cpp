@@ -97,7 +97,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
             } else {
                 BOOST_TEST_MESSAGE("Announcing (" << i << "/" << max_retries << ") failed with: " << ec.message());
                 ec = {};
-                async_sleep(ctx, 3s, cancel_signal, yield[ec]);
+                async_sleep(3s, cancel_signal, yield[ec]);
                 BOOST_REQUIRE(!ec);
             }
         }
@@ -113,7 +113,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
             } else {
                 BOOST_TEST_MESSAGE("Get peers (" << i << "/" << max_retries << ") failed with: " << ec.message());
                 ec = {};
-                async_sleep(ctx, 3s, cancel_signal, yield[ec]);
+                async_sleep(3s, cancel_signal, yield[ec]);
                 BOOST_REQUIRE(!ec);
             }
         }
