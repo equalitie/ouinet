@@ -88,7 +88,7 @@ void Server::start_listen(asio::yield_context yield)
 
     auto& tunnel_params = _service->get_tunnel_params();
     _local_destination = i2p::api::CreateLocalDestination(*_private_keys, true,
-        tunnel_params.empty() ? nullptr : &tunnel_params);
+        tunnel_params.IsEmpty() ? nullptr : &tunnel_params);
     do {
       std::unique_ptr<i2p::client::I2PServerTunnel> i2p_server_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, _local_destination);
     //i2p_server_tunnel->Start();

@@ -301,8 +301,7 @@ async def request_echo(proxy_port, echo_content) -> Response:
         TestFixtures.TEST_HTTP_SERVER_PORT,
         echo_content,
     )
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, request_url, proxy_port, url)
+    return await asyncio.to_thread(request_url, proxy_port, url)
 
 
 def request_url(port, url) -> Response:
@@ -483,22 +482,19 @@ async def test_tcp_transport(certificate_file, http_server):
     assertEquals(response.text, content)
 
 async def get_cached_echo(port: int, content: str) -> Response:
-    all_trials_failed = True
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
         try:
+            print(f"get_cached_echo attempt {i + 1}...")
             response = await request_echo(port, content)
-        except Exception:
-            # print("[WARNING] failing to retrieve from cache with error", str(e))
-            continue
-        if response.status_code == 200:
-            all_trails_failed = False
-            break
+            if response.status_code == 200:
+                assertEquals(response.text, content)
+                return response
+            print(f"get_cached_echo: got status {response.status_code}, retrying...")
+        except Exception as e:
+            print(f"get_cached_echo: {e}, retrying...")
+        await asyncio.sleep(5)
 
-
-    assertEquals(all_trials_failed, False)
-    assertEquals(response.status_code, 200)
-    assertEquals(response.text, content)
-    return response
+    raise AssertionError(f"Failed to get cached response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts")
 
 
 @pytest.mark.timeout(TestFixtures.BEP5_CACHE_TIMEOUT)

@@ -253,10 +253,8 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
         const auto& data = *peers_it->second.as_string();
         const size_t DEST_HASH_LEN = 32;
         for (size_t i = 0; i + DEST_HASH_LEN <= data.size(); i += DEST_HASH_LEN) {
-            char b32[64];
-            size_t b32_len = i2p::data::ByteStreamToBase32(
-                (const uint8_t*)data.data() + i, DEST_HASH_LEN, b32, sizeof(b32));
-            std::string dest(b32, b32_len);
+            string dest = i2p::data::ByteStreamToBase32(
+                (const uint8_t*)data.data() + i, DEST_HASH_LEN);
             dest += ".b32.i2p";
             LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
             peers.insert(move(dest));
