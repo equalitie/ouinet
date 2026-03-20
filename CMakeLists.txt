@@ -30,6 +30,19 @@ option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 option(WITH_DEPRECATED "Build with deprecated features" OFF)
 
 ################################################################################
+# show summary
+
+message(STATUS "---------------------------------------")
+message(STATUS "Options:")
+message(STATUS "  WITH_TEST                : ${WITH_TEST}")
+message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
+message(STATUS "  WITH_EXPERIMENTAL        : ${WITH_EXPERIMENTAL}")
+message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
+message(STATUS "  WITH_DEPRECATED          : ${WITH_DEPRECATED}")
+message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
+message(STATUS "---------------------------------------")
+
+################################################################################
 # Global build flags
 if (WITH_ASAN)
     add_compile_options("-fsanitize=address" "-fno-omit-frame-pointer")
