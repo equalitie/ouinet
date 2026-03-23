@@ -272,6 +272,9 @@ function copy_local_sources (
 
 copy_local_sources $(pwd) $ouinet_dir
 
+# Prevent "dubious ownership" errors
+exe git config --global --add safe.directory $ouinet_dir
+
 if [ -n "$host_ouisync_dir" ]; then
     container_ouisync_dir=$work_dir/ouisync
     copy_local_sources $host_ouisync_dir $container_ouisync_dir
@@ -311,7 +314,10 @@ for target_os in ${target_oss[@]}; do
         exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
         exe -w $build_dir cmake --build . -j $(exe nproc)
     else
-        exe -w $ouinet_dir ./scripts/build-android.sh
+        env=(
+            WITH_EXPERIMENTAL=$([ "$with_experimental" == y ] && echo ON || echo OFF)
+        )
+        exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh
     fi
 
     check_artifacts_exist_for_target_os $target_os
