@@ -39,6 +39,10 @@ target_link_libraries(test_response_reader ouinet_common)
 ######################################################################
 add_executable(test_response_writer "test_response_writer.cpp")
 
+######################################################################
+add_executable(test_signing test_signing.cpp)
+target_link_libraries(client_lib)
+
 ################################################################################
 if (NOT WIN32)
 add_executable(test_persistent_lru_cache "test_persistent_lru_cache.cpp")
