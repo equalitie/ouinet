@@ -200,7 +200,6 @@ target_link_libraries(ouinet_common
         ${OUINET_HARDCODED_CA_CERTS}
         ouinet_dependencies
         Boost::iostreams
-        lib::gcrypt
         lib::json
         asio_utp
         ouinet_rs
