@@ -158,7 +158,6 @@ file(GLOB ouinet_common_sources
     "./src/util/log_path.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
-    "./src/util/hash.cpp"
     "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
     "./src/util/yield.cpp"
