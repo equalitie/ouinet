@@ -1,22 +1,25 @@
 #include "random.h"
+#include <random>
 
-extern "C" {
-#include "gcrypt.h"
-}
+namespace ouinet::util::random {
 
-namespace ouinet { namespace util { namespace random {
-
-void data(void* data, unsigned int size)
+std::random_device g_dev;
+std::mt19937 g_rng(g_dev());
+ 
+void data(void* data, size_t size)
 {
-    ::gcry_create_nonce(data, size);
+    std::uniform_int_distribution<std::mt19937::result_type> dist(0,255);
+
+    for (size_t i = 0; i < size; ++i) {
+        *((uint8_t*) data) = dist(g_rng);
+    }
 }
 
-std::string string(unsigned int size)
+std::string string(size_t size)
 {
     std::string s(size, '\0');
-    ::gcry_create_nonce((void*) s.data(), size);
+    data(s.data(), s.size());
     return s;
 }
 
-}}} // namespaces
-
+} // namespaces
