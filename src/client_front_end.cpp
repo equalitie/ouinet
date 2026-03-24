@@ -668,7 +668,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "<h2>Distributed cache</h2>\n";
         auto inj_pubkey = config.cache_http_pub_key();
         if (inj_pubkey) {
-            auto inj_pubkey_s = inj_pubkey->serialize();
+            auto inj_pubkey_s = inj_pubkey->to_bytes();
             ss << "Injector pubkey (hex): " << util::bytes::to_hex(inj_pubkey_s) << "<br>\n";
             ss << "Injector pubkey (Base32): " << util::base32up_encode(inj_pubkey_s) << "<br>\n";
             ss << "<br>\n";

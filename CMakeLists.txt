@@ -154,7 +154,6 @@ file(GLOB ouinet_common_sources
     "./src/util/atomic_file.cpp"
     "./src/util/random.cpp"
     "./src/util/handler_tracker.cpp"
-    "./src/util/crypto.cpp"
     "./src/util/sign.cpp"
     "./src/util/log_path.cpp"
     "./src/util/file_io.cpp"

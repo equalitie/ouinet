@@ -101,7 +101,7 @@ struct Client::Impl {
     std::set<udp::endpoint> _lan_my_endpoints;
     shared_ptr<bt::DhtBase> _dht;
     string _uri_swarm_prefix;
-    util::Ed25519PublicKey _cache_pk;
+    sign::PublicKey _cache_pk;
     fs::path _cache_dir;
     Client::opt_path _static_cache_dir;
     unique_ptr<cache::HttpStore> _http_store;
@@ -117,7 +117,7 @@ struct Client::Impl {
 
     Impl( AsioExecutor ex
         , std::set<udp::endpoint> lan_my_eps
-        , util::Ed25519PublicKey& cache_pk
+        , sign::PublicKey& cache_pk
         , fs::path cache_dir
         , Client::opt_path static_cache_dir
         , unique_ptr<cache::HttpStore> http_store_
@@ -704,7 +704,7 @@ struct Client::Impl {
 std::unique_ptr<Client>
 Client::build( AsioExecutor ex
              , std::set<udp::endpoint> lan_my_eps
-             , util::Ed25519PublicKey cache_pk
+             , sign::PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
              , Client::opt_path static_cache_dir

@@ -95,7 +95,7 @@ class MainlineDht : public DhtBase {
      * The current version is a quick-and-dirty good-enough-for-now.
      */
     boost::optional<MutableDataItem> mutable_get(
-        const util::Ed25519PublicKey& public_key,
+        const sign::PublicKey& public_key,
         boost::string_view salt,
         Cancel&,
         asio::yield_context

@@ -16,7 +16,7 @@
 #include "declspec.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
-#include "util/crypto.h"
+#include "util/sign.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -161,7 +161,7 @@ public:
         return _proxy_access_token;
     }
 
-    boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
+    boost::optional<sign::PublicKey> cache_http_pub_key() const {
         return _cache_http_pubkey;
     }
 
@@ -569,7 +569,7 @@ private:
 
     fs::path _cache_static_path;
     fs::path _cache_static_content_path;
-    boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
+    boost::optional<sign::PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     [[deprecated("Use _dns_config instead.")]]

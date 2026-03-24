@@ -13,7 +13,7 @@
 
 #include "../constants.h"
 #include "../response_reader.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/hash.h"
 #include "../util/executor.h"
 
@@ -90,7 +90,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey&
+                      , const sign::SecretKey&
                       , const std::string& key_id
                       , std::chrono::seconds::rep ts);
 
@@ -100,7 +100,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey& sk
+                      , const sign::SecretKey& sk
                       , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
@@ -128,11 +128,11 @@ http_injection_merge( http::response_header<> rsh
 
 // Get a `keyId` encoding the given public key itself.
 std::string
-http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
+http_key_id_for_injection(const sign::PublicKey&);
 
 // Create HTTP chunk extension
 std::string
-block_chunk_ext( const boost::optional<util::Ed25519PublicKey::sig_array_t>& sig
+block_chunk_ext( const boost::optional<sign::Signature>& sig
                , const boost::optional<util::SHA512::digest_type>& prev_digest = {});
 
 // Allows reading parts of a response from stream `in`
@@ -143,7 +143,7 @@ public:
                  , http::request_header<> rqh
                  , std::string injection_id
                  , std::chrono::seconds::rep injection_ts
-                 , ouinet::util::Ed25519PrivateKey sk);
+                 , sign::SecretKey sk);
     ~SigningReader() override;
 
     boost::optional<ouinet::http_response::Part>
@@ -180,9 +180,9 @@ public:
     using status_set = std::set<http::status>;
 
 public:
-    VerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
+    VerifyingReader( GenericStream in, sign::PublicKey pk
                    , status_set statuses = {});
-    VerifyingReader( reader_uptr rd, ouinet::util::Ed25519PublicKey pk
+    VerifyingReader( reader_uptr rd, sign::PublicKey pk
                    , status_set statuses = {});
     ~VerifyingReader() override;
 
@@ -260,14 +260,14 @@ http_digest(const http::response<http::dynamic_body>&);
 // Compute a signature as per draft-cavage-http-signatures-12.
 std::string  // use this to enable setting the time stamp (e.g. for tests)
 http_signature( const http::response_header<>&
-              , const ouinet::util::Ed25519PrivateKey&
+              , const sign::SecretKey&
               , const std::string& key_id
               , std::chrono::seconds::rep ts);
 
 inline  // use this for the rest of cases
 std::string
 http_signature( const http::response_header<>& rsh
-              , const ouinet::util::Ed25519PrivateKey& sk
+              , const sign::SecretKey& sk
               , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
@@ -300,7 +300,7 @@ struct HttpSignature {
     // present in the head but not covered by the signature
     // (extra field names and values point to the given head).
     std::pair<bool, http::fields> verify( const http::response_header<>&
-                                        , const util::Ed25519PublicKey&);
+                                        , const sign::PublicKey&);
 };
 
 }} // namespaces

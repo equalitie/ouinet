@@ -13,7 +13,6 @@
 #include <ouisync.hpp>
 #include <ouisync/service.hpp>
 #include "util/test_dir.h"
-#include "util/crypto.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "client.h"

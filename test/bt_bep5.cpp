@@ -10,7 +10,6 @@
 #include "../src/constants.h"
 #include "../src/bittorrent/mainline_dht.h"
 #include "../src/bittorrent/dht_node.h"
-#include "../src/util/crypto.h"
 #include "../src/task.h"
 #include "../src/parse/number.h"
 #include "../src/async_sleep.h"
