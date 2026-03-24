@@ -9,7 +9,7 @@
 
 #include "../bittorrent/mainline_dht.h"
 #include "../response_reader.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/yield.h"
 #include "cache_entry.h"
 #include "resource_id.h"
@@ -35,7 +35,7 @@ private:
     static std::unique_ptr<Client>
     build( AsioExecutor ex
          , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , opt_path static_cache_dir
@@ -49,7 +49,7 @@ public:
     static std::unique_ptr<Client>
     build( AsioExecutor ex
          , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , YieldContext yield)
@@ -63,7 +63,7 @@ public:
     static std::unique_ptr<Client>
     build( AsioExecutor ex
          , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , fs::path static_cache_dir

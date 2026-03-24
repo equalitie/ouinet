@@ -8,30 +8,24 @@
 
 #include <boost/asio/buffer.hpp>
 #include <boost/utility/string_view.hpp>
+#include <openssl/evp.h>
 
-namespace ouinet { namespace util {
+namespace ouinet::util {
 
-enum class hash_algorithm {
-    sha1,
-    sha256,
-    sha512,
-};
-
-
-namespace hash_detail {
-
-class HashImpl;
-struct HashImplDeleter {
-    void operator()(HashImpl*);
-};
-
-HashImpl* new_hash_impl(hash_algorithm);
-void hash_impl_update(HashImpl&, const void*, size_t);
-uint8_t* hash_impl_close(HashImpl&);
-
-} // namespace hash_detail
-
-
+namespace algo {
+    struct Sha1 {
+        static const size_t digest_size = 20;
+        static const EVP_MD* initializer() { return EVP_sha1(); }
+    };
+    struct Sha256 {
+        static const size_t digest_size = 32;
+        static const EVP_MD* initializer() { return EVP_sha256(); }
+    };
+    struct Sha512 {
+        static const size_t digest_size = 64;
+        static const EVP_MD* initializer() { return EVP_sha512(); }
+    };
+}
 
 /* Templated class to support running hashes.
  *
@@ -39,12 +33,17 @@ uint8_t* hash_impl_close(HashImpl&);
  * data.  When you are done, you may call the `close` function, which returns
  * the resulting digest as an array of bytes.
  */
-template<hash_algorithm ALGORITHM, size_t DIGEST_LENGTH>
-class Hash {
+template<typename Algo> class Hash {
 public:
-    using digest_type = std::array<uint8_t, DIGEST_LENGTH>;
+    using digest_type = std::array<uint8_t, Algo::digest_size>;
 
     Hash() {}
+
+    // TODO
+    Hash(Hash const&) = delete;
+    Hash(Hash &&) = delete;
+    Hash& operator=(Hash const&) = delete;
+    Hash& operator=(Hash &&) = delete;
 
     static digest_type zero_digest() {
         static bool filled = false;
@@ -94,14 +93,25 @@ public:
 
     inline digest_type close()
     {
-        if (!impl) impl.reset(hash_detail::new_hash_impl(ALGORITHM));
+        lazy_init();
 
-        auto digest_buffer = hash_detail::hash_impl_close(*impl);
+        unsigned char hash[EVP_MAX_MD_SIZE];
+        unsigned int hash_len = 0;
+
+        if (EVP_DigestFinal_ex(_ctx, hash, &hash_len) != 1) {
+            throw std::runtime_error("failed to finalize hash");
+        }
 
         digest_type result;
-        std::memcpy(result.data(), digest_buffer, result.size());
 
-        impl = nullptr;
+        if (hash_len != result.size()) {
+            throw std::runtime_error("invalid hash size");
+        }
+
+        std::memcpy(result.data(), hash, hash_len);
+
+        EVP_MD_CTX_free(_ctx);
+        _ctx = nullptr;
 
         return result;
     }
@@ -115,7 +125,11 @@ public:
     }
 
     static constexpr size_t size() {
-        return DIGEST_LENGTH;
+        return Algo::digest_size;
+    }
+
+    ~Hash() {
+        if (_ctx) EVP_MD_CTX_free(_ctx);
     }
 
 private:
@@ -135,18 +149,29 @@ private:
     }
 
 private:
-    std::unique_ptr<hash_detail::HashImpl, hash_detail::HashImplDeleter> impl;
+    EVP_MD_CTX* _ctx = nullptr;
 
-    inline void update(const void* buffer, size_t size)
+    void update(const void* buffer, size_t size)
     {
-        if (!impl) impl.reset(hash_detail::new_hash_impl(ALGORITHM));
-        hash_detail::hash_impl_update(*impl, buffer, size);
+        lazy_init();
+        if (EVP_DigestUpdate(_ctx, buffer, size) != 1) {
+            throw std::runtime_error("failed to update hash context");
+        }
+    }
+
+    void lazy_init() {
+        if (_ctx) return;
+        _ctx = EVP_MD_CTX_new();
+        if (!_ctx) throw std::runtime_error("failed to create hash context");
+        if (EVP_DigestInit_ex(_ctx, Algo::initializer(), NULL) != 1) {
+            throw std::runtime_error("failed to initialie hash context");
+        }
     }
 };
 
-using SHA1 = Hash<hash_algorithm::sha1, 20>;
-using SHA256 = Hash<hash_algorithm::sha256, 32>;
-using SHA512 = Hash<hash_algorithm::sha512, 64>;
+using SHA1 = Hash<algo::Sha1>;
+using SHA256 = Hash<algo::Sha256>;
+using SHA512 = Hash<algo::Sha512>;
 
 
 /* Utility functions to get the hash of a set of strings.
@@ -193,4 +218,4 @@ SHA512::digest_type sha512_digest(const Arg& arg, const Rest&... rest) {
     return SHA512::digest(arg, rest...);
 }
 
-}} // namespaces
+} // namespaces

@@ -154,11 +154,10 @@ file(GLOB ouinet_common_sources
     "./src/util/atomic_file.cpp"
     "./src/util/random.cpp"
     "./src/util/handler_tracker.cpp"
-    "./src/util/crypto.cpp"
+    "./src/util/sign.cpp"
     "./src/util/log_path.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
-    "./src/util/hash.cpp"
     "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
     "./src/util/yield.cpp"
@@ -201,7 +200,6 @@ target_link_libraries(ouinet_common
         ${OUINET_HARDCODED_CA_CERTS}
         ouinet_dependencies
         Boost::iostreams
-        lib::gcrypt
         lib::json
         asio_utp
         ouinet_rs

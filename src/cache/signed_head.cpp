@@ -12,7 +12,7 @@ SignedHead::sign_response( const http::request_header<>& rqh
                          , http::response_header<> rsh
                          , const std::string& injection_id
                          , std::chrono::seconds::rep injection_ts
-                         , const util::Ed25519PrivateKey& sk)
+                         , const sign::SecretKey& sk)
 {
     using namespace ouinet::http_;
 
@@ -52,7 +52,7 @@ SignedHead::sign_response( const http::request_header<>& rqh
 }
 
 boost::optional<http::response_header<>>
-SignedHead::verify(http::response_header<> rsh, const util::Ed25519PublicKey& pk)
+SignedHead::verify(http::response_header<> rsh, const sign::PublicKey& pk)
 {
     // Put together the head to be verified:
     // given head, minus chunking (and related headers), and signatures themselves.
@@ -121,7 +121,7 @@ SignedHead::verify(http::response_header<> rsh, const util::Ed25519PublicKey& pk
 }
 
 boost::optional<SignedHead>
-SignedHead::verify_and_create(http::response_header<> rsh, const util::Ed25519PublicKey& pk)
+SignedHead::verify_and_create(http::response_header<> rsh, const sign::PublicKey& pk)
 {
     auto rsh_o = verify(std::move(rsh), pk);
     if (!rsh_o) return boost::none;

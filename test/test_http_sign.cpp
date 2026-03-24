@@ -17,7 +17,6 @@
 
 #include <util.h>
 #include <util/bytes.h>
-#include <util/crypto.h>
 #include <util/wait_condition.h>
 #include <util/yield.h>
 #include <cache/http_sign.h>
@@ -92,14 +91,14 @@ static const size_t inj_bs = 65536;
 static const string inj_b64sk = "MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ=";
 static const string inj_b64pk = "DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=";
 
-static util::Ed25519PrivateKey get_private_key() {
-    auto ska = util::bytes::to_array<uint8_t, util::Ed25519PrivateKey::key_size>(util::base64_decode(inj_b64sk));
-    return util::Ed25519PrivateKey(std::move(ska));
+static sign::SecretKey get_private_key() {
+    auto ska = util::bytes::to_array<uint8_t, sign::SecretKey::size>(util::base64_decode(inj_b64sk));
+    return sign::SecretKey(ska);
 }
 
-static util::Ed25519PublicKey get_public_key() {
-    auto pka = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(util::base64_decode(inj_b64pk));
-    return util::Ed25519PublicKey(std::move(pka));
+static sign::PublicKey get_public_key() {
+    auto pka = util::bytes::to_array<uint8_t, sign::PublicKey::size>(util::base64_decode(inj_b64pk));
+    return sign::PublicKey(std::move(pka));
 }
 
 // If Beast changes message representation or shuffles headers,
@@ -149,7 +148,7 @@ static string _get_signature_field(bool is_final, size_t body_size, const string
             is_final ? util::str( "\n"
                                   "x-ouinet-data-size: ", body_size, "\n"
                                   "digest: SHA-256=", body_b64digest)
-                     : ""))), "\"",
+                     : "")).bytes), "\"",
     "\r\n" );
 }
 
@@ -240,14 +239,6 @@ static http::request_header<> get_request_header() {
     return req_h;
 }
 
-struct TestGlobalFixture {
-    void setup() {
-        ouinet::util::crypto_init();
-    }
-};
-
-BOOST_TEST_GLOBAL_FIXTURE(TestGlobalFixture);
-
 BOOST_AUTO_TEST_CASE(test_chain_hasher) {
     using namespace cache;
 
@@ -269,7 +260,7 @@ BOOST_AUTO_TEST_CASE(test_chain_hasher) {
         //cerr << i << " chain_digest: " << util::base64_encode(ch_sign.chain_digest) << "\n";
         //cerr << i << " chain_signat: " << util::base64_encode(ch_sign.chain_signature) << "\n";
 
-        BOOST_REQUIRE_EQUAL(rs_block_sigs[i], util::base64_encode(ch_sign.chain_signature));
+        BOOST_REQUIRE_EQUAL(rs_block_sigs[i], util::base64_encode(ch_sign.chain_signature.bytes));
         BOOST_REQUIRE(ch_sign.verify(pk, inj_id));
 
         ChainHash ch_verif = chh_verif.calculate_block(block.size(), block_digest, ch_sign.chain_signature);

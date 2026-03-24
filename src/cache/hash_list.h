@@ -2,7 +2,7 @@
 #include <cstdint>
 
 #include "../util/hash.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../response_part.h"
 #include "../declspec.h"
 #include "signed_head.h"
@@ -11,12 +11,11 @@ namespace ouinet::cache {
 
 struct OUINET_DECL HashList {
     using Digest    = util::SHA512::digest_type;
-    using PubKey    = util::Ed25519PublicKey;
-    using Signature = PubKey::sig_array_t;
+    using PubKey    = sign::PublicKey;
 
     struct Block {
         Digest data_hash;
-        Signature chained_hash_signature;
+        sign::Signature chained_hash_signature;
     };
 
     SignedHead         signed_head;

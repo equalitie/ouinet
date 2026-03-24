@@ -12,7 +12,7 @@
 #include "mutable_data.h"
 #include "node_id.h"
 
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/executor.h"
 #include "../util/signal.h"
 
@@ -124,7 +124,7 @@ class DataStore {
     void put_immutable(BencodedValue value);
     boost::optional<BencodedValue> get_immutable(NodeID id);
 
-    static NodeID mutable_get_id(util::Ed25519PublicKey public_key, boost::string_view salt);
+    static NodeID mutable_get_id(sign::PublicKey public_key, boost::string_view salt);
     void put_mutable(MutableDataItem item);
     boost::optional<MutableDataItem> get_mutable(NodeID id);
 

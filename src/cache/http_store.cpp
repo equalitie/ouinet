@@ -59,7 +59,7 @@ static const fs::path body_fname = "body";
 static const fs::path body_path_fname = "body-path";
 static const fs::path sigs_fname = "sigs";
 
-using Signature = util::Ed25519PublicKey::sig_array_t;
+using Signature = sign::Signature::Bytes;
 
 static
 std::size_t
@@ -182,7 +182,7 @@ public:
 
         if (e.signature.empty()) return;
 
-        auto sig = util::base64_decode<Signature>(e.signature);
+        auto sig = util::base64_decode<sign::Signature::Bytes>(e.signature);
 
         if (!sig) return;
 
@@ -204,7 +204,7 @@ public:
             e.prev_chained_digest = util::base64_encode(*chain_hasher.prev_chained_digest());
 
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
-        chain_hasher.calculate_block(ch.size, block_digest, *sig);
+        chain_hasher.calculate_block(ch.size, block_digest, sign::Signature(*sig));
 
         util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
     }
@@ -661,7 +661,7 @@ protected:
 
 class StaticHttpStore : public HttpReadStore {
 public:
-    StaticHttpStore(fs::path p, fs::path cp, util::Ed25519PublicKey pk, AsioExecutor ex)
+    StaticHttpStore(fs::path p, fs::path cp, sign::PublicKey pk, AsioExecutor ex)
         : HttpReadStore(std::move(p), std::move(ex))
         , content_path(std::move(cp)), verif_pubk(std::move(pk))
     {}
@@ -731,12 +731,12 @@ public:
 
 private:
     fs::path content_path;
-    util::Ed25519PublicKey verif_pubk;
+    sign::PublicKey verif_pubk;
 };
 
 std::unique_ptr<BaseHttpStore>
 make_static_http_store( fs::path path, fs::path content_path
-                      , util::Ed25519PublicKey pk, AsioExecutor ex)
+                      , sign::PublicKey pk, AsioExecutor ex)
 {
     using namespace std;
     return make_unique<StaticHttpStore>(move(path), move(content_path), move(pk), move(ex));

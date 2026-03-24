@@ -1,5 +1,4 @@
 #include "client.h"
-#include "util/crypto.h"
 #include "logger.h"
 #include "force_exit_on_signal.h"
 #include <iostream>
@@ -9,8 +8,6 @@ using namespace std;
 
 int main(int argc, const char* argv[])
 {
-    util::crypto_init();
-
     ClientConfig cfg;
 
     try {
