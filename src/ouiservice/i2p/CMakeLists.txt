@@ -6,21 +6,11 @@ include(ExternalProject)
 block()
     set(WITH_BINARY OFF)
     set(WITH_GUI OFF)
-    if (NOT ANDROID)
-        # We need shared libraries because of tests and the fact that i2pd uses
-        # globals which would be initialized twice if the test is linked to
-        # both libclient and libinjector (which both link with i2pd).  We don't
-        # need i2pd as shared library on Android where we don't run those
-        # tests. However would be nice to have consistent linking on all
-        # platforms.
-        # TODO: Maybe instead of making the three i2pd libraries shared we should
-        # make the `ouiservice-i2p` shared.
-        set(BUILD_SHARED_LIBS ON)
-    endif()
+    set(BUILD_SHARED_LIBS OFF)
     set(BUILD_TESTING OFF)
     add_definitions(-DBOOST_ASIO_DYN_LINK)
     add_subdirectory(./i2pd/build)
-    if(POLICY CMP0079 )
+    if(POLICY CMP0079)
         # Allows adding the libraries below
         # https://stackoverflow.com/a/75246115/273348
         cmake_policy(SET CMP0079 NEW)
@@ -39,7 +29,7 @@ add_dependencies(libi2pdlang                                OpenSSL::headers Boo
 ################################################################################
 project(ouiservice-i2p)
 
-add_library(ouiservice-i2p
+add_library(ouiservice-i2p SHARED
     "./tunnel.cpp"
     "./handshake.cpp"
     "./client.cpp"

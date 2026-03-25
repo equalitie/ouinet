@@ -200,7 +200,6 @@ file(GLOB ouinet_common_sources
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"
-    ${EXPERIMENTAL_SOURCES}
     ${DEPRECATED_SOURCES}
 )
 
@@ -217,7 +216,6 @@ target_link_libraries(ouinet_common
     PRIVATE
         lib::url
         OpenSSL::Crypto
-        ${EXPERIMENTAL_LIBRARIES}
         ${DEPRECATED_LIBRARIES}
     PUBLIC
         ${OUINET_HARDCODED_CA_CERTS}
@@ -238,7 +236,7 @@ target_include_directories(ouinet_common PUBLIC "src")
 ################################################################################
 if(WITH_EXPERIMENTAL)
     target_compile_definitions(ouinet_common
-            INTERFACE -D__EXPERIMENTAL__
+        PUBLIC -D__EXPERIMENTAL__
     )
 endif()
 
@@ -291,6 +289,7 @@ target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
+        ${EXPERIMENTAL_LIBRARIES}
         ${OUINET_OUISYNC_LIBS}
 )
 
@@ -317,7 +316,6 @@ file(GLOB injector_sources
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
-    ${EXPERIMENTAL_SOURCES}
     ${DEPRECATED_SOURCES}
 )
 
@@ -326,7 +324,7 @@ if (NOT WIN32 AND NOT MINGW)
     set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
 endif ()
 
-target_link_libraries(injector_lib ouinet_common)
+target_link_libraries(injector_lib ouinet_common ${EXPERIMENTAL_LIBRARIES})
 
 if (WIN32 OR MINGW)
     target_compile_definitions(injector_lib PRIVATE -DOUINET_DECL_EXPORT)
