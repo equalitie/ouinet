@@ -153,18 +153,19 @@ static const array<string, 3> rs_block_sig{
 
 // As they appear in signature files.
 static util::SHA512::digest_type rs_block_chash_raw(size_t i) {
-    using Signature = util::Ed25519PublicKey::sig_array_t;
-
     if (i == 0) return util::SHA512::zero_digest();
 
     cache::ChainHasher chain_hasher;
     cache::ChainHash chain_hash;
 
+
     for (size_t j = 0; j < i; ++j) {
+        auto sig_bytes = *util::base64_decode<sign::Signature::Bytes>(rs_block_sig[j]);
+
         chain_hash = chain_hasher.calculate_block(
                 rs_block_data[j].size(),
                 rs_block_dhash_raw[j],
-                *util::base64_decode<Signature>(rs_block_sig[j]));
+                sign::Signature(sig_bytes));
     }
 
     return chain_hash.chain_digest;

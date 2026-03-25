@@ -174,8 +174,6 @@ function list_artifacts_for_target_os (
             artifacts=(
                 $build_dir/client
                 $build_dir/injector
-                $build_dir/libgcrypt.so.20.5.0
-                $build_dir/libgpg-error.so.0.38.0
                 $build_dir/libouinet_asio.so
                 $build_dir/libouinet_asio_ssl.so
                 $build_dir/libouinet_asio_ssl.so
@@ -187,8 +185,6 @@ function list_artifacts_for_target_os (
             artifacts=(
                 $build_dir/client.exe
                 $build_dir/injector.exe
-                $build_dir/gcrypt/out/bin/libgcrypt-20.dll
-                $build_dir/gpg_error/out/bin/libgpg-error-0.dll
                 $build_dir/libouinet_asio.dll
                 $build_dir/libouinet_asio_ssl.dll
                 $build_dir/libclient_lib.dll

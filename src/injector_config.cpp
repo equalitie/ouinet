@@ -358,14 +358,14 @@ void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
             return;
         }
 
-        _ed25519_private_key = util::Ed25519PrivateKey::generate();
+        _ed25519_private_key = sign::SecretKey::generate();
 
         boost::nowide::ofstream(priv_config) << _ed25519_private_key;
         boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
         return;
     }
 
-    _ed25519_private_key = *util::Ed25519PrivateKey::from_hex(hex);
+    _ed25519_private_key = *sign::SecretKey::from_hex(hex);
     boost::nowide::ofstream(priv_config) << _ed25519_private_key;
     boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
 }

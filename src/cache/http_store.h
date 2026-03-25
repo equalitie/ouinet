@@ -11,7 +11,7 @@
 #include "resource_id.h"
 #include "../constants.h"
 #include "../response_reader.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/signal.h"
 #include "../util/yield.h"
 
@@ -237,7 +237,7 @@ public:
 // Please make sure that `content_path` is already in canonical form or some checks may fail.
 std::unique_ptr<BaseHttpStore>
 make_static_http_store( fs::path path, fs::path content_path
-                      , util::Ed25519PublicKey
+                      , sign::PublicKey
                       , AsioExecutor);
 
 class HttpStore : public BaseHttpStore {

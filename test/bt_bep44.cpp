@@ -11,7 +11,7 @@
 #include <boost/optional/optional_io.hpp>
 #include <boost/tokenizer.hpp>
 #include "../src/constants.h"
-#include "../src/util/crypto.h"
+#include "../src/util/sign.h"
 #include "../src/util/wait_condition.h"
 #include "../src/util/str.h"
 #include "../src/util/hash.h"
@@ -114,18 +114,18 @@ boost::string_view as_string_view(const std::array<uint8_t, N>& a)
 }
 
 struct GetCmd {
-    util::Ed25519PublicKey public_key;
+    sign::PublicKey public_key;
     string dht_key;
 };
 
 struct PutCmd {
-    util::Ed25519PrivateKey private_key;
+    sign::SecretKey private_key;
     string dht_key;
     string dht_value;
 };
 
 struct StressCmd {
-    util::Ed25519PrivateKey private_key;
+    sign::SecretKey private_key;
 };
 
 void parse_args( const vector<string>& args
@@ -237,7 +237,7 @@ int main(int argc, const char** argv)
                 cerr << "pubkey key: \"" << cmd_toks[1] << "\"\n";
                 cerr << "key:        \"" << cmd_toks[2] << "\"\n";
                 GetCmd get_cmd;
-                get_cmd.public_key = *util::Ed25519PublicKey::from_hex(cmd_toks[1]);
+                get_cmd.public_key = *sign::PublicKey::from_hex(cmd_toks[1]);
                 get_cmd.dht_key = cmd_toks[2];
 
                 auto salt = ouinet::util::sha1_digest(get_cmd.dht_key);
@@ -274,7 +274,7 @@ int main(int argc, const char** argv)
                     continue;
                 }
                 PutCmd put_cmd;
-                put_cmd.private_key = *util::Ed25519PrivateKey::from_hex(cmd_toks[1]);
+                put_cmd.private_key = *sign::SecretKey::from_hex(cmd_toks[1]);
                 put_cmd.dht_key = cmd_toks[2];
                 put_cmd.dht_value = cmd_toks[3];
 
@@ -308,7 +308,7 @@ int main(int argc, const char** argv)
                     continue;
                 }
                 StressCmd stress_cmd;
-                stress_cmd.private_key = *util::Ed25519PrivateKey::from_hex(cmd_toks[1]);
+                stress_cmd.private_key = *sign::SecretKey::from_hex(cmd_toks[1]);
 
                 WaitCondition wc(ctx);
 

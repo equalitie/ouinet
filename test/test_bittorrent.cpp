@@ -147,7 +147,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     auto mutable_data = []( const string& value
                           , const string& salt
-                          , const util::Ed25519PrivateKey& private_key)
+                          , const sign::SecretKey& private_key)
     {
         // Use the timestamp as a version ID.
         using Time = boost::posix_time::ptime;
@@ -164,7 +164,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     sys::error_code ec;
     Cancel cancel;
 
-    auto skey = util::Ed25519PrivateKey::generate();
+    auto skey = sign::SecretKey::generate();
     auto pkey = skey.public_key();
 
     size_t push_get_count = 8;

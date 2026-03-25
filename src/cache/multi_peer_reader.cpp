@@ -7,7 +7,7 @@
 #include "../http_util.h"
 #include "../session.h"
 #include "../util/watch_dog.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/crypto_stream.h"
 #include "../util/intrusive_list.h"
 #include "../constants.h"
@@ -94,7 +94,7 @@ public:
     AsioExecutor _exec;
     ResourceId _resource_id;
     CryptoStreamKey _resource_key;
-    const util::Ed25519PublicKey _cache_pk;
+    const sign::PublicKey _cache_pk;
 
     GenericStream _connection;
 
@@ -102,7 +102,7 @@ public:
     Cancel _lifetime_cancel;
     util::LogPath _log_path;
 
-    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, util::Ed25519PublicKey cache_pk, util::LogPath log_path) :
+    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, sign::PublicKey cache_pk, util::LogPath log_path) :
         _exec(exec),
         _resource_id(resource_id),
         _resource_key(resource_key),
@@ -344,7 +344,7 @@ public:
          , set<udp::endpoint> lan_my_eps
          , set<udp::endpoint> wan_my_eps
          , set<udp::endpoint> lan_peer_eps
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<DhtLookup> peer_lookup
@@ -399,7 +399,7 @@ public:
     Peers(AsioExecutor exec
          , set<udp::endpoint> lan_my_eps
          , set<udp::endpoint> lan_peer_eps
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
@@ -541,7 +541,7 @@ private:
     AsioExecutor _exec;
     ConditionVariable _cv;
 
-    util::Ed25519PublicKey _cache_pk;
+    sign::PublicKey _cache_pk;
     std::set<asio::ip::udp::endpoint> _lan_peer_eps;
     std::set<asio::ip::udp::endpoint> _lan_my_eps;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
@@ -560,7 +560,7 @@ private:
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
                                 , CryptoStreamKey resource_key
-                                , util::Ed25519PublicKey cache_pk
+                                , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::shared_ptr<unsigned> newest_proto_seen
@@ -581,7 +581,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
                                 , CryptoStreamKey resource_key
-                                , util::Ed25519PublicKey cache_pk
+                                , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::set<asio::ip::udp::endpoint> wan_my_eps

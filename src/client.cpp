@@ -71,7 +71,6 @@
 
 #include "parse/number.h"
 #include "util/signal.h"
-#include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
 #include "util/reachability.h"

@@ -246,6 +246,7 @@ externalproject_add(built_boost
             --layout=system
             --prefix=${OUINET_BOOST_PREFIX}/install
             --no-cmake-config
+            --verbosity=0
             -q # Stop at first error
             ${ENABLE_BOOST_COMPONENTS}
             ${BOOST_ARCH_CONFIGURATION}
