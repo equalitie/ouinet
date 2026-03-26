@@ -57,6 +57,13 @@ target_link_libraries(ouiservice-i2p
         ouinet_common
 )
 
+# Place the resulting library together with the rest.
+set_target_properties(ouiservice-i2p PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     externalproject_add(android-ifaddrs
         GIT_REPOSITORY https://github.com/PurpleI2P/android-ifaddrs
