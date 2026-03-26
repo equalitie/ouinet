@@ -57,7 +57,7 @@ struct ReachabilityFixture
     const unique_ptr<util::UdpServerReachabilityAnalysis> reachability_analysis = make_unique<
         util::UdpServerReachabilityAnalysis>();
     const uint16_t incoming_connections = 1000;
-    const uint8_t wait_for_unconfirmed_reachable= 1;
+    const uint8_t wait_for_unconfirmed_reachable = 1;
 
 
     ReachabilityFixture() = default;
@@ -101,6 +101,36 @@ BOOST_FIXTURE_TEST_SUITE(suite_reachability, ReachabilityFixture);
             timer.async_wait(yield);
             BOOST_TEST(reachability_status(*reachability_analysis) == "UnconfirmedReachable");
 
+            reachability_analysis->stop();
+        });
+        ctx->run();
+    }
+
+    BOOST_AUTO_TEST_CASE(test_race_conditions_with_threads_inside_coros)
+    {
+        start_reachability_analysis();
+
+        task::spawn_detached(*ctx, [&](const asio::yield_context& yield)
+        {
+            std::vector<std::jthread> threads;
+
+            task::spawn_detached(*ctx, [&](const asio::yield_context&)
+            {
+                for (int i = 0; i < incoming_connections; ++i)
+                {
+                    if (!ctx) continue;
+                    threads.emplace_back([&]
+                    {
+                        incoming_connection(ctx, endpoint);
+                        // Stopping from different threads to force a race condition
+                        reachability_analysis->stop();
+                    });
+                }
+            });
+
+            asio::steady_timer timer{*ctx};
+            timer.expires_after(chrono::seconds(wait_for_unconfirmed_reachable));
+            timer.async_wait(yield);
             reachability_analysis->stop();
         });
         ctx->run();
