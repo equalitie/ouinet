@@ -136,4 +136,35 @@ BOOST_FIXTURE_TEST_SUITE(suite_reachability, ReachabilityFixture);
         ctx->run();
     }
 
+    BOOST_AUTO_TEST_CASE(test_race_conditions_with_threads)
+    {
+        start_reachability_analysis();
+
+        std::vector<std::jthread> threads;
+
+        task::spawn_detached(*ctx, [&](const asio::yield_context& y)
+        {
+            for (int i = 0; i < incoming_connections; ++i)
+            {
+                if (!ctx) continue;
+                threads.emplace_back([&]
+                {
+                    incoming_connection(ctx, endpoint);
+                    // Stopping from different threads to force a race condition
+                    reachability_analysis->stop();
+                });
+            }
+        });
+
+        task::spawn_detached(*ctx, [&](const asio::yield_context& yield)
+        {
+
+            asio::steady_timer timer{*ctx};
+            timer.expires_after(chrono::seconds(wait_for_unconfirmed_reachable));
+            timer.async_wait(yield);
+            reachability_analysis->stop();
+        });
+        ctx->run();
+    }
+
 BOOST_AUTO_TEST_SUITE_END();
