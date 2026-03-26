@@ -148,3 +148,7 @@ target_link_libraries(test-injector-resolver injector_lib)
 ######################################################################
 add_executable(test_fetch "test_fetch.cpp")
 target_link_libraries(test_fetch injector_lib client_lib)
+
+######################################################################
+add_executable(test_reachability_analysis "test_reachability_analysis.cpp")
+target_link_libraries(test_reachability_analysis client_lib)
