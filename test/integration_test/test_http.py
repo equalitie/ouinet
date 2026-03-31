@@ -213,6 +213,7 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.DHT_INITIALIZED_REGEX,
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
                 TestFixtures.RESPONSE_RECEIVED_FROM_CACHE,
+                TestFixtures.CACHE_CLIENT_PEER_FOUND,
             ],
         ),
     )
@@ -565,6 +566,11 @@ async def test_tcp_cache(certificate_file, http_server):
     )
     # Make sure that the client2 is ready to access the cache
     await wait_for_dht_ready(cache_client)
+    # Make sure client2 found client1 as a peer
+    await wait_for_benchmark(cache_client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
+    # Make sure client1 found client2 as a peer
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
+
     # Now request the same page from second client
     get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
