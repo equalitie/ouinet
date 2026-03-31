@@ -69,7 +69,6 @@
 #include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
-#include "util/reachability.h"
 #include "util/async_job.h"
 #include "upnp_updater.h"
 #include "util/handler_tracker.h"
@@ -255,10 +254,6 @@ public:
             _bt_dht->stop();
             _bt_dht = nullptr;
         }
-        if (_udp_reachability) {
-            _udp_reachability->stop();
-            _udp_reachability = nullptr;
-        }
     }
 
     Client::RunningState get_state() const noexcept {
@@ -310,10 +305,6 @@ public:
             = create_udp_multiplexer( _ctx
                                     , _config.repo_root() / "last_used_udp_port"
                                     , _config.udp_mux_port());
-
-        _udp_reachability
-            = make_unique<util::UdpServerReachabilityAnalysis>();
-        _udp_reachability->start(get_executor(), *_udp_multiplexer);
 
         return *_udp_multiplexer;
     }
@@ -660,7 +651,6 @@ private:
 
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
-    unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
 
     util::LogPath _log_path;
     std::optional<Client::MockDhtBuilder> _bt_dht_builder;
@@ -1044,7 +1034,6 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldConte
                                , local_ep
                                , _upnps_ptr
                                , _bt_dht.get()
-                               , _udp_reachability.get()
                                , metrics_controller
                                , _proxy_endpoint_address, _frontend_endpoint, _frontend_unix_socket_endpoint
                                , cancel

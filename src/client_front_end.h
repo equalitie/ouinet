@@ -10,7 +10,6 @@
 #include "namespaces.h"
 #include "ouiservice/bep5/client.h"
 #include "ssl/ca_certificate.h"
-#include "util/reachability.h"
 #include "util/yield.h"
 #include "logger.h"
 #include "cxx/metrics.h"
@@ -101,7 +100,6 @@ public:
                   , boost::optional<UdpEndpoint> local_ep
                   , const std::shared_ptr<UPnPs>&
                   , const bittorrent::DhtBase* dht
-                  , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
                   , std::string_view proxy_endpoint
                   , std::string_view frontend_endpoint
@@ -155,7 +153,6 @@ private:
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>& upnps_ptr
                       , const bittorrent::DhtBase*
-                      , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
                       , std::ostringstream&
@@ -169,7 +166,6 @@ private:
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>&
                       , const bittorrent::DhtBase*
-                      , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
                       , std::ostringstream&
