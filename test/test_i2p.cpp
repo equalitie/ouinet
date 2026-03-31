@@ -1,3 +1,5 @@
+#include <boost/asio/error.hpp>
+#include <cstddef>
 #define BOOST_TEST_MODULE utility
 #include <boost/test/included/unit_test.hpp>
 #include <boost/filesystem.hpp>
@@ -164,8 +166,14 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
             BOOST_TEST_MESSAGE("Client reading hello message");
             std::string buffer(hello_message.size(), 'X');
-            asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
+            size_t got = asio::async_read(conn, asio::buffer(buffer), yield[ec]);
+            if (ec == asio::error::eof and got == hello_message.size()){
+                // we got exactly our buffer and only then the stream ended
+                // this is not a real exception.
+                BOOST_TEST_MESSAGE("Encountered EOF after filling whole buffer, proceeding nominally");
+                ec.clear();
+            }
+            BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message() << ": got " << got  << "bytes out of " << hello_message.size() << " and final buffer is " << buffer);
 
             BOOST_REQUIRE_EQUAL(buffer, hello_message);
         });
@@ -247,13 +255,13 @@ std::string byte_units(uint64_t count) {
     if (count >= 1024 * 1024) {
         auto mbs = count / mb;
         auto rest = float((count - (mbs*mb))) / mb;
-        return util::str(mbs, ".", int(rest*1000), "MiB"); 
+        return util::str(mbs, ".", int(rest*1000), "MiB");
     } else if (count >= kb) {
         auto kbs = count / kb;
         auto rest = float((count - (kbs*kb))) / kb;
-        return util::str(kbs, ".", int(rest*1000), "KiB"); 
+        return util::str(kbs, ".", int(rest*1000), "KiB");
     } else {
-        return util::str(count, "B"); 
+        return util::str(count, "B");
     }
 }
 
