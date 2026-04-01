@@ -90,7 +90,9 @@ function combine {
             
             xcodebuild -create-xcframework \
                 -framework ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework \
+                -debug-symbols ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework.dSYM \
                 -framework ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework \
+                -debug-symbols ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework.dSYM \
                 -output ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
         else
             echo "ERROR: ${DIR}/build-iphonesimulator not found, please build before combining frameworks"
