@@ -2,16 +2,14 @@
 
 import asyncio
 import signal
-import sys
 
 from test_fixtures import TestFixtures
 from test_http import (
     run_i2p_client,
     run_i2p_injector,
-    # certificate_file,
     wait_for_benchmark,
     cleanup,
-    _all_dirs,
+    all_dirs,
 )
 
 ctrl_c = asyncio.Event()
@@ -21,12 +19,11 @@ def shutdown(_x, _y):
     ctrl_c.set()
 
 
-async def main():
-    """
-    provide a proxy to manually see if browsing works
-    """
-    _all_dirs()
+def monitor_ctrl_c():
+    signal.signal(signal.SIGINT, shutdown)
 
+
+def default_i2p_injector():
     i2pinjector = run_i2p_injector(
         [
             "--listen-on-i2p",
@@ -35,6 +32,21 @@ async def main():
             "DEBUG",
         ]
     )
+    return i2pinjector
+
+
+async def exit_on_demand():
+    await ctrl_c.wait()
+    await cleanup()
+
+
+async def main():
+    """
+    provide a proxy to manually see if browsing works
+    """
+    all_dirs()
+
+    i2pinjector = default_i2p_injector()
 
     # wait for the injector tunnel to be advertised
     await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
@@ -59,11 +71,11 @@ async def main():
     print(
         f"Done. In your browser, use localhost:{TestFixtures.I2P_CLIENT["port"]} as a proxy"
     )
+    print("press ctrl+c when done")
 
-    await ctrl_c.wait()
-    await cleanup()
+    await exit_on_demand()
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, shutdown)
+    monitor_ctrl_c()
     asyncio.run(main())

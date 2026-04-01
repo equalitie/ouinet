@@ -6,29 +6,30 @@ include(ExternalProject)
 block()
     set(WITH_BINARY OFF)
     set(WITH_GUI OFF)
-    set(BUILD_SHARED_LIBS ON)
+    set(BUILD_SHARED_LIBS OFF)
     set(BUILD_TESTING OFF)
     add_definitions(-DBOOST_ASIO_DYN_LINK)
     add_subdirectory(./i2pd/build)
-    if(POLICY CMP0079 )
+    if(POLICY CMP0079)
         # Allows adding the libraries below
         # https://stackoverflow.com/a/75246115/273348
         cmake_policy(SET CMP0079 NEW)
     endif()
-    target_link_libraries(libi2pd PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
-    target_link_libraries(libi2pdclient PRIVATE Boost::program_options)
+    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
+    target_link_libraries(libi2pdclient PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
+    target_link_libraries(libi2pdlang   PRIVATE                        ouinet_asio ouinet_asio_ssl)
 endblock()
 
 # i2pd messes with CMAKE_MODULE_PATH, which breaks automatic dependency handling.
 # Work around this issue by setting them by hand.
-add_dependencies(libi2pd OpenSSL::Crypto OpenSSL::SSL Boost::boost)
-add_dependencies(libi2pdclient OpenSSL::Crypto OpenSSL::SSL Boost::boost)
-add_dependencies(libi2pdlang Boost::boost)
+add_dependencies(libi2pd       OpenSSL::Crypto OpenSSL::SSL OpenSSL::headers Boost::boost)
+add_dependencies(libi2pdclient OpenSSL::Crypto OpenSSL::SSL OpenSSL::headers Boost::boost)
+add_dependencies(libi2pdlang                                OpenSSL::headers Boost::boost)
 
 ################################################################################
 project(ouiservice-i2p)
 
-add_library(ouiservice-i2p
+add_library(ouiservice-i2p SHARED
     "./tunnel.cpp"
     "./handshake.cpp"
     "./client.cpp"
@@ -54,6 +55,13 @@ target_link_libraries(ouiservice-i2p
         OpenSSL::SSL
     PUBLIC
         ouinet_common
+)
+
+# Place the resulting library together with the rest.
+set_target_properties(ouiservice-i2p PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")

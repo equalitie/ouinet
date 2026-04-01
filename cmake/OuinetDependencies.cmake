@@ -5,9 +5,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/dependencies/openssl.cmake)
 # This is used all over Ouinet's source.
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/boost.cmake)
 
-# For crypto, hash and random utilities.
-include(${CMAKE_CURRENT_LIST_DIR}/dependencies/gcrypt.cmake)
-
 if(WITH_DEPRECATED)
     # For Pluggable Transport modules (obfs4 and lampshade).
     include(${CMAKE_CURRENT_LIST_DIR}/dependencies/golang.cmake)
@@ -21,3 +18,9 @@ include(${CMAKE_CURRENT_LIST_DIR}/dependencies/url.cmake)
 
 # Ouinet code written in rust
 include(${CMAKE_CURRENT_LIST_DIR}/dependencies/ouinet-rs.cmake)
+
+# Ouisync library
+include(${CMAKE_CURRENT_LIST_DIR}/dependencies/ouisync.cmake)
+
+# Hardcoded CA certificates
+include(${CMAKE_CURRENT_LIST_DIR}/dependencies/ca-certs.cmake)

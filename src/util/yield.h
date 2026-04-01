@@ -6,6 +6,7 @@
 #include "../util/log_path.h"
 #include "../logger.h"
 #include "../or_throw.h"
+#include "../task.h"
 #include <boost/asio/spawn.hpp>
 #include <boost/utility/string_view.hpp>
 
@@ -46,6 +47,12 @@ public:
         return _asio_yield;
     }
 
+    YieldContext throwing() const {
+        YieldContext ret = *this;
+        ret._asio_yield.ec_ = nullptr;
+        return ret;
+    }
+
     YieldContext ignore_error()
     {
         return YieldContext(_asio_yield[*_ignored_error], _log_path);
@@ -73,6 +80,18 @@ public:
     auto
     run(F&& f) {
         return std::forward<F>(f)(_asio_yield);
+    }
+
+    template<class F> void spawn_detached(F&& lambda) {
+        auto log_path = _log_path.tag("spawn");
+        task::spawn_detached(
+            _asio_yield.get_executor(),
+            [ f = std::move(lambda)
+            , log_path = std::move(log_path)
+            ]
+            (asio::yield_context yield) mutable {
+                f(YieldContext(yield, log_path));
+            });
     }
 
     // Log for the given level, when enabled.

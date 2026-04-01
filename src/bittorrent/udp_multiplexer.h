@@ -110,7 +110,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
 
             while (true) {
                 sys::error_code ec;
-                async_sleep(get_executor(), seconds(1), cancel, yield[ec]);
+                async_sleep(seconds(1), cancel, yield[ec]);
                 if (cancel) return;
 
                 cerr << "Current BT rate ";

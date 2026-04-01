@@ -215,6 +215,7 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.RESPONSE_RECEIVED_FROM_CACHE,
                 TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
                 TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
+                TestFixtures.CACHE_CLIENT_PEER_FOUND,
             ],
         ),
     )
@@ -361,10 +362,10 @@ def http_server() -> Generator[Process, None, None]:
 
 @pytest_asyncio.fixture(autouse=True)
 def all_dirs():
-    _all_dirs()
+    all_dirs()
 
 
-def _all_dirs():
+def all_dirs():
     """
     Broken out for non-pytest use
     """
@@ -572,6 +573,11 @@ async def test_tcp_cache(certificate_file, http_server):
     )
     # Make sure that the client2 is ready to access the cache
     await wait_for_dht_ready(cache_client)
+    # Make sure client2 found client1 as a peer
+    await wait_for_benchmark(cache_client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
+    # Make sure client1 found client2 as a peer
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
+
     # Now request the same page from second client
     await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
@@ -663,7 +669,7 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
 
     # client
     # use only Proxy or Injector mechanisms
-    current_client = run_i2p_client(
+    client = run_i2p_client(
         name=TestFixtures.I2P_CLIENT["name"],
         idx_key=None,
         args=[
@@ -678,7 +684,7 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
         ],
     )
     # wait for the client tunnel to connect to the injector
-    await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    await wait_for_benchmark(client, TestFixtures.I2P_TUNNEL_READY_REGEX)
 
     if size_of_transported_blob == None:
         content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
@@ -736,39 +742,37 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
 
     # client. We try and retry making the client until it is okay
     content_delivered_over_i2p = False
-    for i2p_client_id in range(0, TestFixtures.MAX_NO_OF_I2P_CLIENTS):
-        # use only Proxy or Injector mechanisms
-        current_client = run_i2p_client(
-            name=TestFixtures.I2P_CLIENT["name"],
-            idx_key=None,
-            args=[
-                "--disable-origin-access",
-                "--cache-type",
-                "bep5-http",
-                "--cache-private",
-                "--cache-http-public-key",
-                index_key,
-                "--listen-on-tcp",
-                "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
-                "--injector-ep",
-                "i2p:" + injector_i2p_public_id,
-                "--i2p-hops-per-tunnel",
-                str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
-            ],
-        )
 
-        # wait for the client tunnel to connect to the injector
-        await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
-        content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-        try:
-            response = await try_fetch_over_i2p(content)
-            assert_ok(response, content)
-            content_delivered_over_i2p = True
-        except:
-            i2pclient: OuinetProcess = proc_list.pop()
-            await i2pclient.stop()
-        if content_delivered_over_i2p:
-            break
+    # use only Proxy or Injector mechanisms
+    current_client = run_i2p_client(
+        name=TestFixtures.I2P_CLIENT["name"],
+        idx_key=None,
+        args=[
+            "--disable-origin-access",
+            "--cache-type",
+            "bep5-http",
+            "--cache-private",
+            "--cache-http-public-key",
+            index_key,
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
+            "--injector-ep",
+            "i2p:" + injector_i2p_public_id,
+            "--i2p-hops-per-tunnel",
+            str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
+        ],
+    )
+
+    # wait for the client tunnel to connect to the injector
+    await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
+    try:
+        response = await try_fetch_over_i2p(content)
+        assert_ok(response, content)
+        content_delivered_over_i2p = True
+    except:
+        i2pclient: OuinetProcess = proc_list.pop()
+        await i2pclient.stop()
 
     assertTrue(content_delivered_over_i2p)
 

@@ -216,14 +216,13 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         if (auto opt = as_optional<string>(vm, opt_name.c_str())) {
             string value = *opt;
 
-            using PubKey = util::Ed25519PublicKey;
-            pk = PubKey::from_hex(value);
+            pk = sign::PublicKey::from_hex(value);
 
             if (!pk) {  // attempt decoding from Base32
                 auto pk_s = util::base32_decode(value);
-                if (pk_s.size() == PubKey::key_size) {
-                    auto pk_a = util::bytes::to_array<uint8_t, PubKey::key_size>(pk_s);
-                    pk = PubKey(std::move(pk_a));
+                if (pk_s.size() == sign::PublicKey::size) {
+                    auto pk_a = util::bytes::to_array<uint8_t, sign::PublicKey::size>(pk_s);
+                    pk = sign::PublicKey(std::move(pk_a));
                 }
             }
 
@@ -295,7 +294,14 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             }
         }
 #endif // ifdef __EXPERIMENTAL__
-        
+        else if (type_str == "ouisync" || type_str == "") {
+            if (auto token_opt = as_optional<string>(vm, "ouisync-page-index")) {
+                _cache_type = CacheType::Ouisync;
+                _ouisync = OuisyncCacheConfig { *token_opt };
+            } else {
+                throw error("Argument --cache-type=ouisync requires --ouisync-page-index=<page_index_repo_read_token>");
+            }
+        }
         else if (type_str == "none" || type_str == "") {
             _cache_type = CacheType::None;
         }

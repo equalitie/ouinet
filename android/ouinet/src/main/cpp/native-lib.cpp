@@ -11,7 +11,6 @@
 #include <client.h>
 #include <client_config.h>
 #include <util/signal.h>
-#include <util/crypto.h>
 #include <condition_variable>
 
 #include <fcntl.h>
@@ -34,15 +33,9 @@ struct Defer {
 std::unique_ptr<ouinet::Client> g_client;
 ouinet::asio::io_context g_ctx;
 thread g_client_thread;
-bool g_crypto_initialized = false;
 
 void start_client_thread(const vector<string>& args, const vector<string>& extra_path)
 {
-    if (!g_crypto_initialized) {
-        ouinet::util::crypto_init();
-        g_crypto_initialized = true;
-    }
-
     char* old_path_c = getenv("PATH");
     if (old_path_c) {
         std::string old_path(old_path_c);

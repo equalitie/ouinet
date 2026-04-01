@@ -29,7 +29,7 @@ void TlsOuiServiceServer::start_listen(asio::yield_context yield) /* override */
                 if (cancel || ec == asio::error::operation_aborted) break;
 
                 if (ec) {
-                    async_sleep(_ex, 100ms, cancel, yield);
+                    async_sleep(100ms, cancel, yield);
                     if (cancel) break;
                     continue;
                 }

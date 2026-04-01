@@ -15,6 +15,7 @@
 #include "constants.h"
 #include "task.h"
 #include "cxx/metrics.h"
+#include "async_sleep.h"
 
 namespace utf = boost::unit_test;
 
@@ -74,7 +75,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
 
     task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
-        Signal<void()> cancel_signal;
+        Cancel cancel_signal;
 
         NodeID infohash = util::sha1_digest("ouinet-test-" + to_string(time(0)));
 
@@ -87,11 +88,37 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
         }
         BOOST_REQUIRE(!ec);
 
-        dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
-        BOOST_REQUIRE_MESSAGE(!ec, "Announcing failed with: " << ec.message());
+        const uint8_t max_retries = 5;
 
-        auto peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
-        BOOST_REQUIRE_MESSAGE(!ec, "Get peers failed with: " << ec.message());
+        for (uint8_t i = 0; i < max_retries; i++) {
+            dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
+            if (!ec) {
+                break;
+            } else {
+                BOOST_TEST_MESSAGE("Announcing (" << i << "/" << max_retries << ") failed with: " << ec.message());
+                ec = {};
+                async_sleep(3s, cancel_signal, yield[ec]);
+                BOOST_REQUIRE(!ec);
+            }
+        }
+
+        BOOST_REQUIRE_MESSAGE(!ec, "Announcing failed");
+
+        std::set<udp::endpoint> peers;
+
+        for (uint8_t i = 0; i < max_retries; i++) {
+            peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
+            if (!ec) {
+                break;
+            } else {
+                BOOST_TEST_MESSAGE("Get peers (" << i << "/" << max_retries << ") failed with: " << ec.message());
+                ec = {};
+                async_sleep(3s, cancel_signal, yield[ec]);
+                BOOST_REQUIRE(!ec);
+            }
+        }
+
+        BOOST_REQUIRE_MESSAGE(!ec, "Get peers failed");
 
         BOOST_REQUIRE(peers.count(dht.wan_endpoint()));
 
@@ -120,7 +147,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
 
     auto mutable_data = []( const string& value
                           , const string& salt
-                          , const util::Ed25519PrivateKey& private_key)
+                          , const sign::SecretKey& private_key)
     {
         // Use the timestamp as a version ID.
         using Time = boost::posix_time::ptime;
@@ -137,7 +164,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     sys::error_code ec;
     Cancel cancel;
 
-    auto skey = util::Ed25519PrivateKey::generate();
+    auto skey = sign::SecretKey::generate();
     auto pkey = skey.public_key();
 
     size_t push_get_count = 8;

@@ -59,7 +59,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
 
                 if (ec) {
                     // Retry after a short while to avoid CPU hogging
-                    async_sleep(_ex, 1s, _stop_listen, yield);
+                    async_sleep(1s, _stop_listen, yield);
                     ec = sys::error_code();
                     continue;
                 }

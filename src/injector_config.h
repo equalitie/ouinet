@@ -11,7 +11,7 @@
 #include "declspec.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
-#include "util/crypto.h"
+#include "util/sign.h"
 
 #include "cxx/dns.h"
 
@@ -133,7 +133,7 @@ public:
     const std::string& tls_ca_cert_store_path() const
     { return _tls_ca_cert_store_path; }
 
-    util::Ed25519PrivateKey cache_private_key() const
+    sign::SecretKey cache_private_key() const
     { return _ed25519_private_key; }
 
 private:
@@ -172,7 +172,7 @@ private:
     bool _allow_private_targets = false;
     [[deprecated("Use _dns_config instead.")]]
     bool _disable_doh = false;
-    util::Ed25519PrivateKey _ed25519_private_key;
+    sign::SecretKey _ed25519_private_key;
 
     dns::Config _dns_config;
 };

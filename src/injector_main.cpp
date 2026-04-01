@@ -7,8 +7,6 @@ using namespace ouinet;
 
 int main(int argc, const char* argv[])
 {
-    util::crypto_init();
-
     InjectorConfig config;
 
     try {

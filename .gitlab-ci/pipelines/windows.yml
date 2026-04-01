@@ -6,10 +6,10 @@ windows / build:
   tags:
     - windows-shell
   script:
-    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+    - cmake --version
+    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DWITH_OUISYNC=ON
     - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
     - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
-    - Copy-Item -Path ${BUILD_PATH}\gcrypt\out\lib\*.dll, ${BUILD_PATH}\gcrypt\out\bin\*.dll, ${BUILD_PATH}\gpg_error\out\lib\*.dll, ${BUILD_PATH}\gpg_error\out\bin\*.dll -Destination ${BUILD_PATH}
     - $libs = @("libgcc_s_seh-1", "libstdc++-6", "libwinpthread-1", "zlib1")
     - foreach ($lib in $libs) { Copy-Item C:\msys64\mingw64\bin\${lib}.dll -Destination ${BUILD_PATH} }
   artifacts:
@@ -17,8 +17,8 @@ windows / build:
       - $BUILD_PATH/client.exe
       - $BUILD_PATH/injector.exe
       - $BUILD_PATH/*lib*
-      - $BUILD_PATH/test/test-*
-      - $BUILD_PATH/test/bt-*
+      - $BUILD_PATH/test/test_*
+      - $BUILD_PATH/test/bt_*
     expire_in: 6h
   needs:
     []
@@ -35,11 +35,11 @@ windows / unit-test:
       - $BUILD_PATH/client.exe
       - $BUILD_PATH/injector.exe
       - $BUILD_PATH/*lib*
-      - $BUILD_PATH/test/test-*
+      - $BUILD_PATH/test/test_*
     expire_in: 6h
   script:
     - $env:PATH = "${CI_PROJECT_DIR}\${BUILD_PATH};$env:PATH"
-    - $testFiles = Get-ChildItem -Path "${BUILD_PATH}\test" -Filter "test-*"
+    - $testFiles = Get-ChildItem -Path "${BUILD_PATH}\test" -Filter "test_*"
     - $testsFailed = $false
     - foreach ($test in $testFiles) { & $test.FullName --log_level=test_suite; if (-not $?) { $testsFailed = $true }}
     - echo $testsFailed

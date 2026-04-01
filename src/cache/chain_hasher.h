@@ -1,17 +1,17 @@
 #pragma once
 
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/bytes.h"
 
 namespace ouinet { namespace cache {
 
 class ChainHash {
 public:
-    using PrivateKey = util::Ed25519PrivateKey;
-    using PublicKey  = util::Ed25519PublicKey;
-    using Signature  = PublicKey::sig_array_t;
-    using Hash       = util::SHA512;
-    using Digest     = Hash::digest_type;
+    using SecretKey = sign::SecretKey;
+    using PublicKey = sign::PublicKey;
+    using Signature = sign::Signature;
+    using Hash      = util::SHA512;
+    using Digest    = Hash::digest_type;
 
     size_t    offset;
     Digest    chain_digest;
@@ -40,14 +40,14 @@ private:
 
 class ChainHasher {
 public:
-    using PrivateKey = ChainHash::PrivateKey;
-    using Signature  = ChainHash::Signature;
-    using Hash       = ChainHash::Hash;
-    using Digest     = ChainHash::Digest;
+    using SecretKey = ChainHash::SecretKey;
+    using Signature = ChainHash::Signature;
+    using Hash      = ChainHash::Hash;
+    using Digest    = ChainHash::Digest;
 
     struct Signer {
         const std::string& injection_id;
-        const PrivateKey&  key;
+        const SecretKey&  key;
 
         Signature sign(size_t offset, const Digest& chained_digest) const {
             return key.sign(ChainHash::str_to_sign(injection_id, offset, chained_digest));
@@ -66,7 +66,7 @@ public:
         Hash chained_hasher;
 
         if (_prev_chained_signature) {
-            chained_hasher.update(*_prev_chained_signature);
+            chained_hasher.update(_prev_chained_signature->bytes);
         }
 
         if (_prev_chained_digest) {
