@@ -9,19 +9,31 @@ _trial_temp*
 .vagrant/
 Vagrantfile.kvm
 
-android/.gradle/
+
 android/.idea/
+android/.gradle/
 android/android.iml
 android/builddir/
+android/build/
 
+android/gen-wrapper.gradle
 android/gradlew
 android/gradlew.bat
+android/gradle-*
 android/ouinet/ouinet.iml
 android/ouinet/data
 android/ouinet/src/debug/jniLibs
 android/ouinet/src/debug/resources
 
 android/local.properties
+
+build-android-omni-debug/
+build-android-omni-release/
+
+commandlinetools*
+gradle-*
+sdk/*
+_gradle-home/
 
 #python byte codes
 *.pyc
