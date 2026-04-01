@@ -13,6 +13,7 @@ static const std::string public_host[] = {
     "ceno.app",
     "example.com",
     "9.9.9.9",
+    " 169.252.251.250",
     "172.15.0.1",
     "172.32.0.1",
     "192.167.8.4",
@@ -76,9 +77,24 @@ BOOST_DATA_TEST_CASE(test_resolve_target_loopback,
 static const std::string private_host[] = {
     // ipv4
     "192.168.0.1",
+    "169.254.10.5",
     "172.17.0.1",
     "10.4.2.1",
-    // ipv6
+    // ipv6 link-local
+    "[fe80::1]",
+    "[fe80:0::1]",
+    "[fe80:0:0::1]",
+    "[fe80:0:0:0::1]",
+    // ipv6 unique-local
+    "[fc00::1]",
+    "[fc00:0::1]",
+    "[fc00:0:0::1]",
+    "[fc00:0:0:0::1]",
+    "[fd00::1]",
+    "[fd00:0::1]",
+    "[fd00:0:0::1]",
+    "[fd00:0:0:0::1]",
+    // ipv6 mapped ipv4 addresses
     "::ffff:192.168.1.1:8080",
     "::ffff:172.17.0.1:8080",
     "::ffff:10.4.2.1:8080",

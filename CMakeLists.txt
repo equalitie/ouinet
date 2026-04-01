@@ -213,7 +213,6 @@ file(GLOB client_sources
     "./src/cache/*.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
-    "./src/util/reachability.cpp"
     ${VERSION_CPP}
 )
 

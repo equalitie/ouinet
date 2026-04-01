@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.6.5](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.5) - 2026-03-31
+
+### Removed
+
+- Remove UDP Server Reachability Analysis. !180
+
+### Security
+
+- Improvements to private address validations. !173
+- Timing attack mitigation. !178
 
 ## [v1.6.4](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.4) - 2026-03-11
 

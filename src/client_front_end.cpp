@@ -340,21 +340,6 @@ set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
 
 static
 std::string
-reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
-    switch (reachability.judgement()) {
-    case util::UdpServerReachabilityAnalysis::Reachability::Undecided:
-        return "undecided";
-    case util::UdpServerReachabilityAnalysis::Reachability::ConfirmedReachable:
-        return "reachable";
-    case util::UdpServerReachabilityAnalysis::Reachability::UnconfirmedReachable:
-        return "likely reachable";
-    }
-    assert(0 && "Invalid reachability");
-    return "(unknown)";
-}
-
-static
-std::string
 client_state(Client::RunningState cstate) {
     switch (cstate) {
     case Client::RunningState::Created:
@@ -468,7 +453,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , boost::optional<UdpEndpoint> local_ep
                                   , const std::shared_ptr<UPnPs>& upnps_ptr
                                   , const bittorrent::DhtBase* dht
-                                  , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
                                   , ClientFrontEndMetricsController& metrics
@@ -586,9 +570,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "<h2>Network</h2>\n";
 
-    if (reachability) {
-        ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
-    }
     if (local_ep) {
         ss << "Local UDP endpoints:<br>\n";
         ss << "<ul>\n";
@@ -745,7 +726,6 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , boost::optional<UdpEndpoint> local_ep
                                       , const std::shared_ptr<UPnPs>& upnps_ptr
                                       , const bittorrent::DhtBase* dht
-                                      , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
                                       , cache::Client* cache_client
                                       , std::shared_ptr<ouiservice::Bep5Client> client
@@ -790,8 +770,6 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
     if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
 
     response["bt_extra_bootstraps"] = bt_extra_bootstraps(config);
-
-    if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
     if  (metrics.is_enabled()) {
         response["metrics_delete_after"] = config.metrics()->delete_after_seconds;
@@ -970,7 +948,6 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , boost::optional<UdpEndpoint> local_ep
                               , const std::shared_ptr<UPnPs>& upnps_ptr
                               , const bittorrent::DhtBase* dht
-                              , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
                               , const std::string_view proxy_endpoint
                               , const std::string_view frontend_endpoint
@@ -1025,7 +1002,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_pinned_list(req, res, ss, cache_client);
     } else if (path == status_api_path) {
         sys::error_code e;
-        handle_api_status( config, client_state, local_ep, upnps_ptr, dht, reachability
+        handle_api_status( config, client_state, local_ep, upnps_ptr, dht
                          , req, res, ss, cache_client, client, metrics, cancel
                          , yield[e]);
     } else if (path.starts_with(groups_api_path)) {
@@ -1039,7 +1016,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_api_endpoints(proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
     } else {
         sys::error_code e;
-        handle_portal( config, client_state, local_ep, upnps_ptr, dht, reachability
+        handle_portal( config, client_state, local_ep, upnps_ptr, dht
                      , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
     }
