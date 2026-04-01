@@ -39,7 +39,7 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2025
 
     # Install cmake
     # TODO: Pass CMAKE_VERSION as ARG to keep it consistent with other platforms
-    ENV CMAKE_VERSION="3.31.7"
+    ENV CMAKE_VERSION="4.2.1"
     RUN setx CMAKE_FILE_BASE "cmake-$env:CMAKE_VERSION-windows-x86_64"
     RUN setx CMAKE_FILE_ZIP ($env:CMAKE_FILE_BASE + '.zip')
     RUN setx CMAKE_URL "https://github.com/Kitware/CMake/releases/download/v$env:CMAKE_VERSION/$env:CMAKE_FILE_ZIP"
@@ -55,3 +55,10 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2025
         ';C:\msys64\usr\bin' + \
         ';C:\msys64\mingw64\bin'; \
       Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment\' -Name Path -Value $path;
+
+    # Download latest CA certificates from Microsoft and install them (needed for C++ tests)
+    RUN \
+        CertUtil –generateSSTFromWU C:\RootStore.sst; \
+        $file=Get-ChildItem -Path C:\Rootstore.sst; \
+        $file | Import-Certificate -CertStoreLocation 'Cert:\LocalMachine\Root\'; \
+        rm C:\RootStore.sst

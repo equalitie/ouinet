@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
                 });
 
                 BOOST_REQUIRE(!cancel);
-                async_sleep(ctx, 1s, cancel, yield[ec]);
+                async_sleep(1s, cancel, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
         });
 
@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
 
                 BOOST_REQUIRE(!c1);
                 BOOST_REQUIRE(!c2);
-                async_sleep(ctx, 1s, c2, yield[ec]);
+                async_sleep(1s, c2, yield[ec]);
                 BOOST_REQUIRE(millis_since(start) < 100);
         });
 

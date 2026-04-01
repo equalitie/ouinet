@@ -2,7 +2,7 @@ variables:
   TARGET_PLATFORM: 'linux'
   WITH_EXPERIMENTAL: 'OFF'
   BUILD_PATH: 'build/$TARGET_PLATFORM-experimental_$WITH_EXPERIMENTAL'
-  BUILD_TYPE: 'Debug'
+  BUILD_TYPE: 'Release'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   CMAKE_VERSION: "3.31.7-linux-x86_64"
   WITH_ASAN: "OFF"
@@ -19,8 +19,8 @@ variables:
       - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
       - $BUILD_PATH/lib*.so.*
-      - $BUILD_PATH/test/bt-*
-      - $BUILD_PATH/test/test-*
+      - $BUILD_PATH/test/bt_*
+      - $BUILD_PATH/test/test_*
     expire_in: 6h
   cache:
     key: single
@@ -31,8 +31,17 @@ variables:
     - source $CI_PROJECT_DIR/scripts/install-cmake.sh $CMAKE_VERSION
     - mkdir -p $CI_PROJECT_DIR/$BUILD_PATH
     - cd $BUILD_PATH
-    - echo cmake -S $CI_PROJECT_DIR -B $CI_PROJECT_DIR/$BUILD_PATH -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBOOST_VERSION=$BOOST_VERSION -DWITH_ASAN=$WITH_ASAN  -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
-    - cmake -S $CI_PROJECT_DIR -B $CI_PROJECT_DIR/$BUILD_PATH -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBOOST_VERSION=$BOOST_VERSION -DWITH_ASAN=$WITH_ASAN  -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
+    - CONFIGURE_ARGS=(
+        -S $CI_PROJECT_DIR
+        -B $CI_PROJECT_DIR/$BUILD_PATH
+        -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+        -DBOOST_VERSION=$BOOST_VERSION
+        -DWITH_ASAN=$WITH_ASAN
+        -DWITH_OUISYNC=ON
+        -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
+      )
+    - echo cmake ${CONFIGURE_ARGS[@]}
+    - cmake ${CONFIGURE_ARGS[@]}
     - cmake --build $CI_PROJECT_DIR/$BUILD_PATH -- -j `nproc`
 
 .linux-unit-cpp-test:
@@ -46,7 +55,7 @@ variables:
       - $BUILD_PATH/injector
       - $BUILD_PATH/lib*.so
       - $BUILD_PATH/lib*.so.*
-      - $BUILD_PATH/test/test-*
+      - $BUILD_PATH/test/test_*
     expire_in: 6h
   image: $BUILDER_IMAGE
   script:

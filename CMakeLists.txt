@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.13)
 
 # Set cmake policies to avoid warnings in newer versions of cmake
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
@@ -23,9 +23,24 @@ option(WITH_TEST "Compile tests" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
+option(WITH_OUISYNC "Build with Ouisync" OFF)
+option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
 option(WITH_DEPRECATED "Build with deprecated features" OFF)
+
+################################################################################
+# show summary
+
+message(STATUS "---------------------------------------")
+message(STATUS "Options:")
+message(STATUS "  WITH_TEST                : ${WITH_TEST}")
+message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
+message(STATUS "  WITH_EXPERIMENTAL        : ${WITH_EXPERIMENTAL}")
+message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
+message(STATUS "  WITH_DEPRECATED          : ${WITH_DEPRECATED}")
+message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
+message(STATUS "---------------------------------------")
 
 ################################################################################
 # Global build flags
@@ -69,7 +84,6 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
-
 
 # This target needs to be linked by all code that includes ouinet headers.
 add_library(ouinet_dependencies INTERFACE)
@@ -161,11 +175,10 @@ file(GLOB ouinet_common_sources
     "./src/util/atomic_file.cpp"
     "./src/util/random.cpp"
     "./src/util/handler_tracker.cpp"
-    "./src/util/crypto.cpp"
+    "./src/util/sign.cpp"
     "./src/util/log_path.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
-    "./src/util/hash.cpp"
     "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
     "./src/util/yield.cpp"
@@ -187,7 +200,6 @@ file(GLOB ouinet_common_sources
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"
-    ${EXPERIMENTAL_SOURCES}
     ${DEPRECATED_SOURCES}
 )
 
@@ -196,16 +208,19 @@ set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FL
 
 add_library(ouinet_common STATIC ${ouinet_common_sources})
 
+if (OUINET_HARDCODE_CA_CERTS)
+    set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
+endif()
+
 target_link_libraries(ouinet_common
     PRIVATE
         lib::url
         OpenSSL::Crypto
-        ${EXPERIMENTAL_LIBRARIES}
         ${DEPRECATED_LIBRARIES}
     PUBLIC
+        ${OUINET_HARDCODED_CA_CERTS}
         ouinet_dependencies
         Boost::iostreams
-        lib::gcrypt
         lib::json
         asio_utp
         ouinet_rs
@@ -221,7 +236,7 @@ target_include_directories(ouinet_common PUBLIC "src")
 ################################################################################
 if(WITH_EXPERIMENTAL)
     target_compile_definitions(ouinet_common
-            INTERFACE -D__EXPERIMENTAL__
+        PUBLIC -D__EXPERIMENTAL__
     )
 endif()
 
@@ -257,6 +272,7 @@ file(GLOB client_sources
     "./src/util/reachability.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
+    ${OUISERVICE_OUISYNC_CPP_FILES}
     ${VERSION_CPP}
 )
 
@@ -265,10 +281,16 @@ if (NOT WIN32 AND NOT MINGW)
     set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 endif ()
 
+if (WITH_OUISYNC)
+    set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)
+endif()
+
 target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
+        ${EXPERIMENTAL_LIBRARIES}
+        ${OUINET_OUISYNC_LIBS}
 )
 
 if (WIN32 OR MINGW)
@@ -294,7 +316,6 @@ file(GLOB injector_sources
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
-    ${EXPERIMENTAL_SOURCES}
     ${DEPRECATED_SOURCES}
 )
 
@@ -303,7 +324,7 @@ if (NOT WIN32 AND NOT MINGW)
     set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
 endif ()
 
-target_link_libraries(injector_lib ouinet_common)
+target_link_libraries(injector_lib ouinet_common ${EXPERIMENTAL_LIBRARIES})
 
 if (WIN32 OR MINGW)
     target_compile_definitions(injector_lib PRIVATE -DOUINET_DECL_EXPORT)

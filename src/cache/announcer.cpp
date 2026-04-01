@@ -209,7 +209,7 @@ struct Announcer::Loop {
             if (d == 0s) return i;
 
             auto cc = cancel.connect([&] { _timer_cancel(); });
-            async_sleep(ex, d, _timer_cancel, yield);
+            async_sleep(d, _timer_cancel, yield);
         }
 
         return or_throw(yield, asio::error::operation_aborted, end);
@@ -273,7 +273,7 @@ struct Announcer::Loop {
                         announce(e, cancel, yield[ec_coro]);
                         if (cancel) return;
                         if (!ec_coro) { success = true; break; }
-                        async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec_coro]);
+                        async_sleep(chrono::seconds(1+i), cancel, yield[ec_coro]);
                         if (cancel) return;
                         ec_coro = {};
                     }

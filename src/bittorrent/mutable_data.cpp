@@ -1,7 +1,7 @@
 #include "mutable_data.h"
 
 #include "../util/bytes.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -46,7 +46,7 @@ MutableDataItem MutableDataItem::sign(
     BencodedValue value,
     int64_t sequence_number,
     boost::string_view salt,
-    util::Ed25519PrivateKey private_key
+    sign::SecretKey private_key
 ) {
     MutableDataItem output{
         private_key.public_key(),

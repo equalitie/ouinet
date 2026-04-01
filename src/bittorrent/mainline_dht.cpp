@@ -22,7 +22,7 @@
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
 #include "../util/condition_variable.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/str.h"
 #include "../util/success_condition.h"
 #include "../util/file_io.h"
@@ -619,7 +619,7 @@ NodeID DhtNode::data_put_immutable(
 }
 
 boost::optional<MutableDataItem> DhtNode::data_get_mutable(
-    const util::Ed25519PublicKey& public_key,
+    const sign::PublicKey& public_key,
     boost::string_view salt,
     Cancel& cancel,
     asio::yield_context yield
@@ -679,7 +679,7 @@ boost::optional<MutableDataItem> DhtNode::data_get_mutable(
             responsible_nodes.insert({ *candidate.id, boost::none });
         }
 
-        if (response["k"] != util::bytes::to_string(public_key.serialize())) {
+        if (response["k"] != util::bytes::to_string(public_key.to_bytes())) {
             return;
         }
 
@@ -687,14 +687,14 @@ boost::optional<MutableDataItem> DhtNode::data_get_mutable(
         if (!sequence_number) return;
 
         auto signature = response["sig"].as_string_view();
-        if (!signature || signature->size() != util::Ed25519PublicKey::sig_size) return;
+        if (!signature || signature->size() != sign::Signature::size) return;
 
         MutableDataItem item {
             public_key,
             std::string(salt),
             response["v"],
             *sequence_number,
-            util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature)
+            util::bytes::to_array<uint8_t, sign::Signature::size>(*signature)
         };
         if (item.verify()) {
             if (!data || *sequence_number > data->sequence_number) {
@@ -754,9 +754,9 @@ NodeID DhtNode::data_put_mutable(
                              , asio::yield_context yield) -> bool {
             BencodedMap put_message {
                 { "id", _node_id.to_bytestring() },
-                { "k", util::bytes::to_string(data.public_key.serialize()) },
+                { "k", util::bytes::to_string(data.public_key.to_bytes()) },
                 { "seq", data.sequence_number },
-                { "sig", util::bytes::to_string(data.signature) },
+                { "sig", util::bytes::to_string(data.signature.bytes) },
                 { "v", data.value },
                 { "token", std::string(put_token) }
             };
@@ -838,7 +838,7 @@ NodeID DhtNode::data_put_mutable(
 
         if (cancel) return;
 
-        if (response["k"] != util::bytes::to_string(data.public_key.serialize())) {
+        if (response["k"] != util::bytes::to_string(data.public_key.to_bytes())) {
             return;
         }
 
@@ -846,14 +846,14 @@ NodeID DhtNode::data_put_mutable(
         if (!response_seq) return;
 
         auto response_sig = response["sig"].as_string_view();
-        if (!response_sig || response_sig->size() != util::Ed25519PublicKey::sig_size) return;
+        if (!response_sig || response_sig->size() != sign::Signature::size) return;
 
         MutableDataItem item {
             data.public_key,
             data.salt,
             response["v"],
             *response_seq,
-            util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*response_sig)
+            util::bytes::to_array<uint8_t, sign::Signature::size>(*response_sig)
         };
 
         if (item.verify()) {
@@ -959,7 +959,7 @@ void DhtNode::store_contacts_loop(asio::yield_context yield)
         if (cancel) return;
 
         sys::error_code ec;
-        async_sleep(_exec, std::chrono::minutes(6), cancel, yield[ec]);
+        async_sleep(std::chrono::minutes(6), cancel, yield[ec]);
         if (cancel) return;
         return_or_throw_on_error(yield, cancel, ec);
     }
@@ -1422,9 +1422,9 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
                 return send_reply(reply);
             }
 
-            reply["k"] = util::bytes::to_string(mutable_item->public_key.serialize());
+            reply["k"] = util::bytes::to_string(mutable_item->public_key.to_bytes());
             reply["seq"] = mutable_item->sequence_number;
-            reply["sig"] = util::bytes::to_string(mutable_item->signature);
+            reply["sig"] = util::bytes::to_string(mutable_item->signature.bytes);
             reply["v"] = mutable_item->value;
             return send_reply(reply);
         }
@@ -1455,19 +1455,19 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
             if (!public_key_) {
                 return send_error(203, "Missing argument 'k'");
             }
-            if (public_key_->size() != util::Ed25519PublicKey::key_size) {
+            if (public_key_->size() != sign::PublicKey::size) {
                 return send_error(203, "Malformed argument 'k'");
             }
-            util::Ed25519PublicKey public_key(util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(*public_key_));
+            sign::PublicKey public_key(util::bytes::to_array<uint8_t, sign::PublicKey::size>(*public_key_));
 
             boost::optional<string_view> signature_ = arguments["sig"].as_string_view();
             if (!signature_) {
                 return send_error(203, "Missing argument 'sig'");
             }
-            if (signature_->size() != util::Ed25519PublicKey::sig_size) {
+            if (signature_->size() != sign::Signature::size) {
                 return send_error(203, "Malformed argument 'sig'");
             }
-            util::Ed25519PublicKey::sig_array_t signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature_);
+            sign::Signature::Bytes signature = util::bytes::to_array<uint8_t, sign::Signature::size>(*signature_);
 
             boost::optional<int64_t> sequence_number_ = arguments["seq"].as_int();
             if (!sequence_number_) {
@@ -1828,7 +1828,7 @@ void DhtNode::bootstrap(asio::yield_context yield)
                 // 300ms delays.
                 k += score_of(bs);
                 if (k < SCORE_GOAL) {
-                    async_sleep(_exec, milliseconds(300), done_cancel, yield);
+                    async_sleep(milliseconds(300), done_cancel, yield);
                 }
 
                 if (done_cancel) break;
@@ -1856,7 +1856,7 @@ void DhtNode::bootstrap(asio::yield_context yield)
 
             // We could not bootstrap off any of the known nodes, wait a bit
             // and try again.
-            async_sleep(_exec, seconds(10), cancel, yield);
+            async_sleep(seconds(10), cancel, yield);
         }
     }
 
@@ -2874,7 +2874,7 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
 }
 
 boost::optional<MutableDataItem> MainlineDht::mutable_get(
-    const util::Ed25519PublicKey& public_key,
+    const sign::PublicKey& public_key,
     boost::string_view salt,
     Cancel& cancel_signal,
     asio::yield_context yield
@@ -2950,7 +2950,7 @@ void MainlineDht::wait_all_ready(
     sys::error_code ec;
 
     while (!c && !all_ready()) {
-        async_sleep(_exec, std::chrono::milliseconds(200), c, yield[ec]);
+        async_sleep(std::chrono::milliseconds(200), c, yield[ec]);
     }
 
     if (c) ec = asio::error::operation_aborted;

@@ -50,7 +50,6 @@
 
 #include "util/timeout.h"
 #include "util/atomic_file.h"
-#include "util/crypto.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
 #include "util/yield.h"
@@ -420,10 +419,9 @@ private:
                 sig_reader = make_unique<http_response::Reader>(move(orig_con));
             }
 
-            orig_sess = yield[ec].tag("read_hdr").run([&] (auto y) {
-                return Session::create( move(sig_reader), cache_rq_method == http::verb::head
-                                      , timeout_cancel, y);
-            });
+            orig_sess = Session::create( move(sig_reader), cache_rq_method == http::verb::head
+                                       , timeout_cancel, yield[ec].tag("read_hdr"));
+
             if (ec = compute_error_code(ec, cancel, fetch_wd)) {
                 yield.log("Failed to process response head; ec=", ec);
                 return or_throw(yield, ec);
@@ -699,9 +697,7 @@ void serve( const InjectorConfig& config
             if (!ec) {
                 using OrigReader = http_response::Reader;
                 Session::reader_uptr rrp = std::make_unique<OrigReader>(move(orig_con));
-                auto orig_sess = pyield[ec].tag("read_hdr").run([&] (auto y) {
-                    return Session::create(move(rrp), req.method() == http::verb::head, cancel, y);
-                });
+                auto orig_sess = Session::create(move(rrp), req.method() == http::verb::head, cancel, pyield[ec].tag("read_hdr"));
                 if (!ec) {
                     auto& inh = orig_sess.response_header();
                     // Keep proxy connection if the proxy wants to.
@@ -802,7 +798,6 @@ void listen( const InjectorConfig& config
     OriginPools origin_pools;
 
     asio::ssl::context ssl_ctx{asio::ssl::context::tls_client};
-    ssl::util::set_default_verify_paths(ssl_ctx);
     ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
 
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
@@ -812,7 +807,7 @@ void listen( const InjectorConfig& config
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(exec, std::chrono::milliseconds(100), cancel, yield.native())) {
+            if (!async_sleep(std::chrono::milliseconds(100), cancel, yield.native())) {
                 break;
             }
             ec = {};

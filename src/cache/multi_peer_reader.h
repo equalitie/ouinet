@@ -30,7 +30,7 @@ public:
     MultiPeerReader( AsioExecutor ex
                    , ResourceId
                    , CryptoStreamKey
-                   , util::Ed25519PublicKey cache_pk
+                   , sign::PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
                    , std::shared_ptr<unsigned> newest_proto_seen
@@ -40,7 +40,7 @@ public:
     MultiPeerReader( AsioExecutor ex
                    , ResourceId
                    , CryptoStreamKey
-                   , util::Ed25519PublicKey cache_pk
+                   , sign::PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
                    , std::set<asio::ip::udp::endpoint> wan_my_endpoints

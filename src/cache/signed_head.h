@@ -14,7 +14,7 @@ public:
     // Only the `hs2019` algorithm with an explicit key is supported,
     // so the ready-to-use key is left in `pk`.
     struct BlockSigs {
-        util::Ed25519PublicKey pk;
+        sign::PublicKey pk;
         boost::string_view algorithm;  // always "hs2019"
         size_t size;
     
@@ -50,7 +50,7 @@ public:
               , http::response_header<> rsh
               , const std::string& injection_id
               , std::chrono::seconds::rep injection_ts
-              , const util::Ed25519PrivateKey& sk)
+              , const sign::SecretKey& sk)
         : Base(sign_response( rqh
                             , std::move(rsh)
                             , injection_id
@@ -80,7 +80,7 @@ private:
 public:
     static
     boost::optional<SignedHead>
-    verify_and_create(http::response_header<>, const util::Ed25519PublicKey&);
+    verify_and_create(http::response_header<>, const sign::PublicKey&);
 
     static
     boost::optional<SignedHead>
@@ -113,7 +113,7 @@ public:
                  , http::response_header<> rsh
                  , const std::string& injection_id
                  , std::chrono::seconds::rep injection_ts
-                 , const util::Ed25519PrivateKey& sk);
+                 , const sign::SecretKey& sk);
 
     // Verify that the given response head contains
     // good signatures for it from the given public key.
@@ -126,7 +126,7 @@ public:
     // return an empty head.
     static
     boost::optional<http::response_header<>>
-    verify(http::response_header<>, const ouinet::util::Ed25519PublicKey&);
+    verify(http::response_header<>, const sign::PublicKey&);
 
     static
     bool
@@ -136,10 +136,10 @@ public:
     const std::string& uri()          const { return _uri; }
     size_t block_size()               const { return _bs_params.size; }
 
-    const util::Ed25519PublicKey& public_key() const { return _bs_params.pk; }
+    const sign::PublicKey& public_key() const { return _bs_params.pk; }
 
-    static std::string encode_key_id(const util::Ed25519PublicKey& pk) {
-        return key_id_pfx() + util::base64_encode(pk.serialize());
+    static std::string encode_key_id(const sign::PublicKey& pk) {
+        return key_id_pfx() + util::base64_encode(pk.to_bytes());
     }
 
     std::string encode_key_id() const {
@@ -152,15 +152,15 @@ public:
 
 private:
     static
-    boost::optional<util::Ed25519PublicKey>
+    boost::optional<sign::PublicKey>
     decode_key_id(boost::string_view key_id)
     {
-        using PublicKey = util::Ed25519PublicKey::key_array_t;
+        using PublicKey = sign::PublicKey::Bytes;
 
         if (!key_id.starts_with(key_id_pfx())) return {};
         auto decoded_pk = util::base64_decode<PublicKey>(key_id.substr(key_id_pfx().size()));
         if (!decoded_pk) return {};
-        return util::Ed25519PublicKey(*decoded_pk);
+        return sign::PublicKey(*decoded_pk);
     }
 
 private:

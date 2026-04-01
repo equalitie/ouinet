@@ -97,7 +97,7 @@ struct detail::Bep5AnnouncerImpl
                 _WARN("Announcing infohash: ", infohash, ": failed; ec=", ec);
                 // TODO: Arbitrary timeout
                 _DEBUG("Will retry infohash because of announcement error: ", infohash);
-                async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
+                async_sleep(random_timeout(1s, 1min), cancel, yield);
                 if (cancel) return;
                 go_again = true;  // do not wait for manual request
                 continue;
@@ -116,7 +116,7 @@ struct detail::Bep5AnnouncerImpl
             _DEBUG( "Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
                   , "s to announce infohash: ", infohash);
 
-            async_sleep(exec, sleep, cancel, yield);
+            async_sleep(sleep, cancel, yield);
         }
     }
 

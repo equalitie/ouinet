@@ -23,7 +23,7 @@
 #include "dht.h"
 
 #include "../namespaces.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/signal.h"
 #include "../util/wait_condition.h"
 #include "../util/async_queue.h"
@@ -144,7 +144,7 @@ class DhtNode {
      * TODO: Implement minimum sequence number if we ever need it.
      */
     boost::optional<MutableDataItem> data_get_mutable(
-        const util::Ed25519PublicKey& public_key,
+        const sign::PublicKey& public_key,
         boost::string_view salt,
         Cancel&,
         asio::yield_context

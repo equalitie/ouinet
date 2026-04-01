@@ -29,7 +29,7 @@
 
 namespace ouinet { namespace cache {
 
-using sig_array_t = util::Ed25519PublicKey::sig_array_t;
+using sig_array_t = sign::Signature::Bytes;
 using block_digest_t = util::SHA512::digest_type;
 using opt_sig_array_t = boost::optional<sig_array_t>;
 using opt_block_digest_t = boost::optional<block_digest_t>;
@@ -39,7 +39,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
                       , const util::SHA256::digest_type& content_digest
-                      , const util::Ed25519PrivateKey& sk
+                      , const sign::SecretKey& sk
                       , const std::string& key_id
                       , std::chrono::seconds::rep ts)
 {
@@ -189,23 +189,25 @@ block_dig_from_exts(boost::string_view xs)
 }
 
 static
-opt_sig_array_t
+boost::optional<sign::Signature>
 block_sig_from_exts(boost::string_view xs)
 {
-    return block_arrattr_from_exts<sig_array_t>(xs, http_::response_block_signature_ext);
+    auto bytes = block_arrattr_from_exts<sig_array_t>(xs, http_::response_block_signature_ext);
+    if (!bytes) return boost::none;
+    return sign::Signature(*bytes);
 }
 
 // TODO: implement `ouipsig`
 
 std::string
-block_chunk_ext( const opt_sig_array_t& sig
+block_chunk_ext( const boost::optional<sign::Signature>& sig
                , const opt_block_digest_t& prev_digest)
 {
     std::ostringstream exts;
 
     static const auto fmt_sx = ";" + http_::response_block_signature_ext + "=\"%s\"";
     if (sig) {
-        auto encoded_sig = util::base64_encode(*sig);
+        auto encoded_sig = util::base64_encode(sig->bytes);
         exts << (boost::format(fmt_sx) % encoded_sig);
     }
 
@@ -385,7 +387,7 @@ get_sig_str_hdrs(const Head& sig_head)
 
 std::string
 http_signature( const http::response_header<>& rsh
-              , const util::Ed25519PrivateKey& sk
+              , const sign::SecretKey& sk
               , const std::string& key_id
               , std::chrono::seconds::rep ts)
 {
@@ -404,7 +406,7 @@ http_signature( const http::response_header<>& rsh
     std::string sig_string, headers;
     std::tie(sig_string, headers) = get_sig_str_hdrs(sig_head);
 
-    auto encoded_sig = util::base64_encode(sk.sign(sig_string));
+    auto encoded_sig = util::base64_encode(sk.sign(sig_string).bytes);
 
     return (fmt % key_id % ts % headers % encoded_sig).str();
 }
@@ -417,14 +419,14 @@ struct SigningReader::Impl {
     const http::request_header<> _rqh;
     const std::string _injection_id;
     const std::chrono::seconds::rep _injection_ts;
-    const util::Ed25519PrivateKey _sk;
+    const sign::SecretKey _sk;
     const std::string _httpsig_key_id;
     ChainHasher _chain_hasher;
 
     Impl( http::request_header<> rqh
         , std::string injection_id
         , std::chrono::seconds::rep injection_ts
-        , util::Ed25519PrivateKey sk)
+        , sign::SecretKey sk)
         : _rqh(std::move(rqh))
         , _injection_id(std::move(injection_id))
         , _injection_ts(std::move(injection_ts))
@@ -559,7 +561,7 @@ SigningReader::SigningReader( GenericStream in
                             , http::request_header<> rqh
                             , std::string injection_id
                             , std::chrono::seconds::rep injection_ts
-                            , util::Ed25519PrivateKey sk)
+                            , sign::SecretKey sk)
     : http_response::Reader(std::move(in))
     , _impl(std::make_unique<Impl>( std::move(rqh)
                                   , std::move(injection_id)
@@ -647,7 +649,7 @@ HttpSignature::parse(boost::string_view sig)
 
 std::pair<bool, http::fields>
 HttpSignature::verify( const http::response_header<>& rsh
-                     , const util::Ed25519PublicKey& pk)
+                     , const sign::PublicKey& pk)
 {
     // The key may imply an algorithm,
     // but an explicit algorithm should not conflict with the key.
@@ -667,7 +669,7 @@ HttpSignature::verify( const http::response_header<>& rsh
         return {false, {}};
     }
 
-    if (!pk.verify(sig_string, *decoded_sig))
+    if (!pk.verify(sig_string, sign::Signature(*decoded_sig)))
         return {false, {}};
 
     // Collect headers not covered by signature.
@@ -685,7 +687,7 @@ HttpSignature::verify( const http::response_header<>& rsh
 
 struct VerifyingReader::Impl {
     bool _check_framing;
-    const util::Ed25519PublicKey _pk;
+    const sign::PublicKey _pk;
     const status_set _statuses;
 
     SignedHead _head;  // verified head; keep for later use
@@ -705,7 +707,7 @@ struct VerifyingReader::Impl {
 
     bool _is_done = false;
 
-    Impl(bool check_framing, util::Ed25519PublicKey pk, status_set statuses)
+    Impl(bool check_framing, sign::PublicKey pk, status_set statuses)
         : _check_framing(check_framing)
         , _pk(std::move(pk))
         , _statuses(std::move(statuses))
@@ -851,7 +853,7 @@ struct VerifyingReader::Impl {
             _chain_hasher.set_offset(_block_offset);
         }
 
-        auto chain_hash = _chain_hasher.calculate_block(_block_data.size(), util::sha512_digest(_block_data), *block_sig);
+        auto chain_hash = _chain_hasher.calculate_block(_block_data.size(), util::sha512_digest(_block_data), sign::Signature(*block_sig));
 
         if (!chain_hash.verify(_head.public_key(), _head.injection_id())) {
             LOG_WARN("Failed to verify data block with offset ", _block_offset, "; uri=", _head.uri());
@@ -964,7 +966,7 @@ struct VerifyingReader::Impl {
 };
 
 VerifyingReader::VerifyingReader( GenericStream in
-                                , util::Ed25519PublicKey pk
+                                , sign::PublicKey pk
                                 , status_set statuses)
     : _reader(std::make_unique<http_response::Reader>(std::move(in)))
     , _impl(std::make_unique<Impl>(true, std::move(pk), std::move(statuses)))
@@ -972,7 +974,7 @@ VerifyingReader::VerifyingReader( GenericStream in
 }
 
 VerifyingReader::VerifyingReader( reader_uptr rd
-                                , util::Ed25519PublicKey pk
+                                , sign::PublicKey pk
                                 , status_set statuses)
     : _reader(std::move(rd))
     , _impl(std::make_unique<Impl>(true, std::move(pk), std::move(statuses)))

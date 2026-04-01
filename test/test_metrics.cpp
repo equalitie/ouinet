@@ -33,10 +33,10 @@ BOOST_AUTO_TEST_CASE(enable_enable) {
 
         Cancel cancel;
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.enable(ctx.get_executor(), [](auto, auto, auto) {});
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.enable(ctx.get_executor(), [](auto, auto, auto) {});
     });
 
@@ -57,10 +57,10 @@ BOOST_AUTO_TEST_CASE(disable_disable) {
 
         Cancel cancel;
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.disable();
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.disable();
     });
 
@@ -81,13 +81,13 @@ BOOST_AUTO_TEST_CASE(enable_disable_enable) {
 
         Cancel cancel;
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.enable(ctx.get_executor(), [](auto, auto, auto) {});
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.disable();
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.enable(ctx.get_executor(), [](auto, auto, auto) {});
     });
 
@@ -108,13 +108,13 @@ BOOST_AUTO_TEST_CASE(disable_enable_disable) {
 
         Cancel cancel;
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.disable();
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.enable(ctx.get_executor(), [](auto, auto, auto) {});
 
-        async_sleep(ctx, 300ms, cancel, yield);
+        async_sleep(300ms, cancel, yield);
         client.disable();
     });
 

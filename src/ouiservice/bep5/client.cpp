@@ -204,7 +204,7 @@ private:
             _wait_condition_locks.clear();
 
             if (ec) {
-                async_sleep(ex, 1s, cancel, yield);
+                async_sleep(1s, cancel, yield);
                 continue;
             }
 
@@ -217,7 +217,7 @@ private:
 
             add_peers(move(endpoints));
 
-            async_sleep(ex, 1min, cancel, yield);
+            async_sleep(1min, cancel, yield);
         }
     }
 
@@ -318,7 +318,7 @@ private:
             _injector_was_seen = false;
             if (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
                 auto d = (*_last_ping_time + _ping_frequency) - Clock::now();
-                async_sleep(get_executor(), d, cancel, yield);
+                async_sleep(d, cancel, yield);
                 if (cancel) return;
             }
             _DEBUG("Waiting to ping injectors: done");
@@ -530,7 +530,7 @@ void Bep5Client::status_loop(asio::yield_context yield)
 
     while (!cancel) {
         ec = {};
-        async_sleep(get_executor(), 1min, cancel, yield[ec]);
+        async_sleep(1min, cancel, yield[ec]);
 
         if (ec || cancel || logger.get_threshold() > DEBUG)
             continue;
@@ -651,7 +651,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             sys::error_code ec;
 
             if (delay_ms) {
-                async_sleep(exec, chrono::milliseconds(delay_ms), spawn_cancel, y);
+                async_sleep(chrono::milliseconds(delay_ms), spawn_cancel, y);
                 if (spawn_cancel) return;
             }
 

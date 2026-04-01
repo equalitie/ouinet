@@ -61,7 +61,7 @@ linux / integration-test:
   extends:
     .linux-integration-test
   needs:
-    ['linux / unit-rust-test', 'linux / unit-cpp-test']
+    ['linux / unit-rust-test', 'linux / unit-cpp-test', 'linux / build']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
@@ -156,6 +156,6 @@ linux / integration-test-experimental:
   extends:
     .linux-integration-test
   needs:
-    ['linux / unit-test-experimental']
+    ['linux / unit-test-experimental', 'linux / build-experimental']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python

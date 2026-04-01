@@ -3,26 +3,26 @@
 
 namespace ouinet { namespace bep5 {
 
-std::string compute_injector_swarm_name(const ouinet::util::Ed25519PublicKey& pubkey, unsigned protocol_version)
+std::string compute_injector_swarm_name(const sign::PublicKey& pubkey, unsigned protocol_version)
 {
     return util::str
-        ( "ed25519:", util::base32up_encode(pubkey.serialize())
+        ( "ed25519:", util::base32up_encode(pubkey.to_bytes())
         , "/v", protocol_version
         , "/injectors");
 }
 
-std::string compute_bridge_swarm_name(const ouinet::util::Ed25519PublicKey& pubkey, unsigned protocol_version)
+std::string compute_bridge_swarm_name(const sign::PublicKey& pubkey, unsigned protocol_version)
 {
     return util::str
-        ( "ed25519:", util::base32up_encode(pubkey.serialize())
+        ( "ed25519:", util::base32up_encode(pubkey.to_bytes())
         , "/v", protocol_version
         , "/bridges");
 }
 
-std::string compute_uri_swarm_prefix(const ouinet::util::Ed25519PublicKey& pubkey, unsigned protocol_version)
+std::string compute_uri_swarm_prefix(const sign::PublicKey& pubkey, unsigned protocol_version)
 {
     return util::str
-        ( "ed25519:", util::base32up_encode(pubkey.serialize())
+        ( "ed25519:", util::base32up_encode(pubkey.to_bytes())
         , "/v", protocol_version
         , "/uri/");
 }

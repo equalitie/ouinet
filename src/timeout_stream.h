@@ -207,7 +207,7 @@ public:
     }
 
     bool is_open() const {
-        if (_state) return false;
+        if (!_state) return false;
         return _state->is_open();
     }
 

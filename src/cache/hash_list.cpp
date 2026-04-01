@@ -29,7 +29,7 @@ bool HashList::verify() const {
 
     for (auto& block : blocks) {
         chain_hash = chain_hasher.calculate_block(
-                block_size, block.data_hash, block.chained_hash_signature);
+                block_size, block.data_hash, sign::Signature(block.chained_hash_signature));
     }
 
     return chain_hash.verify( signed_head.public_key()
@@ -59,9 +59,9 @@ struct Parser {
         return ret;
     }
 
-    boost::optional<util::Ed25519PublicKey::sig_array_t>
+    boost::optional<sign::Signature::Bytes>
     read_signature() {
-        return read_array<util::Ed25519PublicKey::sig_size>();
+        return read_array<sign::Signature::size>();
     }
 
     boost::optional<Digest>
@@ -134,7 +134,7 @@ HashList HashList::load(
 
     Parser parser;
 
-    using Signature = PubKey::sig_array_t;
+    using Signature = sign::Signature::Bytes;
 
     bool magic_checked = false;
 
@@ -222,7 +222,7 @@ void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
 
     size_t content_length =
         MAGIC.size() + strlen("\n") +
-        blocks.size() * (PubKey::sig_size + util::SHA512::size());
+        blocks.size() * (sign::Signature::size + util::SHA512::size());
 
     h.set(ORIGINAL_STATUS, util::str(h.result_int()));
     h.result(http::status::ok);
@@ -236,7 +236,7 @@ void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
 
     for (auto& block : blocks) {
         bufs.push_back(asio::buffer(block.data_hash));
-        bufs.push_back(asio::buffer(block.chained_hash_signature));
+        bufs.push_back(asio::buffer(block.chained_hash_signature.bytes));
     }
 
     auto wd = watch_dog(con.get_executor(),
