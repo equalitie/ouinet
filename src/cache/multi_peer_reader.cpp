@@ -74,10 +74,16 @@ GenericStream connect( AsioExecutor exec
 {
     sys::error_code ec;
     auto opt_m = choose_multiplexer_for(exec, ep, lan_my_eps);
+
+#ifdef __APPLE__
     if (!opt_m) {
         // No local endpoint with matching IP version (IPv4/IPv6) found
         return or_throw<GenericStream>(yield, asio::error::network_unreachable);
     }
+#else
+    assert(opt_m);
+#endif
+
     asio_utp::socket s(exec);
     s.bind(*opt_m, ec);
     if (ec) return or_throw<GenericStream>(yield, ec);

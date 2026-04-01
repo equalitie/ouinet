@@ -42,7 +42,11 @@ public:
     }
 
     std::string cache_http_public_key() const {
+#ifdef __APPLE__
         std::ifstream file((_config.repo_root() / "ed25519-public-key").string());
+#else
+        std::ifstream file((_config.repo_root() / "ed25519-public-key"));
+#endif
         if (!file) throw std::runtime_error("File not found");
         std::stringstream buffer;
         buffer << file.rdbuf();
