@@ -120,10 +120,12 @@ void Server::stop_listen()
 GenericStream Server::accept(asio::yield_context yield) {
     sys::error_code ec;
     auto conn = accept_without_handshake(yield[ec]);
-    
+
     if (ec) {
         return or_throw<GenericStream>(yield, ec);
     }
+
+    LOG_DEBUG("I2P server: accepted connection from ", conn.remote_endpoint());
 
     Cancel cancel = _stopped;
     perform_handshake(conn, cancel, yield[ec]);

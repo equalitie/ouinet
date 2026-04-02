@@ -117,7 +117,6 @@ struct Client::Impl {
 #ifdef __EXPERIMENTAL__
     std::shared_ptr<bt::Bep3Tracker> _bep3_tracker;
     std::shared_ptr<ouiservice::i2poui::Service> _i2p_service;
-    std::unique_ptr<ouiservice::i2poui::Server> _bep3_server;
     std::unique_ptr<Bep3Announcer> _bep3_announcer;
 #endif // __EXPERIMENTAL__
     GarbageCollector _gc;
@@ -168,8 +167,8 @@ struct Client::Impl {
 #ifdef __EXPERIMENTAL__
     bool enable_bep3_announcer( shared_ptr<ouiservice::i2poui::Service> i2p_service
                               , string tracker_id
-                              , size_t simultaneous_announcements
-                              , asio::yield_context yield) {
+                              , shared_ptr<i2p::client::ClientDestination> destination
+                              , size_t simultaneous_announcements) {
         if (_bep3_announcer) {
             _DEBUG("BEP3 announcer is already enabled");
             return false;
@@ -181,23 +180,8 @@ struct Client::Impl {
 
         _i2p_service = i2p_service;
 
-        // Starting the BEP3 server so we can use its destination for both
-        // announcing to the tracker and serving content to peers.
-        // Note that Zzzot rejects torrent announce if ip= parameter is not
-        // the same as the annnouncer's destination (set in the http header of
-        // the announce request)
-        _DEBUG("starting BEP3 server to responds to cache announces");
-        _bep3_server = i2p_service->build_server("bep3-server-key");
-        sys::error_code ec;
-        _bep3_server->start_listen(yield[ec]);
-        if (ec) {
-            _ERROR("failed to start BEP3 server; ec=", ec.message());
-            return or_throw(yield, ec, false);
-        }
-        _DEBUG("BEP3 responder server started");
-
         _bep3_tracker = make_shared<bt::Bep3Tracker>(
-            move(i2p_service), move(tracker_id), _bep3_server->get_destination());
+            move(i2p_service), move(tracker_id), move(destination));
 
         // NOTE: The announcer eagerly calls ensure_started() on the tracker,
         // to kick start the I2P tunnel, even though bep3_tracker try to start
@@ -924,9 +908,9 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
 #ifdef __EXPERIMENTAL__
 bool Client::enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
                                   , std::string tracker_id
-                                  , size_t simultaneous_announcements
-                                  , asio::yield_context yield) {
-    return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), simultaneous_announcements, yield);
+                                  , std::shared_ptr<i2p::client::ClientDestination> destination
+                                  , size_t simultaneous_announcements) {
+    return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), std::move(destination), simultaneous_announcements);
 }
 #endif // __EXPERIMENTAL__
 

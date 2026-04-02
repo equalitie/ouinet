@@ -140,6 +140,9 @@ public:
         , _bt_dht_builder(std::move(dht_builder))
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
+#ifdef __EXPERIMENTAL__
+        , _i2p_cache_server_wc(_ctx)
+#endif
         , _metrics(_config.metrics()
                     ? metrics::Client( _config.repo_root() / "metrics"
                                      , std::move(_config.metrics()->encryption_key)
@@ -574,6 +577,63 @@ private:
         }));
     }
 
+#ifdef __EXPERIMENTAL__
+    void idempotent_start_accepting_i2p(asio::yield_context yield) {
+        if (_i2p_cache_server) return;
+
+        sys::error_code ec;
+        _i2p_cache_server_wc.wait(_shutdown_signal, yield[ec]);
+        return_or_throw_on_error(yield, _shutdown_signal, ec);
+        if (_i2p_cache_server) return;
+        auto lock = _i2p_cache_server_wc.lock();
+
+        //should not callI2P service should start before 
+        assert(_i2p_service);
+
+        // We need to start the server whiche responds to requests corresponding to
+        // announces and gives its id to the announcer
+        // so we mut  initiate the announcer client on the same i2p id.
+        // That is a Zzzot requirement otherwise our announces get rejected
+        _i2p_cache_server = _i2p_service->build_server("bep3-server-key");
+
+        //TODO: How come there is no cancel here?
+        _i2p_cache_server->start_listen(yield[ec]);
+        if (ec) {
+            LOG_ERROR("Failed to start listening on I2P cache server; ec=", ec);
+            _i2p_cache_server.reset();
+            return or_throw(yield, ec);
+        }
+
+        TRACK_SPAWN(_ctx, ([&, c = _shutdown_signal] (asio::yield_context yield) mutable {
+            auto slot = c.connect([&] () mutable { _i2p_cache_server = nullptr; });
+
+            while (!c) {
+                sys::error_code ec;
+                auto con = _i2p_cache_server->accept(yield[ec]);
+                if (c) return;
+                if (ec == asio::error::operation_aborted) return;
+                if (ec) {
+                    LOG_WARN("I2P cache: Failure to accept; ec=", ec);
+                    async_sleep(200ms, c, yield);
+                    continue;
+                }
+                LOG_INFO("I2P cache: Accepted connection from ", con.remote_endpoint());
+                TRACK_SPAWN(_ctx, ([this, con = move(con)]
+                                   (asio::yield_context yield) mutable {
+                    sys::error_code ec;
+                    std::string tag = (logger.get_threshold() <= DEBUG)
+                             ? "I2PAccept(" + con.remote_endpoint() + ")"
+                             : "I2PAccept";
+
+                    YieldContext y(yield, _log_path.tag(std::move(tag)));
+                    serve_utp_request(move(con), y[ec].tag("serve_i2p_req"));
+                    _YDEBUG(y, "Done; ec=", ec);
+                }));
+            }
+        }));
+    }
+#endif // __EXPERIMENTAL__
+
 private:
     // The newest protocol version number seen in a trusted exchange
     // (i.e. from an injector exchange or injector-signed cached content).
@@ -614,6 +674,11 @@ private:
 
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
     WaitCondition _multi_utp_server_wc;
+
+#ifdef __EXPERIMENTAL__
+    unique_ptr<ouiservice::i2poui::Server> _i2p_cache_server;
+    WaitCondition _i2p_cache_server_wc;
+#endif // __EXPERIMENTAL__
 
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
@@ -2593,7 +2658,14 @@ void Client::State::setup_cache(YieldContext yield)
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
-      if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements(), yield.native())) {
+      //TODO: This should ideally move out of cache type claus, Cache type only
+      //dictate how to announce the available seeder, the seeder should be available
+      //no matter its willingness is announced (similar to BEP5 cache).
+      idempotent_start_accepting_i2p(yield[ec].native());
+      fail_on_error("Failed to start accepting on I2P for cache::Client");
+
+      assert(_i2p_cache_server && "I2P cache server must be running before enabling BEP3 announcer");
+      if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _i2p_cache_server->get_destination(), _config.max_simultaneous_announcements())) {
           ec = asio::error::invalid_argument;
       }
       fail_on_error("Failed to enable BEP3 announcer in cache::Client");
