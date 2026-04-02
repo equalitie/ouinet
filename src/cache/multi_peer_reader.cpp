@@ -417,7 +417,7 @@ public:
     // LAN peers some how depends on DHT (lock?) which might have not been initiated
     // so we don't deal with them here.
     Peers(AsioExecutor exec
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
@@ -473,19 +473,6 @@ public:
             sys::error_code ec;
 
             LOG_DEBUG(log_path, " Fetching hash list from I2P: ", i2p_dest);
-
-            Cancel timeout_cancel(c);
-            auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
-                LOG_DEBUG("BEP3 hash list download timed out for: ", i2p_dest);
-                timeout_cancel();
-            });
-
-            auto i2p_client = i2p_service->build_client(i2p_dest);
-            i2p_client->start(y[ec]);
-            fail_on_error_or_timeout(y, c, ec, wd);
-
-            auto con = i2p_client->connect(y[ec], c);
-            fail_on_error_or_timeout(y, c, ec, wd);
 
             Cancel timeout_cancel(c);
             auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
@@ -739,7 +726,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
                                 , CryptoStreamKey resource_key
-                                , util::Ed25519PublicKey cache_pk
+                                , sign::PublicKey cache_pk
                                 , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
                                 , std::shared_ptr<ouiservice::i2poui::Service> i2p_service
                                 , std::shared_ptr<unsigned> newest_proto_seen

@@ -61,7 +61,7 @@ public:
     MultiPeerReader( AsioExecutor ex
                    , ResourceId
                    , CryptoStreamKey
-                   , util::Ed25519PublicKey cache_pk
+                   , sign::PublicKey cache_pk
                    , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
                    , std::shared_ptr<ouiservice::i2poui::Service> i2p_service
                    , std::shared_ptr<unsigned> newest_proto_seen

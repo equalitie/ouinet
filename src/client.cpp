@@ -801,7 +801,8 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
                   : boost::posix_time::not_a_date_time;
     };
 
-    if (c && _config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+    if (c && (_config.cache_type() == ClientConfig::CacheType::Bep5Http
+           || _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P)) {
         auto rq = request.to_peer_request();
         auto key = rq.resource_id();
 
@@ -2592,8 +2593,7 @@ void Client::State::setup_cache(YieldContext yield)
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
-      //TODO: Should this also be sending yeild[ec].native instead?
-      if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements(), yield)) {
+      if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements(), yield.native())) {
           ec = asio::error::invalid_argument;
       }
       fail_on_error("Failed to enable BEP3 announcer in cache::Client");

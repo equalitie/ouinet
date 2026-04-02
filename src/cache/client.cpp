@@ -151,7 +151,7 @@ struct Client::Impl {
         , _gc(*_http_store, [&] (const auto& resource_id, auto rr, auto y) {
               return keep_cache_entry(resource_id, move(rr), y);
           }, log_path, _ex)
-        , _peer_lookups(256)
+        , _dht_peer_lookups(256)
 #ifdef __EXPERIMENTAL__
         , _tracker_peer_lookups(256)
 #endif
