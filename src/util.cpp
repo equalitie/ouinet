@@ -12,6 +12,7 @@
 #include <boost/archive/iterators/transform_width.hpp>
 
 #include <skyr/percent_encoding/percent_decode.hpp>
+#include <skyr/percent_encoding/percent_encode.hpp>
 
 #include "util/iterators/base32_from_binary.hpp"
 #include "util/iterators/binary_from_base32.hpp"
@@ -164,4 +165,9 @@ string ouinet::util::percent_decode(const boost::string_view in) {
     } catch (const skyr::percent_encoding::percent_encode_errc&) {
         return {};
     }
+}
+
+string ouinet::util::percent_encode(const boost::string_view in) {
+    if (in.empty()) return {};
+    return skyr::percent_encode(string_view(in.data(), in.size()));
 }

@@ -38,7 +38,8 @@ public:
     std::shared_ptr<i2p::client::ClientDestination> get_local_destination () const { return _local_destination; };
 
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
-    std::unique_ptr<Client> build_client(const std::string& target_id);
+    std::unique_ptr<Client> build_client(const std::string& target_id
+        , std::shared_ptr<i2p::client::ClientDestination> destination = nullptr);
   
 protected:
     void load_known_hosts_to_address_book();

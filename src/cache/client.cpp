@@ -14,6 +14,11 @@
 #include "../util/keep_alive.h"
 #include "../util/crypto_stream.h"
 #include "../ouiservice/utp.h"
+#ifdef __EXPERIMENTAL__
+#include "../ouiservice/i2p/service.h"
+#include <bittorrent/bep3_tracker.h>
+#include "bep3_tracker_lookup.h"
+#endif
 #include "../logger.h"
 #include "../async_sleep.h"
 #include "../constants.h"
@@ -21,6 +26,7 @@
 #include "../bep5_swarms.h"
 #include "multi_peer_reader.h"
 #include <map>
+#include <string>
 
 #define _LOGPFX "cache/client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -107,10 +113,19 @@ struct Client::Impl {
     unique_ptr<cache::HttpStore> _http_store;
     boost::posix_time::time_duration _max_cached_age;
     Cancel _lifetime_cancel;
-    std::unique_ptr<Announcer> _announcer;
+    std::unique_ptr<Bep5Announcer> _bep5_announcer;
+#ifdef __EXPERIMENTAL__
+    std::shared_ptr<bt::Bep3Tracker> _bep3_tracker;
+    std::shared_ptr<ouiservice::i2poui::Service> _i2p_service;
+    std::unique_ptr<ouiservice::i2poui::Server> _bep3_server;
+    std::unique_ptr<Bep3Announcer> _bep3_announcer;
+#endif // __EXPERIMENTAL__
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
-    util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
+    util::LruCache<std::string, shared_ptr<DhtLookup>> _dht_peer_lookups;
+#ifdef __EXPERIMENTAL__
+    util::LruCache<std::string, shared_ptr<Bep3TrackerLookup>> _tracker_peer_lookups;
+#endif // __EXPERIMENTAL__
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _groups;
     util::LogPath _log_path;
@@ -136,7 +151,10 @@ struct Client::Impl {
         , _gc(*_http_store, [&] (const auto& resource_id, auto rr, auto y) {
               return keep_cache_entry(resource_id, move(rr), y);
           }, log_path, _ex)
-        , _peer_lookups(256)
+        , _dht_peer_lookups(256)
+#ifdef __EXPERIMENTAL__
+        , _tracker_peer_lookups(256)
+#endif
         , _local_peer_discovery(_ex, _lan_my_endpoints)
         , _log_path(std::move(log_path))
     {}
@@ -147,15 +165,65 @@ struct Client::Impl {
                 group);
     }
 
-    bool enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
-        if (_dht || _announcer) return false;
+#ifdef __EXPERIMENTAL__
+    bool enable_bep3_announcer( shared_ptr<ouiservice::i2poui::Service> i2p_service
+                              , string tracker_id
+                              , size_t simultaneous_announcements
+                              , asio::yield_context yield) {
+        if (_bep3_announcer) {
+            _DEBUG("BEP3 announcer is already enabled");
+            return false;
+        }
+        if (!i2p_service) {
+            _DEBUG("not enabling BEP3 announcer because i2p service has not been initialied");
+            return false;
+        }
 
-        _dht = move(dht);
-        _announcer = std::make_unique<Announcer>(_dht, simultaneous_announcements);
+        _i2p_service = i2p_service;
+
+        // Starting the BEP3 server so we can use its destination for both
+        // announcing to the tracker and serving content to peers.
+        // Note that Zzzot rejects torrent announce if ip= parameter is not
+        // the same as the annnouncer's destination (set in the http header of
+        // the announce request)
+        _DEBUG("starting BEP3 server to responds to cache announces");
+        _bep3_server = i2p_service->build_server("bep3-server-key");
+        sys::error_code ec;
+        _bep3_server->start_listen(yield[ec]);
+        if (ec) {
+            _ERROR("failed to start BEP3 server; ec=", ec.message());
+            return or_throw(yield, ec, false);
+        }
+        _DEBUG("BEP3 responder server started");
+
+        _bep3_tracker = make_shared<bt::Bep3Tracker>(
+            move(i2p_service), move(tracker_id), _bep3_server->get_destination());
+
+        // NOTE: The announcer eagerly calls ensure_started() on the tracker,
+        // to kick start the I2P tunnel, even though bep3_tracker try to start
+        // the tunnel before sending request if hasn't started anyway.
+        _bep3_announcer = std::make_unique<Bep3Announcer>(
+            _bep3_tracker, simultaneous_announcements);
 
         // Announce all groups.
         for (auto& group_name : _groups->groups())
-            if (_announcer->add(compute_swarm_name(group_name)))
+            if (_bep3_announcer->add(compute_swarm_name(group_name)))
+                _VERBOSE("Start BEP3 announcing group: ", group_name);
+
+        _DEBUG("BEP3 announcer successfully initiated");
+        return true;
+    }
+#endif // __EXPERIMENTAL__
+
+    bool enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
+        if (_dht || _bep5_announcer) return false;
+
+        _dht = move(dht);
+        _bep5_announcer = std::make_unique<Bep5Announcer>(_dht, simultaneous_announcements);
+
+        // Announce all groups.
+        for (auto& group_name : _groups->groups())
+            if (_bep5_announcer->add(compute_swarm_name(group_name)))
                 _VERBOSE("Start announcing group: ", group_name);
 
         return true;
@@ -373,19 +441,36 @@ struct Client::Impl {
                                 , http_::response_error_hdr_retrieval_failed, yield);
     }
 
-    shared_ptr<DhtLookup> peer_lookup(std::string swarm_name)
+    shared_ptr<DhtLookup> dht_peer_lookup(std::string swarm_name)
     {
         assert(_dht);
 
-        auto* lookup = _peer_lookups.get(swarm_name);
+        auto* lookup = _dht_peer_lookups.get(swarm_name);
 
         if (!lookup) {
-            lookup = _peer_lookups.put( swarm_name
+            lookup = _dht_peer_lookups.put( swarm_name
                                       , make_shared<DhtLookup>(_dht, swarm_name));
         }
 
         return *lookup;
     }
+
+#ifdef __EXPERIMENTAL__
+    shared_ptr<Bep3TrackerLookup> tracker_peer_lookup(std::string swarm_name)
+    {
+        assert(_bep3_tracker);
+
+        auto* lookup = _tracker_peer_lookups.get(swarm_name);
+
+        if (!lookup) {
+            lookup = _tracker_peer_lookups.put( swarm_name
+                , make_shared<Bep3TrackerLookup>(
+                    _bep3_tracker, swarm_name));
+        }
+
+        return *lookup;
+    }
+#endif // __EXPERIMENTAL__
 
     Session load( const ResourceId& resource_id
                 , const CryptoStreamKey& resource_key
@@ -430,10 +515,12 @@ struct Client::Impl {
 
         std::optional<metrics::Request> metrics;
 
+        _DEBUG("Distributed cache lookup: dht=", (_dht ? "yes" : "no"), " bep3_tracker=", (_bep3_tracker ? "yes" : "no"));
+
         if (_dht) {
             metrics = metrics_client.new_cache_in_request();
 
-            auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
+            auto peer_lookup_ = dht_peer_lookup(compute_swarm_name(group));
 
             auto local_peers = _local_peer_discovery.found_peers();
 
@@ -457,7 +544,36 @@ struct Client::Impl {
                 , move(peer_lookup_)
                 , _newest_proto_seen
                 , log_path);
-        } else {
+        }
+#ifdef __EXPERIMENTAL__
+        else if (_bep3_tracker) {
+            auto tracker_lookup_ = tracker_peer_lookup(compute_swarm_name(group));
+
+            auto local_peers = _local_peer_discovery.found_peers();
+
+            if (logger.get_threshold() <= DEBUG) {
+                LOG_DEBUG(log_path, " Peer lookup with BEP3 tracker and local discovery:");
+                LOG_DEBUG(log_path, "    resource_id= ", resource_id);
+                LOG_DEBUG(log_path, "    group=       ", group);
+                LOG_DEBUG(log_path, "    swarm_name=  ", tracker_lookup_->swarm_name());
+                LOG_DEBUG(log_path, "    infohash=    ", tracker_lookup_->infohash());
+                LOG_DEBUG(log_path, "    local_peers= ", local_peers);
+            };
+
+            // Using I2P specific constructor which doesn't deal with lan endpoints
+            // for now to make it less complicated.
+            reader = std::make_unique<MultiPeerReader>
+                ( _ex
+                , resource_id
+                , resource_key
+                , _cache_pk
+                , move(tracker_lookup_)
+                , _i2p_service
+                , _newest_proto_seen
+                , log_path);
+        }
+#endif // __EXPERIMENTAL__
+        else {
             auto local_peers = _local_peer_discovery.found_peers();
 
             if (logger.get_threshold() <= DEBUG) {
@@ -530,9 +646,17 @@ struct Client::Impl {
         _groups->add(group, resource_id, cancel, yield[ec].native());
         if (ec) return or_throw(yield, ec);
 
-        if (!_announcer) return;
-        if (_announcer->add(compute_swarm_name(group)))
-            _VERBOSE("Start announcing group: ", group);
+        if (_bep5_announcer) {
+            if (_bep5_announcer->add(compute_swarm_name(group)))
+                _VERBOSE("Start announcing group: ", group);
+        }
+
+#ifdef __EXPERIMENTAL__
+        if (_bep3_announcer) {
+            if (_bep3_announcer->add(compute_swarm_name(group)))
+                _VERBOSE("Start BEP3 announcing group: ", group);
+        }
+#endif // __EXPERIMENTAL__
     }
 
     http::response_header<>
@@ -579,11 +703,24 @@ struct Client::Impl {
     void unpublish_cache_entry(const cache::ResourceId& resource_id, bool& group_pinned)
     {
         auto empty_groups = _groups->remove(resource_id, group_pinned);
-        if (!_announcer || group_pinned) return;
-        for (const auto& eg : empty_groups)
-            if (_announcer->remove(compute_swarm_name(eg)))
-                _VERBOSE("Stop announcing group: ", eg);;
-    }
+        if (group_pinned) return;
+
+#ifdef __EXPERIMENTAL__
+        if (!_bep5_announcer && !_bep3_announcer) return;
+#else
+        if (!_bep5_announcer) return;
+#endif // __EXPERIMENTAL__
+
+        for (const auto& eg : empty_groups) {
+            if (_bep5_announcer && _bep5_announcer->remove(compute_swarm_name(eg)))
+                _VERBOSE("Stop announcing group: ", eg);
+
+#ifdef __EXPERIMENTAL__
+            if (_bep3_announcer && _bep3_announcer->remove(compute_swarm_name(eg)))
+                _VERBOSE("Stop BEP3 announcing group: ", eg);
+#endif // __EXPERIMENTAL__
+        }
+    }        
 
     // Return whether the entry should be kept in storage.
     bool keep_cache_entry(const cache::ResourceId& resource_id, cache::reader_uptr rr, asio::yield_context yield)
@@ -783,6 +920,15 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
     return _impl->enable_dht(move(dht),
                              simultaneous_announcements);
 }
+
+#ifdef __EXPERIMENTAL__
+bool Client::enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+                                  , std::string tracker_id
+                                  , size_t simultaneous_announcements
+                                  , asio::yield_context yield) {
+    return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), simultaneous_announcements, yield);
+}
+#endif // __EXPERIMENTAL__
 
 Session Client::load( const cache::ResourceId& resource_id
                     , const CryptoStreamKey& resource_key

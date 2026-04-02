@@ -18,12 +18,17 @@ namespace ouinet::ouiservice::i2poui {
 
 using namespace std;
 
-Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const AsioExecutor& exec)
+Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const AsioExecutor& exec, std::shared_ptr<i2p::client::ClientDestination> destination)
     : _service(service)
     , _exec(exec)
     , _target_id(target_id)
     , _timeout(timeout)
-{}
+    , _destination(destination ? move(destination) : (service ? service->get_local_destination() : nullptr))
+{
+    if (!_destination) {
+        assert(service && "I2P Client requires either a destination or a service");
+    }
+}
 
 Client::~Client()
 {
@@ -42,7 +47,7 @@ void Client::start(asio::yield_context yield)
                 _target_id,
                 "127.0.0.1",
                 0,
-                _service ? _service->get_local_destination () : nullptr);
+                _destination);
 
         _client_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_client_tunnel), _timeout);
 

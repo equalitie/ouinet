@@ -219,6 +219,7 @@ target_link_libraries(ouinet_common
         ${DEPRECATED_LIBRARIES}
     PUBLIC
         ${OUINET_HARDCODED_CA_CERTS}
+        ${EXPERIMENTAL_LIBRARIES}
         ouinet_dependencies
         Boost::iostreams
         lib::json
@@ -235,6 +236,8 @@ target_include_directories(ouinet_common PUBLIC "src")
 
 ################################################################################
 if(WITH_EXPERIMENTAL)
+    # PUBLIC (not INTERFACE) so ouinet_common's own sources see __EXPERIMENTAL__
+    # (needed by src/bittorrent/bep3_tracker.h/cpp)
     target_compile_definitions(ouinet_common
         PUBLIC -D__EXPERIMENTAL__
     )

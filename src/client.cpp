@@ -2535,7 +2535,12 @@ void Client::State::setup_cache(YieldContext yield)
         do_notify_ready();
     });
 
-    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http
+#ifdef __EXPERIMENTAL__
+        ||
+        _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P
+#endif // ifdef __EXPERIMENTAL__
+        ) {
       LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
 #define fail_on_error(__msg) { \
@@ -2549,7 +2554,7 @@ void Client::State::setup_cache(YieldContext yield)
         ? cache::Client::build( _ctx.get_executor()
                               , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
-                              , _config.repo_root()/"bep5_http"
+                                , _config.repo_root()/"bep5_http" //TODO gives this a more inclusive name covering bothe bep5 and bep3 caches
                               , _config.max_cached_age()
                               , yield[ec])
         : cache::Client::build( _ctx.get_executor()
@@ -2569,13 +2574,12 @@ void Client::State::setup_cache(YieldContext yield)
     // but they will still report and error code to the caller.
     do_notify_ready();
 
-    auto dht = bittorrent_dht(yield[ec].native());
-    fail_on_error("Failed to initialize BT DHT for cache::Client");
+    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+      auto dht = bittorrent_dht(yield[ec].native());
+      fail_on_error("Failed to initialize BT DHT for cache::Client");
 
-    if (!_cache->enable_dht(dht, _config.max_simultaneous_announcements())) ec = asio::error::invalid_argument;
-    fail_on_error("Failed to enable BT DHT in cache::Client");
-
-#undef fail_on_error
+      if (!_cache->enable_dht(dht, _config.max_simultaneous_announcements())) ec = asio::error::invalid_argument;
+      fail_on_error("Failed to enable BT DHT in cache::Client");
     }
 #ifdef __EXPERIMENTAL__
     //setup Bep3HTTPOverI2P cache
@@ -2588,10 +2592,17 @@ void Client::State::setup_cache(YieldContext yield)
         _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor());
       }
 
+      if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _config.max_simultaneous_announcements(), yield.native())) {
+          ec = asio::error::invalid_argument;
+      }
+      fail_on_error("Failed to enable BEP3 announcer in cache::Client");
     }
 #endif // ifdef __EXPERIMENTAL__
+
+#undef fail_on_error
+    }
     //unsupported cache type
-	else {
+    else {
         ec = asio::error::operation_not_supported;
         return;
     }

@@ -214,6 +214,8 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
                 TestFixtures.RESPONSE_RECEIVED_FROM_CACHE,
                 TestFixtures.CACHE_CLIENT_PEER_FOUND,
+                TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
+                TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
             ],
         ),
     )
@@ -292,6 +294,8 @@ def request_sized_content(port, content_size) -> Response:
 def request_echo(proxy_port, echo_content) -> Response:
     """
     Send a get request to request the test server to echo the content
+    TODO: This should plobably be async to avoid blocking the event loop
+    So we can see the log while the request is not being served.
     """
     url = "http://%s:%d/?content=%s" % (
         get_nonloopback_ip(),
@@ -478,17 +482,20 @@ async def test_tcp_transport(certificate_file, http_server):
     assertEquals(response.status_code, 200)
     assertEquals(response.text, content)
 
-
-def get_cached_echo(port: int, content: str) -> Response:
+async def get_cached_echo(port: int, content: str) -> Response:
+    all_trials_failed = True
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
         try:
-            response = request_echo(port, content)
+            response = await asyncio.to_thread(request_echo, port, content)
         except Exception:
             # print("[WARNING] failing to retrieve from cache with error", str(e))
             continue
         if response.status_code == 200:
+            all_trails_failed = False
             break
 
+
+    assertEquals(all_trials_failed, False)
     assertEquals(response.status_code, 200)
     assertEquals(response.text, content)
     return response
@@ -572,7 +579,7 @@ async def test_tcp_cache(certificate_file, http_server):
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
 
     # Now request the same page from second client
-    get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
+    await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
     # # make sure it was served from cache
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
@@ -789,7 +796,102 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
     await wait_for_dht_ready(cache_client)
     port = TestFixtures.CACHE_CLIENT[1]["port"]
     assert isinstance(port, int)
-    get_cached_echo(port, content)
+    await get_cached_echo(port, content)
 
     # Make sure it was served from cache
+    # This might be wrong: if it is not served from cache it last for ever or we should
+    # have a common clue and then check where it was served from.
+    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
+
+
+@pytest.mark.timeout(TestFixtures.BEP3_CACHE_TIMEOUT)
+@pytest.mark.asyncio
+async def test_bep3_cache_over_i2p(http_server):
+    """
+    Tests BEP3 cache over I2P: client1 fetches content via TCP injector,
+    caches it and announces to BEP3 tracker over I2P. After injector is stopped,
+    client2 looks up peers via the same BEP3 tracker and retrieves from cache.
+    """
+    # TCP Injector (provides signing key, no I2P needed)
+    injector = run_tcp_injector(
+        ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
+    )
+    await wait_for_benchmark(injector, TestFixtures.TCP_INJECTOR_PORT_READY_REGEX)
+    await wait_for_benchmark(injector, TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX)
+    index_key = injector.get_index_key()
+    assert len(index_key) > 0
+
+    # Client1: fetches via TCP injector, caches and announces to BEP3 tracker
+    client = run_tcp_client(
+        name=TestFixtures.CACHE_CLIENT[0]["name"],
+        args=[
+            "--cache-type",
+            "bep3-http-over-i2p",
+            "--cache-http-public-key",
+            str(index_key),
+            "--i2p-bep3-tracker",
+            TestFixtures.BEP3_TRACKER_ID,
+            "--disable-origin-access",
+            "--disable-proxy-access",
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
+            "--front-end-ep",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["fe_port"]),
+            "--injector-ep",
+            "tcp:127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT),
+            "--i2p-hops-per-tunnel",
+            str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
+        ],
+    )
+
+    await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
+
+    # Wait for I2P tunnel to be ready (needed for BEP3 tracker communication)
+    await wait_for_benchmark(client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    # Wait for BEP3 announcer to be fully ready (server tunnel + tracker)
+    await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
+
+    content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
+    response = request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+    assertEquals(response.status_code, 200)
+    assertEquals(response.text, content)
+
+    # This somehow cause client1 to crash
+    # Shut injector down to ensure it does not seed content to cache client
+    # await injector.stop()
+
+    # Wait for client to cache the response
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX)
+
+    # Client2: retrieves from BEP3 distributed cache (no injector)
+    cache_client = run_tcp_client(
+        TestFixtures.CACHE_CLIENT[1]["name"],
+        args=[
+            "--cache-type",
+            "bep3-http-over-i2p",
+            "--cache-http-public-key",
+            str(index_key),
+            "--i2p-bep3-tracker",
+            TestFixtures.BEP3_TRACKER_ID,
+            "--disable-origin-access",
+            "--disable-proxy-access",
+            "--listen-on-tcp",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
+            "--front-end-ep",
+            "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["fe_port"]),
+            "--i2p-hops-per-tunnel",
+            str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
+        ],
+    )
+
+    # Wait for client2's I2P tunnel (needed to talk to BEP3 tracker)
+    await wait_for_benchmark(cache_client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
+    await wait_for_benchmark(cache_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    await wait_for_benchmark(cache_client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
+
+    # Retrieve cached content
+    await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
+
+    # Make sure client1 served it and client2 got it from cache
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
     await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)

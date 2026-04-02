@@ -272,13 +272,14 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             }
 
             // An injector can be explicitly set but it should always be an I2P endpoint
-            if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
-                throw std::runtime_error(
-                    util::str("A BEP3-I2P injector is derived implicitly"
-                              " when using '--cache-type=bep3-http-over-i2p',"
-                              " but it is already set to a non I2P endpoint: ",
-                              *_injector_ep));
-            }
+            // TODO: why? based on what logic?
+            // if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
+            //     throw std::runtime_error(
+            //         util::str("A BEP3-I2P injector is derived implicitly"
+            //                   " when using '--cache-type=bep3-http-over-i2p',"
+            //                   " but it is already set to a non I2P endpoint: ",
+            //                   *_injector_ep));
+            // }
 
             /*
              * We use an I2P endpoint here as the discovery is performed using BEP3, to support
@@ -349,12 +350,27 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw std::runtime_error(
                 "The '--i2p-hops-per-tunnel' argument must be used with "
                 "'--injector-ep' with an i2p injector or with "
-                "--cache-type=bep5-http-over-i2p ");
+                "--cache-type=bep3-http-over-i2p ");
           }
 
         _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
     }
 #endif // ifdef __EXPERIMENTAL__ _i2p_hops_
+
+#ifdef __EXPERIMENTAL__
+    if (auto opt = as_optional<string>(vm, "i2p-bep3-tracker")) {
+        if (_cache_type != CacheType::Bep3HTTPOverI2P) {
+            throw std::runtime_error(
+                "'--i2p-bep3-tracker' can only be used with '--cache-type=bep3-http-over-i2p'");
+        }
+        _i2p_bep3_tracker = *opt;
+    }
+
+    if (_cache_type == CacheType::Bep3HTTPOverI2P && !_i2p_bep3_tracker) {
+        throw std::runtime_error(
+            "'--cache-type=bep3-http-over-i2p' requires '--i2p-bep3-tracker' to be set");
+    }
+#endif // ifdef __EXPERIMENTAL__
 
     if (_cache_type == CacheType::None) {
         LOG_WARN("Not using d-cache");

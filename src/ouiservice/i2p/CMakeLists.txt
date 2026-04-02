@@ -36,10 +36,12 @@ add_library(ouiservice-i2p SHARED
     "./server.cpp"
     "./service.cpp"
     "../../logger.cpp"
+    "../../async_sleep.cpp"
 )
 add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
 target_include_directories(ouiservice-i2p
     PUBLIC
+        ${CMAKE_SOURCE_DIR}/src
         "./i2pd/libi2pd"
         "./i2pd/libi2pd_client"
         "./i2pd/i18n"
@@ -54,7 +56,8 @@ target_link_libraries(ouiservice-i2p
         libi2pdlang
         OpenSSL::SSL
     PUBLIC
-        ouinet_common
+        ouinet_asio
+        ouinet_asio_ssl
 )
 
 # Place the resulting library together with the rest.
