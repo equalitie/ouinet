@@ -98,7 +98,7 @@ function docker_rsync (
     fi
 
     rsync -e "docker $opt_h exec -i" \
-        -av --no-links --delete \
+        -azv --no-links --delete \
         ${exclude[@]/#/--exclude=} \
         $host_src_dir/ $container_name:$container_dst_dir
 )
