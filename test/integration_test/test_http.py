@@ -361,7 +361,7 @@ def http_server() -> Generator[Process, None, None]:
 
 
 @pytest_asyncio.fixture(autouse=True)
-def all_dirs():
+def _all_dirs():
     all_dirs()
 
 
@@ -482,6 +482,7 @@ async def test_tcp_transport(certificate_file, http_server):
     assertEquals(response.status_code, 200)
     assertEquals(response.text, content)
 
+
 async def get_cached_echo(port: int, content: str) -> Response:
     all_trials_failed = True
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
@@ -491,9 +492,8 @@ async def get_cached_echo(port: int, content: str) -> Response:
             # print("[WARNING] failing to retrieve from cache with error", str(e))
             continue
         if response.status_code == 200:
-            all_trails_failed = False
+            all_trials_failed = False
             break
-
 
     assertEquals(all_trials_failed, False)
     assertEquals(response.status_code, 200)
