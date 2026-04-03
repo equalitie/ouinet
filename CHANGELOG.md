@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Include debug symbols in iOS xcframework. !161
+- Added setDisableDoH/getDisableDoH for DNS-over-HTTPS control for iOS. !158
+- Added getProxyEndpoint/getFrontendEndpoint methods for iOS. !158
+
+### Fixed
+
+- iOS thread safety issues when stopping the client or getting runtime state. 158
+- Cleaned up redundant cancel handler in `local_peer_discovery`. !158
+
+### Changed
+
+- Increased the header limit for requests to 16KB. !158
+- Upgraded iOS OpenSSL to v3.6.0. !158
+- Updated iOS SDK version to v26.0. !158
+- Other iOS Build Improvements. !158
+
+
 ## [v1.6.5](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.5) - 2026-03-31
 
 ### Removed
