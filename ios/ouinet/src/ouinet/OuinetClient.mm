@@ -53,6 +53,9 @@ NativeLib _n;
   if ([config getDisableBridgeAnnouncement]) {
     args.push_back("--disable-bridge-announcement");
   }
+  if ([config getDisableDoH]) {
+    args.push_back("--disable-doh");
+  }
   
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
   if (error)
@@ -80,6 +83,18 @@ NativeLib _n;
   }
   args.push_back(std::string([[NSString stringWithFormat: @"%@=%@", key, value] UTF8String]));
   return args;
+}
+
+- (NSString*)getProxyEndpoint
+{
+  std::string endpoint = _n.getProxyEndpoint();
+  return [NSString stringWithUTF8String:endpoint.c_str()];
+}
+
+- (NSString*)getFrontendEndpoint
+{
+  std::string endpoint = _n.getFrontendEndpoint();
+  return [NSString stringWithUTF8String:endpoint.c_str()];
 }
 
 @end

@@ -2576,6 +2576,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         } else {
             reqhp.body_limit(_config.max_request_body_size());
         }
+        reqhp.header_limit(16*1024);
 
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests
