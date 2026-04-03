@@ -12,8 +12,10 @@ namespace i2p::client {
 namespace ouinet::ouiservice::i2poui {
 
 class Tunnel  {
+    using executor_type = asio::any_io_executor;
+
 public:
-  AsioExecutor get_executor() {  return _exec; }
+  executor_type get_executor() {  return _exec; }
 
   /**
        is called by GenericConnector::is_ready to set a callback when
@@ -24,7 +26,7 @@ public:
 
   bool has_timed_out() {return _has_timed_out;}
 
-  Tunnel(const AsioExecutor&, std::shared_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
+  Tunnel(const executor_type&, std::shared_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
 
   ~Tunnel();
 
@@ -41,9 +43,9 @@ private:
   void set_timeout_to_get_ready(uint32_t timeout);
 
 private:
-  AsioExecutor _exec;
+  executor_type _exec;
 
-  using WorkGuard = asio::executor_work_guard<AsioExecutor>;
+  using WorkGuard = asio::executor_work_guard<executor_type>;
 
   //the tunnel will use this mock work to prevent asio service
   //from exiting while channel is waiting for accepting or connecting

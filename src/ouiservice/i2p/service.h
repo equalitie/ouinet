@@ -18,10 +18,12 @@ namespace i2p::client {
 namespace ouinet::ouiservice::i2poui {
 
 class Service : public std::enable_shared_from_this<Service> {
+    using executor_type = asio::any_io_executor;
+
 public:
     // because by default usage of i2p service is to  prioritize anominty 
     // the default tunnel length is set to 3. To makes I2P connections faster this could be reduced to 1
-    Service(const std::string& datadir, const AsioExecutor&, const size_t _number_of_hops_per_tunnel = 3);
+    Service(const std::string& datadir, const executor_type&, const size_t _number_of_hops_per_tunnel = 3);
 
     Service(const Service&) = delete;
     Service& operator=(const Service&) = delete;
@@ -33,7 +35,7 @@ public:
 
     uint32_t  get_i2p_tunnel_ready_timeout() { return 5*60; /* 5 minutes */ };
 
-    AsioExecutor get_executor() { return _exec; };
+    executor_type get_executor() { return _exec; };
 
     std::shared_ptr<i2p::client::ClientDestination> get_local_destination () const { return _local_destination; };
 
@@ -44,7 +46,7 @@ public:
 protected:
     void load_known_hosts_to_address_book();
 
-    AsioExecutor _exec;
+    executor_type _exec;
     std::string _data_dir;
 
     // all client tunnels share local destination, because destination is expensive

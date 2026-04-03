@@ -24,7 +24,7 @@ using namespace ouinet::ouiservice::i2poui;
 
 static const uint16_t i2cp_port = 7454;
 
-Service::Service(const string& datadir, const AsioExecutor& exec, const size_t _number_of_hops_per_tunnel)
+Service::Service(const string& datadir, const executor_type& exec, const size_t _number_of_hops_per_tunnel)
     : _exec(exec)
     , _data_dir(datadir)
 {

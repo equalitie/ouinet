@@ -14,16 +14,18 @@ namespace ouinet::ouiservice::i2poui {
 class Service;
 
 class Client : public ouinet::OuiServiceImplementationClient {
+    using executor_type = asio::any_io_executor;
+
 public:
     Client( std::shared_ptr<Service> service
           , const std::string& target_id
           , uint32_t timeout
-          , const AsioExecutor&
+          , const executor_type&
           , std::shared_ptr<i2p::client::ClientDestination> destination = nullptr);
 
     ~Client();
 
-    AsioExecutor get_executor() { return _exec; }
+    executor_type get_executor() { return _exec; }
 
     void start(asio::yield_context yield) override;
     void stop() override;
@@ -41,7 +43,7 @@ public:
 
 private:
     std::shared_ptr<Service> _service;
-    AsioExecutor _exec;
+    executor_type _exec;
     std::string _target_id;
     uint32_t _timeout;
 

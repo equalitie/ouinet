@@ -340,6 +340,21 @@ public:
 
 };
 
+struct MultiPeerReader::PreFetch {
+    using OptBlock = boost::optional<MultiPeerReader::Block>;
+
+    size_t block_id;
+    Peer* peer;
+
+    PreFetch(size_t block_id, Peer* peer)
+        : block_id(block_id)
+        , peer(peer)
+    {}
+
+    virtual ~PreFetch() {}
+
+    virtual OptBlock get_block(Cancel&, asio::yield_context) = 0;
+};
 
 class MultiPeerReader::Peers {
 public:
@@ -744,22 +759,6 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , log_path);
 }
 #endif
-
-struct MultiPeerReader::PreFetch {
-    using OptBlock = boost::optional<MultiPeerReader::Block>;
-
-    size_t block_id;
-    Peer* peer;
-
-    PreFetch(size_t block_id, Peer* peer)
-        : block_id(block_id)
-        , peer(peer)
-    {}
-
-    virtual ~PreFetch() {}
-
-    virtual OptBlock get_block(Cancel&, asio::yield_context) = 0;
-};
 
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
     AsyncJob<boost::none_t> job;

@@ -2,8 +2,8 @@
 
 #include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
-#include <util/executor.h>
-#include <util/unique_function.h>
+#include <boost/asio/any_io_executor.hpp>
+#include "util/unique_function.h"
 
 namespace ouinet {
 
@@ -22,11 +22,9 @@ namespace ouinet {
  *     t.async_read_some(my_buffer, yield[ec]);
  */
 
-using ouinet::util::AsioExecutor;
-
 template<class InnerStream> class TimeoutStream {
 public:
-    using executor_type = AsioExecutor;
+    using executor_type = asio::any_io_executor;
     using next_layer_type = InnerStream;
     using endpoint_type = typename InnerStream::endpoint_type;
 
@@ -42,7 +40,7 @@ private:
     class Deadline : public std::enable_shared_from_this<Deadline> {
         using Parent = std::enable_shared_from_this<Deadline>;
     public:
-        Deadline(AsioExecutor& exec)
+        Deadline(executor_type& exec)
             : _timer(exec)
         {}
 

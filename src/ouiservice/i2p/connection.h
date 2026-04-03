@@ -16,7 +16,9 @@ namespace i2poui {
 
 class Connection : public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>> {
 public:
-    Connection(const AsioExecutor& exec)
+    using executor_type = asio::any_io_executor;
+
+    Connection(const executor_type& exec)
         : _exec(exec)
         , _socket(asio::ip::tcp::socket(_exec))
     {
@@ -31,7 +33,7 @@ public:
     Connection(Connection&&) = default;
     Connection& operator=(Connection&&) = default;
 
-    AsioExecutor get_executor() { return _exec; }
+    executor_type get_executor() { return _exec; }
 
     template< class MutableBufferSequence
             , class ReadHandler>
@@ -52,7 +54,7 @@ private:
     asio::ip::tcp::socket& socket() { return _socket.next_layer(); }
 
 private:
-    AsioExecutor _exec;
+    executor_type _exec;
     TimeoutStream<asio::ip::tcp::socket> _socket;
 };
 
