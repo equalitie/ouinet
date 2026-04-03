@@ -66,9 +66,11 @@ void handle_exception(const char* actor, std::exception_ptr ep) {
     }
     catch (std::exception const& e) {
         BOOST_ERROR("Actor '" << actor << "' threw an exception: " << e.what());
+        throw;
     }
     catch (...) {
         BOOST_ERROR("Actor '" << actor << "' threw an unknown exception");
+        throw;
     }
 }
 
