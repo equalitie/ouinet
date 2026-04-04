@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Include debug symbols in iOS xcframework. !161
 - Added setDisableDoH/getDisableDoH for DNS-over-HTTPS control for iOS. !158
 - Added getProxyEndpoint/getFrontendEndpoint methods for iOS. !158
+- Expose C style Ouinet `client_lib`. !163
+- New CI job to build Windows artifacts in release mode. !163
 
 ### Fixed
 
@@ -25,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgraded iOS OpenSSL to v3.6.0. !158
 - Updated iOS SDK version to v26.0. !158
 - Other iOS Build Improvements. !158
+- Update `asio-utp` submodule to include latest fixes. !163
 
 
 ## [v1.6.5](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.5) - 2026-03-31
