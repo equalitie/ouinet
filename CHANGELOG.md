@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added getProxyEndpoint/getFrontendEndpoint methods for iOS. !158
 - Expose C style Ouinet `client_lib`. !163
 - New CI job to build Windows artifacts in release mode. !163
+- CMake target which creates a binary for manually testing scrapes. !165
 
 ### Fixed
 
