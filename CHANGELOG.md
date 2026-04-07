@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - iOS thread safety issues when stopping the client or getting runtime state. 158
 - Cleaned up redundant cancel handler in `local_peer_discovery`. !158
+- Fix `wait_for_ready` function to wait until there's a successful lookup to
+the DHT that happened in the past 5 minutes. !166
+- Perform lookups to injector and bridge swarms in parallel and connect as soon
+as any of the swarms is ready. !166
+- Fix typo in regex that covers IPv6 ULA. 01ea1535
+- Fix a crash due to an unitialized shared pointer when requesting status
+endpoint. !168
+- Compilation issues in i2pd's CMakeFile. !168
 
 ### Changed
 
@@ -29,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated iOS SDK version to v26.0. !158
 - Other iOS Build Improvements. !158
 - Update `asio-utp` submodule to include latest fixes. !163
+- Refactor authenticate function. b1d30f9b
 
 
 ## [v1.6.5](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.5) - 2026-03-31
