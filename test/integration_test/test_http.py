@@ -61,18 +61,22 @@ def get_nonloopback_ip() -> str:
     return ip
 
 
-async def wait_for_injector_peer_candidates(frontend_port: int):
+def get_status(frontend_port: int) -> object:
+    response = requests.get(f"http://localhost:{frontend_port}/api/status")
+    response.raise_for_status()
+    return response.json()
+
+
+async def wait_for_injector_peer_candidates(frontend_port: int) -> None:
     tries = 0
     maxtries = 20
     while True:
 
         print(f"waiting for peers: try {tries+1}/{maxtries}")
-        response = requests.get(f"http://localhost:{frontend_port}/api/status")
-        response.raise_for_status()
-        if response.json()["injector_ready"]:
+        status = get_status(frontend_port)
+        if status["injector_ready"]:
             break
-        peer_n = response.json()["injector_peers_n"]
-
+        peer_n = status["injector_peers_n"]
         tries += 1
         if tries >= maxtries:
             raise Exception(
@@ -276,6 +280,8 @@ async def test_tcp_transport(certificate_file, http_server):
     # Wait for the injector to open port
     await wait_for_benchmark(injector, TestFixtures.TCP_INJECTOR_PORT_READY_REGEX)
 
+    fe_port = TestFixtures.TCP_CLIENT["fe_port"]
+
     # Client
     client = run_tcp_client(
         name=TestFixtures.TCP_CLIENT["name"],
@@ -284,6 +290,8 @@ async def test_tcp_transport(certificate_file, http_server):
             "--cache-type=none",  # Use only Proxy mechanism
             "--listen-on-tcp",
             f"127.0.0.1:{TestFixtures.TCP_CLIENT['port']}",
+            "--front-end-ep",
+            "127.0.0.1:" + str(fe_port),
             "--injector-ep",
             f"tcp:127.0.0.1:{TestFixtures.TCP_INJECTOR_PORT}",
         ],
@@ -291,6 +299,9 @@ async def test_tcp_transport(certificate_file, http_server):
 
     # Wait for the client to open port
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
+
+    # Check that status does not crash
+    get_status(fe_port)
 
     # TODO: No need to randomize in this particular test.
     # One can make another test to check that unique addresses are not cached

@@ -21,6 +21,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
+#include <cstddef>
 #include <memory>
 #include <nlohmann/json.hpp>
 
@@ -721,6 +722,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
+size_t ClientFrontEnd::injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept{
+    if (!client) {
+        return 0;
+    }
+    return client -> injector_candidates_n();
+}
+
 void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , Client::RunningState cstate
                                       , boost::optional<UdpEndpoint> local_ep
@@ -740,8 +748,8 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_access", config.is_injector_access_enabled()},
-        {"injector_peers_n", client -> injector_candidates_n()},
-        {"injector_ready", client -> injector_candidates_n() > 1},
+        {"injector_peers_n", injector_candidates_n(client)},
+        {"injector_ready", injector_candidates_n(client) > 1},
         {"distributed_cache", config.is_cache_access_enabled()},
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},

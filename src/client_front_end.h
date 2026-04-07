@@ -5,6 +5,7 @@
 #include <boost/beast.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
+#include <cstddef>
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"
@@ -191,6 +192,8 @@ private:
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);
     void disable_log_to_file(ClientConfig&);
+
+    size_t injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept;
 };
 
 } // ouinet namespace
