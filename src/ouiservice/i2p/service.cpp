@@ -20,9 +20,17 @@ using namespace ouinet::ouiservice::i2poui;
 #define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
 #define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
 #define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
+#define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__))
 
 static const uint16_t i2cp_port = 7454;
+
+namespace ouinet::ouiservice::i2poui {
+    // In order to prevent double init
+    // This is not a complete solution.
+    // We still cannot reinit a service once all of the services were terminated
+    // We just can make multiple of them
+    size_t init_counter;
+}
 
 Service::Service(const string& datadir, const executor_type& exec, const size_t _number_of_hops_per_tunnel)
     : _exec(exec)
@@ -37,8 +45,11 @@ Service::Service(const string& datadir, const executor_type& exec, const size_t 
 
     std::vector<const char*> argv({"i2pouiservice", datadir_arg.data()});
 
-    i2p::api::InitI2P(argv.size(), (char**) argv.data(), argv[0]);
-    i2p::api::StartI2P();
+    if (init_counter++ == 0) {
+        i2p::api::InitI2P(argv.size(), (char**) argv.data(), argv[0]);
+        i2p::api::StartI2P();
+    }
+
 
     // create local destination shared with client tunnels
     // we might change CryptoType to ECIES or to x25519 once it's available in the network
@@ -61,7 +72,7 @@ Service::Service(const string& datadir, const executor_type& exec, const size_t 
     // Start destination's thread and tunnel pool
     _local_destination->Start ();
 
-    // Access the client address book 
+    // Access the client address book
     _i2p_address_book = &i2p::client::context.GetAddressBook();
 
     //we do not need to start the address book. It is seemingly has been initiated by the client context
@@ -72,7 +83,10 @@ Service::Service(const string& datadir, const executor_type& exec, const size_t 
 Service::~Service()
 {
     if (_local_destination) _local_destination->Stop();
-    i2p::api::StopI2P();
+
+    if (--init_counter == 0) {
+        i2p::api::StopI2P();
+    }
 }
 
 std::unique_ptr<Server> Service::build_server(const std::string& private_key_filename)
@@ -86,7 +100,7 @@ std::unique_ptr<Client> Service::build_client(const std::string& target_id, std:
 }
 
 void Service::load_known_hosts_to_address_book()
-{ 
+{
  if (_i2p_address_book) {
     std::ifstream f(_data_dir + "/" + "hosts.txt", std::ifstream::in);
     if (f.is_open ())
