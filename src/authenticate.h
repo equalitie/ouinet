@@ -53,16 +53,15 @@ bool authenticate( Request& req
     auto auth_i = req.find(http::field::proxy_authorization);
 
     if (auth_i != req.end()) {
-      
-        int invalid;
-        std::string computed = parse_auth(auth_i->value());
-        if (credentials.size() <= 0 || computed.size() != credentials.size()) {
-            invalid = 1;
-        } else {
-            computed.resize(credentials.size());
-            // Constant time memory compare from OpenSSL to avoid timing attacks
-            invalid = CRYPTO_memcmp(credentials.data(), computed.data(), credentials.size());
-        }
+        const std::string computed = parse_auth(auth_i->value());
+        const int invalid = computed.size() != credentials.size()
+                            ? 1
+                            : CRYPTO_memcmp(
+                                credentials.data(),
+                                computed.data(),
+                                credentials.size()
+                              ); // Constant time memory compare from
+                                 // OpenSSL to avoid timing attacks.
 
         // Make sure we don't pass the credentials further.
         req.erase(http::field::proxy_authorization);
