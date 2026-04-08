@@ -909,9 +909,13 @@ Client::State::connect_to_origin( const http::request_header<>& rq
                                 , Cancel& cancel
                                 , YieldContext yield)
 {
-    std::string host;
-    uint16_t port;
-    std::tie(host, port) = util::get_host_port(rq);
+    auto host_port = util::get_host_port(rq);
+
+    if (!host_port) {
+        return or_throw<GenericStream>(yield, asio::error::invalid_argument);
+    }
+
+    auto [host, port] = std::move(*host_port);
 
     sys::error_code ec;
 

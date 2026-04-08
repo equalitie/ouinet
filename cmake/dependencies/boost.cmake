@@ -45,6 +45,7 @@ set(BOOST_COMPONENTS
     regex
     system
     unit_test_framework
+    url
 )
 
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})

@@ -214,7 +214,7 @@ endif()
 
 target_link_libraries(ouinet_common
     PRIVATE
-        lib::url
+        Boost::url
         OpenSSL::Crypto
         ${DEPRECATED_LIBRARIES}
     PUBLIC
