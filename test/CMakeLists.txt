@@ -138,6 +138,9 @@ add_executable(test_dns "test_dns.cpp")
 add_executable(test_fetch "test_fetch.cpp")
 target_link_libraries(test_fetch injector_lib client_lib)
 
+add_executable(test_fetch_i2p_bep3 "./test_fetch_i2p_bep3.cpp")
+target_link_libraries(test_fetch_i2p_bep3 injector_lib client_lib)
+
 ######################################################################
 if(WITH_EXPERIMENTAL)
     add_executable(test_i2p test_i2p.cpp)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 
 #include <boost/asio.hpp>
@@ -13,6 +14,8 @@
 namespace ouinet {
 namespace ouiservice {
 namespace i2poui {
+
+extern size_t init_counter;
 
 class Connection : public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>> {
 public:
