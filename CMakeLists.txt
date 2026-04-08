@@ -88,7 +88,7 @@ include(BuildVersion)
 # This target needs to be linked by all code that includes ouinet headers.
 add_library(ouinet_dependencies INTERFACE)
 target_compile_options(ouinet_dependencies
-    INTERFACE -std=c++20
+    INTERFACE -std=c++23
 )
 target_include_directories(ouinet_dependencies
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
