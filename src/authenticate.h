@@ -2,6 +2,7 @@
 
 #include <boost/beast/core/detail/base64.hpp>
 #include <boost/beast/version.hpp>
+#include <openssl/crypto.h>
 #include "namespaces.h"
 #include "generic_stream.h"
 #include "http_util.h"
@@ -53,12 +54,20 @@ bool authenticate( Request& req
     auto auth_i = req.find(http::field::proxy_authorization);
 
     if (auth_i != req.end()) {
-        bool valid = credentials == parse_auth(auth_i->value());
+        const std::string computed = parse_auth(auth_i->value());
+        const int invalid = computed.size() != credentials.size()
+                            ? 1
+                            : CRYPTO_memcmp(
+                                credentials.data(),
+                                computed.data(),
+                                credentials.size()
+                              ); // Constant time memory compare from
+                                 // OpenSSL to avoid timing attacks.
 
         // Make sure we don't pass the credentials further.
         req.erase(http::field::proxy_authorization);
 
-        if (valid) return true;
+        if (!invalid) return true;
     }
 
     http::response<http::string_body>

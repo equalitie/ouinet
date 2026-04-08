@@ -20,4 +20,6 @@ public:
   std::string helloOuinet();
   void startClient(const std::vector<std::string>& args);
   void stopClient();
+  std::string getProxyEndpoint() const noexcept;
+  std::string getFrontendEndpoint() const noexcept;
 };

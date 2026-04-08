@@ -48,6 +48,7 @@ if [[ $BUILDTYPE == "Release" ]]; then
   mkdir -p ${BINDIR}
   cp ${BUILDDIR}/*.exe ${BINDIR}
   cp ${BUILDDIR}/*lib* ${BINDIR}
+  cp ${SOURCEDIR}/src/client_lib.h ${BINDIR}
   cp ${BUILDDIR}/{gcrypt,gpg_error}/out/{lib,bin}/*dll* ${BINDIR}
   cp ${MSYS2DIR}/{"libgcc_s_seh-1","libstdc++-6","libwinpthread-1","zlib1"}.dll ${BINDIR}
 

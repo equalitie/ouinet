@@ -12,6 +12,7 @@ windows / build:
     - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
     - $libs = @("libgcc_s_seh-1", "libstdc++-6", "libwinpthread-1", "zlib1")
     - foreach ($lib in $libs) { Copy-Item C:\msys64\mingw64\bin\${lib}.dll -Destination ${BUILD_PATH} }
+    - Copy-Item -Path src/client_lib.h -Destination ${BUILD_PATH}
   artifacts:
     paths:
       - $BUILD_PATH/client.exe
@@ -46,3 +47,26 @@ windows / unit-test:
     - if ($testsFailed) { exit 1 }
   needs:
     ['windows / build']
+
+windows / build-release:
+  variables:
+    TARGET_PLATFORM: 'windows'
+    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
+  stage: build
+  tags:
+    - windows-shell
+  script:
+    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
+    - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
+    - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
+    - $libs = @("libgcc_s_seh-1", "libstdc++-6", "libwinpthread-1", "zlib1")
+    - foreach ($lib in $libs) { Copy-Item C:\msys64\mingw64\bin\${lib}.dll -Destination ${BUILD_PATH} }
+    - Copy-Item -Path src/client_lib.h -Destination ${BUILD_PATH}
+  artifacts:
+    paths:
+      - $BUILD_PATH/client.exe
+      - $BUILD_PATH/injector.exe
+      - $BUILD_PATH/*lib*
+    expire_in: 6h
+  needs:
+    []

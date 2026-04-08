@@ -9,9 +9,15 @@ class TestDir {
 public:
     struct Builder {
         bool _delete_if_exists = false;
+        bool _delete_on_exit = false;
 
         Builder delete_if_exists(bool value) {
             _delete_if_exists = value;
+            return *this;
+        }
+
+        Builder delete_on_exit(bool value) {
+            _delete_on_exit = value;
             return *this;
         }
 
@@ -36,16 +42,16 @@ public:
             if (builder->_delete_if_exists && fs::exists(_tempdir)) {
                 fs::remove_all(_tempdir);
             }
+            _delete_on_exit = builder->_delete_on_exit;
         }
 
         fs::create_directories(_tempdir);
     }
 
-    TestDir make_subdir(const std::string& name) const {
+    TestDir make_subdir(const std::string& name) {
         fs::path path = _tempdir / name;
         fs::create_directory(path);
         auto dir = TestDir(path);
-        dir.delete_on_exit(false);
         return dir;
     }
 
@@ -102,7 +108,7 @@ private:
 
 private:
     fs::path _tempdir;
-    bool _delete_on_exit = true;
+    bool _delete_on_exit = false;
 };
 
 } // namespace ouinet
