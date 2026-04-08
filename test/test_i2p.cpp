@@ -61,16 +61,17 @@ float as_seconds(std::chrono::duration<Rep, Period> duration) {
 }
 
 void handle_exception(const char* actor, std::exception_ptr ep) {
+    // NOTE: Don't re-throw from the `catch` blocks as that will cause the
+    // `i2poui::Service` to _not_ call its destructor which in turn will cause
+    // the next test to fail at initialization.
     try {
         if (ep) std::rethrow_exception(ep);
     }
     catch (std::exception const& e) {
         BOOST_ERROR("Actor '" << actor << "' threw an exception: " << e.what());
-        throw;
     }
     catch (...) {
         BOOST_ERROR("Actor '" << actor << "' threw an unknown exception");
-        throw;
     }
 }
 
