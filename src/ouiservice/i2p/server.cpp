@@ -57,6 +57,8 @@ Server::~Server()
 
 void Server::start_listen(asio::yield_context yield)
 {
+    auto cancel = _stopped;
+
     asio::ip::tcp::endpoint endpoint(asio::ip::tcp::v4(), 0);
 
     sys::error_code ec;
@@ -86,19 +88,23 @@ void Server::start_listen(asio::yield_context yield)
     uint16_t port = _tcp_acceptor.local_endpoint().port();
 
     _local_destination = i2p::api::CreateLocalDestination(*_private_keys, true);
+
     do {
-      std::unique_ptr<i2p::client::I2PServerTunnel> i2p_server_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, _local_destination);
-    //i2p_server_tunnel->Start();
-      _server_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_server_tunnel), _timeout);
-      _server_tunnel->wait_to_get_ready(yield[ec]);
-      if (ec) {
-        LOG_DEBUG("I2P server tunnel setup attempt failed; ec=", ec.message());
-      }
-    } while(_server_tunnel->has_timed_out());
+        ec = {};
+        auto i2p_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, _local_destination);
+        _server_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_tunnel), _timeout);
+        _server_tunnel->wait_to_get_ready(yield[ec]);
+        if (ec) {
+            LOG_DEBUG("I2P server tunnel setup attempt failed; ec=", ec.message());
+        }
+    }
+    while(ec && !cancel);
+
+    if (cancel) ec = asio::error::operation_aborted;
 
     if (ec) {
-      _tcp_acceptor.close();
-      return or_throw(yield, ec);
+        _tcp_acceptor.close();
+        return or_throw(yield, ec);
     }
 
 }
