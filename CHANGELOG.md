@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.6.6](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.6) - 2026-04-07
+
 ### Added
 
 - Include debug symbols in iOS xcframework. !161
@@ -25,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 the DHT that happened in the past 5 minutes. !166
 - Perform lookups to injector and bridge swarms in parallel and connect as soon
 as any of the swarms is ready. !166
-- Fix typo in regex that covers IPv6 ULA. 01ea1535
+- Fix typo in regex that covers IPv6 ULA. ba7b248e
 - Fix a crash due to an unitialized shared pointer when requesting status
 endpoint. !168
 - Compilation issues in i2pd's CMakeFile. !168
