@@ -151,3 +151,12 @@ if (WITH_OUISYNC)
     add_executable(test_ouisync "test_ouisync.cpp")
     target_link_libraries(test_ouisync injector_lib client_lib)
 endif()
+
+if(UNIX AND NOT APPLE AND NOT CYGWIN)
+    set(LINUX TRUE)
+endif()
+
+if(LINUX)
+    add_executable(manual_browse_scrape "manual/browse_scrape.cpp")
+    target_link_libraries(manual_browse_scrape client_lib)
+endif()
