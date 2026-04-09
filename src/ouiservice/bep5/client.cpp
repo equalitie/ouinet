@@ -15,6 +15,8 @@
 #include "../../util/handler_tracker.h"
 #include "../../util/wait_condition.h"
 #include "../../util/watch_dog.h"
+#include "../../util/semaphore.h"
+#include <boost/asio/experimental/channel.hpp>
 
 #define _LOGPFX "Bep5Client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -72,48 +74,8 @@ choose_multiplexer_for(bt::DhtBase& dht, const udp::endpoint& ep)
     return boost::none;
 }
 
-// Based on <https://stackoverflow.com/a/7222201>
-// and `../dht_lookup.h`.
-namespace boost {
-static inline void hash_combine(std::size_t& seed, const asio::ip::address& addr)
-{
-    // IPv4 addresses are encoded as IPv4-mapped IPv6 addresses
-    // to hash every address consistently regardless of the protocol version,
-    // so no need to take the protocol into account.
-    //boost::hash_combine(seed, ep.protocol().protocol());
-
-    asio::ip::address_v6::bytes_type addr6{0,0,0,0, 0,0,0,0, 0xff,0xff,0xff,0xff, 0,0,0,0};
-    if (addr.is_v4()) {
-        auto addr4 = addr.to_v4().to_uint();
-        for (unsigned i = 15; i > 11; --i) {
-            addr6[i] = addr4 & 0x000000fful;
-            addr4 >>= 8;
-        }
-    } else {
-        assert(addr.is_v6());
-        addr6 = addr.to_v6().to_bytes();
-    }
-
-    boost::hash_combine(seed, addr6);
-}
-
-static inline void hash_combine(std::size_t& seed, const asio::ip::udp::endpoint& ep)
-{
-    boost::hash_combine(seed, ep.address());
-    boost::hash_combine(seed, ep.port());
-}
-}
-
-template <>
-struct std::hash<asio::ip::udp::endpoint>
-{
-    inline std::size_t operator() (const asio::ip::udp::endpoint& ep) const
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, ep);
-        return seed;
-    }
-};
+constexpr chrono::duration ERROR_WAIT_DURATION = 1s;
+constexpr chrono::duration SUCCESS_WAIT_DURATION = 1min;
 
 struct Bep5Client::Swarm
 {
@@ -125,8 +87,9 @@ private:
     Bep5Client* _owner;
     shared_ptr<bt::DhtBase> _dht;
     bt::NodeID _infohash;
+    SwarmType _type;
     Cancel _lifetime_cancel;
-    size_t _get_peers_call_count = 0;
+    std::optional<chrono::steady_clock::time_point> _last_success_time;
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
     const bool _connect_proxy;
@@ -136,11 +99,13 @@ public:
          , bt::NodeID infohash
          , shared_ptr<bt::DhtBase> dht
          , size_t capacity
+         , SwarmType type
          , Cancel& cancel
          , bool connect_proxy)
         : _owner(owner)
         , _dht(move(dht))
         , _infohash(infohash)
+        , _type(type)
         , _lifetime_cancel(cancel)
         , _peers(capacity)
         , _connect_proxy(connect_proxy)
@@ -161,8 +126,21 @@ public:
 
     const Peers& peers() const { return _peers; }
 
+    std::vector<Candidate> candidates() const {
+            std::vector<Candidate> ret;
+            ret.reserve(_peers.size());
+            for (auto& p : _peers) ret.push_back({p.first, p.second, _type});
+            return ret;
+    }
+
+    bool is_ready() const {
+        if (!_last_success_time) return false;
+        auto duration = chrono::steady_clock::now() - *_last_success_time;
+        return duration < 5 * SUCCESS_WAIT_DURATION;
+    }
+
     void wait_for_ready(Cancel cancel, asio::yield_context yield) {
-        if (_get_peers_call_count != 0) return;
+        if (is_ready()) return;
 
         WaitCondition wc(_dht->get_executor());
 
@@ -200,13 +178,12 @@ private:
 
             if (cancel) break;
 
-            _get_peers_call_count++;
-            _wait_condition_locks.clear();
-
             if (ec) {
-                async_sleep(ex, 1s, cancel, yield);
+                async_sleep(ex, ERROR_WAIT_DURATION, cancel, yield);
                 continue;
             }
+
+            _last_success_time = chrono::steady_clock::now();
 
             if (log_debug()) {
                 _DEBUG("New endpoints: ", endpoints.size());
@@ -216,9 +193,12 @@ private:
             }
 
             add_peers(move(endpoints));
+            _wait_condition_locks.clear();
 
-            async_sleep(ex, 1min, cancel, yield);
+            async_sleep(ex, SUCCESS_WAIT_DURATION, cancel, yield);
         }
+
+        _wait_condition_locks.clear();
     }
 
     bool log_debug() {
@@ -467,7 +447,7 @@ void Bep5Client::start(asio::yield_context yield)
 
         _INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
-        _injector_swarm.reset(new Swarm(this, infohash, _dht, injector_swarm_capacity, _cancel, false));
+        _injector_swarm.reset(new Swarm(this, infohash, _dht, injector_swarm_capacity, SwarmType::injector, _cancel, false));
         _injector_swarm->start();
     }
 
@@ -476,7 +456,7 @@ void Bep5Client::start(asio::yield_context yield)
 
         _INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
-        _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, _cancel, true));
+        _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, SwarmType::helper, _cancel, true));
         _helpers_swarm->start();
 
         _helpers_swarm->wait_for_ready(_cancel, yield);
@@ -499,6 +479,10 @@ void Bep5Client::start(asio::yield_context yield)
 }
 
 size_t Bep5Client::injector_candidates_n() const noexcept {
+    if (!_injector_swarm){
+        return 0;
+    }
+
     return _injector_swarm -> peers().size();
 }
 
@@ -544,63 +528,92 @@ void Bep5Client::status_loop(asio::yield_context yield)
     }
 }
 
-std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
-{
-    std::vector<Candidate> inj;
-    std::vector<Candidate> hlp;
-
-    auto& inj_m = _injector_swarm->peers();
-    auto* hlp_m = _helpers_swarm ? &_helpers_swarm->peers() : nullptr;
-
-    if (target & Target::injectors) {
-        inj.reserve(inj_m.size());
-        for (auto p : inj_m) inj.push_back({p.first, p.second, Target::injectors});
-    }
-
-    if (hlp_m && (target & Target::helpers)) {
-        hlp.reserve(hlp_m->size());
-        for (auto p : *hlp_m) hlp.push_back({p.first, p.second, Target::helpers});
-    }
-
-    std::shuffle(inj.begin(), inj.end(), _random_generator);
-    std::shuffle(hlp.begin(), hlp.end(), _random_generator);
-
-    std::vector<Candidate> ret;
-    ret.reserve(inj.size() + hlp.size());
-
-    for (auto& p : inj) { ret.push_back(p); }
-    for (auto& p : hlp) { ret.push_back(p); }
-
-    //auto wan_eps = _dht->wan_endpoints();
-    //auto lan_eps = _dht->local_endpoints();
-    //cerr << "wan: "; for (auto& i : wan_eps) cerr << i << ","; cerr << "\n";
-    //cerr << "lan: "; for (auto& i : lan_eps) cerr << i << ","; cerr << "\n";
-    //cerr << "inj: "; for (auto& i : inj) cerr << i.endpoint << ","; cerr << "\n";
-    //cerr << "hlp: "; for (auto& i : hlp) cerr << i.endpoint << ","; cerr << "\n";
-
-    // If there is a peer that has woked recently then use that one
-    if (_last_working_ep) {
-        for (auto i = ret.begin(); i != ret.end(); ++i) {
-            if (i->endpoint == *_last_working_ep) {
-                if (i != ret.begin()) {
-                    std::swap(*i, ret.front());
-                }
-                break;
-            }
-        }
-    }
-
-    return ret;
-}
-
 GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel)
 {
     return connect(yield, cancel, true, _default_targets);
 }
 
+using Target = Bep5Client::Target;
+
+struct Bep5Client::Candidates {
+    std::set<udp::endpoint> used_candidates;
+    boost::optional<udp::endpoint> preferred_ep;
+    std::optional<Candidate> preferred;
+    std::vector<Candidate> inj_candidates;
+    std::vector<Candidate> hlp_candidates;
+    std::default_random_engine rand_engine;
+
+    Candidates(boost::optional<udp::endpoint> const& preferred_ep) :
+        preferred_ep(preferred_ep),
+        rand_engine(chrono::system_clock::now().time_since_epoch().count())
+    {}
+
+    void try_insert(Candidate candidate) {
+        if (used_candidates.count(candidate.endpoint)) {
+            return;
+        }
+
+        if (preferred_ep && *preferred_ep == candidate.endpoint) {
+            preferred = candidate;
+            return;
+        }
+
+        if (is_in(candidate, inj_candidates)) return;
+        if (is_in(candidate, hlp_candidates)) return;
+
+        switch (candidate.swarm_type) {
+            case SwarmType::injector:
+                inj_candidates.push_back(candidate);
+                break;
+            case SwarmType::helper:
+                hlp_candidates.push_back(candidate);
+                break;
+        }
+    }
+
+    std::optional<Candidate> pick_candidate() {
+        std::optional<Candidate> ret;
+
+        if (preferred) {
+            ret = std::move(*preferred);
+            preferred.reset();
+        }
+        else {
+            ret = random_remove_from(inj_candidates);
+            if (!ret) ret = random_remove_from(hlp_candidates);
+        }
+
+        if (ret) {
+            used_candidates.insert(ret->endpoint);
+        }
+
+        return ret;
+    }
+
+    std::optional<Candidate> random_remove_from(std::vector<Candidate>& candidates) {
+        if (candidates.empty()) return {};
+        std::uniform_int_distribution<size_t> random{0, candidates.size() - 1};
+        auto i = candidates.begin() + random(rand_engine);
+        auto ret = std::move(*i);
+        auto last = candidates.end() - 1;
+        if (i != last) {
+            *i = std::move(*last);
+        }
+        candidates.resize(candidates.size() - 1);
+        return ret;
+    }
+
+    bool is_in(Candidate& c, std::vector<Candidate> const& in) const {
+        for (auto& i : in) {
+            if (c.endpoint == i.endpoint) return true;
+        }
+        return false;
+    }
+};
+
 GenericStream Bep5Client::connect( asio::yield_context yield
                                  , Cancel& cancel_
-                                 , bool tls
+                                 , bool use_tls
                                  , Target target)
 {
     assert(!_cancel);
@@ -609,69 +622,109 @@ GenericStream Bep5Client::connect( asio::yield_context yield
     Cancel cancel(cancel_);
     auto cancel_con = _cancel.connect([&] { cancel(); });
 
-    sys::error_code ec;
+    auto exec = get_executor();
 
-    if (_injector_swarm && (target & Target::injectors)) {
-        _injector_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, GenericStream());
+    asio::experimental::channel<void(sys::error_code, std::vector<Candidate>)> channel(exec, 2);
+
+    auto inj_swarm = (target & Target::injectors) ? _injector_swarm.get() : nullptr;
+    auto hlp_swarm = (target & Target::helpers)   ? _helpers_swarm. get() : nullptr;
+
+    if (!inj_swarm && !hlp_swarm) {
+        return or_throw<GenericStream>(yield, asio::error::network_unreachable);
     }
-
-    if (_helpers_swarm && (target & Target::helpers)) {
-        _helpers_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, GenericStream());
-    }
-
-    WaitCondition wc(get_executor());
 
     Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
 
-    Target ret_target = Target::none;
-    asio::ip::udp::endpoint ret_ep;
-    GenericStream ret_con;
+    auto close_channel_con = spawn_cancel.connect([&] { if (channel.is_open()) channel.close(); });
 
-    uint32_t i = 0;
+    WaitCondition wc(exec);
 
-    auto exec = get_executor();
+    size_t job_count = (inj_swarm ? 1 : 0) + (hlp_swarm ? 1 : 0);
 
-    for (auto peer : get_peers(target)) {
-        auto j = i++;
+    for (auto swarm : std::array<Swarm*, 2>{inj_swarm, hlp_swarm}) {
+        if (swarm == nullptr) continue;
 
-        const uint32_t k = 10;
-        uint32_t delay_ms = (j <= k) ? 0 : ((j-k) * 100);
-
-        TRACK_SPAWN(exec, ([
-            =,
-            this,
-            &spawn_cancel,
-            &ret_target,
-            &ret_con,
-            &ret_ep,
-            lock = wc.lock()
-        ] (asio::yield_context y) mutable {
+        TRACK_SPAWN(exec, ([&job_count, &channel, &spawn_cancel, swarm, lock = wc.lock()] (auto yield) {
             sys::error_code ec;
-
-            if (delay_ms) {
-                async_sleep(exec, chrono::milliseconds(delay_ms), spawn_cancel, y);
-                if (spawn_cancel) return;
+            swarm->wait_for_ready(spawn_cancel, yield[ec]);
+            if (!ec) {
+                auto peers = swarm->candidates();
+                channel.async_send(sys::error_code(), std::move(peers), yield[ec]);
             }
-
-            _DEBUG("trying to contact", peer.endpoint);
-            auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
-            assert(!spawn_cancel || ec == asio::error::operation_aborted);
-            if (spawn_cancel || ec) return;
-            ret_target = peer.target;
-            ret_con = move(con);
-            ret_ep  = peer.endpoint;
-            spawn_cancel();
+            if (--job_count == 0 && channel.is_open()) {
+                channel.close();
+            }
         }));
     }
 
+    struct Result {
+        SwarmType swarm_type;
+        asio::ip::udp::endpoint endpoint;
+        GenericStream connection;
+    };
+
+    std::optional<Result> result;
+
+    Candidates candidates(_last_working_ep);
+
+    auto concurrency = std::make_optional<util::Semaphore>(10, exec);
+    auto reset_concurrency = spawn_cancel.connect([&concurrency] { concurrency.reset(); });
+
+    while (true) {
+        sys::error_code channel_ec;
+        auto new_candidates = channel.async_receive(yield[channel_ec]);
+
+        if (cancel) channel_ec = asio::error::operation_aborted;
+        if (channel_ec) break;
+
+        for (auto& candidate : new_candidates) {
+            candidates.try_insert(candidate);
+        }
+
+        while (auto peer = candidates.pick_candidate()) {
+            sys::error_code concurrency_ec;
+            if (!concurrency) break;
+            auto concurrency_lock = concurrency->await_lock(yield[concurrency_ec]);
+            if (concurrency_ec || spawn_cancel) break;
+
+            asio::steady_timer timer(exec);
+            timer.expires_after(100ms);
+            timer.async_wait([cl = std::move(concurrency_lock)] (auto) {});
+
+            TRACK_SPAWN(exec, ([
+                self = this,
+                peer,
+                use_tls,
+                &spawn_cancel,
+                &result,
+                lock = wc.lock()
+            ] (asio::yield_context y) mutable {
+                _DEBUG("trying to contact", peer->endpoint);
+
+                sys::error_code ec;
+
+                auto con = self->connect_single(*peer->client, use_tls, spawn_cancel, y[ec]);
+
+                assert(!spawn_cancel || ec == asio::error::operation_aborted);
+                if (spawn_cancel || ec) return;
+
+                result = Result {
+                    peer->swarm_type,
+                    peer->endpoint,
+                    std::move(con)
+                };
+                spawn_cancel();
+            }));
+        }
+    }
+
+    sys::error_code ec;
     wc.wait(yield[ec]);
 
     if (cancel) {
         ec = asio::error::operation_aborted;
     }
-    else if (!ret_con.has_implementation()) {
+    else if (!result) {
         ec = asio::error::network_unreachable;
     }
     else {
@@ -681,27 +734,24 @@ GenericStream Bep5Client::connect( asio::yield_context yield
 
     if (ec) {
         _last_working_ep = boost::none;
-        _DEBUG( "Did not connect to any peer;"
-              , " peers=", i
-              , " ec=", ec);
-    } else {
-        _last_working_ep = ret_ep;
-        if (ret_target == Target::injectors) {
-            if (_injector_pinger)
-                _injector_pinger->injector_was_seen_now();
-            _DEBUG("Connected to injector peer directly; rep=", ret_ep);
-        } else if (ret_target == Target::helpers)
-            _DEBUG("Connected to injector via helper peer (bridge); rep=", ret_ep);
-        else
-            assert(0 && "Invalid peer type");
-    }
 
-    return or_throw(yield, ec, move(ret_con));
+        _DEBUG("Did not connect to injector; ec=", ec);
+        return or_throw<GenericStream>(yield, ec);
+    } else {
+        _last_working_ep = result->endpoint;
+
+        if (result->swarm_type == SwarmType::injector && _injector_pinger) {
+            _injector_pinger->injector_was_seen_now();
+        }
+
+        _DEBUG("Connected to ", result->swarm_type, "; ep=", result->endpoint);
+        return or_throw(yield, ec, std::move(result->connection));
+    }
 }
 
 GenericStream
 Bep5Client::connect_single( AbstractClient& cli
-                          , bool tls
+                          , bool use_tls
                           , Cancel& cancel
                           , asio::yield_context yield)
 {
@@ -709,7 +759,7 @@ Bep5Client::connect_single( AbstractClient& cli
     auto con = cli.connect(yield[ec], cancel);
     return_or_throw_on_error(yield, cancel, ec, GenericStream{});
 
-    if (!tls) return con;
+    if (!use_tls) return con;
 
     assert(_injector_tls_ctx);
 

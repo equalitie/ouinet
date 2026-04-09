@@ -71,7 +71,6 @@
 #include "util/crypto.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
-#include "util/reachability.h"
 #include "util/async_job.h"
 #include "upnp_updater.h"
 #include "util/handler_tracker.h"
@@ -192,10 +191,6 @@ public:
             _bt_dht->stop();
             _bt_dht = nullptr;
         }
-        if (_udp_reachability) {
-            _udp_reachability->stop();
-            _udp_reachability = nullptr;
-        }
         _origin_pools = {};
     }
 
@@ -248,10 +243,6 @@ public:
             = create_udp_multiplexer( _ctx
                                     , _config.repo_root() / "last_used_udp_port"
                                     , _config.udp_mux_port());
-
-        _udp_reachability
-            = make_unique<util::UdpServerReachabilityAnalysis>();
-        _udp_reachability->start(get_executor(), *_udp_multiplexer);
 
         return *_udp_multiplexer;
     }
@@ -593,7 +584,6 @@ private:
 
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
-    unique_ptr<util::UdpServerReachabilityAnalysis> _udp_reachability;
 
     util::LogPath _log_path;
     std::optional<Client::MockDhtBuilder> _bt_dht_builder;
@@ -972,7 +962,6 @@ Response Client::State::fetch_fresh_from_front_end(const Request& rq, YieldConte
                                , local_ep
                                , _upnps_ptr
                                , _bt_dht.get()
-                               , _udp_reachability.get()
                                , metrics_controller
                                , _proxy_endpoint_address, _frontend_endpoint, _frontend_unix_socket_endpoint
                                , cancel
@@ -1252,9 +1241,8 @@ Session Client::State::fetch_fresh_through_simple_proxy
     if (_injector_connections.empty()) {
         _YDEBUG(yield, "Connecting to the injector");
 
-        auto c = yield[ec].tag("connect_to_injector2").run([&] (auto y) {
-            return _injector->connect(y, timeout_cancel);
-        });
+        auto c = _injector->connect(yield[ec].tag("connect_to_injector2").native(), timeout_cancel);
+
         if (ec = compute_error_code(ec, cancel, watch_dog)) {
             _YWARN(yield, "Failed to connect to injector; ec=", ec);
             metrics.finish(ec);
@@ -2314,6 +2302,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         } else {
             reqhp.body_limit(_config.max_request_body_size());
         }
+        reqhp.header_limit(16*1024);
 
         // No timeout either, a keep-alive connection to the user agent
         // will remain open and waiting for new requests

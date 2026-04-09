@@ -135,13 +135,6 @@ struct LocalPeerDiscovery::Impl {
         string data(256*128, '\0');
         udp::endpoint sender_ep;
 
-        bool foo = false;
-        auto cancel_slot = cancel.connect([&] {
-                foo = true;
-                sys::error_code ec;
-                _socket.close(ec);
-            });
-
         auto cc = cancel.connect([&] { _socket.close(); });
 
         while (true) {

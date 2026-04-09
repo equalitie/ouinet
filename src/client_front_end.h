@@ -5,13 +5,13 @@
 #include <boost/beast.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
+#include <cstddef>
 #include <map>
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"
 #include "ouiservice/bep5/client.h"
 #include "ssl/ca_certificate.h"
-#include "util/reachability.h"
 #include "util/yield.h"
 #include "logger.h"
 #include "cxx/metrics.h"
@@ -102,7 +102,6 @@ public:
                   , boost::optional<UdpEndpoint> local_ep
                   , const std::shared_ptr<UPnPs>&
                   , const bittorrent::DhtBase* dht
-                  , const util::UdpServerReachabilityAnalysis*
                   , ClientFrontEndMetricsController&
                   , std::string_view proxy_endpoint
                   , std::string_view frontend_endpoint
@@ -156,7 +155,6 @@ private:
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>& upnps_ptr
                       , const bittorrent::DhtBase*
-                      , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
                       , std::ostringstream&
@@ -170,7 +168,6 @@ private:
                       , boost::optional<UdpEndpoint> local_ep
                       , const std::shared_ptr<UPnPs>&
                       , const bittorrent::DhtBase*
-                      , const util::UdpServerReachabilityAnalysis*
                       , const Request&
                       , Response&
                       , std::ostringstream&
@@ -196,6 +193,8 @@ private:
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);
     void disable_log_to_file(ClientConfig&);
+
+    size_t injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept;
 };
 
 } // ouinet namespace

@@ -39,6 +39,11 @@ if(WIN32 OR MINGW)
     add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
 endif()
 
+if(APPLE AND NOT IOS)
+    # Boost.Stacktrace doesn't need _GNU_SOURCE on macOS
+    add_definitions(-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED)
+endif()
+
 if ((NOT ANDROID) AND (NOT IOS))
     # Adds -fPIC when building static libraries (which I think is the default
     # when building dynamic ones). It's needed on x86 when linking the
@@ -213,6 +218,7 @@ file(GLOB client_sources
     "./src/client.cpp"
     "./src/client_config.cpp"
     "./src/client_front_end.cpp"
+    "./src/client_lib.cpp"
     "./src/cache_control.cpp"
     "./src/request_routing.cpp"
     "./src/ssl/dummy_certificate.cpp"
@@ -230,16 +236,20 @@ file(GLOB client_sources
     "./src/cache/resource_key.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
-    "./src/util/reachability.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
     ${VERSION_CPP}
 )
 
-add_library(client_lib SHARED ${client_sources})
+if (IOS)
+    add_library(client_lib STATIC ${client_sources})
+else()
+    add_library(client_lib SHARED ${client_sources})
+endif()
 if (NOT WIN32 AND NOT MINGW)
     set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
-endif ()
+endif()
+add_library(ouinet::client ALIAS client_lib)
 
 target_link_libraries(client_lib
     PUBLIC

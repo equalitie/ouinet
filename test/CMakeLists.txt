@@ -136,3 +136,13 @@ target_link_libraries(test-injector-resolver injector_lib)
 ######################################################################
 add_executable(test_fetch "test_fetch.cpp")
 target_link_libraries(test_fetch injector_lib client_lib)
+
+######################################################################
+if(UNIX AND NOT APPLE AND NOT CYGWIN)
+    set(LINUX TRUE)
+endif()
+
+if(LINUX)
+    add_executable(manual_browse_scrape "manual/browse_scrape.cpp")
+    target_link_libraries(manual_browse_scrape client_lib)
+endif()
