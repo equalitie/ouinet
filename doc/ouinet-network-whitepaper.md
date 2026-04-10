@@ -250,7 +250,7 @@ When a Ouinet injector has created a canonical response for a newly constructed 
 
 The Ouinet injector adds the following headers to the cache entry:
 
-* `X-Ouinet-Version`: This describes the version of the Ouinet distributed cache storage format. This document describes the distributed cache storage format version **4**.
+* `X-Ouinet-Version`: This describes the version of the Ouinet distributed cache storage format. This document describes the distributed cache storage format version **7**.
 * `X-Ouinet-URI`: Contains the URI of the resource described by this cache entry.
 * `X-Ouinet-Injection`: This describes a unique ID assigned to this cache entry, allowing a receiver to refer unambiguously to this specific cache entry, as well as the time at which the cache entry was created. Encoded as `X-Ouinet-Injection: id=<string>,ts=<timestamp>`, where `<string>` is a string containing only alphanumeric characters, dashes, and underscores; and `<timestamp>` is an integer value, representing a timestamp expressed as the number of seconds since 1970-01-01 00:00:00 UTC.
 
