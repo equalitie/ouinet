@@ -456,9 +456,7 @@ private:
             return or_throw(yield, _##WHAT##_start_ec); \
         \
         sys::error_code ec; \
-        yield[ec].tag("wait_for_" #WHAT).run([&] (auto y) { \
-            _##WHAT##_starting->wait(cancel, y); \
-        }); \
+        _##WHAT##_starting->wait(cancel, yield[ec].tag("wait_for_" #WHAT).native()); \
         ec = compute_error_code(ec, cancel); \
         if (ec && ec != asio::error::operation_aborted) \
             LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
@@ -784,10 +782,8 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
                                      , cyield.tag("handle_no_injectors_error"));
         }
 
-        auto inj = cyield[ec].tag("connect_to_injector").run([&] (auto y) {
-            return _bep5_client->connect( y, cancel
+        auto inj = _bep5_client->connect( cyield[ec].tag("connect_to_injector").native(), cancel
                                         , false, ouiservice::Bep5Client::injectors);
-        });
 
         ec = compute_error_code(ec, cancel);
         if (ec == asio::error::operation_aborted) return or_throw(cyield, ec);
@@ -810,9 +806,7 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
             _YDEBUG(cyield, "END; ec=", ec, " fwd_bytes_c2i=", fwd_bytes_c2i, " fwd_bytes_i2c=", fwd_bytes_i2c);
         });
 
-        cyield[ec].tag("write_res").run([&] (auto y) {
-            util::http_reply(con, res, y);
-        });
+        util::http_reply(con, res, cyield[ec].tag("write_res").native());
         return_or_throw_on_error(cyield, cancel, ec);
 
         // Forward the rest of data in both directions.
@@ -944,11 +938,10 @@ Client::State::fetch_via_self( Rq request
     request.keep_alive(true);
 
     _YDEBUG(yield, "Sending a request to self");
+
     // Send request
-    yield[ec].tag("write_self_req").run([&] (auto y) {
-        request.prepare_payload();
-        http::async_write(con, request, y);
-    });
+    request.prepare_payload();
+    http::async_write(con, request, yield[ec].tag("write_self_req").native());
 
     if (ec = compute_error_code(ec, cancel)) {
         _YERROR(yield, "Failed to send request to self; ec=", ec);
@@ -1120,10 +1113,10 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
     // Send request
-    yield[ec].tag("write_origin_req").run([&] (auto y) {
+    {
         auto con_close = timeout_cancel.connect([&] { con.close(); });
-        http::async_write(con, rq_, y);
-    });
+        http::async_write(con, rq_, yield[ec].tag("write_origin_req").native());
+    };
 
     if (ec = compute_error_code(ec, cancel, watch_dog)) {
         if (metrics) metrics->finish(ec);
@@ -1186,9 +1179,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
     assert(_injector);
 
-    auto inj = yield[ec].tag("connect_to_injector").run([&] (auto y) {
-        return _injector->connect(y, timeout_cancel);
-    });
+    auto inj = _injector->connect(yield[ec].tag("connect_to_injector").native(), timeout_cancel);
 
     ec = compute_error_code(ec, cancel, watch_dog);
     if (ec) {
@@ -1210,10 +1201,8 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
     // Open a tunnel to the origin
     // (to later perform the SSL handshake and send the request).
-    yield[ec].tag("connreq").run([&] (auto y) {
-        connreq.prepare_payload();
-        util::http_request(inj.connection, connreq, timeout_cancel, y);
-    });
+    connreq.prepare_payload();
+    util::http_request(inj.connection, connreq, timeout_cancel, yield[ec].tag("connreq").native());
 
     ec = compute_error_code(ec, cancel, watch_dog);
     if (ec) {
@@ -1228,9 +1217,7 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
     {
         auto r = std::make_unique<http_response::Reader>(std::move(inj.connection));
 
-        auto part = yield[ec].tag("read_hdr").run([&] (auto y) {
-            return r->async_read_part(timeout_cancel, y);
-        });
+        auto part = r->async_read_part(timeout_cancel, yield[ec].tag("read_hdr").native());
 
         ec = compute_error_code(ec, cancel, watch_dog);
         if (ec) {
@@ -1274,10 +1261,10 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
     // TODO: move
     auto rq_ = util::req_form_from_absolute_to_origin(rq);
 
-    yield[ec].tag("write_req").run([&] (auto y) {
+    {
         auto slot = timeout_cancel.connect([&con] { con.close(); });
-        http::async_write(con, rq_, y);
-    });
+        http::async_write(con, rq_, yield[ec].tag("write_req").native());
+    };
 
     ec = compute_error_code(ec, cancel, watch_dog);
     if (ec) {
@@ -1370,9 +1357,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
 
     _YDEBUG(yield, "Sending a request to the injector");
     // Send request
-    yield[ec].tag("write_injector_req").run([&] (auto y) {
-        request.async_write(con, y);
-    });
+    request.async_write(con, yield[ec].tag("write_injector_req").native());
 
     if (ec = compute_error_code(ec, cancel, watch_dog)) {
         _YWARN(yield, "Failed to send request to the injector; ec=", ec);
@@ -1466,9 +1451,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     // and ignore the rest of the response so the connection can potentially be
     // reused.
     auto ignore_rest = [](Session& session, Cancel& cancel, YieldContext yield) {
-        yield.run([&] (auto yield) {
-            session.flush_response(cancel, yield, [](auto part, auto cancel, auto yield) {}, 60s);
-        });
+        session.flush_response(cancel, yield.native(), [](auto part, auto cancel, auto yield) {}, 60s);
     };
 
     LOG_DEBUG(yield, " Metrics direct: ec:\"", direct_ec.message(), "\" result:", direct_session.response_header().result());
@@ -2268,21 +2251,15 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     if (ec) return or_throw(yield, ec, true);
 
-    yield[ec].tag("write_req").run([&] (auto y) {
-        http::async_write(origin, rq, y);
-    });
+    http::async_write(origin, rq, yield[ec].tag("write_req").native());
 
     beast::flat_buffer origin_rbuf;
     Response rs;
-    yield[ec].tag("read_res").run([&] (auto y) {
-        http::async_read(origin, origin_rbuf, rs, y);
-    });
+    http::async_read(origin, origin_rbuf, rs, yield[ec].tag("read_res").native());
 
     if (ec) return or_throw(yield, ec, true);
 
-    yield[ec].tag("write_res").run([&] (auto y) {
-        http::async_write(browser, rs, y);
-    });
+    http::async_write(browser, rs, yield[ec].tag("write_res").native());
 
     if (rs.result() != http::status::switching_protocols) return true;
 
@@ -2395,9 +2372,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         // until the later desires to close it.
         YieldContext yield = yield_.tag(util::str("R", next_request_id++));
 
-        yield[ec].tag("read_req").run([&] (auto y) {
-            http::async_read(con, con_rbuf, reqhp, y);
-        });
+        http::async_read(con, con_rbuf, reqhp, yield[ec].tag("read_req").native());
 
         if ( ec == http::error::end_of_stream
           || ec == asio::ssl::error::stream_truncated
@@ -2444,9 +2419,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         // Authentication is needed only for the outer HTTP SSL CONNECT request,
         // not the inner HTTP GET inside the SSL.
         if (!mitm) {
-            bool auth = yield[ec].tag("auth").run([&] (auto y) {
-                return authenticate(req, con, _config.client_credentials(), y);
-            });
+            bool auth = authenticate(req, con, _config.client_credentials(), yield[ec].tag("auth").native());
             if (!auth) {
                 _YWARN(yield, "Request authentication failed, discarding");
                 continue;
@@ -2463,9 +2436,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         if (!mitm && req.method() == http::verb::connect) {
             sys::error_code ec;
             // Subsequent access to the connection will use the encrypted channel.
-            yield[ec].tag("mitm_handshake").run([&] (auto y) {
-                con = ssl_mitm_handshake(move(con), req, y);
-            });
+            con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_handshake").native());
             if (ec) {
                 _YERROR(yield, "MitM exception; ec=", ec);
                 break;
@@ -3014,9 +2985,7 @@ void Client::State::start_ouinet()
                   sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
-                  yield[ec].tag("read_req").run([&] (auto y) {
-                      http::async_read(c, c_rbuf, rq, y);
-                  });
+                  http::async_read(c, c_rbuf, rq, yield[ec].tag("read_req").native());
 
                   if (ec) return;
 
@@ -3024,9 +2993,7 @@ void Client::State::start_ouinet()
 
                   if (ec) return;
 
-                  yield[ec].tag("write_res").run([&] (auto y) {
-                      http::async_write(c, rs, y);
-                  });
+                  http::async_write(c, rs, yield[ec].tag("write_res").native());
             });
         }));
     }
@@ -3050,9 +3017,7 @@ void Client::State::start_ouinet()
                   sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
-                  yield[ec].tag("read_req_u_s").run([&] (auto y) {
-                      http::async_read(c, c_rbuf, rq, y);
-                  });
+                  http::async_read(c, c_rbuf, rq, yield[ec].tag("read_req_u_s").native());
 
                   if (ec) return;
 
@@ -3060,9 +3025,7 @@ void Client::State::start_ouinet()
 
                   if (ec) return;
 
-                  yield[ec].tag("write_res_u_s").run([&] (auto y) {
-                      http::async_write(c, rs, y);
-                  });
+                  http::async_write(c, rs, yield[ec].tag("write_res_u_s").native());
             });
         }));
     }

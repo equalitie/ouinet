@@ -263,10 +263,8 @@ void handle_connect_request( GenericStream client_c
         yield.log("END; ec=", ec, " fwd_bytes_c2o=", fwd_bytes_c2o, " fwd_bytes_o2c=", fwd_bytes_o2c);
     });
 
-    auto origin_c = yield[ec].tag("connect").run([&] (auto y) {
-        return connect_to_host( lookup, exec, default_timeout::tcp_connect()
-                              , cancel, y);
-    });
+    auto origin_c = connect_to_host( lookup, exec, default_timeout::tcp_connect()
+                                   , cancel, yield[ec].tag("connect").native());
 
     if (ec) {
         sys::error_code he_ec;
@@ -403,9 +401,7 @@ private:
             // Send HTTP request to origin.
             auto orig_rq = util::to_origin_request(cache_rq);
             orig_rq.keep_alive(true);  // regardless of what client wants
-            yield[ec].tag("request").run([&] (auto y) {
-                util::http_request(orig_con, orig_rq, timeout_cancel, y);
-            });
+            util::http_request(orig_con, orig_rq, timeout_cancel, yield[ec].tag("request").native());
             if (ec = compute_error_code(ec, cancel, fetch_wd)) {
                 yield.log("Failed to send request; ec=", ec);
                 return or_throw(yield, ec);
@@ -447,8 +443,9 @@ private:
         yield.log("=== Sending back injector response ===");
         yield.log(orig_sess.response_header());
 
-        yield.tag("flush")[ec].run([&] (auto y) {
-            orig_sess.flush_response(cancel, y, [&con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
+        orig_sess.flush_response(cancel
+                                , yield[ec].tag("flush").native()
+                                , [&con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(con, cc, yy[ee]);
                 return_or_throw_on_error(yy, cc, ee);
@@ -456,8 +453,9 @@ private:
                     fwd_bytes += b->size();
                 else if (auto cb = part.as_chunk_body())
                     fwd_bytes += cb->size();
-            }, default_timeout::activity());
-        });
+            }
+            , default_timeout::activity());
+
         if (ec = compute_error_code(ec, cancel, overlong_wd)) {
             yield.log("Failed to process response; ec=", ec);
             return or_throw(yield, ec);
@@ -552,9 +550,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
         rs.keep_alive(rq.keep_alive());
         rs.prepare_payload();
 
-        yield.tag("write_res").run([&] (auto y) {
-            util::http_reply(con, rs, y);
-        });
+        util::http_reply(con, rs, yield.tag("write_res").native());
         return;
     }
 
@@ -609,9 +605,7 @@ void serve( const InjectorConfig& config
 
             auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
 
-            yield[ec].tag("read_req").run([&] (auto y) {
-                http::async_read(con, con_rbuf, req, y);
-            });
+            http::async_read(con, con_rbuf, req, yield[ec].tag("read_req").native());
 
             ec = compute_error_code(ec, cancel, wd);
             if (ec) break;
@@ -629,9 +623,8 @@ void serve( const InjectorConfig& config
             continue;
         }
 
-        bool auth = yield[ec].tag("auth").run([&] (auto y) {
-                return authenticate(req, con, config.credentials(), y);
-        });
+        bool auth = authenticate(req, con, config.credentials(), yield[ec].tag("auth").native());
+
         if (!auth) {
             yield.log("Proxy authentication failed");
             if (ec || !req_keep_alive) break;
@@ -693,9 +686,7 @@ void serve( const InjectorConfig& config
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                pyield[ec].tag("send_request").run([&] (auto y) {
-                    util::http_request(orig_con, orig_req, cancel, y);
-                });
+                util::http_request(orig_con, orig_req, cancel, pyield[ec].tag("send_request").native());
             }
             bool res_keep_alive = false;
             bool client_was_written_to = false;
@@ -714,8 +705,9 @@ void serve( const InjectorConfig& config
                     pyield.log("=== Sending back proxy response ===");
                     pyield.log(inh);
 
-                    pyield[ec].tag("flush").run([&] (auto y) {
-                        orig_sess.flush_response(cancel, y, [&] (auto&& part, auto& cc, auto yy) {
+                    orig_sess.flush_response(cancel
+                                            , pyield[ec].tag("flush").native()
+                                            , [&] (auto&& part, auto& cc, auto yy) {
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
                             client_was_written_to = true;  // even with error (possible partial write)
@@ -724,8 +716,8 @@ void serve( const InjectorConfig& config
                                 fwd_bytes += b->size();
                             else if (auto cb = part.as_chunk_body())
                                 fwd_bytes += cb->size();
-                        }, default_timeout::activity());
-                    });
+                        }
+                        , default_timeout::activity());
                 }
                 rrp = orig_sess.release_reader();
                 if (rrp)

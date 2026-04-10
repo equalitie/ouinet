@@ -12,8 +12,6 @@
 
 namespace ouinet {
 
-using ouinet::util::AsioExecutor;
-
 class YieldContext
 {
 public:
@@ -39,7 +37,7 @@ public:
         return YieldContext(_asio_yield[ec], _log_path);
     }
 
-    AsioExecutor get_executor() const {
+    asio::any_io_executor get_executor() const {
         return _asio_yield.get_executor();
     }
 
@@ -56,30 +54,6 @@ public:
     YieldContext ignore_error()
     {
         return YieldContext(_asio_yield[*_ignored_error], _log_path);
-    }
-
-    // Use this to keep this instance (with tag, tracking, etc.) alive
-    // while running code which only accepts plain `asio::yield_context`.
-    //
-    // Example:
-    //
-    //     auto foo = yield[ec].tag("foo").run([&] (auto y) { return do_foo(a, y); });
-    //
-    // Where `do_foo` only accepts `asio::yield_context`.
-    //
-    // You can spare some boilerplate by defining a macro like:
-    //
-    //     #define YIELD_KEEP(_Y, _C) ((_Y).run([&] (auto __Y) { return (_C); }));
-    //
-    // And using it like:
-    //
-    //     auto foo = YIELD_KEEP(yield[ec].tag("foo"), do_foo(a, __Y));
-    //
-    // TODO: This function is deprecated, use `native()` instead.
-    template<class F>
-    auto
-    run(F&& f) {
-        return std::forward<F>(f)(_asio_yield);
     }
 
     template<class F> void spawn_detached(F&& lambda) {
