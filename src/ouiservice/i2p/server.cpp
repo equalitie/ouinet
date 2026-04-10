@@ -158,8 +158,18 @@ GenericStream Server::accept_without_handshake(asio::yield_context yield)
         return or_throw<GenericStream>(yield, ec);
     }
 
+    // On Linux, i2pd maps the peer's IdentHash to a unique loopback address
+    // (127.x.y.z where x.y.z are the first 3 bytes of the IdentHash).
+    // Capture it before moving the connection.
+    std::string remote_ep;
+    {
+        sys::error_code ep_ec;
+        auto ep = connection.socket().remote_endpoint(ep_ec);
+        if (!ep_ec) remote_ep = ep.address().to_string();
+    }
+
     _server_tunnel->intrusive_add(connection);
-    return GenericStream(std::move(connection));
+    return GenericStream(std::move(connection), std::move(remote_ep));
 }
 
 std::string Server::public_identity() const
