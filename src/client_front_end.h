@@ -5,8 +5,8 @@
 #include <boost/beast.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
-#include <map>
 #include <cstddef>
+#include <map>
 #include "client.h"
 #include "namespaces.h"
 #include "ouiservice/bep5/client.h"

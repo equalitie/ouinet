@@ -192,7 +192,7 @@ injector-credentials = test_user_change_me:test_password_change_me
 
 The value of `cache-http-public-key` can be obtained from the injector file
 named `ed25519-public-key` or from the injector log entry that starts with
-`[INFO] Injector swarm: sha1('ed25519:abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno/v6/injectors`.
+`[INFO] Injector swarm: sha1('ed25519:abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmno/v7/injectors`.
 
 `injector-tls-cert-file` is the path to the `tls-cert.pem` copied from the
 injector and `injector-credentials` should be set to the same value defined

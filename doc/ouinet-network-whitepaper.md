@@ -250,7 +250,7 @@ When a Ouinet injector has created a canonical response for a newly constructed 
 
 The Ouinet injector adds the following headers to the cache entry:
 
-* `X-Ouinet-Version`: This describes the version of the Ouinet distributed cache storage format. This document describes the distributed cache storage format version **4**.
+* `X-Ouinet-Version`: This describes the version of the Ouinet distributed cache storage format. This document describes the distributed cache storage format version **7**.
 * `X-Ouinet-URI`: Contains the URI of the resource described by this cache entry.
 * `X-Ouinet-Injection`: This describes a unique ID assigned to this cache entry, allowing a receiver to refer unambiguously to this specific cache entry, as well as the time at which the cache entry was created. Encoded as `X-Ouinet-Injection: id=<string>,ts=<timestamp>`, where `<string>` is a string containing only alphanumeric characters, dashes, and underscores; and `<timestamp>` is an integer value, representing a timestamp expressed as the number of seconds since 1970-01-01 00:00:00 UTC.
 
@@ -380,7 +380,7 @@ An injector server using Ed25519 private key `KEY` might construct the following
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -407,7 +407,7 @@ In this signature, `<key>` stands for the public key associated with the `KEY` p
 ```
 (response-status): 200
 (created): 1584748800
-x-ouinet-version: 6
+x-ouinet-version: 7
 x-ouinet-uri: https://example.com/hello
 x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -443,7 +443,7 @@ In the computation of `header-signature` in the above, `<key>` stands for the pu
 ```
 (response-status): 200
 (created): 1584748800
-x-ouinet-version: 6
+x-ouinet-version: 7
 x-ouinet-uri: https://example.com/hello
 x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -512,7 +512,7 @@ An injector server transmitting the example cache entry described at the end of 
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -539,7 +539,7 @@ If the injector server decided to only create a complete cache entry signature, 
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -560,7 +560,7 @@ When sending only a complete cache signature like the example above, the injecto
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -626,7 +626,7 @@ A client wishing to fetch only the second half of the example cache entry descri
 
 ```
 GET https://example.com/hello HTTP/1.1
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 Range: bytes=6-11
 
 ```
@@ -635,7 +635,7 @@ If the receiving client contains a cache entry for this resource signed using a 
 
 ```
 HTTP/1.1 206 Partial Content
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -687,7 +687,7 @@ In addition to transferring cache entries between different participants in the 
 
 To circulate cached content out of band, formats for data at rest are defined.  A *static cache repository* is a directory consisting of two subdirectories:
 
-* One to hold cache entries; for version 3 of the signed HTTP storage format, this is called `data-v3`.
+* One to hold cache entries; for version 4 of the signed HTTP storage format, this is called `data-v4`.
 * One to hold resource group information; for version 0 of the DHT group storage format, this is called `dht_groups`.
 
 Each resource group with a distinctive bytestring `<resource-group>` has a group directory named `dht_groups/<lower-hex(sha1(resource-group))>` containing:
@@ -695,7 +695,7 @@ Each resource group with a distinctive bytestring `<resource-group>` has a group
 * A `group_name` file with `<resource-group>` as its only content (no trailing newline).
 * An `items` subdirectory with one file per cache entry having that belongs to the group; the file contains the entry's `<resource-uri>` as its only content (no trailing newline) and is named `<lower-hex(sha1(resource-uri))>`.
 
-Each cache entry with a `<resource-uri>` and thus `<uri-hash=lower-hex(sha1(resource-uri))>` has a directory named `data-v3/<uri-hash[0:2]>/<uri-hash[2:]>`. The splitting of the directory name avoids having too many entries directly under `data-v3`. The entry's directory contains:
+Each cache entry with a `<resource-uri>` and thus `<uri-hash=lower-hex(sha1(resource-uri))>` has a directory named `data-v4/<uri-hash[0:2]>/<uri-hash[2:]>`. The splitting of the directory name avoids having too many entries directly under `data-v4`. The entry's directory contains:
 
 * A `head` file holding the whole raw HTTP head with response status and headers (except framing), and `X-Ouinet-*` headers conforming its signature (as described in the [Signature computation](#signature-computation) section). Lines are CRLF-terminated and a final empty line is included.
 * If the resource has a non-empty body, a `sigs` file with one fixed-width, LF-terminated line per data block. The i-th line corresponds to the i-th block and has this content: `<padded-offset(i)> <base64(block-signature(i))> <base64(hash(i))> <base64(chained-hash(i-1))>`, where `padded-offset(i)` is the offset of the block in lower-case hexadecimal zero-padded to 16 characters, separators are a single space, and hashes and signatures are those defined in the [Stream signatures](#stream-signatures) section; `chained-hash(-1)` is defined as a hash-length string of NUL bytes.

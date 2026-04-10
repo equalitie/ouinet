@@ -853,8 +853,8 @@ Client::build( AsioExecutor ex
              , YieldContext yield)
 {
     using ClientPtr = unique_ptr<Client>;
-    static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2"};
-    static const auto store_curver_subdir = "data-v3";
+    static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2", "data-v3"};
+    static const auto store_curver_subdir = "data-v4";
 
     sys::error_code ec;
 

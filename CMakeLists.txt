@@ -280,7 +280,6 @@ file(GLOB client_sources
     "./src/util/temp_dir.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
-    ${OUISERVICE_OUISYNC_CPP_FILES}
     ${VERSION_CPP}
 )
 
