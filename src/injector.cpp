@@ -138,18 +138,20 @@ void handle_no_proxy( GenericStream& con
 // (the returned lookup may not be usable then).
 TcpLookup
 resolve_target(const http::request_header<>& req
-                      , bool allow_private_targets
-                      , std::shared_ptr<dns::Resolver> dns_resolver
-                      , AsioExecutor exec
-                      , Cancel& cancel
-                      , YieldContext yield)
+              , bool allow_private_targets
+              , std::shared_ptr<dns::Resolver> dns_resolver
+              , AsioExecutor exec
+              , Cancel& cancel
+              , YieldContext yield)
 {
     TcpLookup lookup;
     sys::error_code ec;
 
-    string host;
-    uint16_t port;
-    tie(host, port) = util::get_host_port(req);
+    auto host_port = util::get_host_port(req);
+    if (!host_port) {
+        return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+    }
+    auto [host, port] = std::move(*host_port);
 
     // First test trivial cases (like "localhost" or "127.1.2.3").
     bool local = boost::regex_match(host, util::localhost_rx);
@@ -218,7 +220,10 @@ void handle_connect_request( GenericStream client_c
     if (ec) {
         sys::error_code he_ec;
         string host;
-        tie(host, ignore) = util::get_host_port(req);
+        auto host_port = util::get_host_port(req);
+        if (host_port) {
+            host = std::move(host_port->first);
+        }
 
         if (ec == asio::error::invalid_argument)
             return handle_error( client_c, req, http::status::bad_request
@@ -879,9 +884,6 @@ Injector::Injector(
     if (_config.is_private_target_allowed()) {
         LOG_INFO(log_path, "Allowing injection of private targets.");
         g_allow_private_targets = true;
-    }
-    if (!_config.is_doh_enabled()) {
-        LOG_INFO("DNS over HTTPS is disabled.");
     }
     LOG_INFO( "DNS protocols enabled: ["
             , dns::Resolver::protos_to_str(_config.dns_config().protocols)

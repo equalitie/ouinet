@@ -18,11 +18,12 @@ namespace ouinet::ouiservice::i2poui {
 class Service;
 
 class Server : public ouinet::OuiServiceImplementationServer {
+    using executor_type = asio::any_io_executor;
 public:
 
     Server( std::shared_ptr<Service> service
           , const std::string& private_key_filename
-            , uint32_t timeout, const AsioExecutor&);
+            , uint32_t timeout, const executor_type&);
 
 public:
     ~Server();
@@ -45,7 +46,7 @@ private:
 
 private:
     std::shared_ptr<Service> _service;
-    AsioExecutor _exec;
+    executor_type _exec;
     std::unique_ptr<i2p::data::PrivateKeys> _private_keys;
     uint32_t _timeout;
 

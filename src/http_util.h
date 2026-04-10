@@ -29,7 +29,7 @@ namespace util {
 // Get the host and port a request refers to,
 // either from the ``Host:`` header or from the target URI.
 // IPv6 addresses are returned without brackets.
-std::pair<std::string, uint16_t>
+std::optional<std::pair<std::string, uint16_t>>
 get_host_port(const http::request_header<>&);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -405,9 +405,9 @@ template<class Request>
 bool req_ensure_host(Request& req) {
     if (!req[http::field::host].empty()) return true;
 
-    std::string host;
-    uint16_t port;
-    std::tie(host, port) = util::get_host_port(req);
+    auto host_port = util::get_host_port(req);
+    if (!host_port) return false;
+    auto [host, port] = std::move(*host_port);
     auto hosth = detail::http_host_header(host, std::to_string(port));
     if (hosth.empty()) return false;  // error
     req.set(http::field::host, hosth);

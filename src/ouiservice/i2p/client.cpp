@@ -18,7 +18,7 @@ namespace ouinet::ouiservice::i2poui {
 
 using namespace std;
 
-Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const AsioExecutor& exec, std::shared_ptr<i2p::client::ClientDestination> destination)
+Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const executor_type& exec, std::shared_ptr<i2p::client::ClientDestination> destination)
     : _service(service)
     , _exec(exec)
     , _target_id(target_id)
@@ -37,11 +37,12 @@ Client::~Client()
 
 void Client::start(asio::yield_context yield)
 {
-    Cancel stopped = _stopped;
+    Cancel cancel = _stopped;
 
     sys::error_code ec;
 
     do {
+        ec = {};
         auto i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>(
                 "i2p_oui_client",
                 _target_id,
@@ -50,12 +51,11 @@ void Client::start(asio::yield_context yield)
                 _destination);
 
         _client_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_client_tunnel), _timeout);
-
         _client_tunnel->wait_to_get_ready(yield[ec]);
-    } while(_client_tunnel->has_timed_out() && !stopped);
+    }
+    while(ec && !cancel);
 
-    if (!ec && !_client_tunnel) ec = asio::error::operation_aborted;
-    ec = compute_error_code(ec, stopped);
+    ec = compute_error_code(ec, cancel);
     if (ec) return or_throw(yield, ec);
 
     _port = _client_tunnel->local_endpoint().port();
@@ -69,7 +69,7 @@ void Client::stop()
     _stopped();
 }
 
-inline void exponential_backoff(AsioExecutor& exec, uint32_t i, Cancel& cancel, asio::yield_context yield) {
+inline void exponential_backoff(uint32_t i, Cancel& cancel, asio::yield_context yield) {
     // Constants in this function are made up, feel free to modify them as needed.
     if (i < 3) return;
     i -= 3;
@@ -105,7 +105,7 @@ Client::connect(asio::yield_context yield, Cancel& cancel)
         assert(ec);
 
         ec = {};
-        exponential_backoff(_exec, i, cancel, yield[ec]);
+        exponential_backoff(i, cancel, yield[ec]);
 
         if (ec) {
             return or_throw<GenericStream>(yield, ec);
@@ -139,7 +139,7 @@ Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
 
         if (ec) {
             ec = {};
-            exponential_backoff(_exec, i, cancel, yield[ec]);
+            exponential_backoff(i, cancel, yield[ec]);
             if (ec) return or_throw<GenericStream>(yield, ec);
             continue;
         }

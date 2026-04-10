@@ -59,6 +59,11 @@ if(WIN32 OR MINGW)
     add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
 endif()
 
+if(APPLE AND NOT IOS)
+    # Boost.Stacktrace doesn't need _GNU_SOURCE on macOS
+    add_definitions(-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED)
+endif()
+
 if ((NOT ANDROID) AND (NOT IOS))
     # Adds -fPIC when building static libraries (which I think is the default
     # when building dynamic ones). It's needed on x86 when linking the
@@ -88,7 +93,7 @@ include(BuildVersion)
 # This target needs to be linked by all code that includes ouinet headers.
 add_library(ouinet_dependencies INTERFACE)
 target_compile_options(ouinet_dependencies
-    INTERFACE -std=c++20
+    INTERFACE -std=c++23
 )
 target_include_directories(ouinet_dependencies
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -214,11 +219,12 @@ endif()
 
 target_link_libraries(ouinet_common
     PRIVATE
-        lib::url
+        Boost::url
         OpenSSL::Crypto
         ${DEPRECATED_LIBRARIES}
     PUBLIC
         ${OUINET_HARDCODED_CA_CERTS}
+        ${EXPERIMENTAL_LIBRARIES}
         ouinet_dependencies
         Boost::iostreams
         lib::json
@@ -240,10 +246,6 @@ if(WITH_EXPERIMENTAL)
     target_compile_definitions(ouinet_common
         PUBLIC -D__EXPERIMENTAL__
     )
-    target_include_directories(ouinet_common PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ouiservice/i2p/i2pd/libi2pd"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ouiservice/i2p/i2pd/libi2pd_client"
-    )
 endif()
 
 ################################################################################
@@ -258,6 +260,7 @@ file(GLOB client_sources
     "./src/client.cpp"
     "./src/client_config.cpp"
     "./src/client_front_end.cpp"
+    "./src/client_lib.cpp"
     "./src/cache_control.cpp"
     "./src/request_routing.cpp"
     "./src/ssl/dummy_certificate.cpp"
@@ -275,17 +278,25 @@ file(GLOB client_sources
     "./src/cache/resource_key.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
-    "./src/util/reachability.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
     ${OUISERVICE_OUISYNC_CPP_FILES}
     ${VERSION_CPP}
 )
 
-add_library(client_lib SHARED ${client_sources})
+if (IOS)
+    add_library(client_lib STATIC ${client_sources})
+else()
+    add_library(client_lib SHARED ${client_sources})
+endif()
 if (NOT WIN32 AND NOT MINGW)
     set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
-endif ()
+endif()
+add_library(ouinet::client ALIAS client_lib)
+
+if (WITH_OUISYNC)
+    set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)
+endif()
 
 if (WITH_OUISYNC)
     set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)

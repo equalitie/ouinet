@@ -9,6 +9,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.6](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.6) - 2026-04-07
+
+### Added
+
+- Include debug symbols in iOS xcframework. !161
+- Added setDisableDoH/getDisableDoH for DNS-over-HTTPS control for iOS. !158
+- Added getProxyEndpoint/getFrontendEndpoint methods for iOS. !158
+- Expose C style Ouinet `client_lib`. !163
+- New CI job to build Windows artifacts in release mode. !163
+- CMake target which creates a binary for manually testing scrapes. !165
+
+### Fixed
+
+- iOS thread safety issues when stopping the client or getting runtime state. 158
+- Cleaned up redundant cancel handler in `local_peer_discovery`. !158
+- Fix `wait_for_ready` function to wait until there's a successful lookup to
+the DHT that happened in the past 5 minutes. !166
+- Perform lookups to injector and bridge swarms in parallel and connect as soon
+as any of the swarms is ready. !166
+- Fix typo in regex that covers IPv6 ULA. ba7b248e
+- Fix a crash due to an unitialized shared pointer when requesting status
+endpoint. !168
+- Compilation issues in i2pd's CMakeFile. !168
+
+### Changed
+
+- Increased the header limit for requests to 16KB. !158
+- Upgraded iOS OpenSSL to v3.6.0. !158
+- Updated iOS SDK version to v26.0. !158
+- Other iOS Build Improvements. !158
+- Update `asio-utp` submodule to include latest fixes. !163
+- Refactor authenticate function. b1d30f9b
+
+
+## [v1.6.5](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.5) - 2026-03-31
+
+### Removed
+
+- Remove UDP Server Reachability Analysis. !180
+
+### Security
+
+- Improvements to private address validations. !173
+- Timing attack mitigation. !178
+
 ## [v1.6.4](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.4) - 2026-03-11
 
 ### Fixed

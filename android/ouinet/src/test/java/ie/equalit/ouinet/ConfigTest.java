@@ -47,7 +47,6 @@ public class ConfigTest {
     private static final boolean DISABLE_BRIDGE_ANNOUNCEMENT = true;
     private static final String MAX_CACHED_AGE = "120";
     private static final String LOCAL_DOMAIN = "local.domain";
-    private static final boolean DISABLE_DOH = true;
     private static final Set<String> DNS_PROTOCOLS = new HashSet<>();
 
     static {
@@ -113,7 +112,6 @@ public class ConfigTest {
                 .setDisableBridgeAnnouncement(DISABLE_BRIDGE_ANNOUNCEMENT)
                 .setMaxCachedAge(MAX_CACHED_AGE)
                 .setLocalDomain(LOCAL_DOMAIN)
-                .setDisableDoH(DISABLE_DOH)
                 .setDnsProtocols(DNS_PROTOCOLS)
                 .build();
 
@@ -131,7 +129,6 @@ public class ConfigTest {
         assertThat(config.getFrontEndEp(), is(FRONT_END_EP));
         assertThat(config.getMaxCachedAge(), is(MAX_CACHED_AGE));
         assertThat(config.getLocalDomain(), is(LOCAL_DOMAIN));
-        assertThat(config.getDisableDoH(), is(DISABLE_DOH));
         assertThat(config.getDnsProtocols(), is(DNS_PROTOCOLS));
 
         assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));

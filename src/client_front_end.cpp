@@ -21,6 +21,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
+#include <cstddef>
 #include <memory>
 #include <nlohmann/json.hpp>
 
@@ -340,21 +341,6 @@ set_bt_extra_bootstraps(beast::string_view v, ClientConfig& config) {
 
 static
 std::string
-reachability_status(const util::UdpServerReachabilityAnalysis& reachability) {
-    switch (reachability.judgement()) {
-    case util::UdpServerReachabilityAnalysis::Reachability::Undecided:
-        return "undecided";
-    case util::UdpServerReachabilityAnalysis::Reachability::ConfirmedReachable:
-        return "reachable";
-    case util::UdpServerReachabilityAnalysis::Reachability::UnconfirmedReachable:
-        return "likely reachable";
-    }
-    assert(0 && "Invalid reachability");
-    return "(unknown)";
-}
-
-static
-std::string
 client_state(Client::RunningState cstate) {
     switch (cstate) {
     case Client::RunningState::Created:
@@ -468,7 +454,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                                   , boost::optional<UdpEndpoint> local_ep
                                   , const std::shared_ptr<UPnPs>& upnps_ptr
                                   , const bittorrent::DhtBase* dht
-                                  , const util::UdpServerReachabilityAnalysis* reachability
                                   , const Request& req, Response& res, ostringstream& ss
                                   , cache::Client* cache_client
                                   , ClientFrontEndMetricsController& metrics
@@ -585,9 +570,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "<h2>Network</h2>\n";
 
-    if (reachability) {
-        ss << "Reachability status: " << reachability_status(*reachability) << "<br>\n";
-    }
     if (local_ep) {
         ss << "Local UDP endpoints:<br>\n";
         ss << "<ul>\n";
@@ -632,12 +614,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "DNS protocols enabled: "
        << dns::Resolver::protos_to_str(config.dns_config().protocols)
-       << ".<br><br>\n";
-
-    ss << "DNS over HTTPS: "
-       << ( config.is_doh_enabled()
-          ? "enabled"
-          : "disabled" )
        << ".<br><br>\n";
 
     {
@@ -739,12 +715,18 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
           "</html>\n";
 }
 
+size_t ClientFrontEnd::injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept{
+    if (!client) {
+        return 0;
+    }
+    return client -> injector_candidates_n();
+}
+
 void ClientFrontEnd::handle_api_status( ClientConfig& config
                                       , Client::RunningState cstate
                                       , boost::optional<UdpEndpoint> local_ep
                                       , const std::shared_ptr<UPnPs>& upnps_ptr
                                       , const bittorrent::DhtBase* dht
-                                      , const util::UdpServerReachabilityAnalysis* reachability
                                       , const Request& req, Response& res, ostringstream& ss
                                       , cache::Client* cache_client
                                       , std::shared_ptr<ouiservice::Bep5Client> client
@@ -759,8 +741,8 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"origin_access", config.is_origin_access_enabled()},
         {"proxy_access", config.is_proxy_access_enabled()},
         {"injector_access", config.is_injector_access_enabled()},
-        {"injector_peers_n", client -> injector_candidates_n()},
-        {"injector_ready", client -> injector_candidates_n() > 1},
+        {"injector_peers_n", injector_candidates_n(client)},
+        {"injector_ready", injector_candidates_n(client) > 1},
         {"distributed_cache", config.is_cache_access_enabled()},
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
@@ -770,7 +752,6 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
-        {"doh_enabled", config.is_doh_enabled()},
         {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
@@ -789,8 +770,6 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
     if (dht) response["public_udp_endpoints"] = public_udp_endpoints(*dht);
 
     response["bt_extra_bootstraps"] = bt_extra_bootstraps(config);
-
-    if (reachability) response["udp_world_reachable"] = reachability_status(*reachability);
 
     if  (metrics.is_enabled()) {
         response["metrics_delete_after"] = config.metrics()->delete_after_seconds;
@@ -969,7 +948,6 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , boost::optional<UdpEndpoint> local_ep
                               , const std::shared_ptr<UPnPs>& upnps_ptr
                               , const bittorrent::DhtBase* dht
-                              , const util::UdpServerReachabilityAnalysis* reachability
                               , ClientFrontEndMetricsController& metrics
                               , const std::string_view proxy_endpoint
                               , const std::string_view frontend_endpoint
@@ -1024,7 +1002,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_pinned_list(req, res, ss, cache_client);
     } else if (path == status_api_path) {
         sys::error_code e;
-        handle_api_status( config, client_state, local_ep, upnps_ptr, dht, reachability
+        handle_api_status( config, client_state, local_ep, upnps_ptr, dht
                          , req, res, ss, cache_client, client, metrics, cancel
                          , yield[e]);
     } else if (path.starts_with(groups_api_path)) {
@@ -1038,7 +1016,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
         handle_api_endpoints(proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
     } else {
         sys::error_code e;
-        handle_portal( config, client_state, local_ep, upnps_ptr, dht, reachability
+        handle_portal( config, client_state, local_ep, upnps_ptr, dht
                      , req, res, ss, cache_client, metrics, cancel
                      , yield[e]);
     }

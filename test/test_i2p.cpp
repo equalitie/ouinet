@@ -61,6 +61,9 @@ float as_seconds(std::chrono::duration<Rep, Period> duration) {
 }
 
 void handle_exception(const char* actor, std::exception_ptr ep) {
+    // NOTE: Don't re-throw from the `catch` blocks as that will cause the
+    // `i2poui::Service` to _not_ call its destructor which in turn will cause
+    // the next test to fail at initialization.
     try {
         if (ep) std::rethrow_exception(ep);
     }
@@ -99,6 +102,19 @@ void run_server_and_client(asio::io_context& ctx, ServerJob server_job, ClientJo
     });
 
     ctx.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_i2p_init_counting) {
+    Setup setup;
+    asio::io_context ctx;
+    auto exec = ctx.get_executor();
+    {
+        auto service1 = Service(setup.tempdir.string(), exec);
+        BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 1, "Init 1: counter at " << ouiservice::i2poui::init_counter);
+        auto service2 = Service("mewmewmew", exec); // testing that the string is no longer relevant. it is not even a path
+        BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 2, "Init 2: counter at " << ouiservice::i2poui::init_counter);
+    }
+    BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 0, "outscoping: counter at " << ouiservice::i2poui::init_counter);
 }
 
 BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
@@ -247,13 +263,13 @@ std::string byte_units(uint64_t count) {
     if (count >= 1024 * 1024) {
         auto mbs = count / mb;
         auto rest = float((count - (mbs*mb))) / mb;
-        return util::str(mbs, ".", int(rest*1000), "MiB"); 
+        return util::str(mbs, ".", int(rest*1000), "MiB");
     } else if (count >= kb) {
         auto kbs = count / kb;
         auto rest = float((count - (kbs*kb))) / kb;
-        return util::str(kbs, ".", int(rest*1000), "KiB"); 
+        return util::str(kbs, ".", int(rest*1000), "KiB");
     } else {
-        return util::str(count, "B"); 
+        return util::str(count, "B");
     }
 }
 

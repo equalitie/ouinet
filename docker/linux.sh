@@ -334,7 +334,7 @@ for target_os in ${target_oss[@]}; do
             exe ${env[@]/#/-e } cargo test --manifest-path $ouinet_dir/rust/Cargo.toml -- --nocapture
         fi
     fi
-        
+
     ### C++ Tests
     if [ "$run_all_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
         if [ "$target_os" != android ]; then

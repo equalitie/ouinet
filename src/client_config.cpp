@@ -406,24 +406,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
-
-
-    // Pre-load opt_protos to keep compatibility with disable-doh
     auto opt_protos = as_optional<vector<string>>(vm, "dns-protocol");
-
-    // If disable-doh is present 'https' is removed from protocols selected by 'dns-protocols`
-    // the mechanism makes sure that at least one protocol is selected otherwise adds
-    // 'plain' to 'dns-protocols' list.
-    // This code will be deleted too when the deprecated option `disable-doh` is removed.
-    if (vm["disable-doh"].as<bool>()) {
-        LOG_WARN("Option '--disable-doh' is deprecated, use '--dns-protocol' instead");
-        auto doh = std::find( opt_protos->begin(), opt_protos->end(), "https");
-        if (doh != opt_protos->end())
-            opt_protos->erase(doh);
-        if (opt_protos->empty())
-            opt_protos->emplace_back("plain");
-        _disable_doh = true;
-    }
 
     for (const auto& proto_name : *opt_protos) {
         dns::bridge::Protocol proto;

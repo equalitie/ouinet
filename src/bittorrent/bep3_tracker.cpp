@@ -11,7 +11,7 @@
 #include "bep3_tracker.h"
 #include <ouiservice/i2p/client.h>
 #include <ouiservice/i2p/service.h>
-#include <Destination.h>
+#include <ouiservice/i2p/i2pd/libi2pd/Destination.h>
 #include "../util.h"
 #include "../logger.h"
 #include <ouiservice/i2p/i2pd/libi2pd/Base.h>  // ByteStreamToBase32
@@ -253,8 +253,7 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
         const auto& data = *peers_it->second.as_string();
         const size_t DEST_HASH_LEN = 32;
         for (size_t i = 0; i + DEST_HASH_LEN <= data.size(); i += DEST_HASH_LEN) {
-            string dest = i2p::data::ByteStreamToBase32(
-                (const uint8_t*)data.data() + i, DEST_HASH_LEN);
+            std::string dest = i2p::data::ByteStreamToBase32((const uint8_t*)data.data() + i, DEST_HASH_LEN);
             dest += ".b32.i2p";
             LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
             peers.insert(move(dest));

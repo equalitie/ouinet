@@ -11,8 +11,9 @@
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 
-#include <skyr/percent_encoding/percent_decode.hpp>
-#include <skyr/percent_encoding/percent_encode.hpp>
+#include <boost/url/encode.hpp>
+#include <boost/url/decode_view.hpp>
+#include <boost/url/rfc/unreserved_chars.hpp>
 
 #include "util/iterators/base32_from_binary.hpp"
 #include "util/iterators/binary_from_base32.hpp"
@@ -160,14 +161,13 @@ bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out
 
 string ouinet::util::percent_decode(const boost::string_view in) {
     if (in.empty()) return {};
-    try {
-        return skyr::percent_decode(string_view(in.data(), in.size())).value();
-    } catch (const skyr::percent_encoding::percent_encode_errc&) {
-        return {};
-    }
+    boost::urls::decode_view dv(in);
+    return std::string(dv.begin(), dv.end());
 }
 
 string ouinet::util::percent_encode(const boost::string_view in) {
     if (in.empty()) return {};
-    return skyr::percent_encode(string_view(in.data(), in.size()));
+    namespace urls = boost::urls;
+    auto ev = urls::encode(in, urls::unreserved_chars);
+    return std::string(ev.begin(), ev.end());
 }

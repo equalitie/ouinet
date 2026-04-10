@@ -499,7 +499,11 @@ struct Client::Impl {
 
         std::optional<metrics::Request> metrics;
 
-        _DEBUG("Distributed cache lookup: dht=", (_dht ? "yes" : "no"), " bep3_tracker=", (_bep3_tracker ? "yes" : "no"));
+        _DEBUG("Distributed cache lookup:");
+        _DEBUG("    dht=", (_dht ? "yes" : "no"));
+#ifdef __EXPERIMENTAL__
+        _DEBUG("    bep3_tracker=", (_bep3_tracker ? "yes" : "no"));
+#endif
 
         if (_dht) {
             metrics = metrics_client.new_cache_in_request();
@@ -833,8 +837,8 @@ Client::build( AsioExecutor ex
              , YieldContext yield)
 {
     using ClientPtr = unique_ptr<Client>;
-    static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2"};
-    static const auto store_curver_subdir = "data-v3";
+    static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2", "data-v3"};
+    static const auto store_curver_subdir = "data-v4";
 
     sys::error_code ec;
 

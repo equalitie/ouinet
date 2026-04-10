@@ -20,9 +20,9 @@ SignedHead::sign_response( const http::request_header<>& rqh
     auto key_id = encode_key_id(pk);
 
     // TODO: This should be a `static_assert`.
-    assert(protocol_version_hdr_current == protocol_version_hdr_v6);
+    assert(protocol_version_hdr_current == protocol_version_hdr_v7);
 
-    rsh.set(protocol_version_hdr, protocol_version_hdr_v6);
+    rsh.set(protocol_version_hdr, protocol_version_hdr_v7);
     rsh.set(response_uri_hdr, rqh.target());
     rsh.set(response_injection_hdr
            , str(boost::format("id=%s,ts=%d") % injection_id % injection_ts));

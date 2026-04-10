@@ -7,18 +7,16 @@
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <functional>
 #include <vector>
 #include <iostream>
-#include <util/executor.h>
 
 namespace ouinet {
 
-using ouinet::util::AsioExecutor;
-
 class GenericStream {
 public:
-    using executor_type = AsioExecutor;
+    using executor_type = boost::asio::any_io_executor;
 
 private:
     using OnRead  = std::function<void(sys::error_code, size_t)>;
@@ -263,7 +261,7 @@ public:
     const std::string& remote_endpoint() const { return _remote_endpoint; }
 
 private:
-    AsioExecutor _executor;
+    executor_type _executor;
 
     struct Shared {
         std::unique_ptr<Base> impl;

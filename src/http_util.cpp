@@ -2,7 +2,7 @@
 
 #include <boost/asio/error.hpp>
 #include <boost/regex.hpp>
-#include <skyr/url.hpp>
+#include <boost/url.hpp>
 
 #include "logger.h"
 #include "parse/number.h"
@@ -16,7 +16,7 @@ namespace http = beast::http;
 namespace posix_time = boost::posix_time;
 
 
-std::pair<std::string, uint16_t>
+std::optional<std::pair<std::string, uint16_t>>
 ouinet::util::get_host_port(const http::request_header<>& req)
 {
     auto target = req.target();
@@ -32,12 +32,15 @@ ouinet::util::get_host_port(const http::request_header<>& req)
 
     if (hp.empty() && req.version() == 10) {
         // HTTP/1.0 proxy client with no ``Host:``, use URL.
-        skyr::url url{std::string(target)};
-        if (!url.port().empty()) {
-            boost::string_view port_sv = url.port();
+        auto url = boost::urls::parse_uri(target);
+        if (!url) {
+            return {};
+        }
+        if (!url->port().empty()) {
+            boost::string_view port_sv = url->port();
             port = parse::number<unsigned>(port_sv).get();
         }
-        return make_pair(url.hostname(), port);
+        return make_pair(url->host(), port);
     }
 
     auto [host, port_sv] = split_ep(hp);
