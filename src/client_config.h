@@ -185,10 +185,6 @@ public:
 
     std::string local_domain() const { return _local_domain; }
 
-    bool is_doh_enabled() const {
-        return !_disable_doh;
-    }
-
     dns::Config dns_config() const
     {
         return _dns_config;
@@ -400,10 +396,6 @@ private:
 
         po::options_description dns("DNS options");
         dns.add_options()
-           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
-            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
-              "When this option is present the client will fallback to the default DNS mechanism "
-              "provided by the operating system. Deprecated, use --dns-protocol instead.")
            ("dns-protocol", po::value<vector<string>>()
                                 ->composing()
                                 ->default_value(dns_default_protocols,
@@ -595,8 +587,6 @@ private:
     boost::optional<sign::PublicKey> _cache_http_pubkey;
     CacheType _cache_type = CacheType::None;
     std::string _local_domain;
-    [[deprecated("Use _dns_config instead.")]]
-    bool _disable_doh = false;
     bool _allow_private_targets = false;
     std::map<std::string, std::string> _add_request_fields;
 

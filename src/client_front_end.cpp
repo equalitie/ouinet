@@ -616,12 +616,6 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
        << dns::Resolver::protos_to_str(config.dns_config().protocols)
        << ".<br><br>\n";
 
-    ss << "DNS over HTTPS: "
-       << ( config.is_doh_enabled()
-          ? "enabled"
-          : "disabled" )
-       << ".<br><br>\n";
-
     {
         auto rx_limit = config.udp_mux_rx_limit();
         ss << "UDP Multiplexer Rx Limit: "
@@ -758,7 +752,6 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
-        {"doh_enabled", config.is_doh_enabled()},
         {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };

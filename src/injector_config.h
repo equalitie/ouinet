@@ -124,9 +124,6 @@ public:
     bool is_private_target_allowed() const
     { return _allow_private_targets; }
 
-    bool is_doh_enabled() const
-    { return !_disable_doh; }
-
     dns::Config dns_config() const
     { return _dns_config; }
 
@@ -170,8 +167,6 @@ private:
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
-    [[deprecated("Use _dns_config instead.")]]
-    bool _disable_doh = false;
     sign::SecretKey _ed25519_private_key;
 
     dns::Config _dns_config;

@@ -53,9 +53,6 @@ NativeLib _n;
   if ([config getDisableBridgeAnnouncement]) {
     args.push_back("--disable-bridge-announcement");
   }
-  if ([config getDisableDoH]) {
-    args.push_back("--disable-doh");
-  }
   
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
   if (error)

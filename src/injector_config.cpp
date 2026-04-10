@@ -74,10 +74,6 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
          , "Allows the injection of targets resolving to private addresses. "
            "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
-        ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
-         , "Disable DNS over HTTPS for domain name resolution. "
-           "When this option is present the injector will fallback to the default DNS mechanism "
-           "provided by the operating system. Deprecated, use --dns-protocol instead.")
         ("dns-protocol", po::value<std::vector<string>>()
                              ->composing()
                              ->default_value(dns_default_protocols,
@@ -214,22 +210,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _allow_private_targets = true;
     }
 
-    // Pre-load opt_protos to keep compatibility with disable-doh
     auto opt_protos = vm["dns-protocol"].as<std::vector<string>>();
-
-    // If disable-doh is present 'https' is removed from protocols selected by 'dns-protocols`
-    // the mechanism makes sure that at least one protocol is selected otherwise adds
-    // 'plain' to 'dns-protocols' list.
-    // This code will be deleted too when the deprecated option `disable-doh` is removed.
-    if (vm["disable-doh"].as<bool>()) {
-        LOG_WARN("Option '--disable-doh' is deprecated, use '--dns-protocol' instead");
-        auto doh = std::find( opt_protos.begin(), opt_protos.end(), "https");
-        if (doh != opt_protos.end())
-            opt_protos.erase(doh);
-        if (opt_protos.empty())
-            opt_protos.emplace_back("plain");
-        _disable_doh = true;
-    }
 
     for (const auto& proto_name : opt_protos) {
         dns::bridge::Protocol proto;
