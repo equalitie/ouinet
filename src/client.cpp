@@ -2643,8 +2643,6 @@ void Client::State::setup_cache(YieldContext yield)
 #ifdef __EXPERIMENTAL__
     //setup Bep3HTTPOverI2P cache
     else if (_config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P) {
-      // set _upnps just to prevent crashes when displaying its status in the frontend interface
-      _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
