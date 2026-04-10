@@ -280,6 +280,7 @@ file(GLOB client_sources
     "./src/util/temp_dir.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
+    ${OUISERVICE_OUISYNC_CPP_FILES}
     ${VERSION_CPP}
 )
 
@@ -292,6 +293,10 @@ if (NOT WIN32 AND NOT MINGW)
     set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 endif()
 add_library(ouinet::client ALIAS client_lib)
+
+if (WITH_OUISYNC)
+    set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)
+endif()
 
 if (WITH_OUISYNC)
     set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)

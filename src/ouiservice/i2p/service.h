@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include "i2pd/libi2pd/util.h"  // i2p::util::Mapping
 
 #include <boost/asio.hpp>
 
@@ -15,13 +16,14 @@ namespace i2p::client {
     class AddressBook;
 }
 
+
 namespace ouinet::ouiservice::i2poui {
 
 class Service : public std::enable_shared_from_this<Service> {
     using executor_type = asio::any_io_executor;
 
 public:
-    // because by default usage of i2p service is to  prioritize anominty 
+    // because by default usage of i2p service is to  prioritize anominty
     // the default tunnel length is set to 3. To makes I2P connections faster this could be reduced to 1
     Service(const std::string& datadir, const executor_type&, const size_t _number_of_hops_per_tunnel = 3);
 
@@ -38,11 +40,12 @@ public:
     executor_type get_executor() { return _exec; };
 
     std::shared_ptr<i2p::client::ClientDestination> get_local_destination () const { return _local_destination; };
+    const i2p::util::Mapping& get_tunnel_params() const { return _tunnel_params; };
 
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
     std::unique_ptr<Client> build_client(const std::string& target_id
         , std::shared_ptr<i2p::client::ClientDestination> destination = nullptr);
-  
+
 protected:
     void load_known_hosts_to_address_book();
 
@@ -51,6 +54,7 @@ protected:
 
     // all client tunnels share local destination, because destination is expensive
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
+    i2p::util::Mapping _tunnel_params;
 
     // We run an address book as soon as we start the the i2pd daemon simialr to i2pd client
     i2p::client::AddressBook* _i2p_address_book = nullptr;

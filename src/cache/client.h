@@ -17,6 +17,10 @@
 #include "peer_message.h"
 #include "util/crypto_stream_key.h"
 
+namespace i2p::client {
+    class ClientDestination;
+}
+
 namespace ouinet {
 
 namespace bittorrent {
@@ -90,14 +94,16 @@ public:
     bool enable_dht(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
 #ifdef __EXPERIMENTAL__
-    // Check if i2p is enabled and setup the BEP3 announcer over I2P.
-    // We need to start the server whiche responds to requests corresponding announces
-    // here, because we need to initiate the announcer client on the same i2p id.
-    // That is a Zzzot requirement otherwise our announces get rejected
+    // Check if i2p is enabled and if so Setup the BEP3 announcer over I2P.
+    // The destination must come from an already-listening I2P server which responds
+    // to requests corresponding announces here.
+    // we need to know the destination to able to initiate the announcer client on
+    // the same i2p id. This is because Zzzot rejects announces whose ip= doesn't
+    // match the announcer's destination.
     bool enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
                               , std::string tracker_id
-                              , size_t simultaneous_announcements
-                              , asio::yield_context yield);
+                              , std::shared_ptr<i2p::client::ClientDestination> destination
+                              , size_t simultaneous_announcements);
 #endif // __EXPERIMENTAL__
 
     // This may add a response source header.
