@@ -380,7 +380,7 @@ An injector server using Ed25519 private key `KEY` might construct the following
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -407,7 +407,7 @@ In this signature, `<key>` stands for the public key associated with the `KEY` p
 ```
 (response-status): 200
 (created): 1584748800
-x-ouinet-version: 6
+x-ouinet-version: 7
 x-ouinet-uri: https://example.com/hello
 x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -443,7 +443,7 @@ In the computation of `header-signature` in the above, `<key>` stands for the pu
 ```
 (response-status): 200
 (created): 1584748800
-x-ouinet-version: 6
+x-ouinet-version: 7
 x-ouinet-uri: https://example.com/hello
 x-ouinet-injection: id=qwertyuiop-12345,ts=1584748800
 date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -512,7 +512,7 @@ An injector server transmitting the example cache entry described at the end of 
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -539,7 +539,7 @@ If the injector server decided to only create a complete cache entry signature, 
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -560,7 +560,7 @@ When sending only a complete cache signature like the example above, the injecto
 
 ```
 HTTP/1.1 200 OK
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
@@ -626,7 +626,7 @@ A client wishing to fetch only the second half of the example cache entry descri
 
 ```
 GET https://example.com/hello HTTP/1.1
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 Range: bytes=6-11
 
 ```
@@ -635,7 +635,7 @@ If the receiving client contains a cache entry for this resource signed using a 
 
 ```
 HTTP/1.1 206 Partial Content
-X-Ouinet-Version: 6
+X-Ouinet-Version: 7
 X-Ouinet-URI: https://example.com/hello
 X-Ouinet-Injection: id=qwertyuiop-12345,ts=1584748800
 Date: Sat, 21 Mar 2020 00:00:00 GMT
