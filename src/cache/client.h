@@ -91,9 +91,8 @@ public:
     // we need to know the destination to able to initiate the announcer client on
     // the same i2p id. This is because Zzzot rejects announces whose ip= doesn't
     // match the announcer's destination.
-    bool enable_bep3_announcer( std::shared_ptr<I2pService> i2p_service
+    bool enable_bep3_announcer( I2pServer const&
                               , std::string tracker_id
-                              , std::shared_ptr<I2pClientDestination> destination
                               , size_t simultaneous_announcements);
 #endif // __EXPERIMENTAL__
 

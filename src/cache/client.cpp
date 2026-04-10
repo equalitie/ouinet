@@ -165,23 +165,17 @@ struct Client::Impl {
     }
 
 #ifdef __EXPERIMENTAL__
-    bool enable_bep3_announcer( shared_ptr<I2pService> i2p_service
+    bool enable_bep3_announcer( I2pServer const& i2p_server
                               , string tracker_id
-                              , shared_ptr<I2pClientDestination> destination
                               , size_t simultaneous_announcements) {
         if (_bep3_announcer) {
             _DEBUG("BEP3 announcer is already enabled");
             return false;
         }
-        if (!i2p_service) {
-            _DEBUG("not enabling BEP3 announcer because i2p service has not been initialied");
-            return false;
-        }
 
-        _i2p_service = i2p_service;
+        _i2p_service = i2p_server.get_service();
 
-        _bep3_tracker = make_shared<bt::Bep3Tracker>(
-            move(i2p_service), move(tracker_id), move(destination));
+        _bep3_tracker = make_shared<bt::Bep3Tracker>(i2p_server, move(tracker_id));
 
         // NOTE: The announcer eagerly calls ensure_started() on the tracker,
         // to kick start the I2P tunnel, even though bep3_tracker try to start
@@ -910,11 +904,10 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
 }
 
 #ifdef __EXPERIMENTAL__
-bool Client::enable_bep3_announcer( std::shared_ptr<I2pService> i2p_service
+bool Client::enable_bep3_announcer( I2pServer const& i2p_server
                                   , std::string tracker_id
-                                  , std::shared_ptr<I2pClientDestination> destination
                                   , size_t simultaneous_announcements) {
-    return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), std::move(destination), simultaneous_announcements);
+    return _impl->enable_bep3_announcer(i2p_server, std::move(tracker_id), simultaneous_announcements);
 }
 #endif // __EXPERIMENTAL__
 

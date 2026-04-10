@@ -21,12 +21,10 @@ using namespace ouinet::bittorrent;
 namespace http = boost::beast::http;
 namespace beast = boost::beast;
 
-Bep3Tracker::Bep3Tracker( shared_ptr<I2pService> i2p_service
-                         , string tracker_id
-                         , shared_ptr<I2pClientDestination> destination)
-    : _i2p_client(i2p_service->build_client(tracker_id, destination))
-    , _destination(move(destination))
-    , _start_cv(i2p_service->get_executor())
+Bep3Tracker::Bep3Tracker(I2pServer const& i2p_server, string tracker_id)
+    : _destination(i2p_server.get_destination())
+    , _i2p_client(i2p_server.get_service()->build_client(tracker_id, _destination))
+    , _start_cv(i2p_server.get_executor())
 {
     assert(_destination && "Bep3Tracker requires a valid destination");
     _serving_i2p_id = _destination->GetIdentity()->ToBase64(); //We are sure _destination isn't null Q.E.D

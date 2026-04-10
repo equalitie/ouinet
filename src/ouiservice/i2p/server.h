@@ -41,6 +41,9 @@ public:
     // Returns the server's ClientDestination, available after start_listen()
     std::shared_ptr<i2p::client::ClientDestination> get_destination() const { return _local_destination; }
 
+    std::shared_ptr<Service> get_service() const { return _service; }
+    executor_type get_executor() const { return _exec; }
+
 private:
     void load_private_key(const std::string& key_file_name);
 

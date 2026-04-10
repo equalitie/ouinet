@@ -2658,7 +2658,10 @@ void Client::State::setup_cache(YieldContext yield)
       fail_on_error("Failed to start accepting on I2P for cache::Client");
 
       assert(_i2p_cache_server && "I2P cache server must be running before enabling BEP3 announcer");
-      if (!_cache->enable_bep3_announcer(_i2p_service, *_config.i2p_bep3_tracker(), _i2p_cache_server->get_destination(), _config.max_simultaneous_announcements())) {
+      if (!_cache->enable_bep3_announcer(
+              *_i2p_cache_server,
+              *_config.i2p_bep3_tracker(),
+              _config.max_simultaneous_announcements())) {
           ec = asio::error::invalid_argument;
       }
       fail_on_error("Failed to enable BEP3 announcer in cache::Client");
