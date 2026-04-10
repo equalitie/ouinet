@@ -4,8 +4,10 @@
 #include "../util/log_path.h"
 #include "../or_throw.h"
 #include "../task.h"
+
 #include <boost/asio/spawn.hpp>
 #include <boost/utility/string_view.hpp>
+#include <boost/asio/async_result.hpp>
 
 namespace ouinet {
 
@@ -38,7 +40,7 @@ public:
         return _asio_yield.get_executor();
     }
 
-    asio::yield_context native() const {
+    operator asio::yield_context const&() const {
         return _asio_yield;
     }
 
@@ -112,14 +114,49 @@ Ret or_throw( YieldContext yield
             , const sys::error_code& ec
             , Ret&& ret = {})
 {
-    return or_throw(yield.native(), ec, std::forward<Ret>(ret));
+    return or_throw(static_cast<asio::yield_context const&>(yield), ec, std::forward<Ret>(ret));
 }
 
 inline
 void or_throw( YieldContext yield
              , const sys::error_code& ec)
 {
-    return or_throw(yield.native(), ec);
+    return or_throw(static_cast<asio::yield_context const&>(yield), ec);
 }
 
 } // ouinet namespace
+
+// This code allows `YieldContext` to be passed to functions expecting a
+// generic completion token.
+//
+// Inspired by Boost.Outcome code:
+// https://www.boost.org/doc/libs/1_89_0/libs/outcome/doc/html/recipes/asio-integration-1-70.html
+namespace boost::asio {
+
+    template<typename Signature>
+    class async_result<ouinet::YieldContext, Signature> {
+    private:
+        using YieldContext = ouinet::YieldContext;
+    
+    public:
+        using return_type = typename async_result<yield_context, Signature>::return_type;
+    
+        template<typename Initiation, typename... Args>
+        static return_type
+        initiate(Initiation&& initiation, YieldContext&& token, Args&&... args)
+        {
+            auto asio_yield = static_cast<asio::yield_context const&>(token);
+    
+            return async_initiate<yield_context, Signature>(
+                [ init = std::forward<Initiation>(initiation)
+                ]
+                (auto&& handler, auto&&... call_args) mutable {
+                    std::move(init)( std::forward<decltype(handler)>(handler)
+                                   , std::forward<decltype(call_args)>(call_args)...);
+                },
+                asio_yield,
+                std::forward<Args>(args)...);
+        }
+    };
+
+} // namespace boost::asio

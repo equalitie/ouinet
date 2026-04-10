@@ -397,7 +397,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
     auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
     if (ec) return or_throw<reader_uptr>(yield, ec);
 
-    auto head = ResourceReader::read_signed_head(headf, cancel, yield.native());
+    auto head = ResourceReader::read_signed_head(headf, cancel, yield);
 
     if (ec) {
         if (ec != asio::error::operation_aborted) {
@@ -897,7 +897,7 @@ FullHttpStore::for_each( keep_func keep
             }
             assert(rr);
 
-            auto keep_entry = keep(*resource_id, std::move(rr), yield.native()[ec]);
+            auto keep_entry = keep(*resource_id, std::move(rr), yield[ec]);
             ec = compute_error_code(ec, cancel);
             if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
             if (ec) {

@@ -15,7 +15,7 @@ PeerRequest PeerRequest::async_read(GenericStream& con, YieldContext yield) {
     beast::flat_buffer con_rbuf;
 
     sys::error_code ec;
-    http::async_read(con, con_rbuf, req, yield.native()[ec]);
+    http::async_read(con, con_rbuf, req, yield[ec]);
 
     if (ec) return or_throw<PeerRequest>(yield, ec);
     if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);

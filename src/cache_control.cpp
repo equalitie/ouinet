@@ -260,7 +260,6 @@ CacheControl::do_fetch(
         auto& fs = fetch_state;
         // Create new yield context so that we don't accidentally reset the
         // returned error code.
-        asio::yield_context y = yield.native();
         {
 #           ifndef NDEBUG
             auto wdog = watch_dog(_ex, std::chrono::seconds(10), [&] {
@@ -269,7 +268,7 @@ CacheControl::do_fetch(
                 });
 #           endif
             sys::error_code ignored_ec;
-            if (fs.fetch_fresh)  fs.fetch_fresh ->stop(y[ignored_ec]);
+            if (fs.fetch_fresh)  fs.fetch_fresh ->stop(yield[ignored_ec]);
         }
         {
 #           ifndef NDEBUG
@@ -279,7 +278,7 @@ CacheControl::do_fetch(
                 });
 #           endif
             sys::error_code ignored_ec;
-            if (fs.fetch_stored) fs.fetch_stored->stop(y[ignored_ec]);
+            if (fs.fetch_stored) fs.fetch_stored->stop(yield[ignored_ec]);
         }
     });
 
@@ -486,7 +485,7 @@ CacheControl::do_fetch_fresh( FetchState& fs
         fs.fetch_fresh = make_fetch_fresh_job(rq, cached, yield);
     }
 
-    fs.fetch_fresh->wait_for_finish(yield.native());
+    fs.fetch_fresh->wait_for_finish(yield);
 
     auto result = move(fs.fetch_fresh->result());
     auto rs = move(result.retval);
@@ -562,7 +561,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         if (!fs.fetch_stored->has_result()) {
-            cv.wait(yield.native());
+            cv.wait(yield);
         }
     }
 
@@ -577,7 +576,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
         }
 
         // fetch_fresh errored, wait for the stored version
-        fs.fetch_stored->wait_for_finish(yield.native());
+        fs.fetch_stored->wait_for_finish(yield);
 
         auto& r2 = fs.fetch_stored->result();
         return or_throw(yield, r2.ec, move(r2.retval));

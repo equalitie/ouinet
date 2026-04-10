@@ -76,7 +76,7 @@ struct GarbageCollector {
             _DEBUG("Garbage collector started");
             while (!cancel) {
                 sys::error_code ec;
-                async_sleep(chrono::minutes(7), cancel, yield.native()[ec]);
+                async_sleep(chrono::minutes(7), cancel, yield[ec]);
                 if (cancel || ec) break;
 
                 _DEBUG("Collecting garbage...");
@@ -236,7 +236,7 @@ struct Client::Impl {
         if (req.method() == http::verb::propfind) {
             _YDEBUG(yield, "Serving propfind for ", req.resource_id());
             auto hl = _http_store->load_hash_list
-                (req.resource_id(), cancel, yield[ec].native());
+                (req.resource_id(), cancel, yield[ec]);
 
             CryptoStreamKey key;
 
@@ -258,11 +258,11 @@ struct Client::Impl {
             return_or_throw_on_error(yield, cancel, ec, false);
 
 
-            async_write_blob_type(BlobType::cypher_text, sink, yield.native()[ec]);
+            async_write_blob_type(BlobType::cypher_text, sink, yield[ec]);
             return_or_throw_on_error(yield, cancel, ec, false);
 
             auto crypto_sink = make_crypto_sink(key);
-            hl.write(crypto_sink, cancel, yield.tag("write_propfind").native()[ec]);
+            hl.write(crypto_sink, cancel, yield.tag("write_propfind")[ec]);
 
             _YDEBUG(yield, "Write; ec=", ec);
             return or_throw(yield, ec, bool(!ec));
@@ -325,12 +325,12 @@ struct Client::Impl {
 
         bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
 
-        async_write_blob_type(BlobType::cypher_text, sink, yield.native()[ec]);
+        async_write_blob_type(BlobType::cypher_text, sink, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, false);
 
         auto crypto_sink = make_crypto_sink(key);
 
-        s.flush_response(cancel, yield.tag("flush")[ec].native(), [&crypto_sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
+        s.flush_response(cancel, yield.tag("flush")[ec], [&crypto_sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
             sys::error_code ee;
             part.async_write(crypto_sink, cc, yy[ee]);
             return_or_throw_on_error(yy, cc, ee);
@@ -405,10 +405,10 @@ struct Client::Impl {
                           , YieldContext yield)
     {
         sys::error_code ec;
-        async_write_blob_type(BlobType::plain_text, con, yield.native()[ec]);
+        async_write_blob_type(BlobType::plain_text, con, yield[ec]);
         if (ec) return or_throw(yield, ec);
         auto res = util::http_error(keep_alive, status, OUINET_CLIENT_SERVER_STRING, proto_error);
-        util::http_reply(con, res, yield.native());
+        util::http_reply(con, res, yield);
     }
 
     void handle_not_found( GenericStream& con
@@ -622,10 +622,10 @@ struct Client::Impl {
     {
         sys::error_code ec;
         cache::KeepSignedReader fr(r);
-        _http_store->store(resource_id, fr, cancel, yield[ec].native());
+        _http_store->store(resource_id, fr, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
-        _groups->add(group, resource_id, cancel, yield[ec].native());
+        _groups->add(group, resource_id, cancel, yield[ec]);
         if (ec) return or_throw(yield, ec);
 
         if (_bep5_announcer) {
@@ -749,7 +749,7 @@ struct Client::Impl {
 
         sys::error_code e;
 
-        auto y = yield.native();
+        auto y = yield;
 
         // Use static groups if its directory is provided.
         std::unique_ptr<BaseGroups> static_groups;

@@ -92,7 +92,7 @@ full_duplex( Stream1 a
           });
 
     sys::error_code ec;
-    wait_condition.wait(yield.native()[ec]);  // leave cancellation handling to tasks
+    wait_condition.wait(yield[ec]);  // leave cancellation handling to tasks
     ec = compute_error_code(ec, cancel, wdog);
 
     return or_throw(yield, ec, std::make_pair(fwd_bytes_a2b, fwd_bytes_b2a));

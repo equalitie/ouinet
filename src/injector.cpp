@@ -94,7 +94,7 @@ void send_response( GenericStream& con
     yield.log("=== Sending back response ===");
     yield.log(res);
 
-    util::http_reply(con, res, yield.native());
+    util::http_reply(con, res, yield);
 }
 
 static
@@ -264,7 +264,7 @@ void handle_connect_request( GenericStream client_c
     });
 
     auto origin_c = connect_to_host( lookup, exec, default_timeout::tcp_connect()
-                                   , cancel, yield[ec].tag("connect").native());
+                                   , cancel, yield[ec].tag("connect"));
 
     if (ec) {
         sys::error_code he_ec;
@@ -334,7 +334,7 @@ class InjectorCacheControl {
         auto socket = connect_to_host( lookup
                                      , executor
                                      , cancel
-                                     , yield[ec].native());
+                                     , yield[ec]);
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -343,7 +343,7 @@ class InjectorCacheControl {
                                                 , ssl_ctx
                                                 , url->host
                                                 , cancel
-                                                , yield[ec].native());
+                                                , yield[ec]);
 
             return or_throw(yield, ec, move(c));
         } else {
@@ -401,7 +401,7 @@ private:
             // Send HTTP request to origin.
             auto orig_rq = util::to_origin_request(cache_rq);
             orig_rq.keep_alive(true);  // regardless of what client wants
-            util::http_request(orig_con, orig_rq, timeout_cancel, yield[ec].tag("request").native());
+            util::http_request(orig_con, orig_rq, timeout_cancel, yield[ec].tag("request"));
             if (ec = compute_error_code(ec, cancel, fetch_wd)) {
                 yield.log("Failed to send request; ec=", ec);
                 return or_throw(yield, ec);
@@ -444,7 +444,7 @@ private:
         yield.log(orig_sess.response_header());
 
         orig_sess.flush_response(cancel
-                                , yield[ec].tag("flush").native()
+                                , yield[ec].tag("flush")
                                 , [&con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
                 sys::error_code ee;
                 part.async_write(con, cc, yy[ee]);
@@ -550,7 +550,7 @@ void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
         rs.keep_alive(rq.keep_alive());
         rs.prepare_payload();
 
-        util::http_reply(con, rs, yield.tag("write_res").native());
+        util::http_reply(con, rs, yield.tag("write_res"));
         return;
     }
 
@@ -605,7 +605,7 @@ void serve( const InjectorConfig& config
 
             auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
 
-            http::async_read(con, con_rbuf, req, yield[ec].tag("read_req").native());
+            http::async_read(con, con_rbuf, req, yield[ec].tag("read_req"));
 
             ec = compute_error_code(ec, cancel, wd);
             if (ec) break;
@@ -623,7 +623,7 @@ void serve( const InjectorConfig& config
             continue;
         }
 
-        bool auth = authenticate(req, con, config.credentials(), yield[ec].tag("auth").native());
+        bool auth = authenticate(req, con, config.credentials(), yield[ec].tag("auth"));
 
         if (!auth) {
             yield.log("Proxy authentication failed");
@@ -686,7 +686,7 @@ void serve( const InjectorConfig& config
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                util::http_request(orig_con, orig_req, cancel, pyield[ec].tag("send_request").native());
+                util::http_request(orig_con, orig_req, cancel, pyield[ec].tag("send_request"));
             }
             bool res_keep_alive = false;
             bool client_was_written_to = false;
@@ -706,7 +706,7 @@ void serve( const InjectorConfig& config
                     pyield.log(inh);
 
                     orig_sess.flush_response(cancel
-                                            , pyield[ec].tag("flush").native()
+                                            , pyield[ec].tag("flush")
                                             , [&] (auto&& part, auto& cc, auto yy) {
                             sys::error_code ee;
                             part.async_write(con, cc, yy[ee]);
@@ -782,7 +782,7 @@ void listen( const InjectorConfig& config
     AsioExecutor exec = proxy_server.get_executor();
 
     sys::error_code ec;
-    proxy_server.start_listen(yield[ec].native());
+    proxy_server.start_listen(yield[ec]);
     if (ec) {
         LOG_ERROR(yield, " Failed to setup ouiservice proxy server; ec=", ec);
         return;
@@ -800,11 +800,11 @@ void listen( const InjectorConfig& config
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
 
     while (true) {
-        GenericStream connection = proxy_server.accept(yield[ec].native());
+        GenericStream connection = proxy_server.accept(yield[ec]);
         if (ec == boost::asio::error::operation_aborted) {
             break;
         } else if (ec) {
-            if (!async_sleep(std::chrono::milliseconds(100), cancel, yield.native())) {
+            if (!async_sleep(std::chrono::milliseconds(100), cancel, yield)) {
                 break;
             }
             ec = {};

@@ -41,11 +41,4 @@ connected_pair(asio::yield_context yield)
     return make_pair(move(s1), move(s2));
 }
 
-inline
-std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(YieldContext yield)
-{
-    return connected_pair(yield.native());
-}
-
 }} // namespaces

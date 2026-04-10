@@ -62,7 +62,8 @@ File open_file(Repository& repo, std::string const& path, YieldContext yield) {
 
     while (true) {
         try {
-            return repo.open_file(path, yield.native());
+            // TODO: Why is the static_cast needed?
+            return repo.open_file(path, static_cast<asio::yield_context const&>(yield));
         }
         catch (const sys::system_error& e) {
             if (is_fully_loaded) {
@@ -76,7 +77,7 @@ File open_file(Repository& repo, std::string const& path, YieldContext yield) {
                 throw;
             }
 
-            auto progress = repo.get_sync_progress(yield.native());
+            auto progress = repo.get_sync_progress(yield);
 
             // If `progress.total == 0`, then the repo has been imported but no
             // syncing happened yet. Otherwise if `progress.total !=
@@ -89,7 +90,7 @@ File open_file(Repository& repo, std::string const& path, YieldContext yield) {
                 continue;
             }
 
-            sub.async_receive(yield.native());
+            sub.async_receive(yield);
         }
     }
 }
@@ -110,12 +111,12 @@ struct Ouisync::Impl {
         }
 
         auto file = open_file(page_index, std::string("/") + repo_name, yield.tag("open_file"));
-        auto len = file.get_length(yield.native());
-        auto token_vec = file.read(0, len, yield.native());
+        auto len = file.get_length(yield);
+        auto token_vec = file.read(0, len, yield);
         auto token = ShareToken{std::string(token_vec.begin(), token_vec.end())};
 
-        auto repo = open_or_create_repo(session, repo_name, token, yield.native());
-        set_repo_defaults(repo, can_mount, yield.native());
+        auto repo = open_or_create_repo(session, repo_name, token, yield);
+        set_repo_defaults(repo, can_mount, yield);
         auto repo_ptr = std::make_shared<Repository>(std::move(repo));
 
         sites[std::move(repo_name)] = repo_ptr;
@@ -175,7 +176,7 @@ void reply_error(const Request& rq, sys::system_error e, GenericStream& con, Yie
         ss.str()
     );
 
-    util::http_reply(con, rs, yield.native());
+    util::http_reply(con, rs, yield);
 }
 
 static bool has_body(http::response_header<> const& hdr) {
@@ -216,19 +217,19 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
         using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;
 
         Cancel cancel;
-        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield.native());
-        auto head = Reader::read_signed_head(head_file, cancel, yield.native());
-        head_file.close(yield.native());
+        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield);
+        auto head = Reader::read_signed_head(head_file, cancel, yield);
+        head_file.close(yield);
 
         std::optional<OuisyncFile> sigs_file, body_file;
 
         if (has_sigs(head)) {
-            sigs_file.emplace(OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield.native()));
+            sigs_file.emplace(OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield));
         } else {
             sigs_file.emplace(OuisyncFile::empty(yield.get_executor()));
         }
         if (has_body(head)) {
-            body_file.emplace(OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield.native()));
+            body_file.emplace(OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield));
         } else {
             body_file.emplace(OuisyncFile::empty(yield.get_executor()));
         }

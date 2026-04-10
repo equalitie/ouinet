@@ -660,10 +660,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
               % max_age.total_seconds() % past_as_string(max_age));
 
         sys::error_code ec;
-        auto yield_ = yield.native();
-        auto local_size = cache_client->local_size(cancel, yield_[ec]);
+        auto local_size = cache_client->local_size(cancel, yield[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
+        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
 
         ss << "Approximate size of content cached locally: ";
         if (ec) ss << "(unknown)";
@@ -781,10 +780,9 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
 
     if (cache_client) {
         sys::error_code ec;
-        auto yield_ = yield.native();
-        auto sz = cache_client->local_size(cancel, yield_[ec]);
+        auto sz = cache_client->local_size(cancel, yield[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
+        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
         if (ec) {
             LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
         } else {
