@@ -15,10 +15,7 @@
 #include "../session.h"
 #include "resource_id.h"
 #include "util/crypto_stream_key.h"
-
-#ifdef __EXPERIMENTAL__
-namespace ouinet::ouiservice::i2poui { class Service; }
-#endif
+#include "ouiservice/i2p/fwd.h"
 
 namespace ouinet::cache {
 
@@ -63,7 +60,7 @@ public:
                    , CryptoStreamKey
                    , sign::PublicKey cache_pk
                    , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
-                   , std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+                   , std::shared_ptr<I2pService> i2p_service
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , util::LogPath);
 #endif

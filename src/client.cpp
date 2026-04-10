@@ -666,7 +666,7 @@ private:
     WaitCondition _multi_utp_server_wc;
 
 #ifdef __EXPERIMENTAL__
-    unique_ptr<ouiservice::i2poui::Server> _i2p_cache_server;
+    unique_ptr<I2pServer> _i2p_cache_server;
     WaitCondition _i2p_cache_server_wc;
 #endif // __EXPERIMENTAL__
 
@@ -684,7 +684,7 @@ private:
 
 #ifdef __EXPERIMENTAL__
     //this could be start either because of cache or injector
-    shared_ptr<ouiservice::I2pOuiService> _i2p_service;
+    shared_ptr<I2pService> _i2p_service;
 #endif // ifdef __EXPERIMENTAL__
 
     shared_ptr<dns::Resolver> _dns_resolver;
@@ -2648,7 +2648,7 @@ void Client::State::setup_cache(YieldContext yield)
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
-        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
+        _i2p_service = make_shared<I2pService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
       //TODO: This should ideally move out of cache type claus, Cache type only
@@ -3134,7 +3134,7 @@ void Client::State::setup_injector(asio::yield_context yield)
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
-        _i2p_service = make_shared<ouiservice::I2pOuiService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
+        _i2p_service = make_shared<I2pService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
       auto i2p_client = _i2p_service->build_client(injector_ep->endpoint_string);

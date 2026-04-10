@@ -16,22 +16,13 @@
 #include "dht_groups.h"
 #include "peer_message.h"
 #include "util/crypto_stream_key.h"
-
-namespace i2p::client {
-    class ClientDestination;
-}
+#include "ouiservice/i2p/fwd.h"
 
 namespace ouinet {
 
 namespace bittorrent {
     class DhtBase;
 }
-
-#ifdef __EXPERIMENTAL__
-namespace ouiservice::i2poui {
-    class Service;
-}
-#endif
 
 class Session;
 
@@ -100,9 +91,9 @@ public:
     // we need to know the destination to able to initiate the announcer client on
     // the same i2p id. This is because Zzzot rejects announces whose ip= doesn't
     // match the announcer's destination.
-    bool enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+    bool enable_bep3_announcer( std::shared_ptr<I2pService> i2p_service
                               , std::string tracker_id
-                              , std::shared_ptr<i2p::client::ClientDestination> destination
+                              , std::shared_ptr<I2pClientDestination> destination
                               , size_t simultaneous_announcements);
 #endif // __EXPERIMENTAL__
 

@@ -445,7 +445,7 @@ public:
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
-         , std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+         , std::shared_ptr<I2pService> i2p_service
          , std::shared_ptr<unsigned> newest_proto_seen
          , util::LogPath log_path)
         : _exec(exec)
@@ -689,7 +689,7 @@ private:
     std::shared_ptr<DhtLookup> _peer_lookup;
 #ifdef __EXPERIMENTAL__
     std::shared_ptr<Bep3TrackerLookup> _tracker_lookup;
-    std::shared_ptr<ouiservice::i2poui::Service> _i2p_service;
+    std::shared_ptr<I2pService> _i2p_service;
 #endif
     std::shared_ptr<unsigned> _newest_proto_seen;
     util::LogPath _log_path;
@@ -752,7 +752,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , CryptoStreamKey resource_key
                                 , sign::PublicKey cache_pk
                                 , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
-                                , std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+                                , std::shared_ptr<I2pService> i2p_service
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , util::LogPath log_path)
     : _executor(ex)

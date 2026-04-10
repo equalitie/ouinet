@@ -116,7 +116,7 @@ struct Client::Impl {
     std::unique_ptr<Bep5Announcer> _bep5_announcer;
 #ifdef __EXPERIMENTAL__
     std::shared_ptr<bt::Bep3Tracker> _bep3_tracker;
-    std::shared_ptr<ouiservice::i2poui::Service> _i2p_service;
+    std::shared_ptr<I2pService> _i2p_service;
     std::unique_ptr<Bep3Announcer> _bep3_announcer;
 #endif // __EXPERIMENTAL__
     GarbageCollector _gc;
@@ -165,9 +165,9 @@ struct Client::Impl {
     }
 
 #ifdef __EXPERIMENTAL__
-    bool enable_bep3_announcer( shared_ptr<ouiservice::i2poui::Service> i2p_service
+    bool enable_bep3_announcer( shared_ptr<I2pService> i2p_service
                               , string tracker_id
-                              , shared_ptr<i2p::client::ClientDestination> destination
+                              , shared_ptr<I2pClientDestination> destination
                               , size_t simultaneous_announcements) {
         if (_bep3_announcer) {
             _DEBUG("BEP3 announcer is already enabled");
@@ -910,9 +910,9 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
 }
 
 #ifdef __EXPERIMENTAL__
-bool Client::enable_bep3_announcer( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+bool Client::enable_bep3_announcer( std::shared_ptr<I2pService> i2p_service
                                   , std::string tracker_id
-                                  , std::shared_ptr<i2p::client::ClientDestination> destination
+                                  , std::shared_ptr<I2pClientDestination> destination
                                   , size_t simultaneous_announcements) {
     return _impl->enable_bep3_announcer(std::move(i2p_service), std::move(tracker_id), std::move(destination), simultaneous_announcements);
 }

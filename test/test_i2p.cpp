@@ -31,9 +31,6 @@ using namespace ouinet;
 using namespace chrono;
 using namespace chrono_literals;
 namespace test = boost::unit_test;
-using ouiservice::i2poui::Service;
-using ouiservice::i2poui::Server;
-using ouiservice::i2poui::Client;
 
 const std::string hello_message = "hello";
 
@@ -62,7 +59,7 @@ float as_seconds(std::chrono::duration<Rep, Period> duration) {
 
 void handle_exception(const char* actor, std::exception_ptr ep) {
     // NOTE: Don't re-throw from the `catch` blocks as that will cause the
-    // `i2poui::Service` to _not_ call its destructor which in turn will cause
+    // `I2pService` to _not_ call its destructor which in turn will cause
     // the next test to fail at initialization.
     try {
         if (ep) std::rethrow_exception(ep);
@@ -109,9 +106,9 @@ BOOST_AUTO_TEST_CASE(test_i2p_init_counting) {
     asio::io_context ctx;
     auto exec = ctx.get_executor();
     {
-        auto service1 = Service(setup.tempdir.string(), exec);
+        auto service1 = I2pService(setup.tempdir.string(), exec);
         BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 1, "Init 1: counter at " << ouiservice::i2poui::init_counter);
-        auto service2 = Service("mewmewmew", exec); // testing that the string is no longer relevant. it is not even a path
+        auto service2 = I2pService("mewmewmew", exec); // testing that the string is no longer relevant. it is not even a path
         BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 2, "Init 2: counter at " << ouiservice::i2poui::init_counter);
     }
     BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 0, "outscoping: counter at " << ouiservice::i2poui::init_counter);
@@ -124,11 +121,11 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
-            : service(make_shared<Service>(setup.tempdir.string(), exec))
+            : service(make_shared<I2pService>(setup.tempdir.string(), exec))
             , server_ready(exec)
         {}
 
-        shared_ptr<Service> service;
+        shared_ptr<I2pService> service;
         WaitCondition server_ready;
         string server_ep;
     };
@@ -194,11 +191,11 @@ BOOST_AUTO_TEST_CASE(test_connect_with_handshake) {
 
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
-            : service(make_shared<Service>(setup.tempdir.string(), exec))
+            : service(make_shared<I2pService>(setup.tempdir.string(), exec))
             , server_ready(exec)
         {}
 
-        shared_ptr<Service> service;
+        shared_ptr<I2pService> service;
         WaitCondition server_ready;
         string server_ep;
     };
@@ -280,11 +277,11 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
-            : service(make_shared<Service>(setup.tempdir.string(), exec))
+            : service(make_shared<I2pService>(setup.tempdir.string(), exec))
             , server_ready(exec)
         {}
 
-        shared_ptr<Service> service;
+        shared_ptr<I2pService> service;
         WaitCondition server_ready;
         string server_ep;
         steady_clock::time_point send_started;
@@ -377,12 +374,12 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 
     struct SharedState {
         SharedState(const Setup& setup, AsioExecutor exec)
-            : service(make_shared<Service>(setup.tempdir.string(), exec))
+            : service(make_shared<I2pService>(setup.tempdir.string(), exec))
             , server_ready(exec)
         {}
 
         Cancel cancel;
-        shared_ptr<Service> service;
+        shared_ptr<I2pService> service;
         WaitCondition server_ready;
         string server_ep;
         unsigned subsequent_conn_count = 32;

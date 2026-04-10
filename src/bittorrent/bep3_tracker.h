@@ -8,9 +8,7 @@
 #include "namespaces.h"
 #include "util/signal.h"
 #include "util/condition_variable.h"
-
-namespace i2p::client { class ClientDestination; }
-namespace ouinet::ouiservice::i2poui { class Client; class Service; }
+#include "ouiservice/i2p/fwd.h"
 
 namespace ouinet::bittorrent {
 
@@ -19,9 +17,9 @@ namespace ouinet::bittorrent {
 class Bep3Tracker {
 public:
     using Executor = boost::asio::any_io_executor;
-    Bep3Tracker( std::shared_ptr<ouiservice::i2poui::Service> i2p_service
+    Bep3Tracker( std::shared_ptr<I2pService> i2p_service
                , std::string tracker_id
-               , std::shared_ptr<i2p::client::ClientDestination> destination);
+               , std::shared_ptr<I2pClientDestination> destination);
 
     ~Bep3Tracker();
 
@@ -49,8 +47,8 @@ private:
     static constexpr size_t _peer_id_prefix_len = 8;
 
     Cancel _cancel;
-    std::shared_ptr<ouiservice::i2poui::Client> _i2p_client;
-    std::shared_ptr<i2p::client::ClientDestination> _destination;
+    std::shared_ptr<I2pClient> _i2p_client;
+    std::shared_ptr<I2pClientDestination> _destination;
     std::string _serving_i2p_id;
 
     enum class StartState { not_started, starting, started };

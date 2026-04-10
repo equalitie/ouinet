@@ -9,9 +9,7 @@
 
 #include "bencoding.h"
 #include "bep3_tracker.h"
-#include <ouiservice/i2p/client.h>
-#include <ouiservice/i2p/service.h>
-#include <ouiservice/i2p/i2pd/libi2pd/Destination.h>
+#include "ouiservice/i2p.h"
 #include "../util.h"
 #include "../logger.h"
 #include <ouiservice/i2p/i2pd/libi2pd/Base.h>  // ByteStreamToBase32
@@ -23,9 +21,9 @@ using namespace ouinet::bittorrent;
 namespace http = boost::beast::http;
 namespace beast = boost::beast;
 
-Bep3Tracker::Bep3Tracker( shared_ptr<ouiservice::i2poui::Service> i2p_service
+Bep3Tracker::Bep3Tracker( shared_ptr<I2pService> i2p_service
                          , string tracker_id
-                         , shared_ptr<i2p::client::ClientDestination> destination)
+                         , shared_ptr<I2pClientDestination> destination)
     : _i2p_client(i2p_service->build_client(tracker_id, destination))
     , _destination(move(destination))
     , _start_cv(i2p_service->get_executor())

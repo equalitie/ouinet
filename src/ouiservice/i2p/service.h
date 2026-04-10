@@ -16,7 +16,6 @@ namespace i2p::client {
     class AddressBook;
 }
 
-
 namespace ouinet::ouiservice::i2poui {
 
 class Service : public std::enable_shared_from_this<Service> {

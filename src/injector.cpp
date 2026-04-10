@@ -1027,8 +1027,8 @@ Injector::Injector(
 #ifdef __EXPERIMENTAL__    
 
     if (_config.listen_on_i2p()) {
-      auto i2p_service = make_shared<ouiservice::I2pOuiService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());
-        std::unique_ptr<ouiservice::I2pOuiServiceServer> i2p_server = i2p_service->build_server("i2p-private-key");
+      auto i2p_service = make_shared<I2pService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());
+        std::unique_ptr<I2pServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
         auto ep = i2p_server->public_identity();
         LOG_INFO("I2P public ID: ", ep);

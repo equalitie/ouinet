@@ -39,8 +39,6 @@ namespace test = boost::unit_test;
 using namespace ouinet;
 namespace fs = ouinet::fs ;
 namespace util = ouinet::util;
-using ouiservice::i2poui::Service;
-using ouiservice::i2poui::Client;
 
 const std::string hello_message = "hello";
 

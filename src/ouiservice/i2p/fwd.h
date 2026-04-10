@@ -1,22 +1,20 @@
 #pragma once
 
-#ifdef __EXPERIMENTAL__
+// Forward declarations
 
-#include "../ouiservice.h"
-#include "i2p/client.h"
-#include "i2p/server.h"
-#include "i2p/service.h"
-#include "i2pd/libi2pd/Destination.h"
+namespace i2p::client {
+    class ClientDestination;
+}
 
 namespace ouinet {
+    namespace ouiservice::i2poui {
+        class Server;
+        class Client;
+        class Service;
+    }
+
     using I2pServer = ouiservice::i2poui::Server;
     using I2pClient = ouiservice::i2poui::Client;
     using I2pService = ouiservice::i2poui::Service;
     using I2pClientDestination = i2p::client::ClientDestination;
 }
-
-#else // ifdef __EXPERIMENTAL__
- 
-#include "i2p/fwd.h"
-
-# endif
