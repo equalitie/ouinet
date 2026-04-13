@@ -78,18 +78,18 @@ void run_server_and_client(asio::io_context& ctx, ServerJob server_job, ClientJo
     task::spawn_detached(ctx,
         [ server_job = std::move(server_job)
         , client_job = std::move(client_job)
-        ] (asio::yield_context yield) {
+        ] (asio::yield_context yield) mutable {
             WaitCondition server_finished(yield.get_executor());
             WaitCondition client_finished(yield.get_executor());
 
             // Server
-            asio::spawn(yield.get_executor(), [&, lock = server_finished.lock()] (asio::yield_context yield) {
+            asio::spawn(yield.get_executor(), [&, lock = server_finished.lock()] (asio::yield_context yield) mutable {
                     server_job(yield);
                 },
                 [] (auto e) { handle_exception("server", e); });
 
             // Client
-            asio::spawn(yield.get_executor(), [&, lock = client_finished.lock()] (asio::yield_context yield) {
+            asio::spawn(yield.get_executor(), [&, lock = client_finished.lock()] (asio::yield_context yield) mutable {
                     client_job(yield);
                 },
                 [] (auto e) { handle_exception("client", e); });
@@ -134,7 +134,7 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
             auto server = shared->service->build_server("i2p-private-key");
 
             shared->server_ep = server->public_identity();
@@ -205,7 +205,7 @@ BOOST_AUTO_TEST_CASE(test_connect_with_handshake) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
             BOOST_TEST_MESSAGE("Server spawned");
             auto server = shared->service->build_server("i2p-private-key");
 
@@ -294,7 +294,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
             BOOST_TEST_MESSAGE("Server spawned");
             auto server = shared->service->build_server("i2p-private-key");
 
@@ -390,7 +390,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) {
+        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
             BOOST_TEST_MESSAGE("Server spawned");
             auto server = shared->service->build_server("i2p-private-key");
 
