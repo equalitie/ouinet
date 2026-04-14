@@ -179,6 +179,9 @@ if(WITH_EXPERIMENTAL)
     add_i2p_test(xxx-test-i2p-restart
         "test-i2p-restart.cpp"
     )
+
+    add_executable(test_i2p_tracker "./test_i2p_tracker.cpp")
+    target_link_libraries(test_i2p_tracker injector_lib client_lib)
 endif()
 
 if (WITH_OUISYNC)

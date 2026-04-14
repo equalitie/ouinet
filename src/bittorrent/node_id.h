@@ -63,6 +63,7 @@ struct NodeID {
 
     static NodeID zero();
     static NodeID max();
+    static NodeID random();
 
     // http://bittorrent.org/beps/bep_0042.html
     static NodeID generate(asio::ip::address address);
