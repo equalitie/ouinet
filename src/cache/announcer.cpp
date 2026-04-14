@@ -359,18 +359,6 @@ struct Bep3Loop : public Announcer::Loop {
         TRACK_SPAWN(ex, [this] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
-
-            {
-                TRACK_HANDLER();
-                _DEBUG("Starting I2P client for BEP3 tracker");
-                tracker->ensure_started(cancel, yield[ec]);
-            }
-
-            if (ec) {
-                _DEBUG("Failed to start I2P client: ", ec);
-                return;
-            }
-
             loop(cancel, yield[ec]);
         });
     }

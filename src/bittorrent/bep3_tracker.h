@@ -7,7 +7,7 @@
 #include "node_id.h"
 #include "namespaces.h"
 #include "util/signal.h"
-#include "util/condition_variable.h"
+#include "util/wait_condition.h"
 #include "ouiservice/i2p/fwd.h"
 
 namespace ouinet::bittorrent {
@@ -16,19 +16,15 @@ namespace ouinet::bittorrent {
 // analogous to how DhtBase encapsulates the DHT protocol.
 class Bep3Tracker {
 public:
-    using Executor = boost::asio::any_io_executor;
     Bep3Tracker(I2pServer const&, std::string tracker_id);
 
     ~Bep3Tracker();
-
-    // Start the I2P tunnel if not already started, no-op otherwise
-    void ensure_started(Cancel, asio::yield_context);
 
     void tracker_announce(NodeID infohash, Cancel&, asio::yield_context);
 
     std::set<std::string> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
 
-    Executor get_executor();
+    asio::any_io_executor get_executor();
 
 private:
     // Send an HTTP GET request to the tracker per the BEP 3 tracker protocol
@@ -38,6 +34,9 @@ private:
     // Builds common query parameters and appends extra_params,
     // returns the response body.
     std::string send_request(const std::string& extra_params, Cancel&, asio::yield_context);
+
+    // Wait for the I2P tunnel to start
+    void ensure_started(Cancel, asio::yield_context);
 
     static NodeID generate_random_peer_id();
 
@@ -49,9 +48,8 @@ private:
     std::shared_ptr<I2pClient> _i2p_client;
     std::string _serving_i2p_id;
 
-    enum class StartState { not_started, starting, started };
-    StartState _start_state = StartState::not_started;
-    ConditionVariable _start_cv;
+    using StartState = std::variant<std::shared_ptr<WaitCondition>, sys::error_code>;
+    std::shared_ptr<StartState> _start_state;
 };
 
 } // namespaces

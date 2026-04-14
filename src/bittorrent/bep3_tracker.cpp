@@ -12,6 +12,7 @@
 #include "ouiservice/i2p.h"
 #include "../util.h"
 #include "../logger.h"
+#include "util/overloaded.h"
 #include <ouiservice/i2p/i2pd/libi2pd/Base.h>  // ByteStreamToBase32
 
 using namespace std;
@@ -24,10 +25,21 @@ namespace beast = boost::beast;
 Bep3Tracker::Bep3Tracker(I2pServer const& i2p_server, string tracker_id)
     : _destination(i2p_server.get_destination())
     , _i2p_client(i2p_server.get_service()->build_client(tracker_id, _destination))
-    , _start_cv(i2p_server.get_executor())
+    , _start_state(std::make_shared<StartState>(std::make_shared<WaitCondition>(_i2p_client->get_executor())))
 {
     assert(_destination && "Bep3Tracker requires a valid destination");
     _serving_i2p_id = _destination->GetIdentity()->ToBase64(); //We are sure _destination isn't null Q.E.D
+
+    task::spawn_detached(_i2p_client->get_executor(),
+        [ i2p_client = _i2p_client
+        , start_state = _start_state
+        , lock = std::get<std::shared_ptr<WaitCondition>>(*_start_state)->lock()
+        ] (auto yield) {
+            sys::error_code ec;
+            // TODO: Cancel
+            i2p_client->start(yield[ec]);
+            *start_state = ec;
+        });
 }
 
 Bep3Tracker::~Bep3Tracker()
@@ -37,39 +49,23 @@ Bep3Tracker::~Bep3Tracker()
 
 void Bep3Tracker::ensure_started(Cancel cancel, asio::yield_context yield)
 {
-    // TODO: I2P Client needs to accept Cancel for starting tunnel
     auto slot = _cancel.connect([&] { cancel(); });
 
-    if (_start_state == StartState::started) return;
-
-    if (_start_state == StartState::starting) {
-        // Another coroutine is already starting, wait for it
-        sys::error_code ec;
-        _start_cv.wait(cancel, yield[ec]);
-        ec = compute_error_code(ec, cancel);
-        if (ec ||
-            //this probably should never happen (neither error nor cancelled but
-            // also not started but we leave it as saftey check. 
-            _start_state != StartState::started)
-            return or_throw(yield, ec ? ec : asio::error::operation_aborted);
-        return;
-    }
-
-    _start_state = StartState::starting;
-    sys::error_code ec;
-    _i2p_client->start(yield[ec]);
-    ec = compute_error_code(ec, cancel);
-    if (!ec) {
-        _start_state = StartState::started;
-    } else {
-        _start_state = StartState::not_started;
-    }
-
-    _start_cv.notify(ec);
-    return or_throw(yield, ec);
+    std::visit(overloaded {
+        [&] (std::shared_ptr<WaitCondition> wc) {
+            sys::error_code ignored_ec;
+            wc->wait(cancel, yield[ignored_ec]);
+            if (cancel) return or_throw(yield, asio::error::operation_aborted);
+            return or_throw(yield, std::get<sys::error_code>(*_start_state));
+        },
+        [&] (sys::error_code ec) {
+            return or_throw(yield, ec);
+        }
+    },
+    *_start_state);
 }
 
-Bep3Tracker::Executor Bep3Tracker::get_executor()
+asio::any_io_executor Bep3Tracker::get_executor()
 {
     return _i2p_client->get_executor();
 }
