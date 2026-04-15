@@ -217,6 +217,7 @@ target_link_libraries(ouinet_common
         lib::url
         OpenSSL::Crypto
         ${DEPRECATED_LIBRARIES}
+        ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
         ${OUINET_HARDCODED_CA_CERTS}
         ouinet_dependencies

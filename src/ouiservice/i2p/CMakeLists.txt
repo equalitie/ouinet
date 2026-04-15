@@ -15,9 +15,9 @@ block()
         # https://stackoverflow.com/a/75246115/273348
         cmake_policy(SET CMP0079 NEW)
     endif()
-    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
-    target_link_libraries(libi2pdclient PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
-    target_link_libraries(libi2pdlang   PRIVATE                        ouinet_asio ouinet_asio_ssl)
+    target_link_libraries(libi2pd       PUBLIC Boost::program_options ouinet_asio ouinet_asio_ssl)
+    target_link_libraries(libi2pdclient PUBLIC Boost::program_options ouinet_asio ouinet_asio_ssl)
+    target_link_libraries(libi2pdlang   PUBLIC                        ouinet_asio ouinet_asio_ssl)
 endblock()
 
 # i2pd messes with CMAKE_MODULE_PATH, which breaks automatic dependency handling.
@@ -36,6 +36,7 @@ add_library(ouiservice-i2p SHARED
     "./server.cpp"
     "./service.cpp"
     "../../logger.cpp"
+    "../../async_sleep.cpp"
 )
 add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
 target_include_directories(ouiservice-i2p
@@ -43,6 +44,8 @@ target_include_directories(ouiservice-i2p
         "./i2pd/libi2pd"
         "./i2pd/libi2pd_client"
         "./i2pd/i18n"
+    PRIVATE
+        ../..
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -53,8 +56,6 @@ target_link_libraries(ouiservice-i2p
         z
         libi2pdlang
         OpenSSL::SSL
-    PUBLIC
-        ouinet_common
 )
 
 # Place the resulting library together with the rest.
