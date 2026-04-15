@@ -1,7 +1,7 @@
 variables:
   TARGET_PLATFORM: 'linux'
   BUILD_PATH: 'build/$TARGET_PLATFORM'
-  BUILD_TYPE: 'Release'
+  BUILD_TYPE: 'Debug'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   CMAKE_VERSION: "3.31.7-linux-x86_64"
   WITH_ASAN: "OFF"
