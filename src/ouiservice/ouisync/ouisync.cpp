@@ -2,7 +2,6 @@
 #include <boost/beast/http/vector_body.hpp>
 #include <ouisync.hpp>
 #include <ouisync/service.hpp>
-#include <ouisync/subscription.hpp>
 #include "ouisync.h"
 #include "error.h"
 #include "util/url.h"
@@ -20,7 +19,6 @@ using ouisync::Session;
 using ouisync::Repository;
 using ouisync::File;
 using ouisync::ShareToken;
-using ouisync::RepositorySubscription;
 
 // TODO: Set through cmd args as these may differ in tests and in production
 static const bool SYNC_ENABLED = true;
@@ -59,9 +57,7 @@ void set_repo_defaults(Repository& repo, bool can_mount, asio::yield_context yie
 }
 
 File open_file(Repository& repo, std::string const& path, YieldContext yield) {
-    RepositorySubscription sub;
-    sub.subscribe(repo, yield.native());
-
+    auto sub = repo.subscribe();
     bool is_fully_loaded = false;
 
     while (true) {
@@ -93,7 +89,7 @@ File open_file(Repository& repo, std::string const& path, YieldContext yield) {
                 continue;
             }
 
-            sub.state_changed(yield.native());
+            sub.async_receive(yield.native());
         }
     }
 }
@@ -214,7 +210,7 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
 
         // TODO: Use constants from http_store.cpp instead of these hardcoded
         // strings
-        fs::path root = "data-v3";
+        fs::path root = "data-v4";
         fs::path path = cache::path_from_resource_id(root, rq.resource_id());
 
         using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;

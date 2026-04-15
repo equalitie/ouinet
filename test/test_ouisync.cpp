@@ -179,6 +179,8 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
             });
 
+        ouisync::init_log();
+
         auto ouisync_service_dir = root.make_subdir("ouisync");
         ouisync::Service service(yield.get_executor());
         service.start(ouisync_service_dir.string().c_str(), "ouisync-service", yield);
@@ -250,7 +252,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
         session.copy(
             {},                                                     // `src_repo`
-            (seeder_dir.path() / "bep5_http" / "data-v3").string(), // `src_path`
+            (seeder_dir.path() / "bep5_http" / "data-v4").string(), // `src_path`
             group,                                                  // `dst_repo`
             "/",                                                    // `dst_path`
             yield);
@@ -276,4 +278,3 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
     ctx.run();
 }
-
