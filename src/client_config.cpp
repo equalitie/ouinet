@@ -290,6 +290,8 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
              * BEP5 the endpoint should be something different in order to manage multiple
              * connections when performing the discovery of peers using a DHT.
              */
+             // TODO: here is the last place where the incorrect i2p injector endpoint can be constructed
+             // but idk how to validate it, and if it is possible at all.
             if (!_injector_ep) {
                 _injector_ep = Endpoint{
                    Endpoint::I2pEndpoint,
