@@ -1,11 +1,15 @@
 #include <boost/optional/optional_io.hpp>
 #include "client_config.h"
 
+#ifdef __EXPERIMENTAL__
+#include "ouiservice/i2p/address.h"
+#endif // __EXPERIMENTAL__
+
 namespace ouinet {
 
-template<class... Args>
+template <class... Args>
 inline
-std::runtime_error error(Args&&... args) {
+std::runtime_error error(Args && ...args) {
     return std::runtime_error(util::str(std::forward<Args>(args)...));
 }
 
@@ -342,7 +346,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 ));
         }
 
-        if (!(//If we neither connecting for an i2p injector 
+        if (!(//If we neither connecting for an i2p injector
             (_injector_ep && _injector_ep->type == Endpoint::I2pEndpoint) ||
             //nor we are not  running a Bep5 over i2p cache
             (_cache_type == CacheType::Bep3HTTPOverI2P)))
@@ -362,6 +366,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         if (_cache_type != CacheType::Bep3HTTPOverI2P) {
             throw std::runtime_error(
                 "'--i2p-bep3-tracker' can only be used with '--cache-type=bep3-http-over-i2p'");
+        }
+        if (!ouinet::ouiservice::i2poui::isValidI2PB32(opt.value())) {
+            throw std::runtime_error(
+                "invalid i2p address of bep3 tracker was provided");
         }
         _i2p_bep3_tracker = *opt;
     }
