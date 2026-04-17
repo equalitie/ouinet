@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <boost/filesystem.hpp>
 #include "namespaces.h"
 
