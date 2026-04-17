@@ -146,8 +146,8 @@ if(WITH_EXPERIMENTAL)
     add_executable(test_i2p_endpoint "test_i2p_endpoint.cpp")
     target_link_libraries(test_i2p_endpoint injector_lib)
 
-    add_executable(test_fetch_i2p_bep3 "./test_fetch_i2p_bep3.cpp")
-    target_link_libraries(test_fetch_i2p_bep3 injector_lib client_lib)
+    add_executable(test_i2p_fetch "./test_i2p_fetch.cpp")
+    target_link_libraries(test_i2p_fetch injector_lib client_lib)
 
     add_executable(test_i2p_tracker "./test_i2p_tracker.cpp")
     target_link_libraries(test_i2p_tracker injector_lib client_lib)
