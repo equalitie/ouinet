@@ -82,7 +82,13 @@ Service::Service(const string& datadir, const executor_type& exec, const size_t 
 
 Service::~Service()
 {
-    if (_local_destination) _local_destination->Stop();
+    if (_local_destination) {
+        _local_destination->Stop();
+        // Doing this explicitly here because if it's destroyed _after_
+        // `StopI2P` then subsequent initialization of i2pd will misbehave (the
+        // next i2p c++ test will fail).
+        _local_destination.reset();
+    }
 
     if (--init_counter == 0) {
         i2p::api::StopI2P();
