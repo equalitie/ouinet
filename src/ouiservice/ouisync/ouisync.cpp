@@ -62,8 +62,7 @@ File open_file(Repository& repo, std::string const& path, YieldContext yield) {
 
     while (true) {
         try {
-            // TODO: Why is the static_cast needed?
-            return repo.open_file(path, static_cast<asio::yield_context const&>(yield));
+            return repo.open_file(path, yield);
         }
         catch (const sys::system_error& e) {
             if (is_fully_loaded) {
