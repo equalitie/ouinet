@@ -3,6 +3,7 @@
 #include <set>
 #include <string>
 #include <memory>
+#include <variant>
 #include <boost/asio/spawn.hpp>
 #include "node_id.h"
 #include "namespaces.h"
