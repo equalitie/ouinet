@@ -11,7 +11,7 @@ void data(void* data, size_t size)
     std::uniform_int_distribution<std::mt19937::result_type> dist(0,255);
 
     for (size_t i = 0; i < size; ++i) {
-        *((uint8_t*) data) = dist(g_rng);
+        *((uint8_t*) data++) = dist(g_rng);
     }
 }
 
