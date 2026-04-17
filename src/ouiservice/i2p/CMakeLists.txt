@@ -35,6 +35,7 @@ add_library(ouiservice-i2p SHARED
     "./client.cpp"
     "./server.cpp"
     "./service.cpp"
+    "./address.cpp"
     "../../logger.cpp"
     "../../async_sleep.cpp"
 )

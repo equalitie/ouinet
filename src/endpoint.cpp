@@ -1,4 +1,8 @@
 #include "endpoint.h"
+#include "ouiservice/i2p/address.h"
+#include <boost/none.hpp>
+
+using ouinet::ouiservice::i2poui::isValidI2PB32;
 
 namespace ouinet {
 
@@ -23,6 +27,10 @@ boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
 #ifdef __EXPERIMENTAL__
     } else if (type == "i2p") {
         output.type = Endpoint::I2pEndpoint;
+        if (not isValidI2PB32(output.endpoint_string)){
+            return boost::none;
+        }
+
 #endif // ifdef __EXPERIMENTAL__
 #ifdef __DEPRECATED__
     } else if (type == "lampshade") {
