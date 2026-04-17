@@ -31,7 +31,7 @@ void Server::load_private_key(const string& key_file_name)
 {
     ifstream in_file(key_file_name);
     string keys_str;
-    LOG_DEBUG("Reading private key from" + key_file_name);
+    OUI_LOG_DEBUG("Reading private key from" + key_file_name);
     if (in_file.is_open()) {
         keys_str = string( istreambuf_iterator<char>(in_file)
                          , istreambuf_iterator<char>());
@@ -65,7 +65,7 @@ void Server::start_listen(asio::yield_context yield)
     sys::error_code ec;
 
     /// announce that we started listening on i2p port
-    LOG_DEBUG("I2P server openning port..");
+    OUI_LOG_DEBUG("I2P server openning port..");
 
     _tcp_acceptor.open(endpoint.protocol(), ec);
     if (ec) {
@@ -97,7 +97,7 @@ void Server::start_listen(asio::yield_context yield)
         _server_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_tunnel), _timeout);
         _server_tunnel->wait_to_get_ready(yield[ec]);
         if (ec) {
-            LOG_DEBUG("I2P server tunnel setup attempt failed; ec=", ec.message());
+            OUI_LOG_DEBUG("I2P server tunnel setup attempt failed; ec=", ec.message());
         }
     }
     while(ec && !cancel);
@@ -130,7 +130,7 @@ GenericStream Server::accept(asio::yield_context yield) {
         return or_throw<GenericStream>(yield, ec);
     }
 
-    LOG_DEBUG("I2P server: accepted connection from ", conn.remote_endpoint());
+    OUI_LOG_DEBUG("I2P server: accepted connection from ", conn.remote_endpoint());
 
     Cancel cancel = _stopped;
     perform_handshake(conn, cancel, yield[ec]);

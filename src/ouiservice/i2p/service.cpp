@@ -16,11 +16,6 @@ using namespace ouinet::ouiservice;
 using namespace ouinet::ouiservice::i2poui;
 
 #include "../../logger.h"
-//Includeding logger doesn't work for a reason I do not understand
-#define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__))
 
 static const uint16_t i2cp_port = 7454;
 
@@ -50,7 +45,7 @@ Service::Service(const string& datadir, const executor_type& exec, const size_t 
     , _data_dir(datadir)
     , _tunnel_params(make_tunnel_params(_number_of_hops_per_tunnel))
 {
-    LOG_INFO("Starting i2p tunnels");
+    OUI_LOG_INFO("Starting i2p tunnels");
 
     string datadir_arg = "--datadir=" + datadir;
 
@@ -66,7 +61,7 @@ Service::Service(const string& datadir, const executor_type& exec, const size_t 
     // we might change CryptoType to ECIES or to x25519 once it's available in the network
     auto keys = i2p::data::PrivateKeys::CreateRandomKeys (i2p::data::SIGNING_KEY_TYPE_EDDSA_SHA512_ED25519);
 
-    LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be ",
+    OUI_LOG_INFO("Number of hops in I2P inbound and outbound tunnels is set to be ",
              _number_of_hops_per_tunnel);
     _local_destination = std::make_shared<i2p::client::RunnableClientDestination>(keys, false, &_tunnel_params);
     // Start destination's thread and tunnel pool
@@ -112,16 +107,16 @@ void Service::load_known_hosts_to_address_book()
     if (f.is_open ())
       {
         _i2p_address_book->LoadHostsFromStream (f, false);
-        LOG_INFO("Pre-resolved host loaded!");
+        OUI_LOG_INFO("Pre-resolved host loaded!");
 
       }
     else
       {
-        LOG_WARN("Failed to load host resolver file!");
+        OUI_LOG_WARN("Failed to load host resolver file!");
       }
   } else {
     //inform then panic!
-    LOG_ABORT("address book has not been initiated before loading!");
+    OUI_LOG_ABORT("address book has not been initiated before loading!");
   }
 }
 
