@@ -70,30 +70,6 @@ asio::any_io_executor Bep3Tracker::get_executor()
     return _i2p_client->get_executor();
 }
 
-NodeID Bep3Tracker::generate_random_peer_id()
-{
-    // From Spec: https://www.bittorrent.org/beps/bep_0003.html
-    // "
-    // peer_id
-    // A string of length 20 which this downloader uses as its id. Each downloader generates its own
-    // id at random at the start of a new download. This value will also almost certainly have to be
-    // escaped.
-    // "
-    //
-    // As we only use bittorent protocol to announce and we do not use it for downloading the cached
-    // content we opportunistically re-randomize the peer_id on each announce least we leave 
-    // unnecessary tracking traces behind.
-    NodeID::Buffer buf;
-    for (size_t i = 0; i < _peer_id_prefix_len && i < buf.size(); ++i) {
-        buf[i] = static_cast<uint8_t>(_peer_id_prefix[i]);
-    }
-    srand(time(nullptr));
-    for (size_t i = _peer_id_prefix_len; i < buf.size(); ++i) {
-        buf[i] = rand() % 256;
-    }
-    return NodeID(buf);
-}
-
 string Bep3Tracker::send_request( const string& extra_params
                                 , Cancel& cancel
                                 , asio::yield_context yield)
@@ -112,7 +88,10 @@ string Bep3Tracker::send_request( const string& extra_params
     ec = compute_error_code(ec, cancel);
     if (ec) return or_throw(yield, ec, string{});
 
-    auto peer_id = generate_random_peer_id();
+    // As we only use bittorent protocol to announce and we do not use it for downloading the cached
+    // content we opportunistically re-randomize the peer_id on each announce least we leave 
+    // unnecessary tracking traces behind.
+    auto peer_id = NodeID::random();
 
     string peer_id_encoded = util::percent_encode(peer_id.to_bytestring());
 
