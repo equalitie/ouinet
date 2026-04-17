@@ -1,88 +1,98 @@
 #pragma once
 
 #include <functional>
-#include <iostream>
-
 #include <boost/asio/error.hpp>
-#include <boost/intrusive/list.hpp>
 #include <boost/system/error_code.hpp>
 
+#include "intrusive_list.h"
 #include "../namespaces.h"
-
 #include "../or_throw.h"
 
 namespace ouinet {
 
 template<typename T>
 class Signal {
-private:
-    template<class K>
-    using List = boost::intrusive::list<K, boost::intrusive::constant_time_size<false>>;
-    using Hook = boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
-
 public:
-    class Connection : public Hook
+    class Connection
     {
     public:
         Connection() = default;
 
-        Connection(Connection&& other)
-            : _slot(std::move(other._slot))
-            , _call_count(other._call_count)
-        {
-            other._call_count = 0;
-            other.swap_nodes(*this);
+        Connection(Connection&& other) {
+            *this = std::move(other);
         }
 
         Connection& operator=(Connection&& other) {
+            if (this == &other) return *this;
             _slot = std::move(other._slot);
+            other._hook.swap_nodes(this->_hook);
+            other._hook.unlink();
             _call_count = other._call_count;
             other._call_count = 0;
-            other.swap_nodes(*this);
             return *this;
         }
 
-        size_t call_count() const { return _call_count; }
-
-        operator bool() const { return call_count() != 0; }
+        operator bool() const { return _call_count != 0; }
 
     private:
         friend class Signal;
+        template<typename... Args>
+        void on_signal(Args&&... args) {
+            ++_call_count;
+            if (_slot) {
+                auto slot = std::move(_slot);
+                slot(std::forward<Args>(args)...);
+            }
+        }
+
+    private:
+        util::intrusive::list_hook _hook;
         std::function<T> _slot;
-        size_t _call_count = 0;
+        uint32_t _call_count = 0;
     };
 
 public:
-    Signal()                    = default;
+    Signal() = default;
 
+    // NOTE: We can't allow copying while using intrusive lists for children
+    // because a copy would need to have the same children and one child can
+    // not be in two intrusive lists.
     Signal(const Signal&)            = delete;
     Signal& operator=(const Signal&) = delete;
 
     Signal(Signal& parent)
-        : _parent_connection(parent.connect(call_to_self()))
-    {}
-
-    Signal(Signal&& other)
-        : _connections(std::move(other._connections))
-        , _call_count(other._call_count)
+        : _parent(&parent)
     {
-        other._call_count = 0;
+        parent._children.push_back(*this);
+    }
 
-        if (other._parent_connection._slot) {
-            _parent_connection = std::move(other._parent_connection);
-            _parent_connection._slot = call_to_self();
-        }
+    Signal(Signal&& other) {
+        *this = std::move(other);
     }
 
     Signal& operator=(Signal&& other)
     {
-        _connections = std::move(other._connections);
+        if (this == &other) return *this;
+
+        abandon_children();
+
+        _hook.unlink();
+        _hook.swap_nodes(other._hook);
+
+        _parent = other._parent;
+        other._parent = nullptr;
+
+        _children.swap(other._children);
+        other._children.clear();
+
+        _connections.swap(other._connections);
+        other._connections.clear();
+
         _call_count = other._call_count;
         other._call_count = 0;
 
-        if (other._parent_connection._slot) {
-            _parent_connection = std::move(other._parent_connection);
-            _parent_connection._slot = call_to_self();
+        for (auto& c : _children) {
+            c._parent = this;
         }
 
         return *this;
@@ -93,15 +103,9 @@ public:
     {
         ++_call_count;
 
-        auto connections = std::move(_connections);
-        for (auto& connection : connections) {
-            try {
-                ++connection._call_count;
-                connection._slot(std::forward<Args>(args)...);
-            } catch (std::exception& e) {
-                assert(0);
-            }
-        }
+        auto cs = std::move(_connections);
+        for (auto& c : cs) { c.on_signal(std::forward<Args>(args)...); }
+        for (auto& c : _children) { c(std::forward<Args>(args)...); }
     }
 
     size_t call_count() const { return _call_count; }
@@ -119,17 +123,36 @@ public:
 
     size_t size() const { return _connections.size(); }
 
-private:
-    auto call_to_self() {
-        return [&] (auto&&... args) {
-                    (*this)(std::forward<decltype(args)>(args)...);
-               };
+    ~Signal() {
+        abandon_children();
     }
 
 private:
-    List<Connection> _connections;
-    size_t _call_count = 0;
-    Connection _parent_connection;
+    // Move children to their grand parent (parent of this).
+    void abandon_children() {
+        if (_parent) {
+            assert(_hook.is_linked());
+            auto i = _parent->_children.iterator_to(*this);
+            while (!_children.empty()) {
+                auto& c = _children.front();
+                c._hook.unlink();
+                c._parent = _parent;
+                _parent->_children.insert(i, c);
+            }
+        }
+        else {
+            for (auto& c : _children) {
+                c._parent = nullptr;
+            }
+        }
+    }
+
+private:
+    util::intrusive::list_hook _hook;
+    Signal* _parent = nullptr;
+    util::intrusive::list<Signal, &Signal::_hook> _children;
+    util::intrusive::list<Connection, &Connection::_hook> _connections;
+    uint32_t _call_count = 0;
 };
 
 // This is how we use it 99% (100%?) of the time.
