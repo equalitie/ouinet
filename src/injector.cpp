@@ -1017,14 +1017,13 @@ Injector::Injector(
     }
 #endif // __DEPRECATED__    
 #ifdef __EXPERIMENTAL__    
-
     if (_config.listen_on_i2p()) {
-      auto i2p_service = make_shared<I2pService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());
+        auto i2p_service = make_shared<I2pService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());
         std::unique_ptr<I2pServer> i2p_server = i2p_service->build_server("i2p-private-key");
 
-        auto ep = i2p_server->public_identity();
-        LOG_INFO("I2P public ID: ", ep);
-        util::create_state_file(_config.repo_root()/"endpoint-i2p", ep.value);
+        _i2p_address = i2p_server->public_identity();
+        LOG_INFO("I2P public ID: ", *_i2p_address);
+        util::create_state_file(_config.repo_root()/"endpoint-i2p", _i2p_address->value);
 
         proxy_server->add(std::move(i2p_server));
     }
