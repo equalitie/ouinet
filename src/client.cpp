@@ -1241,8 +1241,9 @@ Session Client::State::fetch_fresh_through_simple_proxy
     if (_injector_connections.empty()) {
         _YDEBUG(yield, "Connecting to the injector");
 
-        auto c = _injector->connect(yield[ec].tag("connect_to_injector2").native(), timeout_cancel);
-
+        auto c = yield[ec].tag("connect_to_injector2").run([&] (auto y) {
+            return _injector->connect(y, timeout_cancel);
+        });
         if (ec = compute_error_code(ec, cancel, watch_dog)) {
             _YWARN(yield, "Failed to connect to injector; ec=", ec);
             metrics.finish(ec);

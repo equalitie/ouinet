@@ -26,20 +26,6 @@ public:
     }
 
 private:
-    enum class SwarmType {
-        injector,
-        helper
-    };
-
-    friend std::ostream& operator<<(std::ostream& os, SwarmType t) {
-        switch (t) {
-            case SwarmType::injector: return os << "injector";
-            case SwarmType::helper: return os << "helper";
-        }
-        assert(false);
-        return os << "?";
-    }
-
     using AbstractClient = OuiServiceImplementationClient;
     struct Swarm;
     class InjectorPinger;
@@ -47,15 +33,12 @@ private:
     struct Candidate {
         asio::ip::udp::endpoint endpoint;
         std::shared_ptr<AbstractClient> client;
-        SwarmType swarm_type;
+        Target target;
 
         friend std::ostream& operator<<(std::ostream& os, const Candidate& c) {
-            return os << "Candidate{ endpoint:" << c.endpoint << ", client:" << c.client.get() << ", type:" << c.swarm_type << "}";
+            return os << "Candidate{ endpoint:" << c.endpoint << ", client:" << c.client.get() << ", target:" << c.target << "}";
         }
     };
-
-    struct Candidates;
-    friend class Candidates;
 
 public:
     Bep5Client( std::shared_ptr<bittorrent::DhtBase>
@@ -75,7 +58,7 @@ public:
     size_t injector_candidates_n() const noexcept;
 
     GenericStream connect(asio::yield_context, Cancel&) override;
-    GenericStream connect(asio::yield_context, Cancel&, bool use_tls, Target);
+    GenericStream connect(asio::yield_context, Cancel&, bool tls, Target);
 
     ~Bep5Client();
 
@@ -83,8 +66,9 @@ public:
 
 private:
     void status_loop(asio::yield_context);
+    std::vector<Candidate> get_peers(Target);
 
-    GenericStream connect_single(AbstractClient&, bool use_tls, Cancel&, asio::yield_context);
+    GenericStream connect_single(AbstractClient&, bool tls, Cancel&, asio::yield_context);
 
 private:
     std::shared_ptr<bittorrent::DhtBase> _dht;
