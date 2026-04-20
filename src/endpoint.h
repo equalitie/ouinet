@@ -1,8 +1,8 @@
 #pragma once
 
-#include <boost/variant.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
+#include <variant>
 #include <optional>
 #include <string>
 #include "ouiservice/i2p/address.h"
