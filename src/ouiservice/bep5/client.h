@@ -2,6 +2,7 @@
 
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/optional.hpp>
 #include <asio_utp/udp_multiplexer.hpp>
 
 #include "../../ouiservice.h"

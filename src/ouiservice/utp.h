@@ -41,7 +41,7 @@ class UtpOuiServiceClient : public OuiServiceImplementationClient
     public:
     UtpOuiServiceClient( const AsioExecutor&
                        , asio_utp::udp_multiplexer
-                       , std::string remote_endpoint);
+                       , asio::ip::udp::endpoint remote_endpoint);
 
     void start(asio::yield_context) override {}
     void stop() override {}

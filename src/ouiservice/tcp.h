@@ -28,7 +28,7 @@ class TcpOuiServiceServer : public OuiServiceImplementationServer
 class TcpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
-    TcpOuiServiceClient(const AsioExecutor&, std::string endpoint);
+    TcpOuiServiceClient(const AsioExecutor&, asio::ip::tcp::endpoint endpoint);
 
     // Tcp clients don't have any internal async IO to be started/stopped.
     void start(asio::yield_context yield) override {}

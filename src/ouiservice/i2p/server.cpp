@@ -169,7 +169,7 @@ GenericStream Server::accept_without_handshake(asio::yield_context yield)
 
 I2pAddress Server::public_identity() const
 {
-    return I2pAddress { _private_keys->GetPublic()->ToBase64() };
+    return *I2pAddress::parse(_private_keys->GetPublic()->ToBase64());
 }
 
 } // namespaces

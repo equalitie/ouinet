@@ -1,89 +1,71 @@
 #include "endpoint.h"
-#include "ouiservice/i2p/address.h"
-#include <boost/none.hpp>
-
-using ouinet::ouiservice::i2poui::isValidI2PB32;
+#include "util/overloaded.h"
+#include "parse/number.h"
 
 namespace ouinet {
 
-boost::optional<Endpoint> parse_endpoint(beast::string_view endpoint)
-{
-    size_t pos = endpoint.find(':');
-    if (pos == std::string::npos) {
-        return boost::none;
-    }
-    beast::string_view type = endpoint.substr(0, pos);
-    Endpoint output;
-    output.endpoint_string = std::string(endpoint.substr(pos + 1));
+// TODO: Use parse/endpoint.h (it uses boost::{optional,string_view} though).
+template<class TcpOrUdp>
+static std::optional<typename TcpOrUdp::endpoint> parse_ip_endpoint(std::string_view s) {
+    auto pos = s.find(':');
+    if (pos == std::string::npos) return {};
 
-    if (type == "tcp") {
-        output.type = Endpoint::TcpEndpoint;
-    } else if (type == "utp") {
-        output.type = Endpoint::UtpEndpoint;
-#ifdef USE_GNUNET
-    } else if (type == "gnunet") {
-        output.type = Endpoint::GnunetEndpoint;
-#endif
-#ifdef __EXPERIMENTAL__
-    } else if (type == "i2p") {
-        output.type = Endpoint::I2pEndpoint;
-        if (not isValidI2PB32(output.endpoint_string)){
-            return boost::none;
-        }
+    sys::error_code ec;
+    auto addr = asio::ip::make_address(s.substr(0, pos), ec);
+    if (ec) return {};
 
-#endif // ifdef __EXPERIMENTAL__
-#ifdef __DEPRECATED__
-    } else if (type == "lampshade") {
-        output.type = Endpoint::LampshadeEndpoint;
-    } else if (type == "obfs2") {
-        output.type = Endpoint::Obfs2Endpoint;
-    } else if (type == "obfs3") {
-        output.type = Endpoint::Obfs3Endpoint;
-    } else if (type == "obfs4") {
-        output.type = Endpoint::Obfs4Endpoint;
-#endif // ifdef  __DEPRECATED__
-    } else if (type == "bep5") {
-        output.type = Endpoint::Bep5Endpoint;
-    } else {
-        return boost::none;
-    }
-    return output;
+    auto port_s = s.substr(pos + 1);
+    auto port = parse::number<unsigned short>(port_s);
+    if (!port) return {};
+
+    return typename TcpOrUdp::endpoint(addr, *port);
 }
 
-std::ostream& operator<<(std::ostream& os, const Endpoint& ep)
-{
-    if (ep.type == Endpoint::TcpEndpoint) {
-        os << "tcp";
-    } else if (ep.type == Endpoint::UtpEndpoint) {
-        os << "utp";
-#ifdef USE_GNUNET
-    } else if (ep.type == Endpoint::GnunetEndpoint) {
-        os << "gnunet";
-#endif
-#ifdef __EXPERIMENTAL__
-    } else if (ep.type == Endpoint::I2pEndpoint) {
-        os << "i2p";
-#endif // ifdef __EXPERIMENTAL__
-#ifdef __DEPRECATED__
-    } else if (ep.type == Endpoint::LampshadeEndpoint) {
-        os << "lampshade";
-    } else if (ep.type == Endpoint::Obfs2Endpoint) {
-        os << "obfs2";
-    } else if (ep.type == Endpoint::Obfs3Endpoint) {
-        os << "obfs3";
-    } else if (ep.type == Endpoint::Obfs4Endpoint) {
-        os << "obfs4";
-#endif // ifdef __DEPRECATED__
-    } else if (ep.type == Endpoint::Bep5Endpoint) {
-        os << "bep5";
-    } else {
-        assert(false);
-    }
+/* static */
+std::optional<Endpoint> Endpoint::parse(std::string_view s) {
+    size_t pos = s.find(':');
+    if (pos == std::string::npos) return {};
 
-    os << ":";
-    os << ep.endpoint_string;
+    std::string_view type = s.substr(0, pos);
+    auto ep_s = s.substr(pos + 1);
+
+    if (type == "tcp") {
+        auto ep = parse_ip_endpoint<asio::ip::tcp>(ep_s);
+        if (!ep) return {};
+        return *ep;
+    } else if (type == "utp") {
+        auto ep = parse_ip_endpoint<asio::ip::udp>(ep_s);
+        if (!ep) return {};
+        return Utp { *ep };
+    } else if (type == "i2p") {
+        auto addr = I2pAddress::parse(ep_s);
+        if (!addr) return {};
+        return *addr;
+    } else if (type == "bep5") {
+        return Bep5 { std::string(ep_s) };
+    } else {
+        return {};
+    }
+}
+
+std::ostream& operator<<(std::ostream& os, const Endpoint& ep) {
+    std::visit(overloaded {
+            [&] (asio::ip::tcp::endpoint const& ep) mutable {
+                os << "tcp:" << ep;
+            },
+            [&] (Endpoint::Utp const& ep) mutable {
+                os << "utp:" << ep.value;
+            },
+            [&] (I2pAddress const& ep) mutable {
+                os << "i2p:" << ep;
+            },
+            [&] (Endpoint::Bep5 const& ep) mutable {
+                os << "bep5:" << ep.value;
+            },
+        },
+        ep._alternative);
 
     return os;
 }
 
-} // ouinet namespace
+} // ouinet

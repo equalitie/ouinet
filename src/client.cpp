@@ -33,6 +33,7 @@
 #include "async_sleep.h"
 #include "or_throw.h"
 #include "request_routing.h"
+#include "split_string.h"
 #include "request.h"
 #include "peer_message.h"
 #include "full_duplex_forward.h"
@@ -3092,14 +3093,14 @@ void Client::State::setup_injector(asio::yield_context yield)
     std::unique_ptr<OuiServiceImplementationClient> client;
 
 #ifdef __EXPERIMENTAL__
-    if (injector_ep->type == Endpoint::I2pEndpoint) {
+    if (auto ep = injector_ep->get_if<I2pAddress>()) {
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
         _i2p_service = make_shared<I2pService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
-      auto i2p_client = _i2p_service->build_client(I2pAddress{injector_ep->endpoint_string});
+      auto i2p_client = _i2p_service->build_client(*ep);
 
       //TODO: should we uncomment this?
       // if (!i2p_client->verify_endpoint()) {
@@ -3110,27 +3111,27 @@ void Client::State::setup_injector(asio::yield_context yield)
     }
     else
 #endif // ifdef __EXPERIMENTAL__
-    if (injector_ep->type == Endpoint::TcpEndpoint) {
-        auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), injector_ep->endpoint_string);
+    if (auto ep = injector_ep->get_if<asio::ip::tcp::endpoint>()) {
+        auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), *ep);
 
         if (!tcp_client->verify_endpoint()) {
             return or_throw(yield, ec = asio::error::invalid_argument);
         }
         client = maybe_wrap_tls(move(tcp_client));
-    } else if (injector_ep->type == Endpoint::UtpEndpoint) {
+    } else if (auto ep = injector_ep->get_if<Endpoint::Utp>()) {
         asio_utp::udp_multiplexer m(_ctx);
         m.bind(common_udp_multiplexer(), ec);
         assert(!ec);
 
         auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
-            (_ctx.get_executor(), move(m), injector_ep->endpoint_string);
+            (_ctx.get_executor(), move(m), ep->value);
 
         if (!utp_client->verify_remote_endpoint()) {
             return or_throw(yield, ec = asio::error::invalid_argument);
         }
 
         client = maybe_wrap_tls(move(utp_client));
-    } else if (injector_ep->type == Endpoint::Bep5Endpoint) {
+    } else if (auto ep = injector_ep->get_if<Endpoint::Bep5>()) {
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
             if (ec != asio::error::operation_aborted) {
@@ -3147,7 +3148,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         }
 
         _bep5_client = make_shared<ouiservice::Bep5Client>
-                (dht, injector_ep->endpoint_string, *bridge_swarm_name, _config.is_bridge_announcement_enabled(),
+                (dht, ep->value, *bridge_swarm_name, _config.is_bridge_announcement_enabled(),
                  &inj_ctx);
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
@@ -3159,40 +3160,6 @@ void Client::State::setup_injector(asio::yield_context yield)
             ec = {};
         }
     }
-#ifdef __DEPRECATED__
-/*
-    else if (injector_ep->type == Endpoint::LampshadeEndpoint) {
-        auto lampshade_client = make_unique<ouiservice::LampshadeOuiServiceClient>(_ctx, injector_ep->endpoint_string);
-
-        if (!lampshade_client->verify_endpoint()) {
-            return or_throw(yield, ec = asio::error::invalid_argument);
-        }
-        client = std::move(lampshade_client);
-    }
-*/
-    else if (injector_ep->type == Endpoint::Obfs2Endpoint) {
-        auto obfs2_client = make_unique<ouiservice::Obfs2OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs2-client");
-
-        if (!obfs2_client->verify_endpoint()) {
-            return or_throw(yield, ec = asio::error::invalid_argument);
-        }
-        client = std::move(obfs2_client);
-    } else if (injector_ep->type == Endpoint::Obfs3Endpoint) {
-        auto obfs3_client = make_unique<ouiservice::Obfs3OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs3-client");
-
-        if (!obfs3_client->verify_endpoint()) {
-            return or_throw(yield, ec = asio::error::invalid_argument);
-        }
-        client = std::move(obfs3_client);
-    } else if (injector_ep->type == Endpoint::Obfs4Endpoint) {
-        auto obfs4_client = make_unique<ouiservice::Obfs4OuiServiceClient>(_ctx, injector_ep->endpoint_string, _config.repo_root()/"obfs4-client");
-
-        if (!obfs4_client->verify_endpoint()) {
-            return or_throw(yield, ec = asio::error::invalid_argument);
-        }
-        client = std::move(obfs4_client);
-    }
-#endif // ifdef __DEPRECATED__
 
     _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
     _injector->add(*injector_ep, std::move(client));

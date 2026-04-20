@@ -135,7 +135,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         auto injector_ep_str = *opt;
 
         if (!injector_ep_str.empty()) {
-            auto opt = parse_endpoint(injector_ep_str);
+            auto opt = Endpoint::parse(injector_ep_str);
 
             if (!opt) {
                 throw error("Failed to parse endpoint: ", injector_ep_str);
@@ -248,14 +248,13 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                     "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
             }
 
-            if (_injector_ep && _injector_ep->type == Endpoint::Bep5Endpoint) {
+            if (_injector_ep && _injector_ep->get_if<Endpoint::Bep5>()) {
                 throw error("A BEP5 injector endpoint is derived implicitly"
                             " when using '--cache-type=bep5-http',"
                             " but it is already set to: ", *_injector_ep);
             }
             if (!_injector_ep) {
-                _injector_ep = Endpoint{
-                    Endpoint::Bep5Endpoint,
+                _injector_ep = Endpoint::Bep5{
                     bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
                 };
             }
@@ -269,30 +268,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             if (!_cache_http_pubkey) {
                 throw std::runtime_error(
                     "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
-            }
-
-            // An injector can be explicitly set but it should always be an I2P endpoint
-            // TODO: why? based on what logic?
-            // if (_injector_ep && _injector_ep->type != Endpoint::I2pEndpoint) {
-            //     throw std::runtime_error(
-            //         util::str("A BEP3-I2P injector is derived implicitly"
-            //                   " when using '--cache-type=bep3-http-over-i2p',"
-            //                   " but it is already set to a non I2P endpoint: ",
-            //                   *_injector_ep));
-            // }
-
-            /*
-             * We use an I2P endpoint here as the discovery is performed using BEP3, to support
-             * BEP5 the endpoint should be something different in order to manage multiple
-             * connections when performing the discovery of peers using a DHT.
-             */
-             // TODO: here is the last place where the incorrect i2p injector endpoint can be constructed
-             // but idk how to validate it, and if it is possible at all.
-            if (!_injector_ep) {
-                _injector_ep = Endpoint{
-                   Endpoint::I2pEndpoint,
-                   bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-               };
             }
         }
 #endif // ifdef __EXPERIMENTAL__
@@ -345,7 +320,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
 
         if (!(//If we neither connecting for an i2p injector
-            (_injector_ep && _injector_ep->type == Endpoint::I2pEndpoint) ||
+            (_injector_ep && _injector_ep->get_if<I2pAddress>()) ||
             //nor we are not  running a Bep5 over i2p cache
             (_cache_type == CacheType::Bep3HTTPOverI2P)))
           {
@@ -365,11 +340,12 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw std::runtime_error(
                 "'--i2p-bep3-tracker' can only be used with '--cache-type=bep3-http-over-i2p'");
         }
-        if (!ouinet::ouiservice::i2poui::isValidI2PB32(opt.value())) {
+        auto addr = I2pAddress::parse(*opt);
+        if (!addr) {
             throw std::runtime_error(
                 "invalid i2p address of bep3 tracker was provided");
         }
-        _i2p_bep3_tracker = I2pAddress{ *opt };
+        _i2p_bep3_tracker = std::move(*addr);
     }
 
     if (_cache_type == CacheType::Bep3HTTPOverI2P && !_i2p_bep3_tracker) {

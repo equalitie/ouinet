@@ -216,7 +216,7 @@ private:
         }
 
         auto utp_client = make_unique<UtpOuiServiceClient>
-            (_dht->get_executor(), move(*opt_m), util::str(ep));
+            (_dht->get_executor(), move(*opt_m), ep);
 
         if (!utp_client->verify_remote_endpoint()) {
             _ERROR("Failed to bind uTP client");

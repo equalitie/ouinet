@@ -1,9 +1,8 @@
 #pragma once
 
-// Validate I2P address:
-// https://i2p.net/en/docs/overview/naming/
-
 #include <string>
+#include <optional>
+#include <ostream>
 
 namespace ouinet {
 
@@ -11,19 +10,21 @@ class I2pAddress {
 public:
     std::string value;
 
-    bool operator<(const I2pAddress& other) const {
-        return value < other.value;
-    }
+    static std::optional<I2pAddress> parse(std::string_view);
+
+    I2pAddress(I2pAddress const&) = default;
+    I2pAddress(I2pAddress &&) = default;
+    I2pAddress& operator=(I2pAddress const&) = default;
+    I2pAddress& operator=(I2pAddress &&) = default;
+
+    auto operator<=>(const I2pAddress&) const = default;
 
     friend std::ostream& operator<<(std::ostream& os, I2pAddress const& addr) {
         return os << addr.value;
     }
+
+private:
+    I2pAddress(std::string value) : value(std::move(value)) {}
 };
 
 } // ouinet namespace
-
-namespace ouinet::ouiservice::i2poui {
-
-bool isValidI2PB32(const std::string &s);
-
-} // namespace ouinet::ouiservice::i2poui

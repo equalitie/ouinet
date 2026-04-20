@@ -3,9 +3,10 @@
 #include <limits>
 #include <boost/optional.hpp>
 #include <boost/utility/string_view.hpp>
+#include <string_view>
 #include "../util.h"
 
-namespace ouinet { namespace parse {
+namespace ouinet::parse {
 
 //--------------------------------------------------------------------
 
@@ -194,4 +195,14 @@ number(boost::string_view& s)
 }
 
 //--------------------------------------------------------------------
-}} // namespaces
+
+template<class N>
+std::optional<N> number(std::string_view& s) {
+    boost::string_view bs(s.data(), s.size());
+    auto n = number<N>(bs);
+    s = std::string_view(bs.data(), bs.size());
+    if (!n) return {};
+    return *n;
+}
+
+} // namespace

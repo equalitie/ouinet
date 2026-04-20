@@ -218,7 +218,9 @@ set<I2pAddress> Bep3Tracker::tracker_get_peers( NodeID infohash
             if (ip_it == pm->end()) continue;
             auto ip = ip_it->second.as_string();
             if (!ip || ip->empty()) continue;
-            peers.insert(I2pAddress{*ip});
+            auto addr = I2pAddress::parse(*ip);
+            if (!addr) continue;
+            peers.insert(std::move(*addr));
         }
     } else if (peers_it->second.is_string()) {
         // Compact I2P format: concatenated 32-byte DestHashes
@@ -227,8 +229,13 @@ set<I2pAddress> Bep3Tracker::tracker_get_peers( NodeID infohash
         for (size_t i = 0; i + DEST_HASH_LEN <= data.size(); i += DEST_HASH_LEN) {
             std::string dest = i2p::data::ByteStreamToBase32((const uint8_t*)data.data() + i, DEST_HASH_LEN);
             dest += ".b32.i2p";
-            LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
-            peers.insert(I2pAddress{move(dest)});
+            auto addr = I2pAddress::parse(dest);
+            if (addr) {
+                LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
+                peers.insert(I2pAddress{move(*addr)});
+            } else {
+                LOG_ERROR("BEP3 tracker: failed to parse i2p address: ", dest);
+            }
         }
     }
 

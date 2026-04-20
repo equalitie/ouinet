@@ -67,30 +67,9 @@ GenericStream TcpOuiServiceServer::accept(asio::yield_context yield)
     return GenericStream(std::move(socket), tcp_shutter);
 }
 
-static boost::optional<asio::ip::tcp::endpoint> parse_endpoint(std::string endpoint)
-{
-    size_t pos = endpoint.rfind(':');
-    if (pos == std::string::npos) {
-        return boost::none;
-    }
-
-    int port;
-    try {
-        port = std::stoi(endpoint.substr(pos + 1));
-    } catch(...) {
-        return boost::none;
-    }
-    sys::error_code ec;
-    asio::ip::address address = asio::ip::make_address(endpoint.substr(0, pos), ec);
-    if (ec) {
-        return boost::none;
-    }
-    return asio::ip::tcp::endpoint(address, port);
-}
-
-TcpOuiServiceClient::TcpOuiServiceClient(const AsioExecutor& ex, std::string endpoint):
+TcpOuiServiceClient::TcpOuiServiceClient(const AsioExecutor& ex, asio::ip::tcp::endpoint endpoint):
     _ex(ex),
-    _endpoint(parse_endpoint(endpoint))
+    _endpoint(endpoint)
 {}
 
 GenericStream

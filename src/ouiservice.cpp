@@ -193,5 +193,5 @@ OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     }
     while (_implementation && impl != _implementation);
 
-    return or_throw<ConnectInfo>(yield, ec, {move(con), _endpoint});
+    return or_throw<ConnectInfo>(yield, ec, {move(con), *_endpoint});
 }

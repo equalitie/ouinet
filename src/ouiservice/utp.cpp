@@ -81,19 +81,11 @@ GenericStream UtpOuiServiceServer::accept(asio::yield_context yield)
     return or_throw(yield, ec, move(s));
 }
 
-static boost::optional<asio::ip::udp::endpoint> parse_endpoint(std::string endpoint)
-{
-    sys::error_code ec;
-    auto ep = parse::endpoint<asio::ip::udp>(endpoint, ec);
-    if (ec) return boost::none;
-    return ep;
-}
-
 UtpOuiServiceClient::UtpOuiServiceClient( const AsioExecutor& ex
                                         , asio_utp::udp_multiplexer m
-                                        , std::string endpoint):
+                                        , asio::ip::udp::endpoint endpoint):
     _ex(ex),
-    _remote_endpoint(parse_endpoint(endpoint)),
+    _remote_endpoint(endpoint),
     _udp_multiplexer(move(m))
 {
 }
