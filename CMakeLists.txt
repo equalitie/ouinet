@@ -11,6 +11,9 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
 endif()
 
 ################################################################################
+project(ouinet)
+
+################################################################################
 # Configurable options
 
 # Configurable options
@@ -40,6 +43,10 @@ message(STATUS "  WITH_EXPERIMENTAL        : ${WITH_EXPERIMENTAL}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
 message(STATUS "  WITH_DEPRECATED          : ${WITH_DEPRECATED}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
+message(STATUS "")
+message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+message(STATUS "C++ compiler ID: ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "---------------------------------------")
 
 ################################################################################
@@ -77,7 +84,6 @@ if (OUINET_MEASURE_BUILD_TIMES)
 endif()
 
 ################################################################################
-project(ouinet)
 
 if(MINGW) # Note that MING gets defined only after `project(ouinet)`
     # Fixes errors
@@ -138,12 +144,7 @@ find_package(CPPUPnP REQUIRED)
 target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
-if(WITH_EXPERIMENTAL)
-    add_subdirectory(./src/ouiservice/i2p)
-    set(EXPERIMENTAL_LIBRARIES
-            ouinet::ouiservice-i2p
-    )
-endif()
+add_subdirectory(./src/ouiservice/i2p)
 
 ###########################################################
 
@@ -224,7 +225,7 @@ target_link_libraries(ouinet_common
         ${DEPRECATED_LIBRARIES}
     PUBLIC
         ${OUINET_HARDCODED_CA_CERTS}
-        ${EXPERIMENTAL_LIBRARIES}
+        ouinet::ouiservice-i2p
         ouinet_dependencies
         Boost::iostreams
         lib::json
@@ -238,15 +239,6 @@ target_link_libraries(ouinet_common
 )
 
 target_include_directories(ouinet_common PUBLIC "src")
-
-################################################################################
-if(WITH_EXPERIMENTAL)
-    # PUBLIC (not INTERFACE) so ouinet_common's own sources see __EXPERIMENTAL__
-    # (needed by src/bittorrent/bep3_tracker.h/cpp)
-    target_compile_definitions(ouinet_common
-        PUBLIC -D__EXPERIMENTAL__
-    )
-endif()
 
 ################################################################################
 if(WITH_DEPRECATED)
@@ -306,7 +298,6 @@ target_link_libraries(client_lib
     PUBLIC
         ouinet_common
         cpp_upnp
-        ${EXPERIMENTAL_LIBRARIES}
         ${OUINET_OUISYNC_LIBS}
 )
 
@@ -341,7 +332,7 @@ if (NOT WIN32 AND NOT MINGW)
     set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
 endif ()
 
-target_link_libraries(injector_lib ouinet_common ${EXPERIMENTAL_LIBRARIES})
+target_link_libraries(injector_lib ouinet_common)
 
 if (WIN32 OR MINGW)
     target_compile_definitions(injector_lib PRIVATE -DOUINET_DECL_EXPORT)

@@ -60,7 +60,21 @@ target_link_libraries(ouiservice-i2p
         ouinet_asio
         ouinet_asio_ssl
 )
+target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
 
+################################################################################
+add_library(ouiservice-i2p-no-impl STATIC "./address.cpp")
+target_compile_options(ouiservice-i2p-no-impl PUBLIC -std=c++23)
+
+################################################################################
+if(WITH_EXPERIMENTAL)
+    target_compile_definitions(ouiservice-i2p PUBLIC -D__EXPERIMENTAL__)
+    add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
+else()
+    add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p-no-impl)
+endif()
+
+################################################################################
 # Place the resulting library together with the rest.
 set_target_properties(ouiservice-i2p PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -69,12 +83,13 @@ set_target_properties(ouiservice-i2p PROPERTIES
 )
 
 # Place the resulting library together with the rest.
-set_target_properties(ouiservice-i2p PROPERTIES
+set_target_properties(ouiservice-i2p-no-impl PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+################################################################################
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     externalproject_add(android-ifaddrs
         GIT_REPOSITORY https://github.com/PurpleI2P/android-ifaddrs

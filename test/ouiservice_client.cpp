@@ -1,6 +1,4 @@
 #include <boost/asio/spawn.hpp>
-#include <boost/asio/detached.hpp>
-#include <iostream>
 #include <string>
 
 #include "namespaces.h"
@@ -8,15 +6,10 @@
 #include "ouiservice.h"
 #include "ouiservice/tcp.h"
 
-//#include "util/crypto.h"
-
-using namespace std;
 using namespace ouinet;
 
 int main(int argc, const char* argv[])
 {
-//    util::crypto_init();
-
     if (argc < 2) {
         std::cerr << "Usage: ouiservice-client <message>\n";
         return 1;
@@ -28,22 +21,22 @@ int main(int argc, const char* argv[])
 
     OuiServiceClient client(ctx.get_executor());
 
-    auto endpoint = Endpoint{Endpoint::TcpEndpoint, "127.0.0.1:10203"};
-    client.add(endpoint, make_unique<ouiservice::TcpOuiServiceClient>(ctx.get_executor(), endpoint.endpoint_string));
+    auto endpoint = asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 10203);
+    client.add(endpoint, make_unique<ouiservice::TcpOuiServiceClient>(ctx.get_executor(), endpoint));
 
     task::spawn_detached(ctx, [&client, &message] (asio::yield_context yield) {
         sys::error_code ec;
         client.start(yield[ec]);
 
         if (ec) {
-            std::cerr << "Failed to setup ouiservice client: " << ec.message() << endl;
+            std::cerr << "Failed to setup ouiservice client: " << ec.message() << "\n";
             return;
         }
 
         Signal<void()> cancel;
         auto connection = client.connect(yield[ec], cancel).connection;
         if (ec) {
-            std::cerr << "Failed to connect to server: " << ec.message() << endl;
+            std::cerr << "Failed to connect to server: " << ec.message() << "\n";
             return;
         }
 
