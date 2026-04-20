@@ -2,6 +2,7 @@
 
 #include "../../ouiservice.h"
 
+#include "address.h"
 #include "tunnel.h"
 
 namespace i2p::client {
@@ -18,7 +19,7 @@ class Client : public ouinet::OuiServiceImplementationClient {
 
 public:
     Client( std::shared_ptr<Service> service
-          , const std::string& target_id
+          , const I2pAddress& target_id
           , uint32_t timeout
           , const executor_type&
           , std::shared_ptr<i2p::client::ClientDestination> destination = nullptr);
@@ -34,7 +35,7 @@ public:
     connect(asio::yield_context yield, Signal<void()>& cancel) override;
 
     // Returns the target I2P address this client connects to
-    const std::string& get_target_id() const { return _target_id; }
+    const I2pAddress& get_target_id() const { return _target_id; }
 
     // Connect without the ouinet i2p handshake protocol. Use this for test  or for communicating
     // with non-ouinet I2P hosts such as BEP3 trackers.
@@ -44,7 +45,7 @@ public:
 private:
     std::shared_ptr<Service> _service;
     executor_type _exec;
-    std::string _target_id;
+    I2pAddress _target_id;
     uint32_t _timeout;
 
     // The destinaton where client requests originate from

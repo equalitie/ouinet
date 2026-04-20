@@ -480,7 +480,7 @@ public:
         });
     }
 
-    void add_candidate(const string& i2p_dest) {
+    void add_candidate(const I2pAddress& i2p_dest) {
         auto ip = _all_i2p_peers.insert({i2p_dest, unique_ptr<Peer>()});
 
         if (!ip.second) return; // Already inserted
@@ -671,7 +671,7 @@ private:
     // _candidate_peers nor _good_peers are considered as failed.
     std::map<udp::endpoint, unique_ptr<Peer>> _all_udp_peers;
 #ifdef __EXPERIMENTAL__
-    std::map<string, unique_ptr<Peer>> _all_i2p_peers;
+    std::map<I2pAddress, unique_ptr<Peer>> _all_i2p_peers;
 #endif
 
     util::intrusive::list<Peer, &Peer::_candidate_hook> _candidate_peers;

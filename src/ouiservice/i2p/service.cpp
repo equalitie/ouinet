@@ -95,7 +95,7 @@ std::unique_ptr<Server> Service::build_server(const std::string& private_key_fil
     return std::make_unique<Server>(shared_from_this(), _data_dir + "/" + private_key_filename, get_i2p_tunnel_ready_timeout(), _exec);
 }
 
-std::unique_ptr<Client> Service::build_client(const std::string& target_id, std::shared_ptr<i2p::client::ClientDestination> destination)
+std::unique_ptr<Client> Service::build_client(const I2pAddress& target_id, std::shared_ptr<i2p::client::ClientDestination> destination)
 {
     return std::make_unique<Client>(shared_from_this(), target_id, get_i2p_tunnel_ready_timeout(), _exec, std::move(destination));
 }

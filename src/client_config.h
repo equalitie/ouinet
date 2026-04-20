@@ -27,6 +27,7 @@
 #include "util.h"
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
+#include "ouiservice/i2p/address.h"
 
 #include "cxx/dns.h"
 
@@ -96,7 +97,7 @@ public:
       return _i2p_hops_per_tunnel;
     }
 
-    const boost::optional<std::string>& i2p_bep3_tracker() const {
+    const boost::optional<I2pAddress>& i2p_bep3_tracker() const {
       return _i2p_bep3_tracker;
     }
 #endif // ifdef __EXPERIMENTAL__
@@ -596,7 +597,7 @@ private:
 
 #ifdef __EXPERIMENTAL__
     size_t _i2p_hops_per_tunnel = 3;
-    boost::optional<std::string> _i2p_bep3_tracker;
+    boost::optional<I2pAddress> _i2p_bep3_tracker;
 #endif // ifdef __EXPERIMENTAL__
   
     std::optional<OuisyncCacheConfig> _ouisync;

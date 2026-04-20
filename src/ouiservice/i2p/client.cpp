@@ -18,7 +18,7 @@ namespace ouinet::ouiservice::i2poui {
 
 using namespace std;
 
-Client::Client(std::shared_ptr<Service> service, const string& target_id, uint32_t timeout, const executor_type& exec, std::shared_ptr<i2p::client::ClientDestination> destination)
+Client::Client(std::shared_ptr<Service> service, const I2pAddress& target_id, uint32_t timeout, const executor_type& exec, std::shared_ptr<i2p::client::ClientDestination> destination)
     : _service(service)
     , _exec(exec)
     , _target_id(target_id)
@@ -45,7 +45,7 @@ void Client::start(asio::yield_context yield)
         ec = {};
         auto i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>(
                 "i2p_oui_client",
-                _target_id,
+                _target_id.value,
                 "127.0.0.1",
                 0,
                 _destination);
@@ -125,7 +125,7 @@ Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
         connection.close();
     });
 
-    OUI_LOG_DEBUG("Connecting to i2p peer... target=", _target_id);
+    OUI_LOG_DEBUG("Connecting to i2p peer... target=", _target_id.value);
 
     for (uint32_t i = 0;; ++i) {
         sys::error_code ec;
@@ -144,7 +144,7 @@ Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
             continue;
         }
 
-        OUI_LOG_DEBUG("Connection to i2p peer established; target=", _target_id);
+        OUI_LOG_DEBUG("Connection to i2p peer established; target=", _target_id.value);
 
         _client_tunnel->intrusive_add(connection);
 

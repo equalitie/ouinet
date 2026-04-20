@@ -167,9 +167,9 @@ GenericStream Server::accept_without_handshake(asio::yield_context yield)
     return GenericStream(std::move(connection));
 }
 
-std::string Server::public_identity() const
+I2pAddress Server::public_identity() const
 {
-    return _private_keys->GetPublic()->ToBase64();
+    return I2pAddress { _private_keys->GetPublic()->ToBase64() };
 }
 
 } // namespaces

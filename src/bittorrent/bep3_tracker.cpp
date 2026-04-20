@@ -13,6 +13,7 @@
 #include "../util.h"
 #include "../logger.h"
 #include "util/overloaded.h"
+#include <ouiservice/i2p/address.h>
 #include <ouiservice/i2p/i2pd/libi2pd/Base.h>  // ByteStreamToBase32
 
 using namespace std;
@@ -22,7 +23,7 @@ using namespace ouinet::bittorrent;
 namespace http = boost::beast::http;
 namespace beast = boost::beast;
 
-Bep3Tracker::Bep3Tracker(I2pServer const& i2p_server, string tracker_id)
+Bep3Tracker::Bep3Tracker(I2pServer const& i2p_server, I2pAddress tracker_id)
     : _destination(i2p_server.get_destination())
     , _i2p_client(i2p_server.get_service()->build_client(tracker_id, _destination))
     , _start_state(std::make_shared<StartState>(std::make_shared<WaitCondition>(_i2p_client->get_executor())))
@@ -109,7 +110,7 @@ string Bep3Tracker::send_request( const string& extra_params
            << extra_params;
 
     http::request<http::empty_body> req{http::verb::get, target.str(), 11};
-    req.set(http::field::host, _i2p_client->get_target_id());
+    req.set(http::field::host, _i2p_client->get_target_id().value);
     req.set(http::field::user_agent, "Ouinet/1.0");
 
     LOG_DEBUG("BEP3 tracker: sending request: ", req);
@@ -167,9 +168,9 @@ void Bep3Tracker::tracker_announce( NodeID infohash
     return or_throw(yield, ec);
 }
 
-set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
-                                          , Cancel& cancel
-                                          , asio::yield_context yield)
+set<I2pAddress> Bep3Tracker::tracker_get_peers( NodeID infohash
+                                              , Cancel& cancel
+                                              , asio::yield_context yield)
 {
     string info_hash_encoded = util::percent_encode(infohash.to_bytestring());
 
@@ -182,23 +183,23 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
     sys::error_code ec;
     auto body = send_request(params.str(), cancel, yield[ec]);
 
-    if (ec) return or_throw(yield, ec, set<string>{});
+    if (ec) return or_throw(yield, ec, set<I2pAddress>{});
 
     // Parse bencoded tracker response
     auto decoded = bencoding_decode(body);
     if (!decoded || !decoded->is_map()) {
         LOG_WARN("BEP3 tracker: invalid bencoded response");
-        return or_throw(yield, asio::error::invalid_argument, set<string>{});
+        return or_throw(yield, asio::error::invalid_argument, set<I2pAddress>{});
     }
 
     auto* map = decoded->as_map();
     auto peers_it = map->find("peers");
     if (peers_it == map->end()) {
         LOG_WARN("BEP3 tracker: no peers key in response");
-        return or_throw(yield, asio::error::invalid_argument, set<string>{});
+        return or_throw(yield, asio::error::invalid_argument, set<I2pAddress>{});
     }
 
-    set<string> peers;
+    set<I2pAddress> peers;
 
     LOG_DEBUG("BEP3 tracker: peers type: ",
               peers_it->second.is_list() ? "list" :
@@ -217,7 +218,7 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
             if (ip_it == pm->end()) continue;
             auto ip = ip_it->second.as_string();
             if (!ip || ip->empty()) continue;
-            peers.insert(*ip);
+            peers.insert(I2pAddress{*ip});
         }
     } else if (peers_it->second.is_string()) {
         // Compact I2P format: concatenated 32-byte DestHashes
@@ -227,7 +228,7 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
             std::string dest = i2p::data::ByteStreamToBase32((const uint8_t*)data.data() + i, DEST_HASH_LEN);
             dest += ".b32.i2p";
             LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
-            peers.insert(move(dest));
+            peers.insert(I2pAddress{move(dest)});
         }
     }
 

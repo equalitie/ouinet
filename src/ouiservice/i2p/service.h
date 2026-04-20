@@ -7,6 +7,7 @@
 
 #include "client.h"
 #include "server.h"
+#include "address.h"
 
 #include "../../ouiservice.h"
 
@@ -42,7 +43,7 @@ public:
     const i2p::util::Mapping& get_tunnel_params() const { return _tunnel_params; };
 
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
-    std::unique_ptr<Client> build_client(const std::string& target_id
+    std::unique_ptr<Client> build_client(const I2pAddress& target_id
         , std::shared_ptr<i2p::client::ClientDestination> destination = nullptr);
 
 protected:

@@ -1,10 +1,6 @@
 #include <boost/optional/optional_io.hpp>
 #include "client_config.h"
 
-#ifdef __EXPERIMENTAL__
-#include "ouiservice/i2p/address.h"
-#endif // __EXPERIMENTAL__
-
 namespace ouinet {
 
 template <class... Args>
@@ -373,7 +369,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw std::runtime_error(
                 "invalid i2p address of bep3 tracker was provided");
         }
-        _i2p_bep3_tracker = *opt;
+        _i2p_bep3_tracker = I2pAddress{ *opt };
     }
 
     if (_cache_type == CacheType::Bep3HTTPOverI2P && !_i2p_bep3_tracker) {

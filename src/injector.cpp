@@ -1024,7 +1024,7 @@ Injector::Injector(
 
         auto ep = i2p_server->public_identity();
         LOG_INFO("I2P public ID: ", ep);
-        util::create_state_file(_config.repo_root()/"endpoint-i2p", ep);
+        util::create_state_file(_config.repo_root()/"endpoint-i2p", ep.value);
 
         proxy_server->add(std::move(i2p_server));
     }

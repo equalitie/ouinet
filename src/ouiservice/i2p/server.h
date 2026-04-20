@@ -2,6 +2,7 @@
 
 #include "../../ouiservice.h"
 
+#include "address.h"
 #include "tunnel.h"
 
 namespace i2p::data {
@@ -36,7 +37,7 @@ public:
     // Only used in tests
     GenericStream accept_without_handshake(asio::yield_context yield);
 
-    std::string public_identity() const;
+    I2pAddress public_identity() const;
 
     // Returns the server's ClientDestination, available after start_listen()
     std::shared_ptr<i2p::client::ClientDestination> get_destination() const { return _local_destination; }

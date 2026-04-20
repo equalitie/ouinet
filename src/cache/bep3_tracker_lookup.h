@@ -4,10 +4,11 @@
 #include <string>
 #include <bittorrent/bep3_tracker.h>
 #include "peer_lookup.h"
+#include "ouiservice/i2p/address.h"
 
 namespace ouinet::cache {
 
-class Bep3TrackerLookup : public PeerLookup<std::set<std::string>> {
+class Bep3TrackerLookup : public PeerLookup<std::set<I2pAddress>> {
 public:
     Bep3TrackerLookup(Bep3TrackerLookup&&) = delete;
 

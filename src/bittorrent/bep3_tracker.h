@@ -9,6 +9,7 @@
 #include "namespaces.h"
 #include "util/signal.h"
 #include "util/wait_condition.h"
+#include "ouiservice/i2p/address.h"
 #include "ouiservice/i2p/fwd.h"
 
 namespace ouinet::bittorrent {
@@ -17,13 +18,13 @@ namespace ouinet::bittorrent {
 // analogous to how DhtBase encapsulates the DHT protocol.
 class Bep3Tracker {
 public:
-    Bep3Tracker(I2pServer const&, std::string tracker_id);
+    Bep3Tracker(I2pServer const&, I2pAddress tracker_id);
 
     ~Bep3Tracker();
 
     void tracker_announce(NodeID infohash, Cancel&, asio::yield_context);
 
-    std::set<std::string> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
+    std::set<I2pAddress> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
 
     asio::any_io_executor get_executor();
 

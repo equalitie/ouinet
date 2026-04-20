@@ -166,7 +166,7 @@ struct Client::Impl {
 
 #ifdef __EXPERIMENTAL__
     bool enable_bep3_announcer( I2pServer const& i2p_server
-                              , string tracker_id
+                              , I2pAddress tracker_id
                               , size_t simultaneous_announcements) {
         if (_bep3_announcer) {
             _DEBUG("BEP3 announcer is already enabled");
@@ -905,7 +905,7 @@ bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announc
 
 #ifdef __EXPERIMENTAL__
 bool Client::enable_bep3_announcer( I2pServer const& i2p_server
-                                  , std::string tracker_id
+                                  , I2pAddress tracker_id
                                   , size_t simultaneous_announcements) {
     return _impl->enable_bep3_announcer(i2p_server, std::move(tracker_id), simultaneous_announcements);
 }

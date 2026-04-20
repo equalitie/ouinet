@@ -3092,16 +3092,14 @@ void Client::State::setup_injector(asio::yield_context yield)
     std::unique_ptr<OuiServiceImplementationClient> client;
 
 #ifdef __EXPERIMENTAL__
-    if (injector_ep->type == Endpoint::I2pEndpoint)
-
-    {
+    if (injector_ep->type == Endpoint::I2pEndpoint) {
       //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
       //with both services, we check if i2p ouiservice has already started
       if (!_i2p_service) {
         _i2p_service = make_shared<I2pService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
       }
 
-      auto i2p_client = _i2p_service->build_client(injector_ep->endpoint_string);
+      auto i2p_client = _i2p_service->build_client(I2pAddress{injector_ep->endpoint_string});
 
       //TODO: should we uncomment this?
       // if (!i2p_client->verify_endpoint()) {

@@ -17,6 +17,7 @@
 #include "peer_message.h"
 #include "util/crypto_stream_key.h"
 #include "ouiservice/i2p/fwd.h"
+#include "ouiservice/i2p/address.h"
 
 namespace ouinet {
 
@@ -92,7 +93,7 @@ public:
     // the same i2p id. This is because Zzzot rejects announces whose ip= doesn't
     // match the announcer's destination.
     bool enable_bep3_announcer( I2pServer const&
-                              , std::string tracker_id
+                              , I2pAddress tracker_id
                               , size_t simultaneous_announcements);
 #endif // __EXPERIMENTAL__
 
