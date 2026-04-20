@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.7](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.7) - 2026-04-20
+
+### Removed
+
+- Temporarily revert 8f8fd107; "Merge branch 'fix-wait-for-ready' into
+'main'". !183
+
+
 ## [v1.6.6](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.6) - 2026-04-07
 
 ### Added
@@ -22,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- iOS thread safety issues when stopping the client or getting runtime state. 158
+- iOS thread safety issues when stopping the client or getting runtime state. !158
 - Cleaned up redundant cancel handler in `local_peer_discovery`. !158
 - Fix `wait_for_ready` function to wait until there's a successful lookup to
 the DHT that happened in the past 5 minutes. !166
