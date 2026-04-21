@@ -4,7 +4,8 @@ namespace ouinet {
 
 // Validate I2P address:
 // https://i2p.net/en/docs/overview/naming/
-bool is_valid_i2p_b32(std::string_view s) {
+/* static */
+bool I2pAddress::is_valid_b32(std::string_view s) {
     static const std::string_view suffix = ".b32.i2p";
 
     if (!s.ends_with(suffix)) return false;
@@ -19,18 +20,18 @@ bool is_valid_i2p_b32(std::string_view s) {
     return true;
 }
 
-bool is_valid_i2p_base64_name(std::string_view s) {
+bool is_valid_b64(std::string_view s) {
     // TODO
     return !s.empty();
 }
 
 /* static */
 std::optional<I2pAddress> I2pAddress::parse(std::string_view s) {
-    if (is_valid_i2p_b32(s)) {
+    if (is_valid_b32(s)) {
         return I2pAddress(std::string(s));
     }
 
-    if (is_valid_i2p_base64_name(s)) {
+    if (is_valid_b64(s)) {
         return I2pAddress(std::string(s));
     }
 

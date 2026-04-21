@@ -23,6 +23,8 @@ public:
         return os << addr.value;
     }
 
+    static bool is_valid_b32(std::string_view s);
+
 private:
     I2pAddress(std::string value) : value(std::move(value)) {}
 };

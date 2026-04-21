@@ -127,7 +127,7 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
         shared_ptr<I2pService> service;
         WaitCondition server_ready;
-        string server_ep;
+        std::optional<I2pAddress> server_ep;
     };
 
     auto shared = make_shared<SharedState>(setup, ctx.get_executor());
@@ -161,7 +161,7 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
             shared->server_ready.wait(yield);
             BOOST_TEST_MESSAGE("Server is ready");
 
-            auto client = shared->service->build_client(shared->server_ep);
+            auto client = shared->service->build_client(*shared->server_ep);
 
             sys::error_code ec;
 
@@ -197,7 +197,7 @@ BOOST_AUTO_TEST_CASE(test_connect_with_handshake) {
 
         shared_ptr<I2pService> service;
         WaitCondition server_ready;
-        string server_ep;
+        std::optional<I2pAddress> server_ep;
     };
 
     BOOST_TEST_MESSAGE("Preparing shared state");
@@ -228,7 +228,7 @@ BOOST_AUTO_TEST_CASE(test_connect_with_handshake) {
             shared->server_ready.wait(yield);
             BOOST_TEST_MESSAGE("Server is ready");
 
-            auto client = shared->service->build_client(shared->server_ep);
+            auto client = shared->service->build_client(*shared->server_ep);
 
             sys::error_code ec;
 
@@ -283,7 +283,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
         shared_ptr<I2pService> service;
         WaitCondition server_ready;
-        string server_ep;
+        std::optional<I2pAddress> server_ep;
         steady_clock::time_point send_started;
         std::queue<std::vector<unsigned char>> sent_messages;
         const unsigned int buffer_size = 512;
@@ -342,7 +342,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
             BOOST_TEST_MESSAGE("Server is ready");
 
             //RetryingClient client{shared->service};
-            auto client = shared->service->build_client(shared->server_ep);
+            auto client = shared->service->build_client(*shared->server_ep);
 
             sys::error_code ec;
 
@@ -381,7 +381,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
         Cancel cancel;
         shared_ptr<I2pService> service;
         WaitCondition server_ready;
-        string server_ep;
+        std::optional<I2pAddress> server_ep;
         unsigned subsequent_conn_count = 32;
     };
 
@@ -420,7 +420,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
             shared->server_ready.wait(yield);
             BOOST_TEST_MESSAGE("Server is ready");
 
-            auto client = shared->service->build_client(shared->server_ep);
+            auto client = shared->service->build_client(*shared->server_ep);
 
             sys::error_code ec;
 

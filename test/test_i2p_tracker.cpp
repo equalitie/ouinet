@@ -30,7 +30,7 @@ BOOST_AUTO_TEST_CASE(announce_and_get_peers) {
 
     asio::io_context ctx;
 
-    const std::string tracker_id = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p";
+    const auto tracker_id = *I2pAddress::parse("z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p");
 
     asio::spawn(ctx, [&] (asio::yield_context yield) mutable {
         sys::error_code ec;
