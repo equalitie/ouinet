@@ -29,7 +29,7 @@ add_dependencies(libi2pdlang                                OpenSSL::headers Boo
 ################################################################################
 project(ouiservice-i2p)
 
-add_library(ouiservice-i2p SHARED
+add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
     "./tunnel.cpp"
     "./handshake.cpp"
     "./client.cpp"
@@ -39,7 +39,6 @@ add_library(ouiservice-i2p SHARED
     "../../logger.cpp"
     "../../async_sleep.cpp"
 )
-add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
 target_include_directories(ouiservice-i2p
     PUBLIC
         ${CMAKE_SOURCE_DIR}/src
@@ -63,7 +62,7 @@ target_link_libraries(ouiservice-i2p
 target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
 
 ################################################################################
-add_library(ouiservice-i2p-no-impl STATIC "./address.cpp")
+add_library(ouiservice-i2p-no-impl EXCLUDE_FROM_ALL STATIC "./address.cpp")
 target_compile_options(ouiservice-i2p-no-impl PUBLIC -std=c++23)
 
 ################################################################################
