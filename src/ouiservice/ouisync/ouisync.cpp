@@ -208,10 +208,7 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
 
         auto repo = _impl->resolve(rq.dht_group(), yield.tag("resolve"));
 
-        // TODO: Use constants from http_store.cpp instead of these hardcoded
-        // strings
-        fs::path root = "data-v4";
-        fs::path path = cache::path_from_resource_id(root, rq.resource_id());
+        fs::path path = cache::path_from_resource_id(cache::root_fname, rq.resource_id());
 
         using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;
 
@@ -223,12 +220,12 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
         std::optional<OuisyncFile> sigs_file, body_file;
 
         if (has_sigs(head)) {
-            sigs_file.emplace(OuisyncFile::init(open_file(*repo, (path / "sigs").string(), yield), yield));
+            sigs_file.emplace(OuisyncFile::init(open_file(*repo, (path / cache::sigs_fname).string(), yield), yield));
         } else {
             sigs_file.emplace(OuisyncFile::empty(yield.get_executor()));
         }
         if (has_body(head)) {
-            body_file.emplace(OuisyncFile::init(open_file(*repo, (path / "body").string(), yield), yield));
+            body_file.emplace(OuisyncFile::init(open_file(*repo, (path / cache::body_fname).string(), yield), yield));
         } else {
             body_file.emplace(OuisyncFile::empty(yield.get_executor()));
         }

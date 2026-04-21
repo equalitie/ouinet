@@ -12,6 +12,7 @@
 #include <chrono>
 #include <ouisync.hpp>
 #include <ouisync/service.hpp>
+#include "cache/http_store.h"
 #include "util/test_dir.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
@@ -251,10 +252,10 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
         //page_repo.mount(yield);
 
         session.copy(
-            {},                                                     // `src_repo`
-            (seeder_dir.path() / "bep5_http" / "data-v4").string(), // `src_path`
-            group,                                                  // `dst_repo`
-            "/",                                                    // `dst_path`
+            {},                                                             // `src_repo`
+            (seeder_dir.path() / "bep5_http" / cache::root_fname).string(), // `src_path`
+            group,                                                          // `dst_repo`
+            "/",                                                            // `dst_path`
             yield);
 
         // Create an entry in the `page_index` repo with the new repo

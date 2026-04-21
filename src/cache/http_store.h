@@ -20,6 +20,13 @@
 
 namespace ouinet { namespace cache {
 
+// File names for response components.
+static const boost::filesystem::path root_fname = "data-v4";
+static const boost::filesystem::path head_fname = "head";
+static const boost::filesystem::path body_fname = "body";
+static const boost::filesystem::path body_path_fname = "body-path";
+static const boost::filesystem::path sigs_fname = "sigs";
+
 using ouinet::util::AsioExecutor;
 
 // When a client gets a `HEAD` request for a URL,

@@ -702,7 +702,7 @@ struct Client::Impl {
                 _VERBOSE("Stop BEP3 announcing group: ", eg);
 #endif // __EXPERIMENTAL__
         }
-    }        
+    }
 
     // Return whether the entry should be kept in storage.
     bool keep_cache_entry(const cache::ResourceId& resource_id, cache::reader_uptr rr, asio::yield_context yield)
@@ -832,7 +832,7 @@ Client::build( AsioExecutor ex
 {
     using ClientPtr = unique_ptr<Client>;
     static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2", "data-v3"};
-    static const auto store_curver_subdir = "data-v4";
+    static const auto store_curver_subdir = cache::root_fname;
 
     sys::error_code ec;
 

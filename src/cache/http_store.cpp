@@ -53,12 +53,6 @@ static const std::time_t recently_updated_secs = 10 * 60;  // 10 minutes ago
 static const boost::regex parent_name_rx("^[0-9a-f]{2}$");
 static const boost::regex dir_name_rx("^[0-9a-f]{38}$");
 
-// File names for response components.
-static const fs::path head_fname = "head";
-static const fs::path body_fname = "body";
-static const fs::path body_path_fname = "body-path";
-static const fs::path sigs_fname = "sigs";
-
 using Signature = sign::Signature::Bytes;
 
 static
