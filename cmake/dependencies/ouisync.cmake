@@ -22,39 +22,15 @@ if (WITH_OUISYNC)
         set(OUISYNC_CPP_SRC_DIR "${OUISYNC_SRC_DIR}/bindings/cpp")
     else()
         # Otherwise download from Git
-        # Inspired by https://crascit.com/2015/07/25/cmake-gtest/
-
-        file(WRITE ${CMAKE_BINARY_DIR}/ouisync/download/CMakeLists.txt
-            "cmake_minimum_required(VERSION 3.10)\n"
-            "project(ouisync-download NONE)\n"
-            ""
-            "include(ExternalProject)\n"
-            "externalproject_add(ouisync\n"
-            "  GIT_REPOSITORY    https://github.com/equalitie/ouisync\n"
-            "  GIT_TAG           ab65c6a952b4faba1d6ee4b5e5b1703168a62e94\n"
-            "  SOURCE_DIR        ${CMAKE_BINARY_DIR}/ouisync/src\n"
-            "  BINARY_DIR        ${CMAKE_BINARY_DIR}/ouisync/build\n"
-            "  # No building, that's done outside of this externalproject_add\n"
-            "  CONFIGURE_COMMAND \"\"\n"
-            "  BUILD_COMMAND     \"\"\n"
-            "  INSTALL_COMMAND   \"\"\n"
-            "  TEST_COMMAND      \"\"\n"
-            ")"
+        FetchContent_Declare(
+            ouisync
+            GIT_REPOSITORY "https://github.com/equalitie/ouisync"
+            GIT_TAG        "392385b040277123bb315165e20c43176a9ad8c0"
         )
+        FetchContent_MakeAvailable(ouisync)
 
-        # Configure
-        execute_process(
-            COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" .
-            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/ouisync/download"
-        )
-
-        # Build
-        execute_process(
-            COMMAND "${CMAKE_COMMAND}" --build .
-            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/ouisync/download"
-        )
-
-        set(OUISYNC_CPP_SRC_DIR "${CMAKE_BINARY_DIR}/ouisync/src/bindings/cpp")
+        FetchContent_GetProperties(ouisync)
+        set(OUISYNC_CPP_SRC_DIR "${ouisync_SOURCE_DIR}/bindings/cpp")
     endif()
 
     # Import targets
