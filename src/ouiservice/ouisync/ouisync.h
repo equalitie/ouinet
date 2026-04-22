@@ -1,22 +1,18 @@
 #pragma once
 
-#include <boost/asio/spawn.hpp>
-#include <boost/beast/http/message.hpp>
-#include <boost/beast/http/string_body.hpp>
-#include <boost/filesystem/path.hpp>
-#include "namespaces.h"
-#include "or_throw.h"
-#include "util/yield.h"
 #include "request.h"
 #include "session.h"
 
 namespace ouinet {
-    class GenericStream; 
+    class GenericStream;
 }
 
-namespace ouinet::ouisync_service {
-
 #ifdef WITH_OUISYNC
+
+#include <ouisync/file_stream.hpp>
+
+namespace ouinet {
+namespace ouisync_service {
 
 class Ouisync {
 public:
@@ -44,8 +40,25 @@ private:
     std::string _page_index_token;
 };
 
+} // namespace ouisync_service
+
+namespace util::file_io {
+
+inline size_t file_size(ouisync::FileStream& file, sys::error_code& ec) {
+    return file.size();
+}
+
+inline void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec) {
+    file.seek(pos);
+}
+
+} // namespace util::file_io
+} // namespace ouinet
+
 #else // ifdef WITH_OUISYNC
- 
+
+namespace ouinet::ouisync_service {
+
 class Ouisync {
 public:
     Ouisync(boost::filesystem::path, std::string page_index_token) {}
@@ -69,6 +82,6 @@ public:
     }
 };
 
-#endif // ifdef WITH_OUISYNC
-
 } // namespace ouinet::ouisync_service
+
+#endif // ifdef WITH_OUISYNC

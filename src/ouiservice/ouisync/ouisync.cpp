@@ -1,6 +1,7 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/beast/http/vector_body.hpp>
 #include <ouisync.hpp>
+#include <ouisync/file_stream.hpp>
 #include <ouisync/service.hpp>
 #include "ouisync.h"
 #include "error.h"
@@ -9,7 +10,6 @@
 #include "generic_stream.h"
 #include "util/keep_alive.h"
 #include "cache/cache_entry.h"
-#include "ouiservice/ouisync/file.h"
 #include "cache/resource.h"
 #include "cache/http_store.h"
 
@@ -18,6 +18,7 @@ namespace ouinet::ouisync_service {
 using ouisync::Session;
 using ouisync::Repository;
 using ouisync::File;
+using ouisync::FileStream;
 using ouisync::ShareToken;
 
 // TODO: Set through cmd args as these may differ in tests and in production
@@ -210,24 +211,24 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
 
         fs::path path = cache::path_from_resource_id(cache::root_fname, rq.resource_id());
 
-        using Reader = ouinet::cache::GenericResourceReader<OuisyncFile>;
+        using Reader = ouinet::cache::GenericResourceReader<FileStream>;
 
         Cancel cancel;
-        auto head_file = OuisyncFile::init(open_file(*repo, (path / "head").string(), yield), yield);
+        auto head_file = FileStream::init(open_file(*repo, (path / cache::head_fname).string(), yield), yield);
         auto head = Reader::read_signed_head(head_file, cancel, yield);
         head_file.close(yield);
 
-        std::optional<OuisyncFile> sigs_file, body_file;
+        std::optional<FileStream> sigs_file, body_file;
 
         if (has_sigs(head)) {
-            sigs_file.emplace(OuisyncFile::init(open_file(*repo, (path / cache::sigs_fname).string(), yield), yield));
+            sigs_file.emplace(FileStream::init(open_file(*repo, (path / cache::sigs_fname).string(), yield), yield));
         } else {
-            sigs_file.emplace(OuisyncFile::empty(yield.get_executor()));
+            sigs_file.emplace(FileStream{});
         }
         if (has_body(head)) {
-            body_file.emplace(OuisyncFile::init(open_file(*repo, (path / cache::body_fname).string(), yield), yield));
+            body_file.emplace(FileStream::init(open_file(*repo, (path / cache::body_fname).string(), yield), yield));
         } else {
-            body_file.emplace(OuisyncFile::empty(yield.get_executor()));
+            body_file.emplace(FileStream{});
         }
 
         auto reader = std::make_unique<Reader>(
