@@ -314,7 +314,7 @@ target_compile_definitions(ouinet_asio
         ${BOOST_COMPILE_DEFINITIONS}
 )
 target_compile_options(ouinet_asio
-    PUBLIC -std=c++20
+    PUBLIC -std=c++23
 )
 
 if (${BOOST_BUILD_SHARED})
