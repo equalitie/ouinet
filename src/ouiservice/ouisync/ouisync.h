@@ -3,10 +3,6 @@
 #include "request.h"
 #include "session.h"
 
-namespace ouinet {
-    class GenericStream;
-}
-
 #ifdef WITH_OUISYNC
 
 #include <ouisync/file_stream.hpp>

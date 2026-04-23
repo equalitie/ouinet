@@ -7,7 +7,7 @@ endif()
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
-	cmake_policy(SET CMP0135 NEW)
+    cmake_policy(SET CMP0135 NEW)
 endif()
 
 ################################################################################
@@ -272,7 +272,6 @@ file(GLOB client_sources
     "./src/util/temp_dir.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
-    ${OUISERVICE_OUISYNC_CPP_FILES}
     ${VERSION_CPP}
 )
 
@@ -286,19 +285,12 @@ if (NOT WIN32 AND NOT MINGW)
 endif()
 add_library(ouinet::client ALIAS client_lib)
 
-if (WITH_OUISYNC)
-    set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)
-endif()
-
-if (WITH_OUISYNC)
-    set(OUINET_OUISYNC_LIBS cpp_ouisync_client cpp_ouisync_service)
-endif()
 
 target_link_libraries(client_lib
     PUBLIC
         ouinet_common
+        ouinet_ouisync
         cpp_upnp
-        ${OUINET_OUISYNC_LIBS}
 )
 
 if (WIN32 OR MINGW)
