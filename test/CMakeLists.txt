@@ -11,7 +11,7 @@ if(MINGW)
 endif()
 
 function(simple_test test_name)
-    add_executable(${test_name} ${ARGN})
+    add_executable(${test_name} ${ARGN} ../src/util/log_path.cpp)
     target_link_libraries(${test_name} PUBLIC ouinet_asio)
     target_include_directories(${test_name} PUBLIC ../src)
     target_compile_options(${test_name} PUBLIC -std=c++23)
@@ -21,6 +21,9 @@ function(common_test test_name)
     add_executable(${test_name} ${ARGN})
     target_link_libraries(${test_name} ouinet_common)
 endfunction()
+
+######################################################################
+common_test(test_async test_async.cpp)
 
 ######################################################################
 simple_test(test_cancel "test_cancel.cpp")
