@@ -10,11 +10,11 @@
 #include <fstream>
 #include <streambuf>
 
-#include "../../or_throw.h"
+#include "or_throw.h"
 #include "handshake.h"
 
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
 
 using namespace std;
 

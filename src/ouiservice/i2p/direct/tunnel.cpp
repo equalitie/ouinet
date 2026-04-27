@@ -11,13 +11,13 @@
 #  undef LOG_INFO
 #endif
 
-#include "../../logger.h"
-#include "../../defer.h"
+#include "logger.h"
+#include "defer.h"
 
 #include "tunnel.h"
 
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
 
 using namespace std;
 

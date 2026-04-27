@@ -12,14 +12,13 @@
 #include <ClientContext.h>
 
 using namespace std;
-using namespace ouinet::ouiservice;
-using namespace ouinet::ouiservice::i2poui;
+using namespace ouinet::i2p_direct;
 
-#include "../../logger.h"
+#include "logger.h"
 
 static const uint16_t i2cp_port = 7454;
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
     // In order to prevent double init
     // This is not a complete solution.
     // We still cannot reinit a service once all of the services were terminated
@@ -53,6 +52,8 @@ Service::Service(const string& datadir, const executor_type& exec, const size_t 
 
     if (init_counter++ == 0) {
         i2p::api::InitI2P(argv.size(), (char**) argv.data(), argv[0]);
+        // Use this to enable logging from i2pd
+        //i2p::api::StartI2P(std::make_shared<std::ostream>(std::cerr.rdbuf()));
         i2p::api::StartI2P();
     }
 

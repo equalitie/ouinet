@@ -155,8 +155,8 @@ target_link_libraries(test_fetch injector_lib client_lib)
 
 ######################################################################
 if(WITH_EXPERIMENTAL)
-    common_test(test_i2p test_i2p.cpp)
-    target_link_libraries(test_i2p client_lib)
+    common_test(test_i2p_direct test_i2p_direct.cpp)
+    target_link_libraries(test_i2p_direct client_lib)
 
     common_test(test_i2p_endpoint "test_i2p_endpoint.cpp")
     target_link_libraries(test_i2p_endpoint injector_lib)

@@ -42,11 +42,11 @@ add_dependencies(libi2pdlang                                OpenSSL::headers Boo
 project(ouiservice-i2p)
 
 add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
-    "./tunnel.cpp"
-    "./handshake.cpp"
-    "./client.cpp"
-    "./server.cpp"
-    "./service.cpp"
+    "./direct/tunnel.cpp"
+    "./direct/handshake.cpp"
+    "./direct/client.cpp"
+    "./direct/server.cpp"
+    "./direct/service.cpp"
     "./address.cpp"
     "../../logger.cpp"
     "../../async_sleep.cpp"

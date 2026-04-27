@@ -2,11 +2,11 @@
 #include <boost/asio/write.hpp>
 
 #include "handshake.h"
-#include "../../or_throw.h"
-#include "../../generic_stream.h"
-#include "../../namespaces.h"
+#include "or_throw.h"
+#include "generic_stream.h"
+#include "namespaces.h"
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
 
 static const std::string MAGIC = "i2p-ouinet";
 

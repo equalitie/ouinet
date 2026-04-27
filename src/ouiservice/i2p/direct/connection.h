@@ -7,13 +7,11 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/intrusive/list.hpp>
 
-#include "../../namespaces.h"
-#include "../../logger.h"
-#include "../../timeout_stream.h"
+#include "namespaces.h"
+#include "logger.h"
+#include "timeout_stream.h"
 
-namespace ouinet {
-namespace ouiservice {
-namespace i2poui {
+namespace ouinet::i2p_direct {
 
 extern size_t init_counter;
 
@@ -87,6 +85,4 @@ inline void Connection::close()
     boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>::unlink();
 }
 
-} // i2poui namespace
-} // ouiservice namespace
-} // ouinet namespace
+} // namespace

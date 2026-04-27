@@ -2,8 +2,8 @@
 
 #include "multi_peer_reader.h"
 #ifdef __EXPERIMENTAL__
-#include <ouiservice/i2p/client.h>
-#include <ouiservice/i2p/service.h>
+#include "ouiservice/i2p/direct/client.h"
+#include "ouiservice/i2p/direct/service.h"
 #endif
 #include "multi_peer_reader_error.h"
 #include "cache_entry.h"

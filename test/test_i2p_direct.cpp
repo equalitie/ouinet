@@ -107,11 +107,11 @@ BOOST_AUTO_TEST_CASE(test_i2p_init_counting) {
     auto exec = ctx.get_executor();
     {
         auto service1 = I2pService(setup.tempdir.string(), exec);
-        BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 1, "Init 1: counter at " << ouiservice::i2poui::init_counter);
+        BOOST_TEST_REQUIRE(i2p_direct::init_counter == 1, "Init 1: counter at " << i2p_direct::init_counter);
         auto service2 = I2pService("mewmewmew", exec); // testing that the string is no longer relevant. it is not even a path
-        BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 2, "Init 2: counter at " << ouiservice::i2poui::init_counter);
+        BOOST_TEST_REQUIRE(i2p_direct::init_counter == 2, "Init 2: counter at " << i2p_direct::init_counter);
     }
-    BOOST_TEST_REQUIRE(ouiservice::i2poui::init_counter == 0, "outscoping: counter at " << ouiservice::i2poui::init_counter);
+    BOOST_TEST_REQUIRE(i2p_direct::init_counter == 0, "outscoping: counter at " << i2p_direct::init_counter);
 }
 
 BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {

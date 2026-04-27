@@ -7,14 +7,14 @@
 #include "service.h"
 #include "handshake.h"
 
-#include "../../logger.h"
-#include "../../util/condition_variable.h"
-#include "../../or_throw.h"
-#include "../../async_sleep.h"
+#include "logger.h"
+#include "util/condition_variable.h"
+#include "or_throw.h"
+#include "async_sleep.h"
 
-#include "../../namespaces.h"
+#include "namespaces.h"
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
 
 using namespace std;
 

@@ -15,7 +15,7 @@
 #include "../util/crypto_stream.h"
 #include "../ouiservice/utp.h"
 #ifdef __EXPERIMENTAL__
-#include "../ouiservice/i2p/service.h"
+#include "ouiservice/i2p/direct/service.h"
 #include <bittorrent/bep3_tracker.h>
 #include "bep3_tracker_lookup.h"
 #endif

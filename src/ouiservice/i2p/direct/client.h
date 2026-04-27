@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../ouiservice.h"
+#include "ouiservice.h"
 
-#include "address.h"
+#include "../address.h"
 #include "tunnel.h"
 
 namespace i2p::client {
@@ -10,7 +10,7 @@ namespace i2p::client {
     class ClientDestination;
 }
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
 
 class Service;
 

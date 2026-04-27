@@ -1,7 +1,7 @@
 #pragma once
 #include <boost/asio/spawn.hpp>
 
-#include "../../util/condition_variable.h"
+#include "util/condition_variable.h"
 
 #include "connectionlist.h"
 
@@ -9,7 +9,7 @@ namespace i2p::client {
     class I2PService;
 }
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
 
 class Tunnel  {
     using executor_type = asio::any_io_executor;

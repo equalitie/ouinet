@@ -1,15 +1,15 @@
 #pragma once
 
 #include <memory>
-#include "i2pd/libi2pd/util.h"  // i2p::util::Mapping
+#include "../i2pd/libi2pd/util.h"  // i2p::util::Mapping
 
 #include <boost/asio.hpp>
 
 #include "client.h"
 #include "server.h"
-#include "address.h"
+#include "../address.h"
 
-#include "../../ouiservice.h"
+#include "ouiservice.h"
 
 
 namespace i2p::client {
@@ -17,7 +17,7 @@ namespace i2p::client {
     class AddressBook;
 }
 
-namespace ouinet::ouiservice::i2poui {
+namespace ouinet::i2p_direct {
 
 class Service : public std::enable_shared_from_this<Service> {
     using executor_type = asio::any_io_executor;

@@ -4,9 +4,7 @@
 
 #include "connection.h"
 
-namespace ouinet {
-namespace ouiservice {
-namespace i2poui {
+namespace ouinet::i2p_direct {
 
 class ConnectionList {
 public:
@@ -27,6 +25,4 @@ private:
     boost::intrusive::list<Connection, boost::intrusive::constant_time_size<false>> _connections;
 };
 
-} // i2poui namespace
-} // ouiservice namespace
-} // ouinet namespace
+} // namespace
