@@ -8,6 +8,7 @@
 #include "util/async.h"
 #include "parse/number.h"
 #include "constants.h"
+#include "logger.h"
 
 namespace ouinet {
 
@@ -17,6 +18,11 @@ PeerRequest::async_read(GenericStream& con, Async yield) {
     beast::flat_buffer con_rbuf;
 
     auto read_r = http::async_read(con, con_rbuf, req, yield);
+
+    LOG_SILLY("PeerRequest::async_read: raw request: ", req);
+    LOG_SILLY("PeerRequest::async_read: method=", req.method_string(),
+              " target=", req.target(),
+              " version=", req.version());
 
     if (!read_r.has_value()) {
         return std::unexpected(read_r.error());
