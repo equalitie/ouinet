@@ -609,6 +609,9 @@ private:
                     continue;
                 }
                 LOG_INFO("I2P cache: Accepted connection from ", con.remote_endpoint());
+                LOG_DEBUG("I2P cache: Connection details:"
+                          " remote_endpoint=", con.remote_endpoint(),
+                          " is_open=", con.is_open());
                 TRACK_SPAWN(_ctx, ([this, con = move(con)]
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
@@ -617,7 +620,11 @@ private:
                              : "I2PAccept";
 
                     YieldContext y(yield, _log_path.tag(std::move(tag)));
+                    LOG_DEBUG("I2P cache: About to serve request from ",
+                              con.remote_endpoint(),
+                              " is_open=", con.is_open());
                     serve_utp_request(move(con), y[ec].tag("serve_i2p_req"));
+                    LOG_DEBUG("I2P cache: serve_utp_request finished; ec=", ec);
                     _YDEBUG(y, "Done; ec=", ec);
                 }));
             }

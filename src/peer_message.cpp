@@ -7,6 +7,7 @@
 #include "util/keep_alive.h"
 #include "parse/number.h"
 #include "constants.h"
+#include "logger.h"
 
 namespace ouinet {
 
@@ -16,6 +17,12 @@ PeerRequest PeerRequest::async_read(GenericStream& con, YieldContext yield) {
 
     sys::error_code ec;
     http::async_read(con, con_rbuf, req, yield.native()[ec]);
+
+    LOG_SILLY("PeerRequest::async_read: raw request: ", req);
+    LOG_SILLY("PeerRequest::async_read: method=", req.method_string(),
+              " target=", req.target(),
+              " version=", req.version(),
+              " ec=", ec);
 
     if (ec) return or_throw<PeerRequest>(yield, ec);
     if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
