@@ -1,5 +1,7 @@
 #include "address.h"
 #include <string_view>
+#include "util/hash.h"
+#include <boost/beast/core/detail/base64.hpp>
 
 namespace ouinet {
 
@@ -66,6 +68,93 @@ std::optional<I2pAddress> I2pAddress::parse(std::string_view s) {
     }
 
     return {};
+}
+
+static std::string remove_padding(std::string s) {
+    while (s.ends_with('=')) {
+        s.resize(s.size() - 1);
+    }
+    return s;
+}
+
+static std::string b64_i2p_to_standard(std::string s) {
+    for (auto& c : s) {
+        if (c == '-') c = '+';
+        else if (c == '~') c = '/';
+    }
+    return s;
+}
+
+static std::optional<std::vector<char>> decode_b64(std::string in) {
+    using namespace boost::beast::detail::base64;
+    in = remove_padding(b64_i2p_to_standard(std::move(in)));
+    std::vector<char> out;
+    out.resize(decoded_size(in.size()));
+    auto [size, used] = decode(out.data(), in.data(), in.size());
+    if (used != in.size()) {
+        return {};
+    }
+    out.resize(size);
+    return out;
+}
+
+std::string encode_b32(std::span<unsigned char> in, bool with_padding = false) {
+    constexpr std::string_view base32_alphabet = "abcdefghijklmnopqrstuvwxyz234567";
+
+    if (in.empty()) {
+        return {};
+    }
+
+    std::string output;
+    output.reserve(((in.size() + 4) / 5) * 8);
+
+    std::uint64_t buffer = 0;
+    int bits_left = 0;
+
+    for (const auto b : in) {
+        buffer = (buffer << 8) | b;
+        bits_left += 8;
+
+        while (bits_left >= 5) {
+            bits_left -= 5;
+
+            const auto index =
+                static_cast<std::size_t>((buffer >> bits_left) & 0x1F);
+
+            output.push_back(base32_alphabet[index]);
+        }
+    }
+
+    // Remaining bits
+    if (bits_left > 0) {
+        const auto index =
+            static_cast<std::size_t>((buffer << (5 - bits_left)) & 0x1F);
+
+        output.push_back(base32_alphabet[index]);
+    }
+
+    // RFC 4648 padding
+    if (with_padding) {
+        while (output.size() % 8 != 0) {
+            output.push_back('=');
+        }
+    }
+
+    return output;
+}
+
+/* static */
+std::optional<std::string> I2pAddress::b64_to_b32(std::string in) {
+    auto binary = decode_b64(std::move(in));
+    if (!binary) return {};
+    auto digest = util::sha256_digest(std::string_view(binary->begin(), binary->end()));
+    return encode_b32(std::span(digest.begin(), digest.end()));
+}
+
+/* static */
+std::optional<I2pAddress> I2pAddress::from_binary_b32(std::span<unsigned char> bytes) {
+    if (bytes.size() != B32_ADDR_BINARY_SIZE) return {};
+    return I2pAddress(encode_b32(bytes) + ".b32.i2p");
 }
 
 } // namespace ouinet

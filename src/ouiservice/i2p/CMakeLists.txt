@@ -48,8 +48,16 @@ add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
     "./direct/server.cpp"
     "./direct/service.cpp"
     "./address.cpp"
-    "../../logger.cpp"
+    "./address.cpp"
+    "./sam.cpp"
+    "./session.cpp"
+    "./session_id.cpp"
+    "./tracker.cpp"
+    "./announcer.cpp"
+    "../../util/random.cpp"
     "../../async_sleep.cpp"
+    "../../bittorrent/bencoding.cpp"
+    "../../bittorrent/node_id.cpp"
 )
 target_include_directories(ouiservice-i2p
     PUBLIC
