@@ -630,9 +630,16 @@ private:
                     async_sleep(200ms, yield);
                     continue;
                 }
-                LOG_INFO("Accepted I2P connection");
+                LOG_INFO("I2P cache: Accepted connection from ", con->remote_endpoint());
+                LOG_DEBUG("I2P cache: Connection details:"
+                          " remote_endpoint=", con->remote_endpoint(),
+                          " is_open=", con->is_open());
                 yield.spawn([this, con = std::move(*con)] (Async yield) mutable {
+                    LOG_DEBUG("I2P cache: About to serve request from ",
+                              con.remote_endpoint(),
+                              " is_open=", con.is_open());
                     serve_peer_request(std::move(con), yield.tag("serve_i2p_req"));
+                    LOG_DEBUG("I2P cache: serve_peer_request finished");
                 });
             }
         });
