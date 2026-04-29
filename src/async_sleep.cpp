@@ -1,4 +1,5 @@
 #include "async_sleep.h"
+#include "util/async.h"
 
 namespace ouinet {
 
@@ -25,6 +26,27 @@ bool async_sleep( asio::steady_timer::duration duration
     }
 
     return true;
+}
+
+void async_sleep(asio::steady_timer::duration duration, Async yield)
+{
+    if (yield.is_cancelled()) {
+        throw Async::Cancelled();
+    }
+
+    asio::steady_timer timer(yield.get_executor());
+    timer.expires_after(duration);
+
+    auto stop_timer = yield.cancel_slot([&timer] {
+        timer.cancel();
+    });
+
+    sys::error_code ec = timer.async_wait(yield);
+
+    if (ec) {
+        assert(ec == asio::error::operation_aborted);
+        throw Async::Cancelled();
+    }
 }
 
 } // namespace
