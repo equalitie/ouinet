@@ -60,6 +60,7 @@ using Lru = PersistentLruCache<StringEntry>;
 BOOST_AUTO_TEST_CASE(test_initialize)
 {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     Cancel cancel;
 
     auto dir = fs::temp_directory_path()
@@ -80,11 +81,11 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
     const unsigned max_cache_size = 2;
 
-    task::spawn_detached(ctx, [&] (auto yield) {
+    task::spawn_detached(exec, [&] (auto yield) {
         sys::error_code ec;
 
         {
-            auto lru = Lru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = Lru::load(exec, dir, max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE(!ec);
 
@@ -129,7 +130,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
         {
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = Lru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = Lru::load(exec, dir, max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
@@ -143,7 +144,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = Lru::load(ctx, dir, new_max_cache_size, cancel, yield[ec]);
+            auto lru = Lru::load(exec, dir, new_max_cache_size, cancel, yield[ec]);
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), new_max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
@@ -172,6 +173,7 @@ using DataLru = PersistentLruCache<DataEntry>;
 BOOST_AUTO_TEST_CASE(test_open_value)
 {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     Cancel cancel;
 
     auto dir = fs::temp_directory_path()
@@ -187,12 +189,12 @@ BOOST_AUTO_TEST_CASE(test_open_value)
     const std::string key("test");
     const std::string data(4200, 'x');  // bigger than usual cache block
 
-    task::spawn_detached(ctx, [&] (auto yield) {
+    task::spawn_detached(exec, [&] (auto yield) {
         sys::error_code ec;
 
         // Create cache and insert element
         {
-            auto lru = DataLru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = DataLru::load(exec, dir, max_cache_size, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             lru->insert(key, DataEntry{&data}, cancel, yield[ec]);
@@ -201,7 +203,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
 
         // Reload cache and open element data
         {
-            auto lru = DataLru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = DataLru::load(exec, dir, max_cache_size, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             auto i = lru->find(key);
@@ -220,7 +222,7 @@ BOOST_AUTO_TEST_CASE(test_open_value)
         {
             std::string data_in;
 
-            auto lru = DataLru::load(ctx, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = DataLru::load(exec, dir, max_cache_size, cancel, yield[ec]);
             BOOST_REQUIRE(!ec);
 
             auto i = lru->find(key);

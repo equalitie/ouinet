@@ -46,12 +46,13 @@ unsigned ms(Clock::duration d) {
 
 BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
     asio::io_context ioc;
+    auto exec = ioc.get_executor();
 
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor acceptor(ioc, loopback_ep);
+    tcp::acceptor acceptor(exec, loopback_ep);
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         acceptor.async_accept(s, yield);
 
         auto timeout_duration = 500ms;
@@ -69,8 +70,8 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
         BOOST_REQUIRE_EQUAL(ec, asio::error::timed_out);
     });
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         s.async_connect(acceptor.local_endpoint(), yield);
         async_sleep(1s, yield);
     });
@@ -80,12 +81,13 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
 
 BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
     asio::io_context ioc;
+    auto exec = ioc.get_executor();
 
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor acceptor(ioc, loopback_ep);
+    tcp::acceptor acceptor(exec, loopback_ep);
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         acceptor.async_accept(s, yield);
 
         auto timeout_duration = 500ms;
@@ -112,8 +114,8 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
         }
     });
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         s.async_connect(acceptor.local_endpoint(), yield);
 
         async_sleep(250ms, yield);

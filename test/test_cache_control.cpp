@@ -95,7 +95,8 @@ Entry make_entry(posix_time::ptime created, Response rs, Async yield) {
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 {
     asio::io_context ctx;
-    CacheControl cc(ctx, "test");
+    auto exec = ctx.get_executor();
+    CacheControl cc(exec, "test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -145,7 +146,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
 {
     asio::io_context ctx;
 
-    CacheControl cc(ctx, "test");
+    auto exec = ctx.get_executor();
+    CacheControl cc(exec, "test");
 
     // This test is set up such that `fetch_stored` always completes before `fetch_fresh`. That
     // means that when the new resource is requested, it's retrieved from the cache, but if the old
@@ -223,8 +225,9 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
 BOOST_AUTO_TEST_CASE(test_maxage)
 {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    CacheControl cc(ctx, "test");
+    CacheControl cc(exec, "test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -294,7 +297,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
 BOOST_AUTO_TEST_CASE(test_http10_expires)
 {
     asio::io_context ctx;
-    CacheControl cc(ctx, "test");
+    auto exec = ctx.get_executor();
+    CacheControl cc(exec, "test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -376,7 +380,8 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
 BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 {
     asio::io_context ctx;
-    CacheControl cc(ctx, "test");
+    auto exec = ctx.get_executor();
+    CacheControl cc(exec, "test");
 
     unsigned origin_check = 0;
 
@@ -410,7 +415,8 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 BOOST_AUTO_TEST_CASE(test_no_etag_override)
 {
     asio::io_context ctx;
-    CacheControl cc(ctx, "test");
+    auto exec = ctx.get_executor();
+    CacheControl cc(exec, "test");
 
     unsigned origin_check = 0;
 
@@ -467,7 +473,8 @@ BOOST_AUTO_TEST_CASE(test_response_private)
 BOOST_AUTO_TEST_CASE(test_if_none_match)
 {
     asio::io_context ctx;
-    CacheControl cc(ctx, "test");
+    auto exec = ctx.get_executor();
+    CacheControl cc(exec, "test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;
@@ -560,7 +567,8 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
 BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
 {
     asio::io_context ctx;
-    CacheControl cc(ctx, "test");
+    auto exec = ctx.get_executor();
+    CacheControl cc(exec, "test");
 
     unsigned cache_check = 0;
     unsigned origin_check = 0;

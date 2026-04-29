@@ -217,7 +217,7 @@ static const auto rs_chunk_ext_empty = rs_block_sig_cx_empty;
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    task::spawn_detached(ctx, [f = forward<F>(f)] (auto yield) {
+    task::spawn_detached(ctx.get_executor(), [f = forward<F>(f)] (auto yield) {
             try {
                 f(YieldContext(yield));
             }
@@ -398,19 +398,20 @@ BOOST_AUTO_TEST_CASE(test_http_verify) {
 
 BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_false), empty) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         asio::ip::tcp::socket
-            origin_w(ctx), origin_r(ctx),
-            signed_w(ctx), signed_r(ctx),
-            tested_w(ctx), tested_r(ctx);
+            origin_w(exec), origin_r(exec),
+            signed_w(exec), signed_r(exec),
+            tested_w(exec), tested_r(exec);
         tie(origin_w, origin_r) = util::connected_pair(yield);
         tie(signed_w, signed_r) = util::connected_pair(yield);
         tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send raw origin response.
-        task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
             const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
@@ -426,7 +427,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         });
 
         // Sign origin response.
-        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(exec, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -444,7 +445,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         });
 
         // Test signed output.
-        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w, empty
+        task::spawn_detached(exec, [ signed_r = std::move(signed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
             size_t xidx = 0;
             Cancel cancel;
@@ -483,7 +484,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
         });
 
         // Black hole.
-        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -499,21 +500,22 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
 
 BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true_false), empty) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         asio::ip::tcp::socket
-            origin_w(ctx), origin_r(ctx),
-            signed_w(ctx), signed_r(ctx),
-            hashed_w(ctx), hashed_r(ctx),
-            tested_w(ctx), tested_r(ctx);
+            origin_w(exec), origin_r(exec),
+            signed_w(exec), signed_r(exec),
+            hashed_w(exec), hashed_r(exec),
+            tested_w(exec), tested_r(exec);
         tie(origin_w, origin_r) = util::connected_pair(yield);
         tie(signed_w, signed_r) = util::connected_pair(yield);
         tie(hashed_w, hashed_r) = util::connected_pair(yield);
         tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send raw origin response.
-        task::spawn_detached(ctx, [&origin_w, empty, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&origin_w, empty, lock = wc.lock()] (auto y) {
             sys::error_code e;
             const auto& rs_head_s_ = empty ? rs_head_s_empty : rs_head_s;
             asio::async_write( origin_w
@@ -529,7 +531,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Sign origin response.
-        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(exec, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -547,7 +549,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Verify signed output.
-        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &hashed_w
+        task::spawn_detached(exec, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -564,7 +566,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Check generation of chained hashes.
-        task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w, empty
+        task::spawn_detached(exec, [ hashed_r = std::move(hashed_r), &tested_w, empty
                          , lock = wc.lock()](auto y) mutable {
             size_t xidx = 0;
             Cancel cancel;
@@ -596,7 +598,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
         });
 
         // Black hole.
-        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -612,21 +614,22 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
 
 BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         asio::ip::tcp::socket
-            origin_w(ctx), origin_r(ctx),
-            signed_w(ctx), signed_r(ctx),
-            forged_w(ctx), forged_r(ctx),
-            tested_w(ctx), tested_r(ctx);
+            origin_w(exec), origin_r(exec),
+            signed_w(exec), signed_r(exec),
+            forged_w(exec), forged_r(exec),
+            tested_w(exec), tested_r(exec);
         tie(origin_w, origin_r) = util::connected_pair(yield);
         tie(signed_w, signed_r) = util::connected_pair(yield);
         tie(forged_w, forged_r) = util::connected_pair(yield);
         tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send raw origin response.
-        task::spawn_detached(ctx, [&origin_w, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&origin_w, lock = wc.lock()] (auto y) {
             sys::error_code e;
             asio::async_write( origin_w
                              , asio::const_buffer(rs_head_s.data(), rs_head_s.size())
@@ -640,7 +643,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Sign origin response.
-        task::spawn_detached(ctx, [ origin_r = std::move(origin_r), &signed_w
+        task::spawn_detached(exec, [ origin_r = std::move(origin_r), &signed_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -660,7 +663,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Forge (alter) signed output.
-        task::spawn_detached(ctx, [ &signed_r, &forged_w
+        task::spawn_detached(exec, [ &signed_r, &forged_w
                          , lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
@@ -686,7 +689,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Verify forged output.
-        task::spawn_detached(ctx, [ forged_r = std::move(forged_r), &tested_w
+        task::spawn_detached(exec, [ forged_r = std::move(forged_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -703,7 +706,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
         });
 
         // Black hole.
-        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -721,19 +724,20 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
 // (i.e. no trailers).
 BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         asio::ip::tcp::socket
-            signed_w(ctx), signed_r(ctx),
-            hashed_w(ctx), hashed_r(ctx),
-            tested_w(ctx), tested_r(ctx);
+            signed_w(exec), signed_r(exec),
+            hashed_w(exec), hashed_r(exec),
+            tested_w(exec), tested_r(exec);
         tie(signed_w, signed_r) = util::connected_pair(yield);
         tie(hashed_w, hashed_r) = util::connected_pair(yield);
         tie(tested_w, tested_r) = util::connected_pair(yield);
 
         // Send signed response.
-        task::spawn_detached(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&signed_w, lock = wc.lock()] (auto y) {
             // Head (raw).  With trailers as normal headers.
             auto trh_start = rs_head_signed_s.find("Trailer:");
             BOOST_REQUIRE(trh_start != string::npos);
@@ -765,7 +769,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         });
 
         // Verify signed output.
-        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &hashed_w
+        task::spawn_detached(exec, [ signed_r = std::move(signed_r), &hashed_w
                          , lock = wc.lock()](auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -782,7 +786,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         });
 
         // Check generation of chained hashes.
-        task::spawn_detached(ctx, [ hashed_r = std::move(hashed_r), &tested_w
+        task::spawn_detached(exec, [ hashed_r = std::move(hashed_r), &tested_w
                          , lock = wc.lock()](auto y) mutable {
             size_t xidx = 0;
             Cancel cancel;
@@ -806,7 +810,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
         });
 
         // Black hole.
-        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
@@ -866,12 +870,13 @@ static const first_last block_ranges[] = {
 BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
                     , boost::unit_test::data::make(block_ranges), firstb_lastb) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         asio::ip::tcp::socket
-            signed_w(ctx), signed_r(ctx),
-            tested_w(ctx), tested_r(ctx);
+            signed_w(exec), signed_r(exec),
+            tested_w(exec), tested_r(exec);
         tie(signed_w, signed_r) = util::connected_pair(yield);
         tie(tested_w, tested_r) = util::connected_pair(yield);
 
@@ -879,7 +884,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         tie(first_block, last_block) = firstb_lastb;
 
         // Send partial response.
-        task::spawn_detached(ctx, [ &signed_w
+        task::spawn_detached(exec, [ &signed_w
                          , first_block, last_block
                          , lock = wc.lock()] (auto y) {
             // Head (raw).
@@ -911,7 +916,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         });
 
         // Test the loaded response.
-        task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tested_w
+        task::spawn_detached(exec, [ signed_r = std::move(signed_r), &tested_w
                          , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
             sys::error_code e;
@@ -929,7 +934,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         });
 
         // Black hole.
-        task::spawn_detached(ctx, [&tested_r, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [&tested_r, lock = wc.lock()] (auto y) {
             char d[2048];
             asio::mutable_buffer b(d, sizeof(d));
 
