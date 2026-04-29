@@ -41,8 +41,18 @@ public:
 
     public:
         Lock(std::shared_ptr<WaitState> wait_state);
-        Lock(const Lock&) = delete;
-        Lock& operator=(const Lock&) = delete;
+        Lock(const Lock& other) {
+            *this = other;
+        }
+
+        Lock& operator=(const Lock& other) {
+            _wait_state = other._wait_state;
+            if (!_wait_state) return *this;
+            if (!other.hook.is_linked()) return *this;
+            _wait_state->locks.push_back(*this);
+            return *this;
+        }
+
         Lock(Lock&&);
         Lock& operator=(Lock&&);
 
