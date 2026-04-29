@@ -26,6 +26,7 @@ int millis_since(Clock::time_point start) {
 
 BOOST_AUTO_TEST_CASE(test_scheduler) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
     std::srand(time(0));
 
@@ -34,8 +35,8 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
     unsigned run_count = 0;
 
     for (unsigned i = 0; i < 20; ++i) {
-        task::spawn_detached(ctx, [&ctx, &scheduler, &run_count](auto yield) {
-            asio::post(ctx, yield);
+        task::spawn_detached(exec, [&exec, &scheduler, &run_count](auto yield) {
+            asio::post(exec, yield);
 
             sys::error_code ec;
             auto slot = scheduler.wait_for_slot(yield[ec]);
@@ -46,7 +47,7 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
 
             BOOST_REQUIRE(run_count <= scheduler.max_running_jobs());
 
-            Timer timer(ctx);
+            Timer timer(exec);
             timer.expires_after(chrono::milliseconds(std::rand() % 500));
             timer.async_wait(yield[ec]);
 
@@ -59,13 +60,14 @@ BOOST_AUTO_TEST_CASE(test_scheduler) {
 
 BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    Scheduler scheduler(ctx, 0);
+    Scheduler scheduler(exec, 0);
 
-    task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
+    task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
         Cancel cancel;
-        task::spawn_detached(ctx, [&ctx, &cancel](auto yield) {
-            asio::post(ctx, yield);
+        task::spawn_detached(exec, [&exec, &cancel](auto yield) {
+            asio::post(exec, yield);
             cancel();
         });
         sys::error_code ec;
@@ -78,12 +80,13 @@ BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
 
 BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    auto scheduler = make_unique<Scheduler>(ctx, 0);
+    auto scheduler = make_unique<Scheduler>(exec, 0);
 
-    task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
-            task::spawn_detached(ctx, [&ctx, &scheduler](auto yield) {
-            asio::post(ctx, yield);
+    task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
+            task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
+            asio::post(exec, yield);
             scheduler.reset();
         });
 
