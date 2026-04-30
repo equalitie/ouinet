@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <memory>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -13,169 +14,127 @@
 #include <client_config.h>
 #include <util/signal.h>
 #include <util/crypto.h>
-#include <condition_variable>
 #include <future>
 #include <mutex>
-#include <atomic>
+#include <optional>
 
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-//#include "debug.h"
-//#include "std_scoped_redirect.h"
-
 using namespace std;
 using ouinet::ClientConfig;
 
-/*
-struct Defer {
-    Defer(function<void()> f) : _f(move(f)) {}
-    ~Defer() { _f(); }
-    function<void()> _f;
+// ── Per-run session ────────────────────────────────────────────────────────────
+// All state belonging to a single start/stop cycle.
+// Shared between g_current_session and the detached worker thread via shared_ptr,
+// so the object is kept alive until both sides release it.
+struct ClientSession {
+    ouinet::asio::io_context ctx;
+    std::unique_ptr<ouinet::Client> client;
+    std::optional<ouinet::asio::executor_work_guard<
+        ouinet::asio::io_context::executor_type>> ctx_guard;
 };
-*/
 
-// g_client is only accessed from the g_client_thread.
-std::unique_ptr<ouinet::Client> g_client;
-ouinet::asio::io_context g_ctx;
-thread g_client_thread;
-bool g_crypto_initialized = false;
+// ── Globals ───────────────────────────────────────────────────────────────────
 
-// Thread-safe cached values for cross-thread access
-std::atomic<bool> g_client_ready{false};
+// g_session_mutex protects all of: g_current_session, g_proxy_endpoint_cached,
+// g_frontend_endpoint_cached.
+std::shared_ptr<ClientSession> g_current_session;
 std::string g_proxy_endpoint_cached;
 std::string g_frontend_endpoint_cached;
-std::mutex g_endpoint_mutex;
+std::mutex g_session_mutex;
 
-void start_client_thread(const std::vector<std::string>& args) //, const vector<string>& extra_path)
+// ── Session cleanup ────────────────────────────────────────────────────────────
+// Called from the detached thread after ctx.run() exits (normally or via exception).
+// Clears global state only if this session is still the active one — prevents
+// a finishing old session from clobbering a newly started session's state.
+static void on_session_exit(const std::shared_ptr<ClientSession>& session)
 {
-    if (!g_crypto_initialized) {
-        ouinet::util::crypto_init();
-        g_crypto_initialized = true;
-    }
-
-    /*
-    char* old_path_c = getenv("PATH");
-    if (old_path_c) {
-        std::string old_path(old_path_c);
-        std::set<std::string> old_path_entries;
-        size_t index = 0;
-        while (true) {
-            size_t pos = old_path.find(':', index);
-            if (pos == std::string::npos) {
-                old_path_entries.insert(old_path.substr(index));
-                break;
-            } else {
-                old_path_entries.insert(old_path.substr(index, pos - index));
-                index = pos + 1;
-            }
+    {
+        std::lock_guard<std::mutex> lock(g_session_mutex);
+        if (g_current_session.get() == session.get()) {
+            g_current_session = nullptr;
+            g_proxy_endpoint_cached.clear();
+            g_frontend_endpoint_cached.clear();
         }
-
-        std::string new_path;
-        for (size_t i = 0; i < extra_path.size(); i++) {
-            if (!old_path_entries.count(extra_path[i])) {
-                new_path += extra_path[i];
-                new_path += ":";
-            }
-        }
-        new_path += old_path;
-        setenv("PATH", new_path.c_str(), 1);
-    }
-    */
-
-    // Already running — nothing to do.
-    if (g_client_ready) return;
-
-    // If the previous thread finished but was never joined, join it now
-    // so that assigning a new thread won't call std::terminate().
-    if (g_client_thread.joinable()) {
-        g_client_thread.join();
     }
 
-    std::cout<<"Ouinet config:"<<std::endl;
-    for (std::string arg: args) {
-        std::cout<<arg<<std::endl;
-    }
-
-    g_client_thread = thread([=] {
-            if (g_client) return;
-
-            //StdScopedRedirect redirect_guard;
-
-            //debug("Starting new ouinet client.");
-            std::cout<<"Starting new ouinet client"<<std::endl;
-            LOG_WARN("OUINET::Starting new ouinet client");
-
-            // In case we're restarting.
-            g_ctx.restart();
-
-            vector<const char*> args_;
-            args_.reserve(args.size());
-
-            for (const auto& arg : args) {
-                args_.push_back(arg.c_str());
-            }
-
-            try {
-                ClientConfig cfg(args_.size(), const_cast<const char**>(args_.data()));
-                g_client = make_unique<ouinet::Client>(g_ctx, move(cfg));
-                g_client->start();
-
-                // Cache endpoints for thread-safe access
-                {
-                    std::lock_guard<std::mutex> lock(g_endpoint_mutex);
-                    auto ep = g_client->get_proxy_endpoint();
-                    g_proxy_endpoint_cached = ep.address().to_string() + ":" + to_string(ep.port());
-                    g_frontend_endpoint_cached = g_client->get_frontend_endpoint();
-                }
-                g_client_ready = true;
-            }
-            catch (const std::exception& e) {
-                //debug("Failed to start Ouinet client:");
-                //debug("%s", e.what());
-                std::cout<<"Failed to start ouinet client"<<std::endl;
-                std::cout<<e.what()<<std::endl;
-                g_client.reset();
-                return;
-            }
-
-            try {
-                g_ctx.run();
-            }
-            catch (const std::exception& e) {
-                //debug("Exception thrown from ouinet");
-                //debug("%s", e.what());
-                std::cout<<"Exception thrown from ouinet"<<std::endl;
-                std::cout<<e.what()<<std::endl;
-            }
-
-            //debug("Ouinet's main loop stopped.");
-            std::cout<<"Ouinet's main loop stopped."<<std::endl;
-            g_client_ready = false;
-            {
-                std::lock_guard<std::mutex> lock(g_endpoint_mutex);
-                g_proxy_endpoint_cached.clear();
-                g_frontend_endpoint_cached.clear();
-            }
-            g_client.reset();
-        });
+    // Always release session's own resources regardless of whether current
+    session->ctx_guard.reset();
+    session->client.reset();
 }
 
-int NativeLib::getClientState()
+// ── start_client_thread ────────────────────────────────────────────────────────
+// Called under g_session_mutex from startClient().
+void start_client_thread(const std::vector<std::string>& args)
 {
-    // TODO: Avoid needing to keep this in sync by hand.
-    if (!g_client_ready)
-        return g_ctx.stopped() ? 6 /* stopped */ : -1 /* missing */;
+    static std::once_flag crypto_init_flag;
+    std::call_once(crypto_init_flag, ouinet::util::crypto_init);
 
-    // Post to io_context thread and wait for result
-    std::promise<int> promise;
-    ouinet::asio::post(g_ctx, [&promise] {
-        if (!g_client) {
-            promise.set_value(-1);
+    if (g_current_session) return;  // session already active — starting or running
+
+    auto session = std::make_shared<ClientSession>();
+    g_current_session = session;  // protected — caller holds g_session_mutex
+
+    std::cout << "Ouinet config:" << std::endl;
+    for (const std::string& arg : args) std::cout << arg << std::endl;
+
+    std::thread([session, args]() {
+        std::cout << "Starting new ouinet client" << std::endl;
+        LOG_WARN("OUINET::Starting new ouinet client");
+
+        vector<const char*> args_;
+        args_.reserve(args.size());
+        for (const auto& arg : args) args_.push_back(arg.c_str());
+
+        try {
+            ClientConfig cfg(args_.size(), const_cast<const char**>(args_.data()));
+            session->client = make_unique<ouinet::Client>(session->ctx, move(cfg));
+            session->client->start();
+
+            {
+                std::lock_guard<std::mutex> lock(g_session_mutex);
+                auto ep = session->client->get_proxy_endpoint();
+                g_proxy_endpoint_cached = ep.address().to_string() + ":" + to_string(ep.port());
+                g_frontend_endpoint_cached = session->client->get_frontend_endpoint();
+            }
+        }
+        catch (const std::exception& e) {
+            std::cout << "Failed to start ouinet client: " << e.what() << std::endl;
+            on_session_exit(session);
             return;
         }
-        switch (g_client->get_state()) {
+
+        session->ctx_guard.emplace(session->ctx.get_executor());
+        try {
+            session->ctx.run();
+        }
+        catch (const std::exception& e) {
+            std::cout << "Exception thrown from ouinet: " << e.what() << std::endl;
+        }
+
+        std::cout << "Ouinet's main loop stopped." << std::endl;
+        on_session_exit(session);
+        // session shared_ptr released here — object destroyed if stopClient
+        // already released its ref via the posted stop handler
+    }).detach();
+}
+
+// ── NativeLib ─────────────────────────────────────────────────────────────────
+int NativeLib::getClientState()
+{
+    std::shared_ptr<ClientSession> session;
+    {
+        std::lock_guard<std::mutex> lock(g_session_mutex);
+        session = g_current_session;
+    }
+    if (!session || session->ctx.stopped()) return -1;
+
+    std::promise<int> promise;
+    ouinet::asio::post(session->ctx, [&promise, session] {
+        if (!session->client) { promise.set_value(-1); return; }
+        switch (session->client->get_state()) {
         case ouinet::Client::RunningState::Created:  promise.set_value(0); break;
         case ouinet::Client::RunningState::Failed:   promise.set_value(1); break;
         case ouinet::Client::RunningState::Starting: promise.set_value(2); break;
@@ -189,48 +148,30 @@ int NativeLib::getClientState()
     return promise.get_future().get();
 }
 
-void NativeLib::startClient(const std::vector<std::string>& args)//, const vector<string>& extra_path)
+void NativeLib::startClient(const std::vector<std::string>& args)
 {
-    /*
-    size_t argn = env->GetArrayLength(jargs);
-    vector<string> args;
-    args.reserve(argn);
-
-    for (size_t i = 0; i < argn; ++i) {
-        jstring jstr = (jstring) env->GetObjectArrayElement(jargs, i);
-        const char* arg = env->GetStringUTFChars(jstr, 0);
-        args.push_back(arg);
-        env->ReleaseStringUTFChars(jstr, arg);
-    }
-
-
-    size_t pathn = env->GetArrayLength(jpath);
-    vector<string> path;
-    path.reserve(pathn);
-
-    for (size_t i = 0; i < pathn; ++i) {
-        jstring jstr = (jstring) env->GetObjectArrayElement(jpath, i);
-        const char* dir = env->GetStringUTFChars(jstr, 0);
-        path.push_back(dir);
-        env->ReleaseStringUTFChars(jstr, dir);
-    }
-    */
-    std::cout<<"Starting ouinet client"<<std::endl;
+    std::lock_guard<std::mutex> lock(g_session_mutex);
+    std::cout << "Starting ouinet client" << std::endl;
     start_client_thread(args);
 }
 
 void NativeLib::stopClient()
 {
-    if (!g_client_thread.joinable()) return;
+    std::shared_ptr<ClientSession> session;
+    {
+        std::lock_guard<std::mutex> lock(g_session_mutex);
+        session = std::move(g_current_session);
+        g_current_session = nullptr;  // new startClient() can proceed immediately
+    }
 
-    // Post stop() to io_context thread to ensure thread-safe access
-    ouinet::asio::post(g_ctx, [] {
-        if (g_client) g_client->stop();
+    if (!session) return;
+
+    // Post stop into the session's own io_context — returns immediately.
+    // The detached thread holds the last shared_ptr ref and will clean up.
+    ouinet::asio::post(session->ctx, [session]() mutable {
+        if (session->client) session->client->stop();
+        session->ctx_guard.reset();  // allows ctx.run() to return once work drains
     });
-
-    g_client_thread.join();
-    g_client_thread = thread();
-    // Note: g_client.reset() happens inside the thread after g_ctx.run() returns
 }
 
 std::string NativeLib::helloOuinet()
@@ -238,15 +179,12 @@ std::string NativeLib::helloOuinet()
     return std::string("Hello Ouinet, this libary was definitely compiled inside of the ouinet cmake build system, cool");
 }
 
-
 std::string NativeLib::getProxyEndpoint() const noexcept {
-    if (!g_client_ready) return "";
-    std::lock_guard<std::mutex> lock(g_endpoint_mutex);
+    std::lock_guard<std::mutex> lock(g_session_mutex);
     return g_proxy_endpoint_cached;
 }
 
 std::string NativeLib::getFrontendEndpoint() const noexcept {
-    if (!g_client_ready) return "";
-    std::lock_guard<std::mutex> lock(g_endpoint_mutex);
+    std::lock_guard<std::mutex> lock(g_session_mutex);
     return g_frontend_endpoint_cached;
 }
