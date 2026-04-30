@@ -39,7 +39,7 @@ if (WITH_OUISYNC)
             cpp_ouisync_client
         PRIVATE
             cpp_ouisync_service
-            ouinet_rs
+            ouinet_common
     )
     target_include_directories(ouinet_ouisync PUBLIC "./src")
     add_compile_definitions(WITH_OUISYNC)

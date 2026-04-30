@@ -44,7 +44,7 @@ add_executable(test_response_writer "test_response_writer.cpp")
 
 ######################################################################
 if (NOT WIN32)
-add_executable(test_persistent_lru_cache "test_persistent_lru_cache.cpp")
+    add_executable(test_persistent_lru_cache "test_persistent_lru_cache.cpp")
 endif ()
 
 ################################################################################
@@ -55,7 +55,7 @@ endif()
 
 ################################################################################
 if (NOT WIN32)
-add_executable(bt_bep44 "bt_bep44.cpp")
+    add_executable(bt_bep44 "bt_bep44.cpp")
 endif ()
 
 ################################################################################

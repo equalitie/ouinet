@@ -189,4 +189,3 @@ void Resolver::close() {
 }
 
 } // namespace ouinet::dns
-
