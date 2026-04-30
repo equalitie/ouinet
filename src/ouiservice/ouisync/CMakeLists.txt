@@ -48,7 +48,7 @@ if (WITH_OUISYNC)
             ouinet_common
     )
     target_include_directories(ouinet_ouisync PUBLIC "${CMAKE_SOURCE_DIR}/src")
-    add_compile_definitions(WITH_OUISYNC)
+    target_compile_definitions(ouinet_ouisync PUBLIC WITH_OUISYNC)
 else()
     add_library(ouinet_ouisync INTERFACE EXCLUDE_FROM_ALL)
     target_include_directories(ouinet_ouisync INTERFACE "${CMAKE_SOURCE_DIR}/src")
