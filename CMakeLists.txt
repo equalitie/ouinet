@@ -144,8 +144,9 @@ find_package(CPPUPnP REQUIRED)
 target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
-add_subdirectory(./src/ouiservice/i2p)
 add_subdirectory(./rust)
+add_subdirectory(./src/ouiservice/i2p)
+add_subdirectory(./src/ouiservice/ouisync)
 
 ###########################################################
 

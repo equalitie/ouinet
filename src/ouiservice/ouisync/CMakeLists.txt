@@ -23,7 +23,11 @@ else()
     FetchContent_MakeAvailable(ouisync)
 
     FetchContent_GetProperties(ouisync)
-    add_subdirectory("${ouisync_SOURCE_DIR}/bindings/cpp" EXCLUDE_FROM_ALL)
+    add_subdirectory(
+        "${ouisync_SOURCE_DIR}/bindings/cpp"
+        "${CMAKE_BINARY_DIR}/ouisync"
+        EXCLUDE_FROM_ALL
+    )
 endif()
 
 target_link_libraries(cpp_ouisync_service PRIVATE ouinet_asio)
@@ -33,8 +37,8 @@ if (WITH_OUISYNC)
     add_library(
         ouinet_ouisync
         EXCLUDE_FROM_ALL
-        "./src/ouiservice/ouisync/ouisync.cpp"
-        "./src/ouiservice/ouisync/error.cpp"
+        "./ouisync.cpp"
+        "./error.cpp"
     )
     target_link_libraries(ouinet_ouisync
         PUBLIC
@@ -43,9 +47,9 @@ if (WITH_OUISYNC)
             cpp_ouisync_service
             ouinet_common
     )
-    target_include_directories(ouinet_ouisync PUBLIC "./src")
+    target_include_directories(ouinet_ouisync PUBLIC "${CMAKE_SOURCE_DIR}/src")
     add_compile_definitions(WITH_OUISYNC)
 else()
     add_library(ouinet_ouisync INTERFACE EXCLUDE_FROM_ALL)
-    target_include_directories(ouinet_ouisync INTERFACE "./src")
+    target_include_directories(ouinet_ouisync INTERFACE "${CMAKE_SOURCE_DIR}/src")
 endif()
