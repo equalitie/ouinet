@@ -8,11 +8,9 @@ FetchContent_Declare(
     GIT_TAG v0.5.2
 )
 
-set(OUINET_RS_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-
 set(OUINET_RS_CXXFLAGS_LIST
-    "-I${CMAKE_CURRENT_BINARY_DIR}/boost/install/include"
-    "-I${OUINET_RS_ROOT_DIR}/rust"
+    "-I${CMAKE_BINARY_DIR}/boost/install/include"
+    "-I${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 if ("${PLATFORM}" STREQUAL "OS64")
@@ -42,7 +40,7 @@ endif()
 
 FetchContent_MakeAvailable(Corrosion)
 
-corrosion_import_crate(MANIFEST_PATH ${OUINET_RS_ROOT_DIR}/rust/Cargo.toml)
+corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml)
 
 string(REPLACE ";" " " OUINET_RS_CXXFLAGS "${OUINET_RS_CXXFLAGS_LIST}")
 corrosion_set_env_vars(ouinet_rs "CXXFLAGS=${OUINET_RS_CXXFLAGS}")
@@ -62,5 +60,5 @@ endif()
 # as dependency.
 # XXX: Isn't there a better way to obtain the cargo target directory?
 target_include_directories(ouinet_rs
-    INTERFACE ${OUINET_RS_ROOT_DIR}/rust
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
     ${RUST_BRIDGE_PATH})

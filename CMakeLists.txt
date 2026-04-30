@@ -145,6 +145,7 @@ target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
 add_subdirectory(./src/ouiservice/i2p)
+add_subdirectory(./rust)
 
 ###########################################################
 

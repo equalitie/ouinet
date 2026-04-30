@@ -13,6 +13,8 @@ if (OUISYNC_SRC_DIR)
     )
 else()
     # Otherwise download from Git
+    include(FetchContent)
+
     FetchContent_Declare(
         ouisync
         GIT_REPOSITORY "https://github.com/equalitie/ouisync"
