@@ -402,7 +402,6 @@ public:
         }
 
         task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
-            TRACK_HANDLER();
             sys::error_code ec;
 
             auto peer_eps = _peer_lookup->get(c, y[ec]);
@@ -460,7 +459,6 @@ public:
         , _random_generator(_random_device())
     {
         task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
-            TRACK_HANDLER();
             sys::error_code ec;
 
             auto i2p_dests = _tracker_lookup->get(c, y[ec]);
@@ -493,7 +491,6 @@ public:
         task::spawn_detached(_exec, [=, this, log_path = _log_path,
                                      i2p_service = _i2p_service,
                                      c = _lifetime_cancel] (auto y) mutable {
-            TRACK_HANDLER();
             sys::error_code ec;
 
             LOG_DEBUG(log_path, " Fetching hash list from I2P: ", i2p_dest);
@@ -548,7 +545,6 @@ public:
                                      lan_my_eps = _lan_my_eps,
                                      newest_proto_seen = _newest_proto_seen,
                                      c = _lifetime_cancel] (auto y) mutable {
-            TRACK_HANDLER();
             sys::error_code ec;
 
             LOG_DEBUG(log_path, " Fetching hash list from: ", ep);

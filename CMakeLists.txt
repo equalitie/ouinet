@@ -182,7 +182,6 @@ file(GLOB ouinet_common_sources
     "./src/util.cpp"
     "./src/util/atomic_file.cpp"
     "./src/util/random.cpp"
-    "./src/util/handler_tracker.cpp"
     "./src/util/sign.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"

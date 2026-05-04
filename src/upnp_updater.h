@@ -12,7 +12,7 @@
 #include <util/str.h>
 #include <async_sleep.h>
 #include <defer.h>
-#include "util/handler_tracker.h"
+#include "task.h"
 
 namespace ouinet {
 
@@ -30,7 +30,7 @@ public:
         , _internal_port(internal_port)
         , _random_id(util::random::number<uint16_t>())
     {
-        TRACK_SPAWN(exec, ([
+        task::spawn_detached(exec, [
             this,
             exec,
             c = _lifetime_cancel
@@ -45,7 +45,7 @@ public:
                 }
                 async_sleep(std::chrono::seconds(5), c, yield);
             }
-        }));
+        });
     }
 
     ~UPnPUpdater() {

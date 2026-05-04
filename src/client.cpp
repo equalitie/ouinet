@@ -76,7 +76,7 @@
 #include "util/scheduler.h"
 #include "util/async_job.h"
 #include "upnp_updater.h"
-#include "util/handler_tracker.h"
+#include "task.h"
 #include "util/executor.h"
 
 #include "task.h"
@@ -319,7 +319,7 @@ public:
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
-        TRACK_SPAWN(_ctx, ([
+        task::spawn_detached(_ctx, ([
             bt_dht,
             executor = _ctx.get_executor(),
             local_ep = mpl.local_endpoint(),
@@ -530,7 +530,7 @@ private:
             _ctx.get_executor()
             , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr);
 
-        TRACK_SPAWN(_ctx, ([&, c = _shutdown_signal] (asio::yield_context yield) mutable {
+        task::spawn_detached(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _multi_utp_server = nullptr; });
 
             sys::error_code ec;
@@ -551,7 +551,7 @@ private:
                     async_sleep(200ms, c, yield);
                     continue;
                 }
-                TRACK_SPAWN(_ctx, ([this, con = move(con)]
+                task::spawn_detached(_ctx, [this, con = move(con)]
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
                     // Do not log other users' addresses unless debugging.
@@ -562,9 +562,9 @@ private:
                     YieldContext y(yield, _log_path.tag(std::move(tag)));
                     serve_utp_request(move(con), y[ec].tag("serve_utp_req"));
                     _YDEBUG(y, "Done; ec=", ec);
-                }));
+                });
             }
-        }));
+        });
     }
 
 #ifdef __EXPERIMENTAL__
@@ -594,7 +594,7 @@ private:
             return or_throw(yield, ec);
         }
 
-        TRACK_SPAWN(_ctx, ([&, c = _shutdown_signal] (asio::yield_context yield) mutable {
+        task::spawn_detached(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
             auto slot = c.connect([&] () mutable { _i2p_cache_server = nullptr; });
 
             while (!c) {
@@ -608,7 +608,7 @@ private:
                     continue;
                 }
                 LOG_INFO("I2P cache: Accepted connection from ", con.remote_endpoint());
-                TRACK_SPAWN(_ctx, ([this, con = move(con)]
+                task::spawn_detached(_ctx, [this, con = move(con)]
                                    (asio::yield_context yield) mutable {
                     sys::error_code ec;
                     std::string tag = (logger.get_threshold() <= DEBUG)
@@ -618,9 +618,9 @@ private:
                     YieldContext y(yield, _log_path.tag(std::move(tag)));
                     serve_utp_request(move(con), y[ec].tag("serve_i2p_req"));
                     _YDEBUG(y, "Done; ec=", ec);
-                }));
+                });
             }
-        }));
+        });
     }
 #endif // __EXPERIMENTAL__
 
@@ -2793,7 +2793,7 @@ void Client::State::listen_tcp
 
             GenericStream connection(move(socket) , move(tcp_shutter));
 
-            TRACK_SPAWN( _ctx, ([
+            task::spawn_detached( _ctx, [
                 this,
                 self = shared_from_this(),
                 c = move(connection),
@@ -2802,7 +2802,7 @@ void Client::State::listen_tcp
             ](asio::yield_context yield) mutable {
                 if (was_stopped()) return;
                 handler(move(c), YieldContext(yield, _log_path));
-            }));
+            });
         }
     }
 
@@ -2849,7 +2849,7 @@ void Client::State::listen_unix_socket
 
             GenericStream connection(move(socket) , move(unix_socket_shutter));
 
-            TRACK_SPAWN( _ctx, ([
+            task::spawn_detached( _ctx, [
                 this,
                 self = shared_from_this(),
                 c = move(connection),
@@ -2858,7 +2858,7 @@ void Client::State::listen_unix_socket
             ](asio::yield_context yield) mutable {
                 if (was_stopped()) return;
                 handler(move(c), YieldContext(yield, util::LogPath("unix_socket")));
-            }));
+            });
         }
     }
 
@@ -2927,7 +2927,7 @@ void Client::State::start_ouinet()
     next_internal_state = InternalState::Started;
 
     if (_ouisync) {
-        TRACK_SPAWN(_ctx, ([
+        task::spawn_detached(_ctx, [
             this,
             self = shared_from_this()
         ] (asio::yield_context yield) mutable {
@@ -2942,10 +2942,10 @@ void Client::State::start_ouinet()
              catch (...) {
                 LOG_ERROR("Failed to start Ouisync: Unknown exception");
              }
-        }));
+        });
     }
 
-    TRACK_SPAWN(_ctx, ([
+    task::spawn_detached(_ctx, [
         this,
         self = shared_from_this(),
         acceptor = move(proxy_acceptor)
@@ -2965,10 +2965,10 @@ void Client::State::start_ouinet()
 
                 serve_request(move(c), y);
             });
-    }));
+    });
 
     if (front_end_acceptor) {
-        TRACK_SPAWN( _ctx, ([
+        task::spawn_detached( _ctx, [
             this,
             self = shared_from_this(),
             acceptor = move(*front_end_acceptor)
@@ -2996,11 +2996,11 @@ void Client::State::start_ouinet()
 
                   http::async_write(c, rs, yield[ec].tag("write_res"));
             });
-        }));
+        });
     }
 
     if (front_end_unix_socket_acceptor) {
-        TRACK_SPAWN( _ctx, ([
+        task::spawn_detached( _ctx, [
             this,
             self = shared_from_this(),
             acceptor = move(*front_end_unix_socket_acceptor)
@@ -3028,10 +3028,10 @@ void Client::State::start_ouinet()
 
                   http::async_write(c, rs, yield[ec].tag("write_res_u_s"));
             });
-        }));
+        });
     }
 
-    TRACK_SPAWN(_ctx, ([
+    task::spawn_detached(_ctx, [
         this
     ] (asio::yield_context yield) {
         if (was_stopped()) return;
@@ -3041,9 +3041,9 @@ void Client::State::start_ouinet()
 
         if (ec && ec != asio::error::operation_aborted)
             LOG_ERROR("Failed to setup injector; ec=", ec);
-    }));
+    });
 
-    TRACK_SPAWN(_ctx, ([
+    task::spawn_detached(_ctx, [
         this
     ] (asio::yield_context yield) {
         if (was_stopped()) return;
@@ -3053,7 +3053,7 @@ void Client::State::start_ouinet()
 
         if (ec && ec != asio::error::operation_aborted)
             LOG_ERROR("Failed to setup cache; ec=", ec);
-    }));
+    });
 }
 
 //------------------------------------------------------------------------------

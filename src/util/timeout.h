@@ -1,7 +1,7 @@
 #pragma once
 
 #include "signal.h"
-#include "../util/handler_tracker.h"
+#include "../task.h"
 
 namespace ouinet { namespace util {
 
@@ -30,7 +30,6 @@ public:
             });
 
         task::spawn_detached(ex, [s = _state, duration] (asio::yield_context yield) {
-                TRACK_HANDLER();
                 if (s->finished) return;
 
                 sys::error_code ec;

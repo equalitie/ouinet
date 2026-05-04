@@ -4,7 +4,7 @@
 #include "../logger.h"
 #include "../util/str.h"
 #include "../util/watch_dog.h"
-#include "../util/handler_tracker.h"
+#include "../task.h"
 #include "../async_sleep.h"
 
 namespace ouinet {
@@ -35,7 +35,7 @@ void UtpOuiServiceServer::start_listen(asio::yield_context yield)
 {
     using namespace std::chrono_literals;
 
-    TRACK_SPAWN(_ex, [&] (asio::yield_context yield) {
+    task::spawn_detached(_ex, [&] (asio::yield_context yield) {
         Cancel cancel(_cancel);
 
         auto local_ep = _udp_multiplexer->local_endpoint();

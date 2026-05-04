@@ -10,7 +10,7 @@
 #include "../util/wait_condition.h"
 #include "async_sleep.h"
 #include "bittorrent/node_id.h"
-#include "util/handler_tracker.h"
+#include "task.h"
 #include <boost/utility/string_view.hpp>
 
 #ifdef __EXPERIMENTAL__
@@ -192,9 +192,6 @@ struct Announcer::Loop {
 
         while (!cancel) {
             if (entries.empty()) {
-                // XXX: Temporary handler tracking as this coroutine sometimes
-                // fails to exit.
-                TRACK_HANDLER();
                 sys::error_code ec;
                 _DEBUG("No entries to update, waiting...");
                 entries.async_wait_for_push(cancel, yield[ec]);
@@ -222,7 +219,7 @@ struct Announcer::Loop {
 
     void start()
     {
-        TRACK_SPAWN(ex, [this] (asio::yield_context yield) {
+        task::spawn_detached(ex, [this] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
             loop(cancel, yield[ec]);
@@ -255,7 +252,7 @@ struct Announcer::Loop {
                     continue;
                 }
 
-                TRACK_SPAWN(ex, ([this, &cancel, &wcon, lock = wcon.lock()] (asio::yield_context yield) {
+                task::spawn_detached(ex, ([this, &cancel, &wcon, lock = wcon.lock()] (asio::yield_context yield) {
                     sys::error_code ec_coro;
 
                     // Try inserting three times before moving to the next entry
@@ -263,9 +260,6 @@ struct Announcer::Loop {
 
                     Entry e = move(entries.begin()->first);
                     for (int i = 0; i != 3; ++i) {
-                        // XXX: Temporary handler tracking as this coroutine sometimes
-                        // fails to exit.
-                        TRACK_HANDLER();
                         announce(e, cancel, yield[ec_coro]);
                         if (cancel) return;
                         if (!ec_coro) { success = true; break; }
@@ -312,13 +306,12 @@ struct Bep5Loop : public Announcer::Loop {
 
     void start()
     {
-        TRACK_SPAWN(ex, [this] (asio::yield_context yield) {
+        task::spawn_detached(ex, [this] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
 
             // Wait for DHT to be ready before starting the loop
             {
-                TRACK_HANDLER();
                 _DEBUG("Waiting for DHT");
                 dht->wait_all_ready(cancel, yield[ec]);
             }
@@ -356,7 +349,7 @@ struct Bep3Loop : public Announcer::Loop {
 
     void start()
     {
-        TRACK_SPAWN(ex, [this] (asio::yield_context yield) {
+        task::spawn_detached(ex, [this] (asio::yield_context yield) {
             Cancel cancel(_cancel);
             sys::error_code ec;
             loop(cancel, yield[ec]);

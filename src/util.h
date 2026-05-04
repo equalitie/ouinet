@@ -11,12 +11,10 @@
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
 #include <boost/utility/string_view.hpp>
+#include <boost/optional.hpp>
 #include <boost/beast/core/string_type.hpp>
 
 #include "namespaces.h"
-#include "util/signal.h"
-#include "util/condition_variable.h"
-#include "util/handler_tracker.h"
 #include "util/url.h"
 #include "or_throw.h"
 

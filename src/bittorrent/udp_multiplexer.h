@@ -10,7 +10,7 @@
 #include "../util/condition_variable.h"
 #include "../async_sleep.h"
 #include "rate_counter.h"
-#include "../util/handler_tracker.h"
+#include "../task.h"
 
 namespace ouinet { namespace bittorrent {
 
@@ -133,7 +133,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
     });
 #endif
 
-    TRACK_SPAWN(get_executor(), [this] (asio::yield_context yield) {
+    task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
         Cancel cancel(_terminate_signal);
 
         auto terminated = cancel.connect([&] {
@@ -175,7 +175,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
         }
     });
 
-    TRACK_SPAWN(get_executor(), [this] (asio::yield_context yield) {
+    task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         std::vector<uint8_t> buf;

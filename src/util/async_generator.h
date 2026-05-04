@@ -3,7 +3,7 @@
 #include <boost/optional.hpp>
 #include "async_queue.h"
 #include "wait_condition.h"
-#include "handler_tracker.h"
+#include "task.h"
 
 namespace ouinet { namespace util {
 
@@ -60,7 +60,6 @@ public:
                             , shutdown_cancel = _shutdown_cancel
                             , lock = _wc.lock()
                             ] (Yield yield) mutable {
-            TRACK_HANDLER();
             sys::error_code ec;
             gen(self->_queue, shutdown_cancel, yield[ec]);
 

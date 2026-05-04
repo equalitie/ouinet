@@ -3,7 +3,7 @@
 #include <ouiservice/tls.h>
 #include <async_sleep.h>
 #include <logger.h>
-#include <util/handler_tracker.h>
+#include "task.h"
 
 using namespace std;
 using namespace ouinet;
@@ -36,7 +36,7 @@ struct MultiUtpServer::State
 
         Cancel cancel(outer_cancel);
 
-        TRACK_SPAWN(ex, ([
+        task::spawn_detached(ex, [
             &,
             cancel = move(cancel)
         ] (asio::yield_context yield) mutable {
@@ -55,7 +55,7 @@ struct MultiUtpServer::State
                 accept_queue.async_push(move(con), ec, cancel, yield[ec]);
                 assert(!cancel && !ec);
             }
-        }));
+        });
     }
 
     AsioExecutor ex;

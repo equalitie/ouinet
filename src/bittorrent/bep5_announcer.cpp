@@ -1,7 +1,7 @@
 #include "bep5_announcer.h"
 #include "../async_sleep.h"
 #include "../logger.h"
-#include "../util/handler_tracker.h"
+#include "../task.h"
 #include "../util/condition_variable.h"
 #include "../util/wait_condition.h"
 #include <random>
@@ -54,11 +54,11 @@ struct detail::Bep5AnnouncerImpl
         if (auto dht = dht_w.lock()) {
             auto exec = dht->get_executor();
 
-            TRACK_SPAWN(exec, ([
+            task::spawn_detached(exec, [
                 &, self, exec
             ] (asio::yield_context yield) mutable {
                 loop(exec, yield);
-            }));
+            });
         }
     }
 
