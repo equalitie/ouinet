@@ -371,6 +371,16 @@ struct Bep3Loop : public Announcer::Loop {
                 return;
             }
 
+            // Probe the I2P path to the tracker before entering the announce
+            // loop, so the first real announce or cache lookup does not fail
+            // because the lease set / tunnel were not yet established.
+            {
+                TRACK_HANDLER();
+                sys::error_code probe_ec;
+                tracker->tracker_handshake(cancel, yield[probe_ec]);
+                if (cancel) return;
+            }
+
             loop(cancel, yield[ec]);
         });
     }

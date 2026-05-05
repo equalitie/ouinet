@@ -860,17 +860,9 @@ async def test_bep3_cache_over_i2p(http_server, log):
     await wait_for_benchmark(client, TestFixtures.I2P_TUNNEL_READY_REGEX)
     # Wait for BEP3 announcer to be fully ready (server tunnel + tracker)
     await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
-
-    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
-    print(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
-    )
-
-    # TODO: do not wait a fixed time, check for output
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-    print("done waiting")
+    # Wait for the announcer's BEP3 tracker handshake probe to succeed: this
+    # is the only signal that the I2P path to the tracker is actually usable.
+    await wait_for_benchmark(client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
     response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
@@ -883,6 +875,12 @@ async def test_bep3_cache_over_i2p(http_server, log):
 
     # Wait for client to cache the response
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX)
+
+    # Wait for client1 to actually announce the cached entry to the BEP3 tracker
+    # over I2P. Without this, client2 may query the tracker before client1 is
+    # registered as a peer for this infohash and get_cached_echo will spin
+    # through its retries before the i2p transport has any peers to offer.
+    await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX)
 
     # Client2: retrieves from BEP3 distributed cache (no injector)
     cache_client = run_tcp_client(
@@ -910,20 +908,13 @@ async def test_bep3_cache_over_i2p(http_server, log):
     await wait_for_benchmark(cache_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
     await wait_for_benchmark(cache_client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
 
-    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
-    print(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
-    )
-
-    # TODO: do not wait a fixed time, check for output
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-    print("done waiting")
+    # Wait for the BEP3 tracker handshake probe to actually succeed: a local
+    # The handshake probe round-trips through the tracker
+    # and only logs success once that path actually works.
+    await wait_for_benchmark(cache_client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
     # Retrieve cached content
     await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
-
     # Make sure client1 served it and client2 got it from cache
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
     await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)

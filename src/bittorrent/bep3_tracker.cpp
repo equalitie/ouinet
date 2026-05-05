@@ -13,6 +13,7 @@
 #include <ouiservice/i2p/service.h>
 #include <ouiservice/i2p/i2pd/libi2pd/Destination.h>
 #include "../util.h"
+#include "../util/exponential_backoff.h"
 #include "../logger.h"
 #include <ouiservice/i2p/i2pd/libi2pd/Base.h>  // ByteStreamToBase32
 
@@ -175,6 +176,64 @@ string Bep3Tracker::send_request( const string& extra_params
     }
 
     return res.body();
+}
+
+void Bep3Tracker::tracker_handshake(Cancel& cancel, asio::yield_context yield)
+{
+    auto slot = _cancel.connect([&] { cancel(); });
+
+    // Probe with the all-zero infohash and event=stopped, so we don't pollute
+    // the tracker while still forcing a full I2P request round-trip and
+    // therefore ensure/force lease-set exchange.
+    NodeID dummy_infohash{NodeID::Buffer{}};
+    string info_hash_encoded = util::percent_encode(dummy_infohash.to_bytestring());
+
+    ostringstream params;
+
+    // Per BEP3
+    // (https://www.bittorrent.org/beps/bep_0003.html), event=stopped means
+    // "the peer is shutting down gracefully" - if we never announced
+    // event=started for this infohash, the tracker has no peer entry to
+    // remove, so it should treats the request as a no-op.
+    params << "&left=1"
+           << "&info_hash=" << info_hash_encoded
+           << "&compact=0"
+           << "&numwant=0"
+           << "&event=stopped";
+    auto params_str = params.str();
+
+    LOG_DEBUG("BEP3 tracker: handshake starting");
+
+    // Mirror the retry-with-exponential-backoff structure of
+    // i2poui::Client::connect: try, on success return, on cancel propagate,
+    // otherwise back off and retry.
+    //
+    // We do not call compute_error_code(ec, cancel) here because
+    // send_request already takes care of that
+    for (uint32_t i = 0;; ++i) {
+        sys::error_code ec;
+        send_request(params_str, cancel, yield[ec]);
+
+        if (!ec) {
+            LOG_DEBUG("BEP3 tracker: tracker handshake successful; ec=\"Success\"");
+            return;
+        }
+
+        if (ec == asio::error::operation_aborted) {
+            return or_throw(yield, ec);
+        }
+
+        assert(ec);
+
+        LOG_DEBUG("BEP3 tracker: tracker handshake attempt failed; ec=", ec);
+
+        ec = {};
+        util::exponential_backoff(i, cancel, yield[ec]);
+
+        if (ec) {
+            return or_throw(yield, ec);
+        }
+    }
 }
 
 void Bep3Tracker::tracker_announce( NodeID infohash

@@ -79,7 +79,9 @@ class TestFixtures:
     TCP_INJECTOR_NAME = "tcp_injector"
     TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     # TCP_INJECTOR_PORT_READY_REGEX = "TCP address"
-    TCP_INJECTOR_PORT = 7070
+    # Avoid 7070, which is i2pd's default web-console port and would collide
+    # with a system-wide i2pd if it is running by the developer during the test.
+    TCP_INJECTOR_PORT = 7090
 
     CACHE_INJECTOR_NAME = "cache_injector"
 

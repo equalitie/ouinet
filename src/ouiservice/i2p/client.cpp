@@ -9,6 +9,7 @@
 
 #include "../../logger.h"
 #include "../../util/condition_variable.h"
+#include "../../util/exponential_backoff.h"
 #include "../../or_throw.h"
 #include "../../async_sleep.h"
 
@@ -69,19 +70,6 @@ void Client::stop()
     _stopped();
 }
 
-inline void exponential_backoff(uint32_t i, Cancel& cancel, asio::yield_context yield) {
-    // Constants in this function are made up, feel free to modify them as needed.
-    if (i < 3) return;
-    i -= 3;
-    uint32_t constant_after = 8; // max 12.8 seconds
-    if (i > constant_after) i = constant_after;
-    float delay_s = powf(2, i) / 10.f;
-
-    if (!async_sleep(chrono::milliseconds(long(delay_s * 1000.f)), cancel, yield)) {
-        return or_throw(yield, asio::error::operation_aborted);
-    }
-}
-
 ::ouinet::GenericStream
 Client::connect(asio::yield_context yield, Cancel& cancel)
 {
@@ -105,7 +93,7 @@ Client::connect(asio::yield_context yield, Cancel& cancel)
         assert(ec);
 
         ec = {};
-        exponential_backoff(i, cancel, yield[ec]);
+        util::exponential_backoff(i, cancel, yield[ec]);
 
         if (ec) {
             return or_throw<GenericStream>(yield, ec);
@@ -139,7 +127,7 @@ Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
 
         if (ec) {
             ec = {};
-            exponential_backoff(i, cancel, yield[ec]);
+            util::exponential_backoff(i, cancel, yield[ec]);
             if (ec) return or_throw<GenericStream>(yield, ec);
             continue;
         }

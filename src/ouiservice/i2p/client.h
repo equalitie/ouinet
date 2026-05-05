@@ -30,6 +30,10 @@ public:
     void start(asio::yield_context yield) override;
     void stop() override;
 
+    // Even when i2pd says a tunnel is ready it does not mean that the client
+    // and server has successfully done lease exchange (this is parallel to
+    // tor hidden service rendez-vous protocol)) so we always need a handshake
+    // at least for the first actual connection.    
     GenericStream
     connect(asio::yield_context yield, Signal<void()>& cancel) override;
 

@@ -28,6 +28,14 @@ public:
     // Start the I2P tunnel if not already started, no-op otherwise
     void ensure_started(Cancel, asio::yield_context);
 
+    // Probe the I2P path to the tracker until a request round-trip succeeds.
+    // This forces lease-set exchange and tunnel build before any real cache
+    // lookup or announce, so the first real request does not fail because the
+    // tunnel is not actually established. Retries with backoff until success or
+    // cancel. Similar to i2poui::Client::connect but respecting bep3 tracker
+    // protocol.
+    void tracker_handshake(Cancel&, asio::yield_context);
+
     void tracker_announce(NodeID infohash, Cancel&, asio::yield_context);
 
     std::set<std::string> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context);
