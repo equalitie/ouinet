@@ -226,7 +226,7 @@ set(BOOST_PATCH_COMMAND
     cd ${OUINET_BOOST_PREFIX}/src/built_boost
 )
 foreach (patch ${BOOST_PATCHES})
-    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -N -p1 -i ${patch} || true)
+    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch --dry-run -R -N -p1 -i ${patch} || patch -N -p1 -i ${patch})
 endforeach()
 
 execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
