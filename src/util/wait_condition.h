@@ -103,6 +103,8 @@ public:
     WaitCondition(boost::asio::io_context&);
     WaitCondition(const WaitCondition&) = delete;
     WaitCondition& operator=(const WaitCondition&) = delete;
+    WaitCondition(WaitCondition&&) = default;
+    WaitCondition& operator=(WaitCondition&&) = default;
 
     template<class CompletionToken> auto wait(CompletionToken);
     template<class CompletionToken> auto wait(Cancel&, CompletionToken);
