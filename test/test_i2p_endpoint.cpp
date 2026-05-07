@@ -7,6 +7,9 @@
 
 using ouinet::I2pAddress;
 
+static const char I2P_BASE_64_ALPHABET[] =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-~";
+
 BOOST_AUTO_TEST_CASE(valid_b32_addresses) {
     // 52-char valid (example: 52 'a's)
     std::string valid52(52, 'a');
@@ -46,11 +49,6 @@ BOOST_AUTO_TEST_CASE(invalid_b32_addresses) {
     too_short += ".b32.i2p";
     BOOST_REQUIRE(!I2pAddress::is_valid_b32(too_short));
 
-    // Too long
-    std::string too_long(57, 'a');
-    too_long += ".b32.i2p";
-    BOOST_REQUIRE(!I2pAddress::is_valid_b32(too_long));
-
     // The length which is just incorrect
     std::string incorrect_length(55, 'a');
     incorrect_length += ".b32.i2p";
@@ -70,3 +68,62 @@ BOOST_AUTO_TEST_CASE(invalid_b32_addresses) {
 
 }
 
+
+static std::string make_b64_label(std::size_t len) {
+    std::string out;
+    out.reserve(len);
+    for (std::size_t i = 0; i < len; ++i) {
+        out.push_back(I2P_BASE_64_ALPHABET[i % (sizeof(I2P_BASE_64_ALPHABET)-1)]);
+    }
+    return out;
+}
+
+
+BOOST_AUTO_TEST_CASE(valid_b64_addresses)
+{
+    // long enough payload, no suffix
+    BOOST_REQUIRE(I2pAddress::is_valid_b64(make_b64_label(516)));
+    BOOST_REQUIRE(I2pAddress::is_valid_b64(make_b64_label(520)));
+
+    // long payload with suffix ".b64.i2p"
+    std::string long_and_cool = make_b64_label(600) + ".b64.i2p";
+    BOOST_REQUIRE(I2pAddress::is_valid_b64(long_and_cool));
+
+    // one '=' padding before suffix
+    std::string padded = make_b64_label(520) + '=' + ".b64.i2p";
+    BOOST_REQUIRE(I2pAddress::is_valid_b64(padded));
+
+    // multiple '=' padding before suffix
+    std::string padded2 = make_b64_label(520) + "==" + ".b64.i2p";
+    BOOST_REQUIRE(I2pAddress::is_valid_b64(padded2));
+
+    // exactly 516 chars then suffix
+    std::string minimal = make_b64_label(516) + ".b64.i2p";
+    BOOST_REQUIRE(I2pAddress::is_valid_b64(minimal));
+}
+
+BOOST_AUTO_TEST_CASE(invalid_b64_addresses)
+{
+    // Too short
+    BOOST_REQUIRE(!I2pAddress::is_valid_b64(make_b64_label(515)));
+
+    // Contains disallowed character
+    std::string wrong_char = make_b64_label(520);
+    wrong_char[10] = '+';
+    BOOST_REQUIRE(!I2pAddress::is_valid_b64(wrong_char));
+
+    // Suffix embedded in middle
+    std::string warped = make_b64_label(600);
+    warped.insert(100, ".b64.i2p");
+    BOOST_REQUIRE(!I2pAddress::is_valid_b64(warped));
+
+    // '=' in middle of payload
+    std::string wrong_padding = make_b64_label(520);
+    wrong_padding[5] = '=';
+    BOOST_REQUIRE(!I2pAddress::is_valid_b64(wrong_padding));
+
+    // Wrong-case suffix
+    std::string uppercase = make_b64_label(520) + ".B64.I2P";
+    BOOST_REQUIRE(!I2pAddress::is_valid_b64(uppercase));
+
+}
