@@ -9,7 +9,7 @@ FetchContent_Declare(
 )
 
 set(OUINET_RS_CXXFLAGS_LIST
-    "-I${CMAKE_BINARY_DIR}/boost/install/include"
+    "-I${CMAKE_CURRENT_BINARY_DIR}/../boost/install/include"
     "-I${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
