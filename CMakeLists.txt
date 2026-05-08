@@ -169,10 +169,12 @@ endif()
 # `ouinet_rs`
 add_library(ouinet_common_public
     STATIC
+    "./src/task.cpp"
     "./src/logger.cpp"
     "./src/util/log_path.cpp"
 )
 target_link_libraries(ouinet_common_public PUBLIC Boost::filesystem)
+target_compile_options(ouinet_common_public PUBLIC -std=c++23)
 
 ################################################################################
 

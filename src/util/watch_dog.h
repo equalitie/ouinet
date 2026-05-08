@@ -2,6 +2,7 @@
 
 #include <boost/asio/coroutine.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/optional.hpp>
 #include <boost/asio/spawn.hpp>
 #include "../defer.h"
 #include "../or_throw.h"

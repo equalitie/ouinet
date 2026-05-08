@@ -2,6 +2,7 @@
 
 #include "../namespaces.h"
 #include "../util/log_path.h"
+#include "../logger.h"
 #include "../or_throw.h"
 #include "../task.h"
 
