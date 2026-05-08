@@ -36,7 +36,7 @@ private:
 
 public:
     class Lock {
-        friend class WaitState;
+        friend struct WaitState;
         friend class WaitCondition;
 
     public:
@@ -76,7 +76,7 @@ private:
             // `post` finishes.
             hook.unlink();
 
-            asio::post(exec, [self = std::move(shared_from_this())] () mutable {
+            asio::post(exec, [self = shared_from_this()] () mutable {
                     sys::error_code ec;
                     if (self->aborted) {
                         ec = asio::error::operation_aborted;
