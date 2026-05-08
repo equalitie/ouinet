@@ -6,6 +6,7 @@
 #include <boost/intrusive/list.hpp>
 #include <chrono>
 #include <cstddef>
+#include <map>
 //#include <ostream>
 #include "client.h"
 #include "namespaces.h"

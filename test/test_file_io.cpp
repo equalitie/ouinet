@@ -9,7 +9,6 @@
 #include <boost/filesystem.hpp>
 #include "util/signal.h"
 #include "util/file_io.h"
-#include "util/part_io.h"
 #include "../test/util/base_fixture.hpp"
 #include "task.h"
 

@@ -1,4 +1,7 @@
+#pragma once
+
 #include <boost/beast/core.hpp>
+#include <boost/asio/ssl/context.hpp>
 
 #include "declspec.h"
 #include "cache/http_sign.h"

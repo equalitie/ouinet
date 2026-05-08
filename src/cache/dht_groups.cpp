@@ -14,9 +14,9 @@ using namespace ouinet;
 #define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
-using asio::yield_context;
 namespace file_io = util::file_io;
 using sys::errc::make_error_code;
+using cache::ResourceId;
 
 // https://stackoverflow.com/a/417184/273348
 #define MAX_URL_SIZE 2000
@@ -27,7 +27,6 @@ constexpr std::string group_pin="pinned";
 class DhtGroupsImpl {
 public:
     using GroupName = BaseDhtGroups::GroupName;
-    using ItemName  = BaseDhtGroups::ItemName;
 
 public:
     ~DhtGroupsImpl();
@@ -42,22 +41,23 @@ public:
 
     std::set<GroupName> groups() const;
     std::set<DhtGroups::GroupName> pinned_groups();
-    std::set<ItemName> items(const GroupName&) const;
+    std::set<ResourceId> items(const GroupName&) const;
 
-    void add(const GroupName&, const ItemName&, Cancel&, asio::yield_context);
+    void add(const GroupName&, const ResourceId&, Cancel&, asio::yield_context);
 
-    std::set<GroupName> remove(const ItemName&);
-    std::set<GroupName> remove(const ItemName&, bool&);
+    std::set<GroupName> remove(const ResourceId&);
+    std::set<GroupName> remove(const ResourceId&, bool&);
 
     void remove_group(const GroupName&);
 
     bool is_pinned(const GroupName&, sys::error_code&);
+    bool is_pinned(const ResourceId&);
     bool pin_group(const GroupName&, sys::error_code&);
     bool unpin_group(const GroupName&, sys::error_code&);
 
 private:
-    using Group  = std::pair<GroupName, std::set<ItemName>>;
-    using Groups = std::map<GroupName, std::set<ItemName>>;
+    using Group  = std::pair<GroupName, std::set<ResourceId>>;
+    using Groups = std::map<GroupName, std::set<ResourceId>>;
 
     DhtGroupsImpl(AsioExecutor, fs::path root_dir, Groups);
 
@@ -74,7 +74,7 @@ private:
 
     fs::path group_path(const GroupName&);
     fs::path items_path(const GroupName&);
-    fs::path item_path(const GroupName&, const ItemName&);
+    fs::path item_path(const GroupName&, const ResourceId&);
 
 private:
     AsioExecutor _ex;
@@ -101,7 +101,7 @@ try_remove(const fs::path& path)
     // The parent directory may be left empty.
 }
 
-static std::string read_file(fs::path p, AsioExecutor ex, Cancel& c, yield_context y)
+static std::string read_file(fs::path p, AsioExecutor ex, Cancel& c, asio::yield_context y)
 {
     sys::error_code ec;
 
@@ -135,7 +135,7 @@ DhtGroupsImpl::load_group( const fs::path dir
                          , bool trusted
                          , AsioExecutor ex
                          , Cancel& cancel
-                         , yield_context yield)
+                         , asio::yield_context yield)
 {
     assert(fs::is_directory(dir));
     sys::error_code ec;
@@ -162,23 +162,13 @@ DhtGroupsImpl::load_group( const fs::path dir
     Group::second_type items;
 
     for (auto f : fs::directory_iterator(items_dir)) {
-        std::string name = read_file(f, ex, cancel, yield[ec]);
-
-        if (cancel) {
-            return or_throw<Group>(yield, asio::error::operation_aborted);
-        }
-
-        if (ec) {
-            if (trusted) try_remove(f);
+        auto path = f.path().filename();
+        auto resource_id = cache::ResourceId::from_hex(path.c_str());
+        if (!resource_id) {
+            _ERROR("Group item file name is not a valid ResourceId: ", items_dir/path);
             continue;
         }
-
-        if (!trusted && f.path().filename() != sha1_hex_digest(name)) {
-            _ERROR("Group item name does not match its path: ", dir);
-            continue;
-        }
-
-        items.insert(name);
+        items.insert(std::move(*resource_id));
     }
 
     return {std::move(group_name), std::move(items)};
@@ -211,9 +201,9 @@ std::set<DhtGroups::GroupName> DhtGroupsImpl::pinned_groups()
     return ret;
 }
 
-std::set<DhtGroups::ItemName> DhtGroupsImpl::items(const GroupName& gn) const
+std::set<ResourceId> DhtGroupsImpl::items(const GroupName& gn) const
 {
-    std::set<DhtGroups::ItemName> ret;
+    std::set<ResourceId> ret;
 
     auto gi = _groups.find(gn);
     if (gi == _groups.end()) return ret;
@@ -231,7 +221,7 @@ DhtGroupsImpl::load( fs::path root_dir
                    , bool trusted
                    , AsioExecutor ex
                    , Cancel& cancel
-                   , yield_context yield)
+                   , asio::yield_context yield)
 {
     using Ret = std::unique_ptr<DhtGroupsImpl>;
     namespace err = asio::error;
@@ -292,9 +282,9 @@ DhtGroupsImpl::items_path(const GroupName& group_name)
 }
 
 fs::path
-DhtGroupsImpl::item_path(const GroupName& group_name, const ItemName& item_name)
+DhtGroupsImpl::item_path(const GroupName& group_name, const ResourceId& item_name)
 {
-    return items_path(group_name) / sha1_hex_digest(item_name);
+    return items_path(group_name) / item_name.hex_string();
 }
 
 bool
@@ -308,6 +298,17 @@ DhtGroupsImpl::is_pinned(const GroupName& group_name, sys::error_code& ec)
         return false;
     }
     return fs::exists(group_path(group_name) / group_pin);
+}
+
+bool
+DhtGroupsImpl::is_pinned(const ResourceId& resource_id)
+{
+    for (auto pinned_group_name : pinned_groups()) {
+        if (fs::exists(item_path(pinned_group_name, resource_id))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool
@@ -365,9 +366,9 @@ DhtGroupsImpl::unpin_group(const GroupName& group_name, sys::error_code& ec)
 }
 
 void DhtGroupsImpl::add( const GroupName& group_name
-                   , const ItemName& item_name
+                   , const ResourceId& item_name
                    , Cancel& cancel
-                   , yield_context yield)
+                   , asio::yield_context yield)
 {
     _DEBUG("Adding: ", group_name, " -> ", item_name);
     fs::path group_p = group_path(group_name);
@@ -431,15 +432,15 @@ void DhtGroupsImpl::add( const GroupName& group_name
         return or_throw(yield, ec);
     }
 
-    file_io::write(item_f, asio::buffer(item_name), cancel, yield[ec]);
+    //file_io::write(item_f, asio::buffer(item_name), cancel, yield[ec]);
 
-    if (ec) {
-        if (!cancel) {
-            _ERROR("Failed write to group item; ec=", ec);
-        }
-        if (fs::is_empty(items_p)) try_remove(group_p);
-        return or_throw(yield, ec);
-    }
+    //if (ec) {
+    //    if (!cancel) {
+    //        _ERROR("Failed write to group item; ec=", ec);
+    //    }
+    //    if (fs::is_empty(items_p)) try_remove(group_p);
+    //    return or_throw(yield, ec);
+    //}
 
     // Add the item to the group in memory.
     const auto& group_it = _groups.find(group_name);
@@ -450,13 +451,13 @@ void DhtGroupsImpl::add( const GroupName& group_name
     group_it->second.emplace(item_name);  // add item to existing group
 }
 
-std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ItemName& item_name)
+std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ResourceId& item_name)
 {
     bool _ = false;
     return remove(item_name, _);
 }
 
-std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ItemName& item_name, bool& group_pinned)
+std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ResourceId& item_name, bool& group_pinned)
 {
     std::set<GroupName> erased_groups;
 
@@ -523,7 +524,7 @@ public:
     std::set<GroupName> pinned_groups() const override
     { return _impl->pinned_groups(); }
 
-    std::set<ItemName> items(const GroupName& gn) const override
+    std::set<ResourceId> items(const GroupName& gn) const override
     { return _impl->items(gn); }
 
 private:
@@ -555,16 +556,16 @@ public:
     std::set<GroupName> pinned_groups() const override
     { return _impl->pinned_groups(); }
 
-    std::set<ItemName> items(const GroupName& gn) const override
+    std::set<ResourceId> items(const GroupName& gn) const override
     { return _impl->items(gn); }
 
-    void add(const GroupName& gn, const ItemName& in, Cancel& c, asio::yield_context y) override
+    void add(const GroupName& gn, const ResourceId& in, Cancel& c, asio::yield_context y) override
     { return _impl->add(gn, in, c, y); }
 
-    std::set<GroupName> remove(const ItemName& in) override
+    std::set<GroupName> remove(const ResourceId& in) override
     { return _impl->remove(in); }
 
-    std::set<GroupName> remove(const ItemName& in, bool& group_pinned) override
+    std::set<GroupName> remove(const ResourceId& in, bool& group_pinned) override
     { return _impl->remove(in, group_pinned); }
 
     void remove_group(const GroupName& gn) override
@@ -572,6 +573,9 @@ public:
 
     bool is_pinned(const GroupName& gn, sys::error_code& ec) override
     { return _impl->is_pinned(gn, ec); }
+
+    bool is_pinned(const ResourceId& resource_id) override
+    { return _impl->is_pinned(resource_id); }
 
     bool pin_group(const GroupName& gn, sys::error_code& ec) override
     { return _impl->pin_group(gn, ec); }
@@ -587,7 +591,7 @@ std::unique_ptr<DhtGroups>
 ouinet::load_dht_groups( fs::path root_dir
                        , AsioExecutor ex
                        , Cancel& cancel
-                       , yield_context yield)
+                       , asio::yield_context yield)
 {
     return std::make_unique<FullDhtGroups>
         (DhtGroupsImpl::load_trusted( std::move(root_dir), std::move(ex)
@@ -616,11 +620,11 @@ public:
         return ret;
     }
 
-    std::set<ItemName> items(const GroupName& gn) const override
+    std::set<ResourceId> items(const GroupName& gn) const override
     {
         // No `std::set::merge` in C++14,
         // see <https://stackoverflow.com/a/7089642>.
-        std::set<ItemName> ret;
+        std::set<ResourceId> ret;
         auto items_ = FullDhtGroups::items(gn);
         auto fbitems = fallback_groups->items(gn);
         std::set_union( items_.begin(), items_.end()
@@ -629,7 +633,7 @@ public:
         return ret;
     }
 
-    std::set<GroupName> remove(const ItemName& in) override
+    std::set<GroupName> remove(const ResourceId& in) override
     {
         auto emptied = FullDhtGroups::remove(in);
         auto fbgroups = fallback_groups->groups();
@@ -652,7 +656,7 @@ ouinet::load_backed_dht_groups( fs::path root_dir
                               , std::unique_ptr<BaseDhtGroups> fallback_groups
                               , AsioExecutor ex
                               , Cancel& cancel
-                              , yield_context yield)
+                              , asio::yield_context yield)
 {
     return std::make_unique<BackedDhtGroups>
         ( DhtGroupsImpl::load_trusted( std::move(root_dir), std::move(ex)

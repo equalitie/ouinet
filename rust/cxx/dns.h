@@ -79,6 +79,8 @@ public:
 
     void on_cancel(rust::Box<CancellationToken>);
 
+    virtual ~BasicCompleter() {};
+
 private:
     boost::asio::cancellation_slot _cancellation_slot;
 };

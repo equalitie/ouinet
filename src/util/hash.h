@@ -61,6 +61,11 @@ public:
         update(sv.data(), sv.size());
     }
 
+    inline void update(std::string_view sv)
+    {
+        update(sv.data(), sv.size());
+    }
+
     inline void update(const char* c)
     {
         update(boost::string_view(c));

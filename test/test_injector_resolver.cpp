@@ -1,10 +1,11 @@
 #define BOOST_TEST_MODULE injector_resolver
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/included/unit_test.hpp>
-//#include <boost/beast/message.hpp>
 
 #include "../src/injector.h"
+#include <boost/beast/http/string_body.hpp>
 
+using namespace std;
 using namespace ouinet;
 using Request = http::request<http::string_body>;
 

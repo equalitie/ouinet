@@ -152,17 +152,17 @@ BOOST_AUTO_TEST_CASE(test_signed_number) {
     }
 
     {
-        // Max char
+        // Max
         string_view s = "127";
-        auto on = parse::number<char>(s);
+        auto on = parse::number<int8_t>(s);
         BOOST_REQUIRE(on);
         BOOST_REQUIRE_EQUAL(127, *on);
     }
 
     {
-        // Min char
+        // Min
         string_view s = "-128";
-        auto on = parse::number<char>(s);
+        auto on = parse::number<int8_t>(s);
         BOOST_REQUIRE(on);
         BOOST_REQUIRE_EQUAL(-128, *on);
     }
@@ -170,13 +170,13 @@ BOOST_AUTO_TEST_CASE(test_signed_number) {
     {
         // Too big
         string_view s = "128";
-        BOOST_REQUIRE(!parse::number<char>(s));
+        BOOST_REQUIRE(!parse::number<int8_t>(s));
     }
 
     {
         // Too small
         string_view s = "-129";
-        BOOST_REQUIRE(!parse::number<char>(s));
+        BOOST_REQUIRE(!parse::number<int8_t>(s));
     }
 }
 

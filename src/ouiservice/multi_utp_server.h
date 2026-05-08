@@ -6,9 +6,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include <set>
 
-namespace ouinet {
-
-namespace ouiservice {
+namespace ouinet::ouiservice {
 
 class MultiUtpServer : public OuiServiceImplementationServer
 {
@@ -33,5 +31,4 @@ private:
     Cancel _cancel;
 };
 
-}} // namespaces
-
+} // namespaces

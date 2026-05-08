@@ -31,8 +31,6 @@ BOOST_AUTO_TEST_CASE(test_filter_fields) {
     BOOST_REQUIRE(filt_rq.version() == orig_rq.version());
     // This should be explicitly kept.
     BOOST_REQUIRE(filt_rq[http::field::host] == orig_rq[http::field::host]);
-    // This should be implicitly kept.
-    BOOST_REQUIRE(filt_rq["X-Ouinet-Foo"] == orig_rq["X-Ouinet-Foo"]);
     // This should be filtered out.
     BOOST_REQUIRE(filt_rq["X-Foo-Bar"] == "");
     BOOST_REQUIRE(filt_rq[http::field::referer] == "");

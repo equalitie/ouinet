@@ -11,7 +11,6 @@
 #include <fstream>
 #include <string>
 
-#include "cache/http_sign.h"
 
 #include "namespaces.h"
 #include "util.h"
@@ -61,8 +60,9 @@
 #include "cxx/dns.h"
 #include "cxx/metrics.h"
 
+namespace ouinet {
+
 using namespace std;
-using namespace ouinet;
 
 using tcp         = asio::ip::tcp;
 using udp         = asio::ip::udp;
@@ -74,7 +74,7 @@ namespace bt = bittorrent;
 using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
-using ouinet::util::AsioExecutor;
+using util::AsioExecutor;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
@@ -93,7 +93,7 @@ void send_response( GenericStream& con
     yield.log("=== Sending back response ===");
     yield.log(res);
 
-    util::http_reply(con, res, static_cast<asio::yield_context>(yield));
+    util::http_reply(con, res, yield.native());
 }
 
 static
@@ -104,7 +104,7 @@ void handle_error( GenericStream& con
                  , const string& message
                  , YieldContext yield)
 {
-    auto res = util::http_error( req, status
+    auto res = util::http_error( req.keep_alive(), status
                                , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
     send_response(con, res, yield);
 }
@@ -136,7 +136,7 @@ void handle_no_proxy( GenericStream& con
 // If not valid, set error code
 // (the returned lookup may not be usable then).
 TcpLookup
-ouinet::resolve_target(const http::request_header<>& req
+resolve_target(const http::request_header<>& req
                       , bool allow_private_targets
                       , std::shared_ptr<dns::Resolver> dns_resolver
                       , AsioExecutor exec
@@ -330,7 +330,7 @@ class InjectorCacheControl {
         auto socket = connect_to_host( lookup
                                      , executor
                                      , cancel
-                                     , static_cast<asio::yield_context>(yield[ec]));
+                                     , yield[ec].native());
 
         if (ec) return or_throw<GenericStream>(yield, ec);
 
@@ -339,7 +339,7 @@ class InjectorCacheControl {
                                                 , ssl_ctx
                                                 , url->host
                                                 , cancel
-                                                , static_cast<asio::yield_context>(yield[ec]));
+                                                , yield[ec].native());
 
             return or_throw(yield, ec, move(c));
         } else {
@@ -800,7 +800,7 @@ void listen( const InjectorConfig& config
     OriginPools origin_pools;
 
     asio::ssl::context ssl_ctx{asio::ssl::context::tls_client};
-    ssl_ctx.set_default_verify_paths();
+    ssl::util::set_default_verify_paths(ssl_ctx);
     ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
 
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
@@ -822,7 +822,7 @@ void listen( const InjectorConfig& config
         task::spawn_detached(exec, [
             connection = std::move(connection),
             &ssl_ctx,
-            &cancel,
+            cancel,
             &config,
             &dns_resolver,
             &genuuid,
@@ -976,11 +976,11 @@ Injector::Injector(
             tcp::endpoint endpoint = *_config.lampshade_endpoint();
             util::create_state_file( _config.repo_root()/"endpoint-lampshade"
                                    , util::str(endpoint));
-    
+
             unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
                 make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, _config.repo_root()/"lampshade-server");
             LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
-    
+
             proxy_server->add(std::move(server));
         }
     */
@@ -1061,3 +1061,5 @@ void Injector::stop() {
 Injector::~Injector() {
     stop();
 }
+
+} // namespace ouinet

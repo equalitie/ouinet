@@ -2,6 +2,7 @@
 #include <boost/asio/signal_set.hpp>
 #include "force_exit_on_signal.h"
 
+using namespace std;
 using namespace ouinet;
 
 int main(int argc, const char* argv[])

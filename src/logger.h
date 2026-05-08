@@ -15,12 +15,10 @@
 #ifndef SRC_LOGGER_H_
 #define SRC_LOGGER_H_
 
-#include <iostream>
 #include <fstream>
 
-#include "namespaces.h"
 #include "util/str.h"
-#include <boost/optional.hpp>
+#include <boost/optional/optional.hpp>
 #include <boost/utility/string_view.hpp>
 
 // Logger macros which should be used for efficiency

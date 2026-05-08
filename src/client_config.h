@@ -10,10 +10,10 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
-#include "declspec.h"
 #include "namespaces.h"
 #include "cache_control.h"
 #include "util.h"
+#include "declspec.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/crypto.h"

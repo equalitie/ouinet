@@ -1,6 +1,7 @@
 #include "hash_list.h"
 #include "http_sign.h"
 #include "chain_hasher.h"
+#include "parse/number.h"
 
 using namespace std;
 using namespace ouinet;

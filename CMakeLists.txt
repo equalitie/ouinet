@@ -1,11 +1,4 @@
-# Not using `if (ANDROID)` because that's available only since cmake 3.7
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
-    # CMAKE_ANDROID_STANDALONE_TOOLCHAIN (and likely other cross compilation
-    # android variables) was only introduced in v3.7
-    cmake_minimum_required (VERSION 3.7)
-else()
-    cmake_minimum_required (VERSION 3.5)
-endif()
+cmake_minimum_required (VERSION 3.10)
 
 # Set cmake policies to avoid warnings in newer versions of cmake
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.19)
@@ -27,6 +20,7 @@ endif()
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
+option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
 ################################################################################
 # Global build flags
@@ -40,7 +34,7 @@ endif()
 
 add_compile_options("-Wall")
 
-if(WIN32)
+if(WIN32 OR MINGW)
     add_compile_options("-O1")
     add_definitions(-DBOOST_USE_WINDOWS_H -DWIN32_LEAN_AND_MEAN)
 endif()
@@ -55,6 +49,11 @@ if ((NOT ANDROID) AND (NOT IOS))
     # when building dynamic ones). It's needed on x86 when linking the
     # `client_lib` target.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+if (OUINET_MEASURE_BUILD_TIMES)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/measure_time.sh")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CMAKE_CURRENT_SOURCE_DIR}/cmake/measure_time.sh")
 endif()
 
 ################################################################################
@@ -113,7 +112,6 @@ option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
 option(UTP_DEBUG_LOGGING               "" OFF)
 add_subdirectory(./modules/asio-utp)
-add_library(lib::asio_utp ALIAS asio_utp)
 
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
@@ -165,8 +163,13 @@ file(GLOB ouinet_common_sources
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
     "./src/util/hash.cpp"
+    "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
+    "./src/util/yield.cpp"
+    "./src/cache/http_sign.cpp"
+    "./src/cache/signed_head.cpp"
     "./src/ssl/ca_certificate.cpp"
+    "./src/ssl/util.cpp"
     "./src/bittorrent/*.cpp"
     "./src/bep5_swarms.cpp"
     "./src/ouiservice.cpp"
@@ -176,24 +179,30 @@ file(GLOB ouinet_common_sources
     "./src/ouiservice/multi_utp_server.cpp"
     "./src/util/persistent_lru_cache.cpp"
     "./src/endpoint.cpp"
+    "./src/session.cpp"
+    "./src/error.cpp"
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
+    "./src/response_reader.cpp"
     ${EXPERIMENTAL_SOURCES}
 )
+
+# TODO: Some low level openssl functions we use are deprecated.
+set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 
 add_library(ouinet_common STATIC ${ouinet_common_sources})
 
 target_link_libraries(ouinet_common
     PRIVATE
-        ouinet_dependencies
         lib::url
         OpenSSL::Crypto
         ${EXPERIMENTAL_LIBRARIES}
     PUBLIC
+        ouinet_dependencies
         Boost::iostreams
         lib::gcrypt
         lib::json
-        lib::asio_utp
+        asio_utp
         ouinet_rs
         ouinet_common_public
         # Boost::asio_ssl is public for Android because the ClientConfig used
@@ -215,9 +224,20 @@ file(GLOB client_sources
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/connect_proxy.cpp"
-    "./src/cache/*.cpp"
+    "./src/cache/announcer.cpp"
+    "./src/cache/client.cpp"
+    "./src/cache/dht_groups.cpp"
+    "./src/cache/hash_list.cpp"
+    "./src/cache/http_store.cpp"
+    "./src/cache/local_peer_discovery.cpp"
+    "./src/cache/multi_peer_reader.cpp"
+    "./src/cache/multi_peer_reader_error.cpp"
+    "./src/cache/resource_id.cpp"
+    "./src/cache/resource_key.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
+    "./src/request.cpp"
+    "./src/peer_message.cpp"
     ${VERSION_CPP}
 )
 
@@ -255,9 +275,10 @@ endif()
 ################################################################################
 file(GLOB injector_sources
     "./src/injector.cpp"
+    "./src/injector_config.cpp"
     "./src/ouiservice/bep5/server.cpp"
-    "./src/endpoint.cpp"
     "./src/cache/http_sign.cpp"
+    "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
     ${EXPERIMENTAL_SOURCES}
 )
