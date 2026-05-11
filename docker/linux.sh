@@ -325,7 +325,7 @@ for target_os in ${target_oss[@]}; do
         # built for Windows (only dll).
         if [ "$target_os" == linux ]; then
             env=(
-                CXXFLAGS="-I$build_dir/boost/install/include"
+                CXXFLAGS="-I$build_dir/boost/src/built_boost"
                 LD_LIBRARY_PATH="$build_dir"
                 LIBRARY_PATH="$build_dir"
                 RUST_BACKTRACE=1

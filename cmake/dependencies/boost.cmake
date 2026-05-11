@@ -194,8 +194,8 @@ else()
 endif()
 
 set(BUILT_BOOST_VERSION ${BOOST_VERSION})
-set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/install/include)
-set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/install/lib)
+set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/src/built_boost)
+set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/src/built_boost/stage/lib)
 set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
 
 function(_boost_library_filename component output_var)
@@ -245,7 +245,7 @@ externalproject_add(built_boost
             -q # Stop at first error
             ${ENABLE_BOOST_COMPONENTS}
             ${BOOST_ARCH_CONFIGURATION}
-            install
+            stage
     BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
     INSTALL_COMMAND ""
 )
