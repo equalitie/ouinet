@@ -149,11 +149,8 @@ dlls=(
     /c/Windows/System32/downlevel/api-ms-win-core-synch-l1-2-0.dll
     /c/Windows/System32/drivers/netio.sys
     $build_dir/libouinet_asio.dll
-    $build_dir/libouinet_asio_ssl.dll
     $build_dir/libclient_lib.dll
     $build_dir/libinjector_lib.dll
-    $build_dir/gcrypt/out/bin/libgcrypt-20.dll
-    $build_dir/gpg_error/out/bin/libgpg-error-0.dll
 )
 
 make_dll_links=(

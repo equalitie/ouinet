@@ -106,7 +106,6 @@ target_include_directories(ouinet_dependencies
 )
 target_link_libraries(ouinet_dependencies
     INTERFACE
-        ouinet_asio
         Boost::boost
         Boost::date_time
         Boost::filesystem
@@ -116,6 +115,10 @@ target_link_libraries(ouinet_dependencies
         Boost::system
         # generic_stream.h needs openssl headers, but not the library.
         OpenSSL::headers
+        # Note: ouinet_asio needs to be listed after `Boost::filesystem`
+        # because on Windows `Boost::filesystem` uses Windows crypto lirary for
+        # random generation which is linked into `ouinet_asio`.
+        ouinet_asio
 )
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.72.0)
     # explicitly link with bcrypt after Boost::filesystem
@@ -234,10 +237,6 @@ target_link_libraries(ouinet_common
         asio_utp
         ouinet_rs
         ouinet_common_public
-        # Boost::asio_ssl is public for Android because the ClientConfig used
-        # in native-lib.cpp contains ssl::context and we need its move
-        # constructor and destructor implementations.
-        ouinet_asio_ssl
 )
 
 target_include_directories(ouinet_common PUBLIC "src")

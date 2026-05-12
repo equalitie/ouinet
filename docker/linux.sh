@@ -175,8 +175,6 @@ function list_artifacts_for_target_os (
                 $build_dir/client
                 $build_dir/injector
                 $build_dir/libouinet_asio.so
-                $build_dir/libouinet_asio_ssl.so
-                $build_dir/libouinet_asio_ssl.so
                 $build_dir/libclient.so
                 $build_dir/libinjector.so
             )
@@ -186,7 +184,6 @@ function list_artifacts_for_target_os (
                 $build_dir/client.exe
                 $build_dir/injector.exe
                 $build_dir/libouinet_asio.dll
-                $build_dir/libouinet_asio_ssl.dll
                 $build_dir/libclient_lib.dll
                 $build_dir/libinjector_lib.dll
             )

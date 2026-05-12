@@ -15,9 +15,9 @@ block()
         # https://stackoverflow.com/a/75246115/273348
         cmake_policy(SET CMP0079 NEW)
     endif()
-    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
-    target_link_libraries(libi2pdclient PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
-    target_link_libraries(libi2pdlang   PRIVATE                        ouinet_asio ouinet_asio_ssl)
+    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio)
+    target_link_libraries(libi2pdclient PRIVATE Boost::program_options ouinet_asio)
+    target_link_libraries(libi2pdlang   PRIVATE                        ouinet_asio)
 endblock()
 
 # i2pd messes with CMAKE_MODULE_PATH, which breaks automatic dependency handling.
@@ -57,7 +57,6 @@ target_link_libraries(ouiservice-i2p
         OpenSSL::SSL
     PUBLIC
         ouinet_asio
-        ouinet_asio_ssl
 )
 target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
 
