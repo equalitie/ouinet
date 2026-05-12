@@ -12,6 +12,7 @@ fn main() {
 
     for dir in lib_dirs {
         println!("cargo:rustc-link-search=native={dir}");
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{dir}");
     }
 
     for lib in libs {
