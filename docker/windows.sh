@@ -9,6 +9,7 @@ run_cpp_tests=()
 with_ouisync=n
 host_ouisync_dir=
 excluded_test_targets=()
+clean=
 
 source $(dirname $0)/util.sh windows
 
@@ -102,6 +103,10 @@ copy_sources . $ouinet_dir
 if [ -n "$host_ouisync_dir" ]; then
     container_ouisync_dir=$work_dir/ouisync
     copy_sources $host_ouisync_dir $container_ouisync_dir
+fi
+
+if [ "$clean" = y ]; then
+    exe rm -rf $build_dir
 fi
 
 #### Configure
