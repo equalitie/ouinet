@@ -252,8 +252,8 @@ set(client_link_libs
     Boost::program_options
     lib::json
 )
-    
-if (IOS OR ANDROID)
+
+if (IOS OR ANDROID OR LINUX)
     set(CLIENT_LIB_TYPE STATIC)
 elseif(WIN32 OR MINGW)
     set(CLIENT_LIB_TYPE SHARED)
@@ -261,18 +261,18 @@ endif()
 
 if (CLIENT_LIB_TYPE)
     add_library(client_lib ${CLIENT_LIB_TYPE})
-    
+
     if (NOT WIN32 AND NOT MINGW)
         set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
     endif()
-    
+
     if (ANDROID)
         find_library(android_log log)
         list(APPEND client_link_libs ${android_log})
     endif()
-    
+
     ouinet_setup(TARGET client_lib LINK PUBLIC ${client_link_libs})
-    
+
     if (IOS)
         set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
         find_package(ouinet REQUIRED)

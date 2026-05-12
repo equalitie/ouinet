@@ -141,11 +141,14 @@ if(LINUX)
     add_test(TARGET manual_browse_scrape TARGET_SRC "manual/browse_scrape.cpp")
 endif()
 
+######################################################################
+include(rust/cmake/rust_test.cmake)
+add_rust_test(test_connectivity DEPENDENCIES client_lib)
+
+######################################################################
 string(REPLACE ";" " " OUINET_TEST_TARGETS_STR "tests: ${OUINET_TEST_TARGETS}")
 add_custom_target(list_test_targets
     #COMMAND ${CMAKE_COMMAND} -E echo "${OUINET_TEST_TARGETS_STR}"
     COMMAND echo "${OUINET_TEST_TARGETS_STR}"
     VERBATIM
-    USES_TERMINAL
-)
-
+    USES_TERMINAL)
