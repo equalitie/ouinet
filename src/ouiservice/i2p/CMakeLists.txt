@@ -9,7 +9,19 @@ block()
     set(BUILD_SHARED_LIBS OFF)
     set(BUILD_TESTING OFF)
     add_definitions(-DBOOST_ASIO_DYN_LINK)
+
+    if (MINGW)
+        # HACK: `find_package(ZLIB)` used by i2pd can't find pre-installed
+        # zlib on msys64 for some reason.
+        find_package(ZLIB QUIET)
+        if(NOT ZLIB_FOUND)
+            set(ZLIB_LIBRARY c:/msys64/usr/lib/libz.a)
+            set(ZLIB_INCLUDE_DIR c:/msys64/usr/include)
+        endif()
+    endif()
+
     add_subdirectory(./i2pd/build)
+
     if(POLICY CMP0079)
         # Allows adding the libraries below
         # https://stackoverflow.com/a/75246115/273348
