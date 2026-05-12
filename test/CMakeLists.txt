@@ -122,3 +122,7 @@ endif()
 if(LINUX)
     common_test(TARGET manual_browse_scrape TARGET_SRC "manual/browse_scrape.cpp" LIBS client_lib)
 endif()
+
+######################################################################
+include(rust/cmake/rust_test.cmake)
+add_rust_test(test_connectivity DEPENDENCIES client_lib)

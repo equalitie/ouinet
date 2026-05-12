@@ -50,7 +50,7 @@ public:
     template<class Reader>
     static Session create(std::unique_ptr<Reader>&&, bool is_head_response, std::optional<metrics::Request>, Cancel, asio::yield_context);
 
-    const bool head_was_read() const { return _head_was_read; }
+    bool head_was_read() const { return _head_was_read; }
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
@@ -73,7 +73,7 @@ public:
     void flush_response( Cancel&, asio::yield_context
                        , Handler&& h, TimeoutDuration);
 
- 
+
     bool is_done() const override {
         if (!_reader) return false;
         return _reader->is_done();
