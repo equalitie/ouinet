@@ -220,10 +220,6 @@ function check_artifacts_exist_for_target_os (
 
 # ---
 
-if [ "$clean" = y ]; then
-    dock container rm -f $container_name 2>/dev/null || true
-fi
-
 build_image
 
 if ! is_container_running; then
@@ -280,6 +276,10 @@ for target_os in ${target_oss[@]}; do
 
     if [ "$target_os" == linux -o "$target_os" == windows ]; then
         build_dir=$work_dir/build.$target_os
+
+        if [ "$clean" = y ]; then
+            exe rm -rf $build_dir
+        fi
 
         exe bash -c "mkdir -p $build_dir"
 
