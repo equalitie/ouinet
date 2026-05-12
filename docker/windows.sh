@@ -73,7 +73,7 @@ function copy_sources (
 
     local exclude=(
         .git
-        build
+        /build
         target
         android
     )
