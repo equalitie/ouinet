@@ -35,12 +35,6 @@
 #ifdef __EXPERIMENTAL__
 #  include "ouiservice/i2p.h"
 #endif // ifdef __EXPERIMENTAL__
-#ifdef __DEPRECATED__
-#  include "ouiservice/lampshade.h"
-#  include "ouiservice/pt-obfs2.h"
-#  include "ouiservice/pt-obfs3.h"
-#  include "ouiservice/pt-obfs4.h"
-#endif // ifdef __DEPRECATED__
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -962,60 +956,6 @@ Injector::Injector(
     proxy_server->add(make_unique<ouiservice::Bep5Server>
             (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
 
-#ifdef __DEPRECATED__
-    /*
-        if (_config.lampshade_endpoint()) {
-            tcp::endpoint endpoint = *_config.lampshade_endpoint();
-            util::create_state_file( _config.repo_root()/"endpoint-lampshade"
-                                   , util::str(endpoint));
-
-            unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
-                make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, _config.repo_root()/"lampshade-server");
-            LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
-
-            proxy_server->add(std::move(server));
-        }
-    */
-
-    if (_config.obfs2_endpoint()) {
-        tcp::endpoint endpoint = *_config.obfs2_endpoint();
-        LOG_INFO("obfs2 address: ", endpoint);
-        util::create_state_file( _config.repo_root()/"endpoint-obfs2"
-                               , util::str(endpoint));
-
-        proxy_server->add(make_unique<ouiservice::Obfs2OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs2-server"));
-    }
-
-    if (_config.obfs3_endpoint()) {
-        tcp::endpoint endpoint = *_config.obfs3_endpoint();
-        LOG_INFO("obfs3 address: ", endpoint);
-        util::create_state_file( _config.repo_root()/"endpoint-obfs3"
-                               , util::str(endpoint));
-
-        proxy_server->add(make_unique<ouiservice::Obfs3OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs3-server"));
-    }
-
-    if (_config.obfs4_endpoint()) {
-        tcp::endpoint endpoint = *_config.obfs4_endpoint();
-
-        util::create_state_file( _config.repo_root()/"endpoint-obfs4"
-                               , util::str(endpoint));
-
-        unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
-            make_unique<ouiservice::Obfs4OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs4-server");
-        task::spawn_detached(ex, [
-            obfs4 = server.get(),
-            endpoint
-        ] (asio::yield_context yield) {
-            sys::error_code ec;
-            obfs4->wait_for_running(yield[ec]);
-            if (!ec) {
-                LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
-            }
-        });
-        proxy_server->add(std::move(server));
-    }
-#endif // __DEPRECATED__    
 #ifdef __EXPERIMENTAL__    
     if (_config.listen_on_i2p()) {
         auto i2p_service = make_shared<I2pService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());

@@ -98,20 +98,6 @@ public:
     boost::optional<asio::ip::udp::endpoint> utp_tls_endpoint() const
     { return _utp_tls_endpoint; }
 
-#ifdef __DEPRECATED__
-    boost::optional<asio::ip::tcp::endpoint> lampshade_endpoint() const
-    { return _lampshade_endpoint; }
-
-    boost::optional<asio::ip::tcp::endpoint> obfs2_endpoint() const
-    { return _obfs2_endpoint; }
-
-    boost::optional<asio::ip::tcp::endpoint> obfs3_endpoint() const
-    { return _obfs3_endpoint; }
-
-    boost::optional<asio::ip::tcp::endpoint> obfs4_endpoint() const
-    { return _obfs4_endpoint; }
-#endif // ifdef __DEPRECATED__
-
     std::string credentials() const
     { return _credentials; }
 
@@ -155,12 +141,6 @@ private:
     boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_tls_endpoint;
-#ifdef __DEPRECATED__
-    boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
-#endif // ifdef __DEPRECATED__
     std::string _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;

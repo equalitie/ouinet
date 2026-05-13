@@ -56,12 +56,6 @@
 #ifdef __EXPERIMENTAL__
 #  include "ouiservice/i2p.h"
 #endif // ifdef __EXPERIMENTAL__
-#ifdef __DEPRECATED__
-#  include "ouiservice/lampshade.h"
-#  include "ouiservice/pt-obfs2.h"
-#  include "ouiservice/pt-obfs3.h"
-#  include "ouiservice/pt-obfs4.h"
-#endif // ifdef __DEPRECATED__
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"

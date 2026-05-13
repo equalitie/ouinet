@@ -308,9 +308,6 @@ private:
             , po::value<string>()
             , "Injector's endpoint as <TYPE>:<EP>, "
               "where <TYPE> can be \"tcp\", \"utp\",  "
-#ifdef __DEPRECATED__
-              "\"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
-#endif // ifdef __DEPRECATED__
               "and <EP> depends on the type of endpoint: "
               "<IP>:<PORT> for TCP and uTP"
 #ifdef __EXPERIMENTAL__

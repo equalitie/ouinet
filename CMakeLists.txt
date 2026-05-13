@@ -30,7 +30,6 @@ option(WITH_OUISYNC "Build with Ouisync" OFF)
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
-option(WITH_DEPRECATED "Build with deprecated features" OFF)
 
 ################################################################################
 # show summary
@@ -41,7 +40,6 @@ message(STATUS "  WITH_TEST                : ${WITH_TEST}")
 message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
 message(STATUS "  WITH_EXPERIMENTAL        : ${WITH_EXPERIMENTAL}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
-message(STATUS "  WITH_DEPRECATED          : ${WITH_DEPRECATED}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
 message(STATUS "")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
@@ -152,22 +150,6 @@ add_subdirectory(./rust)
 add_subdirectory(./src/ouiservice/i2p)
 add_subdirectory(./src/ouiservice/ouisync)
 
-###########################################################
-
-if(WITH_DEPRECATED)
-    #add_subdirectory(./src/ouiservice/lampshade)
-    add_subdirectory(./src/ouiservice/obfs4proxy)
-    set(DEPRECATED_SOURCES
-            "./src/ouiservice/lampshade.cpp"
-            "./src/ouiservice/pt-obfs2.cpp"
-            "./src/ouiservice/pt-obfs3.cpp"
-            "./src/ouiservice/pt-obfs4.cpp"
-            "./src/ouiservice/pluggable-transports/*.cpp"
-    )
-    set(DEPRECATED_LIBRARIES
-            ouinet::lampshade-asio
-    )
-endif()
 ################################################################################
 # These are separate from `ouinet_common` because they're also required by
 # `ouinet_rs`
@@ -213,7 +195,6 @@ file(GLOB ouinet_common_sources
     "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"
-    ${DEPRECATED_SOURCES}
 )
 
 # TODO: Some low level openssl functions we use are deprecated.
@@ -229,7 +210,6 @@ target_link_libraries(ouinet_common
     PRIVATE
         Boost::url
         OpenSSL::Crypto
-        ${DEPRECATED_LIBRARIES}
     PUBLIC
         ${OUINET_HARDCODED_CA_CERTS}
         ouinet::ouiservice-i2p
@@ -243,12 +223,6 @@ target_link_libraries(ouinet_common
 
 target_include_directories(ouinet_common PUBLIC "src")
 
-################################################################################
-if(WITH_DEPRECATED)
-    target_compile_definitions(ouinet_common
-            INTERFACE -D__DEPRECATED__
-    )
-endif()
 ################################################################################
 
 file(GLOB client_sources
@@ -319,7 +293,6 @@ file(GLOB injector_sources
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
-    ${DEPRECATED_SOURCES}
 )
 
 add_library(injector_lib SHARED ${injector_sources})

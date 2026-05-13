@@ -47,12 +47,6 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-utp", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (cleartext)")
         ("listen-on-utp-tls", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (encrypted)")
-#ifdef __DEPRECATED__
-        ("listen-on-lampshade", po::value<string>(), "IP:PORT endpoint on which we'll listen using the lampshade pluggable transport")
-        ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
-        ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
-        ("listen-on-obfs4", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs4 pluggable transport")
-#endif // ifdef __DEPRECATED__
 #ifdef __EXPERIMENTAL__
         ("listen-on-i2p",
          po::value<string>(),
@@ -296,24 +290,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         if (ec) throw std::runtime_error("Failed to parse uTP endpoint");
         _utp_tls_endpoint = ep;
     }
-
-#ifdef __DEPRECATED__
-    if (vm.count("listen-on-lampshade")) {
-        _lampshade_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-lampshade"].as<string>());
-    }
-
-    if (vm.count("listen-on-obfs2")) {
-        _obfs2_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs2"].as<string>());
-    }
-
-    if (vm.count("listen-on-obfs3")) {
-        _obfs3_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs3"].as<string>());
-    }
-
-    if (vm.count("listen-on-obfs4")) {
-        _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
-    }
-#endif // ifdef __DEPRECATED__
 
     // Please note that generating keys takes a long time
     // and it may cause time outs in CI tests.
