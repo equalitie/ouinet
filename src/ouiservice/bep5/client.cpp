@@ -12,7 +12,7 @@
 #include "../../util/hash.h"
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
-#include "../../util/handler_tracker.h"
+#include "../../task.h"
 #include "../../util/wait_condition.h"
 #include "../../util/watch_dog.h"
 #include "../../util/semaphore.h"
@@ -117,7 +117,7 @@ public:
     }
 
     void start() {
-        TRACK_SPAWN(_dht->get_executor(), [&] (asio::yield_context yield) {
+        task::spawn_detached(_dht->get_executor(), [&] (asio::yield_context yield) {
             Cancel cancel(_lifetime_cancel);
             sys::error_code ec;
             loop(cancel, yield[ec]);
@@ -264,7 +264,7 @@ public:
         , _helper_announcer(new bt::Bep5ManualAnnouncer(util::sha1_digest(helper_swarm_name), dht))
         , _helper_announcement_enabled(helper_announcement_enabled)
     {
-        TRACK_SPAWN(_injector_swarm->get_executor(),
+        task::spawn_detached(_injector_swarm->get_executor(),
                     [this] (asio::yield_context yield) {
             sys::error_code ec;
             loop(yield[ec]);
@@ -356,7 +356,7 @@ private:
         Cancel success_cancel(cancel);
 
         for (auto inj : injectors) {
-            TRACK_SPAWN(ex, ([&, inj, lock = wc.lock()]
+            task::spawn_detached(ex, [&, inj, lock = wc.lock()]
                     (asio::yield_context yield) {
                 Cancel c(cancel);
                 auto sc = success_cancel.connect([&] { c(); });
@@ -366,7 +366,7 @@ private:
                 if (ping_one_injector(inj, c, yield[ec])) {
                     success_cancel();
                 }
-            }));
+            });
         }
 
         sys::error_code ec;
@@ -471,7 +471,7 @@ void Bep5Client::start(asio::yield_context yield)
                                                   , _cancel));
     }
 
-    TRACK_SPAWN(get_executor(),
+    task::spawn_detached(get_executor(),
                 [this] (asio::yield_context yield) {
         sys::error_code ec;
         status_loop(yield[ec]);
@@ -644,7 +644,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
     for (auto swarm : std::array<Swarm*, 2>{inj_swarm, hlp_swarm}) {
         if (swarm == nullptr) continue;
 
-        TRACK_SPAWN(exec, ([&job_count, &channel, &spawn_cancel, swarm, lock = wc.lock()] (auto yield) {
+        task::spawn_detached(exec, [&job_count, &channel, &spawn_cancel, swarm, lock = wc.lock()] (auto yield) {
             sys::error_code ec;
             swarm->wait_for_ready(spawn_cancel, yield[ec]);
             if (!ec) {
@@ -654,7 +654,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             if (--job_count == 0 && channel.is_open()) {
                 channel.close();
             }
-        }));
+        });
     }
 
     struct Result {
@@ -691,7 +691,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
             timer.expires_after(100ms);
             timer.async_wait([cl = std::move(concurrency_lock)] (auto) {});
 
-            TRACK_SPAWN(exec, ([
+            task::spawn_detached(exec, [
                 self = this,
                 peer,
                 use_tls,
@@ -714,7 +714,7 @@ GenericStream Bep5Client::connect( asio::yield_context yield
                     std::move(con)
                 };
                 spawn_cancel();
-            }));
+            });
         }
     }
 

@@ -57,13 +57,14 @@ public:
     // NOTE: We can't allow copying while using intrusive lists for children
     // because a copy would need to have the same children and one child can
     // not be in two intrusive lists.
-    Signal(const Signal&)            = delete;
     Signal& operator=(const Signal&) = delete;
 
-    Signal(Signal& parent)
-        : _parent(&parent)
+    // NOTE: Copy constructor *does not* make a "copy" (for reason explained
+    // above). Instead it creates a child node of the node passed as argument.
+    Signal(const Signal& parent)
+        : _parent(const_cast<Signal*>(&parent))
     {
-        parent._children.push_back(*this);
+        _parent->_children.push_back(*this);
     }
 
     Signal(Signal&& other) {

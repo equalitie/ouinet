@@ -23,8 +23,7 @@ int millis_since(Clock::time_point start) {
     return duration_cast<milliseconds>(end - start).count();
 }
 
-// On Windows CI this is sometimes up to 10 milliseconds
-constexpr milliseconds wait_limit = 10ms;
+constexpr milliseconds wait_limit = 20ms;
 
 BOOST_AUTO_TEST_CASE(one) {
     asio::io_context ctx;

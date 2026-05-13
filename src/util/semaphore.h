@@ -61,7 +61,7 @@ private:
             auto handler = std::move(_handlers.front());
             _handlers.pop_front();
 
-            asio::post(_executor, [ec, h = std::move(handler), state = weak_from_this()] () mutable {
+            asio::post(_executor, [h = std::move(handler), state = weak_from_this()] () mutable {
                 if (auto s = state.lock()) {
                     h(sys::error_code(), s->create_lock());
                 }

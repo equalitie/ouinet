@@ -91,6 +91,7 @@ echo "Host:           $host"
 echo "Target OS:      ${target_oss[*]}"
 echo "Image name:     $image_name"
 echo "Container name: $container_name"
+echo "Clean:          $([ "$clean" = y ] && echo yes || echo no)"
 echo ""
 
 function build_image (
@@ -175,8 +176,6 @@ function list_artifacts_for_target_os (
                 $build_dir/client
                 $build_dir/injector
                 $build_dir/libouinet_asio.so
-                $build_dir/libouinet_asio_ssl.so
-                $build_dir/libouinet_asio_ssl.so
                 $build_dir/libclient.so
                 $build_dir/libinjector.so
             )
@@ -186,7 +185,6 @@ function list_artifacts_for_target_os (
                 $build_dir/client.exe
                 $build_dir/injector.exe
                 $build_dir/libouinet_asio.dll
-                $build_dir/libouinet_asio_ssl.dll
                 $build_dir/libclient_lib.dll
                 $build_dir/libinjector_lib.dll
             )
@@ -222,10 +220,6 @@ function check_artifacts_exist_for_target_os (
 )
 
 # ---
-
-if [ "$clean" = y ]; then
-    dock container rm -f $container_name 2>/dev/null || true
-fi
 
 build_image
 
@@ -284,6 +278,10 @@ for target_os in ${target_oss[@]}; do
     if [ "$target_os" == linux -o "$target_os" == windows ]; then
         build_dir=$work_dir/build.$target_os
 
+        if [ "$clean" = y ]; then
+            exe rm -rf $build_dir
+        fi
+
         exe bash -c "mkdir -p $build_dir"
 
         cmake_configure_options=(
@@ -310,6 +308,10 @@ for target_os in ${target_oss[@]}; do
         exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
         exe -w $build_dir cmake --build . -j $(exe nproc)
     else
+        if [ "$clean" = y ]; then
+            exe -w $ouinet_dir git clean -dfX
+        fi
+
         env=(
             WITH_EXPERIMENTAL=$([ "$with_experimental" == y ] && echo ON || echo OFF)
         )
@@ -325,7 +327,7 @@ for target_os in ${target_oss[@]}; do
         # built for Windows (only dll).
         if [ "$target_os" == linux ]; then
             env=(
-                CXXFLAGS="-I$build_dir/boost/install/include"
+                CXXFLAGS="-I$build_dir/boost/src/built_boost"
                 LD_LIBRARY_PATH="$build_dir"
                 LIBRARY_PATH="$build_dir"
                 RUST_BACKTRACE=1

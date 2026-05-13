@@ -9,15 +9,27 @@ block()
     set(BUILD_SHARED_LIBS OFF)
     set(BUILD_TESTING OFF)
     add_definitions(-DBOOST_ASIO_DYN_LINK)
+
+    if (MINGW)
+        # HACK: `find_package(ZLIB)` used by i2pd can't find pre-installed
+        # zlib on msys64 for some reason.
+        find_package(ZLIB QUIET)
+        if(NOT ZLIB_FOUND)
+            set(ZLIB_LIBRARY c:/msys64/usr/lib/libz.a)
+            set(ZLIB_INCLUDE_DIR c:/msys64/usr/include)
+        endif()
+    endif()
+
     add_subdirectory(./i2pd/build)
+
     if(POLICY CMP0079)
         # Allows adding the libraries below
         # https://stackoverflow.com/a/75246115/273348
         cmake_policy(SET CMP0079 NEW)
     endif()
-    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
-    target_link_libraries(libi2pdclient PRIVATE Boost::program_options ouinet_asio ouinet_asio_ssl)
-    target_link_libraries(libi2pdlang   PRIVATE                        ouinet_asio ouinet_asio_ssl)
+    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio)
+    target_link_libraries(libi2pdclient PRIVATE Boost::program_options ouinet_asio)
+    target_link_libraries(libi2pdlang   PRIVATE                        ouinet_asio)
 endblock()
 
 # i2pd messes with CMAKE_MODULE_PATH, which breaks automatic dependency handling.
@@ -57,7 +69,6 @@ target_link_libraries(ouiservice-i2p
         OpenSSL::SSL
     PUBLIC
         ouinet_asio
-        ouinet_asio_ssl
 )
 target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
 

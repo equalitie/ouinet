@@ -9,6 +9,7 @@ run_cpp_tests=()
 with_ouisync=n
 host_ouisync_dir=
 excluded_test_targets=()
+clean=
 
 source $(dirname $0)/util.sh windows
 
@@ -43,14 +44,19 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-echo "Using host \"$host\""
+image_name=$(choose_docker_image_name)
+container_name=$(choose_docker_container_name)
+
+echo "Host:           $host"
+echo "Target OS:      win"
+echo "Image name:     $image_name"
+echo "Container name: $container_name"
+echo "Clean:          $([ "$clean" = y ] && echo yes || echo no)"
+echo ""
 
 if [ -z "$host_core_count" ]; then
     host_core_count=$(ssh $host 'cmd /s /c echo %NUMBER_OF_PROCESSORS%' | tr -d '[:space:]')
 fi
-
-image_name=$(choose_docker_image_name)
-container_name=$(choose_docker_container_name)
 
 work_dir=/opt
 ouinet_dir=$work_dir/ouinet
@@ -72,7 +78,7 @@ function copy_sources (
 
     local exclude=(
         .git
-        build
+        /build
         target
         android
     )
@@ -102,6 +108,10 @@ copy_sources . $ouinet_dir
 if [ -n "$host_ouisync_dir" ]; then
     container_ouisync_dir=$work_dir/ouisync
     copy_sources $host_ouisync_dir $container_ouisync_dir
+fi
+
+if [ "$clean" = y ]; then
+    exe rm -rf $build_dir
 fi
 
 #### Configure
@@ -149,11 +159,8 @@ dlls=(
     /c/Windows/System32/downlevel/api-ms-win-core-synch-l1-2-0.dll
     /c/Windows/System32/drivers/netio.sys
     $build_dir/libouinet_asio.dll
-    $build_dir/libouinet_asio_ssl.dll
     $build_dir/libclient_lib.dll
     $build_dir/libinjector_lib.dll
-    $build_dir/gcrypt/out/bin/libgcrypt-20.dll
-    $build_dir/gpg_error/out/bin/libgpg-error-0.dll
 )
 
 make_dll_links=(

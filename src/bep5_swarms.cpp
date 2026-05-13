@@ -1,5 +1,6 @@
 #include "bep5_swarms.h"
 #include "util.h"
+#include "util/str.h"
 
 namespace ouinet { namespace bep5 {
 

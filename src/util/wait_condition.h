@@ -36,13 +36,23 @@ private:
 
 public:
     class Lock {
-        friend class WaitState;
+        friend struct WaitState;
         friend class WaitCondition;
 
     public:
         Lock(std::shared_ptr<WaitState> wait_state);
-        Lock(const Lock&) = delete;
-        Lock& operator=(const Lock&) = delete;
+        Lock(const Lock& other) {
+            *this = other;
+        }
+
+        Lock& operator=(const Lock& other) {
+            _wait_state = other._wait_state;
+            if (!_wait_state) return *this;
+            if (!other.hook.is_linked()) return *this;
+            _wait_state->locks.push_back(*this);
+            return *this;
+        }
+
         Lock(Lock&&);
         Lock& operator=(Lock&&);
 
@@ -66,7 +76,7 @@ private:
             // `post` finishes.
             hook.unlink();
 
-            asio::post(exec, [self = std::move(shared_from_this())] () mutable {
+            asio::post(exec, [self = shared_from_this()] () mutable {
                     sys::error_code ec;
                     if (self->aborted) {
                         ec = asio::error::operation_aborted;
@@ -93,6 +103,8 @@ public:
     WaitCondition(boost::asio::io_context&);
     WaitCondition(const WaitCondition&) = delete;
     WaitCondition& operator=(const WaitCondition&) = delete;
+    WaitCondition(WaitCondition&&) = default;
+    WaitCondition& operator=(WaitCondition&&) = default;
 
     template<class CompletionToken> auto wait(CompletionToken);
     template<class CompletionToken> auto wait(Cancel&, CompletionToken);

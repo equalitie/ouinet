@@ -9,7 +9,7 @@ FetchContent_Declare(
 )
 
 set(OUINET_RS_CXXFLAGS_LIST
-    "-I${CMAKE_CURRENT_BINARY_DIR}/../boost/install/include"
+    "-I${BUILT_BOOST_INCLUDE_DIR}"
     "-I${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
@@ -62,3 +62,4 @@ endif()
 target_include_directories(ouinet_rs
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
     ${RUST_BRIDGE_PATH})
+target_link_libraries(ouinet_rs INTERFACE ouinet_common_public)

@@ -10,7 +10,7 @@
 #include "../parse/number.h"
 #include "../util/set_io.h"
 #include "../util/lru_cache.h"
-#include "../util/handler_tracker.h"
+#include "../task.h"
 #include "../util/keep_alive.h"
 #include "../util/crypto_stream.h"
 #include "../ouiservice/utp.h"
@@ -70,7 +70,6 @@ struct GarbageCollector {
     {
         task::spawn_detached(_executor, [&] (asio::yield_context y) {
             YieldContext yield(y, _log_path);
-            TRACK_HANDLER();
             Cancel cancel(_cancel);
 
             _DEBUG("Garbage collector started");

@@ -35,7 +35,7 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2025
       Invoke-Msys 'pacman --noconfirm -Syuu'; \
       Invoke-Msys 'pacman --noconfirm -Syuu'; \
       Invoke-Msys 'pacman --noconfirm -Scc'; \
-      Invoke-Msys 'pacman --noconfirm -S mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc git make patch mingw-w64-x86_64-rust unzip wget rsync';
+      Invoke-Msys 'pacman --noconfirm -S mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc git make patch mingw-w64-x86_64-rust unzip wget rsync zlib-devel';
 
     # Install cmake
     # TODO: Pass CMAKE_VERSION as ARG to keep it consistent with other platforms

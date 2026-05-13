@@ -1,7 +1,5 @@
 cmake_minimum_required (VERSION 3.13)
 
-link_libraries(ouinet_common)
-
 if(MINGW)
     # Add `#include <winsock2.h>` to every cpp file.
     # This gets rid of an error and a warning:
@@ -12,65 +10,76 @@ if(MINGW)
     add_definitions(-include winsock2.h)
 endif()
 
+function(simple_test test_name)
+    add_executable(${test_name} ${ARGN})
+    target_link_libraries(${test_name} PUBLIC ouinet_asio)
+    target_include_directories(${test_name} PUBLIC ../src)
+    target_compile_options(${test_name} PUBLIC -std=c++23)
+endfunction()
+
+function(common_test test_name)
+    add_executable(${test_name} ${ARGN})
+    target_link_libraries(${test_name} ouinet_common)
+endfunction()
 
 ######################################################################
-add_executable(test_cancel "test_cancel.cpp")
+simple_test(test_cancel "test_cancel.cpp")
 
 ######################################################################
-add_executable(test_parser "test_parser.cpp")
+common_test(test_parser "test_parser.cpp")
 
 ######################################################################
-add_executable(test_cache "test_cache_control.cpp")
+common_test(test_cache "test_cache_control.cpp")
 target_link_libraries(test_cache client_lib injector_lib)
 
 ######################################################################
-add_executable(test_crypto_stream "test_crypto_stream.cpp")
+common_test(test_crypto_stream "test_crypto_stream.cpp")
 
 ######################################################################
-add_executable(test_wait_condition "test_wait_condition.cpp")
+common_test(test_wait_condition "test_wait_condition.cpp")
 
 ######################################################################
-add_executable(test_scheduler "test_scheduler.cpp")
+common_test(test_scheduler "test_scheduler.cpp")
 
 ######################################################################
-add_executable(test_timeout_stream "test_timeout_stream.cpp")
+common_test(test_timeout_stream "test_timeout_stream.cpp")
 
 ######################################################################
-add_executable(test_response_reader "test_response_reader.cpp")
+common_test(test_response_reader "test_response_reader.cpp")
 target_link_libraries(test_response_reader ouinet_common)
 
 ######################################################################
-add_executable(test_response_writer "test_response_writer.cpp")
+common_test(test_response_writer "test_response_writer.cpp")
 
 ######################################################################
 if (NOT WIN32)
-    add_executable(test_persistent_lru_cache "test_persistent_lru_cache.cpp")
+    common_test(test_persistent_lru_cache "test_persistent_lru_cache.cpp")
 endif ()
 
 ################################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test_bittorrent "test_bittorrent.cpp")
+    common_test(test_bittorrent "test_bittorrent.cpp")
     target_link_libraries(test_bittorrent ouinet_common)
 endif()
 
 ################################################################################
 if (NOT WIN32)
-    add_executable(bt_bep44 "bt_bep44.cpp")
+    common_test(bt_bep44 "bt_bep44.cpp")
 endif ()
 
 ################################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test_routing_table "test_routing_table.cpp")
+    common_test(test_routing_table "test_routing_table.cpp")
 endif()
 
 ################################################################################
-add_executable(bt_bep5 "bt_bep5.cpp")
+common_test(bt_bep5 "bt_bep5.cpp")
 
 ######################################################################
-add_executable(test_watch_dog "test_watch_dog.cpp")
+common_test(test_watch_dog "test_watch_dog.cpp")
 
 ######################################################################
-add_executable(test_util "test_util.cpp")
+common_test(test_util "test_util.cpp")
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set_target_properties(test_util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
@@ -82,82 +91,82 @@ if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
 endif ()
 
 ######################################################################
-add_executable(test_logger "test_logger.cpp")
+common_test(test_logger "test_logger.cpp")
 
 ######################################################################
-add_executable(test_connection_pool "test_connection_pool.cpp")
+common_test(test_connection_pool "test_connection_pool.cpp")
 
 ######################################################################
-add_executable(oui_server "ouiservice_server.cpp")
+common_test(oui_server "ouiservice_server.cpp")
 
 ######################################################################
-add_executable(oui_client "ouiservice_client.cpp")
+common_test(oui_client "ouiservice_client.cpp")
 
 ######################################################################
-add_executable(test_http_util "test_http_util.cpp")
+common_test(test_http_util "test_http_util.cpp")
 
 ######################################################################
-add_executable(test_http_sign "test_http_sign.cpp")
+common_test(test_http_sign "test_http_sign.cpp")
 target_link_libraries(test_http_sign injector_lib)
 
 ######################################################################
-add_executable(test_http_store "test_http_store.cpp")
+common_test(test_http_store "test_http_store.cpp")
 target_link_libraries(test_http_store client_lib injector_lib)
 
 ######################################################################
-add_executable(test_atomic_temp "test_atomic_temp.cpp")
+common_test(test_atomic_temp "test_atomic_temp.cpp")
 target_link_libraries(test_atomic_temp client_lib)
 
 ######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test_cache_announcer
+    common_test(test_cache_announcer
         "performance_test/test_cache_announcer.cpp"
         "../test/util/bittorrent_utils.cpp")
 endif()
 
 ######################################################################
-add_executable(test_bencoding "test_bencoding.cpp")
+common_test(test_bencoding "test_bencoding.cpp")
 target_link_libraries(test_bencoding ouinet_common)
 
 ######################################################################
-add_executable(test_file_io "test_file_io.cpp" "util/base_fixture.hpp")
+common_test(test_file_io "test_file_io.cpp" "util/base_fixture.hpp")
 
 ######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test_dht "test_dht.cpp")
+    common_test(test_dht "test_dht.cpp")
 endif()
 
 ######################################################################
-add_executable(test_metrics "test_metrics.cpp")
+common_test(test_metrics "test_metrics.cpp")
 
 ######################################################################
-add_executable(test_injector_resolver "test_injector_resolver.cpp")
+common_test(test_injector_resolver "test_injector_resolver.cpp")
 target_link_libraries(test_injector_resolver injector_lib)
 
 ######################################################################
-add_executable(test_dns "test_dns.cpp")
+common_test(test_dns "test_dns.cpp")
 
 ######################################################################
-add_executable(test_fetch "test_fetch.cpp")
+common_test(test_fetch "test_fetch.cpp")
 target_link_libraries(test_fetch injector_lib client_lib)
 
 ######################################################################
 if(WITH_EXPERIMENTAL)
-    add_executable(test_i2p test_i2p.cpp)
+    common_test(test_i2p test_i2p.cpp)
     target_link_libraries(test_i2p client_lib)
 
-    add_executable(test_i2p_endpoint "test_i2p_endpoint.cpp")
+    common_test(test_i2p_endpoint "test_i2p_endpoint.cpp")
     target_link_libraries(test_i2p_endpoint injector_lib)
 
-    add_executable(test_i2p_fetch "./test_i2p_fetch.cpp")
+    common_test(test_i2p_fetch "./test_i2p_fetch.cpp")
     target_link_libraries(test_i2p_fetch injector_lib client_lib)
 
-    add_executable(test_i2p_tracker "./test_i2p_tracker.cpp")
+    common_test(test_i2p_tracker ./test_i2p_tracker.cpp)
     target_link_libraries(test_i2p_tracker injector_lib client_lib)
 endif()
 
 if (WITH_OUISYNC)
-    add_executable(test_ouisync "test_ouisync.cpp")
+    common_test(test_ouisync "test_ouisync.cpp")
     target_link_libraries(test_ouisync injector_lib client_lib)
 endif()
 
@@ -166,6 +175,6 @@ if(UNIX AND NOT APPLE AND NOT CYGWIN)
 endif()
 
 if(LINUX)
-    add_executable(manual_browse_scrape "manual/browse_scrape.cpp")
+    common_test(manual_browse_scrape "manual/browse_scrape.cpp")
     target_link_libraries(manual_browse_scrape client_lib)
 endif()

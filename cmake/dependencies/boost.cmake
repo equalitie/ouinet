@@ -21,18 +21,12 @@ elseif (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
       list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
     elseif (${BOOST_VERSION} EQUAL 1.88.0)
       set(BOOST_VERSION_HASH 46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b)
+      list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-1_88_0.patch)
     endif ()
 
     set(BOOST_COROUTINE_BACKEND fiber)
     list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
-
-# These are not related to boost version, it fixes issues we started seeing
-# after Mingw upgrade. This however does not work with i2pd
-list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-decltype.patch)
-if(NOT WITH_EXPERIMENTAL)
-  list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-bad-executor-vtable.patch)
-endif()
 
 set(BOOST_COMPONENTS
     context
@@ -200,8 +194,8 @@ else()
 endif()
 
 set(BUILT_BOOST_VERSION ${BOOST_VERSION})
-set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/install/include)
-set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/install/lib)
+set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/src/built_boost)
+set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/src/built_boost/stage/lib)
 set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
 
 function(_boost_library_filename component output_var)
@@ -251,7 +245,7 @@ externalproject_add(built_boost
             -q # Stop at first error
             ${ENABLE_BOOST_COMPONENTS}
             ${BOOST_ARCH_CONFIGURATION}
-            install
+            stage
     BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
     INSTALL_COMMAND ""
 )
@@ -288,9 +282,13 @@ set_target_properties(Boost::boost PROPERTIES
 # instead. Boost does not ship this library, so we need to create it.
 
 if (${BOOST_BUILD_SHARED})
-    add_library(ouinet_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+    add_library(ouinet_asio SHARED
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 else()
-    add_library(ouinet_asio STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+    add_library(ouinet_asio STATIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 endif()
 
 target_link_libraries(ouinet_asio
@@ -302,32 +300,25 @@ target_link_libraries(ouinet_asio
         Boost::system
 )
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.77.0)
-    # explicitly link with bcrypt after Boost::filesystem
-    target_link_libraries(ouinet_asio
-        PUBLIC
-            crypt32
-            bcrypt)
+    set(OUINET_ASIO_WIN_LIBRARIES crypt32 bcrypt)
 endif()
-target_compile_definitions(ouinet_asio
+
+target_link_libraries(ouinet_asio
     PUBLIC
+    OpenSSL::Crypto
+    OpenSSL::SSL
+    ${OUINET_ASIO_WIN_LIBRARIES})
+
+target_compile_definitions(ouinet_asio
+    PRIVATE
         -DBOOST_ASIO_DYN_LINK
+    PUBLIC
         ${BOOST_COMPILE_DEFINITIONS}
 )
+
 target_compile_options(ouinet_asio
-    PUBLIC -std=c++20
+    PUBLIC -std=c++23
 )
-
-if (${BOOST_BUILD_SHARED})
-    add_library(ouinet_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
-else()
-    add_library(ouinet_asio_ssl STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
-endif()
-target_link_libraries(ouinet_asio_ssl
-    PUBLIC
-        OpenSSL::SSL
-        ouinet_asio
-)
-
 
 # FindBoost.cmake doesn't define targets for newer versions of boost.
 # Let's emulate it instead.

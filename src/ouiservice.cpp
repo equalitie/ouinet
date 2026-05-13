@@ -6,7 +6,7 @@
 #include "util/condition_variable.h"
 #include "util/success_condition.h"
 #include "util/str.h"
-#include "util/handler_tracker.h"
+#include "task.h"
 #include "async_sleep.h"
 
 using namespace std;
@@ -33,7 +33,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
     SuccessCondition success_condition(_ex);
 
     for (auto& implementation : _implementations) {
-        TRACK_SPAWN(_ex, ([
+        task::spawn_detached(_ex, [
             this,
             implementation = implementation.get(),
             lock = success_condition.lock()
@@ -72,7 +72,7 @@ void OuiServiceServer::start_listen(asio::yield_context yield)
                 _connection_queue.push_back(std::move(connection));
                 _connection_available.notify();
             }
-        }));
+        });
     }
 
     bool success = success_condition.wait_for_success(yield);
