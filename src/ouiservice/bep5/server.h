@@ -18,10 +18,12 @@ public:
               , boost::asio::ssl::context* ssl_context
               , std::string swarm_name);
 
-    void start_listen(asio::yield_context) override;
+    [[nodiscard]]
+    sys::error_code start_listen(Async) override;
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> accept(Async) override;
 
     ~Bep5Server();
 

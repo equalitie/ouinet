@@ -12,6 +12,7 @@
 
 #include "or_throw.h"
 #include "handshake.h"
+#include "async_sleep.h"
 
 
 namespace ouinet::i2p_direct {
@@ -56,9 +57,9 @@ Server::~Server()
     stop_listen();
 }
 
-void Server::start_listen(asio::yield_context yield)
+sys::error_code Server::start_listen(Async yield)
 {
-    auto cancel = _stopped;
+    auto slot = _stopped.connect([&] { yield.cancel(); });
 
     asio::ip::tcp::endpoint endpoint(asio::ip::tcp::v4(), 0);
 
@@ -68,22 +69,22 @@ void Server::start_listen(asio::yield_context yield)
     OUI_LOG_DEBUG("I2P server openning port..");
 
     _tcp_acceptor.open(endpoint.protocol(), ec);
-    if (ec) {
-        return or_throw(yield, ec);
-    }
+    if (ec) return ec;
 
     _tcp_acceptor.set_option(asio::socket_base::reuse_address(true));
 
     _tcp_acceptor.bind(endpoint, ec);
+
     if (ec) {
         _tcp_acceptor.close();
-        return or_throw(yield, ec);
+        return ec;
     }
 
     _tcp_acceptor.listen(asio::socket_base::max_listen_connections, ec);
+
     if (ec) {
         _tcp_acceptor.close();
-        return or_throw(yield, ec);
+        return ec;
     }
 
     uint16_t port = _tcp_acceptor.local_endpoint().port();
@@ -91,24 +92,19 @@ void Server::start_listen(asio::yield_context yield)
     auto& tunnel_params = _service->get_tunnel_params();
     _local_destination = i2p::api::CreateLocalDestination(*_private_keys, true,
         tunnel_params.IsEmpty() ? nullptr : &tunnel_params);
+
     do {
-        ec = {};
         auto i2p_tunnel = std::make_unique<i2p::client::I2PServerTunnel>("i2p_oui_server", "127.0.0.1", port, _local_destination);
         _server_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_tunnel), _timeout);
-        _server_tunnel->wait_to_get_ready(yield[ec]);
+        sys::error_code ec = _server_tunnel->wait_to_get_ready(yield);
         if (ec) {
             OUI_LOG_DEBUG("I2P server tunnel setup attempt failed; ec=", ec.message());
+            async_sleep(200ms, yield);
         }
     }
-    while(ec && !cancel);
+    while(ec);
 
-    if (cancel) ec = asio::error::operation_aborted;
-
-    if (ec) {
-        _tcp_acceptor.close();
-        return or_throw(yield, ec);
-    }
-
+    return ec;
 }
 
 void Server::stop_listen()
@@ -122,45 +118,42 @@ void Server::stop_listen()
     }
 }
 
-GenericStream Server::accept(asio::yield_context yield) {
-    sys::error_code ec;
-    auto conn = accept_without_handshake(yield[ec]);
+std::expected<GenericStream, sys::error_code>
+Server::accept(Async yield) {
+    auto slot = _stopped.connect([&] { yield.cancel(); });
 
-    if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+    auto conn = accept_without_handshake(yield);
+
+    if (!conn.has_value()) {
+        return std::unexpected(conn.error());
     }
 
-    OUI_LOG_DEBUG("I2P server: accepted connection from ", conn.remote_endpoint());
+    OUI_LOG_DEBUG("I2P server: accepted connection from ", conn->remote_endpoint());
 
-    Cancel cancel = _stopped;
-    perform_handshake(conn, cancel, yield[ec]);
+    sys::error_code ec = perform_handshake(*conn, yield);
 
     if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+        return std::unexpected(ec);
     }
 
-    return conn;
+    return std::move(*conn);
 }
 
-GenericStream Server::accept_without_handshake(asio::yield_context yield)
+std::expected<GenericStream, sys::error_code>
+Server::accept_without_handshake(Async yield)
 {
-    // Make a copy on the stack
-    Cancel cancel = _stopped;
-
-    sys::error_code ec;
+    auto slot = _stopped.connect([&] { yield.cancel(); });
 
     Connection connection(_exec);
 
-    _tcp_acceptor.async_accept(connection.socket(), yield[ec]);
-
-    ec = compute_error_code(ec, cancel);
+    sys::error_code ec = _tcp_acceptor.async_accept(connection.socket(), yield);
 
     if (!ec && !_server_tunnel) {
         ec = asio::error::operation_aborted;
     }
 
     if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+        return std::unexpected(ec);
     }
 
     _server_tunnel->intrusive_add(connection);

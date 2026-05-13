@@ -9,7 +9,11 @@ namespace i2p::client {
     class I2PService;
 }
 
-namespace ouinet::i2p_direct {
+namespace ouinet {
+
+class Async;
+
+namespace i2p_direct {
 
 class Tunnel  {
     using executor_type = asio::any_io_executor;
@@ -22,7 +26,8 @@ public:
        the acceptor is ready.
 
   */
-  void wait_to_get_ready(boost::asio::yield_context yield);
+  [[nodiscard]]
+  sys::error_code wait_to_get_ready(Async);
 
   Tunnel(const executor_type&, std::shared_ptr<i2p::client::I2PService> _i2p_tunnel, uint32_t timeout);
 
@@ -54,7 +59,7 @@ private:
   std::shared_ptr<i2p::client::I2PService> _i2p_tunnel;
   ConnectionList _connections;
   std::unique_ptr<ConditionVariable> _ready_condition;
-  std::shared_ptr<bool> _was_destroyed;
+  Cancel _cancel;
 };
 
-} // namespaces
+}} // namespaces

@@ -14,24 +14,26 @@ class WeakOuiServiceClient : public OuiServiceImplementationClient
         _base(std::move(base_))
     {};
 
-    void start(asio::yield_context yield) override {
+    [[nodiscard]]
+    sys::error_code start(Async yield) override {
         auto ptr = _base.lock();
-        if (!ptr) return or_throw(yield, asio::error::bad_descriptor);
-        ptr->start(yield);
+        if (!ptr) return asio::error::bad_descriptor;
+        return ptr->start(yield);
     }
 
     void stop() override {
         if (auto ptr = _base.lock()) ptr->stop();
     }
 
-    GenericStream connect(asio::yield_context yield, Cancel& cancel) override {
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async yield) override {
         auto ptr = _base.lock();
 
         if (!ptr) {
-            return or_throw<GenericStream>(yield, asio::error::bad_descriptor);
+            return std::unexpected(asio::error::bad_descriptor);
         }
 
-        return ptr->connect(yield, cancel);
+        return ptr->connect(yield);
     }
 
     private:

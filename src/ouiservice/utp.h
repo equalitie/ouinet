@@ -2,11 +2,11 @@
 
 #include <list>
 #include <boost/asio/ip/udp.hpp>
+#include <boost/asio/experimental/channel.hpp>
 #include <boost/optional.hpp>
 #include <asio_utp.hpp>
 
 #include "../ouiservice.h"
-#include "../util/async_queue.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -14,12 +14,15 @@ namespace ouiservice {
 class UtpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    UtpOuiServiceServer(const AsioExecutor&, asio::ip::udp::endpoint endpoint);
+    UtpOuiServiceServer(asio::any_io_executor, asio::ip::udp::endpoint endpoint);
 
-    void start_listen(asio::yield_context) override;
+    [[nodiscard]]
+    sys::error_code start_listen(Async) override;
+
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> accept(Async) override;
 
     ~UtpOuiServiceServer();
 
@@ -29,24 +32,27 @@ class UtpOuiServiceServer : public OuiServiceImplementationServer
     }
 
     private:
-    AsioExecutor _ex;
+    asio::any_io_executor _ex;
     asio::ip::udp::endpoint _endpoint;
     Cancel _cancel;
     std::unique_ptr<asio_utp::udp_multiplexer> _udp_multiplexer;
-    util::AsyncQueue<GenericStream> _accept_queue;
+    asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
 };
 
 class UtpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
-    UtpOuiServiceClient( const AsioExecutor&
+    UtpOuiServiceClient( asio::any_io_executor
                        , asio_utp::udp_multiplexer
                        , asio::ip::udp::endpoint remote_endpoint);
 
-    void start(asio::yield_context) override {}
+    [[nodiscard]]
+    sys::error_code start(Async) override;
+
     void stop() override {}
 
-    GenericStream connect(asio::yield_context, Cancel&) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async) override;
 
     boost::optional<asio::ip::udp::endpoint> local_endpoint() const {
         return _udp_multiplexer.local_endpoint();
@@ -55,7 +61,7 @@ class UtpOuiServiceClient : public OuiServiceImplementationClient
     bool verify_remote_endpoint() const { return bool(_remote_endpoint); }
 
     private:
-    AsioExecutor _ex;
+    asio::any_io_executor _ex;
     boost::optional<asio::ip::udp::endpoint> _remote_endpoint;
     asio_utp::udp_multiplexer _udp_multiplexer;
 };

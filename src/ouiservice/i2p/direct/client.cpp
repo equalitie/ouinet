@@ -17,6 +17,7 @@
 namespace ouinet::i2p_direct {
 
 using namespace std;
+using ouinet::GenericStream;
 
 Client::Client(std::shared_ptr<Service> service, const I2pAddress& target_id, uint32_t timeout, const executor_type& exec, std::shared_ptr<i2p::client::ClientDestination> destination)
     : _service(service)
@@ -35,14 +36,13 @@ Client::~Client()
     stop();
 }
 
-void Client::start(asio::yield_context yield)
+sys::error_code Client::start(Async yield)
 {
-    Cancel cancel = _stopped;
+    auto slot = _stopped.connect([&] { yield.cancel(); });
 
     sys::error_code ec;
 
     do {
-        ec = {};
         auto i2p_client_tunnel = std::make_unique<i2p::client::I2PClientTunnel>(
                 "i2p_oui_client",
                 _target_id.value,
@@ -51,14 +51,15 @@ void Client::start(asio::yield_context yield)
                 _destination);
 
         _client_tunnel = std::make_unique<Tunnel>(_exec, std::move(i2p_client_tunnel), _timeout);
-        _client_tunnel->wait_to_get_ready(yield[ec]);
+        ec = _client_tunnel->wait_to_get_ready(yield);
     }
-    while(ec && !cancel);
+    while(ec);
 
-    ec = compute_error_code(ec, cancel);
-    if (ec) return or_throw(yield, ec);
+    if (ec) return ec;
 
     _port = _client_tunnel->local_endpoint().port();
+
+    return sys::error_code();
 }
 
 void Client::stop()
@@ -69,7 +70,7 @@ void Client::stop()
     _stopped();
 }
 
-inline void exponential_backoff(uint32_t i, Cancel& cancel, asio::yield_context yield) {
+inline void exponential_backoff(uint32_t i, Async yield) {
     // Constants in this function are made up, feel free to modify them as needed.
     if (i < 3) return;
     i -= 3;
@@ -77,70 +78,49 @@ inline void exponential_backoff(uint32_t i, Cancel& cancel, asio::yield_context 
     if (i > constant_after) i = constant_after;
     float delay_s = powf(2, i) / 10.f;
 
-    if (!async_sleep(chrono::milliseconds(long(delay_s * 1000.f)), cancel, yield)) {
-        return or_throw(yield, asio::error::operation_aborted);
-    }
+    async_sleep(chrono::milliseconds(long(delay_s * 1000.f)), yield);
 }
 
-::ouinet::GenericStream
-Client::connect(asio::yield_context yield, Cancel& cancel)
+std::expected<GenericStream, sys::error_code>
+Client::connect(Async yield)
 {
-    for (uint32_t i = 0;; ++i) {
-        sys::error_code ec;
-        auto conn = connect_without_handshake(yield[ec], cancel);
+    auto slot = _stopped.connect([&] { yield.cancel(); });
 
-        if (!ec) {
-            auto stopped = _stopped.connect([&cancel] { cancel(); });
-            perform_handshake(conn, cancel, yield[ec]);
+    for (uint32_t i = 0;; ++i) {
+        auto conn = connect_without_handshake(yield);
+
+        if (conn.has_value()) {
+            sys::error_code ec = perform_handshake(*conn, yield);
 
             if (!ec) {
-                return conn;
+                return std::move(*conn);
             }
         }
 
-        if (ec == asio::error::operation_aborted) {
-            return or_throw<GenericStream>(yield, ec);
-        }
-
-        assert(ec);
-
-        ec = {};
-        exponential_backoff(i, cancel, yield[ec]);
-
-        if (ec) {
-            return or_throw<GenericStream>(yield, ec);
-        }
+        exponential_backoff(i, yield);
     }
 }
 
-::ouinet::GenericStream
-Client::connect_without_handshake(asio::yield_context yield, Cancel& cancel)
+std::expected<GenericStream, sys::error_code>
+Client::connect_without_handshake(Async yield)
 {
-    auto stopped = _stopped.connect([&cancel] { cancel(); });
+    auto stopped = _stopped.connect([&] { yield.cancel(); });
 
     Connection connection(_exec);
     
-    auto cancel_slot = cancel.connect([&] {
-        // tcp::socket::cancel() does not work properly on all platforms
+    auto cancel_slot = yield.cancel_slot([&] {
         connection.close();
     });
 
     OUI_LOG_DEBUG("Connecting to i2p peer... target=", _target_id.value);
 
     for (uint32_t i = 0;; ++i) {
-        sys::error_code ec;
-
-        connection._socket.async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port), yield[ec]);
-        ec = compute_error_code(ec, cancel);
-
-        if (ec == asio::error::operation_aborted) {
-            return or_throw<GenericStream>(yield, ec);
-        }
+        sys::error_code ec = connection._socket.async_connect(
+                asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), _port),
+                yield);
 
         if (ec) {
-            ec = {};
-            exponential_backoff(i, cancel, yield[ec]);
-            if (ec) return or_throw<GenericStream>(yield, ec);
+            exponential_backoff(i, yield);
             continue;
         }
 

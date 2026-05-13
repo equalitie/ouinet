@@ -23,8 +23,7 @@ using namespace std;
 
 
 Tunnel::Tunnel(const executor_type& exec, std::shared_ptr<i2p::client::I2PService> i2p_tunnel, uint32_t timeout)
-  : _exec(exec), _i2p_tunnel(std::move(i2p_tunnel)),
-    _was_destroyed(make_shared<bool>(false))
+  : _exec(exec), _i2p_tunnel(std::move(i2p_tunnel))
 {
   // I2Pd doesn't implicitly keep executor busy, so we need to
   // do it ourselves.
@@ -48,14 +47,15 @@ void Tunnel::set_timeout_to_get_ready(uint32_t timeout)
    the acceptor is ready.
 
 */
-void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
-    auto wd = _was_destroyed;
+sys::error_code Tunnel::wait_to_get_ready(Async yield) {
+    auto slot = _cancel.connect([&] { yield.cancel(); });
+    auto cancel = _cancel;
 
     sys::error_code ec;
 
     assert(!_ready_condition);
     _ready_condition = make_unique<ConditionVariable>(_exec);
-    auto on_exit = defer([this, wd] { if (!*wd) _ready_condition = nullptr; });
+    auto on_exit = defer([this, cancel] { if (cancel) _ready_condition = nullptr; });
 
     // Wait till we find a route to the service and tunnel is ready then try to
     // acutally connect and then unblock
@@ -63,13 +63,13 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
     
     auto exec = _exec;
 
-    _i2p_tunnel->AddReadyCallback([&exec, wd, &ec, this](const sys::error_code& error) mutable {
+    _i2p_tunnel->AddReadyCallback([&exec, cancel, &ec, this](const sys::error_code& error) mutable {
         // _i2p_tunnel is not using our executor and thus will execute the
         // callback in a different thread, so use `asio::post` to get back to our
         // thread.
-        asio::post(exec, [wd = std::move(wd), &ec, this, error] {
+        asio::post(exec, [cancel = std::move(cancel), &ec, this, error] {
             ec = error;
-            if (*wd) return;
+            if (cancel) return;
             _ready_condition->notify();
         });
     });
@@ -78,17 +78,14 @@ void Tunnel::wait_to_get_ready(boost::asio::yield_context yield) {
     // i.e. when the handler finishes.
     _ready_condition->wait(yield);
 
-    if (*wd) {
-        ec = asio::error::operation_aborted;
-    }
-    else if (ec) {
+    if (ec) {
         LOG_ERROR("I2P Tunnel failed to be established (", ec.message(), ")");
     }
     else {
         LOG_DEBUG("I2P Tunnel has been established");  // used by integration tests
     }
 
-    return or_throw(yield, ec);
+    return ec;
 }
 
 boost::asio::ip::tcp::endpoint Tunnel::local_endpoint() {
@@ -104,7 +101,7 @@ void Tunnel::intrusive_add(Connection& connection) {
 }
 
 Tunnel::~Tunnel() {
-  *_was_destroyed = true;
+  _cancel();
   _connections.close_all();
   _i2p_tunnel->Stop();
 

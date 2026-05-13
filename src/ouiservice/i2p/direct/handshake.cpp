@@ -3,6 +3,7 @@
 
 #include "handshake.h"
 #include "or_throw.h"
+#include "util/async.h"
 #include "generic_stream.h"
 #include "namespaces.h"
 
@@ -10,24 +11,22 @@ namespace ouinet::i2p_direct {
 
 static const std::string MAGIC = "i2p-ouinet";
 
-void perform_handshake(GenericStream& conn, Cancel& cancel, asio::yield_context yield) {
-    sys::error_code ec;
-    
-    asio::async_write(conn, asio::buffer(MAGIC), yield[ec]);
-    ec = compute_error_code(ec, cancel);
-    if (ec) return or_throw(yield, ec);
+sys::error_code perform_handshake(GenericStream& conn, Async yield) {
+    auto wr = asio::async_write(conn, asio::buffer(MAGIC), yield);
+    if (!wr.has_value()) return wr.error();
     
     std::string buffer(MAGIC.size(), 'x');
 
-    asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-    ec = compute_error_code(ec, cancel);
-    if (ec) return or_throw(yield, ec);
+    auto rr = asio::async_read(conn, asio::buffer(buffer), yield);
+    if (!rr.has_value()) return rr.error();
     
     if (buffer != MAGIC) {
         // TODO: We should return `std::errc::protocol_error`, but need to
         // figure out how to convert it to `boost::system::error_code`.
-        return or_throw(yield, asio::error::no_protocol_option);
+        return asio::error::no_protocol_option;
     }
+
+    return {};
 }
 
 } // namespaces

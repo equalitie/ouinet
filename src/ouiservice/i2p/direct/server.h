@@ -14,7 +14,11 @@ namespace i2p::client {
     class ClientDestination;
 }
 
-namespace ouinet::i2p_direct {
+namespace ouinet {
+
+class Async;
+
+namespace i2p_direct {
 
 class Service;
 
@@ -29,13 +33,19 @@ public:
 public:
     ~Server();
 
-    void start_listen(asio::yield_context yield) override;
+    [[nodiscard]]
+    sys::error_code start_listen(Async) override;
+
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context yield) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code>
+    accept(Async) override;
 
     // Only used in tests
-    GenericStream accept_without_handshake(asio::yield_context yield);
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code>
+    accept_without_handshake(Async);
 
     I2pAddress public_identity() const;
 
@@ -62,4 +72,4 @@ private:
     Cancel _stopped;
 };
 
-} // namespaces
+}} // namespaces

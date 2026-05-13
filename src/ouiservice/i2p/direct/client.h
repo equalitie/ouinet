@@ -10,7 +10,11 @@ namespace i2p::client {
     class ClientDestination;
 }
 
-namespace ouinet::i2p_direct {
+namespace ouinet {
+
+class Async;
+
+namespace i2p_direct {
 
 class Service;
 
@@ -28,19 +32,23 @@ public:
 
     executor_type get_executor() { return _exec; }
 
-    void start(asio::yield_context yield) override;
+    [[nodiscard]]
+    sys::error_code start(Async) override;
+
     void stop() override;
 
-    GenericStream
-    connect(asio::yield_context yield, Signal<void()>& cancel) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code>
+    connect(Async) override;
 
     // Returns the target I2P address this client connects to
     const I2pAddress& get_target_id() const { return _target_id; }
 
     // Connect without the ouinet i2p handshake protocol. Use this for test  or for communicating
     // with non-ouinet I2P hosts such as BEP3 trackers.
-    GenericStream
-    connect_without_handshake(asio::yield_context yield, Signal<void()>& cancel);
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code>
+    connect_without_handshake(Async);
 
 private:
     std::shared_ptr<Service> _service;
@@ -58,4 +66,4 @@ private:
     Cancel _stopped;
 };
 
-} // namespaces
+}} // namespaces

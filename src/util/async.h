@@ -76,16 +76,20 @@ public:
         return _asio_yield.get_executor();
     }
 
-    void spawn(auto lambda) {
+    void spawn(Cancel cancel, auto lambda) {
         task::spawn_detached(
             _asio_yield.get_executor(),
             [ lambda = std::move(lambda),
-              cancel = _cancel,
+              cancel = std::move(cancel),
               log_path = _log_path.tag("spawn")
             ]
             (asio::yield_context yield) mutable {
                 lambda(Async(yield, std::move(cancel), log_path));
             });
+    }
+
+    void spawn(auto lambda) {
+        spawn(_cancel, std::move(lambda));
     }
 
     Cancel::Connection cancel_slot(auto lambda) {

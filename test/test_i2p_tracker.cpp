@@ -9,6 +9,7 @@
 
 #include "ouiservice/i2p/session.h"
 #include "ouiservice/i2p/tracker.h"
+#include "util/unwrap.h"
 #include "util/test_dir.h"
 #include "util/log_path.h"
 #include "util/async.h"
@@ -70,37 +71,6 @@ void spawn(auto& ctx, auto work) {
                 BOOST_ERROR("Unknown exception");
             }
         });
-}
-
-template<class T> struct Print {
-    friend std::ostream& operator<<(std::ostream& os, const Print<T>& p) {
-        return os << p.val;
-    }
-    T val;
-};
-
-template<> struct Print<sys::error_code> {
-    friend std::ostream& operator<<(std::ostream& os, const Print<sys::error_code>& p) {
-        return os << p.ec.message();
-    }
-    sys::error_code ec;
-};
-
-template<typename T, typename E> T unwrap(std::expected<T, E> exp, std::source_location loc = std::source_location::current()) {
-    if (!exp.has_value()) {
-        BOOST_FAIL(loc.file_name() << ":" << loc.line() << " error:" << Print<E>{exp.error()});
-    } else {
-        BOOST_CHECK(true);
-    }
-    return std::move(*exp);
-}
-
-template<typename E> void unwrap(std::expected<void, E> exp, std::source_location loc = std::source_location::current()) {
-    if (!exp.has_value()) {
-        BOOST_FAIL(loc.file_name() << ":" << loc.line() << " error:" << Print<E>{exp.error()});
-    } else {
-        BOOST_CHECK(true);
-    }
 }
 
 // vmon

@@ -33,7 +33,7 @@
 
 #include "ouiservice.h"
 #ifdef __EXPERIMENTAL__
-#  include "ouiservice/i2p.h"
+//#  include "ouiservice/i2p.h"
 #  include "ouiservice/i2p/util/create_i2p_session.h"
 #endif // ifdef __EXPERIMENTAL__
 #include "ouiservice/tcp.h"
@@ -315,43 +315,48 @@ class InjectorCacheControl {
                          , Cancel& cancel
                          , YieldContext yield)
     {
-        // Parse the URL to tell HTTP/HTTPS, host, port.
-        auto url = util::Url::from(rq.target());
+        try {
+            // Parse the URL to tell HTTP/HTTPS, host, port.
+            auto url = util::Url::from(rq.target());
 
-        if (!url) {
-            yield.log("Unsupported target URL");
-            return or_throw<GenericStream>( yield
-                                          , asio::error::operation_not_supported);
-        }
+            if (!url) {
+                yield.log("Unsupported target URL");
+                return or_throw<GenericStream>( yield
+                                              , asio::error::operation_not_supported);
+            }
 
-        sys::error_code ec;
+            sys::error_code ec;
 
-        // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target( rq
-                                         , g_allow_private_targets
-                                         , std::move(dns_resolver)
+            // Resolve target endpoint and check its validity.
+            TcpLookup lookup = resolve_target( rq
+                                             , g_allow_private_targets
+                                             , std::move(dns_resolver)
+                                             , executor
+                                             , cancel, yield[ec]);
+
+            if (ec) return or_throw<GenericStream>(yield, ec);
+
+            auto socket = connect_to_host( lookup
                                          , executor
-                                         , cancel, yield[ec]);
+                                         , cancel
+                                         , yield[ec]);
 
-        if (ec) return or_throw<GenericStream>(yield, ec);
+            if (ec) return or_throw<GenericStream>(yield, ec);
 
-        auto socket = connect_to_host( lookup
-                                     , executor
-                                     , cancel
-                                     , yield[ec]);
+            if (url->scheme == "https") {
+                auto c = ssl::util::client_handshake( move(socket)
+                                                    , ssl_ctx
+                                                    , url->host
+                                                    , Async(yield, cancel));
 
-        if (ec) return or_throw<GenericStream>(yield, ec);
-
-        if (url->scheme == "https") {
-            auto c = ssl::util::client_handshake( move(socket)
-                                                , ssl_ctx
-                                                , url->host
-                                                , cancel
-                                                , yield[ec]);
-
-            return or_throw(yield, ec, move(c));
-        } else {
-            return GenericStream(move(socket));
+                if (!c.has_value()) return or_throw<GenericStream>(yield, c.error());
+                return std::move(*c);
+            } else {
+                return GenericStream(move(socket));
+            }
+        }
+        catch (Async::Cancelled const&) {
+            return or_throw<GenericStream>(yield, asio::error::operation_aborted);
         }
     }
 
@@ -570,7 +575,7 @@ void serve( const InjectorConfig& config
           , asio::ssl::context& ssl_ctx
           , OriginPools& origin_pools
           , uuid_generator& genuuid
-          , Cancel& cancel
+          , Cancel cancel
           , YieldContext yield_)
 {
     auto close_connection_slot = cancel.connect([&con] {
@@ -774,19 +779,17 @@ static
 void listen( const InjectorConfig& config
            , std::shared_ptr<dns::Resolver> dns_resolver
            , OuiServiceServer& proxy_server
-           , Cancel& cancel
-           , YieldContext yield)
+           , Async yield)
 {
     uuid_generator genuuid;
 
-    auto stop_proxy_slot = cancel.connect([&proxy_server] {
+    auto stop_proxy_slot = yield.cancel_slot([&proxy_server] {
         proxy_server.stop_listen();
     });
 
     AsioExecutor exec = proxy_server.get_executor();
 
-    sys::error_code ec;
-    proxy_server.start_listen(yield[ec]);
+    sys::error_code ec = proxy_server.start_listen(yield);
     if (ec) {
         LOG_ERROR(yield, " Failed to setup ouiservice proxy server; ec=", ec);
         return;
@@ -804,41 +807,37 @@ void listen( const InjectorConfig& config
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
 
     while (true) {
-        GenericStream connection = proxy_server.accept(yield[ec]);
-        if (ec == boost::asio::error::operation_aborted) {
-            break;
-        } else if (ec) {
-            if (!async_sleep(std::chrono::milliseconds(100), cancel, yield)) {
-                break;
-            }
+        auto connection = proxy_server.accept(yield);
+
+        if (!connection.has_value()) {
+            async_sleep(std::chrono::milliseconds(100), yield);
             ec = {};
             continue;
         }
 
         uint64_t connection_id = next_connection_id++;
 
-        task::spawn_detached(exec, [
-            connection = std::move(connection),
+        yield.spawn([
+            connection = std::move(*connection),
             &ssl_ctx,
-            cancel,
             &config,
             &dns_resolver,
             &genuuid,
             &origin_pools,
-            &yield,
             connection_id,
             lock = shutdown_connections.lock()
-        ] (boost::asio::yield_context asio_yield) mutable {
+        ] (Async yield) mutable {
+            // TODO: Make `serve` use `Async`.
             sys::error_code leaked_ec;
-            auto y = YieldContext(asio_yield, yield.log_path().tag(util::str('C', connection_id)));
+            auto y = YieldContext(yield.asio_yield(), yield.log_path().tag(util::str('C', connection_id)));
             serve( config
                  , dns_resolver
                  , std::move(connection)
                  , ssl_ctx
                  , origin_pools
                  , genuuid
-                 , cancel
-                 , y[leaked_ec]);
+                 , yield.get_cancel()
+                 , y);
             if (leaked_ec) {
                 // The convention is that `serve` does not throw errors,
                 // so complain otherwise but avoid crashing in production.
@@ -969,21 +968,21 @@ Injector::Injector(
 
     if (_config.listen_on_i2p()) {
         struct Server : public OuiServiceImplementationServer {
-            void start_listen(asio::yield_context yield) {}
+            sys::error_code start_listen(Async) {
+                return sys::error_code();
+            }
 
             void stop_listen() { _cancel(); }
         
-            GenericStream accept(asio::yield_context y) override {
-                Async yield(y, _cancel, _log_path);
-
+            std::expected<GenericStream, sys::error_code> accept(Async yield) override {
                 auto future_result = _session_future.wait(yield);
 
                 if (!future_result.has_value()) {
-                    return or_throw<GenericStream>(y, asio::error::fault);
+                    return std::unexpected(asio::error::fault);
                 }
                 auto& create_result = future_result->get();
                 if (!create_result.has_value()) {
-                    return or_throw<GenericStream>(y, asio::error::fault);
+                    return std::unexpected(asio::error::fault);
                 }
 
                 auto session = *create_result;
@@ -992,7 +991,7 @@ Injector::Injector(
 
                 if (!result.has_value()) {
                     LOG_WARN("Failed to accept I2P connection");
-                    return or_throw<GenericStream>(y, result.error().code());
+                    return std::unexpected(result.error().code());
                 }
 
                 return std::move(*result);
@@ -1026,8 +1025,7 @@ Injector::Injector(
         cancel = _cancel,
         log_path
     ] (asio::yield_context yield) mutable {
-        sys::error_code ec;
-        listen(_config, _dns_resolver, *proxy_server, cancel, YieldContext(yield, log_path)[ec]);
+        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, log_path));
     });
 }
 

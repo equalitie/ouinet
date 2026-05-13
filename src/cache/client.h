@@ -26,6 +26,7 @@ namespace bittorrent {
 }
 
 class Session;
+class Async;
 
 namespace cache {
 
@@ -106,11 +107,12 @@ public:
 
     // Returns true if both request and response had keep-alive == true.
     // Times out if forwarding to the sink gets stuck.
-    bool serve_local( const PeerCacheRequest&
-                    , GenericStream& sink
-                    , metrics::Client&
-                    , Cancel&
-                    , YieldContext);
+    [[nodiscard]]
+    std::expected<bool, sys::error_code>
+    serve_local( const PeerCacheRequest&
+               , GenericStream& sink
+               , metrics::Client&
+               , Async);
 
     std::size_t local_size( Cancel
                           , asio::yield_context) const;

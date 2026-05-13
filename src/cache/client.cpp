@@ -14,7 +14,6 @@
 #include "../util/keep_alive.h"
 #include "../util/crypto_stream.h"
 #include "../ouiservice/utp.h"
-#include "ouiservice/i2p/direct/service.h"
 #include "ouiservice/i2p/tracker.h"
 #include "ouiservice/i2p/tracker_lookup.h"
 #include "ouiservice/i2p/announcer.h"
@@ -191,7 +190,7 @@ struct Client::Impl {
                     , GenericStream& sink
                     , metrics::Client& metrics_client
                     , Cancel& cancel
-                    , YieldContext& yield)
+                    , YieldContext yield)
     {
         sys::error_code ec;
 
@@ -892,13 +891,20 @@ void Client::store( const cache::ResourceId& key
     _impl->store(key, group, r, cancel, yield);
 }
 
-bool Client::serve_local( const PeerCacheRequest& req
-                        , GenericStream& sink
-                        , metrics::Client& metrics
-                        , Cancel& cancel
-                        , YieldContext yield)
+std::expected<bool, sys::error_code>
+Client::serve_local( const PeerCacheRequest& req
+                   , GenericStream& sink
+                   , metrics::Client& metrics
+                   , Async yield)
 {
-    return _impl->serve_local(req, sink, metrics, cancel, yield);
+    Cancel cancel = yield.get_cancel();
+    YieldContext ouinet_yield(yield.asio_yield(), yield.log_path());
+    sys::error_code ec;
+    bool keep_alive = _impl->serve_local(req, sink, metrics, cancel, ouinet_yield[ec]);
+    if (cancel || ec == asio::error::operation_aborted)
+        throw Async::Cancelled();
+    if (ec) return std::unexpected(ec);
+    return keep_alive;
 }
 
 std::size_t Client::local_size( Cancel cancel

@@ -10,25 +10,27 @@ namespace ouiservice {
 // Wraps HTTP CONNECT proxy over an existing service.
 class ConnectProxyOuiServiceClient : public OuiServiceImplementationClient
 {
-    public:
+public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationClient>;
 
-    public:
+public:
     ConnectProxyOuiServiceClient(BaseServicePtr base_):
         _base(std::move(base_))
     {};
 
-    void start(asio::yield_context yield) override {
-        _base->start(yield);
+    [[nodiscard]]
+    sys::error_code start(Async yield) override {
+        return _base->start(yield);
     }
 
     void stop() override {
         _base->stop();
     }
 
-    GenericStream connect(asio::yield_context, Cancel&) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async) override;
 
-    private:
+private:
     BaseServicePtr _base;
 };
 

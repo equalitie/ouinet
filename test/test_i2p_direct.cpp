@@ -16,6 +16,7 @@
 #include <async_sleep.h>
 #include <util/async_generator.h>
 #include <util/wait_condition.h>
+#include "util/unwrap.h"
 #include <ouiservice/i2p/direct/service.h>
 #include "task.h"
 
@@ -86,13 +87,13 @@ void run_server_and_client(asio::io_context& ctx, ServerJob server_job, ClientJo
 
             // Server
             asio::spawn(yield.get_executor(), [&, lock = server_finished.lock()] (asio::yield_context yield) mutable {
-                    server_job(yield);
+                    server_job(Async(yield, Cancel(), util::LogPath("server")));
                 },
                 [] (auto e) { handle_exception("server", e); });
 
             // Client
             asio::spawn(yield.get_executor(), [&, lock = client_finished.lock()] (asio::yield_context yield) mutable {
-                    client_job(yield);
+                    client_job(Async(yield, Cancel(), util::LogPath("client")));
                 },
                 [] (auto e) { handle_exception("client", e); });
 
@@ -136,51 +137,38 @@ BOOST_AUTO_TEST_CASE(test_connect_and_exchage) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
+        [shared, server_ready_lock = shared->server_ready.lock()] (Async yield) mutable {
             auto server = shared->service->build_server("i2p-private-key");
 
             shared->server_ep = server->public_identity();
 
-            sys::error_code ec;
-
             BOOST_TEST_MESSAGE("Server starts listening");
-            server->start_listen(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
+            unwrap(server->start_listen(yield));
 
             server_ready_lock.release();
 
             BOOST_TEST_MESSAGE("Server accepting");
-            GenericStream conn = server->accept_without_handshake(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server accept: " << ec.message());
+            GenericStream conn = unwrap(server->accept_without_handshake(yield));
 
             BOOST_TEST_MESSAGE("Server writing hello message");
-            asio::async_write(conn, asio::buffer(hello_message), yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server write: " << ec.message());
+            unwrap(asio::async_write(conn, asio::buffer(hello_message), yield));
         },
         // Client
-        [shared] (asio::yield_context yield) {
+        [shared] (Async yield) {
             BOOST_TEST_MESSAGE("Await server_ready (this may take a while)");
-            shared->server_ready.wait(yield);
-            BOOST_TEST_MESSAGE("Server is ready");
+            unwrap(shared->server_ready.wait(yield));
 
             auto client = shared->service->build_client(*shared->server_ep);
 
-            sys::error_code ec;
-
             BOOST_TEST_MESSAGE("Client starting");
-            client->start(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, ec.message());
-
-            Cancel cancel;
+            unwrap(client->start(yield));
 
             BOOST_TEST_MESSAGE("Client connecting");
-            auto conn = client->connect_without_handshake(yield[ec], cancel);
-            BOOST_TEST_REQUIRE(!ec, "Client connect: " << ec.message());
+            auto conn = unwrap(client->connect_without_handshake(yield));
 
             BOOST_TEST_MESSAGE("Client reading hello message");
             std::string buffer(hello_message.size(), 'X');
-            asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Client read: " << ec.message());
+            unwrap(asio::async_read(conn, asio::buffer(buffer), yield));
 
             BOOST_REQUIRE_EQUAL(buffer, hello_message);
         });
@@ -207,41 +195,33 @@ BOOST_AUTO_TEST_CASE(test_connect_with_handshake) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
+        [shared, server_ready_lock = shared->server_ready.lock()] (Async yield) mutable {
             BOOST_TEST_MESSAGE("Server spawned");
             auto server = shared->service->build_server("i2p-private-key");
 
             shared->server_ep = server->public_identity();
 
-            sys::error_code ec;
-
             BOOST_TEST_MESSAGE("Server starts listening");
-            server->start_listen(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
+            unwrap(server->start_listen(yield));
 
             server_ready_lock.release();
 
-            server->accept(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server accept with retry: " << ec.message());
+            unwrap(server->accept(yield));
         },
         // Client
-        [shared] (asio::yield_context yield) {
+        [shared] (Async yield) {
             BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
-            shared->server_ready.wait(yield);
-            BOOST_TEST_MESSAGE("Server is ready");
+            unwrap(shared->server_ready.wait(yield));
 
             auto client = shared->service->build_client(*shared->server_ep);
 
-            sys::error_code ec;
 
             BOOST_TEST_MESSAGE("Client starting");
-            client->start(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, ec.message());
+            unwrap(client->start(yield));
 
             BOOST_TEST_MESSAGE("Client connecting");
             Cancel cancel;
-            client->connect(yield[ec], cancel);
-            BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+            unwrap(client->connect(yield));
         });
 }
 
@@ -296,22 +276,18 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
+        [shared, server_ready_lock = shared->server_ready.lock()] (Async yield) mutable {
             BOOST_TEST_MESSAGE("Server spawned");
             auto server = shared->service->build_server("i2p-private-key");
 
             shared->server_ep = server->public_identity();
 
-            sys::error_code ec;
-
             BOOST_TEST_MESSAGE("Server starts listening");
-            server->start_listen(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
+            unwrap(server->start_listen(yield));
 
             server_ready_lock.release();
 
-            auto conn = server->accept(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server accept with retries: " << ec.message());
+            auto conn = unwrap(server->accept(yield));
 
             std::vector<unsigned char> buffer(shared->buffer_size);
 
@@ -319,8 +295,7 @@ BOOST_AUTO_TEST_CASE(test_speed) {
                 if (i % 512 == 0 && i != 0) {
                     BOOST_TEST_MESSAGE("Server received " << i << " out of " << shared->message_count << " messages so far");
                 }
-                asio::async_read(conn, asio::buffer(buffer), yield[ec]);
-                BOOST_TEST_REQUIRE(!ec, "Server read: " << ec.message());
+                unwrap(asio::async_read(conn, asio::buffer(buffer), yield));
                 assert(!shared->sent_messages.empty());
 
                 auto expected = std::move(shared->sent_messages.front());
@@ -338,31 +313,25 @@ BOOST_AUTO_TEST_CASE(test_speed) {
             std::cout << "Which is about " << byte_units(bytes / elapsed_s) << "/s\n";
         },
         // Client
-        [shared] (asio::yield_context yield) {
+        [shared] (Async yield) {
             BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
-            shared->server_ready.wait(yield);
+            unwrap(shared->server_ready.wait(yield));
             BOOST_TEST_MESSAGE("Server is ready");
 
             //RetryingClient client{shared->service};
             auto client = shared->service->build_client(*shared->server_ep);
 
-            sys::error_code ec;
-
             BOOST_TEST_MESSAGE("Client starting");
-            client->start(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, ec.message());
+            unwrap(client->start(yield));
 
             BOOST_TEST_MESSAGE("Client connecting");
-            Cancel cancel;
-            auto conn = client->connect(yield[ec], cancel);
-            BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+            auto conn = unwrap(client->connect(yield));
 
             shared->send_started = steady_clock::now();
 
             for (uint32_t i = 0; i < shared->message_count; i++) {
                 shared->sent_messages.push(generate_random_bytes(shared->buffer_size));
-                asio::async_write(conn, asio::buffer(shared->sent_messages.back()), yield[ec]);
-                BOOST_TEST_REQUIRE(!ec, "Client sending buffer #" << i << ": " << ec.message());
+                unwrap(asio::async_write(conn, asio::buffer(shared->sent_messages.back()), yield));
             }
         });
 
@@ -392,49 +361,40 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
 
     run_server_and_client(ctx,
         // Server
-        [shared, server_ready_lock = shared->server_ready.lock()] (asio::yield_context yield) mutable {
+        [shared, server_ready_lock = shared->server_ready.lock()] (Async yield) mutable {
             BOOST_TEST_MESSAGE("Server spawned");
             auto server = shared->service->build_server("i2p-private-key");
 
             shared->server_ep = server->public_identity();
 
-            sys::error_code ec;
-
             auto cancelled = shared->cancel.connect([&] { server->stop_listen(); });
 
             BOOST_TEST_MESSAGE("Server starts listening");
-            server->start_listen(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server start_listen: " << ec.message());
+            unwrap(server->start_listen(yield));
 
             server_ready_lock.release();
 
-            auto conn0 = server->accept(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, "Server accept #0 with retries: " << ec.message());
+            auto conn0 = unwrap(server->accept(yield));
 
             for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
-                auto conn = server->accept(yield[ec]);
-                BOOST_TEST_REQUIRE(!ec, "Server accept #" << (i+1) << ": " << ec.message());
+                auto conn = unwrap(server->accept(yield));
             }
         },
         // Client
-        [shared] (asio::yield_context yield) {
+        [shared] (Async yield) {
             BOOST_TEST_MESSAGE("Client awaits server_ready (this may take a while)");
-            shared->server_ready.wait(yield);
+            unwrap(shared->server_ready.wait(yield));
             BOOST_TEST_MESSAGE("Server is ready");
 
             auto client = shared->service->build_client(*shared->server_ep);
 
-            sys::error_code ec;
-
             BOOST_TEST_MESSAGE("Client starting");
-            client->start(yield[ec]);
-            BOOST_TEST_REQUIRE(!ec, ec.message());
+            unwrap(client->start(yield));
 
             steady_clock::time_point conn0_start = steady_clock::now();
 
             BOOST_TEST_MESSAGE("Client connecting");
-            auto conn0 = client->connect(yield[ec], shared->cancel);
-            BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+            auto conn0 = unwrap(client->connect(yield));
 
             steady_clock::time_point conn0_end = steady_clock::now();
 
@@ -446,8 +406,7 @@ BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
             for (unsigned i = 0; i < shared->subsequent_conn_count; i++) {
 
                 steady_clock::time_point conn_start = steady_clock::now();
-                auto conn = client->connect(yield[ec], shared->cancel);
-                BOOST_TEST_REQUIRE(!ec, "Client connect with retries: " << ec.message());
+                auto conn = unwrap(client->connect(yield));
                 steady_clock::time_point conn_end = steady_clock::now();
 
                 auto duration_s = as_seconds(conn_end - conn_start);

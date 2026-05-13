@@ -5,10 +5,12 @@
 
 namespace ouinet {
     class GenericStream;
+    class Async;
 }
 
 namespace ouinet::i2p_direct {
 
-void perform_handshake(GenericStream& conn, Cancel& cancel, asio::yield_context yield);
+[[nodiscard]]
+sys::error_code perform_handshake(GenericStream&, Async);
 
 } // namespaces

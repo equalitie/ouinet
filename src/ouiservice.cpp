@@ -3,14 +3,14 @@
 #include <boost/asio.hpp>
 #include "namespaces.h"
 
-#include "util/condition_variable.h"
-#include "util/success_condition.h"
+#include "util/wait_condition.h"
 #include "util/str.h"
+#include "util/async.h"
 #include "task.h"
 #include "async_sleep.h"
 
+namespace ouinet {
 using namespace std;
-using namespace ouinet;
 
 //--------------------------------------------------------------------
 // OuiServiceServer
@@ -26,60 +26,52 @@ void OuiServiceServer::add(std::unique_ptr<OuiServiceImplementationServer> imple
     _implementations.push_back(std::move(implementation));
 }
 
-void OuiServiceServer::start_listen(asio::yield_context yield)
+sys::error_code OuiServiceServer::start_listen(Async yield)
 {
     using namespace std::chrono_literals;
 
-    SuccessCondition success_condition(_ex);
+    bool success = false;
+    WaitCondition wc(_ex);
+    auto lock = std::make_shared<WaitCondition::Lock>(wc.lock());
 
     for (auto& implementation : _implementations) {
-        task::spawn_detached(_ex, [
+        yield.spawn(_stop_listen, [
             this,
+            &success,
             implementation = implementation.get(),
-            lock = success_condition.lock()
-        ] (asio::yield_context yield) mutable {
+            lock
+        ] (Async yield) mutable {
             sys::error_code ec;
 
             auto slot_connection = _stop_listen.connect([implementation] () {
                 implementation->stop_listen();
             });
 
-            implementation->start_listen(yield[ec]);
-
+            ec = implementation->start_listen(yield);
             if (ec) return;
 
-            lock.release(true);
+            success = true;
+            lock->release();
 
             while (!_stop_listen) {
-                GenericStream connection = implementation->accept(yield[ec]);
+                auto connection = implementation->accept(yield);
 
-                if (ec == asio::error::operation_aborted) {
-                    break;
-                }
-
-                if (ec) {
-                    // Retry after a short while to avoid CPU hogging
-                    async_sleep(1s, _stop_listen, yield);
+                if (!connection.has_value()) {
+                    async_sleep(1s, yield);
                     ec = sys::error_code();
                     continue;
                 }
 
-                if (_stop_listen) {
-                    connection.close();
-                    break;
-                }
-
-                _connection_queue.push_back(std::move(connection));
+                _connection_queue.push_back(std::move(*connection));
                 _connection_available.notify();
             }
         });
     }
 
-    bool success = success_condition.wait_for_success(yield);
+    lock.reset();
+    wc.wait(yield);
 
-    if (!success) {
-        or_throw(yield, asio::error::network_down);
-    }
+    return success ? sys::error_code() : asio::error::network_down;
 }
 
 void OuiServiceServer::stop_listen()
@@ -92,14 +84,15 @@ void OuiServiceServer::stop_listen()
     _connection_available.notify();
 }
 
-GenericStream OuiServiceServer::accept(asio::yield_context yield)
+std::expected<GenericStream, sys::error_code>
+OuiServiceServer::accept(Async yield)
 {
     if (_connection_queue.empty()) {
         _connection_available.wait(yield);
     }
 
     if (_connection_queue.empty()) {
-        return or_throw<GenericStream>(yield, asio::error::operation_aborted);
+        return std::unexpected(asio::error::operation_aborted);
     }
 
     GenericStream connection = std::move(_connection_queue.front());
@@ -135,7 +128,7 @@ void OuiServiceClient::add( Endpoint endpoint
     _implementation = std::move(implementation);
 }
 
-void OuiServiceClient::start(asio::yield_context yield)
+sys::error_code OuiServiceClient::start(Async yield)
 {
     assert(_implementation);
 
@@ -147,18 +140,21 @@ void OuiServiceClient::start(asio::yield_context yield)
 
     do {
         impl = _implementation;
-        _implementation->start(yield[ec]);
+        ec = _implementation->start(yield);
     }
     while (_implementation && impl != _implementation);
 
-    if (ec) return or_throw(yield, ec);
+    if (ec) return ec;
 
     _started = true;
     _started_condition.notify();
+
+    return {};
 }
 
 void OuiServiceClient::stop()
 {
+    _cancel();
     if (!_implementation) return;
 
     _started = false;
@@ -166,32 +162,43 @@ void OuiServiceClient::stop()
     _started_condition.notify();
 }
 
-OuiServiceClient::ConnectInfo
-OuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
+OuiServiceClient::~OuiServiceClient()
 {
+    stop();
+}
+
+std::expected<OuiServiceClient::ConnectInfo, sys::error_code>
+OuiServiceClient::connect(Async yield)
+{
+    auto slot = _cancel.connect([&] { yield.cancel(); });
+
     namespace err = asio::error;
 
     if (!_implementation) {
-        return or_throw<ConnectInfo>(yield, err::operation_not_supported);
+        return std::unexpected(err::operation_not_supported);
     }
 
     if (!_started) {
         _started_condition.wait(yield);
         if (!_started) {
-            return or_throw<ConnectInfo>(yield, err::operation_aborted);
+            return std::unexpected(err::operation_aborted);
         }
     }
 
-    GenericStream con;
-    sys::error_code ec;
+    std::expected<GenericStream, sys::error_code> con;
     decltype(_implementation) impl;
 
     do {
-        ec = sys::error_code();
         impl = _implementation;
-        con = _implementation->connect(yield[ec], cancel);
+        con = _implementation->connect(yield);
     }
     while (_implementation && impl != _implementation);
 
-    return or_throw<ConnectInfo>(yield, ec, {move(con), *_endpoint});
+    if (!con.has_value()) {
+        return std::unexpected(con.error());
+    }
+
+    return ConnectInfo{move(*con), *_endpoint};
 }
+
+} // namespace
