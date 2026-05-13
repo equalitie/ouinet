@@ -140,6 +140,7 @@ option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
 option(UTP_DEBUG_LOGGING               "" OFF)
 add_subdirectory(./modules/asio-utp)
+target_link_libraries(asio_utp PUBLIC ouinet_asio)
 
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
@@ -176,8 +177,9 @@ add_library(ouinet_common_public
     "./src/logger.cpp"
     "./src/util/log_path.cpp"
 )
-target_link_libraries(ouinet_common_public PUBLIC Boost::filesystem)
+target_link_libraries(ouinet_common_public PUBLIC ouinet_asio Boost::filesystem)
 target_compile_options(ouinet_common_public PUBLIC -std=c++23)
+target_compile_definitions(ouinet_common_public PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
 
 ################################################################################
 
