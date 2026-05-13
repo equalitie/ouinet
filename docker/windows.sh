@@ -44,14 +44,19 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-echo "Using host \"$host\""
+image_name=$(choose_docker_image_name)
+container_name=$(choose_docker_container_name)
+
+echo "Host:           $host"
+echo "Target OS:      win"
+echo "Image name:     $image_name"
+echo "Container name: $container_name"
+echo "Clean:          $([ "$clean" = y ] && echo yes || echo no)"
+echo ""
 
 if [ -z "$host_core_count" ]; then
     host_core_count=$(ssh $host 'cmd /s /c echo %NUMBER_OF_PROCESSORS%' | tr -d '[:space:]')
 fi
-
-image_name=$(choose_docker_image_name)
-container_name=$(choose_docker_container_name)
 
 work_dir=/opt
 ouinet_dir=$work_dir/ouinet

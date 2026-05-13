@@ -91,6 +91,7 @@ echo "Host:           $host"
 echo "Target OS:      ${target_oss[*]}"
 echo "Image name:     $image_name"
 echo "Container name: $container_name"
+echo "Clean:          $([ "$clean" = y ] && echo yes || echo no)"
 echo ""
 
 function build_image (
@@ -307,6 +308,10 @@ for target_os in ${target_oss[@]}; do
         exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
         exe -w $build_dir cmake --build . -j $(exe nproc)
     else
+        if [ "$clean" = y ]; then
+            exe -w $ouinet_dir git clean -dfX
+        fi
+
         env=(
             WITH_EXPERIMENTAL=$([ "$with_experimental" == y ] && echo ON || echo OFF)
         )
