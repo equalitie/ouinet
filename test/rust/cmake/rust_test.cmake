@@ -6,7 +6,7 @@ function(add_rust_test name)
 
     cmake_parse_arguments(arg "${options}" "${single_value_args}" "${multi_value_args}" ${ARGN})
 
-    # TODO: consider makind this an argument
+    # TODO: consider making this an argument
     set(output_dir "${CMAKE_CURRENT_BINARY_DIR}")
 
     set(manifest_path "${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml")

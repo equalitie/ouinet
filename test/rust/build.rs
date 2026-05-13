@@ -32,5 +32,6 @@ fn main() {
     println!("cargo:rerun-if-env-changed=INCLUDE_DIRS");
     println!("cargo:rerun-if-env-changed=LIB_DIRS");
     println!("cargo:rerun-if-env-changed=LIBS");
-    println!("cargo:rerun-if-changed=cxx/wrappers.hpp");
+    println!("cargo:rerun-if-changed=cxx/bridge.hpp");
+    println!("cargo:rerun-if-changed=cxx/bridge.cpp");
 }
