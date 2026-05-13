@@ -9,13 +9,16 @@
 
 namespace ouinet {
 namespace test {
-    using IoContext = boost::asio::io_context;
+    using Context = boost::asio::io_context;
 
-    std::unique_ptr<IoContext> new_io_context();
+    std::unique_ptr<Context> new_context();
 
-    using Client = ::ouinet::Client;
+    using ::ouinet::Client;
 
-    std::unique_ptr<Client> new_client(IoContext& ctx, rust::Slice<const rust::Str> options);
-
+    std::unique_ptr<Client> new_client(
+        Context& ctx,
+        rust::Slice<const char* const> argv,
+        rust::Str log_tag
+    );
 } // namespace test
 } // namespace ouinet

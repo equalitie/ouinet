@@ -1,8 +1,7 @@
 # Parse JSON formatted output of cargo build from the file at `CARGO_OUTPUT`, extract all
 # executables from it and copy them to the `OUTPUT_DIR`, stripping the hash from their filenames.
 
-file(READ "${CARGO_OUTPUT}" content)
-string(REPLACE "\n" ";" lines "${content}")
+file(STRINGS "${CARGO_OUTPUT}" lines)
 
 foreach(line IN LISTS lines)
     if(line STREQUAL "")

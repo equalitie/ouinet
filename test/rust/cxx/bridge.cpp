@@ -1,17 +1,24 @@
 #include "bridge.hpp"
+#include "ouinet-test-rs/src/lib.rs.h"
+#include "util/log_path.h"
+
+namespace util = ouinet::util;
 
 namespace ouinet {
 namespace test {
-    std::unique_ptr<IoContext> new_io_context() {
-        return std::make_unique<IoContext>();
+    std::unique_ptr<Context> new_context() {
+        return std::make_unique<Context>();
     }
 
-    std::unique_ptr<Client> new_client(IoContext& ctx, rust::Slice<const rust::Str> options) {
-        // TODO
-
+    std::unique_ptr<Client> new_client(
+        Context& ctx,
+        rust::Slice<const char* const> argv,
+        rust::Str log_tag
+    ) {
         return std::make_unique<Client>(
             ctx,
-            ClientConfig{}
+            ClientConfig(argv.size(), const_cast<const char**>(argv.data())),
+            util::LogPath(static_cast<std::string>(log_tag))
         );
     }
 
