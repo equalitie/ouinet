@@ -55,6 +55,8 @@
 #include "ouiservice.h"
 #ifdef __EXPERIMENTAL__
 #  include "ouiservice/i2p.h"
+#  include "ouiservice/i2p/session.h"
+#  include "ouiservice/i2p/util/create_i2p_session.h"
 #endif // ifdef __EXPERIMENTAL__
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
@@ -69,6 +71,7 @@
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
 #include "util/async_job.h"
+#include "util/promise.h"
 #include "upnp_updater.h"
 #include "task.h"
 #include "util/executor.h"
@@ -113,6 +116,12 @@ class Client::State : public enable_shared_from_this<Client::State> {
         Created, Failed, Started, Stopped
     };
 
+    using I2pSessionPromise = Promise<
+            std::expected<
+                std::shared_ptr<I2pSession>,
+                I2pSession::Error::Create
+            >
+        >;
 public:
     State( asio::io_context& ctx
          , ClientConfig cfg
@@ -134,9 +143,6 @@ public:
         , _bt_dht_builder(std::move(dht_builder))
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
-#ifdef __EXPERIMENTAL__
-        , _i2p_cache_server_wc(_ctx)
-#endif
         , _metrics(_config.metrics()
                     ? metrics::Client( _config.repo_root() / "metrics"
                                      , std::move(_config.metrics()->encryption_key)
@@ -485,7 +491,7 @@ private:
 
     cache::Client* get_cache() const { return _cache.get(); }
 
-    void serve_utp_request(GenericStream, YieldContext);
+    void serve_peer_request(GenericStream, Async);
 
     static void setup_upnp(
         AsioExecutor executor,
@@ -508,6 +514,29 @@ private:
         LOG_DEBUG("UPnP: Updater is starting with ",
                  "local port ", local_ep.port(), " and external port ", ext_port);
         p = make_unique<UPnPUpdater>(executor, ext_port, local_ep.port());
+    }
+
+    I2pSessionPromise::Future get_or_create_i2p_session_future(asio::any_io_executor exec) {
+        if (!_i2p_session_future) {
+            _i2p_session_future = create_i2p_session(_shutdown_signal, _log_path, exec);
+        }
+        return *_i2p_session_future;
+    }
+
+    std::shared_ptr<I2pSession> get_or_create_i2p_session(Async yield) {
+        auto future = get_or_create_i2p_session_future(yield.get_executor());
+
+        auto future_result = _i2p_session_future->wait(yield);
+        if (!future_result.has_value()) {
+            LOG_ERROR("Failed to create I2pSession: broken promise");
+            return nullptr;
+        }
+        auto& create_result = future_result->get();
+        if (!create_result.has_value()) {
+            LOG_ERROR("Failed to create I2pSession: ", create_result.error());
+            return nullptr;
+        }
+        return *create_result;
     }
 
     void idempotent_start_accepting_on_utp(asio::yield_context yield) {
@@ -547,76 +576,43 @@ private:
                 }
                 task::spawn_detached(_ctx, [this, con = move(con)]
                                    (asio::yield_context yield) mutable {
-                    sys::error_code ec;
                     // Do not log other users' addresses unless debugging.
-                    std::string tag = (logger.get_threshold() <= DEBUG)
+                    auto log_path = _log_path
+                        .tag((logger.get_threshold() <= DEBUG)
                              ? "uTPAccept(" + con.remote_endpoint() + ")"
-                             : "uTPAccept";
+                             : "uTPAccept")
+                        .tag("serve_utp_req");
 
-                    YieldContext y(yield, _log_path.tag(std::move(tag)));
-                    serve_utp_request(move(con), y[ec].tag("serve_utp_req"));
-                    _YDEBUG(y, "Done; ec=", ec);
+                    Async y(yield, _shutdown_signal, std::move(log_path));
+                    serve_peer_request(move(con), y);
                 });
             }
         });
     }
 
-#ifdef __EXPERIMENTAL__
-    void idempotent_start_accepting_i2p(asio::yield_context yield) {
-        if (_i2p_cache_server) return;
+    void start_accepting_i2p(Async yield) {
+        auto session = get_or_create_i2p_session(yield);
+        if (!session) return;
 
-        sys::error_code ec;
-        _i2p_cache_server_wc.wait(_shutdown_signal, yield[ec]);
-        return_or_throw_on_error(yield, _shutdown_signal, ec);
-        if (_i2p_cache_server) return;
-        auto lock = _i2p_cache_server_wc.lock();
-
-        //should not callI2P service should start before
-        assert(_i2p_service);
-
-        // We need to start the server whiche responds to requests corresponding to
-        // announces and gives its id to the announcer
-        // so we mut  initiate the announcer client on the same i2p id.
-        // That is a Zzzot requirement otherwise our announces get rejected
-        _i2p_cache_server = _i2p_service->build_server("bep3-server-key");
-
-        //TODO: How come there is no cancel here?
-        _i2p_cache_server->start_listen(yield[ec]);
-        if (ec) {
-            LOG_ERROR("Failed to start listening on I2P cache server; ec=", ec);
-            _i2p_cache_server.reset();
-            return or_throw(yield, ec);
+        if (auto tracker_addr = _config.i2p_bep3_tracker()) {
+            _cache->enable_i2p(session, *tracker_addr);
         }
 
-        task::spawn_detached(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield) mutable {
-            auto slot = c.connect([&] () mutable { _i2p_cache_server = nullptr; });
-
-            while (!c) {
-                sys::error_code ec;
-                auto con = _i2p_cache_server->accept(yield[ec]);
-                if (c) return;
-                if (ec == asio::error::operation_aborted) return;
-                if (ec) {
-                    LOG_WARN("I2P cache: Failure to accept; ec=", ec);
-                    async_sleep(200ms, c, yield);
+        yield.spawn([this, session] (Async yield) mutable {
+            while (true) {
+                auto con = session->accept(yield);
+                if (!con.has_value()) {
+                    LOG_WARN("I2P cache: Failure to accept: ", con.error(), " is_open:", session->is_open());
+                    async_sleep(200ms, yield);
                     continue;
                 }
-                LOG_INFO("I2P cache: Accepted connection from ", con.remote_endpoint());
-                task::spawn_detached(_ctx, [this, con = move(con)]
-                                   (asio::yield_context yield) mutable {
-                    sys::error_code ec;
-                    std::string tag = (logger.get_threshold() <= DEBUG)
-                             ? "I2PAccept(" + con.remote_endpoint() + ")"
-                             : "I2PAccept";
-
-                    YieldContext y(yield, _log_path.tag(std::move(tag)));
-                    serve_utp_request(move(con), y[ec].tag("serve_i2p_req"));
-                    _YDEBUG(y, "Done; ec=", ec);
+                LOG_INFO("Accepted I2P connection");
+                yield.spawn([this, con = move(*con)] (Async yield) mutable {
+                    serve_peer_request(move(con), yield.tag("serve_i2p_req"));
                 });
             }
         });
     }
-#endif // __EXPERIMENTAL__
 
 private:
     // The newest protocol version number seen in a trusted exchange
@@ -658,11 +654,6 @@ private:
     unique_ptr<ouiservice::MultiUtpServer> _multi_utp_server;
     WaitCondition _multi_utp_server_wc;
 
-#ifdef __EXPERIMENTAL__
-    unique_ptr<I2pServer> _i2p_cache_server;
-    WaitCondition _i2p_cache_server_wc;
-#endif // __EXPERIMENTAL__
-
     shared_ptr<ouiservice::Bep5Client> _bep5_client;
 
     shared_ptr<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>> _upnps_ptr;
@@ -675,32 +666,31 @@ private:
     std::optional<ouisync_service::Ouisync> _ouisync;
     std::string _frontend_unix_socket_endpoint;
 
-#ifdef __EXPERIMENTAL__
-    //this could be start either because of cache or injector
-    shared_ptr<I2pService> _i2p_service;
-#endif // ifdef __EXPERIMENTAL__
+    // This could be created either because of cache or injector
+    std::optional<I2pSessionPromise::Future> _i2p_session_future;
 
     shared_ptr<dns::Resolver> _dns_resolver;
 };
 
 //------------------------------------------------------------------------------
-template<class Resp>
+template<class Resp, class Token>
 static
 void handle_http_error( GenericStream& con
                       , Resp& res
-                      , YieldContext yield)
+                      , Token yield)
 {
-    _YDEBUG(yield, "=== Sending back response ===");
-    _YDEBUG(yield, res);
+    LOG_DEBUG(yield, " === Sending back response ===");
+    LOG_DEBUG(yield, " ", res);
 
     util::http_reply(con, res, yield);
 }
 
+template<class Token>
 static
 void handle_bad_request( GenericStream& con
                        , bool keep_alive
                        , const string& message
-                       , YieldContext yield)
+                       , Token yield)
 {
     auto res = util::http_error( keep_alive, http::status::bad_request
                                , OUINET_CLIENT_SERVER_STRING
@@ -710,7 +700,7 @@ void handle_bad_request( GenericStream& con
 
 //------------------------------------------------------------------------------
 void
-Client::State::serve_utp_request(GenericStream con, YieldContext yield)
+Client::State::serve_peer_request(GenericStream con, Async yield)
 {
     assert(_cache);
     if (!_cache) {
@@ -740,23 +730,26 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
 
             auto wd = watch_dog(_ctx, rq_read_timeout, [&] { con.close(); });
 
-            req = PeerRequest::async_read(con, yield.tag("read_req")[ec]);
-
-            fail_on_error_or_timeout(yield, cancel, ec, wd);
+            auto req_r = PeerRequest::async_read(con, yield.tag("read_req"));
+            if (!req_r.has_value()) return;
+            req = std::move(*req_r);
         }
 
         if (auto* cache_req = std::get_if<PeerCacheRequest>(&req)) {
-            auto keep_alive = _cache->serve_local(
-                    *cache_req,
-                    con,
-                    _metrics,
-                    cancel,
-                    yield[ec].tag("serve_local"));
+            auto keep_alive = yield.run_deprecated_api([&] (auto c, auto y) {
+                    return _cache->serve_local(
+                        *cache_req,
+                        con,
+                        _metrics,
+                        c,
+                        y[ec].tag("serve_local"));
+                    }
+                );
 
             if (keep_alive) {
                 continue;  // possible error is recoverable
             }
-            return or_throw(yield, ec);  // done or unrecoverable error
+            return;
         }
 
         auto connect_req = std::get_if<PeerConnectRequest>(&req);
@@ -768,7 +761,7 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
                                      , cyield.tag("invalid request"));
         }
 
-        _YDEBUG(cyield, "Client: Received uTP/CONNECT request");
+        LOG_DEBUG(cyield, " Client: Received uTP/CONNECT request");
 
         // Connect to the injector and tunnel the transaction through it
 
@@ -777,12 +770,12 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
                                      , cyield.tag("handle_no_injectors_error"));
         }
 
-        auto inj = _bep5_client->connect( cyield[ec].tag("connect_to_injector"), cancel
+        auto inj = cyield.run_deprecated_api([&] (auto c, auto y) {
+                return _bep5_client->connect( y[ec].tag("connect_to_injector"), c
                                         , false, ouiservice::Bep5Client::injectors);
+                });
 
-        ec = compute_error_code(ec, cancel);
-        if (ec == asio::error::operation_aborted) return or_throw(cyield, ec);
-        if (ec) {
+        if (!inj.has_value()) {
             return handle_bad_request( con, false, "Failed to connect to injector"
                                      , cyield.tag("handle_injector_unreachable"));
         }
@@ -792,29 +785,29 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
         http::response<http::empty_body> res{http::status::ok, 11};
         res.prepare_payload();
 
-        _YDEBUG(cyield, "BEGIN");
+        LOG_DEBUG(cyield, " BEGIN");
 
         // Remember to always set `ec` before return in case of error,
         // or the wrong error code will be reported.
         size_t fwd_bytes_c2i = 0, fwd_bytes_i2c = 0;
         auto log_result = defer([&] {
-            _YDEBUG(cyield, "END; ec=", ec, " fwd_bytes_c2i=", fwd_bytes_c2i, " fwd_bytes_i2c=", fwd_bytes_i2c);
+            LOG_DEBUG(cyield, " END; ec=", ec, " fwd_bytes_c2i=", fwd_bytes_c2i, " fwd_bytes_i2c=", fwd_bytes_i2c);
         });
 
-        util::http_reply(con, res, cyield[ec].tag("write_res"));
-        return_or_throw_on_error(cyield, cancel, ec);
+        auto reply_r = cyield.run_deprecated_api([&] (auto /*c*/, auto y) {
+                return util::http_reply(con, res, y.tag("write_res"));
+            });
+        if (!reply_r.has_value()) return;
 
         // Forward the rest of data in both directions.
-        auto c2i_i2c =  full_duplex(
+        ec = full_duplex(
             move(con),
-            move(inj),
-            [&] (size_t byte_count) { _metrics.bridge_transfer_c2i(byte_count); },
-            [&] (size_t byte_count) { _metrics.bridge_transfer_i2c(byte_count); },
-            cancel,
-            cyield[ec].tag("full_duplex"));
+            move(*inj),
+            [&] (size_t byte_count) { fwd_bytes_c2i += byte_count; _metrics.bridge_transfer_c2i(byte_count); },
+            [&] (size_t byte_count) { fwd_bytes_i2c += byte_count; _metrics.bridge_transfer_i2c(byte_count); },
+            cyield.tag("full_duplex"));
 
-        std::tie(fwd_bytes_c2i, fwd_bytes_i2c) = c2i_i2c;
-        return or_throw(cyield, ec);
+        return;
     }
 }
 
@@ -2263,7 +2256,13 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    full_duplex(move(browser), move(origin), cancel, yield[ec].tag("full_duplex"));
+    full_duplex(
+            move(browser),
+            move(origin),
+            [&] (size_t) {},
+            [&] (size_t) {},
+            cancel,
+            yield[ec].tag("full_duplex"));
 
     return or_throw(yield, ec, true);
 }
@@ -2607,28 +2606,8 @@ void Client::State::setup_cache(YieldContext yield)
       fail_on_error("Failed to enable BT DHT in cache::Client");
     }
 #ifdef __EXPERIMENTAL__
-    //setup Bep3HTTPOverI2P cache
     else if (_config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P) {
-      //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
-      //with both services, we check if i2p ouiservice has already started
-      if (!_i2p_service) {
-        _i2p_service = make_shared<I2pService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
-      }
-
-      //TODO: This should ideally move out of cache type claus, Cache type only
-      //dictate how to announce the available seeder, the seeder should be available
-      //no matter its willingness is announced (similar to BEP5 cache).
-      idempotent_start_accepting_i2p(yield[ec]);
-      fail_on_error("Failed to start accepting on I2P for cache::Client");
-
-      assert(_i2p_cache_server && "I2P cache server must be running before enabling BEP3 announcer");
-      if (!_cache->enable_bep3_announcer(
-              *_i2p_cache_server,
-              *_config.i2p_bep3_tracker(),
-              _config.max_simultaneous_announcements())) {
-          ec = asio::error::invalid_argument;
-      }
-      fail_on_error("Failed to enable BEP3 announcer in cache::Client");
+        start_accepting_i2p(Async(yield, _shutdown_signal, _log_path.tag("accept")));
     }
 #endif // ifdef __EXPERIMENTAL__
 
@@ -3088,20 +3067,46 @@ void Client::State::setup_injector(asio::yield_context yield)
 
 #ifdef __EXPERIMENTAL__
     if (auto ep = injector_ep->get_if<I2pAddress>()) {
-      //because i2p ouiservice take care of anything i2p related (injector or cache) and starts the i2p daemon we dealing
-      //with both services, we check if i2p ouiservice has already started
-      if (!_i2p_service) {
-        _i2p_service = make_shared<I2pService>((_config.repo_root()/"i2p").string(), _ctx.get_executor(), _config.i2p_hops_per_tunnel());
-      }
+        struct Client : public ouinet::OuiServiceImplementationClient {
+            void start(asio::yield_context yield) override {}
+            void stop() override {
+                _cancel();
+            }
 
-      auto i2p_client = _i2p_service->build_client(*ep);
+            GenericStream
+            connect(asio::yield_context y, Signal<void()>& c) override {
+                Async yield(y, c, _log_path.tag("client_service"));
 
-      //TODO: should we uncomment this?
-      // if (!i2p_client->verify_endpoint()) {
-      //     return or_throw(yield, ec = asio::error::invalid_argument);
-      // }
+                auto future_result = _i2p_session_future.wait(yield);
 
-      client = std::move(i2p_client);
+                if (!future_result.has_value()) {
+                    return or_throw<GenericStream>(y, asio::error::fault);
+                }
+                auto& create_result = future_result->get();
+                if (!create_result.has_value()) {
+                    return or_throw<GenericStream>(y, asio::error::fault);
+                }
+                auto session = *create_result;
+                auto result = session->connect(_addr, yield);
+                if (!result.has_value()) {
+                    return or_throw<GenericStream>(y, result.error().code());
+                }
+                return std::move(*result);
+            }
+
+            Client(I2pAddress addr, I2pSessionPromise::Future i2p_session_future, Cancel cancel, util::LogPath log_path):
+                _addr(std::move(addr)),
+                _i2p_session_future(std::move(i2p_session_future)),
+                _cancel(std::move(cancel)),
+                _log_path(std::move(log_path))
+            {}
+
+            I2pAddress _addr;
+            I2pSessionPromise::Future _i2p_session_future;
+            Cancel _cancel;
+            util::LogPath _log_path;
+        };
+        client = std::make_unique<Client>(*ep, get_or_create_i2p_session_future(yield.get_executor()), _shutdown_signal, _log_path);
     }
     else
 #endif // ifdef __EXPERIMENTAL__

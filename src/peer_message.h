@@ -3,11 +3,13 @@
 #include <boost/beast/http/message.hpp>
 #include "generic_stream.h"
 #include "util/yield.h"
+#include "util/yield.h"
 #include "cache/resource_id.h"
 #include "http_util.h"
 
 namespace ouinet {
 
+class Async;
 // Peer wants to connect to the Injector using us as a Bridge
 class PeerConnectRequest {};
 
@@ -67,7 +69,8 @@ public:
     template<class M>
     PeerRequest(M m): Base(std::move(m)) {}
 
-    PeerRequest static async_read(GenericStream&, YieldContext yield);
+    std::expected<PeerRequest, sys::error_code>
+    static async_read(GenericStream&, Async yield);
 };
 
 enum class BlobType {

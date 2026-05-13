@@ -11,6 +11,7 @@
 #include "http_logger.h"
 #include "util/yield.h"
 #include "util/log_path.h"
+#include "util/promise.h"
 #include "injector_config.h"
 #include "bittorrent/mock_dht.h"
 #include "ouiservice/i2p/address.h"
@@ -61,17 +62,20 @@ public:
         return config().repo_root() / "tls-cert.pem";
     }
 
-    std::optional<I2pAddress> i2p_address() const {
-        return _i2p_address;
-    }
+    std::optional<I2pAddress> i2p_address(Async);
 
 private:
+    struct Inner;
+
     InjectorConfig _config;
     std::shared_ptr<dns::Resolver> _dns_resolver;
     Cancel _cancel;
     std::shared_ptr<bittorrent::DhtBase> _dht;
     std::unique_ptr<asio::ssl::context> _ssl_context;
     std::optional<I2pAddress> _i2p_address;
+
+    // TODO: Move all of the above inside `_inner` to use the pimpl pattern.
+    std::unique_ptr<Inner> _inner;
 };
 
 } // namespace ouinet

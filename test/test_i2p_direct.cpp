@@ -16,7 +16,7 @@
 #include <async_sleep.h>
 #include <util/async_generator.h>
 #include <util/wait_condition.h>
-#include <ouiservice/i2p.h>
+#include <ouiservice/i2p/direct/service.h>
 #include "task.h"
 
 #include <boost/accumulators/accumulators.hpp>
@@ -31,6 +31,8 @@ using namespace ouinet;
 using namespace chrono;
 using namespace chrono_literals;
 namespace test = boost::unit_test;
+
+using I2pService = i2p_direct::Service;
 
 const std::string hello_message = "hello";
 

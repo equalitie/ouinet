@@ -4,6 +4,7 @@
 #include "../util/log_path.h"
 #include "../logger.h"
 #include "../or_throw.h"
+#include "../logger.h"
 #include "../task.h"
 
 #include <boost/asio/spawn.hpp>

@@ -6,9 +6,6 @@
 #include "../response_reader.h"
 #include "../namespaces.h"
 #include "dht_lookup.h"
-#ifdef __EXPERIMENTAL__
-#include "bep3_tracker_lookup.h"
-#endif
 #include "hash_list.h"
 #include "../util/async_generator.h"
 #include "../util/log_path.h"
@@ -59,8 +56,8 @@ public:
                    , ResourceId
                    , CryptoStreamKey
                    , sign::PublicKey cache_pk
-                   , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
-                   , std::shared_ptr<I2pService> i2p_service
+                   , std::shared_ptr<I2pTrackerLookup>
+                   , std::shared_ptr<I2pSession> i2p_session
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , util::LogPath);
 #endif

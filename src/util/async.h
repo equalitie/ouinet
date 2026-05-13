@@ -4,6 +4,7 @@
 #include "../util/log_path.h"
 #include "signal.h"
 #include "yield.h"
+#include "../task.h"
 
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/async_result.hpp>

@@ -9,10 +9,10 @@
 #include "i2pd/libi2pd/Destination.h"
 
 namespace ouinet {
-    using I2pServer = i2p_direct::Server;
-    using I2pClient = i2p_direct::Client;
-    using I2pService = i2p_direct::Service;
-    using I2pClientDestination = i2p::client::ClientDestination;
+    //using I2pServer = i2p_direct::Server;
+    //using I2pClient = i2p_direct::Client;
+    //using I2pService = i2p_direct::Service;
+    //using I2pClientDestination = i2p::client::ClientDestination;
 }
 
 #else // ifdef __EXPERIMENTAL__

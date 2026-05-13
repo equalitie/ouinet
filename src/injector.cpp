@@ -34,6 +34,7 @@
 #include "ouiservice.h"
 #ifdef __EXPERIMENTAL__
 #  include "ouiservice/i2p.h"
+#  include "ouiservice/i2p/util/create_i2p_session.h"
 #endif // ifdef __EXPERIMENTAL__
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
@@ -74,6 +75,10 @@ using util::AsioExecutor;
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
+
+struct Injector::Inner {
+    std::optional<CreateI2pSessionPromise::Future> _i2p_session_future;
+};
 
 // TODO: Get rid of this
 static bool g_allow_private_targets = false;
@@ -290,8 +295,13 @@ void handle_connect_request( GenericStream client_c
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) =
-        full_duplex(move(client_c), move(origin_c), cancel, yield[ec].tag("full_duplex"));
+    full_duplex(
+            move(client_c),
+            move(origin_c),
+            [&] (size_t byte_count) { fwd_bytes_c2o += byte_count; },
+            [&] (size_t byte_count) { fwd_bytes_o2c += byte_count; },
+            cancel,
+            yield[ec].tag("full_duplex"));
 
     return or_throw(yield, ec);
 }
@@ -846,7 +856,8 @@ Injector::Injector(
         util::LogPath log_path,
         std::shared_ptr<bittorrent::MockDht> dht) :
     _config(std::move(config)),
-    _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
+    _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
+    _inner(std::make_unique<Inner>())
 {
     #ifndef __WIN32
     if (_config.open_file_limit()) {
@@ -956,18 +967,56 @@ Injector::Injector(
     proxy_server->add(make_unique<ouiservice::Bep5Server>
             (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
 
-#ifdef __EXPERIMENTAL__    
     if (_config.listen_on_i2p()) {
-        auto i2p_service = make_shared<I2pService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());
-        std::unique_ptr<I2pServer> i2p_server = i2p_service->build_server("i2p-private-key");
+        struct Server : public OuiServiceImplementationServer {
+            void start_listen(asio::yield_context yield) {}
 
-        _i2p_address = i2p_server->public_identity();
-        LOG_INFO("I2P public ID: ", *_i2p_address);
-        util::create_state_file(_config.repo_root()/"endpoint-i2p", _i2p_address->value);
+            void stop_listen() { _cancel(); }
+        
+            GenericStream accept(asio::yield_context y) override {
+                Async yield(y, _cancel, _log_path);
 
-        proxy_server->add(std::move(i2p_server));
+                auto future_result = _session_future.wait(yield);
+
+                if (!future_result.has_value()) {
+                    return or_throw<GenericStream>(y, asio::error::fault);
+                }
+                auto& create_result = future_result->get();
+                if (!create_result.has_value()) {
+                    return or_throw<GenericStream>(y, asio::error::fault);
+                }
+
+                auto session = *create_result;
+
+                auto result = session->accept(yield);
+
+                if (!result.has_value()) {
+                    LOG_WARN("Failed to accept I2P connection");
+                    return or_throw<GenericStream>(y, result.error().code());
+                }
+
+                return std::move(*result);
+            }
+
+            Server(CreateI2pSessionPromise::Future  session_future, Cancel cancel, util::LogPath log_path):
+                _session_future(std::move(session_future)),
+                _cancel(std::move(cancel)),
+                _log_path(std::move(log_path))
+            {}
+
+            CreateI2pSessionPromise::Future _session_future;
+            Cancel _cancel;
+            util::LogPath _log_path;
+        };
+
+        _inner->_i2p_session_future = create_i2p_session(_cancel, log_path, ex);
+
+        proxy_server->add(std::make_unique<Server>(
+            *_inner->_i2p_session_future,
+            _cancel,
+            log_path
+        ));
     }
-#endif // ifdef __EXPERIMENTAL__
 
     LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
@@ -993,6 +1042,24 @@ void Injector::stop() {
 
 Injector::~Injector() {
     stop();
+}
+
+std::optional<I2pAddress> Injector::i2p_address(Async yield) {
+    if (!_inner->_i2p_session_future) {
+        return {};
+    }
+
+    auto future_result = _inner->_i2p_session_future->wait(yield);
+
+    if (!future_result.has_value()) {
+        return {};
+    }
+    auto& create_result = future_result->get();
+    if (!create_result.has_value()) {
+        return {};
+    }
+
+    return (*create_result)->local_addr();
 }
 
 } // namespace ouinet

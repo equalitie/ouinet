@@ -4,6 +4,7 @@
 #include "namespaces.h"
 #include "util/wait_condition.h"
 #include "ouiservice/i2p/session.h"
+#include "ouiservice/i2p/address.h"
 #include "task.h"
 #include "util/async.h"
 #include "util/random.h"

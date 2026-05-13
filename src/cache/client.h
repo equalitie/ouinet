@@ -85,17 +85,9 @@ public:
     // false otherwise.
     bool enable_dht(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
-#ifdef __EXPERIMENTAL__
-    // Check if i2p is enabled and if so Setup the BEP3 announcer over I2P.
-    // The destination must come from an already-listening I2P server which responds
-    // to requests corresponding announces here.
-    // we need to know the destination to able to initiate the announcer client on
-    // the same i2p id. This is because Zzzot rejects announces whose ip= doesn't
-    // match the announcer's destination.
-    bool enable_bep3_announcer( I2pServer const&
-                              , I2pAddress tracker_id
-                              , size_t simultaneous_announcements);
-#endif // __EXPERIMENTAL__
+    // Returns true the first time the I2P is successfully enabled,
+    // false otherwise.
+    bool enable_i2p(std::shared_ptr<I2pSession>, I2pAddress tracker_addr);
 
     // This may add a response source header.
     Session load( const ResourceId&

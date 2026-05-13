@@ -14,8 +14,13 @@ namespace ouinet {
         using I2pClientDestination = i2p::client::ClientDestination;
     }
 
-    using I2pServer = i2p_direct::Server;
-    using I2pClient = i2p_direct::Client;
-    using I2pService = i2p_direct::Service;
-    using I2pClientDestination = i2p::client::ClientDestination;
+    //using I2pServer = i2p_direct::Server;
+    //using I2pClient = i2p_direct::Client;
+    //using I2pService = i2p_direct::Service;
+    //using I2pClientDestination = i2p::client::ClientDestination;
+
+    class I2pSession;
+    class I2pTracker;
+    class I2pTrackerLookup;
+    class I2pAnnouncer;
 }
