@@ -21,18 +21,12 @@ elseif (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
       list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
     elseif (${BOOST_VERSION} EQUAL 1.88.0)
       set(BOOST_VERSION_HASH 46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b)
+      list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-1_88_0.patch)
     endif ()
 
     set(BOOST_COROUTINE_BACKEND fiber)
     list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
-
-# These are not related to boost version, it fixes issues we started seeing
-# after Mingw upgrade. This however does not work with i2pd
-list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-decltype.patch)
-if(NOT WITH_EXPERIMENTAL)
-  list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-bad-executor-vtable.patch)
-endif()
 
 set(BOOST_COMPONENTS
     context
