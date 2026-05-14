@@ -282,7 +282,8 @@ public:
                                                       , _dns_resolver
                                                       , _config.udp_mux_rx_limit_in_bytes()
                                                       , _config.repo_root() / "dht"
-                                                      , _config.bt_bootstrap_extras());
+                                                      , _config.bt_bootstrap_extras()
+                                                      , !_config.bt_bootstrap_no_default());
         }
 
 

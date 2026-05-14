@@ -70,8 +70,10 @@ class DhtNode {
            , metrics::DhtNode
            , std::shared_ptr<dns::Resolver>
            , uint32_t mux_rx_limit
-           , boost::filesystem::path storage_dir = {}
-           , std::set<bootstrap::Address> extra_bs = {});
+           , boost::filesystem::path storage_dir
+           , std::set<bootstrap::Address> extra_bs
+           , bool default_bs
+    );
 
     void start(udp::endpoint, asio::yield_context yield);
     void start(asio_utp::udp_multiplexer, asio::yield_context yield);
@@ -363,6 +365,7 @@ class DhtNode {
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
     std::set<bootstrap::Address> _extra_bs;
+    bool _default_bs;
     metrics::DhtNode _metrics;
 };
 
