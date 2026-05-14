@@ -1,4 +1,5 @@
 use std::{
+    ffi::CString,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     pin::Pin,
 };
@@ -43,7 +44,7 @@ mod ffi {
 
         fn new_client(
             ctx: Pin<&mut Context>,
-            config: Vec<String>,
+            config: &[*const c_char],
             log_tag: &str,
         ) -> Result<UniquePtr<Client>>;
         fn start(self: Pin<&mut Client>);
@@ -114,8 +115,10 @@ pub struct Client {
 
 impl Client {
     pub fn new(ctx: &mut Context, config: Config, log_tag: &str) -> Result<Self, anyhow::Error> {
+        let argv: Vec<_> = config.args.iter().map(|a| a.as_ptr()).collect();
+
         Ok(Self {
-            inner: ffi::new_client(ctx.inner.pin_mut(), config.args, log_tag)?,
+            inner: ffi::new_client(ctx.inner.pin_mut(), &argv, log_tag)?,
         })
     }
 
@@ -139,25 +142,25 @@ impl Client {
 }
 
 pub struct Config {
-    args: Vec<String>,
+    args: Vec<CString>,
 }
 
 impl Config {
     pub fn new() -> Self {
         Self {
             // the 0-th arg needs to be the executable name. Use a dummy one here.
-            args: vec!["_".to_owned()],
+            args: vec![c"_".into()],
         }
     }
 
     pub fn flag(mut self, name: impl Into<String>) -> Self {
-        self.args.push(name.into());
+        self.args.push(CString::new(name.into()).unwrap());
         self
     }
 
     pub fn arg(mut self, name: impl Into<String>, value: impl ToString) -> Self {
-        self.args.push(name.into());
-        self.args.push(value.to_string());
+        self.args.push(CString::new(name.into()).unwrap());
+        self.args.push(CString::new(value.to_string()).unwrap());
         self
     }
 }

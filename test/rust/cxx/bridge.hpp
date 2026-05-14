@@ -20,7 +20,7 @@ namespace test {
 
     std::unique_ptr<Client> new_client(
         Context& ctx,
-        rust::Vec<rust::String> argv,
+        rust::Slice<const char* const> argv,
         rust::Str log_tag
     );
 

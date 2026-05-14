@@ -12,22 +12,12 @@ namespace test {
 
     std::unique_ptr<Client> new_client(
         Context& ctx,
-        rust::Vec<rust::String> argv,
+        rust::Slice<const char* const> argv,
         rust::Str log_tag
     ) {
-        std::vector<std::string> argv_s;
-        std::transform(argv.begin(), argv.end(), std::back_inserter(argv_s), [](const rust::String& s) {
-            return static_cast<std::string>(s);
-        });
-
-        std::vector<const char*> argv_p;
-        std::transform(argv_s.begin(), argv_s.end(), std::back_inserter(argv_p), [](const std::string& s) {
-            return s.c_str();
-        });
-
         return std::make_unique<Client>(
             ctx,
-            ClientConfig(argv_p.size(), argv_p.data()),
+            ClientConfig(argv.size(), const_cast<const char**>(argv.data())),
             util::LogPath(static_cast<std::string>(log_tag))
         );
     }
