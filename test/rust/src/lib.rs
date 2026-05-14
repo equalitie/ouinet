@@ -1,16 +1,25 @@
 use std::{
-    borrow::Cow,
-    ffi::{CStr, CString, c_char},
-    fmt, iter,
-    net::SocketAddr,
-    path::PathBuf,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     pin::Pin,
 };
 
-use cxx::{Exception, UniquePtr};
-
 #[cxx::bridge(namespace = "ouinet::test")]
 pub mod ffi {
+
+    // Intermediate type for converting between C++'s `tcp::endpoint` / `udp::endpoint` and rust's
+    // `SocketAddr`
+    struct SocketAddr {
+        family: IpFamily,
+        octets: [u8; 16],
+        port: u16,
+    }
+
+    #[derive(Debug)]
+    enum IpFamily {
+        V4,
+        V6,
+    }
+
     unsafe extern "C++" {
         include!("cxx/bridge.hpp");
 
@@ -23,114 +32,77 @@ pub mod ffi {
 
         pub fn new_client(
             ctx: Pin<&mut Context>,
-            argv: &[*const c_char],
+            config: Vec<String>,
             log_tag: &str,
         ) -> Result<UniquePtr<Client>>;
 
         pub fn start(self: Pin<&mut Client>);
-        // pub fn stop(self: Pin<&mut Client>);
+        pub fn stop(self: Pin<&mut Client>);
+
+        fn get_proxy_endpoint_raw(client: &Client) -> SocketAddr;
     }
 }
 
-#[derive(Default)]
-pub struct ClientBuilder {
-    repo: Option<PathBuf>,
-    cache_type: CacheType,
-    listen_on_tcp: Option<SocketAddr>,
-    front_end_ep: Option<SocketAddr>,
-    log_tag: Option<String>,
+impl From<ffi::SocketAddr> for SocketAddr {
+    fn from(a: ffi::SocketAddr) -> Self {
+        let ip = match a.family {
+            ffi::IpFamily::V4 => {
+                IpAddr::V4(Ipv4Addr::from_octets(*a.octets[..4].as_array().unwrap()))
+            }
+            ffi::IpFamily::V6 => IpAddr::V6(Ipv6Addr::from_octets(a.octets)),
+            _ => panic!("invalid IP family: {:?}", a.family),
+        };
+
+        Self::from((ip, a.port))
+    }
 }
 
-impl ClientBuilder {
+impl ffi::Client {
+    pub fn get_proxy_endpoint(&self) -> SocketAddr {
+        ffi::get_proxy_endpoint_raw(self).into()
+    }
+
+    /// Returns a RAII guard which stops the client on drop.
+    pub fn stop_guard<'a>(self: Pin<&'a mut ffi::Client>) -> ClientStopGuard<'a> {
+        ClientStopGuard(self)
+    }
+}
+
+pub struct ClientStopGuard<'a>(Pin<&'a mut ffi::Client>);
+
+impl Drop for ClientStopGuard<'_> {
+    fn drop(&mut self) {
+        self.0.as_mut().stop();
+    }
+}
+
+// Safety: asio's io_context should be thread-safe.
+unsafe impl Send for ffi::Context {}
+
+pub struct ConfigBuilder {
+    args: Vec<String>,
+}
+
+impl ConfigBuilder {
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn repo(self, value: impl Into<PathBuf>) -> Self {
         Self {
-            repo: Some(value.into()),
-            ..self
+            // the 0-th arg needs to be the executable name. Use a dummy one here.
+            args: vec!["_".to_owned()],
         }
     }
 
-    pub fn cache_type(self, value: CacheType) -> Self {
-        Self {
-            cache_type: value,
-            ..self
-        }
+    pub fn flag(mut self, name: impl Into<String>) -> Self {
+        self.args.push(name.into());
+        self
     }
 
-    pub fn listen_on_tcp(self, value: SocketAddr) -> Self {
-        Self {
-            listen_on_tcp: Some(value),
-            ..self
-        }
+    pub fn arg(mut self, name: impl Into<String>, value: impl ToString) -> Self {
+        self.args.push(name.into());
+        self.args.push(value.to_string());
+        self
     }
 
-    pub fn front_end_ep(self, value: SocketAddr) -> Self {
-        Self {
-            front_end_ep: Some(value),
-            ..self
-        }
-    }
-
-    pub fn log_tag(self, value: &str) -> Self {
-        Self {
-            log_tag: Some(value.to_owned()),
-            ..self
-        }
-    }
-
-    pub fn build(self, ctx: Pin<&mut ffi::Context>) -> Result<UniquePtr<ffi::Client>, Exception> {
-        fn entry<T: ToString + ?Sized>(name: &'static CStr, value: &T) -> [Cow<'static, CStr>; 2] {
-            [name.into(), CString::new(value.to_string()).unwrap().into()]
-        }
-
-        // The 0-th argument must be the executable name. Use a dummy one here.
-        let options: Vec<Cow<'static, CStr>> = iter::once(c"_".into())
-            .chain(
-                self.repo
-                    .as_ref()
-                    .into_iter()
-                    .flat_map(|v| entry(c"--repo", v.as_path().to_str().unwrap())),
-            )
-            .chain(
-                self.listen_on_tcp
-                    .as_ref()
-                    .into_iter()
-                    .flat_map(|v| entry(c"--listen-on-tcp", v)),
-            )
-            .chain(
-                self.front_end_ep
-                    .as_ref()
-                    .into_iter()
-                    .flat_map(|v| entry(c"--front-end-ep", v)),
-            )
-            .chain(entry(c"--cache-type", &self.cache_type))
-            .collect();
-
-        let options: Vec<*const c_char> = options.iter().map(|item| item.as_ptr()).collect();
-
-        ffi::new_client(ctx, &options, self.log_tag.as_deref().unwrap_or("client"))
-    }
-}
-
-#[derive(Default)]
-pub enum CacheType {
-    #[default]
-    None,
-    Bep5Http,
-    Bep3HttpOverI2p,
-    Ouisync,
-}
-
-impl fmt::Display for CacheType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::None => write!(f, "none"),
-            Self::Bep5Http => write!(f, "beb5-http"),
-            Self::Bep3HttpOverI2p => write!(f, "bep3-http-over-i2p"),
-            Self::Ouisync => write!(f, "ouisync"),
-        }
+    pub fn build(self) -> Vec<String> {
+        self.args
     }
 }

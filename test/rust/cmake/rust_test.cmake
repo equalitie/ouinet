@@ -38,7 +38,7 @@ function(add_rust_test name)
                 INCLUDE_DIRS=${include_dirs}
                 LIB_DIRS=${lib_dirs}
                 LIBS=${libs}
-            cargo check --test ${name}
+            cargo build --test ${name}
                         --manifest-path ${manifest_path}
                         --target-dir ${target_dir}
         VERBATIM
