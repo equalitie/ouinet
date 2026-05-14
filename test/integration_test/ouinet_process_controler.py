@@ -200,6 +200,12 @@ class OuinetProcess(object):
                 stderr,
             )
 
+    def next(self) -> str:
+        try:
+            return self.output.__next__()
+        except StopIteration:
+            return "\nNo more stdout for " + self.command[0]
+
     async def stdout_listening_task(self):
         try:
             while True:
@@ -207,7 +213,7 @@ class OuinetProcess(object):
                     return
                 self.assert_process_is_alive()
 
-                line: str = await asyncio.to_thread(self.output.__next__)
+                line: str = await asyncio.to_thread(self.next)
                 assert isinstance(line, str)
                 self._proc_protocol.errReceived(line)
 
