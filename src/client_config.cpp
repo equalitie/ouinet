@@ -100,6 +100,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
     }
 
+    if (vm["bt-bootstrap-no-default"].as<bool>()) {
+        _bt_bootstrap_no_default = true;
+    }
+
 #ifndef __WIN32
     if (auto opt = as_optional<unsigned int>(vm, "open-file-limit")) {
         increase_open_file_limit(*opt);

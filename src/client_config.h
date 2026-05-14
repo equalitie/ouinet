@@ -243,6 +243,10 @@ private:
               "to start the DHT (can be used several times). "
               "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
               "This option is persistent.")
+           ("bt-bootstrap-no-default", po::bool_switch()->default_value(false)
+            , "Don't use default BitTorrent bootstrap servers."
+              "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used."
+              "This option is persistent.")
 #ifndef __WIN32
            ("open-file-limit"
             , po::value<unsigned int>()
@@ -444,6 +448,7 @@ private:
             ("log-level", po::value<std::string>())
             ("enable-log-file", po::bool_switch())
             ("bt-bootstrap-extra", po::value<std::vector<std::string>>()->composing())
+            ("bt-bootstrap-no-default", po::bool_switch(&_bt_bootstrap_no_default))
             ("disable-origin-access", po::bool_switch(&_disable_origin_access))
             ("disable-injector-access", po::bool_switch(&_disable_injector_access))
             ("disable-cache-access", po::bool_switch(&_disable_cache_access))
@@ -496,6 +501,14 @@ public:
     }
     void bt_bootstrap_extras(ExtraBtBsServers bts) {
         CHANGE_AND_SAVE_OPS(bts == _bt_bootstrap_extras, _bt_bootstrap_extras = std::move(bts));
+    }
+
+    bool bt_bootstrap_no_default() const {
+        return _bt_bootstrap_no_default;
+    }
+
+    void bt_bootstrap_no_default(bool value) {
+        CHANGE_AND_SAVE_OPS(value == _bt_bootstrap_no_default, _bt_bootstrap_no_default = value);
     }
 
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
@@ -552,6 +565,7 @@ private:
     std::string _tls_injector_cert_path;
     std::string _tls_ca_cert_store_path;
     ExtraBtBsServers _bt_bootstrap_extras;
+    bool _bt_bootstrap_no_default = false;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
@@ -586,7 +600,7 @@ private:
 
     size_t _i2p_hops_per_tunnel = 3;
     boost::optional<I2pAddress> _i2p_bep3_tracker;
-  
+
     std::optional<OuisyncCacheConfig> _ouisync;
 };
 

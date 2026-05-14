@@ -31,6 +31,10 @@ boost::program_options::options_description InjectorConfig::options_description(
            "to start the DHT (can be used several times). "
            "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
            "This option is persistent.")
+        ("bt-bootstrap-no-default", po::bool_switch()->default_value(false)
+         , "Don't use default BitTorrent bootstrap servers."
+           "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used."
+           "This option is persistent.")
         ("udp-mux-rx-limit"
          , po::value<uint32_t>()->default_value(500)
          , "Max rate limit that's allowed for incoming packets to the "
@@ -172,6 +176,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
                 throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
             _bt_bootstrap_extras.insert(*btbs_addr);
         }
+    }
+
+    if (vm["bt-bootstrap-no-default"].as<bool>()) {
+        _bt_bootstrap_no_default = true;
     }
 
     if (vm.count("udp-mux-rx-limit")) {
