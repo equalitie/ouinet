@@ -32,7 +32,18 @@ namespace test {
         );
     }
 
-    SocketAddr get_proxy_endpoint_raw(const Client& client) {
+    void stop(Client& client, rust::Box<Completer> completer) {
+        boost::asio::post(client.get_executor(), [client, completer = std::move(completer)]() mutable {
+            if (completer->is_closed()) {
+                return;
+            }
+
+            client.stop();
+            completer->complete();
+        });
+    }
+
+    SocketAddr get_proxy_endpoint(const Client& client) {
         auto ep = client.get_proxy_endpoint();
 
         if (ep.address().is_v4()) {

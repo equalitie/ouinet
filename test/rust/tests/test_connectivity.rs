@@ -1,4 +1,4 @@
-use ouinet_test_rs::{ConfigBuilder, ffi};
+use ouinet_test_rs::{Client, Config, Context};
 use std::{
     fs,
     net::{Ipv4Addr, SocketAddr},
@@ -16,10 +16,11 @@ async fn sanity_check() {
     let repo_dir = root_dir.path().join("client");
     fs::create_dir_all(&repo_dir).unwrap();
 
-    let mut ctx = ffi::new_context();
-    let mut client = ffi::new_client(
-        ctx.pin_mut(),
-        ConfigBuilder::new()
+    let mut ctx = Context::new();
+
+    let mut client = Client::new(
+        &mut ctx,
+        Config::new()
             .arg("--repo", repo_dir.to_str().unwrap())
             .arg("--log-level", "DEBUG")
             .arg("--cache-type", "none")
@@ -28,20 +29,16 @@ async fn sanity_check() {
                 SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
             )
             .arg("--front-end-ep", SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
-            .flag("--bt-bootstrap-no-default")
-            .build(),
+            .flag("--bt-bootstrap-no-default"),
         "client",
     )
     .unwrap();
 
-    client.pin_mut().start();
+    client.start();
+
+    ctx.run();
 
     let proxy_addr = client.get_proxy_endpoint();
-    let _client_stop_guard = client.pin_mut().stop_guard();
-
-    task::spawn_blocking(move || {
-        ctx.pin_mut().run();
-    });
 
     // HTTP server
     let content = "hello world";
@@ -70,6 +67,9 @@ async fn sanity_check() {
         Some("origin")
     );
     assert_eq!(response.text().await.unwrap(), content);
+
+    client.stop().await;
+    ctx.stopped().await;
 }
 
 async fn spawn_http_server(content: String) -> SocketAddr {
