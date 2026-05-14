@@ -9,6 +9,8 @@
 
 namespace ouinet {
 namespace test {
+    struct SocketAddr;
+
     using Context = boost::asio::io_context;
 
     std::unique_ptr<Context> new_context();
@@ -17,8 +19,10 @@ namespace test {
 
     std::unique_ptr<Client> new_client(
         Context& ctx,
-        rust::Slice<const char* const> argv,
+        rust::Vec<rust::String> argv,
         rust::Str log_tag
     );
+
+    SocketAddr get_proxy_endpoint_raw(const Client& client);
 } // namespace test
 } // namespace ouinet
