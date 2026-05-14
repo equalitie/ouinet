@@ -9,6 +9,7 @@
 
 namespace ouinet {
 namespace test {
+    struct Completer;
     struct SocketAddr;
 
     using Context = boost::asio::io_context;
@@ -23,6 +24,8 @@ namespace test {
         rust::Str log_tag
     );
 
-    SocketAddr get_proxy_endpoint_raw(const Client& client);
+    void stop(Client& client,  rust::Box<Completer> completer);
+
+    SocketAddr get_proxy_endpoint(const Client& client);
 } // namespace test
 } // namespace ouinet

@@ -3,9 +3,14 @@ use std::{
     pin::Pin,
 };
 
-#[cxx::bridge(namespace = "ouinet::test")]
-pub mod ffi {
+use cxx::UniquePtr;
+use tokio::{
+    sync::oneshot,
+    task::{self, JoinHandle},
+};
 
+#[cxx::bridge(namespace = "ouinet::test")]
+mod ffi {
     // Intermediate type for converting between C++'s `tcp::endpoint` / `udp::endpoint` and rust's
     // `SocketAddr`
     struct SocketAddr {
@@ -20,26 +25,30 @@ pub mod ffi {
         V6,
     }
 
+    extern "Rust" {
+        type Completer;
+        fn complete(self: &mut Completer);
+        fn is_closed(self: &Completer) -> bool;
+    }
+
     unsafe extern "C++" {
         include!("cxx/bridge.hpp");
 
-        pub type Context;
+        type Context;
 
-        pub fn new_context() -> UniquePtr<Context>;
-        pub fn run(self: Pin<&mut Context>) -> usize;
+        fn new_context() -> UniquePtr<Context>;
+        fn run(self: Pin<&mut Context>) -> usize;
 
-        pub type Client;
+        type Client;
 
-        pub fn new_client(
+        fn new_client(
             ctx: Pin<&mut Context>,
             config: Vec<String>,
             log_tag: &str,
         ) -> Result<UniquePtr<Client>>;
-
-        pub fn start(self: Pin<&mut Client>);
-        pub fn stop(self: Pin<&mut Client>);
-
-        fn get_proxy_endpoint_raw(client: &Client) -> SocketAddr;
+        fn start(self: Pin<&mut Client>);
+        fn stop(client: Pin<&mut Client>, completer: Box<Completer>);
+        fn get_proxy_endpoint(client: &Client) -> SocketAddr;
     }
 }
 
@@ -57,33 +66,83 @@ impl From<ffi::SocketAddr> for SocketAddr {
     }
 }
 
-impl ffi::Client {
+pub struct Context {
+    inner: UniquePtr<ffi::Context>,
+    run_handle: Option<JoinHandle<()>>,
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Self {
+            inner: ffi::new_context(),
+            run_handle: None,
+        }
+    }
+
+    pub fn run(&mut self) {
+        if self.run_handle.is_some() {
+            return;
+        }
+
+        let ptr = self.inner.as_mut_ptr();
+        let ptr = ptr as usize;
+
+        let run_handle = task::spawn_blocking(move || {
+            let ptr = ptr as *mut ffi::Context;
+            let ctx = unsafe { &mut *ptr };
+            let ctx = unsafe { Pin::new_unchecked(ctx) };
+            ctx.run();
+        });
+
+        self.run_handle = Some(run_handle);
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.run_handle.is_some()
+    }
+
+    pub async fn stopped(&mut self) {
+        if let Some(handle) = self.run_handle.take() {
+            handle.await.unwrap();
+        }
+    }
+}
+
+pub struct Client {
+    inner: UniquePtr<ffi::Client>,
+}
+
+impl Client {
+    pub fn new(ctx: &mut Context, config: Config, log_tag: &str) -> Result<Self, anyhow::Error> {
+        Ok(Self {
+            inner: ffi::new_client(ctx.inner.pin_mut(), config.args, log_tag)?,
+        })
+    }
+
+    pub fn start(&mut self) {
+        self.inner.pin_mut().start();
+    }
+
+    pub async fn stop(&mut self) {
+        let (tx, rx) = oneshot::channel();
+        let tx = Completer { tx: Some(tx) };
+        let tx = Box::new(tx);
+
+        ffi::stop(self.inner.pin_mut(), tx);
+
+        rx.await.ok();
+    }
+
     pub fn get_proxy_endpoint(&self) -> SocketAddr {
-        ffi::get_proxy_endpoint_raw(self).into()
-    }
-
-    /// Returns a RAII guard which stops the client on drop.
-    pub fn stop_guard<'a>(self: Pin<&'a mut ffi::Client>) -> ClientStopGuard<'a> {
-        ClientStopGuard(self)
+        ffi::get_proxy_endpoint(&self.inner).into()
     }
 }
 
-pub struct ClientStopGuard<'a>(Pin<&'a mut ffi::Client>);
-
-impl Drop for ClientStopGuard<'_> {
-    fn drop(&mut self) {
-        self.0.as_mut().stop();
-    }
-}
-
-// Safety: asio's io_context should be thread-safe.
-unsafe impl Send for ffi::Context {}
-
-pub struct ConfigBuilder {
+pub struct Config {
     args: Vec<String>,
 }
 
-impl ConfigBuilder {
+impl Config {
     pub fn new() -> Self {
         Self {
             // the 0-th arg needs to be the executable name. Use a dummy one here.
@@ -101,8 +160,20 @@ impl ConfigBuilder {
         self.args.push(value.to_string());
         self
     }
+}
 
-    pub fn build(self) -> Vec<String> {
-        self.args
+pub struct Completer {
+    tx: Option<oneshot::Sender<()>>,
+}
+
+impl Completer {
+    pub fn complete(&mut self) {
+        if let Some(tx) = self.tx.take() {
+            tx.send(()).ok();
+        }
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.tx.as_ref().map(|tx| tx.is_closed()).unwrap_or(true)
     }
 }
