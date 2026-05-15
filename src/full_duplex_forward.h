@@ -31,12 +31,12 @@ full_duplex( Stream1 a
 
     sys::error_code ec;
 
-    static const auto half_duplex = [&ec]( auto& in
-                                         , auto& out
-                                         , auto& fwd_bytes_in_out
-                                         , auto& on_transfer
-                                         , auto& wdog
-                                         , Async yield)
+    const auto half_duplex = [&ec]( auto& in
+                                  , auto& out
+                                  , auto& fwd_bytes_in_out
+                                  , auto& on_transfer
+                                  , auto& wdog
+                                  , Async yield)
     {
         std::array<uint8_t, 2048> data;
 
@@ -117,7 +117,7 @@ full_duplex( Stream1 a
             std::move(b),
             std::move(on_a2b),
             std::move(on_b2a),
-            Async(yield, cancel, yield.log_path()));
+            Async(yield, cancel));
 
     return or_throw(yield, ec);
 }
