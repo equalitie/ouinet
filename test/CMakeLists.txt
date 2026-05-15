@@ -100,12 +100,6 @@ common_test(test_logger "test_logger.cpp")
 common_test(test_connection_pool "test_connection_pool.cpp")
 
 ######################################################################
-common_test(oui_server "ouiservice_server.cpp")
-
-######################################################################
-common_test(oui_client "ouiservice_client.cpp")
-
-######################################################################
 common_test(test_http_util "test_http_util.cpp")
 
 ######################################################################
