@@ -56,10 +56,6 @@ add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
     "./tracker_lookup.cpp"
     "./announcer.cpp"
     "./util/create_i2p_session.cpp"
-    "../../util/random.cpp"
-    "../../async_sleep.cpp"
-    "../../bittorrent/bencoding.cpp"
-    "../../bittorrent/node_id.cpp"
 )
 target_include_directories(ouiservice-i2p
     PUBLIC
@@ -78,7 +74,7 @@ target_link_libraries(ouiservice-i2p
         libi2pdlang
         OpenSSL::SSL
     PUBLIC
-        ouinet_asio
+        ouinet_common_public
 )
 target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
 

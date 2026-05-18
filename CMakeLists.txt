@@ -158,10 +158,15 @@ add_library(ouinet_common_public
     "./src/task.cpp"
     "./src/logger.cpp"
     "./src/util/log_path.cpp"
+    "./src/util/random.cpp"
+    "./src/async_sleep.cpp"
+    "./src/bittorrent/bencoding.cpp"
+    "./src/bittorrent/node_id.cpp"
 )
 target_link_libraries(ouinet_common_public PUBLIC ouinet_asio Boost::filesystem)
 target_compile_options(ouinet_common_public PUBLIC -std=c++23)
 target_compile_definitions(ouinet_common_public PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
+target_include_directories(ouinet_common_public PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 ################################################################################
 
@@ -170,7 +175,6 @@ file(GLOB ouinet_common_sources
     "./src/response_part.cpp"
     "./src/util.cpp"
     "./src/util/atomic_file.cpp"
-    "./src/util/random.cpp"
     "./src/util/sign.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
@@ -192,7 +196,6 @@ file(GLOB ouinet_common_sources
     "./src/endpoint.cpp"
     "./src/session.cpp"
     "./src/error.cpp"
-    "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"
 )
