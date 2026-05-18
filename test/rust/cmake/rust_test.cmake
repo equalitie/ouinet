@@ -22,14 +22,15 @@ function(add_rust_test name)
 
     list(JOIN include_dirs "$<SEMICOLON>" include_dirs)
 
-    set(libs client ouinet_asio ouinet_asio_ssl)
+    # TODO: Is it possible to find these libs automatically?
+    set(libs injector client ouinet_asio boost_filesystem)
     list(JOIN libs "$<SEMICOLON>" libs)
 
     set(lib_dirs ${CMAKE_BINARY_DIR})
 
     set(cargo_output_file "${CMAKE_CURRENT_BINARY_DIR}/rust/${name}.output.json")
 
-    # Check the test for error
+    # Check the test for errors
     add_custom_target(
         "_check_${name}"
         COMMENT "Checking ${name}"

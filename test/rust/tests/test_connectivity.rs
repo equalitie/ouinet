@@ -1,43 +1,80 @@
-use ouinet_test_rs::{Client, Config, Context};
+use ouinet_test_rs::{Client, Config, Context, Injector};
 use std::{
     fs,
     net::{Ipv4Addr, SocketAddr},
 };
 use tempfile::TempDir;
-use tokio::{net::TcpListener, task};
+use tokio::{net::TcpListener, sync::oneshot, task};
 use warp::Filter;
 
 #[tokio::test]
 async fn sanity_check() {
     env_logger::init();
 
-    // Create ouinet client
     let root_dir = TempDir::new().unwrap();
-    let repo_dir = root_dir.path().join("client");
-    fs::create_dir_all(&repo_dir).unwrap();
+    let client_dir = root_dir.path().join("client");
+    let injector_dir = root_dir.path().join("injector");
 
-    let mut ctx = Context::new();
+    let injector_credentials = "username:password";
 
-    let mut client = Client::new(
-        &mut ctx,
-        Config::new()
-            .arg("--repo", repo_dir.to_str().unwrap())
-            .arg("--log-level", "DEBUG")
-            .arg("--cache-type", "none")
-            .arg(
-                "--listen-on-tcp",
-                SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-            )
-            .arg("--front-end-ep", SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
-            .flag("--bt-bootstrap-no-default"),
-        "client",
-    )
-    .unwrap();
+    // Create ouinet injector
+    let (injector_tx, injector_rx) = oneshot::channel();
+    task::spawn_blocking(move || {
+        fs::create_dir_all(&injector_dir).unwrap();
 
-    client.start();
+        let mut ctx = Context::new();
+        let injector = Injector::new(
+            &mut ctx,
+            Config::new()
+                .arg("--repo", injector_dir.to_str().unwrap())
+                .arg("--credentials", injector_credentials)
+                .arg("--log-level", "DEBUG")
+                .flag("--bt-bootstrap-no-default"),
+            "injector",
+        )
+        .unwrap();
 
-    ctx.run();
+        injector_tx.send(injector).unwrap();
+        ctx.run();
+    });
 
+    let mut injector = injector_rx.await.unwrap();
+    let injector_http_public_key = injector.cache_http_public_key();
+    let injector_tls_cert_file = injector.tls_cert_file();
+
+    // Create ouinet client
+    let (client_tx, client_rx) = oneshot::channel();
+    task::spawn_blocking(move || {
+        fs::create_dir_all(&client_dir).unwrap();
+
+        let mut ctx = Context::new();
+        let mut client = Client::new(
+            &mut ctx,
+            Config::new()
+                .arg("--repo", client_dir.to_str().unwrap())
+                .arg("--log-level", "DEBUG")
+                .arg("--injector-credentials", injector_credentials)
+                .arg("--cache-type", "bep5-http")
+                .arg("--cache-http-public-key", injector_http_public_key)
+                .arg("--injector-tls-cert-file", injector_tls_cert_file)
+                .flag("--disable-origin-access")
+                .arg(
+                    "--listen-on-tcp",
+                    SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
+                )
+                .arg("--front-end-ep", SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+                .flag("--bt-bootstrap-no-default"),
+            "client",
+        )
+        .unwrap();
+
+        client.start();
+
+        client_tx.send(client).unwrap();
+        ctx.run();
+    });
+
+    let mut client = client_rx.await.unwrap();
     let proxy_addr = client.get_proxy_endpoint();
 
     // HTTP server
@@ -67,9 +104,6 @@ async fn sanity_check() {
         Some("origin")
     );
     assert_eq!(response.text().await.unwrap(), content);
-
-    client.stop().await;
-    ctx.stopped().await;
 }
 
 async fn spawn_http_server(content: String) -> SocketAddr {

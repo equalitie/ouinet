@@ -6,11 +6,11 @@ namespace util = ouinet::util;
 
 namespace ouinet {
 namespace test {
-    std::unique_ptr<Context> new_context() {
+    std::unique_ptr<Context> context_new() {
         return std::make_unique<Context>();
     }
 
-    std::unique_ptr<Client> new_client(
+    std::unique_ptr<Client> client_new(
         Context& ctx,
         rust::Slice<const char* const> argv,
         rust::Str log_tag
@@ -22,18 +22,26 @@ namespace test {
         );
     }
 
-    void stop(Client& client, rust::Box<Completer> completer) {
-        boost::asio::post(client.get_executor(), [client, completer = std::move(completer)]() mutable {
-            if (completer->is_closed()) {
-                return;
-            }
+    void client_stop(std::unique_ptr<Client> client, rust::Box<Completer> completer) {
+        auto ex = client->get_executor();
 
-            client.stop();
-            completer->complete();
-        });
+        boost::asio::post(
+            ex,
+            [
+                client = std::move(client),
+                completer = std::move(completer)
+            ]() mutable {
+                if (completer->is_closed()) {
+                    return;
+                }
+
+                client->stop();
+                completer->complete();
+            }
+        );
     }
 
-    SocketAddr get_proxy_endpoint(const Client& client) {
+    SocketAddr client_get_proxy_endpoint(const Client& client) {
         auto ep = client.get_proxy_endpoint();
 
         if (ep.address().is_v4()) {
@@ -56,5 +64,35 @@ namespace test {
         }
     }
 
+    std::unique_ptr<Injector> injector_new(
+        Context& ctx,
+        rust::Slice<const char* const> argv,
+        rust::Str log_tag
+    ) {
+        return std::make_unique<Injector>(
+            InjectorConfig(argv.size(), const_cast<const char**>(argv.data())),
+            ctx,
+            util::LogPath(static_cast<std::string>(log_tag))
+        );
+    }
+
+    void injector_stop(std::unique_ptr<Injector> injector, rust::Box<Completer> completer) {
+        auto ex = injector->get_executor();
+
+        boost::asio::post(
+            ex,
+            [
+                injector = std::move(injector),
+                completer = std::move(completer)
+            ]() mutable {
+                if (completer->is_closed()) {
+                    return;
+                }
+
+                injector->stop();
+                completer->complete();
+            }
+        );
+    }
 } // namespace test
 } // namespace ouinet

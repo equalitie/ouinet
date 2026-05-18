@@ -253,7 +253,7 @@ set(client_link_libs
     lib::json
 )
 
-if (IOS OR ANDROID OR LINUX)
+if (IOS OR ANDROID)
     set(CLIENT_LIB_TYPE STATIC)
 elseif(WIN32 OR MINGW)
     set(CLIENT_LIB_TYPE SHARED)

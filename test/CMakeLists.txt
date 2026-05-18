@@ -143,7 +143,7 @@ endif()
 
 ######################################################################
 include(rust/cmake/rust_test.cmake)
-add_rust_test(test_connectivity DEPENDENCIES client_lib)
+add_rust_test(test_connectivity DEPENDENCIES ouinet_client ouinet_injector)
 
 ######################################################################
 string(REPLACE ";" " " OUINET_TEST_TARGETS_STR "tests: ${OUINET_TEST_TARGETS}")
