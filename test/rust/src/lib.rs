@@ -107,6 +107,8 @@ impl Client {
         self.inner.as_mut().unwrap().pin_mut().start();
     }
 
+    /// Stops the client. Note dropping the Client also stops it, but calling this method is useful
+    /// when one wants to wait until the stop completes.
     pub async fn stop(mut self) {
         if let Some(inner) = self.inner.take() {
             Completer::wait(|tx| ffi::client_stop(inner, Box::new(tx))).await;

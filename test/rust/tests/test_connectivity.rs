@@ -4,7 +4,11 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
 };
 use tempfile::TempDir;
-use tokio::{net::TcpListener, sync::oneshot, task};
+use tokio::{
+    net::{TcpListener, UdpSocket},
+    sync::oneshot,
+    task,
+};
 use warp::Filter;
 
 #[tokio::test]
@@ -12,9 +16,15 @@ async fn sanity_check() {
     env_logger::init();
 
     let root_dir = TempDir::new().unwrap();
-    let client_dir = root_dir.path().join("client");
-    let injector_dir = root_dir.path().join("injector");
 
+    let dht_node_socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let dht_node_addr = dht_node_socket.local_addr().unwrap();
+    let dht_node = btdht::MainlineDht::builder()
+        .start(dht_node_socket)
+        .unwrap();
+    assert!(dht_node.bootstrapped().await);
+
+    let injector_dir = root_dir.path().join("injector");
     let injector_credentials = "username:password";
 
     // Create ouinet injector
@@ -29,6 +39,7 @@ async fn sanity_check() {
                 .arg("--repo", injector_dir.to_str().unwrap())
                 .arg("--credentials", injector_credentials)
                 .arg("--log-level", "DEBUG")
+                .arg("--bt-bootstrap-extra", dht_node_addr.to_string())
                 .flag("--bt-bootstrap-no-default"),
             "injector",
         )
@@ -44,6 +55,7 @@ async fn sanity_check() {
 
     // Create ouinet client
     let (client_tx, client_rx) = oneshot::channel();
+    let client_dir = root_dir.path().join("client");
     task::spawn_blocking(move || {
         fs::create_dir_all(&client_dir).unwrap();
 
@@ -63,7 +75,8 @@ async fn sanity_check() {
                     SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
                 )
                 .arg("--front-end-ep", SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
-                .flag("--bt-bootstrap-no-default"),
+                .flag("--bt-bootstrap-no-default")
+                .arg("--bt-bootstrap-extra", dht_node_addr.to_string()),
             "client",
         )
         .unwrap();
