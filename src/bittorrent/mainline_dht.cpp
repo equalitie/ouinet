@@ -2623,8 +2623,8 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         _dns_resolver,
         _mux_rx_limit,
         _storage_dir,
-        std::set<bootstrap::Address>{}, // extra_bs
-        true                            // default_bs
+        _extra_bs,
+        _default_bs
     );
 
     task::spawn_detached(_exec, [&, m = move(m)] (asio::yield_context yield) mutable {
