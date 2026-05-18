@@ -46,7 +46,6 @@ public:
     AsioExecutor get_executor();
 
     void send(std::string&& message, const udp::endpoint& to, Cancel&, asio::yield_context);
-    void send(std::string&& message, const udp::endpoint& to);
 
     // NOTE: The pointer inside the returned string_view is guaranteed to
     // be valid only until the next coroutine based async IO call or until
@@ -263,18 +262,6 @@ void UdpMultiplexer::send(
     if (ec) {
         or_throw(yield, ec);
     }
-}
-
-inline
-void UdpMultiplexer::send(
-    std::string&& message,
-    const udp::endpoint& to
-) {
-    _send_queue.emplace_back();
-    _send_queue.back().message = std::move(message);
-    _send_queue.back().to = to;
-
-    _send_queue_nonempty.notify();
 }
 
 inline

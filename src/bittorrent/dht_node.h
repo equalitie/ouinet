@@ -221,10 +221,6 @@ class DhtNode {
 
     void send_datagram(
         udp::endpoint destination,
-        const BencodedMap& query_arguments
-    );
-    void send_datagram(
-        udp::endpoint destination,
         const BencodedMap& query_arguments,
         Cancel&,
         asio::yield_context
@@ -249,7 +245,7 @@ class DhtNode {
         asio::yield_context
     );
 
-    void handle_query(udp::endpoint sender, BencodedMap& query);
+    void handle_query(udp::endpoint sender, BencodedMap& query, Cancel cancel, asio::yield_context);
 
     void bootstrap(asio::yield_context);
 
