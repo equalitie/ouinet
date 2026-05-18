@@ -71,7 +71,10 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
     DhtNode dht(ctx.get_executor()
         , metrics_dht.dht_node_ipv4()
         , std::make_shared<dns::Resolver>()
-        , rx_limit);
+        , rx_limit
+        , {}
+        , {}
+        , true);
 
     task::spawn_detached(ctx, [&] (auto yield) {
         sys::error_code ec;
@@ -143,7 +146,10 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     DhtNode dht(ctx.get_executor()
         , metrics_dht.dht_node_ipv4()
         , std::make_shared<dns::Resolver>()
-        , rx_limit);
+        , rx_limit
+        , {}
+        , {}
+        , true);
 
     auto mutable_data = []( const string& value
                           , const string& salt
