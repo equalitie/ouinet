@@ -125,4 +125,4 @@ endif()
 
 ######################################################################
 include(rust/cmake/rust_test.cmake)
-add_rust_test(test_connectivity DEPENDENCIES client_lib)
+add_rust_test(test_connectivity DEPENDENCIES injector_lib client_lib)
