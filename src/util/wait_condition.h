@@ -229,9 +229,18 @@ auto WaitCondition::do_wait(Cancel* cancel, CompletionToken token)
             _wait_state->waiters.push_back(*waiter);
 
             if (cancel) {
-                cancel_slot = cancel->connect([&] {
+                // Pass the waiter to the cancel slot by weak_ptr to avoid use-after-free when the
+                // cancel is signaled after the waiter's been completed.
+                std::weak_ptr<Waiter> weak_waiter(waiter);
+
+                cancel_slot = cancel->connect([exec = _exec, weak_waiter = std::move(weak_waiter)] {
+                    auto waiter = weak_waiter.lock();
+                    if (!waiter) {
+                        return;
+                    }
+
                     waiter->aborted = true;
-                    waiter->complete(_exec);
+                    waiter->complete(exec);
                 });
             }
 
