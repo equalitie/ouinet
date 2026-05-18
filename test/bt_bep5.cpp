@@ -106,7 +106,15 @@ int main(int argc, const char** argv)
     auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht {ctx.get_executor(), metrics_dht.dht_node_ipv4(), dns_resolver, rx_limit};
+    DhtNode dht(
+        ctx.get_executor(),
+        metrics_dht.dht_node_ipv4(),
+        dns_resolver,
+        rx_limit,
+        {},
+        {},
+        true
+    );
 
     vector<string> args;
 

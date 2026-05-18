@@ -9,6 +9,7 @@
 #include "util.h"
 #include "http_util.h"
 #include "http_logger.h"
+#include "util/executor.h"
 #include "util/yield.h"
 #include "util/log_path.h"
 #include "util/promise.h"
@@ -42,6 +43,10 @@ public:
     void stop();
     ~Injector();
 
+    AsioExecutor get_executor() const noexcept {
+        return _exec;
+    }
+
     const InjectorConfig& config() const {
         return _config;
     }
@@ -67,6 +72,7 @@ public:
 private:
     struct Inner;
 
+    AsioExecutor _exec;
     InjectorConfig _config;
     std::shared_ptr<dns::Resolver> _dns_resolver;
     Cancel _cancel;
