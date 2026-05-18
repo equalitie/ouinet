@@ -4,7 +4,7 @@
 #include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/intrusive/list.hpp>
-#include "signal.h"
+#include "cancel.h"
 #include "executor.h"
 #include "unique_function.h"
 #include "util/async.h"

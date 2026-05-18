@@ -4,7 +4,7 @@
 #include <boost/asio/experimental/channel.hpp>
 
 #include "../ouiservice.h"
-#include "../util/signal.h"
+#include "../util/cancel.h"
 #include "../util/async.h"
 
 namespace ouinet {

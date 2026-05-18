@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ouiservice/i2p/session.h"
-#include "util/signal.h"
+#include "util/cancel.h"
 #include "util/promise.h"
 
 namespace ouinet {

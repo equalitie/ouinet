@@ -30,7 +30,7 @@ private:
         std::string message;
         udp::endpoint to;
         sys::error_code* return_ec;
-        Signal<void()> sent_signal;
+        Cancel sent_signal;
     };
 
     struct RecvEntry : IntrusiveHook {
@@ -75,7 +75,7 @@ private:
     std::list<SendEntry> _send_queue;
     ConditionVariable _send_queue_nonempty;
     IntrusiveList<RecvEntry> _receive_queue;
-    Signal<void()> _terminate_signal;
+    Cancel _terminate_signal;
     asio::steady_timer _rate_limiting_timer;
     RateCounter _rc_rx;
     RateCounter _rc_tx;

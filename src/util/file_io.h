@@ -3,7 +3,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/filesystem.hpp>
 
-#include "signal.h"
+#include "cancel.h"
 #include "../namespaces.h"
 #include "../or_throw.h"
 #include "../util/executor.h"

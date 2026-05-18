@@ -11,7 +11,6 @@
 
 #include "../generic_stream.h"
 #include "../or_throw.h"
-#include "../util/signal.h"
 #include "../util/ssl_stream.h"
 #include "../util/async.h"
 

@@ -11,12 +11,15 @@
 #include "../namespaces.h"
 #include "../defer.h"
 #include "atomic_file.h"
-#include "signal.h"
 #include "file_io.h"
 #include "scheduler.h"
 #include "bytes.h"
 
-namespace ouinet { namespace util {
+namespace ouinet {
+    class Cancel;
+}
+
+namespace ouinet::util {
 
 namespace persisten_lru_cache_detail {
     static const auto temp_file_prefix = "tmp.";
@@ -468,4 +471,4 @@ PersistentLruCache<Value>::~PersistentLruCache()
     }
 }
 
-}} // namespaces
+} // namespaces

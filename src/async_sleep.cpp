@@ -1,10 +1,11 @@
 #include "async_sleep.h"
 #include "util/async.h"
+#include "util/cancel.h"
 
 namespace ouinet {
 
 bool async_sleep( asio::steady_timer::duration duration
-                , Signal<void()>& cancel
+                , Cancel& cancel
                 , asio::yield_context yield)
 {
     if (cancel) {

@@ -66,7 +66,7 @@
 #include "ouiservice/ouisync/ouisync.h"
 
 #include "parse/number.h"
-#include "util/signal.h"
+#include "util/cancel.h"
 #include "util/lru_cache.h"
 #include "util/scheduler.h"
 #include "util/async_job.h"
@@ -474,7 +474,7 @@ private:
     asio::io_context& get_io_context() { return _ctx; }
     AsioExecutor get_executor() { return _ctx.get_executor(); }
 
-    Signal<void()>& get_shutdown_signal() { return _shutdown_signal; }
+    Cancel& get_shutdown_signal() { return _shutdown_signal; }
 
     bool maybe_handle_websocket_upgrade( GenericStream&
                                        , beast::string_view connect_host_port

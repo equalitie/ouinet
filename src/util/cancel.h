@@ -10,8 +10,7 @@
 
 namespace ouinet {
 
-template<typename T>
-class Signal {
+class Cancel {
 public:
     class Connection
     {
@@ -35,7 +34,7 @@ public:
         operator bool() const { return _call_count != 0; }
 
     private:
-        friend class Signal;
+        friend class Cancel;
         template<typename... Args>
         void on_signal(Args&&... args) {
             ++_call_count;
@@ -47,31 +46,31 @@ public:
 
     private:
         util::intrusive::list_hook _hook;
-        std::function<T> _slot;
+        std::function<void()> _slot;
         uint32_t _call_count = 0;
     };
 
 public:
-    Signal() = default;
+    Cancel() = default;
 
     // NOTE: We can't allow copying while using intrusive lists for children
     // because a copy would need to have the same children and one child can
     // not be in two intrusive lists.
-    Signal& operator=(const Signal&) = delete;
+    Cancel& operator=(const Cancel&) = delete;
 
     // NOTE: Copy constructor *does not* make a "copy" (for reason explained
     // above). Instead it creates a child node of the node passed as argument.
-    Signal(const Signal& parent)
-        : _parent(const_cast<Signal*>(&parent))
+    Cancel(const Cancel& parent)
+        : _parent(const_cast<Cancel*>(&parent))
     {
         _parent->_children.push_back(*this);
     }
 
-    Signal(Signal&& other) {
+    Cancel(Cancel&& other) {
         *this = std::move(other);
     }
 
-    Signal& operator=(Signal&& other)
+    Cancel& operator=(Cancel&& other)
     {
         if (this == &other) return *this;
 
@@ -114,7 +113,7 @@ public:
     operator bool() const { return call_count() != 0; }
 
     [[nodiscard]]
-    Connection connect(std::function<T> slot)
+    Connection connect(std::function<void()> slot)
     {
         Connection connection;
         connection._slot = std::move(slot);
@@ -124,7 +123,7 @@ public:
 
     size_t size() const { return _connections.size(); }
 
-    ~Signal() {
+    ~Cancel() {
         abandon_children();
     }
 
@@ -150,14 +149,11 @@ private:
 
 private:
     util::intrusive::list_hook _hook;
-    Signal* _parent = nullptr;
-    util::intrusive::list<Signal, &Signal::_hook> _children;
+    Cancel* _parent = nullptr;
+    util::intrusive::list<Cancel, &Cancel::_hook> _children;
     util::intrusive::list<Connection, &Connection::_hook> _connections;
     uint32_t _call_count = 0;
 };
-
-// This is how we use it 99% (100%?) of the time.
-using Cancel = Signal<void()>;
 
 inline
 sys::error_code

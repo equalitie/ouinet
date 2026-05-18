@@ -24,7 +24,7 @@
 
 #include "../namespaces.h"
 #include "../util/sign.h"
-#include "../util/signal.h"
+#include "../util/cancel.h"
 #include "../util/wait_condition.h"
 #include "../util/async_queue.h"
 #include "../util/watch_dog.h"

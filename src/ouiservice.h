@@ -9,7 +9,7 @@
 #include "generic_stream.h"
 #include "endpoint.h"
 #include "util/condition_variable.h"
-#include "util/signal.h"
+#include "util/cancel.h"
 
 #include <expected>
 

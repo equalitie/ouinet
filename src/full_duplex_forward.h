@@ -6,13 +6,14 @@
 #include "default_timeout.h"
 #include "generic_stream.h"
 #include "or_throw.h"
-#include "util/signal.h"
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
 #include "util/async.h"
 #include "util/yield.h"
 
 namespace ouinet {
+
+class Cancel;
 
 // This assumes that there is no data already read from either connection,
 // but pending send.  If there is, please send it beforehand.

@@ -5,9 +5,12 @@
 #include <asio_utp/udp_multiplexer.hpp>
 #include "node_id.h"
 #include "namespaces.h"
-#include "util/signal.h"
 
-namespace ouinet::bittorrent {
+namespace ouinet {
+
+class Cancel;
+
+namespace bittorrent {
 
 class DhtBase {
 public:
@@ -53,4 +56,4 @@ public:
     virtual bool is_martian(const UdpEndpoint&) const = 0;
 };
 
-} // namespace ouinet::bittorrent
+}} // namespace ouinet::bittorrent

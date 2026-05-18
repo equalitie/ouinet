@@ -19,7 +19,7 @@
 #include "default_timeout.h"
 #include "or_throw.h"
 #include "util.h"
-#include "util/signal.h"
+#include "util/cancel.h"
 #include "util/watch_dog.h"
 #include "util/keep_alive.h"
 #include "util/async.h"

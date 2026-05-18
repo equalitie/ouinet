@@ -8,9 +8,11 @@
 #include "node_id.h"
 
 #include "../util/sign.h"
-#include "../util/signal.h"
 
 namespace ouinet {
+
+class Cancel;
+
 namespace bittorrent {
 
 struct MutableDataItem {

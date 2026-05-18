@@ -81,7 +81,7 @@ public:
 
 private:
     asio::io_context& _ctx;
-    Signal<void()> _shutdown_signal;
+    Cancel _shutdown_signal;
 
     shared_ptr<bt::MainlineDht> _bt_dht;
     WaitCondition _bt_dht_wc;

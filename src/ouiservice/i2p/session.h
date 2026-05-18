@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sam.h"
-#include "../../util/signal.h"
+#include "../../util/cancel.h"
 
 #include <variant>
 #include <ostream>

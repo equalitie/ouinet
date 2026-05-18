@@ -6,7 +6,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/system.hpp>
 
-#include "util/signal.h"
+#include "util/cancel.h"
 #include "util/yield.h"
 
 // Forward declarations for dns.rs.h

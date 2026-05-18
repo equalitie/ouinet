@@ -3,7 +3,7 @@
 
 #include <namespaces.h>
 #include <optional>
-#include "util/signal.h"
+#include "util/cancel.h"
 
 using namespace ouinet;
 

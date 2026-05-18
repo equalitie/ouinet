@@ -12,13 +12,16 @@
 #include "../constants.h"
 #include "../response_reader.h"
 #include "../util/sign.h"
-#include "../util/signal.h"
 #include "../util/yield.h"
 
 #include "../namespaces.h"
 #include "../declspec.h"
 
-namespace ouinet { namespace cache {
+namespace ouinet {
+    class Cancel;
+}
+
+namespace ouinet::cache {
 
 // File names for response components.
 static const boost::filesystem::path root_fname = "data-v4";
@@ -270,4 +273,4 @@ std::unique_ptr<HttpStore>
 make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
                       , AsioExecutor);
 
-}} // namespaces
+} // namespace

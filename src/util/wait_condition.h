@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "signal.h"
+#include "cancel.h"
 #include "intrusive_list.h"
 #include "yield.h"
 #include <boost/asio/any_completion_handler.hpp>

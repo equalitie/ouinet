@@ -11,7 +11,7 @@
 #include <boost/variant.hpp>
 #include <boost/format.hpp>
 
-#include "util/signal.h"
+#include "util/cancel.h"
 #include "util/variant.h"
 #include "util/watch_dog.h"
 #include "namespaces.h"

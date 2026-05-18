@@ -1,7 +1,8 @@
 #pragma once
 
 #include <boost/asio/spawn.hpp>
-#include "util/signal.h"
+#include <boost/system/error_code.hpp>
+#include "namespaces.h"
 
 namespace ouinet {
     class GenericStream;

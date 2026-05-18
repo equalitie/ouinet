@@ -8,7 +8,7 @@
 
 #include <upnp.h>
 #include <util/random.h>
-#include <util/signal.h>
+#include <util/cancel.h>
 #include <util/str.h>
 #include <async_sleep.h>
 #include <defer.h>

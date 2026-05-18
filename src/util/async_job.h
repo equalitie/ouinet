@@ -9,8 +9,7 @@ template<class Retval> class AsyncJob {
 public:
     using Job = std::function<Retval(Cancel&, asio::yield_context)>;
     using OnFinish = std::function<void()>;
-    using OnFinishSig = Signal<void()>;
-    using Connection = typename OnFinishSig::Connection;
+    using Connection = typename Cancel::Connection;
 
     struct Result {
         sys::error_code ec;
@@ -59,7 +58,7 @@ public:
                          (asio::yield_context yield) {
             AsyncJob* self = s;
 
-            Signal<void()> cancel;
+            Cancel cancel;
 
             self->_self = &self;
             self->_cancel_signal = &cancel;
@@ -142,9 +141,9 @@ public:
 private:
     AsioExecutor _ex;
     boost::optional<Result> _result;
-    Signal<void()>* _cancel_signal = nullptr;
+    Cancel* _cancel_signal = nullptr;
     AsyncJob** _self = nullptr;
-    Signal<void()> _on_finish_sig;
+    Cancel _on_finish_sig;
 };
 
 } // namespace

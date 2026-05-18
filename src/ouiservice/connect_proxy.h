@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../ouiservice.h"
-#include "../util/signal.h"
 #include "../util/async_queue.h"
 
 namespace ouinet {

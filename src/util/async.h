@@ -2,7 +2,7 @@
 
 #include "../namespaces.h"
 #include "../util/log_path.h"
-#include "signal.h"
+#include "cancel.h"
 #include "yield.h"
 #include "../task.h"
 

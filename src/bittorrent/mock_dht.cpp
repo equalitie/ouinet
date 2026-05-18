@@ -1,5 +1,6 @@
 #include "mock_dht.h"
 #include "debug/set.h"
+#include "util/cancel.h"
 
 namespace ouinet::bittorrent {
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "signal.h"
+#include "cancel.h"
 #include "../task.h"
 
 namespace ouinet { namespace util {
@@ -8,7 +8,7 @@ namespace ouinet { namespace util {
 class Timeout {
     struct State {
         asio::steady_timer timer;
-        Signal<void()> local_abort_signal;
+        Cancel local_abort_signal;
         bool finished = false;
 
         State(const AsioExecutor& ex)
@@ -19,7 +19,7 @@ class Timeout {
 public:
     template<class Duration>
     Timeout( const AsioExecutor& ex
-           , Signal<void()>& signal
+           , Cancel& signal
            , Duration duration)
         : _state(std::make_shared<State>(ex))
     {
@@ -45,7 +45,7 @@ public:
             });
     }
 
-    Signal<void()>& abort_signal()
+    Cancel& abort_signal()
     {
         return _state->local_abort_signal;
     }
@@ -63,12 +63,12 @@ public:
 
 private:
     std::shared_ptr<State> _state;
-    Signal<void()>::Connection _signal_connection;
+    Cancel::Connection _signal_connection;
 };
 
 template<class Duration, class F, class Yield>
 auto with_timeout( const AsioExecutor& ex
-                 , Signal<void()>& abort_signal
+                 , Cancel& abort_signal
                  , Duration duration
                  , const F& f
                  , Yield& yield)

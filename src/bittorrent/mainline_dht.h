@@ -18,7 +18,10 @@
 
 #include "../util/executor.h"
 #include "../namespaces.h"
-#include "../util/signal.h"
+
+namespace ouinet {
+    class Cancel;
+}
 
 namespace ouinet::bittorrent {
 

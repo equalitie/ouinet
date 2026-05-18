@@ -14,9 +14,13 @@
 
 #include "../util/sign.h"
 #include "../util/executor.h"
-#include "../util/signal.h"
+#include "../util/cancel.h"
 
-namespace ouinet::bittorrent {
+namespace ouinet {
+
+class Cancel;
+
+namespace bittorrent {
 
 namespace ip = asio::ip;
 using ip::tcp;
@@ -95,7 +99,7 @@ class Tracker {
     AsioExecutor _exec;
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, std::unique_ptr<detail::Swarm>> _swarms;
-    Signal<void()> _terminate_signal;
+    Cancel _terminate_signal;
 };
 
 class DataStore {
@@ -142,7 +146,7 @@ class DataStore {
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, ImmutableStoredItem> _immutable_data;
     std::map<NodeID, MutableStoredItem> _mutable_data;
-    Signal<void()> _terminate_signal;
+    Cancel _terminate_signal;
 };
 
-} // namespaces
+}} // namespaces

@@ -548,7 +548,7 @@ NodeID DhtNode::data_put_immutable(
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        Signal<void()>& cancel,
+        Cancel& cancel,
         asio::yield_context yield
     ) {
         if (!candidate.id && responsible_nodes.full()) {
@@ -2822,7 +2822,7 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
     boost::optional<BencodedValue> output;
     sys::error_code ec;
 
-    Signal<void()> cancel_attempts;
+    Cancel cancel_attempts;
 
     SuccessCondition success_condition(_exec);
     WaitCondition completed_condition(_exec);
@@ -2877,7 +2877,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     boost::optional<MutableDataItem> output;
     sys::error_code ec;
 
-    Signal<void()> cancel_attempts;
+    Cancel cancel_attempts;
 
     SuccessCondition success_condition(_exec);
     WaitCondition completed_condition(_exec);
