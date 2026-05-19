@@ -11,6 +11,9 @@ bool is_valid_b32(std::string_view s) {
 
     if (!s.ends_with(suffix)) return false;
 
+    // Traditional b32 addresses are exactly 52 encoded characters without .b32.i2p
+    // b33 extended addresses are 56+ encoded characters
+    // these are used for encrypted lease-sets
     size_t label_len = s.size() - suffix.size();
     if (label_len!= 52 && label_len < 56) return false;
 
