@@ -447,7 +447,7 @@ private:
     void setup_injector(asio::yield_context);
 
     bool was_stopped() const {
-        return _shutdown_signal.call_count() != 0;
+        return (bool) _shutdown_signal;
     }
 
 #define DEF_WAIT_FOR(WHAT) \

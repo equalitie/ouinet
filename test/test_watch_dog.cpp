@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE(test_new_watch_dog) {
 
             async_sleep(2*d, cancel, yield[ec]);
 
-            BOOST_REQUIRE(cancel.call_count() == 1);
+            BOOST_REQUIRE(cancel);
         }
 
         // extend duration
@@ -63,12 +63,12 @@ BOOST_AUTO_TEST_CASE(test_new_watch_dog) {
             async_sleep(2*d, cancel, yield[ec]);
 
             BOOST_REQUIRE(wd.is_running());
-            BOOST_REQUIRE(cancel.call_count() == 0);
+            BOOST_REQUIRE(!cancel);
 
             async_sleep(2*d, cancel, yield[ec]);
 
             BOOST_REQUIRE(!wd.is_running());
-            BOOST_REQUIRE(cancel.call_count() == 1);
+            BOOST_REQUIRE(cancel);
         }
 
         // shorten duration
@@ -87,13 +87,13 @@ BOOST_AUTO_TEST_CASE(test_new_watch_dog) {
 
             async_sleep(1*d, cancel, yield[ec]);
 
-            BOOST_REQUIRE(cancel.call_count() == 0);
+            BOOST_REQUIRE(!cancel);
 
             wd.expires_after(1*d);
 
             async_sleep(2*d, cancel, yield[ec]);
 
-            BOOST_REQUIRE(cancel.call_count() == 1);
+            BOOST_REQUIRE(cancel);
         }
     });
 
@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE(test_old_watch_dog) {
 
             async_sleep(2s, cancel, yield[ec]);
 
-            BOOST_REQUIRE(cancel.call_count());
+            BOOST_REQUIRE(cancel);
         }
 
         // extend duration
@@ -141,7 +141,7 @@ BOOST_AUTO_TEST_CASE(test_old_watch_dog) {
 
             async_sleep(2s, cancel, yield[ec]);
 
-            BOOST_REQUIRE(cancel.call_count() == 0);
+            BOOST_REQUIRE(!cancel);
         }
     });
 

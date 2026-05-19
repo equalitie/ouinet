@@ -26,28 +26,24 @@ public:
             _slot = std::move(other._slot);
             other._hook.swap_nodes(this->_hook);
             other._hook.unlink();
-            _call_count = other._call_count;
-            other._call_count = 0;
             return *this;
         }
 
-        operator bool() const { return _call_count != 0; }
+        operator bool() const { return !(bool) _slot; }
 
     private:
         friend class Cancel;
-        template<typename... Args>
-        void on_signal(Args&&... args) {
-            ++_call_count;
+
+        void on_signal() {
             if (_slot) {
                 auto slot = std::move(_slot);
-                slot(std::forward<Args>(args)...);
+                slot();
             }
         }
 
     private:
         util::intrusive::list_hook _hook;
         std::function<void()> _slot;
-        uint32_t _call_count = 0;
     };
 
 public:
@@ -88,8 +84,8 @@ public:
         _connections.swap(other._connections);
         other._connections.clear();
 
-        _call_count = other._call_count;
-        other._call_count = 0;
+        _ec = other._ec;
+        other._ec = sys::error_code();
 
         for (auto& c : _children) {
             c._parent = this;
@@ -98,19 +94,29 @@ public:
         return *this;
     }
 
-    template<typename... Args>
-    void operator()(Args&&... args)
+    void operator()(sys::error_code ec = asio::error::operation_aborted)
     {
-        ++_call_count;
+        assert(ec != sys::error_code() && "Don't cancel with success");
+
+        if (_ec == asio::error::operation_aborted) {
+            // Already called and nothing overrides `operation_aborted`.
+            return;
+        }
+
+        _ec = ec;
 
         auto cs = std::move(_connections);
-        for (auto& c : cs) { c.on_signal(std::forward<Args>(args)...); }
-        for (auto& c : _children) { c(std::forward<Args>(args)...); }
+
+        for (auto& c : cs) { c.on_signal(); }
+        for (auto& c : _children) { c(ec); }
     }
 
-    size_t call_count() const { return _call_count; }
+    sys::error_code error_code() const {
+        return _ec;
+    }
 
-    operator bool() const { return call_count() != 0; }
+    // True when `operator()` was called.
+    operator bool() const { return (bool) _ec; }
 
     [[nodiscard]]
     Connection connect(std::function<void()> slot)
@@ -152,7 +158,7 @@ private:
     Cancel* _parent = nullptr;
     util::intrusive::list<Cancel, &Cancel::_hook> _children;
     util::intrusive::list<Connection, &Connection::_hook> _connections;
-    uint32_t _call_count = 0;
+    sys::error_code _ec;
 };
 
 inline

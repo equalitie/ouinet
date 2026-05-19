@@ -24,7 +24,7 @@ public:
         : _state(std::make_shared<State>(ex))
     {
         _signal_connection = signal.connect([s = _state] {
-                if (s->local_abort_signal.call_count() == 0) {
+                if (!s->local_abort_signal) {
                     s->local_abort_signal();
                 }
             });
@@ -39,7 +39,7 @@ public:
 
                 if (s->finished) return;
 
-                if (s->local_abort_signal.call_count() == 0) {
+                if (!s->local_abort_signal) {
                     s->local_abort_signal();
                 }
             });
@@ -52,7 +52,7 @@ public:
 
     bool timed_out() const
     {
-        return _state->local_abort_signal.call_count() != 0;
+        return (bool) _state->local_abort_signal;
     }
 
     ~Timeout()
