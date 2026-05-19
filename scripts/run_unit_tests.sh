@@ -162,8 +162,11 @@ fi
 
 cmake_build ${TEST_TARGETS[@]}
 
-FAILED_TESTS=()
-SKIPPED_TESTS=()
+TEST_RESULTS=()
+
+RESULT_OK="OK"
+RESULT_SKIPPED="SKIPPED"
+RESULT_FAILED="FAILED"
 
 for spec in ${TEST_SPECS[@]}; do
     target=$(get_target $spec)
@@ -171,7 +174,7 @@ for spec in ${TEST_SPECS[@]}; do
 
     if is_in $target ${EXCLUDED_TESTS[@]}; then
         echo "Skipped test $spec"
-        SKIPPED_TESTS+=($spec)
+        TEST_RESULTS+=("$RESULT_SKIPPED" $spec)
         continue
     fi
 
@@ -181,22 +184,23 @@ for spec in ${TEST_SPECS[@]}; do
 
     if ! run_test $target $subtest_arg --log_level=unit_scope; then
         echo "Test $spec failed"
-        FAILED_TESTS+=($spec)
+        TEST_RESULTS+=("$RESULT_FAILED" $spec)
+    else
+        TEST_RESULTS+=("$RESULT_OK" $spec)
     fi
 done
 
-if [ -n "${SKIPPED_TESTS[*]}" ]; then
-    echo "Skpped tests:"
-    for spec in ${SKIPPED_TESTS[@]}; do
-        echo "    $spec"
-    done
-    exit 1
-fi
+EXIT_CODE=0
 
-if [ -n "${FAILED_TESTS[*]}" ]; then
-    echo "Failed tests:"
-    for spec in ${FAILED_TESTS[@]}; do
-        echo "    $spec"
-    done
-    exit 1
-fi
+echo "Test summary:"
+while [[ "${#TEST_RESULTS[@]}" -gt 0 ]]; do
+    result=${TEST_RESULTS[0]}
+    spec=${TEST_RESULTS[1]}
+    TEST_RESULTS=(${TEST_RESULTS[@]:2})
+    if [ "$result" == $RESULT_FAILED ]; then
+        EXIT_CODE=1
+    fi
+    printf '    %-8s %s\n' "$result" "$spec"
+done
+
+exit $EXIT_CODE
