@@ -98,25 +98,3 @@ android / build-prod-image:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
       allow_failure: true
-
-android / build-experimental:
-  variables:
-    TARGET_PLATFORM: 'android'
-    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
-  stage: build
-  tags:
-    - docker
-  needs:
-    - job: 'android / prepare-builder-image'
-      optional: true
-    - job: 'linux / build-experimental'
-  image: $BUILDER_IMAGE
-  script:
-    - mkdir -p build.android-experimental
-    - cd build.android-experimental
-    - env WITH_EXPERIMENTAL=ON ../scripts/build-android.sh
-  artifacts:
-    paths:
-      - build.android-experimental/build-android-*/ouinet/outputs/aar/*.aar
-      - build.android-experimental/build-android-*/ouinet/outputs/apk/*.apk
-    expire_in: 6h

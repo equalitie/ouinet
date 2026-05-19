@@ -1,7 +1,6 @@
 variables:
   TARGET_PLATFORM: 'linux'
-  WITH_EXPERIMENTAL: 'OFF'
-  BUILD_PATH: 'build/$TARGET_PLATFORM-experimental_$WITH_EXPERIMENTAL'
+  BUILD_PATH: 'build/$TARGET_PLATFORM'
   BUILD_TYPE: 'Release'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   CMAKE_VERSION: "3.31.7-linux-x86_64"
@@ -38,7 +37,6 @@ variables:
         -DBOOST_VERSION=$BOOST_VERSION
         -DWITH_ASAN=$WITH_ASAN
         -DWITH_OUISYNC=ON
-        -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
       )
     - echo cmake ${CONFIGURE_ARGS[@]}
     - cmake ${CONFIGURE_ARGS[@]}
