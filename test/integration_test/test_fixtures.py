@@ -129,7 +129,9 @@ class TestFixtures:
     TRIAL_CACHE_REQUESTS_WAIT = 20
 
     MAINNET_INJECTOR_HASH = "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq"
-    FRESH_SUCCESS_REGEX = r'[\s\S]*fresh/injector Finish; ec="Success"[\s\S]*'
+    FRESH_SUCCESS_REGEX = (
+        r'[\s\S]*(?:fresh|cache_miss)/injector Finish; ec="Success"[\s\S]*'
+    )
     DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
     DHT_INITIALIZED_REGEX = r"[\s\S]*BT DHT: WAN endpoint[\s\S]*"
 
