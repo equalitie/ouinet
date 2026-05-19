@@ -345,6 +345,7 @@ for target_os in ${target_oss[@]}; do
                 --build-dir $build_dir
                 # We don't want the script to re-configure and rebuild the tests
                 --skip-cmake-configure
+                ${excluded_test_targets[@]/#/--exclude-test }
             )
 
             exe -w $ouinet_dir bash -c "./scripts/run_unit_tests.sh ${args[*]}"
