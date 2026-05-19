@@ -4,6 +4,7 @@
 
 #include "../address.h"
 #include "tunnel.h"
+#include "declspec.h"
 
 namespace i2p::data {
     class PrivateKeys;
@@ -22,7 +23,7 @@ namespace i2p_direct {
 
 class Service;
 
-class Server : public ouinet::OuiServiceImplementationServer {
+class OUINET_DECL Server : public ouinet::OuiServiceImplementationServer {
     using executor_type = asio::any_io_executor;
 public:
 

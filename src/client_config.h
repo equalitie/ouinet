@@ -40,9 +40,7 @@ static const fs::path log_file_name{_LOG_FILE_NAME};
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
 //TODO: move this to somewhere where both client and injector config has access to
-#ifdef __EXPERIMENTAL__
 #define _MAX_I2P_HOPS 8
-#endif // ifdef __EXPERIMENTAL__
 
 struct MetricsConfig {
     bool enable_on_start = false;
@@ -92,7 +90,6 @@ public:
         return _tls_ca_cert_store_path;
     }
 
-#ifdef __EXPERIMENTAL__
     size_t i2p_hops_per_tunnel() const {
       return _i2p_hops_per_tunnel;
     }
@@ -100,7 +97,6 @@ public:
     const boost::optional<I2pAddress>& i2p_bep3_tracker() const {
       return _i2p_bep3_tracker;
     }
-#endif // ifdef __EXPERIMENTAL__
 
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
@@ -310,22 +306,18 @@ private:
               "where <TYPE> can be \"tcp\", \"utp\",  "
               "and <EP> depends on the type of endpoint: "
               "<IP>:<PORT> for TCP and uTP"
-#ifdef __EXPERIMENTAL__
               ", <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
               "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P"
-#endif // ifdef __EXPERIMENTAL__
            )
            ("injector-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the injector")
            ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
             , "Path to the injector's TLS certificate; enable TLS for TCP and uTP")
-#ifdef __EXPERIMENTAL__
           ("i2p-hops-per-tunnel", po::value<size_t>()
             , "number intermediary hops to be used for I2P garlic routing.")
           ("i2p-bep3-tracker", po::value<string>()
             , "I2P address of the BEP3 tracker "
               "(<B32_PUBKEY>.b32.i2p or <B64_PUBKEY>)")
-#endif // ifdef __EXPERIMENTAL__
            ;
 
         po::options_description cache("Cache options");
@@ -592,10 +584,8 @@ private:
 
     std::unique_ptr<MetricsConfig> _metrics;
 
-#ifdef __EXPERIMENTAL__
     size_t _i2p_hops_per_tunnel = 3;
     boost::optional<I2pAddress> _i2p_bep3_tracker;
-#endif // ifdef __EXPERIMENTAL__
   
     std::optional<OuisyncCacheConfig> _ouisync;
 };

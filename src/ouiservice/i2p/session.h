@@ -2,6 +2,7 @@
 
 #include "sam.h"
 #include "../../util/cancel.h"
+#include "declspec.h"
 
 #include <variant>
 #include <ostream>
@@ -10,7 +11,7 @@ namespace ouinet {
 
 class Async;
 
-class I2pSession {
+class OUINET_DECL I2pSession {
 public:
     struct Error {
         struct IoConnect {

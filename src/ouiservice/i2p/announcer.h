@@ -1,5 +1,6 @@
 #pragma once
 
+#include "declspec.h"
 #include <memory>
 
 namespace ouinet {
@@ -10,7 +11,7 @@ class I2pTrackerClient;
 class I2pAddress;
 
 // Periodically announces our local I2pAddress to `add`ed info-hashes.
-class I2pAnnouncer {
+class OUINET_DECL I2pAnnouncer {
 private:
     struct State;
 

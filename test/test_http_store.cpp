@@ -5,6 +5,7 @@
 #include <array>
 #include <sstream>
 #include <string>
+#include <iomanip>
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>

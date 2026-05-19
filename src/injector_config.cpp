@@ -47,13 +47,11 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-utp", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (cleartext)")
         ("listen-on-utp-tls", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (encrypted)")
-#ifdef __EXPERIMENTAL__
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
         ("i2p-hops-per-tunnel", po::value<size_t>()
          , "number intermediary hops to be used for I2P garlic routing.")
-#endif // ifdef __EXPERIMENTAL__
         // It always announces the TLS uTP endpoint since
         // a TLS certificate is always generated.
         ("credentials", po::value<string>()
@@ -223,7 +221,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
              , "]");
 
 
-#ifdef __EXPERIMENTAL__
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without
     // values in config files. Thus we need to force the 'listen-on-i2p' arg
     // to have one of the strings values "true" or "false".
@@ -258,8 +255,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
         _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
     }
-
-#endif // ifdef __EXPERIMENTAL__
 
     if (vm.count("listen-on-tcp")) {
         auto opt_tcp_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());

@@ -2,6 +2,7 @@
 #include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
 
+#include <iomanip>
 #include <chrono>
 #include <constants.h>
 #include <util/hash.h>

@@ -5,6 +5,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
+#include <variant>
 #include <expected>
 #include <ostream>
 #include <string>

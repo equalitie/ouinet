@@ -25,7 +25,6 @@ option(WITH_TEST "Compile tests" ON)
 #       https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
-option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 option(WITH_OUISYNC "Build with Ouisync" OFF)
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
@@ -38,7 +37,6 @@ message(STATUS "---------------------------------------")
 message(STATUS "Options:")
 message(STATUS "  WITH_TEST                : ${WITH_TEST}")
 message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
-message(STATUS "  WITH_EXPERIMENTAL        : ${WITH_EXPERIMENTAL}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
 message(STATUS "")
@@ -166,7 +164,7 @@ add_library(ouinet_common_public
 target_link_libraries(ouinet_common_public PUBLIC ouinet_asio Boost::filesystem)
 target_compile_options(ouinet_common_public PUBLIC -std=c++23)
 target_compile_definitions(ouinet_common_public PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
-target_include_directories(ouinet_common_public PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ouinet_common_public PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 ################################################################################
 
@@ -260,11 +258,11 @@ if (IOS)
 else()
     add_library(client_lib SHARED ${client_sources})
 endif()
+
 if (NOT WIN32 AND NOT MINGW)
     set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 endif()
 add_library(ouinet::client ALIAS client_lib)
-
 
 target_link_libraries(client_lib
     PUBLIC

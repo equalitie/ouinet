@@ -2,6 +2,7 @@
 
 #include "address.h"
 #include "tracker.h"
+#include "declspec.h"
 
 namespace ouinet {
 
@@ -10,7 +11,7 @@ class I2pTrackerClient;
 
 namespace bittorrent { class NodeID; }
 
-class I2pTrackerLookup {
+class OUINET_DECL I2pTrackerLookup {
 private:
     struct Inner;
 

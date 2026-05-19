@@ -3,6 +3,7 @@
 #include "ouiservice/i2p/session.h"
 #include "util/cancel.h"
 #include "util/promise.h"
+#include "declspec.h"
 
 namespace ouinet {
 
@@ -16,6 +17,6 @@ using CreateI2pSessionPromise = Promise<
         >;
 
 CreateI2pSessionPromise::Future
-create_i2p_session(Cancel, util::LogPath, asio::any_io_executor);
+OUINET_DECL create_i2p_session(Cancel, util::LogPath, asio::any_io_executor);
 
 } // namespace

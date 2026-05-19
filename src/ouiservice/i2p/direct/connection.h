@@ -10,10 +10,11 @@
 #include "namespaces.h"
 #include "logger.h"
 #include "timeout_stream.h"
+#include "declspec.h"
 
 namespace ouinet::i2p_direct {
 
-extern size_t init_counter;
+extern OUINET_DECL size_t init_counter;
 
 class Connection : public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>> {
 public:

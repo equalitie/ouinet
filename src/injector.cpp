@@ -32,10 +32,7 @@
 #include "session.h"
 
 #include "ouiservice.h"
-#ifdef __EXPERIMENTAL__
-//#  include "ouiservice/i2p.h"
-#  include "ouiservice/i2p/util/create_i2p_session.h"
-#endif // ifdef __EXPERIMENTAL__
+#include "ouiservice/i2p/util/create_i2p_session.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"

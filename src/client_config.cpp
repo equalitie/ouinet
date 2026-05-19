@@ -259,7 +259,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 };
             }
         }
-#ifdef __EXPERIMENTAL__
         else if (type_str == "bep3-http-over-i2p") {
             _cache_type = CacheType::Bep3HTTPOverI2P;
 
@@ -270,7 +269,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                     "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
             }
         }
-#endif // ifdef __EXPERIMENTAL__
         else if (type_str == "ouisync" || type_str == "") {
             if (auto token_opt = as_optional<string>(vm, "ouisync-page-index")) {
                 _cache_type = CacheType::Ouisync;
@@ -308,7 +306,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _injector_credentials[*_injector_ep] = cred;
     }
 
-#ifdef __EXPERIMENTAL__
         if (vm.count("i2p-hops-per-tunnel")) {
         auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
 
@@ -332,9 +329,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
         _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
     }
-#endif // ifdef __EXPERIMENTAL__ _i2p_hops_
 
-#ifdef __EXPERIMENTAL__
     if (auto opt = as_optional<string>(vm, "i2p-bep3-tracker")) {
         if (_cache_type != CacheType::Bep3HTTPOverI2P) {
             throw std::runtime_error(
@@ -352,7 +347,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         throw std::runtime_error(
             "'--cache-type=bep3-http-over-i2p' requires '--i2p-bep3-tracker' to be set");
     }
-#endif // ifdef __EXPERIMENTAL__
 
     if (_cache_type == CacheType::None) {
         LOG_WARN("Not using d-cache");

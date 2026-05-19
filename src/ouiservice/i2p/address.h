@@ -5,10 +5,11 @@
 #include <ostream>
 #include <span>
 #include <cstdint>
+#include "declspec.h"
 
 namespace ouinet {
 
-class I2pAddress {
+class OUINET_DECL I2pAddress {
 public:
     static constexpr size_t B32_ADDR_BINARY_SIZE = 32; // Size of sha256 hash
 

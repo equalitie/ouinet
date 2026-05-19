@@ -4,6 +4,7 @@
 
 #include "../address.h"
 #include "tunnel.h"
+#include "declspec.h"
 
 namespace i2p::client {
     class I2PClientTunnel;
@@ -18,7 +19,7 @@ namespace i2p_direct {
 
 class Service;
 
-class Client : public ouinet::OuiServiceImplementationClient {
+class OUINET_DECL Client : public ouinet::OuiServiceImplementationClient {
     using executor_type = asio::any_io_executor;
 
 public:

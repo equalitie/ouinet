@@ -10,7 +10,7 @@
 #include "../address.h"
 
 #include "ouiservice.h"
-
+#include "declspec.h"
 
 namespace i2p::client {
     class ClientDestination;
@@ -19,7 +19,7 @@ namespace i2p::client {
 
 namespace ouinet::i2p_direct {
 
-class Service : public std::enable_shared_from_this<Service> {
+class OUINET_DECL Service : public std::enable_shared_from_this<Service> {
     using executor_type = asio::any_io_executor;
 
 public:

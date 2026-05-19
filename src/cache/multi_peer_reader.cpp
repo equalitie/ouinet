@@ -437,7 +437,6 @@ public:
                , move(newest_proto_seen), move(log_path))
     {}
 
-#ifdef __EXPERIMENTAL__
     // Constructor for BEP3 tracker + I2P peers
     // LAN peers some how depends on DHT (lock?) which might have not been initiated
     // so we don't deal with them here.
@@ -537,7 +536,6 @@ public:
             _cv.notify();
         });
     }
-#endif
 
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
         if (dht.is_martian(ep)) return;
@@ -677,9 +675,7 @@ private:
     // Peers that are in _all_udp_peers/_all_i2p_peers but are not in either
     // _candidate_peers nor _good_peers are considered as failed.
     std::map<udp::endpoint, unique_ptr<Peer>> _all_udp_peers;
-#ifdef __EXPERIMENTAL__
     std::map<I2pAddress, unique_ptr<Peer>> _all_i2p_peers;
-#endif
 
     util::intrusive::list<Peer, &Peer::_candidate_hook> _candidate_peers;
     util::intrusive::list<Peer, &Peer::_good_peer_hook> _good_peers;
@@ -751,7 +747,6 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , _log_path.tag("Peers"));
 }
 
-#ifdef __EXPERIMENTAL__
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
                                 , CryptoStreamKey resource_key
@@ -772,7 +767,6 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , move(newest_proto_seen)
                                , log_path);
 }
-#endif
 
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
     AsyncJob<boost::none_t> job;

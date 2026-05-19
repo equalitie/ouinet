@@ -16,10 +16,8 @@
 #include "cxx/dns.h"
 
 namespace ouinet {
-  //TODO: move this to somewhere where both client and injector config has access to
-#ifdef __EXPERIMENTAL__
+//TODO: move this to somewhere where both client and injector config has access to
 #define _MAX_I2P_HOPS 8
-#endif // ifdef __EXPERIMENTAL__
 
 template<class... Args>
 inline
@@ -64,15 +62,12 @@ public:
     boost::filesystem::path repo_root() const
     { return _repo_root; }
 
-#ifdef __EXPERIMENTAL__
     bool listen_on_i2p() const
     { return _listen_on_i2p; }
 
-  size_t i2p_hops_per_tunnel() const {
+    size_t i2p_hops_per_tunnel() const {
       return _i2p_hops_per_tunnel;
     }
-
-#endif // ifdef __EXPERIMENTAL__
 
     std::string bep5_injector_swarm_name() const
     {
@@ -132,10 +127,8 @@ private:
     ExtraBtBsServers _bt_bootstrap_extras;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_injector;
     boost::optional<size_t> _open_file_limit;
-#ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
     size_t _i2p_hops_per_tunnel = 3;
-#endif // ifdef __EXPERIMENTAL__
     std::string _tls_ca_cert_store_path;
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;

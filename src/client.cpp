@@ -53,10 +53,8 @@
 #include "bittorrent/mutable_data.h"
 
 #include "ouiservice.h"
-#ifdef __EXPERIMENTAL__
-#  include "ouiservice/i2p/session.h"
-#  include "ouiservice/i2p/util/create_i2p_session.h"
-#endif // ifdef __EXPERIMENTAL__
+#include "ouiservice/i2p/session.h"
+#include "ouiservice/i2p/util/create_i2p_session.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -2560,10 +2558,7 @@ void Client::State::setup_cache(YieldContext yield)
     });
 
     if (_config.cache_type() == ClientConfig::CacheType::Bep5Http
-#ifdef __EXPERIMENTAL__
-        ||
-        _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P
-#endif // ifdef __EXPERIMENTAL__
+        || _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P
         ) {
       LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
@@ -2605,11 +2600,9 @@ void Client::State::setup_cache(YieldContext yield)
       if (!_cache->enable_dht(dht, _config.max_simultaneous_announcements())) ec = asio::error::invalid_argument;
       fail_on_error("Failed to enable BT DHT in cache::Client");
     }
-#ifdef __EXPERIMENTAL__
     else if (_config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P) {
         start_accepting_i2p(Async(yield, _shutdown_signal, _log_path.tag("accept")));
     }
-#endif // ifdef __EXPERIMENTAL__
 
 #undef fail_on_error
     }
@@ -3065,7 +3058,6 @@ void Client::State::setup_injector(asio::yield_context yield)
 
     std::unique_ptr<OuiServiceImplementationClient> client;
 
-#ifdef __EXPERIMENTAL__
     if (auto ep = injector_ep->get_if<I2pAddress>()) {
         struct Client : public ouinet::OuiServiceImplementationClient {
             sys::error_code start(Async) override {
@@ -3109,9 +3101,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         };
         client = std::make_unique<Client>(*ep, get_or_create_i2p_session_future(yield.get_executor()), _shutdown_signal, _log_path);
     }
-    else
-#endif // ifdef __EXPERIMENTAL__
-    if (auto ep = injector_ep->get_if<asio::ip::tcp::endpoint>()) {
+    else if (auto ep = injector_ep->get_if<asio::ip::tcp::endpoint>()) {
         auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), *ep);
 
         if (!tcp_client->verify_endpoint()) {

@@ -58,7 +58,6 @@ function cmake_configure {(
         -DCMAKE_BUILD_TYPE=Debug
         -DWITH_ASAN=OFF
         -DWITH_OUISYNC=OFF
-        -DWITH_EXPERIMENTAL=ON
         -DCORROSION_BUILD_TESTS=ON
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         # Uncomment for verbose

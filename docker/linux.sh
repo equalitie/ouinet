@@ -12,7 +12,6 @@ enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
 with_ouisync=n
-with_experimental=n
 host_ouisync_dir=
 with_asan=n
 
@@ -57,9 +56,6 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --with-ouisync)
             with_ouisync=y
-            ;;
-        --with-experimental)
-            with_experimental=y
             ;;
         --use-ouisync-dir)
             host_ouisync_dir=$2; shift;
@@ -287,7 +283,6 @@ for target_os in ${target_oss[@]}; do
         cmake_configure_options=(
             -DCMAKE_BUILD_TYPE=Debug
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
-            -DWITH_EXPERIMENTAL=$([ "$with_experimental" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
             # For testing with custom Ouisync sources
@@ -312,9 +307,6 @@ for target_os in ${target_oss[@]}; do
             exe -w $ouinet_dir git clean -dfX
         fi
 
-        env=(
-            WITH_EXPERIMENTAL=$([ "$with_experimental" == y ] && echo ON || echo OFF)
-        )
         exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh
     fi
 
