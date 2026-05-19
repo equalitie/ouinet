@@ -81,6 +81,7 @@ target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
 ################################################################################
 add_library(ouiservice-i2p-no-impl EXCLUDE_FROM_ALL STATIC "./address.cpp")
 target_compile_options(ouiservice-i2p-no-impl PUBLIC -std=c++23)
+target_link_libraries(ouiservice-i2p-no-impl PRIVATE ouinet_common_public)
 
 ################################################################################
 if(WITH_EXPERIMENTAL)

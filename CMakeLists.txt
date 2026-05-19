@@ -166,7 +166,7 @@ add_library(ouinet_common_public
 target_link_libraries(ouinet_common_public PUBLIC ouinet_asio Boost::filesystem)
 target_compile_options(ouinet_common_public PUBLIC -std=c++23)
 target_compile_definitions(ouinet_common_public PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
-target_include_directories(ouinet_common_public PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ouinet_common_public PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 ################################################################################
 
