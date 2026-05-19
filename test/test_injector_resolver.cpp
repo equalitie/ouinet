@@ -1,6 +1,6 @@
 #define BOOST_TEST_MODULE injector_resolver
 #include <boost/test/data/test_case.hpp>
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include "../src/injector.h"
 #include <boost/beast/http/string_body.hpp>

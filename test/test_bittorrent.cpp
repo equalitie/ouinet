@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE bittorrent
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 #include <boost/optional.hpp>
 #include <boost/asio.hpp>
 

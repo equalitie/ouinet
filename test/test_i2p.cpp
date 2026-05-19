@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE utility
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include "namespaces.h"
 #include "util/wait_condition.h"

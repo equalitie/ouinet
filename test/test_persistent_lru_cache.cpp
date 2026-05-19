@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE persistent_lru_cache
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 #include <boost/asio/detached.hpp>
 
 #include <util/persistent_lru_cache.h>

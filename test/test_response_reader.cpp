@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE response_reader
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ip/tcp.hpp>

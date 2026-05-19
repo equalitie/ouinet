@@ -2,7 +2,7 @@
 
 #include <boost/test/tools/interface.hpp>
 #include <boost/test/tools/old/interface.hpp>
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 #include "ouiservice/i2p/address.h"
 
 using ouinet::I2pAddress;

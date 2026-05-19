@@ -4,9 +4,10 @@
 #include <winsock2.h>
 #endif // __MINGW32__
 
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
+#include <fstream>
 #include "util/cancel.h"
 #include "util/file_io.h"
 #include "../test/util/base_fixture.hpp"
