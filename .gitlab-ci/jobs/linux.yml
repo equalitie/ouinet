@@ -73,7 +73,7 @@ variables:
   image: $BUILDER_IMAGE
   script:
     - export RUST_LOG=ouinet_rs=debug
-    - export CXXFLAGS="-I$CI_PROJECT_DIR/$BUILD_PATH/boost/install/include"
+    - export CXXFLAGS="-I$CI_PROJECT_DIR/$BUILD_PATH/boost/src/built_boost"
     # For the linker to find libboost_asio.so
     - export LIBRARY_PATH="$CI_PROJECT_DIR/$BUILD_PATH"
     # For when the test executable is ran
