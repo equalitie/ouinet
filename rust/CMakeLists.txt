@@ -43,6 +43,10 @@ FetchContent_MakeAvailable(Corrosion)
 corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml)
 
 string(REPLACE ";" " " OUINET_RS_CXXFLAGS "${OUINET_RS_CXXFLAGS_LIST}")
+message("1>>>>>>>>>>>>> ${BUILT_BOOST_INCLUDE_DIR}")
+message("2>>>>>>>>>>>>> ${CMAKE_CURRENT_SOURCE_DIR}")
+message("3>>>>>>>>>>>>> ${OUINET_RS_CXXFLAGS}")
+message(FATAL_ERROR "")
 corrosion_set_env_vars(ouinet_rs "CXXFLAGS=${OUINET_RS_CXXFLAGS}")
 
 add_dependencies(cargo-prebuild_ouinet_rs ouinet_asio)
