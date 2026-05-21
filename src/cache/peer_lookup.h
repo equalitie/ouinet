@@ -43,7 +43,6 @@ public:
         : _swarm_name(std::move(swarm_name))
         , _infohash(util::sha1_digest(_swarm_name))
         , _exec(exec)
-        , _cv(_exec)
     { }
 
     Ret get(Cancel c, asio::yield_context y) {
@@ -51,9 +50,7 @@ public:
         // * Use previously returned result if it's not older than 5mins
         // * Otherwise wait for the running job to finish
 
-        auto cancel_con = _lifetime_cancel.connect([&] { c(); });
-
-        if (!_job) {
+        if (!_job || !_job->is_running()) {
             _job = make_job();
         }
 
@@ -68,8 +65,7 @@ public:
 #endif
 
         sys::error_code ec;
-        _cv.wait(c, y[ec]);
-
+        _job->wait_for_finish(c, y[ec]);
         return_or_throw_on_error(y, c, ec, Ret{});
 
         // (ec == operation_aborted) implies (c == true)
@@ -77,8 +73,6 @@ public:
 
         return or_throw(y, _last_result.ec, _last_result.value);
     }
-
-    virtual ~PeerLookup() { _lifetime_cancel(); }
 
     NodeID infohash() const {
         return _infohash;
@@ -100,31 +94,21 @@ private:
     std::unique_ptr<Job> make_job() {
         auto job = std::make_unique<Job>(_exec);
 
-        job->start([ self = this
-                   , lc = std::make_shared<Cancel>(_lifetime_cancel)
-                   ] (Cancel c, asio::yield_context y) mutable {
-            auto cancel_con = lc->connect([&] { c(); });
-
-            auto on_exit = defer([&] {
-                    if (*lc) return;
-                    self->_cv.notify();
-                    self->_job = nullptr;
-                });
-
-            auto wd = watch_dog(self->_exec, timeout(), [&] {
-                    LOG_WARN(self->_lookup_strategy_name, " lookup ",
-                             self->_infohash, " timed out");
+        job->start([this] (Cancel c, asio::yield_context y) mutable {
+            auto wd = watch_dog(_exec, timeout(), [&] {
+                    LOG_WARN(_lookup_strategy_name, " lookup ",
+                             _infohash, " timed out");
                     c();
                 });
 
             sys::error_code ec;
 
-            auto result = self->do_lookup(c, y[ec]);
+            auto result = do_lookup(c, y[ec]);
 
             if (!c && !ec) {
-                self->_last_result.ec    = ec;
-                self->_last_result.value = std::move(result);
-                self->_last_result.time  = Clock::now();
+                _last_result.ec    = ec;
+                _last_result.value = std::move(result);
+                _last_result.time  = Clock::now();
             }
 
             return or_throw(y, ec, boost::none);
@@ -137,9 +121,7 @@ private:
     NodeID _infohash;
     AsioExecutor _exec;
     std::unique_ptr<Job> _job;
-    ConditionVariable _cv;
     Result _last_result;
-    Cancel _lifetime_cancel;
 };
 
 }} // namespaces
