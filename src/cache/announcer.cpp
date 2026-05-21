@@ -13,8 +13,9 @@
 #include "task.h"
 #include <boost/utility/string_view.hpp>
 
-#define _LOGPFX "Announcer: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#ifdef __EXPERIMENTAL__
+#include <bittorrent/bep3_tracker.h>
+#endif
 
 using namespace std;
 using namespace ouinet;
@@ -60,14 +61,16 @@ struct Announcer::Loop {
     size_t _simultaneous_announcements;
     Cancel _cancel;
     Cancel _timer_cancel;
+    util::LogPath _log_path;
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(AsioExecutor ex, size_t simultaneous_announcements)
+    Loop(AsioExecutor ex, size_t simultaneous_announcements, util::LogPath log_path)
         : ex(ex)
         , entries(ex)
         , _simultaneous_announcements(simultaneous_announcements)
+        , _log_path(move(log_path))
     { }
 
     inline static bool debug() { return logger.get_threshold() <= DEBUG; }
@@ -84,10 +87,10 @@ struct Announcer::Loop {
         bool already_has_key = (entry_i != entries.end());
 
         if (already_has_key) {
-            _DEBUG("Adding ", key, " (already exists)");
+            LOG_DEBUG(_log_path, " Adding ", key, " (already exists)");
             entry_i->first.to_remove = false;
         } else {
-            _DEBUG("Adding ", key);
+            LOG_DEBUG(_log_path, "Adding ", key);
         }
 
         if (already_has_key) return false;
@@ -114,7 +117,7 @@ struct Announcer::Loop {
             if (i->first.key == key) break;  // found
         if (i == entries.end()) return false;  // not found
 
-        _DEBUG("Marking ", key, " for removal");
+        LOG_DEBUG(_log_path, " Marking ", key, " for removal");
         // The actual removal is not done here but in the main loop.
         i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.
@@ -168,7 +171,7 @@ struct Announcer::Loop {
             ss << " ago";
         };
 
-        _DEBUG("Entries:");
+        LOG_DEBUG(_log_path, " Entries:");
         for (auto& ep : entries) {
             auto& e = ep.first;
             ss << " " << e.infohash << " | successful_update=";
@@ -177,7 +180,7 @@ struct Announcer::Loop {
             print(e.failed_update);
             ss << " | key=" << e.key;
 
-            _DEBUG(ss.str());
+            LOG_DEBUG(_log_path, " ", ss.str());
             ss.str({});
         }
     }
@@ -189,7 +192,7 @@ struct Announcer::Loop {
         while (!cancel) {
             if (entries.empty()) {
                 sys::error_code ec;
-                _DEBUG("No entries to update, waiting...");
+                LOG_DEBUG(_log_path, " No entries to update, waiting...");
                 entries.async_wait_for_push(cancel, yield[ec]);
                 return_or_throw_on_error(yield, cancel, ec, end);
             }
@@ -200,7 +203,7 @@ struct Announcer::Loop {
 
             auto d = next_update_after(i->first);
 
-            _DEBUG( "Found entry to update. It'll be updated in "
+            LOG_DEBUG(_log_path, " Found entry to update. It'll be updated in "
                   , chrono::duration_cast<chrono::seconds>(d).count()
                   , " seconds: ", i->first.key);
 
@@ -225,7 +228,7 @@ struct Announcer::Loop {
     void loop(Cancel& cancel, asio::yield_context yield)
     {
         auto on_exit = defer([&] {
-            _DEBUG("Exiting the loop; cancel=", (cancel ? "true":"false"));
+            LOG_DEBUG(_log_path, " Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
         WaitCondition wcon(ex);
@@ -235,7 +238,7 @@ struct Announcer::Loop {
 
             for (size_t n = 0; n < _simultaneous_announcements; ++n) {
                 sys::error_code ec;
-                _DEBUG("Picking entry to update");
+                LOG_DEBUG(_log_path, " Picking entry to update");
                 auto ei = pick_entry(cancel, yield[ec]);
 
                 if (cancel) return;
@@ -295,8 +298,12 @@ struct Announcer::Loop {
 struct Bep5Loop : public Announcer::Loop {
     shared_ptr<bt::DhtBase> dht;
 
-    Bep5Loop(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements)
-        : Loop(dht->get_executor(), simultaneous_announcements)
+    Bep5Loop(
+        shared_ptr<bt::DhtBase> dht,
+        size_t simultaneous_announcements,
+        util::LogPath log_path
+    )
+        : Loop(dht->get_executor(), simultaneous_announcements, move(log_path))
         , dht(move(dht))
     { }
 
@@ -308,7 +315,7 @@ struct Bep5Loop : public Announcer::Loop {
 
             // Wait for DHT to be ready before starting the loop
             {
-                _DEBUG("Waiting for DHT");
+                LOG_DEBUG(_log_path, " Waiting for DHT");
                 dht->wait_all_ready(cancel, yield[ec]);
             }
 
@@ -318,13 +325,13 @@ struct Bep5Loop : public Announcer::Loop {
 
     void announce(Entry& e, Cancel& cancel, asio::yield_context yield) override
     {
-        _DEBUG("Announcing (BEP5/DHT): ", e.key, "...");
+        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e.key, "...");
 
         sys::error_code ec;
         auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
         dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
 
-        _DEBUG("Announcing (BEP5/DHT): ", e_key, ": done; ec=", ec);
+        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e_key, ": done; ec=", ec);
 
         return or_throw(yield, ec);
     }
@@ -350,10 +357,14 @@ Announcer::~Announcer() {}
 
 //--------------------------------------------------------------------
 // Bep5Announcer
-Bep5Announcer::Bep5Announcer(std::shared_ptr<bittorrent::DhtBase> dht, size_t simultaneous_announcements)
+Bep5Announcer::Bep5Announcer(
+    std::shared_ptr<bittorrent::DhtBase> dht,
+    size_t simultaneous_announcements,
+    util::LogPath log_path
+)
     : Announcer(dht->get_executor(), simultaneous_announcements)
 {
-    _loop = make_unique<Bep5Loop>(move(dht), simultaneous_announcements);
+    _loop = make_unique<Bep5Loop>(move(dht), simultaneous_announcements, move(log_path));
     static_cast<Bep5Loop*>(_loop.get())->start();
 }
 

@@ -3,6 +3,7 @@
 #include "../bittorrent/bep5_announcer.h"
 #include "../util/hash.h"
 #include "../util/executor.h"
+#include "../util/log_path.h"
 #include "namespaces.h"
 #include <memory>
 
@@ -30,7 +31,11 @@ protected:
 // BEP5 Announcer - announces to DHT
 class Bep5Announcer final : public Announcer {
 public:
-    Bep5Announcer(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
+    Bep5Announcer(
+        std::shared_ptr<bittorrent::DhtBase>,
+        size_t simultaneous_announcements,
+        util::LogPath log_path
+    );
     ~Bep5Announcer();
 };
 
