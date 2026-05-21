@@ -24,7 +24,7 @@ struct I2pSession::Inner {
 std::expected<I2pSession, Error::Create> I2pSession::create(Async yield, std::optional<asio::ip::tcp::endpoint> sam_ep) {
     auto error = [] (auto&& e) { return std::unexpected(Error::Create { std::move(e) }); };
 
-    auto ep = sam_ep ? *sam_ep : default_endpoint();
+    auto ep = sam_ep ? *sam_ep : Sam::default_endpoint();
 
     auto sam = Sam::connect(ep, yield);
     if (!sam) return error(sam.error());

@@ -205,6 +205,10 @@ public:
         template<class Eo> static auto wrap() { return [](auto ei) { return Eo(std::move(ei)); }; }
     };
 
+    static asio::ip::tcp::endpoint default_endpoint() {
+        return asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 7656);
+    }
+
     Sam(asio::ip::tcp::socket socket);
     Sam(Sam&&);
 

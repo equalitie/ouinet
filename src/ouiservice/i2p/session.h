@@ -54,10 +54,6 @@ public:
 
     I2pSession(I2pSession&& other) = default;
 
-    static asio::ip::tcp::endpoint default_endpoint() {
-        return asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 7656);
-    }
-
     [[nodiscard]]
     static std::expected<I2pSession, Error::Create> create(Async, std::optional<asio::ip::tcp::endpoint> sam_ep = {});
 
