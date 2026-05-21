@@ -58,7 +58,7 @@ static boost::optional<beast::string_view> get(const R& r, http::field f)
     auto i = fields_of(r).find(f);
     if (i == fields_of(r).end())
       return boost::none;
-        
+
     return i->value();
 }
 
