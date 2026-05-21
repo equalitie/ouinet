@@ -106,7 +106,6 @@ common_test(TARGET test_dns)
 common_test(TARGET test_fetch LIBS injector_lib client_lib)
 
 common_test(TARGET test_i2p)
-common_test(TARGET test_i2p_direct)
 common_test(TARGET test_i2p_endpoint)
 common_test(TARGET test_i2p_fetch LIBS injector_lib client_lib)
 common_test(TARGET test_i2p_tracker LIBS injector_lib client_lib)

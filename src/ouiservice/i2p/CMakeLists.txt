@@ -44,11 +44,6 @@ add_dependencies(libi2pdlang                                OpenSSL::headers Boo
 project(ouiservice-i2p)
 
 add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
-    "./direct/tunnel.cpp"
-    "./direct/handshake.cpp"
-    "./direct/client.cpp"
-    "./direct/server.cpp"
-    "./direct/service.cpp"
     "./address.cpp"
     "./address.cpp"
     "./sam.cpp"
@@ -62,18 +57,12 @@ add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
 target_include_directories(ouiservice-i2p
     PUBLIC
         ${CMAKE_SOURCE_DIR}/src
-        "./i2pd/libi2pd"
-        "./i2pd/libi2pd_client"
-        "./i2pd/i18n"
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(ouiservice-i2p
     PRIVATE
-        libi2pdclient
-        libi2pd
         z
-        libi2pdlang
         OpenSSL::SSL
     PUBLIC
         ouinet_common_public
