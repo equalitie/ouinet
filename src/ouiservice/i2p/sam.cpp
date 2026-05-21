@@ -3,6 +3,7 @@
 #include "util/wait_condition.h"
 #include "session_id.h"
 #include "address.h"
+#include "namespaces.h"
 
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
@@ -78,6 +79,27 @@ std::expected<std::string, Error::IoRecv> Sam::recv_line(Async yield) {
         line.push_back(c);
     }
 };
+
+/* static */
+std::expected<Sam, Error::Connect> Sam::connect(asio::ip::tcp::endpoint ep, Async yield) {
+    auto error = [] (auto&& e) { return std::unexpected(Error::Connect { std::move(e) }); };
+
+    asio::ip::tcp::socket socket(yield.get_executor());
+
+    auto slot = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
+
+    auto ec = socket.async_connect(ep, yield);
+    if (ec) return error(Error::IoConnect { ec });
+
+    Sam sam(std::move(socket));
+
+    auto slot1 = yield.cancel_slot([&] { sam.close(); });
+
+    auto h_rs = sam.handshake(yield);
+    if (!h_rs) return error(h_rs.error());
+
+    return sam;
+}
 
 std::expected<std::string, Error::Invoke> Sam::invoke(const std::string& request, Async yield) {
     _inner->mutex.wait(yield);

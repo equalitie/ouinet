@@ -14,15 +14,8 @@ class Async;
 class OUINET_DECL I2pSession {
 public:
     struct Error {
-        struct IoConnect {
-            sys::error_code ec;
-            friend std::ostream& operator<<(std::ostream& os, const IoConnect& e) {
-                return os << "IoConnect{" << e.ec.message() << "}";
-            }
-            sys::error_code code() const { return ec; }
-        };
         struct Create {
-            using Value = std::variant<IoConnect, Sam::Error::Handshake, Sam::Error::CreateSession>;
+            using Value = std::variant<Sam::Error::Connect, Sam::Error::CreateSession>;
             Value value;
             friend std::ostream& operator<<(std::ostream& os, const Create& e) {
                 return std::visit([&os] (auto& e) -> std::ostream&
@@ -34,7 +27,7 @@ public:
             }
         };
         struct Connect {
-            using Value = std::variant<IoConnect, Sam::Error::Handshake, Sam::Error::Invoke>;
+            using Value = std::variant<Sam::Error::Connect, Sam::Error::Invoke>;
             Value value;
             friend std::ostream& operator<<(std::ostream& os, const Connect& e) {
                 return std::visit([&os] (auto& e) -> auto&
@@ -46,7 +39,7 @@ public:
             }
         };
         struct Accept {
-            using Value = std::variant<IoConnect, Sam::Error::Handshake, Sam::Error::Invoke>;
+            using Value = std::variant<Sam::Error::Connect, Sam::Error::Invoke>;
             Value value;
             friend std::ostream& operator<<(std::ostream& os, const Accept& e) {
                 return std::visit([&os] (auto& e) -> auto&

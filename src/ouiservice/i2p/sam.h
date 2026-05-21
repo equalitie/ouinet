@@ -1,7 +1,7 @@
 #pragma once
 
-#include "namespaces.h"
 #include "error.h"
+#include "namespaces.h"
 
 #include <boost/asio/ip/tcp.hpp>
 
@@ -27,6 +27,13 @@ private:
 
 public:
     struct Error {
+        struct IoConnect {
+            sys::error_code ec;
+            friend std::ostream& operator<<(std::ostream& os, const IoConnect& e) {
+                return os << "IoConnect{" << e.ec.message() << "}";
+            }
+            sys::error_code code() const { return ec; }
+        };
         struct IoSend {
             sys::error_code ec;
             friend std::ostream& operator<<(std::ostream& os, const IoSend& e) {
@@ -126,6 +133,18 @@ public:
                 return std::visit([] (auto& e) { return e.code(); }, value);
             }
         };
+        struct Connect {
+            using Value = std::variant<IoConnect, Handshake>;
+            Value value;
+            friend std::ostream& operator<<(std::ostream& os, const Connect& e) {
+                return std::visit([&os] (auto& e) -> std::ostream&
+                    { return os << "Connect{ " << e << " }"; },
+                    e.value);
+            }
+            sys::error_code code() const {
+                return std::visit([] (auto& e) { return e.code(); }, value);
+            }
+        };
         struct DestGenerate {
             using Value = std::variant<Invoke, UnexpectedResponse, InvalidAddress>;
             Value value;
@@ -188,6 +207,11 @@ public:
 
     Sam(asio::ip::tcp::socket socket);
     Sam(Sam&&);
+
+    // Connect to TCP socket and handshake
+    [[nodiscard]]
+    static
+    std::expected<Sam, Error::Connect> connect(asio::ip::tcp::endpoint, Async);
 
     [[nodiscard]]
     std::expected<void, Error::IoSend> send_line(const std::string& line, Async);

@@ -24,28 +24,19 @@ struct I2pSession::Inner {
 std::expected<I2pSession, Error::Create> I2pSession::create(Async yield, std::optional<asio::ip::tcp::endpoint> sam_ep) {
     auto error = [] (auto&& e) { return std::unexpected(Error::Create { std::move(e) }); };
 
-    asio::ip::tcp::socket socket(yield.get_executor());
-
-    auto slot0 = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
-
     auto ep = sam_ep ? *sam_ep : default_endpoint();
 
-    auto ec = socket.async_connect(ep, yield);
-    if (ec) return error(Error::IoConnect { ec });
+    auto sam = Sam::connect(ep, yield);
+    if (!sam) return error(sam.error());
 
-    Sam sam(std::move(socket));
-
-    auto slot1 = yield.cancel_slot([&] { sam.close(); });
-
-    auto h_rs = sam.handshake(yield);
-    if (!h_rs) return error(h_rs.error());
+    auto slot1 = yield.cancel_slot([&] { sam->close(); });
 
     auto id = SessionId::random();
 
-    auto c_rs = sam.create_session(id, yield);
+    auto c_rs = sam->create_session(id, yield);
     if (!c_rs) return error(c_rs.error());
 
-    auto inner = std::make_shared<Inner>(std::move(sam), std::move(id), std::move(*c_rs));
+    auto inner = std::make_shared<Inner>(std::move(*sam), std::move(id), std::move(*c_rs));
 
     // Keep-alive coroutine.
     yield.spawn([inner] (Async yield) mutable {
@@ -66,25 +57,14 @@ std::expected<asio::ip::tcp::socket, Error::Connect> I2pSession::connect(const I
     auto error = [] (auto&& e) { return std::unexpected(Error::Connect { std::move(e) }); };
     auto slot = _inner->cancel.connect([&] { yield.cancel(); });
 
-    asio::ip::tcp::socket socket(yield.get_executor());
-
-    auto slot0 = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
-
-    auto ec = socket.async_connect(_inner->sam.remote_endpoint(), yield);
-    if (ec) return error(Error::IoConnect { ec });
-
-    Sam sam(std::move(socket));
-
-    auto slot1 = yield.cancel_slot([&] { sam.close(); });
-
-    auto h_rs = sam.handshake(yield);
-    if (!h_rs) return error(h_rs.error());
+    auto sam = Sam::connect(_inner->sam.remote_endpoint(), yield);
+    if (!sam) return error(sam.error());
 
     // TODO: Validate response is OK
-    auto i_rs = sam.invoke("STREAM CONNECT ID=" + _inner->id.value + " DESTINATION=" + remote_addr.value + " SILENT=false", yield);
+    auto i_rs = sam->invoke("STREAM CONNECT ID=" + _inner->id.value + " DESTINATION=" + remote_addr.value + " SILENT=false", yield);
     if (!i_rs) return error(i_rs.error());
 
-    return std::move(sam.release_socket());
+    return std::move(sam->release_socket());
 }
 
 std::expected<asio::ip::tcp::socket, Error::Accept> I2pSession::accept(Async yield) {
@@ -93,26 +73,17 @@ std::expected<asio::ip::tcp::socket, Error::Accept> I2pSession::accept(Async yie
 
     asio::ip::tcp::socket socket(yield.get_executor());
 
-    auto slot0 = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
-
-    auto ec = socket.async_connect(_inner->sam.remote_endpoint(), yield);
-    if (ec) return error(Error::IoConnect { ec });
-
-    Sam sam(std::move(socket));
-
-    auto slot1 = yield.cancel_slot([&] { sam.close(); });
-
-    auto h_rs = sam.handshake(yield);
-    if (!h_rs) return error(h_rs.error());
+    auto sam = Sam::connect(_inner->sam.remote_endpoint(), yield);
+    if (!sam) return error(sam.error());
 
     // TODO: Validate response is OK
-    auto i_rs = sam.invoke("STREAM ACCEPT ID=" + _inner->id.value + " SILENT=false", yield);
+    auto i_rs = sam->invoke("STREAM ACCEPT ID=" + _inner->id.value + " SILENT=false", yield);
     if (!i_rs) return error(i_rs.error());
 
-    auto l_rs = sam.recv_line(yield);
+    auto l_rs = sam->recv_line(yield);
     if (!l_rs) return error(Sam::Error::Invoke { l_rs.error() });
 
-    return std::move(sam.release_socket());
+    return std::move(sam->release_socket());
 }
 
 std::expected<std::optional<I2pAddress>, Sam::Error::Lookup> I2pSession::lookup(const std::string& name, Async yield) {
