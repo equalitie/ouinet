@@ -1,15 +1,19 @@
-#define BOOST_TEST_MODULE utility
+#define BOOST_TEST_MODULE test_i2p
 #include <boost/test/unit_test.hpp>
 
 #include "namespaces.h"
 #include "util/wait_condition.h"
 #include "ouiservice/i2p/session.h"
 #include "ouiservice/i2p/address.h"
+#include "ouiservice/i2p/i2pd.h"
 #include "task.h"
+#include "async_sleep.h"
 #include "util/async.h"
 #include "util/random.h"
 #include "util/promise.h"
 #include "util/unwrap.h"
+#include "util/test_dir.h"
+#include "util/i2p.h"
 
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -53,6 +57,8 @@ void run_two(asio::io_context& ctx, ServerJob server_job, ClientJob client_job)
         [ server_job = std::move(server_job)
         , client_job = std::move(client_job)
         ] (asio::yield_context yield) mutable {
+            auto i2pd = ensure_i2p_service(Async(yield));
+
             WaitCondition server_finished(yield.get_executor());
             WaitCondition client_finished(yield.get_executor());
 

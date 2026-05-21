@@ -34,6 +34,10 @@ public:
     {
         fs::create_directories(_tempdir);
     }
+
+    static TestDir for_global_fixture() {
+        return TestDir(fs::temp_directory_path() / "ouinet-cpp-tests" / module_name() / fs::unique_path());
+    }
 #endif
 
     TestDir(fs::path path, std::optional<Builder> builder = {})
@@ -104,6 +108,10 @@ private:
 
     static std::string suite_name() {
         return boost::unit_test::framework::get<boost::unit_test::test_suite>(current_test_case().p_parent_id).p_name;
+    }
+
+    static std::string module_name() {
+        return boost::unit_test::framework::master_test_suite().p_name;
     }
 #endif
 

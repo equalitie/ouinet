@@ -32,8 +32,10 @@ struct I2pd::Inner {
         _out(std::move(out)),
         _log_path(std::move(log_path))
     {
-        task::spawn_detached(process.get_executor(), [this] (asio::yield_context y_){
-            Async yield(y_, _cancel);
+        task::spawn_detached(process.get_executor(), [this, cancel = _cancel] (asio::yield_context y_) mutable {
+            Async yield(y_, cancel);
+
+            auto slot = cancel.connect([&] { if (_out.is_open()) _out.close(); });
 
             asio::streambuf buffer;
             std::string output;

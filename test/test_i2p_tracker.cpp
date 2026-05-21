@@ -13,6 +13,7 @@
 #include "util/test_dir.h"
 #include "util/log_path.h"
 #include "util/async.h"
+#include "util/i2p.h"
 #include "util/wait_condition.h"
 #include "bittorrent/node_id.h"
 #include "namespaces.h"
@@ -80,6 +81,8 @@ BOOST_AUTO_TEST_CASE(tracker_status) {
     asio::io_context ctx;
 
     spawn(ctx, [&] (Async yield) mutable {
+        auto i2pd = ensure_i2p_service(yield);
+
         auto session = unwrap(I2pSession::create(yield));
 
         auto socket = unwrap(session.connect(tracker_id, yield));
@@ -129,6 +132,8 @@ BOOST_AUTO_TEST_CASE(announce_and_get_peers) {
     };
 
     spawn(ctx, [&] (Async yield) mutable {
+        auto i2pd = ensure_i2p_service(yield);
+
         auto tracker_a = create_tracker(yield);
         auto tracker_b = create_tracker(yield);
 
