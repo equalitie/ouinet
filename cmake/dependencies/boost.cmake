@@ -36,6 +36,7 @@ set(BOOST_COMPONENTS
     iostreams
     nowide
     program_options
+    process
     regex
     system
     unit_test_framework

@@ -59,6 +59,7 @@ add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
     "./address.cpp"
     "./address.cpp"
     "./sam.cpp"
+    "./i2pd.cpp"
     "./session.cpp"
     "./session_id.cpp"
     "./tracker.cpp"
@@ -77,6 +78,7 @@ target_include_directories(ouiservice-i2p
 )
 target_link_libraries(ouiservice-i2p
     PRIVATE
+        Boost::process
     PUBLIC
         ouinet_common_public
 )
