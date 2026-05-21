@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE blocker
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>

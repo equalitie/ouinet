@@ -8,6 +8,7 @@ namespace ouinet {
 enum class OuinetError {
     success = 0,
     openssl_failed_to_generate_random_data,
+    i2p,
 };
 
 boost::system::error_category const& ouinet_error_category();

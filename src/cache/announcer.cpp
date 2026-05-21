@@ -13,10 +13,6 @@
 #include "task.h"
 #include <boost/utility/string_view.hpp>
 
-#ifdef __EXPERIMENTAL__
-#include <bittorrent/bep3_tracker.h>
-#endif
-
 #define _LOGPFX "Announcer: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
 
@@ -334,44 +330,6 @@ struct Bep5Loop : public Announcer::Loop {
     }
 };
 
-#ifdef __EXPERIMENTAL__
-//--------------------------------------------------------------------
-// Bep3Loop - announces via HTTP to tracker over I2P
-
-struct Bep3Loop : public Announcer::Loop {
-    shared_ptr<bt::Bep3Tracker> tracker;
-
-    Bep3Loop( shared_ptr<bt::Bep3Tracker> tracker
-            , size_t simultaneous_announcements)
-        : Loop(tracker->get_executor(), simultaneous_announcements)
-        , tracker(move(tracker))
-    { }
-
-    void start()
-    {
-        task::spawn_detached(ex, [this] (asio::yield_context yield) {
-            Cancel cancel(_cancel);
-            sys::error_code ec;
-            loop(cancel, yield[ec]);
-        });
-    }
-
-    void announce(Entry& e, Cancel& cancel, asio::yield_context yield) override
-    {
-        _DEBUG("Announcing (BEP3/I2P): ", e.key, "...");
-
-        sys::error_code ec;
-        auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
-
-        tracker->tracker_announce(e.infohash, cancel, yield[ec]);
-
-        _DEBUG("Announcing (BEP3/I2P): ", e_key, ": done; ec=", ec);
-
-        return or_throw(yield, ec);
-    }
-};
-#endif // __EXPERIMENTAL__
-
 //--------------------------------------------------------------------
 // Base Announcer
 Announcer::Announcer(AsioExecutor ex, size_t simultaneous_announcements)
@@ -400,17 +358,3 @@ Bep5Announcer::Bep5Announcer(std::shared_ptr<bittorrent::DhtBase> dht, size_t si
 }
 
 Bep5Announcer::~Bep5Announcer() {}
-
-#ifdef __EXPERIMENTAL__
-//--------------------------------------------------------------------
-// Bep3Announcer
-Bep3Announcer::Bep3Announcer( std::shared_ptr<bt::Bep3Tracker> tracker
-                            , size_t simultaneous_announcements)
-    : Announcer(tracker->get_executor(), simultaneous_announcements)
-{
-    _loop = make_unique<Bep3Loop>(move(tracker), simultaneous_announcements);
-    static_cast<Bep3Loop*>(_loop.get())->start();
-}
-
-Bep3Announcer::~Bep3Announcer() {}
-#endif // __EXPERIMENTAL__

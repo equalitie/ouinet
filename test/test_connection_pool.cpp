@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE connection-pool
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include "connection_pool.h"
 #include "../src/task.h"

@@ -84,7 +84,7 @@ public:
 private:
     AsioExecutor _exec;
     std::shared_ptr<WaitState> _wait_state;
-    Signal<void()> _cancel_signal;
+    Cancel _cancel_signal;
     bool _cancelled;
 };
 

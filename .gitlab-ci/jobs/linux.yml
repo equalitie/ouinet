@@ -1,7 +1,6 @@
 variables:
   TARGET_PLATFORM: 'linux'
-  WITH_EXPERIMENTAL: 'OFF'
-  BUILD_PATH: 'build/$TARGET_PLATFORM-experimental_$WITH_EXPERIMENTAL'
+  BUILD_PATH: 'build/$TARGET_PLATFORM'
   BUILD_TYPE: 'Release'
   BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   CMAKE_VERSION: "3.31.7-linux-x86_64"
@@ -38,7 +37,6 @@ variables:
         -DBOOST_VERSION=$BOOST_VERSION
         -DWITH_ASAN=$WITH_ASAN
         -DWITH_OUISYNC=ON
-        -DWITH_EXPERIMENTAL=$WITH_EXPERIMENTAL
       )
     - echo cmake ${CONFIGURE_ARGS[@]}
     - cmake ${CONFIGURE_ARGS[@]}
@@ -75,7 +73,7 @@ variables:
   image: $BUILDER_IMAGE
   script:
     - export RUST_LOG=ouinet_rs=debug
-    - export CXXFLAGS="-I$CI_PROJECT_DIR/$BUILD_PATH/boost/install/include"
+    - export CXXFLAGS="-I$CI_PROJECT_DIR/$BUILD_PATH/boost/src/built_boost"
     # For the linker to find libboost_asio.so
     - export LIBRARY_PATH="$CI_PROJECT_DIR/$BUILD_PATH"
     # For when the test executable is ran

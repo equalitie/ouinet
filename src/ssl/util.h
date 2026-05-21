@@ -11,8 +11,8 @@
 
 #include "../generic_stream.h"
 #include "../or_throw.h"
-#include "../util/signal.h"
 #include "../util/ssl_stream.h"
+#include "../util/async.h"
 
 
 namespace ouinet::ssl::util {
@@ -53,12 +53,11 @@ static inline std::string read_bio(BIO* bio) {
 // using SNI.  Verification against a valid CA is done in any case.
 template<class Stream>
 static inline
-ouinet::GenericStream
+std::expected<ouinet::GenericStream, sys::error_code>
 client_handshake( Stream&& con
                 , boost::asio::ssl::context& ssl_context
                 , const std::string& host
-                , Signal<void()>& abort_signal
-                , boost::asio::yield_context yield)
+                , Async yield)
 {
     using namespace std;
     using namespace ouinet;
@@ -77,11 +76,12 @@ client_handshake( Stream&& con
     if (check_host && !::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
         ec = {static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category()};
 
-    if (!ec) {
-        auto slot = abort_signal.connect([&] { ssl_sock->next_layer().close(); });
-        ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
-    }
-    return_or_throw_on_error(yield, abort_signal, ec, GenericStream{});
+    if (ec) return std::unexpected(ec);
+
+    auto slot = yield.cancel_slot([&] { ssl_sock->next_layer().close(); });
+    ec = ssl_sock->async_handshake(ssl::stream_base::client, yield);
+
+    if (ec) return std::unexpected(ec);
 
     return GenericStream(move(ssl_sock));
 }

@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE logger_tester
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <iostream>
 #include <string>

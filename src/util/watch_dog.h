@@ -7,7 +7,7 @@
 #include "../defer.h"
 #include "../or_throw.h"
 #include "../util/executor.h"
-#include "../util/signal.h"
+#include "../util/cancel.h"
 #include "../task.h"
 #include "../namespaces.h"
 

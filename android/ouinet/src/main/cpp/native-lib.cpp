@@ -10,7 +10,7 @@
 #include <namespaces.h>
 #include <client.h>
 #include <client_config.h>
-#include <util/signal.h>
+#include <util/cancel.h>
 #include <condition_variable>
 
 #include <fcntl.h>

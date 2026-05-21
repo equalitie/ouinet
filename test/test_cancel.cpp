@@ -1,9 +1,9 @@
 #define BOOST_TEST_MODULE cancel
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <namespaces.h>
 #include <optional>
-#include "util/signal.h"
+#include "util/cancel.h"
 
 using namespace ouinet;
 
@@ -201,5 +201,55 @@ BOOST_AUTO_TEST_CASE(cancel) {
         BOOST_REQUIRE(c0);
         BOOST_REQUIRE(!c1);
         BOOST_REQUIRE(c2);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(code) {
+    {
+        Cancel c;
+        c();
+        BOOST_REQUIRE_EQUAL(c.error_code(), asio::error::operation_aborted);
+    }
+
+    {
+        Cancel c;
+        c(asio::error::interrupted);
+        BOOST_REQUIRE_EQUAL(c.error_code(), asio::error::interrupted);
+    }
+
+    {
+        Cancel c0;
+        Cancel c1(c0);
+        c0();
+        BOOST_REQUIRE_EQUAL(c1.error_code(), asio::error::operation_aborted);
+    }
+
+    // `operation_aborted` overwrites any other error code
+    {
+        Cancel c0;
+        Cancel c1(c0);
+        c1(asio::error::interrupted);
+        c0();
+        BOOST_REQUIRE_EQUAL(c0.error_code(), asio::error::operation_aborted);
+        BOOST_REQUIRE_EQUAL(c1.error_code(), asio::error::operation_aborted);
+    }
+
+    {
+        Cancel c0;
+        Cancel c1(c0);
+        c0();
+        c1(asio::error::interrupted);
+        BOOST_REQUIRE_EQUAL(c0.error_code(), asio::error::operation_aborted);
+        BOOST_REQUIRE_EQUAL(c1.error_code(), asio::error::operation_aborted);
+    }
+
+    // `operation_aborted` does not propagate upwards
+    {
+        Cancel c0;
+        Cancel c1(c0);
+        c0(asio::error::interrupted);
+        c1();
+        BOOST_REQUIRE_EQUAL(c0.error_code(), asio::error::interrupted);
+        BOOST_REQUIRE_EQUAL(c1.error_code(), asio::error::operation_aborted);
     }
 }

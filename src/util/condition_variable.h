@@ -4,9 +4,10 @@
 #include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/intrusive/list.hpp>
-#include "signal.h"
+#include "cancel.h"
 #include "executor.h"
 #include "unique_function.h"
+#include "util/async.h"
 
 namespace ouinet {
 
@@ -63,8 +64,9 @@ public:
     void notify(const boost::system::error_code& ec
                     = boost::system::error_code());
 
-    void wait(Cancel&, boost::asio::yield_context yield);
+    template<class Token> auto wait(Cancel, Token);
     void wait(boost::asio::yield_context yield);
+    sys::error_code wait(Async yield);
 
 private:
     AsioExecutor _exec;
@@ -93,8 +95,9 @@ void ConditionVariable::notify(const boost::system::error_code& ec)
     }
 }
 
+template<class Token>
 inline
-void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
+auto ConditionVariable::wait(Cancel cancel, Token token)
 {
     auto work = asio::make_work_guard(_exec);
 
@@ -129,9 +132,9 @@ void ConditionVariable::wait(Cancel& cancel, boost::asio::yield_context yield)
     });
 
     return boost::asio::async_initiate<
-        boost::asio::yield_context,
+        Token,
         void(boost::system::error_code)
-      >(init, yield);
+      >(std::move(init), token);
 }
 
 inline
@@ -139,6 +142,12 @@ void ConditionVariable::wait(boost::asio::yield_context yield)
 {
     Cancel dummy_cancel;
     wait(dummy_cancel, yield);
+}
+
+inline
+sys::error_code ConditionVariable::wait(Async yield)
+{
+    return wait(yield.get_cancel(), yield);
 }
 
 } // ouinet namespace

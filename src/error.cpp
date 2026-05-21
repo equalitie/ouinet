@@ -19,6 +19,7 @@ public:
         {
             case OuinetError::success: return "no error";
             case OuinetError::openssl_failed_to_generate_random_data: return "OpenSSL failed to produce random data";
+            case OuinetError::i2p: return "I2P error";
         }
 
         std::snprintf(buffer, len, "Unknown error %d", ev );

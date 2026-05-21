@@ -6,9 +6,6 @@
 #include "../response_reader.h"
 #include "../namespaces.h"
 #include "dht_lookup.h"
-#ifdef __EXPERIMENTAL__
-#include "bep3_tracker_lookup.h"
-#endif
 #include "hash_list.h"
 #include "../util/async_generator.h"
 #include "../util/log_path.h"
@@ -53,17 +50,15 @@ public:
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , util::LogPath);
 
-#ifdef __EXPERIMENTAL__
     // Use this to include I2P peers via BEP3 tracker.
     MultiPeerReader( AsioExecutor ex
                    , ResourceId
                    , CryptoStreamKey
                    , sign::PublicKey cache_pk
-                   , std::shared_ptr<Bep3TrackerLookup> tracker_lookup
-                   , std::shared_ptr<I2pService> i2p_service
+                   , std::shared_ptr<I2pTrackerLookup>
+                   , std::shared_ptr<I2pSession> i2p_session
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , util::LogPath);
-#endif
 
     MultiPeerReader(MultiPeerReader&&) = delete;
     MultiPeerReader(const MultiPeerReader&) = delete;
@@ -95,9 +90,7 @@ private:
     new_fetch_job(size_t block_id, Peer* last_peer, Cancel&, asio::yield_context);
 
     static constexpr std::chrono::seconds BEP5_HASH_LIST_TIMEOUT{10};
-#ifdef __EXPERIMENTAL__
     static constexpr std::chrono::seconds BEP3_HASH_LIST_TIMEOUT{30};
-#endif
 
 private:
     AsioExecutor _executor;

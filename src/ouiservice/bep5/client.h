@@ -10,6 +10,8 @@
 
 namespace ouinet {
 
+class Async;
+
 namespace bittorrent {
     class DhtBase;
 }
@@ -71,21 +73,25 @@ public:
               , asio::ssl::context*
               , Target targets = helpers | injectors);
 
-    void start(asio::yield_context) override;
+    [[nodiscard]]
+    sys::error_code start(Async) override;
     void stop() override;
     size_t injector_candidates_n() const noexcept;
 
-    GenericStream connect(asio::yield_context, Cancel&) override;
-    GenericStream connect(asio::yield_context, Cancel&, bool use_tls, Target);
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async) override;
+
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async, bool use_tls, Target);
 
     ~Bep5Client();
 
     AsioExecutor get_executor();
 
 private:
-    void status_loop(asio::yield_context);
+    void status_loop(Async);
 
-    GenericStream connect_single(AbstractClient&, bool use_tls, Cancel&, asio::yield_context);
+    std::expected<GenericStream, sys::error_code> connect_single(AbstractClient&, bool use_tls, Async);
 
 private:
     std::shared_ptr<bittorrent::DhtBase> _dht;

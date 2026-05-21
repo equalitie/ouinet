@@ -5,11 +5,11 @@
 #include <boost/filesystem.hpp>
 #include "resource_id.h"
 #include "../util/executor.h"
-#include "../util/signal.h"
 #include "../namespaces.h"
 
 namespace ouinet {
 
+class Cancel;
 using ouinet::util::AsioExecutor;
 
 class BaseDhtGroups {

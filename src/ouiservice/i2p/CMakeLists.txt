@@ -6,6 +6,7 @@ include(ExternalProject)
 block()
     set(WITH_BINARY OFF)
     set(WITH_GUI OFF)
+    set(WITH_STATIC ON)
     set(BUILD_SHARED_LIBS OFF)
     set(BUILD_TESTING OFF)
     add_definitions(-DBOOST_ASIO_DYN_LINK)
@@ -18,6 +19,7 @@ block()
             set(ZLIB_LIBRARY c:/msys64/usr/lib/libz.a)
             set(ZLIB_INCLUDE_DIR c:/msys64/usr/include)
         endif()
+        set(WIN_I2P_LINK_LIB Iphlpapi)
     endif()
 
     add_subdirectory(./i2pd/build)
@@ -27,7 +29,7 @@ block()
         # https://stackoverflow.com/a/75246115/273348
         cmake_policy(SET CMP0079 NEW)
     endif()
-    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio)
+    target_link_libraries(libi2pd       PRIVATE Boost::program_options ouinet_asio ${WIN_I2P_LINK_LIB})
     target_link_libraries(libi2pdclient PRIVATE Boost::program_options ouinet_asio)
     target_link_libraries(libi2pdlang   PRIVATE                        ouinet_asio)
 endblock()
@@ -42,14 +44,20 @@ add_dependencies(libi2pdlang                                OpenSSL::headers Boo
 project(ouiservice-i2p)
 
 add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
-    "./tunnel.cpp"
-    "./handshake.cpp"
-    "./client.cpp"
-    "./server.cpp"
-    "./service.cpp"
+    "./direct/tunnel.cpp"
+    "./direct/handshake.cpp"
+    "./direct/client.cpp"
+    "./direct/server.cpp"
+    "./direct/service.cpp"
     "./address.cpp"
-    "../../logger.cpp"
-    "../../async_sleep.cpp"
+    "./address.cpp"
+    "./sam.cpp"
+    "./session.cpp"
+    "./session_id.cpp"
+    "./tracker.cpp"
+    "./tracker_lookup.cpp"
+    "./announcer.cpp"
+    "./util/create_i2p_session.cpp"
 )
 target_include_directories(ouiservice-i2p
     PUBLIC
@@ -68,32 +76,16 @@ target_link_libraries(ouiservice-i2p
         libi2pdlang
         OpenSSL::SSL
     PUBLIC
-        ouinet_asio
+        ouinet_common_public
 )
 target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
+target_compile_definitions(ouiservice-i2p PRIVATE -DOUINET_DECL_EXPORT)
 
 ################################################################################
-add_library(ouiservice-i2p-no-impl EXCLUDE_FROM_ALL STATIC "./address.cpp")
-target_compile_options(ouiservice-i2p-no-impl PUBLIC -std=c++23)
+add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
 
-################################################################################
-if(WITH_EXPERIMENTAL)
-    target_compile_definitions(ouiservice-i2p PUBLIC -D__EXPERIMENTAL__)
-    add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
-else()
-    add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p-no-impl)
-endif()
-
-################################################################################
 # Place the resulting library together with the rest.
 set_target_properties(ouiservice-i2p PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-)
-
-# Place the resulting library together with the rest.
-set_target_properties(ouiservice-i2p-no-impl PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

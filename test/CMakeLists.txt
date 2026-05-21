@@ -11,75 +11,64 @@ if(MINGW)
 endif()
 
 function(simple_test test_name)
-    add_executable(${test_name} ${ARGN})
-    target_link_libraries(${test_name} PUBLIC ouinet_asio)
+    add_executable(${test_name} ${test_name}.cpp ../src/util/log_path.cpp)
+    target_link_libraries(${test_name} PUBLIC ouinet_asio Boost::unit_test_framework)
     target_include_directories(${test_name} PUBLIC ../src)
     target_compile_options(${test_name} PUBLIC -std=c++23)
 endfunction()
 
-function(common_test test_name)
-    add_executable(${test_name} ${ARGN})
-    target_link_libraries(${test_name} ouinet_common)
+function(common_test)
+    set(options)
+    set(oneValueArgs TARGET TARGET_SRC)
+    set(multiValueArgs SRCS LIBS)
+
+    cmake_parse_arguments(
+        ARG
+        "${options}"
+        "${oneValueArgs}"
+        "${multiValueArgs}"
+        ${ARGN}
+    )
+
+    if (NOT ARG_TARGET_SRC)
+        set(ARG_TARGET_SRC ${ARG_TARGET}.cpp)
+    endif()
+
+    add_executable(${ARG_TARGET} ${ARG_TARGET_SRC} ${ARG_SRCS})
+    target_link_libraries(${ARG_TARGET} ${ARG_LIBS} ouinet_common Boost::unit_test_framework)
 endfunction()
 
-######################################################################
-simple_test(test_cancel "test_cancel.cpp")
+simple_test(test_cancel)
 
-######################################################################
-common_test(test_parser "test_parser.cpp")
+common_test(TARGET test_async)
+common_test(TARGET test_parser)
+common_test(TARGET test_cache_control LIBS client_lib injector_lib)
+common_test(TARGET test_crypto_stream)
+common_test(TARGET test_wait_condition)
+common_test(TARGET test_scheduler)
+common_test(TARGET test_timeout_stream)
+common_test(TARGET test_response_reader)
+common_test(TARGET test_response_writer)
 
-######################################################################
-common_test(test_cache "test_cache_control.cpp")
-target_link_libraries(test_cache client_lib injector_lib)
-
-######################################################################
-common_test(test_crypto_stream "test_crypto_stream.cpp")
-
-######################################################################
-common_test(test_wait_condition "test_wait_condition.cpp")
-
-######################################################################
-common_test(test_scheduler "test_scheduler.cpp")
-
-######################################################################
-common_test(test_timeout_stream "test_timeout_stream.cpp")
-
-######################################################################
-common_test(test_response_reader "test_response_reader.cpp")
-target_link_libraries(test_response_reader ouinet_common)
-
-######################################################################
-common_test(test_response_writer "test_response_writer.cpp")
-
-######################################################################
 if (NOT WIN32)
-    common_test(test_persistent_lru_cache "test_persistent_lru_cache.cpp")
+    common_test(TARGET test_persistent_lru_cache)
 endif ()
 
-################################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(test_bittorrent "test_bittorrent.cpp")
-    target_link_libraries(test_bittorrent ouinet_common)
+    common_test(TARGET test_bittorrent)
 endif()
 
-################################################################################
 if (NOT WIN32)
-    common_test(bt_bep44 "bt_bep44.cpp")
+    common_test(TARGET bt_bep44)
 endif ()
 
-################################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(test_routing_table "test_routing_table.cpp")
+    common_test(TARGET test_routing_table)
 endif()
 
-################################################################################
-common_test(bt_bep5 "bt_bep5.cpp")
-
-######################################################################
-common_test(test_watch_dog "test_watch_dog.cpp")
-
-######################################################################
-common_test(test_util "test_util.cpp")
+common_test(TARGET bt_bep5)
+common_test(TARGET test_watch_dog)
+common_test(TARGET test_util)
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set_target_properties(test_util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
@@ -90,84 +79,40 @@ if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     endif()
 endif ()
 
-######################################################################
-common_test(test_logger "test_logger.cpp")
+common_test(TARGET test_logger)
+common_test(TARGET test_connection_pool)
+common_test(TARGET test_http_util)
+common_test(TARGET test_http_sign LIBS injector_lib)
+common_test(TARGET test_http_store LIBS client_lib injector_lib)
+common_test(TARGET test_atomic_temp LIBS client_lib)
 
-######################################################################
-common_test(test_connection_pool "test_connection_pool.cpp")
-
-######################################################################
-common_test(oui_server "ouiservice_server.cpp")
-
-######################################################################
-common_test(oui_client "ouiservice_client.cpp")
-
-######################################################################
-common_test(test_http_util "test_http_util.cpp")
-
-######################################################################
-common_test(test_http_sign "test_http_sign.cpp")
-target_link_libraries(test_http_sign injector_lib)
-
-######################################################################
-common_test(test_http_store "test_http_store.cpp")
-target_link_libraries(test_http_store client_lib injector_lib)
-
-######################################################################
-common_test(test_atomic_temp "test_atomic_temp.cpp")
-target_link_libraries(test_atomic_temp client_lib)
-
-######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(test_cache_announcer
-        "performance_test/test_cache_announcer.cpp"
-        "../test/util/bittorrent_utils.cpp")
+    common_test(TARGET test_cache_announcer
+        TARGET_SRC "performance_test/test_cache_announcer.cpp"
+        SRCS "../test/util/bittorrent_utils.cpp")
 endif()
 
-######################################################################
-common_test(test_bencoding "test_bencoding.cpp")
-target_link_libraries(test_bencoding ouinet_common)
+common_test(TARGET test_bencoding)
 
-######################################################################
-common_test(test_file_io "test_file_io.cpp" "util/base_fixture.hpp")
+common_test(TARGET test_file_io)
 
-######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(test_dht "test_dht.cpp")
+    common_test(TARGET test_dht)
 endif()
 
-######################################################################
-common_test(test_metrics "test_metrics.cpp")
+common_test(TARGET test_metrics)
+common_test(TARGET test_injector_resolver LIBS injector_lib)
+common_test(TARGET test_dns)
+common_test(TARGET test_fetch LIBS injector_lib client_lib)
 
-######################################################################
-common_test(test_injector_resolver "test_injector_resolver.cpp")
-target_link_libraries(test_injector_resolver injector_lib)
-
-######################################################################
-common_test(test_dns "test_dns.cpp")
-
-######################################################################
-common_test(test_fetch "test_fetch.cpp")
-target_link_libraries(test_fetch injector_lib client_lib)
-
-######################################################################
-if(WITH_EXPERIMENTAL)
-    common_test(test_i2p test_i2p.cpp)
-    target_link_libraries(test_i2p client_lib)
-
-    common_test(test_i2p_endpoint "test_i2p_endpoint.cpp")
-    target_link_libraries(test_i2p_endpoint injector_lib)
-
-    common_test(test_i2p_fetch "./test_i2p_fetch.cpp")
-    target_link_libraries(test_i2p_fetch injector_lib client_lib)
-
-    common_test(test_i2p_tracker ./test_i2p_tracker.cpp)
-    target_link_libraries(test_i2p_tracker injector_lib client_lib)
-endif()
+common_test(TARGET test_i2p)
+common_test(TARGET test_i2p_direct)
+common_test(TARGET test_i2p_endpoint)
+common_test(TARGET test_i2p_fetch LIBS injector_lib client_lib)
+common_test(TARGET test_i2p_tracker LIBS injector_lib client_lib)
 
 if (WITH_OUISYNC)
-    common_test(test_ouisync "test_ouisync.cpp")
-    target_link_libraries(test_ouisync injector_lib client_lib)
+    common_test(TARGET test_ouisync LIBS injector_lib client_lib)
 endif()
 
 if(UNIX AND NOT APPLE AND NOT CYGWIN)
@@ -175,6 +120,5 @@ if(UNIX AND NOT APPLE AND NOT CYGWIN)
 endif()
 
 if(LINUX)
-    common_test(manual_browse_scrape "manual/browse_scrape.cpp")
-    target_link_libraries(manual_browse_scrape client_lib)
+    common_test(TARGET manual_browse_scrape TARGET_SRC "manual/browse_scrape.cpp" LIBS client_lib)
 endif()

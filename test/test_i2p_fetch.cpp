@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE utility
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
 #include <boost/asio.hpp>
@@ -180,65 +180,64 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
     auto swarms = std::make_shared<MockDht::Swarms>();
 
-    // Okay as is, maybe port
-    Injector injector(make_config<InjectorConfig>({
-            "./no_injector_exec"s,
-            "--repo"s, root.make_subdir("injector").string(),
-            "--credentials"s, injector_credentials,
-            "--listen-on-i2p=true"s,
-        }),
-        ctx,
-        util::LogPath("injector"),
-        std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
-
-    Client seeder(ctx, make_config<ClientConfig>({
-            "./no_client_exec"s,
-            "--log-level=DEBUG"s,
-            "--repo"s, root.make_subdir("seeder").string(),
-            "--injector-credentials"s, injector_credentials,
-            "--cache-type=bep3-http-over-i2p"s,
-            "--cache-http-public-key"s, injector.cache_http_public_key(),
-            "--injector-ep=i2p:" + injector.i2p_address()->value,
-            "--i2p-bep3-tracker"s, bep3_tracker_id,
-            "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-            "--disable-origin-access"s,
-            "--disable-proxy-access"s,
-            "--i2p-hops-per-tunnel"s, i2p_fast_tunnel_hop_count,
-            // XXX Bind to random ports to avoid clashes
-            "--listen-on-tcp=127.0.0.1:0"s,
-            "--front-end-ep=127.0.0.1:0"s,
-        }),
-        util::LogPath("seeder"),
-        [&ctx, swarms] () {
-            return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
-        });
-
-    Client leecher(ctx, make_config<ClientConfig>({
-            "./no_client_exec"s,
-            "--log-level=DEBUG"s,
-            "--repo"s, root.make_subdir("leecher").string(),
-            "--cache-type=bep3-http-over-i2p"s,
-            "--i2p-bep3-tracker"s, bep3_tracker_id,
-            "--cache-http-public-key"s, injector.cache_http_public_key(),
-            "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-            "--disable-origin-access"s,
-            "--disable-proxy-access"s,
-            // Bind to random ports to avoid clashes
-            "--listen-on-tcp=127.0.0.1:0"s,
-            "--front-end-ep=127.0.0.1:0"s,
-        }),
-        util::LogPath("leecher"),
-        [&ctx, swarms] () {
-            auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
-            dht->can_not_see("injector");
-            return dht;
-        });
-
-    // Clients are started explicitly
-    seeder.start();
-    leecher.start();
-
     run(ctx, [&] (asio::yield_context yield) {
+        Injector injector(make_config<InjectorConfig>({
+                "./no_injector_exec"s,
+                "--repo"s, root.make_subdir("injector").string(),
+                "--credentials"s, injector_credentials,
+                "--listen-on-i2p=true"s,
+            }),
+            ctx,
+            util::LogPath("injector"),
+            std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
+
+        Client seeder(ctx, make_config<ClientConfig>({
+                "./no_client_exec"s,
+                "--log-level=DEBUG"s,
+                "--repo"s, root.make_subdir("seeder").string(),
+                "--injector-credentials"s, injector_credentials,
+                "--cache-type=bep3-http-over-i2p"s,
+                "--cache-http-public-key"s, injector.cache_http_public_key(),
+                "--injector-ep=i2p:" + injector.i2p_address(Async(yield, Cancel()))->value,
+                "--i2p-bep3-tracker"s, bep3_tracker_id,
+                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+                "--disable-origin-access"s,
+                "--disable-proxy-access"s,
+                "--i2p-hops-per-tunnel"s, i2p_fast_tunnel_hop_count,
+                // XXX Bind to random ports to avoid clashes
+                "--listen-on-tcp=127.0.0.1:0"s,
+                "--front-end-ep=127.0.0.1:0"s,
+            }),
+            util::LogPath("seeder"),
+            [&ctx, swarms] () {
+                return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
+            });
+
+        Client leecher(ctx, make_config<ClientConfig>({
+                "./no_client_exec"s,
+                "--log-level=DEBUG"s,
+                "--repo"s, root.make_subdir("leecher").string(),
+                "--cache-type=bep3-http-over-i2p"s,
+                "--i2p-bep3-tracker"s, bep3_tracker_id,
+                "--cache-http-public-key"s, injector.cache_http_public_key(),
+                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+                "--disable-origin-access"s,
+                "--disable-proxy-access"s,
+                // Bind to random ports to avoid clashes
+                "--listen-on-tcp=127.0.0.1:0"s,
+                "--front-end-ep=127.0.0.1:0"s,
+            }),
+            util::LogPath("leecher"),
+            [&ctx, swarms] () {
+                auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
+                dht->can_not_see("injector");
+                return dht;
+            });
+
+        // Clients are started explicitly
+        seeder.start();
+        leecher.start();
+
         auto control_body = fetch_from_origin(yield).body();
 
         auto rq = build_cache_request();
@@ -246,20 +245,20 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(seeder, rq, yield);
 
-        BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
-        BOOST_CHECK_EQUAL(rs1.body(), control_body);
+        BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
+        BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
+        BOOST_REQUIRE_EQUAL(rs1.body(), control_body);
 
         // Give "seeder" time to announce
         Cancel cancel;
-        async_sleep(1s, cancel, yield);
+        async_sleep(20s, cancel, yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
         auto rs2 = fetch_through_client(leecher, rq, yield);
 
-        BOOST_CHECK_EQUAL(rs2.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
-        BOOST_CHECK_EQUAL(rs2.body(), control_body);
+        BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);
+        BOOST_REQUIRE_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
+        BOOST_REQUIRE_EQUAL(rs2.body(), control_body);
 
         injector.stop();
         seeder.stop();

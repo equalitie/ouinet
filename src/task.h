@@ -3,7 +3,7 @@
 #include <boost/asio/spawn.hpp>
 #include "namespaces.h"
 
-namespace ouinet { namespace task {
+namespace ouinet::task {
 
 void handle_exception_ptr(std::exception_ptr);
 
@@ -22,4 +22,4 @@ void spawn_detached(Executor&& exec, Function&& func) {
 #endif
 }
 
-}} // ouinet::task
+} // namespace

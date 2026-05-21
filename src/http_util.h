@@ -4,6 +4,7 @@
 #include "namespaces.h"
 #include <cstdint>
 #include <string>
+#include <expected>
 
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
@@ -18,9 +19,10 @@
 #include "default_timeout.h"
 #include "or_throw.h"
 #include "util.h"
-#include "util/signal.h"
+#include "util/cancel.h"
 #include "util/watch_dog.h"
 #include "util/keep_alive.h"
+#include "util/async.h"
 
 namespace ouinet {
 
@@ -132,6 +134,23 @@ http_reply( StreamOut& out
     if (!wd.is_running()) ec = asio::error::timed_out;
 
     return or_throw(yield, ec);
+}
+
+template<class StreamOut, class Response>
+inline
+std::expected<void, sys::error_code>
+http_reply( StreamOut& out
+          , const Response& rs
+          , Async yield)
+{
+    auto wd = watch_dog( out.get_executor(), default_timeout::http_send_simple()
+                       , [&] { out.close(); });
+
+    sys::error_code ec;
+    auto r = http::async_write(out, rs, yield);
+    if (!wd.is_running()) return std::unexpected(asio::error::timed_out);
+    if (!r.has_value()) return std::unexpected(r.error());
+    return std::expected<void, sys::error_code>();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

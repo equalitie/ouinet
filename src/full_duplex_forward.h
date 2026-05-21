@@ -6,12 +6,14 @@
 #include "default_timeout.h"
 #include "generic_stream.h"
 #include "or_throw.h"
-#include "util/signal.h"
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
+#include "util/async.h"
 #include "util/yield.h"
 
 namespace ouinet {
+
+class Cancel;
 
 // This assumes that there is no data already read from either connection,
 // but pending send.  If there is, please send it beforehand.
@@ -19,42 +21,49 @@ namespace ouinet {
 // A pair of counts is returned
 // for bytes successfully forwarded (from `a` to `b`, from `b` to `a`).
 template<class Stream1, class Stream2, class OnA2B, class OnB2A>
-std::pair<std::size_t, std::size_t>
+sys::error_code
 full_duplex( Stream1 a
            , Stream2 b
            , OnA2B on_a2b
            , OnB2A on_b2a
-           , Cancel cancel
-           , YieldContext yield)
+           , Async yield)
 {
     static const auto timeout = default_timeout::activity();
 
-    static const auto half_duplex = []( auto& in
-                                      , auto& out
-                                      , auto& fwd_bytes_in_out
-                                      , auto& on_transfer
-                                      , auto& wdog
-                                      , auto& cancel
-                                      , asio::yield_context& yield)
+    sys::error_code ec;
+
+    const auto half_duplex = [&ec]( auto& in
+                                  , auto& out
+                                  , auto& fwd_bytes_in_out
+                                  , auto& on_transfer
+                                  , auto& wdog
+                                  , Async yield)
     {
-        sys::error_code ec;
         std::array<uint8_t, 2048> data;
 
         for (;;) {
-            size_t length = in.async_read_some(asio::buffer(data), yield[ec]);
-            ec = compute_error_code(ec, cancel, wdog);
-            if (ec) {
+            auto read_r = in.async_read_some(asio::buffer(data), yield);
+            if (!wdog.is_running()) {
+                if (!ec) ec = asio::error::timed_out;
+                break;
+            }
+            if (!read_r.has_value()) {
+                if (!ec) ec = read_r.error();
                 break;
             }
 
-            asio::async_write(out, asio::buffer(data, length), yield[ec]);
-            ec = compute_error_code(ec, cancel, wdog);
-            if (ec) {
+            auto write_r = asio::async_write(out, asio::buffer(data, *read_r), yield);
+            if (!wdog.is_running()) {
+                if (!ec) ec = asio::error::timed_out;
+                break;
+            }
+            if (!write_r.has_value()) {
+                if (!ec) ec = write_r.error();
                 break;
             }
 
-            fwd_bytes_in_out += length;  // the data was successfully forwarded
-            on_transfer(length);
+            fwd_bytes_in_out += *read_r;  // the data was successfully forwarded
+            on_transfer(*read_r);
             wdog.expires_after(timeout);
         }
         // On error, force the other half-duplex task to finish by closing both streams.
@@ -70,45 +79,48 @@ full_duplex( Stream1 a
         }
     };
 
-    auto cancel_slot = cancel.connect([&] { a.close(); b.close(); });
+    auto cancel_slot = yield.cancel_slot([&] { a.close(); b.close(); });
 
     auto wdog = watch_dog( a.get_executor()
                          , timeout
                          , [&] { a.close(); b.close(); });
 
-    WaitCondition wait_condition(a.get_executor());
+    WaitCondition wait_condition(yield.get_executor());
     std::size_t fwd_bytes_a2b = 0, fwd_bytes_b2a = 0;
 
-    task::spawn_detached
-        ( yield.get_executor()
-        , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(a, b, fwd_bytes_a2b, on_a2b, wdog, cancel, yield);
-          });
+    yield.spawn(
+        [&, lock = wait_condition.lock()](Async yield) {
+            half_duplex(a, b, fwd_bytes_a2b, on_a2b, wdog, yield);
+        });
 
-    task::spawn_detached
-        ( yield.get_executor()
-        , [&, lock = wait_condition.lock()](asio::yield_context yield) {
-              half_duplex(b, a, fwd_bytes_b2a, on_b2a, wdog, cancel, yield);
-          });
+    yield.spawn(
+        [&, lock = wait_condition.lock()](Async yield) {
+            half_duplex(b, a, fwd_bytes_b2a, on_b2a, wdog, yield);
+        });
 
-    sys::error_code ec;
-    wait_condition.wait(yield[ec]);  // leave cancellation handling to tasks
-    ec = compute_error_code(ec, cancel, wdog);
+    [[maybe_unused]]
+    auto _ = wait_condition.wait(yield);  // leave cancellation handling to tasks
 
-    return or_throw(yield, ec, std::make_pair(fwd_bytes_a2b, fwd_bytes_b2a));
+    return ec;
 }
 
-template<class Stream1, class Stream2>
-std::pair<std::size_t, std::size_t>
-full_duplex(Stream1 a, Stream2 b, Cancel cancel, YieldContext yield)
+template<class Stream1, class Stream2, class OnA2B, class OnB2A>
+void
+full_duplex( Stream1 a
+           , Stream2 b
+           , OnA2B on_a2b
+           , OnB2A on_b2a
+           , Cancel cancel, YieldContext yield)
 {
-    return full_duplex(
+    auto ec =
+        full_duplex(
             std::move(a),
             std::move(b),
-            [](size_t) {},
-            [](size_t) {},
-            std::move(cancel),
-            std::move(yield));
+            std::move(on_a2b),
+            std::move(on_b2a),
+            Async(yield, cancel));
+
+    return or_throw(yield, ec);
 }
 
 } // ouinet namespace

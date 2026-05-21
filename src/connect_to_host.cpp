@@ -19,7 +19,7 @@ ouinet::connect_to_host( const AsioExecutor& ex
                        , const string& host
                        , const uint16_t port
                        , std::shared_ptr<dns::Resolver> dns_resolver
-                       , Signal<void()>& cancel_signal
+                       , Cancel& cancel_signal
                        , asio::yield_context yield)
 {
     sys::error_code ec;
@@ -35,7 +35,7 @@ ouinet::connect_to_host( const AsioExecutor& ex
 tcp::socket
 ouinet::connect_to_host( const TcpLookup& lookup
                        , const AsioExecutor& ex
-                       , Signal<void()>& cancel_signal
+                       , Cancel& cancel_signal
                        , asio::yield_context yield)
 {
     sys::error_code ec;
@@ -58,7 +58,7 @@ tcp::socket
 ouinet::connect_to_host( const TcpLookup& lookup
                        , const AsioExecutor& ex
                        , std::chrono::steady_clock::duration timeout
-                       , Signal<void()>& cancel_signal
+                       , Cancel& cancel_signal
                        , asio::yield_context yield)
 {
     return util::with_timeout

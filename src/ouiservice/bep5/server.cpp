@@ -30,9 +30,9 @@ Bep5Server::Bep5Server( shared_ptr<bt::DhtBase> dht
     _announcer = make_unique<bt::Bep5PeriodicAnnouncer>(infohash, dht);
 }
 
-void Bep5Server::start_listen(asio::yield_context yield)
+sys::error_code Bep5Server::start_listen(Async yield)
 {
-    _multi_utp_server->start_listen(yield);
+    return _multi_utp_server->start_listen(yield);
 }
 
 void Bep5Server::stop_listen()
@@ -43,7 +43,7 @@ void Bep5Server::stop_listen()
     _announcer = nullptr;
 }
 
-GenericStream Bep5Server::accept(asio::yield_context yield)
+std::expected<GenericStream, sys::error_code> Bep5Server::accept(Async yield)
 {
     return _multi_utp_server->accept(yield);
 }

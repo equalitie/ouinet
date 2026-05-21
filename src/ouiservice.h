@@ -9,48 +9,49 @@
 #include "generic_stream.h"
 #include "endpoint.h"
 #include "util/condition_variable.h"
-#include "util/signal.h"
+#include "util/cancel.h"
+
+#include <expected>
 
 namespace ouinet {
 
-using ouinet::util::AsioExecutor;
+class Async;
 
 class OuiServiceImplementationServer
 {
     public:
     virtual ~OuiServiceImplementationServer() {}
 
-    virtual void start_listen(asio::yield_context yield) = 0;
+    [[nodiscard]]
+    virtual sys::error_code start_listen(Async) = 0;
     virtual void stop_listen() = 0;
 
-    virtual GenericStream accept(asio::yield_context yield) = 0;
+    [[nodiscard]]
+    virtual std::expected<GenericStream, sys::error_code> accept(Async) = 0;
 };
 
 class OuiServiceServer
 {
-    public:
-    OuiServiceServer(const AsioExecutor&);
+public:
+    OuiServiceServer(const asio::any_io_executor&);
 
-    AsioExecutor get_executor() { return _ex; }
+    asio::any_io_executor get_executor() { return _ex; }
 
     void add(std::unique_ptr<OuiServiceImplementationServer> implementation);
 
-    /*
-     * TODO: Should this have start() and stop() in addition to *_listen()?
-     */
-
-    void start_listen(asio::yield_context yield);
+    [[nodiscard]] sys::error_code start_listen(Async);
     void stop_listen();
 
-    GenericStream accept(asio::yield_context yield);
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> accept(Async);
     void cancel_accept();
 
-    private:
-    AsioExecutor _ex;
+private:
+    asio::any_io_executor _ex;
 
     std::vector<std::unique_ptr<OuiServiceImplementationServer>> _implementations;
 
-    Signal<void()> _stop_listen;
+    Cancel _stop_listen;
     std::list<GenericStream> _connection_queue;
     ConditionVariable _connection_available;
 };
@@ -60,10 +61,14 @@ class OuiServiceImplementationClient
     public:
     virtual ~OuiServiceImplementationClient() {}
 
-    virtual void start(asio::yield_context yield) = 0;
+    [[nodiscard]]
+    virtual sys::error_code  start(Async) = 0;
+
     virtual void stop() = 0;
 
-    virtual GenericStream connect(asio::yield_context yield, Signal<void()>& cancel) = 0;
+    [[nodiscard]]
+    virtual
+    std::expected<GenericStream, sys::error_code> connect(Async) = 0;
 };
 
 /*
@@ -80,21 +85,26 @@ class OuiServiceClient
     };
 
     public:
-    OuiServiceClient(const AsioExecutor&);
+    OuiServiceClient(const asio::any_io_executor&);
 
     void add(Endpoint, std::unique_ptr<OuiServiceImplementationClient>);
 
-    void start(asio::yield_context yield);
+    [[nodiscard]]
+    sys::error_code start(Async);
+
     void stop();
 
-    ConnectInfo
-    connect(asio::yield_context yield, Signal<void()>& cancel);
+    [[nodiscard]]
+    std::expected<ConnectInfo, sys::error_code> connect(Async);
+
+    ~OuiServiceClient();
 
     private:
     std::optional<Endpoint> _endpoint;
     std::shared_ptr<OuiServiceImplementationClient> _implementation;
     bool _started;
     ConditionVariable _started_condition;
+    Cancel _cancel;
 };
 
 } // ouinet namespace

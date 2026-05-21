@@ -25,12 +25,10 @@ option(WITH_TEST "Compile tests" ON)
 #       https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
-option(WITH_EXPERIMENTAL "Build with experimental features" OFF)
 option(WITH_OUISYNC "Build with Ouisync" OFF)
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
-option(WITH_DEPRECATED "Build with deprecated features" OFF)
 
 ################################################################################
 # show summary
@@ -39,9 +37,7 @@ message(STATUS "---------------------------------------")
 message(STATUS "Options:")
 message(STATUS "  WITH_TEST                : ${WITH_TEST}")
 message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
-message(STATUS "  WITH_EXPERIMENTAL        : ${WITH_EXPERIMENTAL}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
-message(STATUS "  WITH_DEPRECATED          : ${WITH_DEPRECATED}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
 message(STATUS "")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
@@ -152,22 +148,6 @@ add_subdirectory(./rust)
 add_subdirectory(./src/ouiservice/i2p)
 add_subdirectory(./src/ouiservice/ouisync)
 
-###########################################################
-
-if(WITH_DEPRECATED)
-    #add_subdirectory(./src/ouiservice/lampshade)
-    add_subdirectory(./src/ouiservice/obfs4proxy)
-    set(DEPRECATED_SOURCES
-            "./src/ouiservice/lampshade.cpp"
-            "./src/ouiservice/pt-obfs2.cpp"
-            "./src/ouiservice/pt-obfs3.cpp"
-            "./src/ouiservice/pt-obfs4.cpp"
-            "./src/ouiservice/pluggable-transports/*.cpp"
-    )
-    set(DEPRECATED_LIBRARIES
-            ouinet::lampshade-asio
-    )
-endif()
 ################################################################################
 # These are separate from `ouinet_common` because they're also required by
 # `ouinet_rs`
@@ -176,10 +156,15 @@ add_library(ouinet_common_public
     "./src/task.cpp"
     "./src/logger.cpp"
     "./src/util/log_path.cpp"
+    "./src/util/random.cpp"
+    "./src/async_sleep.cpp"
+    "./src/bittorrent/bencoding.cpp"
+    "./src/bittorrent/node_id.cpp"
 )
 target_link_libraries(ouinet_common_public PUBLIC ouinet_asio Boost::filesystem)
 target_compile_options(ouinet_common_public PUBLIC -std=c++23)
 target_compile_definitions(ouinet_common_public PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
+target_include_directories(ouinet_common_public PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 ################################################################################
 
@@ -188,7 +173,6 @@ file(GLOB ouinet_common_sources
     "./src/response_part.cpp"
     "./src/util.cpp"
     "./src/util/atomic_file.cpp"
-    "./src/util/random.cpp"
     "./src/util/sign.cpp"
     "./src/util/file_io.cpp"
     "./src/util/temp_file.cpp"
@@ -210,10 +194,8 @@ file(GLOB ouinet_common_sources
     "./src/endpoint.cpp"
     "./src/session.cpp"
     "./src/error.cpp"
-    "./src/async_sleep.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"
-    ${DEPRECATED_SOURCES}
 )
 
 # TODO: Some low level openssl functions we use are deprecated.
@@ -229,7 +211,6 @@ target_link_libraries(ouinet_common
     PRIVATE
         Boost::url
         OpenSSL::Crypto
-        ${DEPRECATED_LIBRARIES}
     PUBLIC
         ${OUINET_HARDCODED_CA_CERTS}
         ouinet::ouiservice-i2p
@@ -243,12 +224,6 @@ target_link_libraries(ouinet_common
 
 target_include_directories(ouinet_common PUBLIC "src")
 
-################################################################################
-if(WITH_DEPRECATED)
-    target_compile_definitions(ouinet_common
-            INTERFACE -D__DEPRECATED__
-    )
-endif()
 ################################################################################
 
 file(GLOB client_sources
@@ -283,11 +258,11 @@ if (IOS)
 else()
     add_library(client_lib SHARED ${client_sources})
 endif()
+
 if (NOT WIN32 AND NOT MINGW)
     set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
 endif()
 add_library(ouinet::client ALIAS client_lib)
-
 
 target_link_libraries(client_lib
     PUBLIC
@@ -319,7 +294,6 @@ file(GLOB injector_sources
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
-    ${DEPRECATED_SOURCES}
 )
 
 add_library(injector_lib SHARED ${injector_sources})

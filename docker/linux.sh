@@ -12,7 +12,6 @@ enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
 with_ouisync=n
-with_experimental=n
 host_ouisync_dir=
 with_asan=n
 
@@ -57,9 +56,6 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --with-ouisync)
             with_ouisync=y
-            ;;
-        --with-experimental)
-            with_experimental=y
             ;;
         --use-ouisync-dir)
             host_ouisync_dir=$2; shift;
@@ -287,7 +283,6 @@ for target_os in ${target_oss[@]}; do
         cmake_configure_options=(
             -DCMAKE_BUILD_TYPE=Debug
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
-            -DWITH_EXPERIMENTAL=$([ "$with_experimental" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
             # For testing with custom Ouisync sources
@@ -312,9 +307,6 @@ for target_os in ${target_oss[@]}; do
             exe -w $ouinet_dir git clean -dfX
         fi
 
-        env=(
-            WITH_EXPERIMENTAL=$([ "$with_experimental" == y ] && echo ON || echo OFF)
-        )
         exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh
     fi
 
@@ -338,44 +330,17 @@ for target_os in ${target_oss[@]}; do
     fi
 
     ### C++ Tests
+
     if [ "$run_all_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
         if [ "$target_os" != android ]; then
-            if [ "$run_all_tests" == y ]; then
-                test_targets=$(list_all_test_targets $build_dir)
-            else
-                test_targets=${run_cpp_tests[@]}
-            fi
-        
-            binary_suffix=
-            env=()
-            lanucher=
-        
-            if [ "$target_os" == windows ]; then
-                launcher="wine"
-                binary_suffix=.exe
-                winepaths=(
-                    $build_dir
-                    $build_dir/gcrypt/out/bin
-                    $build_dir/gpg_error/out/bin
-                    /usr/lib/gcc/x86_64-w64-mingw32/14-win32
-                )
-                env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
-            fi
-        
-            if [ "$with_asan" = y ]; then
-                # TODO: We are violating the "One Definition Rule" because the
-                # client and injector libraries share a lot of code.
-                env+=(ASAN_OPTIONS=detect_odr_violation=0)
-            fi
+            args=(
+                --build-dir $build_dir
+                # We don't want the script to re-configure and rebuild the tests
+                --skip-cmake-configure
+                ${excluded_test_targets[@]/#/--exclude-test }
+            )
 
-            for test in ${test_targets[@]}; do
-                if is_in $test ${excluded_test_targets[@]} ; then
-                    echo "::: Skipping excluded test $test"
-                    continue
-                fi
-                echo "::: Running test: $test"
-                exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
-            done
+            exe -w $ouinet_dir bash -c "./scripts/run_unit_tests.sh ${args[*]}"
         fi
     fi
 

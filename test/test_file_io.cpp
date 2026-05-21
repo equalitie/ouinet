@@ -4,10 +4,11 @@
 #include <winsock2.h>
 #endif // __MINGW32__
 
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
-#include "util/signal.h"
+#include <fstream>
+#include "util/cancel.h"
 #include "util/file_io.h"
 #include "../test/util/base_fixture.hpp"
 #include "task.h"
@@ -21,8 +22,7 @@ namespace sys = boost::system;
 namespace ut = boost::unit_test;
 namespace file_io = ouinet::util::file_io;
 namespace task = ouinet::task;
-
-using Cancel = ouinet::Signal<void()>;
+using ouinet::Cancel;
 
 struct fixture_file_io:fixture_base
 {

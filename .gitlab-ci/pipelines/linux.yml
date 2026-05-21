@@ -43,17 +43,6 @@ linux / unit-rust-test:
   needs:
     ['linux / build']
 
-linux / unit-test-experimental:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-experimental'
-    WITH_EXPERIMENTAL: "ON"
-  extends:
-    .linux-unit-cpp-test
-  needs:
-    ['linux / build-experimental']
-  allow_failure: true
-
 linux / integration-test:
   variables:
     TARGET_PLATFORM: 'linux'
@@ -130,32 +119,3 @@ linux / build-prod-image:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
       allow_failure: true
-
-linux / build-experimental:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-experimental'
-    BOOST_VERSION: "1.88.0"
-    WITH_EXPERIMENTAL: "ON"
-    CMAKE_VERSION: "3.31.7-linux-x86_64"
-    WITH_ASAN: "OFF"
-  extends:
-    .linux-build
-  needs:
-    - job: 'linux / prepare-builder-image'
-      optional: true
-
-linux / integration-test-experimental:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-experimental'
-    BOOST_VERSION: "1.88.0"
-    WITH_EXPERIMENTAL: "ON"
-    CMAKE_VERSION: "3.31.7-linux-x86_64"
-    WITH_ASAN: "OFF"
-  extends:
-    .linux-integration-test
-  needs:
-    ['linux / unit-test-experimental', 'linux / build-experimental']
-  before_script:
-    - ln -s /usr/bin/python3 /usr/bin/python

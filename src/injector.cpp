@@ -32,15 +32,7 @@
 #include "session.h"
 
 #include "ouiservice.h"
-#ifdef __EXPERIMENTAL__
-#  include "ouiservice/i2p.h"
-#endif // ifdef __EXPERIMENTAL__
-#ifdef __DEPRECATED__
-#  include "ouiservice/lampshade.h"
-#  include "ouiservice/pt-obfs2.h"
-#  include "ouiservice/pt-obfs3.h"
-#  include "ouiservice/pt-obfs4.h"
-#endif // ifdef __DEPRECATED__
+#include "ouiservice/i2p/util/create_i2p_session.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -80,6 +72,10 @@ using util::AsioExecutor;
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
+
+struct Injector::Inner {
+    std::optional<CreateI2pSessionPromise::Future> _i2p_session_future;
+};
 
 // TODO: Get rid of this
 static bool g_allow_private_targets = false;
@@ -296,8 +292,13 @@ void handle_connect_request( GenericStream client_c
     assert(!ec);
 
     // Forward the rest of data in both directions.
-    std::tie(fwd_bytes_c2o, fwd_bytes_o2c) =
-        full_duplex(move(client_c), move(origin_c), cancel, yield[ec].tag("full_duplex"));
+    full_duplex(
+            move(client_c),
+            move(origin_c),
+            [&] (size_t byte_count) { fwd_bytes_c2o += byte_count; },
+            [&] (size_t byte_count) { fwd_bytes_o2c += byte_count; },
+            cancel,
+            yield[ec].tag("full_duplex"));
 
     return or_throw(yield, ec);
 }
@@ -311,43 +312,48 @@ class InjectorCacheControl {
                          , Cancel& cancel
                          , YieldContext yield)
     {
-        // Parse the URL to tell HTTP/HTTPS, host, port.
-        auto url = util::Url::from(rq.target());
+        try {
+            // Parse the URL to tell HTTP/HTTPS, host, port.
+            auto url = util::Url::from(rq.target());
 
-        if (!url) {
-            yield.log("Unsupported target URL");
-            return or_throw<GenericStream>( yield
-                                          , asio::error::operation_not_supported);
-        }
+            if (!url) {
+                yield.log("Unsupported target URL");
+                return or_throw<GenericStream>( yield
+                                              , asio::error::operation_not_supported);
+            }
 
-        sys::error_code ec;
+            sys::error_code ec;
 
-        // Resolve target endpoint and check its validity.
-        TcpLookup lookup = resolve_target( rq
-                                         , g_allow_private_targets
-                                         , std::move(dns_resolver)
+            // Resolve target endpoint and check its validity.
+            TcpLookup lookup = resolve_target( rq
+                                             , g_allow_private_targets
+                                             , std::move(dns_resolver)
+                                             , executor
+                                             , cancel, yield[ec]);
+
+            if (ec) return or_throw<GenericStream>(yield, ec);
+
+            auto socket = connect_to_host( lookup
                                          , executor
-                                         , cancel, yield[ec]);
+                                         , cancel
+                                         , yield[ec]);
 
-        if (ec) return or_throw<GenericStream>(yield, ec);
+            if (ec) return or_throw<GenericStream>(yield, ec);
 
-        auto socket = connect_to_host( lookup
-                                     , executor
-                                     , cancel
-                                     , yield[ec]);
+            if (url->scheme == "https") {
+                auto c = ssl::util::client_handshake( move(socket)
+                                                    , ssl_ctx
+                                                    , url->host
+                                                    , Async(yield, cancel));
 
-        if (ec) return or_throw<GenericStream>(yield, ec);
-
-        if (url->scheme == "https") {
-            auto c = ssl::util::client_handshake( move(socket)
-                                                , ssl_ctx
-                                                , url->host
-                                                , cancel
-                                                , yield[ec]);
-
-            return or_throw(yield, ec, move(c));
-        } else {
-            return GenericStream(move(socket));
+                if (!c.has_value()) return or_throw<GenericStream>(yield, c.error());
+                return std::move(*c);
+            } else {
+                return GenericStream(move(socket));
+            }
+        }
+        catch (Async::Cancelled const&) {
+            return or_throw<GenericStream>(yield, asio::error::operation_aborted);
         }
     }
 
@@ -566,7 +572,7 @@ void serve( const InjectorConfig& config
           , asio::ssl::context& ssl_ctx
           , OriginPools& origin_pools
           , uuid_generator& genuuid
-          , Cancel& cancel
+          , Cancel cancel
           , YieldContext yield_)
 {
     auto close_connection_slot = cancel.connect([&con] {
@@ -770,19 +776,17 @@ static
 void listen( const InjectorConfig& config
            , std::shared_ptr<dns::Resolver> dns_resolver
            , OuiServiceServer& proxy_server
-           , Cancel& cancel
-           , YieldContext yield)
+           , Async yield)
 {
     uuid_generator genuuid;
 
-    auto stop_proxy_slot = cancel.connect([&proxy_server] {
+    auto stop_proxy_slot = yield.cancel_slot([&proxy_server] {
         proxy_server.stop_listen();
     });
 
     AsioExecutor exec = proxy_server.get_executor();
 
-    sys::error_code ec;
-    proxy_server.start_listen(yield[ec]);
+    sys::error_code ec = proxy_server.start_listen(yield);
     if (ec) {
         LOG_ERROR(yield, " Failed to setup ouiservice proxy server; ec=", ec);
         return;
@@ -800,41 +804,37 @@ void listen( const InjectorConfig& config
     ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
 
     while (true) {
-        GenericStream connection = proxy_server.accept(yield[ec]);
-        if (ec == boost::asio::error::operation_aborted) {
-            break;
-        } else if (ec) {
-            if (!async_sleep(std::chrono::milliseconds(100), cancel, yield)) {
-                break;
-            }
+        auto connection = proxy_server.accept(yield);
+
+        if (!connection.has_value()) {
+            async_sleep(std::chrono::milliseconds(100), yield);
             ec = {};
             continue;
         }
 
         uint64_t connection_id = next_connection_id++;
 
-        task::spawn_detached(exec, [
-            connection = std::move(connection),
+        yield.spawn([
+            connection = std::move(*connection),
             &ssl_ctx,
-            cancel,
             &config,
             &dns_resolver,
             &genuuid,
             &origin_pools,
-            &yield,
             connection_id,
             lock = shutdown_connections.lock()
-        ] (boost::asio::yield_context asio_yield) mutable {
+        ] (Async yield) mutable {
+            // TODO: Make `serve` use `Async`.
             sys::error_code leaked_ec;
-            auto y = YieldContext(asio_yield, yield.log_path().tag(util::str('C', connection_id)));
+            auto y = YieldContext(yield.asio_yield(), yield.log_path().tag(util::str('C', connection_id)));
             serve( config
                  , dns_resolver
                  , std::move(connection)
                  , ssl_ctx
                  , origin_pools
                  , genuuid
-                 , cancel
-                 , y[leaked_ec]);
+                 , yield.get_cancel()
+                 , y);
             if (leaked_ec) {
                 // The convention is that `serve` does not throw errors,
                 // so complain otherwise but avoid crashing in production.
@@ -852,7 +852,8 @@ Injector::Injector(
         util::LogPath log_path,
         std::shared_ptr<bittorrent::MockDht> dht) :
     _config(std::move(config)),
-    _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
+    _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
+    _inner(std::make_unique<Inner>())
 {
     #ifndef __WIN32
     if (_config.open_file_limit()) {
@@ -962,72 +963,56 @@ Injector::Injector(
     proxy_server->add(make_unique<ouiservice::Bep5Server>
             (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
 
-#ifdef __DEPRECATED__
-    /*
-        if (_config.lampshade_endpoint()) {
-            tcp::endpoint endpoint = *_config.lampshade_endpoint();
-            util::create_state_file( _config.repo_root()/"endpoint-lampshade"
-                                   , util::str(endpoint));
-
-            unique_ptr<ouiservice::LampshadeOuiServiceServer> server =
-                make_unique<ouiservice::LampshadeOuiServiceServer>(ios, endpoint, _config.repo_root()/"lampshade-server");
-            LOG_INFO("Lampshade address: ", endpoint, ",key=", server->public_key());
-
-            proxy_server->add(std::move(server));
-        }
-    */
-
-    if (_config.obfs2_endpoint()) {
-        tcp::endpoint endpoint = *_config.obfs2_endpoint();
-        LOG_INFO("obfs2 address: ", endpoint);
-        util::create_state_file( _config.repo_root()/"endpoint-obfs2"
-                               , util::str(endpoint));
-
-        proxy_server->add(make_unique<ouiservice::Obfs2OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs2-server"));
-    }
-
-    if (_config.obfs3_endpoint()) {
-        tcp::endpoint endpoint = *_config.obfs3_endpoint();
-        LOG_INFO("obfs3 address: ", endpoint);
-        util::create_state_file( _config.repo_root()/"endpoint-obfs3"
-                               , util::str(endpoint));
-
-        proxy_server->add(make_unique<ouiservice::Obfs3OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs3-server"));
-    }
-
-    if (_config.obfs4_endpoint()) {
-        tcp::endpoint endpoint = *_config.obfs4_endpoint();
-
-        util::create_state_file( _config.repo_root()/"endpoint-obfs4"
-                               , util::str(endpoint));
-
-        unique_ptr<ouiservice::Obfs4OuiServiceServer> server =
-            make_unique<ouiservice::Obfs4OuiServiceServer>(ctx, endpoint, _config.repo_root()/"obfs4-server");
-        task::spawn_detached(ex, [
-            obfs4 = server.get(),
-            endpoint
-        ] (asio::yield_context yield) {
-            sys::error_code ec;
-            obfs4->wait_for_running(yield[ec]);
-            if (!ec) {
-                LOG_INFO("obfs4 address: ", endpoint, ",", obfs4->connection_arguments());
-            }
-        });
-        proxy_server->add(std::move(server));
-    }
-#endif // __DEPRECATED__    
-#ifdef __EXPERIMENTAL__    
     if (_config.listen_on_i2p()) {
-        auto i2p_service = make_shared<I2pService>((config.repo_root()/"i2p").string(), ex, config.i2p_hops_per_tunnel());
-        std::unique_ptr<I2pServer> i2p_server = i2p_service->build_server("i2p-private-key");
+        struct Server : public OuiServiceImplementationServer {
+            sys::error_code start_listen(Async) {
+                return sys::error_code();
+            }
 
-        _i2p_address = i2p_server->public_identity();
-        LOG_INFO("I2P public ID: ", *_i2p_address);
-        util::create_state_file(_config.repo_root()/"endpoint-i2p", _i2p_address->value);
+            void stop_listen() { _cancel(); }
+        
+            std::expected<GenericStream, sys::error_code> accept(Async yield) override {
+                auto future_result = _session_future.wait(yield);
 
-        proxy_server->add(std::move(i2p_server));
+                if (!future_result.has_value()) {
+                    return std::unexpected(asio::error::fault);
+                }
+                auto& create_result = future_result->get();
+                if (!create_result.has_value()) {
+                    return std::unexpected(asio::error::fault);
+                }
+
+                auto session = *create_result;
+
+                auto result = session->accept(yield);
+
+                if (!result.has_value()) {
+                    LOG_WARN("Failed to accept I2P connection");
+                    return std::unexpected(result.error().code());
+                }
+
+                return std::move(*result);
+            }
+
+            Server(CreateI2pSessionPromise::Future  session_future, Cancel cancel, util::LogPath log_path):
+                _session_future(std::move(session_future)),
+                _cancel(std::move(cancel)),
+                _log_path(std::move(log_path))
+            {}
+
+            CreateI2pSessionPromise::Future _session_future;
+            Cancel _cancel;
+            util::LogPath _log_path;
+        };
+
+        _inner->_i2p_session_future = create_i2p_session(_cancel, log_path, ex);
+
+        proxy_server->add(std::make_unique<Server>(
+            *_inner->_i2p_session_future,
+            _cancel,
+            log_path
+        ));
     }
-#endif // ifdef __EXPERIMENTAL__
 
     LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
@@ -1037,8 +1022,7 @@ Injector::Injector(
         cancel = _cancel,
         log_path
     ] (asio::yield_context yield) mutable {
-        sys::error_code ec;
-        listen(_config, _dns_resolver, *proxy_server, cancel, YieldContext(yield, log_path)[ec]);
+        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, log_path));
     });
 }
 
@@ -1053,6 +1037,24 @@ void Injector::stop() {
 
 Injector::~Injector() {
     stop();
+}
+
+std::optional<I2pAddress> Injector::i2p_address(Async yield) {
+    if (!_inner->_i2p_session_future) {
+        return {};
+    }
+
+    auto future_result = _inner->_i2p_session_future->wait(yield);
+
+    if (!future_result.has_value()) {
+        return {};
+    }
+    auto& create_result = future_result->get();
+    if (!create_result.has_value()) {
+        return {};
+    }
+
+    return (*create_result)->local_addr();
 }
 
 } // namespace ouinet

@@ -24,7 +24,7 @@
 
 #include "../namespaces.h"
 #include "../util/sign.h"
-#include "../util/signal.h"
+#include "../util/cancel.h"
 #include "../util/wait_condition.h"
 #include "../util/async_queue.h"
 #include "../util/watch_dog.h"
@@ -221,10 +221,6 @@ class DhtNode {
 
     void send_datagram(
         udp::endpoint destination,
-        const BencodedMap& query_arguments
-    );
-    void send_datagram(
-        udp::endpoint destination,
         const BencodedMap& query_arguments,
         Cancel&,
         asio::yield_context
@@ -249,7 +245,7 @@ class DhtNode {
         asio::yield_context
     );
 
-    void handle_query(udp::endpoint sender, BencodedMap& query);
+    void handle_query(udp::endpoint sender, BencodedMap& query, Cancel cancel, asio::yield_context);
 
     void bootstrap(asio::yield_context);
 

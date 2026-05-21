@@ -1,4 +1,5 @@
 #include "utp.h"
+#include "util/async.h"
 #include "../or_throw.h"
 #include "../parse/endpoint.h"
 #include "../logger.h"
@@ -13,9 +14,9 @@ namespace ouiservice {
 using udp = asio::ip::udp;
 using namespace std;
 
-UtpOuiServiceServer::UtpOuiServiceServer( const AsioExecutor& ex
+UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
                                         , udp::endpoint local_endpoint):
-    _ex(ex),
+    _ex(std::move(ex)),
     _udp_multiplexer(new asio_utp::udp_multiplexer(_ex)),
     _accept_queue(_ex)
 {
@@ -23,6 +24,7 @@ UtpOuiServiceServer::UtpOuiServiceServer( const AsioExecutor& ex
 
     _udp_multiplexer->bind(local_endpoint, ec);
 
+    assert(_udp_multiplexer->is_open());
     if (ec) {
         LOG_ERROR("uTP: Failed to bind UtpOuiServiceServer to "
                  , local_endpoint, "; ec=", ec);
@@ -31,37 +33,37 @@ UtpOuiServiceServer::UtpOuiServiceServer( const AsioExecutor& ex
     }
 }
 
-void UtpOuiServiceServer::start_listen(asio::yield_context yield)
+sys::error_code UtpOuiServiceServer::start_listen(Async yield)
 {
     using namespace std::chrono_literals;
 
-    task::spawn_detached(_ex, [&] (asio::yield_context yield) {
-        Cancel cancel(_cancel);
-
+    assert(_udp_multiplexer->is_open());
+    yield.spawn(_cancel, [this] (Async yield) {
         auto local_ep = _udp_multiplexer->local_endpoint();
 
-        while (!cancel) {
+        while (true) {
             sys::error_code ec;
             asio_utp::socket s(_ex);
 
-            auto cancel_con = cancel.connect([&] { s.close(); });
+            auto cancel_con = yield.cancel_slot([&] { s.close(); });
 
             s.bind(local_ep, ec);
             assert(!ec);
-            s.async_accept(yield[ec]);
-            if (cancel) return;
+            ec = s.async_accept(yield);
             if (ec) {
-                assert(ec != asio::error::operation_aborted);
                 LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s;"
                          , " lep=", local_ep, " ec=", ec);
-                async_sleep(5s, cancel, yield[ec]);
+                async_sleep(5s, yield);
                 continue;
             }
 
             auto ep = util::str("uTP/", s.remote_endpoint());
-            _accept_queue.async_push({move(s), move(ep)}, ec, cancel, yield[ec]);
+            ec = _accept_queue.async_send(sys::error_code(), {move(s), move(ep)}, yield);
+            if (ec) break;
         }
     });
+
+    return sys::error_code();
 }
 
 void UtpOuiServiceServer::stop_listen()
@@ -74,29 +76,35 @@ UtpOuiServiceServer::~UtpOuiServiceServer()
     stop_listen();
 }
 
-GenericStream UtpOuiServiceServer::accept(asio::yield_context yield)
+std::expected<GenericStream, sys::error_code> UtpOuiServiceServer::accept(Async yield)
 {
-    sys::error_code ec;
-    auto s = _accept_queue.async_pop(_cancel, yield[ec]);
-    return or_throw(yield, ec, move(s));
+    auto s = _accept_queue.async_receive(yield);
+    if (!s.has_value()) {
+        return std::unexpected(s.error());
+    }
+    return move(*s);
 }
 
-UtpOuiServiceClient::UtpOuiServiceClient( const AsioExecutor& ex
+UtpOuiServiceClient::UtpOuiServiceClient( asio::any_io_executor ex
                                         , asio_utp::udp_multiplexer m
                                         , asio::ip::udp::endpoint endpoint):
-    _ex(ex),
+    _ex(std::move(ex)),
     _remote_endpoint(endpoint),
     _udp_multiplexer(move(m))
 {
 }
 
-GenericStream
-UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
+sys::error_code UtpOuiServiceClient::start(Async) {
+    return sys::error_code();
+}
+
+std::expected<GenericStream, sys::error_code>
+UtpOuiServiceClient::connect(Async yield)
 {
     using namespace chrono_literals;
 
     if (!_remote_endpoint) {
-        return or_throw<GenericStream>(yield, asio::error::invalid_argument);
+        return std::unexpected(asio::error::invalid_argument);
     }
 
     sys::error_code ec;
@@ -111,7 +119,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
         socket.bind(_udp_multiplexer, ec);
         assert(!ec);
 
-        auto cancel_slot = cancel.connect([&] {
+        auto cancel_slot = yield.cancel_slot([&] {
             socket.close();
         });
 
@@ -122,16 +130,14 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
                 socket.close();
         });
 
-        socket.async_connect(*_remote_endpoint, yield[ec]);
+        ec = socket.async_connect(*_remote_endpoint, yield);
 
         if (!timed_out) break;
         ec = asio::error::timed_out;
     }
 
-    if (cancel) ec = asio::error::operation_aborted;
-
     if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+        return std::unexpected(ec);
     }
 
     static const auto shutter = [](asio_utp::socket& s) {

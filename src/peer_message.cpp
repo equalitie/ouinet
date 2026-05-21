@@ -5,21 +5,26 @@
 #include <boost/asio/write.hpp>
 #include "peer_message.h"
 #include "util/keep_alive.h"
+#include "util/async.h"
 #include "parse/number.h"
 #include "constants.h"
 
 namespace ouinet {
 
-PeerRequest PeerRequest::async_read(GenericStream& con, YieldContext yield) {
+std::expected<PeerRequest, sys::error_code>
+PeerRequest::async_read(GenericStream& con, Async yield) {
     http::request<http::empty_body> req;
     beast::flat_buffer con_rbuf;
 
-    sys::error_code ec;
-    http::async_read(con, con_rbuf, req, yield[ec]);
+    auto read_r = http::async_read(con, con_rbuf, req, yield);
 
-    if (ec) return or_throw<PeerRequest>(yield, ec);
+    if (!read_r.has_value()) {
+        return std::unexpected(read_r.error());
+    }
+
+    sys::error_code ec;
     if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
-    if (ec) return or_throw<PeerRequest>(yield, ec);
+    if (ec) return std::unexpected(ec);
 
     http::verb method = req.method();
 
@@ -27,7 +32,7 @@ PeerRequest PeerRequest::async_read(GenericStream& con, YieldContext yield) {
             method != http::verb::connect &&
             method != http::verb::head &&
             method != http::verb::propfind) {
-        return or_throw<PeerRequest>(yield, make_error_code(PeerRequestError::invalid_method));
+        return std::unexpected(make_error_code(PeerRequestError::invalid_method));
     }
 
     if (method == http::verb::connect) {
@@ -42,13 +47,13 @@ PeerRequest PeerRequest::async_read(GenericStream& con, YieldContext yield) {
     // TODO: Not being used at the moment, the old reasoning was that even if the
     // version doesn't match ours we'd still serve the peer some content.
     if (!protocol_version) {
-        return or_throw<PeerRequest>(yield, make_error_code(PeerRequestError::invalid_protocol_version));
+        return std::unexpected(make_error_code(PeerRequestError::invalid_protocol_version));
     }
 
     auto resource_id = cache::ResourceId::from_hex(req.target());
 
     if (!resource_id) {
-        return or_throw<PeerRequest>(yield, make_error_code(PeerRequestError::invalid_target));
+        return std::unexpected(make_error_code(PeerRequestError::invalid_target));
     }
 
     std::optional<util::HttpRequestByteRange> range;
@@ -59,8 +64,8 @@ PeerRequest PeerRequest::async_read(GenericStream& con, YieldContext yield) {
             if (ranges->size() == 1) {
                 range = (*ranges)[0];
             } else {
-                // XXX: We currently support max 1 rage in the request
-                return or_throw<PeerRequest>(yield, make_error_code(PeerRequestError::invalid_range));
+                // XXX: We currently support max 1 range in the request
+                return std::unexpected(make_error_code(PeerRequestError::invalid_range));
             }
         }
     }
