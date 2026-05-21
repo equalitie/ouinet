@@ -35,8 +35,16 @@ class OuinetProcessProtocol(object):
         Listen to the process output to react to fatal errors and track status
         """
         report = self.app_name + ": " + data
-        logging.debug(report)
-        self._logger.handlers[0].flush()
+        try:
+            logging.debug(report)
+            if self._logger.handlers:
+                self._logger.handlers[0].flush()
+        except (ValueError, IndexError, OSError) as e:
+            print(
+                f"[PYTHON TEST SCRIPT ERROR] ouinet_process_protocol.py "
+                f"errReceived(): logging handler flush failed "
+                f"({type(e).__name__}: {e})."
+            )
         print(report)
 
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):

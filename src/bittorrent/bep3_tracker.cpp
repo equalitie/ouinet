@@ -13,6 +13,7 @@
 #include <ouiservice/i2p/service.h>
 #include <ouiservice/i2p/i2pd/libi2pd/Destination.h>
 #include "../util.h"
+#include "../util/bytes.h"
 #include "../util/exponential_backoff.h"
 #include "../logger.h"
 #include <ouiservice/i2p/i2pd/libi2pd/Base.h>  // ByteStreamToBase32
@@ -167,7 +168,7 @@ string Bep3Tracker::send_request( const string& extra_params
     }
 
     LOG_DEBUG("BEP3 tracker: HTTP ", static_cast<int>(res.result()),
-              " ", res.reason(), " body=", res.body());
+              " ", res.reason(), " body=", util::bytes::to_printable(res.body()));
 
     if (res.result() != http::status::ok) {
         LOG_WARN("BEP3 tracker: tracker returned status ",

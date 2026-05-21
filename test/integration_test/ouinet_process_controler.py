@@ -82,9 +82,9 @@ def output_yielder(handle: Popen) -> Generator[str, None, None]:
         try:
             if not handle.stdout:
                 raise IOError("no stdout on process")
-            for line in iter(handle.stdout.readline, ""):
+            for line in iter(handle.stdout.readline, b""):
                 if isinstance(line, bytes):
-                    line = line.decode("utf-8")
+                    line = line.decode("utf-8", errors="replace")
                 yield line
         except:
             pass

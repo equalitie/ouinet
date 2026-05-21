@@ -504,15 +504,18 @@ public:
                 timeout_cancel();
             });
 
+            LOG_DEBUG(log_path, " building new i2p client to tunnel to dest=", i2p_dest);
             auto i2p_client = i2p_service->build_client(i2p_dest);
             i2p_client->start(y[ec]);
-            fail_on_error_or_timeout(y, c, ec, wd);
 
+            auto y_ = y[ec];
+            fail_on_error_or_timeout(y_, c, ec, wd);
+
+            LOG_DEBUG(log_path, " connecting to the i2p peer");
             auto con = i2p_client->connect(y[ec], c);
-            fail_on_error_or_timeout(y, c, ec, wd);
+            fail_on_error_or_timeout(y_, c, ec, wd);
 
-            //TODO: Actually makes the connection works on the server side.
-            //otherwise this code has not been tested.
+            LOG_DEBUG(log_path, " downloading hash list over i2p...");
             p->download_hash_list(con, _newest_proto_seen, timeout_cancel, c, y[ec]);
 
             LOG_DEBUG(log_path, " Done fetching hash list; i2p_dest=", i2p_dest

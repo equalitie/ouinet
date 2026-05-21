@@ -104,7 +104,26 @@ class TestFixtures:
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
     CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve_utp_req/serve_local END[\s\S]*"
+
+    # Logged by the I2P cache server in client.cpp once a peer's PROPFIND or
+    # GET has been successfully written back over the I2P stream. Used by the
+    # BEP3-over-I2P cache test to confirm the seeding client actually served
+    # the request (serve_utp_req/serve_local ENDthe uTP  never fires on the I2P cache).
+    CACHE_CLIENT_I2P_REQUEST_SERVED = (
+        r'[\s\S]*serve_i2p_req/serve_local Write; ec="Success"[\s\S]*'
+    )
     BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*BEP3 announcer successfully initiated[\s\S]*"
+    # Logged by Bep3Loop::announce in src/cache/announcer.cpp once the cached
+    # entry has been successfully announced to the BEP3 tracker over I2P.
+    BEP3_ANNOUNCE_SUCCESS_REGEX = (
+        r'[\s\S]*Announcing \(BEP3/I2P\):.*: done; ec="Success"[\s\S]*'
+    )
+    # Logged by Bep3Tracker::tracker_handshake in src/bittorrent/bep3_tracker.cpp
+    # once a probe round-trip to the BEP3 tracker has succeeded over I2P, i.e.
+    # the I2P path (lease-set + tunnel) is actually usable for tracker requests.
+    BEP3_HANDSHAKE_DONE_REGEX = (
+        r'[\s\S]*BEP3 tracker: tracker handshake successful; ec="Success"[\s\S]*'
+    )
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 

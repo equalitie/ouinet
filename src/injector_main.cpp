@@ -1,12 +1,19 @@
 #include "injector.h"
 #include <boost/asio/signal_set.hpp>
 #include "force_exit_on_signal.h"
+#include <csignal>
 
 using namespace std;
 using namespace ouinet;
 
 int main(int argc, const char* argv[])
 {
+    // When Stdout/stderr is piped to a slow reader (e.g. the pytest harness).
+    // A filled pipe + write() raises SIGPIPE, whose default action is to
+    // terminate the process. We should ignore it so tests don't fail due
+    // to too much logs.
+    std::signal(SIGPIPE, SIG_IGN);
+
     InjectorConfig config;
 
     try {

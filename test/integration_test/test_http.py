@@ -214,6 +214,7 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.TCP_CLIENT_DISCOVERY_START,
                 TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
                 TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED,
+                TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED,
                 TestFixtures.FRESH_SUCCESS_REGEX,
                 TestFixtures.DHT_INITIALIZED_REGEX,
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
@@ -221,6 +222,8 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.CACHE_CLIENT_PEER_FOUND,
                 TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
                 TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
+                TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX,
+                TestFixtures.BEP3_HANDSHAKE_DONE_REGEX,
             ],
         ),
     )
@@ -406,6 +409,11 @@ async def cleanup():
     repofolder = TestFixtures.REPO_FOLDER_NAME
     i2pfolder = "i2p"
 
+    import os
+    if os.environ.get("OUINET_KEEP_REPOS"):
+        print("OUINET_KEEP_REPOS set, skipping cleanup of", repofolder, "and", i2pfolder)
+        return
+
     print("cleaning up the folder", repofolder)
     for folder in [repofolder, i2pfolder]:
         if exists(folder):
@@ -494,7 +502,18 @@ async def test_tcp_transport(certificate_file, http_server):
     assertEquals(response.text, content)
 
 
-async def get_cached_echo(port: int, content: str) -> Response:
+async def get_cached_echo(
+    port: int, content: str, retry_delay: float = 5
+) -> Response:
+    """Fetch a cached echo response with retries.
+
+    `retry_delay` is the wait between attempts.
+
+    For BEP3-over-I2P tests we pass a longer delay of 
+   `TestFixtures.I2P_TUNNEL_HEALING_PERIOD` (each request_echo blocks
+    with timeout=None until the cache fetch succeeds or fails, so a retry
+    only fires after the previous attempt has fully completed;
+    """
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
         try:
             print(f"get_cached_echo attempt {i + 1}...")
@@ -505,10 +524,11 @@ async def get_cached_echo(port: int, content: str) -> Response:
             print(f"get_cached_echo: got status {response.status_code}, retrying...")
         except Exception as e:
             print(f"get_cached_echo: {e}, retrying...")
-        await asyncio.sleep(5)
+        await asyncio.sleep(retry_delay)
 
-    raise AssertionError(f"Failed to get cached response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts")
-
+    raise AssertionError(
+        f"Failed to get cached response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts"
+    )
 
 @pytest.mark.timeout(TestFixtures.BEP5_CACHE_TIMEOUT)
 @pytest.mark.asyncio
@@ -913,8 +933,20 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # and only logs success once that path actually works.
     await wait_for_benchmark(cache_client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
+    # TODO: Consider waiting for a debug line instead of period
+    # print(
+    #     "waiting "
+    #     + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+    #     + " secs so the client doesn't crash 💀..."
+    # )
+    # await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
+
     # Retrieve cached content
-    await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
+    await get_cached_echo(
+        TestFixtures.CACHE_CLIENT[1]["port"],
+        content,
+        retry_delay=TestFixtures.I2P_TUNNEL_HEALING_PERIOD,
+    )
     # Make sure client1 served it and client2 got it from cache
-    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED)
     await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
