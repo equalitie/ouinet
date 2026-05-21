@@ -221,6 +221,9 @@ public:
 
     void close();
 
+    // Remote endpoint of the socket communicating with the I2P service.
+    asio::ip::tcp::endpoint remote_endpoint() const;
+
     ~Sam();
 
 private:

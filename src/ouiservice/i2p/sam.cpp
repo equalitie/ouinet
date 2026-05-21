@@ -270,6 +270,10 @@ void Sam::close() {
     }
 }
 
+asio::ip::tcp::endpoint Sam::remote_endpoint() const {
+    return _inner->socket.remote_endpoint();
+}
+
 Sam::~Sam() {
     close();
 }

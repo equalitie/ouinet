@@ -66,7 +66,7 @@ public:
     }
 
     [[nodiscard]]
-    static std::expected<I2pSession, Error::Create> create(Async);
+    static std::expected<I2pSession, Error::Create> create(Async, std::optional<asio::ip::tcp::endpoint> sam_ep = {});
 
     [[nodiscard]]
     std::expected<asio::ip::tcp::socket, Error::Connect> connect(const I2pAddress& remote_addr, Async);

@@ -21,14 +21,16 @@ struct I2pSession::Inner {
 };
 
 /* static */
-std::expected<I2pSession, Error::Create> I2pSession::create(Async yield) {
+std::expected<I2pSession, Error::Create> I2pSession::create(Async yield, std::optional<asio::ip::tcp::endpoint> sam_ep) {
     auto error = [] (auto&& e) { return std::unexpected(Error::Create { std::move(e) }); };
 
     asio::ip::tcp::socket socket(yield.get_executor());
 
     auto slot0 = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
 
-    auto ec = socket.async_connect(default_endpoint(), yield);
+    auto ep = sam_ep ? *sam_ep : default_endpoint();
+
+    auto ec = socket.async_connect(ep, yield);
     if (ec) return error(Error::IoConnect { ec });
 
     Sam sam(std::move(socket));
@@ -68,7 +70,7 @@ std::expected<asio::ip::tcp::socket, Error::Connect> I2pSession::connect(const I
 
     auto slot0 = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
 
-    auto ec = socket.async_connect(default_endpoint(), yield);
+    auto ec = socket.async_connect(_inner->sam.remote_endpoint(), yield);
     if (ec) return error(Error::IoConnect { ec });
 
     Sam sam(std::move(socket));
@@ -93,7 +95,7 @@ std::expected<asio::ip::tcp::socket, Error::Accept> I2pSession::accept(Async yie
 
     auto slot0 = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
 
-    auto ec = socket.async_connect(default_endpoint(), yield);
+    auto ec = socket.async_connect(_inner->sam.remote_endpoint(), yield);
     if (ec) return error(Error::IoConnect { ec });
 
     Sam sam(std::move(socket));
