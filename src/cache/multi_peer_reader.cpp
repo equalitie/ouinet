@@ -1023,4 +1023,3 @@ void MultiPeerReader::mark_done()
 MultiPeerReader::~MultiPeerReader() {
     _lifetime_cancel();
 }
-

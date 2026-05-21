@@ -1,15 +1,17 @@
 use btdht::MainlineDht;
 use ouinet_test_rs::{Client, Config, Context, Injector};
 use patchbay::{Device, Lab, Router, RouterPreset};
-use reqwest::{IntoUrl, RequestBuilder, Response};
+use reqwest::{IntoUrl, RequestBuilder, Response, StatusCode};
 use std::{
     fs,
     net::{Ipv4Addr, SocketAddr},
+    time::Duration,
 };
 use tempfile::TempDir;
 use tokio::{
     net::{TcpListener, UdpSocket},
     sync::oneshot,
+    time,
 };
 use warp::Filter;
 
@@ -55,7 +57,7 @@ async fn sanity_check() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response
             .headers()
@@ -74,28 +76,34 @@ async fn sanity_check() {
     )
     .await;
 
-    let response = leecher
-        .request(&url, |request| {
-            request
-                .version(reqwest::Version::HTTP_11)
-                .header("X-Ouinet-Group", &url)
-        })
-        .await
-        .unwrap();
+    let response = loop {
+        let response = leecher
+            .request(&url, |request| {
+                request
+                    .version(reqwest::Version::HTTP_11)
+                    .header("X-Ouinet-Group", &url)
+            })
+            .await
+            .unwrap();
 
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
+        match response.status() {
+            StatusCode::OK => break response,
+            StatusCode::BAD_GATEWAY => {
+                time::sleep(Duration::from_millis(250)).await;
+                continue;
+            }
+            code => panic!("Unexpected response status code: {:?}", code),
+        }
+    };
+
     assert_eq!(
         response
             .headers()
             .get("X-Ouinet-Source")
             .map(|v| v.to_str().unwrap()),
-        Some("injector")
+        Some("dist-cache")
     );
     assert_eq!(response.text().await.unwrap(), content);
-
-    leecher.inner.stop().await;
-    seeder.inner.stop().await;
-    injector.inner.stop().await;
 }
 
 // -----------------------------------------------------------------------------
@@ -333,8 +341,7 @@ impl ClientHolder {
         let router = env
             .lab
             .add_router(&format!("{name}-router"))
-            // .preset(RouterPreset::Home)
-            .preset(RouterPreset::Public)
+            .preset(RouterPreset::Home)
             .build()
             .await
             .unwrap();
