@@ -23,7 +23,7 @@ function(add_rust_test name)
     list(JOIN include_dirs "$<SEMICOLON>" include_dirs)
 
     # TODO: Is it possible to find these libs automatically?
-    set(libs injector client ouinet_asio boost_filesystem)
+    set(libs injector client ouiservice-i2p ouinet_asio boost_filesystem)
     list(JOIN libs "$<SEMICOLON>" libs)
 
     set(lib_dirs ${CMAKE_BINARY_DIR})
