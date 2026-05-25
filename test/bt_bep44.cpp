@@ -173,8 +173,7 @@ int main(int argc, const char** argv)
         dns_resolver,
         rx_limit,
         boost::filesystem::path{},
-        std::set<bootstrap::Address>{},
-        true
+        bootstrap::Config{}
     );
 
     vector<string> args;

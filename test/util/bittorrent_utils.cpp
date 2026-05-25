@@ -36,8 +36,7 @@ public:
                                                        , std::make_shared<dns::Resolver>()
                                                        , rx_limit
                                                        , boost::filesystem::path{}
-                                                       , std::set<bt::bootstrap::Address>{}
-                                                       , true);
+                                                       , bt::bootstrap::Config{});
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);
