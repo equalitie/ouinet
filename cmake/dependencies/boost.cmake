@@ -321,22 +321,3 @@ target_compile_options(ouinet_asio
     PUBLIC -std=c++23
 )
 
-# FindBoost.cmake doesn't define targets for newer versions of boost.
-# Let's emulate it instead.
-foreach(component ${BOOST_COMPONENTS})
-    if (NOT TARGET Boost::${component})
-        include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
-        _static_Boost_recursive_dependencies(${component} dependencies)
-
-        find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${dependencies})
-        list(GET Boost_LIBRARIES 0 imported_location)
-
-        add_library(Boost::${component} UNKNOWN IMPORTED)
-        set_target_properties(Boost::${component} PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}"
-            INTERFACE_LINK_LIBRARIES "${Boost_LIBRARIES}"
-            IMPORTED_LOCATION "${imported_location}"
-            IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
-        )
-    endif()
-endforeach()
