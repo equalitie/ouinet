@@ -115,8 +115,7 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
         dns_resolver,
         rx_limit,
         {},
-        {},
-        true
+        {}
     );
 
     init_without_bootstrapping(ctx, dht_node);

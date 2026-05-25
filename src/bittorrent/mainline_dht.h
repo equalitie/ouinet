@@ -49,10 +49,7 @@ class MainlineDht : public DhtBase {
                , std::shared_ptr<dns::Resolver>
                , uint32_t mux_rx_limit
                , boost::filesystem::path storage_dir
-               // Extra bootstrap nodes to use (in addition to the defaults)
-               , std::set<bootstrap::Address> extra_bs
-               // Use default bootstrap nodes?
-               , bool default_bs);
+               , bootstrap::Config bs);
 
     MainlineDht(const MainlineDht&) = delete;
     MainlineDht& operator=(const MainlineDht&) = delete;
@@ -128,8 +125,7 @@ class MainlineDht : public DhtBase {
     std::shared_ptr<dns::Resolver> _dns_resolver;
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
-    std::set<bootstrap::Address> _extra_bs;
-    bool _default_bs;
+    bootstrap::Config _bootstrap_config;
     metrics::MainlineDht _metrics;
 };
 

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <ostream>
+#include <set>
 #include <string>
 
 #include <boost/asio/ip/udp.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/variant.hpp>
+#include <vector>
 
 #include "../namespaces.h"
 
@@ -33,6 +35,42 @@ parse_address(boost::string_view addr);
 // where `<HOST>` can be a host name, `<IPv4>` address, or `<[IPv6]>` address (bracketed).
 std::ostream&
 operator<<(std::ostream&, const Address&);
+
+// Default bootstrap servers
+const std::vector<Address> default_servers {
+    "dht.libtorrent.org:25401",
+    "dht.transmissionbt.com:6881",
+
+    // Alternative bootstrap servers from the Ouinet project.
+    "router.bt.ouinet.work",
+
+    // Part of previous name (in case of DNS failure).
+    asio::ip::make_address("74.3.163.127"),
+
+    // squat popular UDP high port (SIP)
+    "routerx.bt.ouinet.work:5060"
+};
+
+// Bootstrap servers configuration
+struct Config {
+    // Use the default bootstrap servers. Enabled by default.
+    bool _default = true;
+    // Extra bootstrap servers to use, in addition to the default ones. Empty by default.
+    std::set<Address> _extra;
+
+    Config& with_default(bool enabled) {
+        _default = enabled;
+        return *this;
+    }
+
+    Config& with_extras(std::set<Address> addrs) {
+        _extra = std::move(addrs);
+        return *this;
+    }
+
+    // Returns all configured bootstrap servers
+    std::vector<Address> collect() const;
+};
 
 } // bootstrap namespace
 } // bittorrent namespace

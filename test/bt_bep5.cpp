@@ -112,8 +112,7 @@ int main(int argc, const char** argv)
         dns_resolver,
         rx_limit,
         {},
-        {},
-        true
+        {}
     );
 
     vector<string> args;

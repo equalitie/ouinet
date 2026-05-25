@@ -948,8 +948,9 @@ Injector::Injector(
             , _dns_resolver
             , config.udp_mux_rx_limit_in_bytes()
             , fs::path{}  // default storage dir
-            , _config.bt_bootstrap_extras()
-            , !_config.bt_bootstrap_no_default());
+            , bt::bootstrap::Config()
+                .with_default(!_config.bt_bootstrap_no_default())
+                .with_extras(_config.bt_bootstrap_extras()));
     }
 
 

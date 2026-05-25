@@ -207,8 +207,7 @@ DhtNode::DhtNode( const AsioExecutor& exec
                 , std::shared_ptr<dns::Resolver> dns_resolver
                 , const uint32_t mux_rx_limit
                 , fs::path storage_dir
-                , std::set<bootstrap::Address> extra_bs
-                , bool default_bs
+                , bootstrap::Config bs
 ):
     _exec(exec),
     _ready(false),
@@ -216,8 +215,7 @@ DhtNode::DhtNode( const AsioExecutor& exec
     _dns_resolver(std::move(dns_resolver)),
     _mux_rx_limit(mux_rx_limit),
     _storage_dir(std::move(storage_dir)),
-    _extra_bs(std::move(extra_bs)),
-    _default_bs(default_bs),
+    _bootstrap_config(std::move(bs)),
     _metrics(std::move(metrics))
 {
 }
@@ -1722,26 +1720,7 @@ void DhtNode::bootstrap(asio::yield_context yield)
     sys::error_code ec;
     sys::error_code ignored_ec;
 
-    vector<bootstrap::Address> bootstraps;
-
-   if (_default_bs) {
-       bootstraps.push_back("dht.libtorrent.org:25401");
-       bootstraps.push_back("dht.transmissionbt.com:6881");
-
-       // Alternative bootstrap servers from the Ouinet project.
-       bootstraps.push_back("router.bt.ouinet.work");
-
-       // Part of previous name (in case of DNS failure).
-       bootstraps.push_back(asio::ip::make_address("74.3.163.127"));
-
-       // squat popular UDP high port (SIP)
-       bootstraps.push_back("routerx.bt.ouinet.work:5060");
-    }
-
-    for (auto& bootstrap : _extra_bs) {
-        bootstraps.push_back(bootstrap);
-    }
-
+    auto bootstraps = _bootstrap_config.collect();
     auto old_contacts = read_stored_contacts(_exec
                                             , stored_contacts_path()
                                             , cancel
@@ -2556,14 +2535,12 @@ MainlineDht::MainlineDht( const AsioExecutor& exec
                         , std::shared_ptr<dns::Resolver> dns_resolver
                         , uint32_t mux_rx_limit
                         , fs::path storage_dir
-                        , std::set<bootstrap::Address> extra_bs
-                        , bool default_bs)
+                        , bootstrap::Config bootstrap_config)
     : _exec(exec)
     , _dns_resolver(std::move(dns_resolver))
     , _mux_rx_limit(mux_rx_limit)
     , _storage_dir(std::move(storage_dir))
-    , _extra_bs(std::move(extra_bs))
-    , _default_bs(default_bs)
+    , _bootstrap_config(std::move(bootstrap_config))
     , _metrics(std::move(metrics))
 {
 }
@@ -2623,8 +2600,7 @@ void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         _dns_resolver,
         _mux_rx_limit,
         _storage_dir,
-        _extra_bs,
-        _default_bs
+        _bootstrap_config
     );
 
     task::spawn_detached(_exec, [&, m = move(m)] (asio::yield_context yield) mutable {
@@ -2674,8 +2650,7 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
         _dns_resolver,
         _mux_rx_limit,
         _storage_dir,
-        _extra_bs,
-        _default_bs
+        _bootstrap_config
     );
 
     auto cc = _cancel.connect([&] { node = nullptr; });
