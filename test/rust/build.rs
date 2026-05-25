@@ -20,7 +20,7 @@ fn main() {
     }
 
     cxx_build::bridge("src/lib.rs")
-        .std("c++20")
+        .std("c++23")
         .include(".")
         .include("../../src")
         .includes(include_dirs)
