@@ -35,7 +35,7 @@ mod ffi {
         type Context;
 
         fn context_new() -> UniquePtr<Context>;
-        fn run(self: Pin<&mut Context>) -> usize;
+        fn run(self: Pin<&mut Context>) -> Result<usize>;
 
         type Client;
 
@@ -87,8 +87,9 @@ impl Context {
     }
 
     // This function is blocking
-    pub fn run(&mut self) {
-        self.inner.pin_mut().run();
+    pub fn run(&mut self) -> Result<(), anyhow::Error> {
+        self.inner.pin_mut().run()?;
+        Ok(())
     }
 }
 
