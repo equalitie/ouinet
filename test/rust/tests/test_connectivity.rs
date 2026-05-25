@@ -301,7 +301,9 @@ impl InjectorHolder {
                 .unwrap();
 
                 tx.send(injector).unwrap();
-                ctx.run();
+                if let Err(error) = ctx.run() {
+                    tracing::error!("{name} run failed: {error:?}");
+                }
 
                 Ok(())
             })
@@ -395,7 +397,9 @@ impl ClientHolder {
                 client.start();
 
                 tx.send(client).unwrap();
-                ctx.run();
+                if let Err(error) = ctx.run() {
+                    tracing::error!("{name} run failed: {error:?}");
+                }
 
                 Ok(())
             })
