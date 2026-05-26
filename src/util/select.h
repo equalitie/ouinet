@@ -1,6 +1,6 @@
 #pragma once
 
-#include <boost/asio/async_result.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <optional>
 #include <type_traits>
 #include <variant>
@@ -67,7 +67,9 @@ template<typename... Ts>
 using select_result = typename tuple_to_select_result<typename unique<std::tuple<Ts...>>::type>::type;
 
 static_assert(std::is_same_v<select_result<bool>, bool>);
+static_assert(std::is_same_v<select_result<bool, bool>, bool>);
 static_assert(std::is_same_v<select_result<bool, int>, std::variant<bool, int>>);
+static_assert(std::is_same_v<select_result<bool, bool, int>, std::variant<bool, int>>);
 
 } // namespace detail
 
@@ -81,10 +83,9 @@ auto select(Async yield, Fs... fs) {
 
     ConditionVariable cv(yield.get_executor());
     std::optional<Result> result;
-    Cancel cancel(yield.get_cancel());
 
     (
-        yield.spawn(cancel, [f = std::move(fs), &cv, &result](Async yield) {
+        yield.spawn([f = std::move(fs), &cv, &result](Async yield) {
             result = Result(f(yield));
             cv.notify();
         }),
@@ -96,9 +97,35 @@ auto select(Async yield, Fs... fs) {
     }
 
     // Cancel the other branches
-    cancel();
+    yield.cancel();
 
     return result.value();
 }
+
+// Error returned from `timeout` when the timeout expires before the coroutine was able to complete.
+struct Expired {
+};
+
+std::ostream& operator<<(std::ostream& os, const Expired&) {
+    return os << "timeout expired";
+}
+
+// Runs a coroutine to completion or timeout, whichever happens first.
+template<typename F>
+auto timeout(boost::asio::steady_timer::duration duration, F f, Async yield) {
+    using Result = std::invoke_result_t<F, Async>;
+
+    return select(
+        yield,
+        [&](auto yield) {
+            async_sleep(duration, yield);
+            return std::expected<Result, Expired>(std::unexpected(Expired {}));
+        },
+        [&](auto yield) {
+            return std::expected<Result, Expired>(f(yield));
+        }
+    );
+}
+
 
 } // namespace ouinet
