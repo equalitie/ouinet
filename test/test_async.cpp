@@ -3,10 +3,11 @@
 
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <chrono>
 #include <namespaces.h>
 #include <util/async.h>
 #include <util/wait_condition.h>
+
+#include "util/async_test.h"
 
 using namespace ouinet;
 using namespace std::chrono_literals;
@@ -17,7 +18,7 @@ using namespace std::chrono_literals;
 // `void(sys::error_code, size_t)`,...
 template<
     asio::completion_token_for<void(sys::error_code)> Token,
-    class... Args 
+    class... Args
 >
 auto action(Token token, Args&&... args)
 {
@@ -33,39 +34,6 @@ auto action(Token token, Args&&... args)
         },
         token
      );
-}
-
-void test(auto work) {
-    asio::io_context ctx;
-
-    asio::spawn(ctx, [work = std::move(work)] (asio::yield_context yield) mutable {
-            // Wrap `asio::yield_context` in `Async` and pass `util::LogPath`
-            // to it for convenient logging.
-            work(
-                Async(
-                    yield,
-                    util::LogPath(
-                        boost::unit_test::framework::current_test_case().p_name
-                    )
-                )
-            );
-        },
-        [] (std::exception_ptr ep) {
-            // We don't expect exceptions, results from async actions using
-            // `Async` are all of type `std::expected` and we explicitly check
-            // their `.has_value()`.
-            try {
-                if (ep) std::rethrow_exception(ep);
-            }
-            catch (std::exception const& e) {
-                BOOST_ERROR("Exception: " << e.what());
-            }
-            catch (...) {
-                BOOST_ERROR("Unknown exception");
-            }
-        });
-
-    ctx.run();
 }
 
 // Get the return type of calling the above `action` when invoked with given arguments.
@@ -104,29 +72,29 @@ BOOST_AUTO_TEST_CASE(static_return_types) {
 }
 
 BOOST_AUTO_TEST_CASE(return_values) {
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             sys::error_code ec = action(yield, sys::error_code{});
             BOOST_REQUIRE_MESSAGE(!ec, ec.message());
         });
 
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             auto r = action(yield, sys::error_code{}, 1);
             BOOST_REQUIRE_MESSAGE(r.has_value(), r.error());
             BOOST_REQUIRE_EQUAL(*r, 1);
         });
 
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             auto r = action(yield, sys::error_code{}, NoCopy());
             BOOST_REQUIRE_MESSAGE(r.has_value(), r.error());
         });
 
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             auto exp_ec = asio::error::operation_aborted;
             sys::error_code ec = action(yield, exp_ec);
             BOOST_REQUIRE_MESSAGE(ec = exp_ec, ec.message());
         });
 
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             auto exp_ec = asio::error::operation_aborted;
             sys::error_code ec = action(yield, exp_ec);
             BOOST_REQUIRE_MESSAGE(ec = exp_ec, ec.message());
@@ -134,7 +102,7 @@ BOOST_AUTO_TEST_CASE(return_values) {
 }
 
 BOOST_AUTO_TEST_CASE(asio_timer) {
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             asio::steady_timer timer(yield.get_executor());
             timer.expires_after(10ms);
             sys::error_code ec = timer.async_wait(yield);
@@ -143,7 +111,7 @@ BOOST_AUTO_TEST_CASE(asio_timer) {
 }
 
 BOOST_AUTO_TEST_CASE(cancel_timer) {
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             auto exec = yield.get_executor();
 
             WaitCondition wc(exec);
@@ -178,7 +146,7 @@ void sleep_forever(Async yield) {
 }
 
 BOOST_AUTO_TEST_CASE(cancel_yield) {
-    test([] (Async yield) {
+    async_test([] (Async yield) {
             auto exec = yield.get_executor();
 
             WaitCondition wc(exec);
