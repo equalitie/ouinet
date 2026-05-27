@@ -7,6 +7,7 @@
 
 #include "async.h"
 #include "condition_variable.h"
+#include "expected.h"
 
 namespace ouinet {
 
@@ -71,6 +72,21 @@ static_assert(std::is_same_v<select_result<bool, bool>, bool>);
 static_assert(std::is_same_v<select_result<bool, int>, std::variant<bool, int>>);
 static_assert(std::is_same_v<select_result<bool, bool, int>, std::variant<bool, int>>);
 
+template<typename T, typename E>
+std::expected<T, E> maybe_flatten(std::expected<T, E> e) {
+    return std::move(e);
+}
+
+template<typename T, typename E0, typename E1>
+requires std::convertible_to<E1, E0>
+std::expected<T, E0> maybe_flatten(std::expected<std::expected<T, E0>, E1> e) {
+    if (e) {
+        return std::move(e.value());
+    } else {
+        return std::expected<T, E0>(std::unexpected(std::move(e.error())));
+    }
+}
+
 } // namespace detail
 
 // Runs multiple coroutines concurrently waiting for the first to complete, then returns its result
@@ -86,7 +102,14 @@ auto select(Async yield, Fs... fs) {
 
     (
         yield.spawn([f = std::move(fs), &cv, &result](Async yield) {
-            result = Result(f(yield));
+            auto local_result = Result(f(yield));
+
+            // TODO: This shouldn't be necessary but I was getting segfaults without it...
+            if (yield.is_cancelled()) {
+                return;
+            }
+
+            result = std::move(local_result);
             cv.notify();
         }),
         ...
@@ -104,7 +127,12 @@ auto select(Async yield, Fs... fs) {
 
 // Error returned from `timeout` when the timeout expires before the coroutine was able to complete.
 struct Expired {
+    operator boost::system::error_code () const {
+        return boost::asio::error::timed_out;
+    }
 };
+
+static_assert(std::is_convertible_v<Expired, boost::system::error_code>);
 
 std::ostream& operator<<(std::ostream& os, const Expired&) {
     return os << "timeout expired";
@@ -113,18 +141,21 @@ std::ostream& operator<<(std::ostream& os, const Expired&) {
 // Runs a coroutine to completion or timeout, whichever happens first.
 template<typename F>
 auto timeout(boost::asio::steady_timer::duration duration, F f, Async yield) {
-    using Result = std::invoke_result_t<F, Async>;
+    using R = std::invoke_result_t<F, Async>;
+    using E = std::expected<R, Expired>;
 
-    return select(
+    auto result = select(
         yield,
-        [&](auto yield) {
+        [duration](auto yield) {
             async_sleep(duration, yield);
-            return std::expected<Result, Expired>(std::unexpected(Expired {}));
+            return E(std::unexpected(Expired {}));
         },
-        [&](auto yield) {
-            return std::expected<Result, Expired>(f(yield));
+        [f = std::move(f)](auto yield) {
+            return E(f(yield));
         }
     );
+
+    return detail::maybe_flatten(result);
 }
 
 
