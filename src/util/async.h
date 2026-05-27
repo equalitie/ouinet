@@ -186,7 +186,7 @@ namespace boost::asio {
     class async_result<ouinet::Async, Signature> {
     public:
         using return_type = typename detail::ReturnType<Signature>::type;
-    
+
         template<typename Initiation, typename... Args>
         requires(!std::same_as<return_type, void>)
         static return_type
@@ -221,7 +221,7 @@ namespace boost::asio {
         async_initiate_impl(Initiation&& initiation, const ouinet::Async& token, Args&&... args)
         {
             auto asio_yield = token._asio_yield;
-    
+
             using OurSig = typename detail::ChangeSig<Signature>::type;
 
             return async_initiate<yield_context, OurSig>(

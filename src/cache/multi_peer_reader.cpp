@@ -10,19 +10,23 @@
 #include "http_sign.h"
 #include "../http_util.h"
 #include "../session.h"
-#include "../util/watch_dog.h"
-#include "../util/sign.h"
-#include "../util/crypto_stream.h"
-#include "../util/intrusive_list.h"
 #include "../util/async.h"
+#include "../util/async_job.h"
+#include "../util/compat.h"
+#include "../util/condition_variable.h"
+#include "../util/crypto_stream.h"
+#include "../util/debug.h"
+#include "../util/intrusive_list.h"
+#include "../util/sign.h"
+#include "../util/select.h"
+#include "../util/set_io.h"
+#include "../util/watch_dog.h"
 #include "../async_sleep.h"
 #include "../constants.h"
-#include "../util/set_io.h"
-#include "../util/async_job.h"
-#include "../util/condition_variable.h"
 #include "../peer_message.h"
 #include "signed_head.h"
 
+#include <boost/asio/spawn.hpp>
 #include <random>
 
 using namespace std;
@@ -76,30 +80,36 @@ choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
 // TODO: For I2P peers, use i2p_client->connect() instead,
 // which also returns a GenericStream.
 static
-GenericStream connect( AsioExecutor exec
-                     , udp::endpoint ep
-                     , const set<udp::endpoint>& lan_my_eps
-                     , Cancel cancel
-                     , asio::yield_context yield)
+std::expected<GenericStream, sys::error_code>
+connect( udp::endpoint ep
+       , const set<udp::endpoint>& lan_my_eps
+       , Async yield)
 {
     sys::error_code ec;
+    auto exec = yield.get_executor();
+
     auto opt_m = choose_multiplexer_for(exec, ep, lan_my_eps);
 
 #ifdef __APPLE__
     if (!opt_m) {
         // No local endpoint with matching IP version (IPv4/IPv6) found
-        return or_throw<GenericStream>(yield, asio::error::network_unreachable);
+        return std::unexpected(asio::error::network_unreachable);
     }
 #else
     assert(opt_m);
 #endif
 
     asio_utp::socket s(exec);
+
     s.bind(*opt_m, ec);
-    if (ec) return or_throw<GenericStream>(yield, ec);
-    auto cancel_con = cancel.connect([&] { s.close(); });
-    s.async_connect(ep, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
+    if (ec) return std::unexpected(ec);
+
+    yield.cancel_slot([&] { s.close(); });
+    ec = s.async_connect(ep, yield);
+    if (ec) {
+        return std::unexpected(ec);
+    }
+
     return GenericStream(move(s));
 }
 
@@ -298,36 +308,49 @@ public:
 
     // Common logic for loading and validating hash list from an established connection
     // for both udp::endpoint and i2p destinations
-    void download_hash_list(
-            GenericStream con,
-            std::shared_ptr<unsigned> newest_proto_seen,
-            Cancel& timeout_cancel,
-            Cancel& cancel,
-            asio::yield_context yield)
+    std::expected<void, sys::error_code>
+    download_hash_list(
+        GenericStream con,
+        std::shared_ptr<unsigned> newest_proto_seen,
+        Async yield
+    )
     {
-        sys::error_code ec;
+        yield.cancel_slot([&] { con.close(); });
 
-        auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
+        auto result = compat([&](asio::yield_context yield) {
+            return http::async_write(con, request(http::verb::propfind, _resource_id), yield);
+        })(yield);
+        if (!result) {
+            return std::unexpected(result.error());
+        }
 
-        http::async_write(con, request(http::verb::propfind, _resource_id), yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        auto stream = compat([&](asio::yield_context yield) {
+            return determine_incoming_stream(con, yield);
+        })(yield);
+        if (!stream) {
+            return std::unexpected(stream.error());
+        }
 
-        GenericStream stream = determine_incoming_stream(con, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-
-        auto reader = http_response::Reader(std::move(stream));
+        auto reader = http_response::Reader(std::move(*stream));
         //auto reader = std::make_unique<http_response::Reader>(move(con));
 
-        auto hash_list = HashList::load(reader, _cache_pk, timeout_cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        auto hash_list = compat([&](Cancel cancel, asio::yield_context yield) {
+            return HashList::load(reader, _cache_pk, cancel, yield);
+        })(yield);
+        if (!hash_list) {
+            return std::unexpected(hash_list.error());
+        }
 
-        if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen))
-          // The client expects an injection belonging to a supported protocol version,
-          // otherwise we just discard this copy.
-          return or_throw(yield, asio::error::not_found);
+        if (!util::http_proto_version_check_trusted(hash_list->signed_head, *newest_proto_seen)) {
+            // The client expects an injection belonging to a supported protocol version,
+            // otherwise we just discard this copy.
+            return std::unexpected(asio::error::not_found);
+        }
 
-        _hash_list = move(hash_list);
+        _hash_list = move(*hash_list);
         _connection = std::move(con);
+
+        return {};
     }
 
     // Responses may be either plain-text or cypher-text, we read which type it is here
@@ -485,56 +508,69 @@ public:
         if (!ip.second) return; // Already inserted
 
         ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, _log_path);
-        Peer* p = ip.first->second.get();
+        Peer* peer = ip.first->second.get();
 
-        _candidate_peers.push_back(*p);
+        _candidate_peers.push_back(*peer);
 
-        task::spawn_detached(_exec, [=, this, log_path = _log_path,
-                                     i2p_session = _i2p_session,
-                                     c = _lifetime_cancel] (auto y) mutable {
-            sys::error_code ec;
+        task::spawn_detached(
+            _exec,
+            [
+                this,
+                peer,
+                i2p_dest,
+                i2p_session = _i2p_session,
+                log_path = _log_path,
+                cancel = _lifetime_cancel
+            ] (auto y) mutable {
+                Async yield(y, cancel, log_path);
 
-            LOG_DEBUG(log_path, " Fetching hash list from I2P: ", i2p_dest);
+                LOG_DEBUG(yield.log_path(), " Fetching hash list from I2P: ", i2p_dest);
 
-            uint16_t retry = 10;
-            while (retry--) {
-                LOG_DEBUG("BEP3 downloading hash list ", retry, " ", i2p_dest);
-                Cancel timeout_cancel(c);
-                auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
-                    LOG_DEBUG("BEP3 hash list download timed out for: ", i2p_dest);
-                    timeout_cancel();
-                });
+                std::expected<void, sys::error_code> result;
+                uint16_t retry = 10;
 
-                auto con = i2p_session->connect(i2p_dest, Async(y, c, log_path));
-                if (!con.has_value()) {
-                    fail_on_error_or_timeout(y, c, con.error().code(), wd);
-                }
+                while (retry--) {
+                    LOG_DEBUG(yield.log_path(), " BEP3 downloading hash list ", retry, " ", i2p_dest);
 
-                //TODO: Actually makes the connection works on the server side.
-                //otherwise this code has not been tested.
-                p->download_hash_list(std::move(*con), _newest_proto_seen, timeout_cancel, c, y[ec]);
+                    result = timeout(
+                        MultiPeerReader::BEP3_HASH_LIST_TIMEOUT,
+                        [&](auto yield) -> std::expected<void, sys::error_code> {
+                            auto con = i2p_session->connect(i2p_dest, yield);
+                            if (!con) {
+                                return std::unexpected(con.error().code());
+                            }
 
-                if (ec) {
-                    if (!async_sleep(5s, c, y)) {
-                        fail_on_error_or_timeout(y, c, ec, wd);
+                            //TODO: Actually makes the connection works on the server side.
+                            //otherwise this code has not been tested.
+                            return peer->download_hash_list(std::move(*con), _newest_proto_seen, yield);
+                        },
+                        yield
+                    );
+
+                    if (!result) {
+                        async_sleep(5s, yield);
+                        continue;
                     }
-                    ec = {};
-                    continue;
+
+                    break;
                 }
-                break;
+
+                LOG_DEBUG(log_path, " Done fetching hash list; i2p_dest="
+                         , i2p_dest
+                         , " result=", debug(result));
+
+                // TODO: is this necessary?
+                if (yield.is_cancelled()) return;
+
+                peer->_candidate_hook.unlink();
+
+                if (result) {
+                    _good_peers.push_back(*peer);
+                }
+
+                _cv.notify();
             }
-
-            LOG_DEBUG(log_path, " Done fetching hash list; i2p_dest=", i2p_dest
-                     , " ec=", ec, " c=", bool(c));
-
-            if (c) return;
-
-            p->_candidate_hook.unlink();
-
-            if (!ec) _good_peers.push_back(*p);
-
-            _cv.notify();
-        });
+        );
     }
 
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
@@ -548,40 +584,56 @@ public:
         if (!ip.second) return; // Already inserted
 
         ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, peer_log_path);
-        Peer* p = ip.first->second.get();
+        Peer* peer = ip.first->second.get();
 
-        _candidate_peers.push_back(*p);
+        _candidate_peers.push_back(*peer);
 
-        task::spawn_detached(_exec, [=, this, log_path = peer_log_path,
-                                     lan_my_eps = _lan_my_eps,
-                                     newest_proto_seen = _newest_proto_seen,
-                                     c = _lifetime_cancel] (auto y) mutable {
-            sys::error_code ec;
+        task::spawn_detached(
+            _exec,
+            [
+                this,
+                ep,
+                peer,
+                lan_my_eps = _lan_my_eps,
+                log_path = peer_log_path,
+                newest_proto_seen = _newest_proto_seen,
+                cancel = _lifetime_cancel
+            ] (auto y) mutable {
+                Async yield(y, cancel, log_path);
 
-            LOG_DEBUG(log_path, " Fetching hash list from: ", ep);
+                LOG_DEBUG(yield.log_path(), " Fetching hash list from: ", ep);
 
-            Cancel timeout_cancel(c);
-            auto wd = watch_dog(_exec, MultiPeerReader::BEP5_HASH_LIST_TIMEOUT, [&] {
-                LOG_DEBUG("BEP5 hash list download timed out for: ", ep);
-                timeout_cancel();
-            });
+                auto result = timeout(
+                    MultiPeerReader::BEP5_HASH_LIST_TIMEOUT,
+                    [&](auto yield) -> std::expected<void, sys::error_code> {
+                        auto con = connect(ep, lan_my_eps, yield);
 
-            auto con = connect(_exec, ep, lan_my_eps, timeout_cancel, y[ec]);
-            fail_on_error_or_timeout(y, c, ec, wd);
+                        if (!con) {
+                            return std::unexpected(con.error());
+                        }
 
-            p->download_hash_list(std::move(con), newest_proto_seen, timeout_cancel, c, y[ec]);
+                        return peer->download_hash_list(std::move(*con), newest_proto_seen, yield);
+                    },
+                    yield
+                );
 
-            LOG_DEBUG(log_path, " Done fetching hash list; ep=", ep
-                     , " ec=", ec, " c=", bool(c));
+                LOG_DEBUG( yield.log_path(), " Done fetching hash list from: ", ep
+                         , "; result=", debug(result));
 
-            if (c) return;
+                if (result == std::unexpected(asio::error::timed_out)) {
+                    LOG_DEBUG(yield.log_path(), " BEP5 hash list download timed out for: ", ep);
+                    return;
+                }
 
-            p->_candidate_hook.unlink();
+                peer->_candidate_hook.unlink();
 
-            if (!ec) _good_peers.push_back(*p);
+                if (result) {
+                    _good_peers.push_back(*peer);
+                }
 
-            _cv.notify();
-        });
+                _cv.notify();
+            }
+        );
     }
 
     bool still_waiting_for_candidates() const {
