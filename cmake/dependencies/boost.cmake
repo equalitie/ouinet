@@ -191,7 +191,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
 else()
     set(BOOST_ENVIRONMENT )
-    set(BOOST_ARCH_CONFIGURATION "cxxflags=-fPIC")
+    set(BOOST_ARCH_CONFIGURATION "cxxflags=-fPIC -fvisibility=default")
 endif()
 
 set(BUILT_BOOST_VERSION ${BOOST_VERSION})
@@ -210,9 +210,9 @@ set(BOOST_LIBRARY_FILES )
 foreach (component ${BOOST_DEPENDENT_COMPONENTS})
     if (${component} STREQUAL "unit_test_framework")
         set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-test)
-        continue()
+    else()
+        set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-${component})
     endif()
-    set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-${component})
     _boost_library_filename(${component} filename)
     set(BOOST_LIBRARY_FILES ${BOOST_LIBRARY_FILES} ${filename})
 endforeach()
@@ -300,7 +300,7 @@ target_link_libraries(ouinet_asio
     PRIVATE
         Boost::system
 )
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.77.0)
+if ((WIN32 OR MINGW) AND BOOST_VERSION GREATER_EQUAL 1.77.0)
     set(OUINET_ASIO_WIN_LIBRARIES crypt32 bcrypt)
 endif()
 

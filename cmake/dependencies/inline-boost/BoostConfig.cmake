@@ -57,6 +57,10 @@ foreach (component ${BUILT_BOOST_COMPONENTS})
             list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES ntdll)
         endif()
 
+        if (component STREQUAL "filesystem" AND (WIN32 OR MINGW))
+            list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES bcrypt)
+        endif()
+
         foreach (dependency ${dependencies})
             _boost_library_filename(${dependency} dependency_filename)
             list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES ${dependency_filename})
