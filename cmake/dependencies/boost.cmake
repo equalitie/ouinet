@@ -307,6 +307,7 @@ endif()
 target_compile_definitions(ouinet_asio
     PUBLIC
         -DBOOST_ASIO_DYN_LINK
+        -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
         ${BOOST_COMPILE_DEFINITIONS}
 )
 target_compile_options(ouinet_asio
