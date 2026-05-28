@@ -23,6 +23,7 @@
 #include "dht.h"
 
 #include "../namespaces.h"
+#include "../util/async.h"
 #include "../util/sign.h"
 #include "../util/cancel.h"
 #include "../util/wait_condition.h"
@@ -74,8 +75,8 @@ class DhtNode {
            , bootstrap::Config bs
     );
 
-    void start(udp::endpoint, asio::yield_context yield);
-    void start(asio_utp::udp_multiplexer, asio::yield_context yield);
+    std::expected<void, sys::error_code> start(udp::endpoint, Async yield);
+    std::expected<void, sys::error_code> start(asio_utp::udp_multiplexer, Async yield);
     void stop();
 
     /**

@@ -223,21 +223,26 @@ DhtNode::DhtNode( const AsioExecutor& exec
 {
 }
 
-void DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
+std::expected<void, sys::error_code> DhtNode::start(udp::endpoint local_ep, Async yield)
 {
     if (local_ep.address().is_loopback()) {
         _WARN( "Node shall be bound to the loopback address and "
              , "thus won't be able to communicate with the world");
     }
 
-    sys::error_code ec;
     auto m = asio_utp::udp_multiplexer(_exec);
+
+    sys::error_code ec;
     m.bind(local_ep, ec);
-    if (ec) return or_throw(yield, ec);
+
+    if (ec) {
+        return std::unexpected(ec);
+    }
+
     return start(move(m), yield);
 }
 
-void DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
+std::expected<void, sys::error_code> DhtNode::start(asio_utp::udp_multiplexer m, Async yield)
 {
     _multiplexer = std::make_unique<UdpMultiplexer>(move(m), _mux_rx_limit);
 
@@ -251,14 +256,16 @@ void DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
         receive_loop(yield);
     });
 
-    sys::error_code ec;
-    bootstrap(yield[ec]);
+    auto result = compat([&](asio::yield_context yield) { bootstrap(yield); })(yield);
+    if (!result) {
+        return std::unexpected(result.error());
+    }
 
-    if (!ec) task::spawn_detached(_exec, [this] (asio::yield_context yield) {
+    task::spawn_detached(_exec, [this] (asio::yield_context yield) {
         store_contacts_loop(yield);
     });
 
-    return or_throw(yield, ec);
+    return {};
 }
 
 fs::path DhtNode::stored_contacts_path() const
@@ -2637,14 +2644,11 @@ Promise<asio::ip::udp::endpoint>::Future MainlineDht::add_endpoint(asio_utp::udp
                 }
             });
 
-            auto result = compat([&](asio::yield_context yield) {
-                auto& node = _nodes[local_ep];
-                node->start(move(m), yield);
-                return node->wan_endpoint();
-            })(yield);
+            auto& node = _nodes[local_ep];
+            auto result = node->start(move(m), yield);
 
             if (result) {
-                promise.set_value(*result);
+                promise.set_value(node->wan_endpoint());
             }
 
             // TODO: should we send errors as well?
