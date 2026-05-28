@@ -458,7 +458,7 @@ public:
                 const auto max_sleep = chrono::milliseconds(10000);
                 auto sleep = min_sleep;
 
-                while (!yield.is_cancelled()) {
+                while (true) {
                     auto peer_eps = compat([&](Cancel cancel, asio::yield_context yield) {
                         return _dht_lookup->get(cancel, yield);
                     })(yield);

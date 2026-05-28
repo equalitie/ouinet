@@ -49,15 +49,11 @@ public:
 public:
     Cancel() = default;
 
-    // NOTE: We can't allow copying while using intrusive lists for children
-    // because a copy would need to have the same children and one child can
-    // not be in two intrusive lists.
     Cancel& operator=(const Cancel&) = delete;
 
-    // NOTE: Copy constructor *does not* make a "copy" (for reason explained
-    // above). Instead it creates a child node of the node passed as argument.
     Cancel(const Cancel& parent)
         : _parent(const_cast<Cancel*>(&parent))
+        , _ec(parent._ec)
     {
         _parent->_children.push_back(*this);
     }

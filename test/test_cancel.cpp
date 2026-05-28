@@ -202,6 +202,15 @@ BOOST_AUTO_TEST_CASE(cancel) {
         BOOST_REQUIRE(!c1);
         BOOST_REQUIRE(c2);
     }
+
+    // already cancelled parent
+    {
+        Cancel c0;
+        c0();
+        Cancel c1(c0);
+        BOOST_REQUIRE(c0);
+        BOOST_REQUIRE(c1);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(code) {
