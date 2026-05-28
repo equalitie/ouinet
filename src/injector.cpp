@@ -961,8 +961,12 @@ Injector::Injector(
     if (_dht->local_endpoints().empty())
         LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
 
-    proxy_server->add(make_unique<ouiservice::Bep5Server>
-            (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
+    proxy_server->add(make_unique<ouiservice::Bep5Server>(
+        _dht,
+        _ssl_context.get(),
+        _config.bep5_injector_swarm_name(),
+        log_path
+    ));
 
     if (_config.listen_on_i2p()) {
         struct Server : public OuiServiceImplementationServer {
