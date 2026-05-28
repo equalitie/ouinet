@@ -5,13 +5,11 @@ use reqwest::{IntoUrl, RequestBuilder, Response, StatusCode};
 use std::{
     fs,
     net::{Ipv4Addr, SocketAddr},
-    time::Duration,
 };
 use tempfile::TempDir;
 use tokio::{
     net::{TcpListener, UdpSocket},
     sync::oneshot,
-    time,
 };
 use warp::Filter;
 
@@ -76,26 +74,16 @@ async fn sanity_check() {
     )
     .await;
 
-    let response = loop {
-        let response = leecher
-            .request(&url, |request| {
-                request
-                    .version(reqwest::Version::HTTP_11)
-                    .header("X-Ouinet-Group", &url)
-            })
-            .await
-            .unwrap();
+    let response = leecher
+        .request(&url, |request| {
+            request
+                .version(reqwest::Version::HTTP_11)
+                .header("X-Ouinet-Group", &url)
+        })
+        .await
+        .unwrap();
 
-        match response.status() {
-            StatusCode::OK => break response,
-            StatusCode::BAD_GATEWAY => {
-                time::sleep(Duration::from_millis(250)).await;
-                continue;
-            }
-            code => panic!("Unexpected response status code: {:?}", code),
-        }
-    };
-
+    assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response
             .headers()

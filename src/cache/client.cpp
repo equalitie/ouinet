@@ -500,8 +500,6 @@ struct Client::Impl {
                 , resource_key
                 , _cache_pk
                 , move(local_peers)
-                , _dht->local_endpoints()
-                , _dht->wan_endpoints()
                 , move(peer_lookup_)
                 , _newest_proto_seen
                 , log_path);

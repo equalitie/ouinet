@@ -33,10 +33,14 @@ void MockDht::set_endpoints(const std::set<UdpEndpoint>& eps) {
     _local_endpoints = eps;
 }
 
-UdpEndpoint MockDht::add_endpoint(asio_utp::udp_multiplexer m, asio::yield_context) {
+Promise<UdpEndpoint>::Future MockDht::add_endpoint(asio_utp::udp_multiplexer m) {
     _local_endpoints.insert(m.local_endpoint());
     std::cout << _name << ": add_endpoint to " << m.local_endpoint() << "\n";
-    return m.local_endpoint();
+
+    Promise<UdpEndpoint> promise(_exec);
+    promise.set_value(m.local_endpoint());
+
+    return promise.get_future();
 }
 
 std::set<UdpEndpoint> MockDht::local_endpoints() const {

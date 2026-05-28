@@ -320,16 +320,19 @@ public:
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         task::spawn_detached(_ctx, ([
             bt_dht,
-            executor = _ctx.get_executor(),
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
             upnps = _upnps_ptr
-        ] (asio::yield_context yield) mutable {
-            sys::error_code ec;
-            auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
-            if (ec || shutdown_signal) return;
-            State::setup_upnp(executor, ext_ep.port(), local_ep, upnps);
+        ] (auto y) mutable {
+            Async yield(y, shutdown_signal);
+
+            auto ext_ep = bt_dht->add_endpoint(move(m)).wait(yield);
+            if (!ext_ep) {
+                return;
+            }
+
+            State::setup_upnp(yield.get_executor(), ext_ep->get().port(), local_ep, upnps);
         }));
 
         _bt_dht = move(bt_dht);

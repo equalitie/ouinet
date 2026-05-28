@@ -26,7 +26,7 @@ public:
 
     void set_endpoints(const std::set<UdpEndpoint>&) override;
 
-    UdpEndpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context) override;
+    Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
     std::set<UdpEndpoint> local_endpoints() const override;
 

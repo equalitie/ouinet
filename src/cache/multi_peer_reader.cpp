@@ -27,6 +27,7 @@
 #include "signed_head.h"
 
 #include <boost/asio/spawn.hpp>
+#include <chrono>
 #include <random>
 
 using namespace std;
@@ -60,7 +61,7 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 }
 
 static
-boost::optional<asio_utp::udp_multiplexer>
+std::optional<asio_utp::udp_multiplexer>
 choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
                       , const set<udp::endpoint>& lan_my_eps)
 {
@@ -74,7 +75,7 @@ choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
         }
     }
 
-    return boost::none;
+    return std::nullopt;
 }
 
 // TODO: For I2P peers, use i2p_client->connect() instead,
@@ -426,25 +427,59 @@ public:
             }
         }
 
-        task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
-            sys::error_code ec;
+        task::spawn_detached(
+            _exec,
+            [
+                this,
+                log_path = _log_path,
+                cancel = _lifetime_cancel
+            ] (auto y) mutable {
+                Async yield(y, std::move(cancel), std::move(log_path));
 
-            auto peer_eps = _dht_lookup->get(c, y[ec]);
+                auto dht = _dht_lookup->get_dht_lock();
+                assert(dht);
 
-            LOG_DEBUG(log_path, " Peer lookup result; ec=", ec, " eps=", peer_eps);
+                LOG_DEBUG(yield, " Waiting for DHT to be ready...");
 
-            if (c) return;
+                auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+                    dht->wait_all_ready(cancel, yield);
+                })(yield);
 
-            if (!ec) {
-                if (auto dht_lock = _dht_lookup->get_dht_lock()) {
-                    for (auto ep : peer_eps) add_candidate(ep, *dht_lock);
+                if (!result) {
+                    LOG_WARN(yield, " DHT failed to get ready: ", result.error());
                 }
-            }
 
-            _dht_lookup.reset();
+                _lan_my_eps = dht->local_endpoints();
+                _wan_my_eps = dht->wan_endpoints();
+                LOG_DEBUG(yield, "DHT is ready (lan=", _lan_my_eps, " wan=", _wan_my_eps, "). Looking up peers...");
 
-            _cv.notify();
-        });
+                // Keep looking up for peers until success or until `this` is destroyed.
+                const auto min_sleep = chrono::milliseconds(100);
+                const auto max_sleep = chrono::milliseconds(10000);
+                auto sleep = min_sleep;
+
+                while (!yield.is_cancelled()) {
+                    auto peer_eps = compat([&](Cancel cancel, asio::yield_context yield) {
+                        return _dht_lookup->get(cancel, yield);
+                    })(yield);
+
+                    if (peer_eps) {
+                        LOG_DEBUG(yield, " Peer lookup successful: ", *peer_eps);
+
+                        if (auto dht = _dht_lookup->get_dht_lock()) {
+                            for (auto ep : *peer_eps) add_candidate(ep, *dht);
+                        }
+                        break;
+                    } else {
+                        LOG_DEBUG(yield, " Peer lookup failed: ", peer_eps.error(), ". Retry in ", sleep);
+                        async_sleep(sleep, yield);
+                        sleep = min(2 * sleep, max_sleep);
+                    }
+                }
+
+                _dht_lookup.reset();
+                _cv.notify();
+            });
     }
 
     Peers(AsioExecutor exec
@@ -779,8 +814,6 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , CryptoStreamKey resource_key
                                 , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
-                                , std::set<asio::ip::udp::endpoint> lan_my_eps
-                                , std::set<asio::ip::udp::endpoint> wan_my_eps
                                 , std::shared_ptr<DhtLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , util::LogPath log_path)
@@ -788,8 +821,8 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _log_path(std::move(log_path))
 {
     _peers = make_unique<Peers>(ex
-                               , move(lan_my_eps)
-                               , move(wan_my_eps)
+                               , std::set<udp::endpoint>{}
+                               , std::set<udp::endpoint>{}
                                , move(lan_peer_eps)
                                , move(cache_pk)
                                , move(resource_id)
