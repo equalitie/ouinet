@@ -250,11 +250,14 @@ public:
                   , string helper_swarm_name
                   , bool helper_announcement_enabled
                   , shared_ptr<bt::DhtBase> dht
-                  , Cancel& cancel)
+                  , Cancel& cancel
+                  , util::LogPath log_path)
         : _lifetime_cancel(cancel)
         , _injector_swarm(move(injector_swarm))
         , _random_generator(std::random_device()())
-        , _helper_announcer(new bt::Bep5ManualAnnouncer(util::sha1_digest(helper_swarm_name), dht))
+        , _helper_announcer(std::make_unique<bt::Bep5ManualAnnouncer>( util::sha1_digest(helper_swarm_name)
+                                                                     , dht
+                                                                     , std::move(log_path)))
         , _helper_announcement_enabled(helper_announcement_enabled)
     {
         task::spawn_detached(_injector_swarm->get_executor(),
@@ -452,7 +455,8 @@ sys::error_code Bep5Client::start(Async yield)
                                                   , _helpers_swarm_name
                                                   , _helper_announcement_enabled
                                                   , _dht
-                                                  , _cancel));
+                                                  , _cancel
+                                                  , yield.log_path()));
     }
 
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
@@ -652,7 +656,7 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
             try {
                 auto lock = concurrency->await_lock(yield);
                 assert(lock.has_value());
-                auto concurrencty_lock = std::move(*lock); 
+                auto concurrencty_lock = std::move(*lock);
             }
             catch (Async::Cancelled const&) {
                 if (yield.is_cancelled()) throw;

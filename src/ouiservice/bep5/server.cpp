@@ -14,7 +14,8 @@ namespace bt = bittorrent;
 
 Bep5Server::Bep5Server( shared_ptr<bt::DhtBase> dht
                       , boost::asio::ssl::context* ssl_context
-                      , string swarm_name)
+                      , string swarm_name
+                      , util::LogPath log_path)
 {
     assert(dht);
 
@@ -25,9 +26,9 @@ Bep5Server::Bep5Server( shared_ptr<bt::DhtBase> dht
     _multi_utp_server = make_unique<MultiUtpServer>(ex, endpoints, ssl_context);
 
     bt::NodeID infohash = util::sha1_digest(swarm_name);
-    LOG_INFO("Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());
+    LOG_INFO(log_path, " Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());
 
-    _announcer = make_unique<bt::Bep5PeriodicAnnouncer>(infohash, dht);
+    _announcer = make_unique<bt::Bep5PeriodicAnnouncer>(infohash, dht, std::move(log_path));
 }
 
 sys::error_code Bep5Server::start_listen(Async yield)
