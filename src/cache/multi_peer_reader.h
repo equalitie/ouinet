@@ -44,8 +44,6 @@ public:
                    , CryptoStreamKey
                    , sign::PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
-                   , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-                   , std::set<asio::ip::udp::endpoint> wan_my_endpoints
                    , std::shared_ptr<DhtLookup> peer_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , util::LogPath);

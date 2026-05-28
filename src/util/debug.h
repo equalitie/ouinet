@@ -27,7 +27,13 @@ std::ostream& operator<<(std::ostream& os, const Debug<std::expected<T, E>>& d) 
             os << d.inner.value();
         }
     } else {
-        os << "error(" << d.inner.error();
+        os << "error(";
+
+       if constexpr (std::is_same_v<E, boost::system::error_code>) {
+           os << d.inner.error().what();
+       } else {
+           os << d.inner.error();
+       }
     }
 
     return os << ")";

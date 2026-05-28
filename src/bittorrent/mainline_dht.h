@@ -61,9 +61,7 @@ class MainlineDht : public DhtBase {
     // you may want to check `local_endpoints()` after this operation.
     void set_endpoints(const std::set<udp::endpoint>&) override;
 
-    void add_endpoint(asio_utp::udp_multiplexer);
-
-    udp::endpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context) override;
+    Promise<udp::endpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
     std::set<udp::endpoint> local_endpoints() const override {
         std::set<udp::endpoint> ret;

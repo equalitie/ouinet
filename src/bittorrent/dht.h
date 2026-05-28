@@ -1,10 +1,11 @@
 #pragma once
 
+#include <asio_utp/udp_multiplexer.hpp>
 #include <boost/asio/spawn.hpp>
 #include <set>
-#include <asio_utp/udp_multiplexer.hpp>
 #include "node_id.h"
 #include "namespaces.h"
+#include "../util/promise.h"
 
 namespace ouinet {
 
@@ -25,7 +26,7 @@ public:
 
     virtual void set_endpoints(const std::set<UdpEndpoint>&) = 0;
 
-    virtual UdpEndpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context) = 0;
+    virtual Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) = 0;
 
     virtual std::set<UdpEndpoint> local_endpoints() const = 0;
 

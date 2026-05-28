@@ -1,5 +1,7 @@
 
 // Temporary, shall be removed once I'm done with this branch
+#include <boost/asio/error.hpp>
+#include <cstddef>
 #define SPEED_DEBUG 0
 
 #include "mainline_dht.h"
@@ -21,6 +23,7 @@
 #include "../util/address.h"
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
+#include "../util/compat.h"
 #include "../util/condition_variable.h"
 #include "../util/sign.h"
 #include "../util/str.h"
@@ -2570,7 +2573,8 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
         m.bind(ep, ec);
         assert(!ec);
         if (ec) continue;
-        add_endpoint(move(m));
+
+        (void) add_endpoint(move(m));
     }
 }
 
@@ -2581,36 +2585,6 @@ metrics::DhtNode metrics_dht_node_for(metrics::MainlineDht& metrics, const asio:
         assert(addr.is_v6());
         return metrics.dht_node_ipv6();
     }
-}
-
-void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
-{
-    auto local_ep = m.local_endpoint();
-
-    {  // replace the node if existing
-        auto it = _nodes.find(local_ep);
-        if (it != _nodes.end()) {
-            _nodes.erase(it);
-        }
-    }
-
-    _nodes[local_ep] = make_unique<DhtNode>(
-        _exec,
-        metrics_dht_node_for(_metrics, local_ep.address()),
-        _dns_resolver,
-        _mux_rx_limit,
-        _storage_dir,
-        _bootstrap_config
-    );
-
-    task::spawn_detached(_exec, [&, m = move(m)] (asio::yield_context yield) mutable {
-        auto ep = m.local_endpoint();
-        auto con = _cancel.connect([&] { _nodes.erase(ep); });
-
-        sys::error_code ec;
-        _nodes[ep]->start(move(m), yield[ec]);
-        assert(!con || ec == asio::error::operation_aborted);
-    });
 }
 
 std::set<udp::endpoint> MainlineDht::wan_endpoints() const {
@@ -2631,20 +2605,11 @@ void MainlineDht::stop() {
     _nodes.clear();
 }
 
-asio::ip::udp::endpoint
-MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
-                         , asio::yield_context yield)
+Promise<asio::ip::udp::endpoint>::Future MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
 
-    {  // replace the node if existing
-        auto it = _nodes.find(local_ep);
-        if (it != _nodes.end()) {
-            _nodes.erase(it);
-        }
-    }
-
-    auto node = make_unique<DhtNode>(
+    _nodes[local_ep] = make_unique<DhtNode>(
         _exec,
         metrics_dht_node_for(_metrics, local_ep.address()),
         _dns_resolver,
@@ -2653,23 +2618,40 @@ MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
         _bootstrap_config
     );
 
-    auto cc = _cancel.connect([&] { node = nullptr; });
+    Promise<asio::ip::udp::endpoint> promise(_exec);
+    auto future = promise.get_future();
 
-    sys::error_code ec;
-    node->start(move(m), yield[ec]);
+    task::spawn_detached(
+        _exec,
+        [
+            this,
+            m = std::move(m),
+            promise = std::move(promise),
+            local_ep
+        ](auto y) mutable {
+            Async yield(y, _cancel);
 
-    assert(!cc || ec == asio::error::operation_aborted);
-    if (cc) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<asio::ip::udp::endpoint>(yield, ec);
+            yield.cancel_slot([&] {
+                if (auto it = _nodes.find(local_ep); it != _nodes.end()) {
+                    _nodes.erase(it);
+                }
+            });
 
-    auto wan_ep = node->wan_endpoint();
+            auto result = compat([&](asio::yield_context yield) {
+                auto& node = _nodes[local_ep];
+                node->start(move(m), yield);
+                return node->wan_endpoint();
+            })(yield);
 
-    assert(!_nodes.count(local_ep));
-    assert(node);
+            if (result) {
+                promise.set_value(*result);
+            }
 
-    _nodes[local_ep] = std::move(node);
+            // TODO: should we send errors as well?
+        }
+    );
 
-    return wan_ep;
+    return future;
 }
 
 std::set<udp::endpoint> MainlineDht::tracker_announce(
