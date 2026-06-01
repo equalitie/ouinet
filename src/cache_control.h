@@ -25,7 +25,7 @@ static const boost::posix_time::time_duration default_max_cached_age
 
 class GenericStream;
 
-class OUINET_DECL CacheControl {
+class CacheControl {
 private:
     struct FetchState;
 

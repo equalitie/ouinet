@@ -10,17 +10,12 @@ if(MINGW)
     add_definitions(-include winsock2.h)
 endif()
 
-function(simple_test test_name)
-    add_executable(${test_name} ${test_name}.cpp ../src/util/log_path.cpp)
-    target_link_libraries(${test_name} PUBLIC ouinet_asio Boost::unit_test_framework)
-    target_include_directories(${test_name} PUBLIC ../src)
-    target_compile_options(${test_name} PUBLIC -std=c++23)
-endfunction()
+set(OUINET_TEST_TARGETS)
 
-function(common_test)
+function(add_test)
     set(options)
-    set(oneValueArgs TARGET TARGET_SRC)
-    set(multiValueArgs SRCS LIBS)
+    set(oneValueArgs TARGET TYPE TARGET_SRC)
+    set(multiValueArgs SRCS LINK)
 
     cmake_parse_arguments(
         ARG
@@ -30,88 +25,112 @@ function(common_test)
         ${ARGN}
     )
 
+    set(tmp ${OUINET_TEST_TARGETS})
+    list(APPEND tmp ${ARG_TARGET})
+    set(OUINET_TEST_TARGETS ${tmp} PARENT_SCOPE)
+
     if (NOT ARG_TARGET_SRC)
         set(ARG_TARGET_SRC ${ARG_TARGET}.cpp)
     endif()
 
     add_executable(${ARG_TARGET} ${ARG_TARGET_SRC} ${ARG_SRCS})
-    target_link_libraries(${ARG_TARGET} ${ARG_LIBS} ouinet_common Boost::unit_test_framework)
+
+    if (ARG_TYPE STREQUAL "HEADER")
+        target_link_libraries(${ARG_TARGET} PUBLIC ouinet_asio Boost::unit_test_framework)
+        target_include_directories(${ARG_TARGET} PUBLIC ../src)
+        target_compile_options(${ARG_TARGET} PUBLIC -std=c++23)
+    else ()
+        ouinet_setup(TARGET ${ARG_TARGET}
+            LINK
+                ${ARG_LINK}
+                $<TARGET_OBJECTS:ouinet_common>
+                $<TARGET_OBJECTS:ouinet_client>
+                $<TARGET_OBJECTS:ouinet_injector>
+                ouinet_asio
+                ouinet_i2p
+                ouinet_rs
+                asio_utp
+                cpp_upnp
+                Boost::nowide
+                Boost::process
+                Boost::filesystem
+                Boost::url
+                Boost::iostreams
+                Boost::program_options
+                Boost::unit_test_framework
+            NO_API
+        )
+    endif()
 endfunction()
 
-simple_test(test_cancel)
+add_test(TARGET test_cancel TYPE HEADER)
 
-common_test(TARGET test_async)
-common_test(TARGET test_parser)
-common_test(TARGET test_cache_control LIBS client_lib injector_lib)
-common_test(TARGET test_crypto_stream)
-common_test(TARGET test_wait_condition)
-common_test(TARGET test_scheduler)
-common_test(TARGET test_timeout_stream)
-common_test(TARGET test_response_reader)
-common_test(TARGET test_response_writer)
-
-if (NOT WIN32)
-    common_test(TARGET test_persistent_lru_cache)
-endif ()
-
-if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(TARGET test_bittorrent)
-endif()
+add_test(TARGET test_async)
+add_test(TARGET test_parser)
+add_test(TARGET test_cache_control)
+add_test(TARGET test_crypto_stream)
+add_test(TARGET test_wait_condition)
+add_test(TARGET test_scheduler)
+add_test(TARGET test_timeout_stream)
+add_test(TARGET test_response_reader)
+add_test(TARGET test_response_writer)
 
 if (NOT WIN32)
-    common_test(TARGET bt_bep44)
+    add_test(TARGET test_persistent_lru_cache)
 endif ()
 
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(TARGET test_routing_table)
+    add_test(TARGET test_bittorrent)
 endif()
 
-common_test(TARGET bt_bep5)
-common_test(TARGET test_watch_dog)
-common_test(TARGET test_util)
-
-if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-    set_target_properties(test_util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-    if(${CMAKE_GENERATOR} STREQUAL "Xcode")
-        set_target_properties(test_util PROPERTIES LINK_FLAGS "-fsanitize=address")
-    else()
-        target_link_libraries(test_util asan)
-    endif()
+if (NOT WIN32)
+    add_test(TARGET bt_bep44)
 endif ()
 
-common_test(TARGET test_logger)
-common_test(TARGET test_connection_pool)
-common_test(TARGET test_http_util)
-common_test(TARGET test_http_sign LIBS injector_lib)
-common_test(TARGET test_http_store LIBS client_lib injector_lib)
-common_test(TARGET test_atomic_temp LIBS client_lib)
-
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(TARGET test_cache_announcer
-        TARGET_SRC "performance_test/test_cache_announcer.cpp"
-        SRCS "../test/util/bittorrent_utils.cpp")
+    add_test(TARGET test_routing_table)
 endif()
 
-common_test(TARGET test_bencoding)
+add_test(TARGET bt_bep5)
+add_test(TARGET test_watch_dog)
+add_test(TARGET test_util)
+add_test(TARGET test_logger)
+add_test(TARGET test_connection_pool)
+add_test(TARGET test_http_util)
+add_test(TARGET test_http_sign)
+add_test(TARGET test_http_store)
+add_test(TARGET test_atomic_temp)
 
-common_test(TARGET test_file_io)
+# TODO: This one uses dirty tricks and needs to be refactored:
+#   * It `#include`s a cpp file
+#   * It redefines `private` to `public` to access some data
+#if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+#    add_test(TARGET test_cache_announcer
+#        TARGET_SRC "performance_test/test_cache_announcer.cpp"
+#        SRCS "../test/util/bittorrent_utils.cpp"
+#       )
+#endif()
+
+add_test(TARGET test_bencoding)
+
+add_test(TARGET test_file_io)
 
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    common_test(TARGET test_dht)
+    add_test(TARGET test_dht)
 endif()
 
-common_test(TARGET test_metrics)
-common_test(TARGET test_injector_resolver LIBS injector_lib)
-common_test(TARGET test_dns)
-common_test(TARGET test_fetch LIBS injector_lib client_lib)
+add_test(TARGET test_metrics)
+add_test(TARGET test_injector_resolver)
+add_test(TARGET test_dns)
+add_test(TARGET test_fetch)
 
-common_test(TARGET test_i2p)
-common_test(TARGET test_i2p_endpoint)
-common_test(TARGET test_i2p_fetch LIBS injector_lib client_lib)
-common_test(TARGET test_i2p_tracker LIBS injector_lib client_lib)
+add_test(TARGET test_i2p)
+add_test(TARGET test_i2p_endpoint)
+add_test(TARGET test_i2p_fetch)
+add_test(TARGET test_i2p_tracker)
 
 if (WITH_OUISYNC)
-    common_test(TARGET test_ouisync LIBS injector_lib client_lib)
+    add_test(TARGET test_ouisync LINK ouinet_ouisync)
 endif()
 
 if(UNIX AND NOT APPLE AND NOT CYGWIN)
@@ -119,5 +138,14 @@ if(UNIX AND NOT APPLE AND NOT CYGWIN)
 endif()
 
 if(LINUX)
-    common_test(TARGET manual_browse_scrape TARGET_SRC "manual/browse_scrape.cpp" LIBS client_lib)
+    add_test(TARGET manual_browse_scrape TARGET_SRC "manual/browse_scrape.cpp")
 endif()
+
+string(REPLACE ";" " " OUINET_TEST_TARGETS_STR "tests: ${OUINET_TEST_TARGETS}")
+add_custom_target(list_test_targets
+    #COMMAND ${CMAKE_COMMAND} -E echo "${OUINET_TEST_TARGETS_STR}"
+    COMMAND echo "${OUINET_TEST_TARGETS_STR}"
+    VERBATIM
+    USES_TERMINAL
+)
+

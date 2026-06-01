@@ -11,7 +11,7 @@ class I2pTrackerClient;
 class I2pAddress;
 
 // Periodically announces our local I2pAddress to `add`ed info-hashes.
-class OUINET_DECL I2pAnnouncer {
+class I2pAnnouncer {
 private:
     struct State;
 

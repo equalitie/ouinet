@@ -11,7 +11,7 @@
 
 namespace ouinet { namespace util {
 
-class OUINET_DECL temp_dir {
+class temp_dir {
 public:
     // Create a temporary directory named after the given `temp_model` under `dir`.
     // If `keep_on_close(false)`, remove the directory on close.

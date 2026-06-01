@@ -10,7 +10,7 @@
 
 namespace ouinet::util {
 
-class OUINET_DECL atomic_dir {
+class atomic_dir {
 public:
     // Create a directory to atomically replace `path` once it is committed.
     // Storage is backed by a temporary directory in the parent directory of `path`

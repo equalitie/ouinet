@@ -62,4 +62,3 @@ endif()
 target_include_directories(ouinet_rs
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
     ${RUST_BRIDGE_PATH})
-target_link_libraries(ouinet_rs INTERFACE ouinet_common_public)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "declspec.h"
+
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <boost/optional.hpp>
@@ -21,7 +23,7 @@ struct Signature {
     }
 };
 
-class PublicKey {
+class OUINET_DECL PublicKey {
 public:
     static const size_t size = 32;
     using Bytes = std::array<uint8_t, size>;
@@ -55,7 +57,7 @@ private:
     EVP_PKEY* _pubkey = nullptr;
 };
 
-class SecretKey {
+class OUINET_DECL SecretKey {
 public:
     static const size_t size = 32;
     using Bytes = std::array<uint8_t, size>;

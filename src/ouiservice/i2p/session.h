@@ -11,7 +11,7 @@ namespace ouinet {
 
 class Async;
 
-class OUINET_DECL I2pSession {
+class I2pSession {
 public:
     struct Error {
         struct Create {

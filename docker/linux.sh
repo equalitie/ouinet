@@ -174,7 +174,6 @@ function list_artifacts_for_target_os (
                 $build_dir/injector
                 $build_dir/libouinet_asio.so
                 $build_dir/libclient.so
-                $build_dir/libinjector.so
             )
             ;;
         windows)
@@ -183,7 +182,6 @@ function list_artifacts_for_target_os (
                 $build_dir/injector.exe
                 $build_dir/libouinet_asio.dll
                 $build_dir/libclient_lib.dll
-                $build_dir/libinjector_lib.dll
             )
             ;;
         android)

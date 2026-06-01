@@ -55,9 +55,9 @@ if (WITH_I2PD)
 endif()
 
 ################################################################################
-project(ouiservice-i2p)
+project(ouinet_i2p)
 
-add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
+add_library(ouinet_i2p OBJECT
     "./address.cpp"
     "./address.cpp"
     "./sam.cpp"
@@ -70,30 +70,18 @@ add_library(ouiservice-i2p EXCLUDE_FROM_ALL SHARED
     "./util/create_i2p_session.cpp"
 )
 
+ouinet_setup(TARGET ouinet_i2p LINK ouinet_asio)
+
 if (WITH_I2PD)
-    add_dependencies(ouiservice-i2p i2pd)
+    add_dependencies(ouinet_i2p i2pd)
 endif()
 
-target_include_directories(ouiservice-i2p
-    PUBLIC
-        ${CMAKE_SOURCE_DIR}/src
-    INTERFACE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
-target_link_libraries(ouiservice-i2p
-    PRIVATE
-        Boost::process
-    PUBLIC
-        ouinet_common_public
-)
-target_compile_options(ouiservice-i2p PUBLIC -std=c++23)
-target_compile_definitions(ouiservice-i2p PRIVATE -DOUINET_DECL_EXPORT)
+target_include_directories(ouinet_i2p INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 ################################################################################
-add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
 
 # Place the resulting binaries at the root of the build directory.
-set_target_properties(ouiservice-i2p PROPERTIES
+set_target_properties(ouinet_i2p PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

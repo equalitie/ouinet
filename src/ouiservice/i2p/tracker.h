@@ -12,7 +12,7 @@ namespace ouinet {
 class Async;
 namespace bittorrent { class NodeID; }
 
-class OUINET_DECL I2pTrackerClient {
+class I2pTrackerClient {
 public:
     struct Error {
         struct HttpSend {

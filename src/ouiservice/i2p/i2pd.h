@@ -14,7 +14,7 @@ namespace ouinet {
 class Async;
 
 // Class for controlling the `i2pd` executable
-class OUINET_DECL I2pd {
+class I2pd {
 public:
     [[nodiscard]]
     static std::expected<I2pd, sys::error_code> start(fs::path i2pd_binary_path, fs::path root_dir, asio::any_io_executor, util::LogPath);

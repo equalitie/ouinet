@@ -9,7 +9,7 @@
 
 namespace ouinet::cache {
 
-struct OUINET_DECL HashList {
+struct HashList {
     using Digest    = util::SHA512::digest_type;
     using PubKey    = sign::PublicKey;
 

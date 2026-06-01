@@ -11,7 +11,7 @@ namespace ouinet::cache {
 // URL is or might be a secret, the ResourceId is not. Thus unless the peer has
 // the corresponding resource, they should not be able to obtain back the URL
 // out of it without brute force or guessing.
-class OUINET_DECL ResourceId {
+class ResourceId {
 public:
     static ResourceId from_url(std::string_view url);
 
@@ -40,7 +40,7 @@ private:
     std::string _repr;
 };
 
-OUINET_DECL std::ostream& operator<<(std::ostream&, const ouinet::cache::ResourceId&);
+std::ostream& operator<<(std::ostream&, const ouinet::cache::ResourceId&);
 
 } // namespace ouinet::cache
 

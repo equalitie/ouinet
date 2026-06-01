@@ -73,6 +73,7 @@ struct HttpRequestByteRange {
 ///////////////////////////////////////////////////////////////////////////////
 // Returns ptime() if parsing fails.
 boost::posix_time::ptime parse_date(beast::string_view);
+
 std::string format_date(boost::posix_time::ptime);
 
 // Return empty is missing or malformed.

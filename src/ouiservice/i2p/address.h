@@ -9,7 +9,7 @@
 
 namespace ouinet {
 
-class OUINET_DECL I2pAddress {
+class I2pAddress {
 public:
     static constexpr size_t B32_ADDR_BINARY_SIZE = 32; // Size of sha256 hash
 

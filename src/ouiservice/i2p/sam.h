@@ -6,6 +6,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
+#include <optional>
 #include <variant>
 #include <expected>
 #include <ostream>
@@ -19,7 +20,7 @@ class Async;
 class I2pAddress;
 
 // https://i2p.net/en/docs/api/samv3/
-struct OUINET_DECL Sam {
+struct Sam {
 private:
     struct Keypair {
         std::string pub;
