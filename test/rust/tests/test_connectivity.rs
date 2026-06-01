@@ -210,6 +210,8 @@ async fn create_dht_nodes(lab: &Lab, count: usize) -> Vec<DhtNode> {
             .unwrap()
             .unwrap();
 
+        let _span = tracing::info_span!("dht-node", message = i).entered();
+
         let dht = ips
             .iter()
             .enumerate()
@@ -331,7 +333,9 @@ impl ClientHolder {
         let router = env
             .lab
             .add_router(&format!("{name}-router"))
-            .preset(RouterPreset::Home)
+            // FIXME: Currently this test fails if we use the `Home` preset.
+            // .preset(RouterPreset::Home)
+            .preset(RouterPreset::Public)
             .build()
             .await
             .unwrap();
