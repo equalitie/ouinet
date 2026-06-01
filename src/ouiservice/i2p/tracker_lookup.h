@@ -11,7 +11,7 @@ class I2pTrackerClient;
 
 namespace bittorrent { class NodeID; }
 
-class OUINET_DECL I2pTrackerLookup {
+class I2pTrackerLookup {
 private:
     struct Inner;
 

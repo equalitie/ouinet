@@ -17,6 +17,6 @@ using CreateI2pSessionPromise = Promise<
         >;
 
 CreateI2pSessionPromise::Future
-OUINET_DECL create_i2p_session(Cancel, util::LogPath, asio::any_io_executor);
+create_i2p_session(Cancel, util::LogPath, asio::any_io_executor);
 
 } // namespace

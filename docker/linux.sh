@@ -14,6 +14,7 @@ artifact_dir=
 with_ouisync=n
 host_ouisync_dir=
 with_asan=n
+#docker_platform="--platform linux/amd64"
 
 source $(dirname $0)/util.sh linux
 
@@ -153,7 +154,7 @@ function build_image (
         "RUN echo 'PS1=\"\\h/$container_name:\\W \\u$ \"' >> ~/.bashrc"
     )
 
-    echo -e "${dockerfile[@]/*/&'\n'}" | dock build -t $image_name -
+    echo -e "${dockerfile[@]/*/&'\n'}" | dock build $docker_platform -t $image_name -
 )
 
 function enter (
@@ -173,7 +174,6 @@ function list_artifacts_for_target_os (
                 $build_dir/injector
                 $build_dir/libouinet_asio.so
                 $build_dir/libclient.so
-                $build_dir/libinjector.so
             )
             ;;
         windows)
@@ -182,7 +182,6 @@ function list_artifacts_for_target_os (
                 $build_dir/injector.exe
                 $build_dir/libouinet_asio.dll
                 $build_dir/libclient_lib.dll
-                $build_dir/libinjector_lib.dll
             )
             ;;
         android)
@@ -220,7 +219,7 @@ function check_artifacts_exist_for_target_os (
 build_image
 
 if ! is_container_running; then
-    dock run -d --rm --name $container_name $image_name sleep 1d
+    dock run $docker_platform -d --rm --name $container_name $image_name sleep 1d
 fi
 
 if [ "$enter_on_exit" = y ]; then

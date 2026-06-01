@@ -3,7 +3,6 @@
 #include <boost/beast/core.hpp>
 #include <boost/asio/ssl/context.hpp>
 
-#include "declspec.h"
 #include "cache/http_sign.h"
 #include "namespaces.h"
 #include "util.h"
@@ -20,7 +19,7 @@ namespace ouinet {
 
 using TcpLookup = asio::ip::tcp::resolver::results_type;
 
-OUINET_DECL TcpLookup
+TcpLookup
 resolve_target(const http::request_header<>& req
               , bool allow_private_targets
               , std::shared_ptr<dns::Resolver> dns_resolver
@@ -30,7 +29,7 @@ resolve_target(const http::request_header<>& req
 
 // This class needs to outlive the `asio::io_context`. Mainly because of the
 // `ssl::context` which is passed to `ssl::stream`s by reference.
-class OUINET_DECL Injector {
+class Injector {
 public:
     Injector(
         InjectorConfig config,

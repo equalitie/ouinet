@@ -184,7 +184,7 @@ private:
 
 //--------------------------------------------------------------------
 
-class OUINET_DECL CacheRequest {
+class CacheRequest {
 public:
     // TODO: This is only used in tests now, use it also when constructing the message.
     static const uint8_t HTTP_VERSION = 11;

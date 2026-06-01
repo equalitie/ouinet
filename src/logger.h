@@ -18,6 +18,8 @@
 #include <fstream>
 
 #include "util/str.h"
+#include "declspec.h"
+
 #include <boost/optional/optional.hpp>
 #include <boost/utility/string_view.hpp>
 
@@ -47,7 +49,7 @@
 // Standard log levels, ascending order of specificity.
 enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR_LEVEL, ABORT };
 
-log_level_t default_log_level();
+OUINET_DECL log_level_t default_log_level();
 
 inline std::ostream& operator<<(std::ostream& os, log_level_t ll) {
     switch (ll) {
@@ -74,7 +76,7 @@ inline boost::optional<log_level_t> log_level_from_string(const std::string& ll)
     return {};
 }
 
-class Logger
+class OUINET_DECL Logger
 {
   protected:
     bool _stamp_with_time = false;
@@ -118,6 +120,6 @@ class Logger
     void assert_or_die(bool expr, std::string failure_message, std::string function_name = "");
 };
 
-extern Logger logger;
+OUINET_DECL extern Logger logger;
 
 #endif // SRC_LOGGER_H_

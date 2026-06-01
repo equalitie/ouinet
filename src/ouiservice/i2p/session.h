@@ -11,18 +11,11 @@ namespace ouinet {
 
 class Async;
 
-class OUINET_DECL I2pSession {
+class I2pSession {
 public:
     struct Error {
-        struct IoConnect {
-            sys::error_code ec;
-            friend std::ostream& operator<<(std::ostream& os, const IoConnect& e) {
-                return os << "IoConnect{" << e.ec.message() << "}";
-            }
-            sys::error_code code() const { return ec; }
-        };
         struct Create {
-            using Value = std::variant<IoConnect, Sam::Error::Handshake, Sam::Error::CreateSession>;
+            using Value = std::variant<Sam::Error::Connect, Sam::Error::CreateSession>;
             Value value;
             friend std::ostream& operator<<(std::ostream& os, const Create& e) {
                 return std::visit([&os] (auto& e) -> std::ostream&
@@ -34,7 +27,7 @@ public:
             }
         };
         struct Connect {
-            using Value = std::variant<IoConnect, Sam::Error::Handshake, Sam::Error::Invoke>;
+            using Value = std::variant<Sam::Error::Connect, Sam::Error::Invoke>;
             Value value;
             friend std::ostream& operator<<(std::ostream& os, const Connect& e) {
                 return std::visit([&os] (auto& e) -> auto&
@@ -46,7 +39,7 @@ public:
             }
         };
         struct Accept {
-            using Value = std::variant<IoConnect, Sam::Error::Handshake, Sam::Error::Invoke>;
+            using Value = std::variant<Sam::Error::Connect, Sam::Error::Invoke>;
             Value value;
             friend std::ostream& operator<<(std::ostream& os, const Accept& e) {
                 return std::visit([&os] (auto& e) -> auto&
@@ -61,12 +54,8 @@ public:
 
     I2pSession(I2pSession&& other) = default;
 
-    static asio::ip::tcp::endpoint default_endpoint() {
-        return asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 7656);
-    }
-
     [[nodiscard]]
-    static std::expected<I2pSession, Error::Create> create(Async);
+    static std::expected<I2pSession, Error::Create> create(Async, std::optional<asio::ip::tcp::endpoint> sam_ep = {});
 
     [[nodiscard]]
     std::expected<asio::ip::tcp::socket, Error::Connect> connect(const I2pAddress& remote_addr, Async);

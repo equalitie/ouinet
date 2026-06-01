@@ -26,9 +26,9 @@ option(WITH_TEST "Compile tests" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_OUISYNC "Build with Ouisync" OFF)
+option(WITH_I2PD "Build with i2pd" OFF)
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
-
 
 ################################################################################
 # show summary
@@ -38,6 +38,7 @@ message(STATUS "Options:")
 message(STATUS "  WITH_TEST                : ${WITH_TEST}")
 message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
+message(STATUS "  WITH_I2PD                : ${WITH_I2PD}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
 message(STATUS "")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
@@ -92,44 +93,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH})
 include(OuinetDependencies)
 include(BuildVersion)
 
-# This target needs to be linked by all code that includes ouinet headers.
-add_library(ouinet_dependencies INTERFACE)
-target_compile_options(ouinet_dependencies
-    INTERFACE -std=c++23
-)
-target_include_directories(ouinet_dependencies
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-target_link_libraries(ouinet_dependencies
-    INTERFACE
-        Boost::boost
-        Boost::date_time
-        Boost::filesystem
-        Boost::nowide
-        Boost::program_options
-        Boost::regex
-        Boost::system
-        # generic_stream.h needs openssl headers, but not the library.
-        OpenSSL::headers
-        # Note: ouinet_asio needs to be listed after `Boost::filesystem`
-        # because on Windows `Boost::filesystem` uses Windows crypto lirary for
-        # random generation which is linked into `ouinet_asio`.
-        ouinet_asio
-)
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.72.0)
-    # explicitly link with bcrypt after Boost::filesystem
-    target_link_libraries(ouinet_dependencies
-        INTERFACE
-          bcrypt
-    )
-endif()
-if (WITH_ASAN)
-    # NOTE: https://stackoverflow.com/a/50163972
-    target_link_libraries(ouinet_dependencies
-        INTERFACE -fsanitize=address
-    )
-endif()
-
 ###########################################################
 option(ASIO_UTP_WITH_TESTS             "" OFF)
 option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
@@ -141,34 +104,66 @@ target_link_libraries(asio_utp PUBLIC ouinet_asio)
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
-target_compile_definitions(cpp_upnp PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
+target_compile_definitions(cpp_upnp PUBLIC BOOST_ASIO_SEPARATE_COMPILATION)
 ###########################################################
 
 add_subdirectory(./rust)
+
+function(ouinet_setup)
+    # Use NO_API when linking with the object only (not with the dll libraries).
+    set(options NO_API)
+    set(oneValueArgs TARGET)
+    set(multiValueArgs LINK)
+
+    cmake_parse_arguments(
+        ARG
+        "${options}"
+        "${oneValueArgs}"
+        "${multiValueArgs}"
+        ${ARGN}
+    )
+
+    get_target_property(target_type ${ARG_TARGET} TYPE)
+
+    if (WIN32 OR MINGW)
+        if (ARG_NO_API)
+            set(maybe_decl_export OUINET_DECL_NONE)
+        elseif (NOT ${target_type} STREQUAL "EXECUTABLE")
+            set(maybe_decl_export OUINET_DECL_EXPORT)
+        endif()
+    endif()
+
+    if (ANDROID)
+        set(OUINET_ROOT_DIR ${CMAKE_SOURCE_DIR}/../../)
+    else()
+        set(OUINET_ROOT_DIR ${CMAKE_SOURCE_DIR})
+    endif()
+
+    target_compile_definitions(${ARG_TARGET} PRIVATE BOOST_ASIO_SEPARATE_COMPILATION ${maybe_decl_export})
+    target_compile_options(${ARG_TARGET} PRIVATE -std=c++23)
+    target_include_directories(${ARG_TARGET} PUBLIC
+        ${OUINET_ROOT_DIR}/src
+        ${OUINET_ROOT_DIR}/rust
+        ${OUINET_ROOT_DIR}/modules/asio-utp/include
+        ${OUINET_ROOT_DIR}/modules/cpp-upnp/include
+        ${BUILT_BOOST_INCLUDE_DIR}
+        ${OPENSSL_INCLUDE_DIR})
+    target_link_libraries(${ARG_TARGET} ${ARG_LINK})
+endfunction()
+
 add_subdirectory(./src/ouiservice/i2p)
 add_subdirectory(./src/ouiservice/ouisync)
 
 ################################################################################
-# These are separate from `ouinet_common` because they're also required by
-# `ouinet_rs`
-add_library(ouinet_common_public
-    STATIC
+
+file(GLOB ouinet_common_sources
     "./src/task.cpp"
     "./src/logger.cpp"
     "./src/util/log_path.cpp"
     "./src/util/random.cpp"
     "./src/async_sleep.cpp"
-    "./src/bittorrent/bencoding.cpp"
-    "./src/bittorrent/node_id.cpp"
-)
-target_link_libraries(ouinet_common_public PUBLIC ouinet_asio Boost::filesystem)
-target_compile_options(ouinet_common_public PUBLIC -std=c++23)
-target_compile_definitions(ouinet_common_public PUBLIC -DBOOST_ASIO_SEPARATE_COMPILATION)
-target_include_directories(ouinet_common_public PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-################################################################################
-
-file(GLOB ouinet_common_sources
+    "./src/cache/http_store_path.cpp"
+    "./src/cache/resource_id.cpp"
     "./src/connect_to_host.cpp"
     "./src/response_part.cpp"
     "./src/util.cpp"
@@ -201,32 +196,18 @@ file(GLOB ouinet_common_sources
 # TODO: Some low level openssl functions we use are deprecated.
 set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 
-add_library(ouinet_common STATIC ${ouinet_common_sources})
+add_library(ouinet_common OBJECT ${ouinet_common_sources})
+add_dependencies(ouinet_common ouinet_rs)
+ouinet_setup(TARGET ouinet_common LINK ouinet_rs)
 
 if (OUINET_HARDCODE_CA_CERTS)
     set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
 endif()
 
-target_link_libraries(ouinet_common
-    PRIVATE
-        Boost::url
-        OpenSSL::Crypto
-    PUBLIC
-        ${OUINET_HARDCODED_CA_CERTS}
-        ouinet::ouiservice-i2p
-        ouinet_dependencies
-        Boost::iostreams
-        lib::json
-        asio_utp
-        ouinet_rs
-        ouinet_common_public
-)
-
-target_include_directories(ouinet_common PUBLIC "src")
-
 ################################################################################
 
 file(GLOB client_sources
+    "./src/client.cpp"
     "./src/client.cpp"
     "./src/client_config.cpp"
     "./src/client_front_end.cpp"
@@ -244,7 +225,6 @@ file(GLOB client_sources
     "./src/cache/local_peer_discovery.cpp"
     "./src/cache/multi_peer_reader.cpp"
     "./src/cache/multi_peer_reader_error.cpp"
-    "./src/cache/resource_id.cpp"
     "./src/cache/resource_key.cpp"
     "./src/util/atomic_dir.cpp"
     "./src/util/temp_dir.cpp"
@@ -253,37 +233,54 @@ file(GLOB client_sources
     ${VERSION_CPP}
 )
 
-if (IOS)
-    add_library(client_lib STATIC ${client_sources})
-else()
-    add_library(client_lib SHARED ${client_sources})
-endif()
+add_library(ouinet_client OBJECT ${client_sources})
+ouinet_setup(TARGET ouinet_client LINK lib_json ouinet_rs)
 
-if (NOT WIN32 AND NOT MINGW)
-    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
-endif()
-add_library(ouinet::client ALIAS client_lib)
-
-target_link_libraries(client_lib
-    PUBLIC
-        ouinet_common
-        ouinet_ouisync
-        cpp_upnp
+set(client_link_libs
+    ouinet_client
+    ouinet_common
+    ouinet_ouisync
+    ouinet_i2p
+    ouinet_rs
+    asio_utp
+    cpp_upnp
+    Boost::nowide
+    Boost::url
+    Boost::process
+    Boost::iostreams
+    Boost::filesystem
+    Boost::program_options
+    lib::json
 )
-
-if (WIN32 OR MINGW)
-    target_compile_definitions(client_lib PRIVATE -DOUINET_DECL_EXPORT)
+    
+if (IOS OR ANDROID)
+    set(CLIENT_LIB_TYPE STATIC)
+elseif(WIN32 OR MINGW)
+    set(CLIENT_LIB_TYPE SHARED)
 endif()
 
-if (ANDROID)
-    find_library(android_log log)
-    target_link_libraries(client_lib PUBLIC ${android_log})
-elseif (IOS)
-    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
-    find_package(ouinet REQUIRED)
+if (CLIENT_LIB_TYPE)
+    add_library(client_lib ${CLIENT_LIB_TYPE})
+    
+    if (NOT WIN32 AND NOT MINGW)
+        set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+    endif()
+    
+    if (ANDROID)
+        find_library(android_log log)
+        list(APPEND client_link_libs ${android_log})
+    endif()
+    
+    ouinet_setup(TARGET client_lib LINK PUBLIC ${client_link_libs})
+    
+    if (IOS)
+        set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+        find_package(ouinet REQUIRED)
+    endif()
 else()
     add_executable(client "./src/client_main.cpp")
-    target_link_libraries(client client_lib)
+    target_link_libraries(client ${client_link_libs})
+    target_compile_definitions(client PRIVATE OUINET_DECL_NONE)
 endif()
 
 ################################################################################
@@ -291,28 +288,32 @@ file(GLOB injector_sources
     "./src/injector.cpp"
     "./src/injector_config.cpp"
     "./src/ouiservice/bep5/server.cpp"
-    "./src/cache/http_sign.cpp"
-    "./src/cache/signed_head.cpp"
     "./src/http_logger.cpp"
 )
 
-add_library(injector_lib SHARED ${injector_sources})
-if (NOT WIN32 AND NOT MINGW)
-    set_target_properties(injector_lib PROPERTIES OUTPUT_NAME "injector")
-endif ()
+add_library(ouinet_injector OBJECT ${injector_sources})
+ouinet_setup(TARGET ouinet_injector LINK lib_json ouinet_rs)
 
-target_link_libraries(injector_lib ouinet_common)
+set(injector_link_libs
+    ouinet_injector
+    ouinet_common
+    ouinet_i2p
+    ouinet_rs
+    ouinet_asio
+    asio_utp
+    Boost::nowide
+    Boost::url
+    Boost::process
+    Boost::iostreams
+    Boost::program_options
+    Boost::filesystem
+)
 
-if (WIN32 OR MINGW)
-    target_compile_definitions(injector_lib PRIVATE -DOUINET_DECL_EXPORT)
-endif()
-
-
-if ((NOT ANDROID) AND (NOT IOS))
+if (NOT ANDROID AND NOT IOS)
     add_executable(injector "./src/injector_main.cpp")
-    target_link_libraries(injector injector_lib)
+    target_link_libraries(injector ${injector_link_libs})
+    target_compile_definitions(injector PRIVATE OUINET_DECL_NONE)
 endif()
-
 
 ################################################################################
 # Config file directory
@@ -339,7 +340,7 @@ endif()
 
 ################################################################################
 # Tests
-if ((NOT ANDROID) AND WITH_TEST)
+if (NOT ANDROID AND WITH_TEST)
     add_subdirectory(test)
 endif()
 ################################################################################
