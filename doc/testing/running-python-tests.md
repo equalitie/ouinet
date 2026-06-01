@@ -8,5 +8,5 @@ building from source instructions), you can run the tests as follows:
 
     $ export OUINET_REPO_DIR=<SOURCE DIR>
     $ export OUINET_BUILD_DIR=<BUILD DIR>
-    $ ./scripts/run_integration_tests.sh
+    $ ./scripts/run_python_tests.sh
 

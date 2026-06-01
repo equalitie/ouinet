@@ -43,12 +43,12 @@ linux / unit-rust-test:
   needs:
     ['linux / build']
 
-linux / integration-test:
+linux / python-tests:
   variables:
     TARGET_PLATFORM: 'linux'
     BUILD_PATH: 'build/$TARGET_PLATFORM'
   extends:
-    .linux-integration-test
+    .linux-python-tests
   needs:
     ['linux / unit-rust-test', 'linux / unit-cpp-test', 'linux / build']
   before_script:
@@ -109,7 +109,7 @@ linux / build-prod-image:
   stage: release
   tags:
     - shell
-  needs: ['linux / integration-test']
+  needs: ['linux / python-tests']
   script:
     - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
     - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile

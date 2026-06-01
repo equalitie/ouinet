@@ -358,7 +358,7 @@ for target_os in ${target_oss[@]}; do
                 "export OUINET_BUILD_DIR=$build_dir;"
                 "export OUINET_REPO_DIR=$ouinet_dir;"
             
-                "$ouinet_dir/scripts/run_integration_tests.sh;"
+                "$ouinet_dir/scripts/run_python_tests.sh;"
             )
             
             exe bash -c "${script[*]}"

@@ -80,7 +80,7 @@ variables:
     - export LD_LIBRARY_PATH="$CI_PROJECT_DIR/$BUILD_PATH"
     - cargo test --manifest-path ./rust/Cargo.toml -- --nocapture
 
-.linux-integration-test:
+.linux-python-tests:
   stage: test
   tags:
     - docker
@@ -88,5 +88,5 @@ variables:
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
     - export OUINET_BUILD_DIR=$CI_PROJECT_DIR/$BUILD_PATH
-    - ./scripts/run_integration_tests.sh
+    - ./scripts/run_python_tests.sh
 
