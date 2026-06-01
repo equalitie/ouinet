@@ -332,7 +332,9 @@ struct Bep5Loop : public Announcer::Loop {
 
         sys::error_code ec;
         auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
-        dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
+        compat([&](Async yield) {
+            return dht->tracker_announce(e.infohash, std::nullopt, yield);
+        })(cancel, yield[ec]);
 
         LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e_key, ": done; ec=", ec);
 

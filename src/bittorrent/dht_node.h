@@ -108,11 +108,10 @@ class DhtNode {
      *
      * TODO: [ruud] I am not clear to what degree this is actually followed in practice.
      */
-    std::set<udp::endpoint> tracker_announce(
+    std::expected<std::set<udp::endpoint>, sys::error_code> tracker_announce(
         NodeID infohash,
-        boost::optional<int> port,
-        Cancel&,
-        asio::yield_context
+        std::optional<int> port,
+        Async
     );
 
     /**

@@ -32,15 +32,8 @@ public:
 
     virtual std::set<UdpEndpoint> wan_endpoints() const = 0;
 
-    /*
-     * TODO: announce() and put() functions don't have any real error detection.
-     */
-    virtual std::set<UdpEndpoint> tracker_announce(
-        NodeID infohash,
-        boost::optional<int> port,
-        Cancel,
-        asio::yield_context
-    ) = 0;
+    virtual std::expected<std::set<UdpEndpoint>, sys::error_code>
+    tracker_announce(NodeID infohash, std::optional<int> port, Async) = 0;
 
     virtual std::set<UdpEndpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) = 0;
 

@@ -89,9 +89,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
 
             LOG_DEBUG(yield, " Announcing infohash: ", infohash, "...");
 
-            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-                return dht->tracker_announce(infohash, boost::none, cancel, yield);
-            })(yield);
+            auto result = dht->tracker_announce(infohash, std::nullopt, yield);
 
             dht.reset();
 

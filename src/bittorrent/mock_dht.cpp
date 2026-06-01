@@ -65,11 +65,10 @@ std::set<UdpEndpoint> MockDht::Swarm::endpoints(const std::set<std::string>& no_
 /*
  * TODO: announce() and put() functions don't have any real error detection.
  */
-std::set<UdpEndpoint> MockDht::tracker_announce(
+std::expected<std::set<UdpEndpoint>, sys::error_code> MockDht::tracker_announce(
     NodeID infohash,
-    boost::optional<int> port,
-    Cancel,
-    asio::yield_context
+    std::optional<int> port,
+    Async
 ) {
     std::set<UdpEndpoint> my_endpoints;
 

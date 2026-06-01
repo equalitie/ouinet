@@ -1,6 +1,7 @@
 
 // Temporary, shall be removed once I'm done with this branch
 #include <boost/asio/error.hpp>
+#include <boost/asio/spawn.hpp>
 #include <cstddef>
 #define SPEED_DEBUG 0
 
@@ -424,52 +425,54 @@ std::set<udp::endpoint> DhtNode::tracker_get_peers(
     return or_throw(yield, ec, std::move(peers));
 }
 
-std::set<udp::endpoint> DhtNode::tracker_announce(
+std::expected<std::set<udp::endpoint>, sys::error_code> DhtNode::tracker_announce(
     NodeID infohash,
-    boost::optional<int> port,
-    Cancel& cancel,
-    asio::yield_context yield
+    std::optional<int> port,
+    Async yield
 ) {
-    sys::error_code ec;
     std::set<udp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
-    tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield[ec]);
-    if (ec) {
-        return or_throw<std::set<udp::endpoint>>(yield, ec, std::move(peers));
+
+    auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+        tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield);
+    })(yield);
+    if (!result) {
+        return std::unexpected(result.error());
     }
 
     bool success = false;
-    auto cancelled = cancel.connect([]{});
     WaitCondition wc(_exec);
     for (auto& i : responsible_nodes) {
-        task::spawn_detached(_exec, [&, i, lock = wc.lock()] (asio::yield_context yield) {
-            sys::error_code ec;
-            send_write_query(
-                i.second.node_endpoint,
-                i.first,
-                "announce_peer",
-                BencodedMap {
-                    { "id", _node_id.to_bytestring() },
-                    { "info_hash", infohash.to_bytestring() },
-                    { "token", i.second.announce_token },
-                    { "implied_port", port ? int64_t(0) : int64_t(1) },
-                    { "port", port ? int64_t(*port) : int64_t(0) }
-                },
-                cancel,
-                yield[ec]
-            );
-            if (!ec) {
+        yield.spawn([&, i, lock = wc.lock()] (Async yield) {
+            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+                return send_write_query(
+                    i.second.node_endpoint,
+                    i.first,
+                    "announce_peer",
+                    BencodedMap {
+                        { "id", _node_id.to_bytestring() },
+                        { "info_hash", infohash.to_bytestring() },
+                        { "token", i.second.announce_token },
+                        { "implied_port", port ? int64_t(0) : int64_t(1) },
+                        { "port", port ? int64_t(*port) : int64_t(0) }
+                    },
+                    cancel,
+                    yield
+                );
+            })(yield);
+
+            if (result) {
                 success = true;
             }
         });
     }
     wc.wait(yield);
 
-    ec = cancelled ? boost::asio::error::operation_aborted
-                   : success ? sys::error_code()
-                             : boost::asio::error::network_down;
-
-    return or_throw<std::set<udp::endpoint>>(yield, ec, std::move(peers));
+    if (success) {
+        return std::move(peers);
+    } else {
+        return std::unexpected(boost::asio::error::network_down);
+    }
 }
 
 boost::optional<BencodedValue> DhtNode::data_get_immutable(
@@ -2661,44 +2664,38 @@ Promise<asio::ip::udp::endpoint>::Future MainlineDht::add_endpoint(asio_utp::udp
     return future;
 }
 
-std::set<udp::endpoint> MainlineDht::tracker_announce(
+std::expected<std::set<udp::endpoint>, sys::error_code>
+MainlineDht::tracker_announce(
     NodeID infohash,
-    boost::optional<int> port,
-    Cancel cancel,
-    asio::yield_context yield
+    std::optional<int> port,
+    Async yield
 ) {
-    auto cc = _cancel.connect([&] { cancel(); });
+    auto cc = _cancel.connect([&] { yield.cancel(); });
 
     std::set<udp::endpoint> output;
 
     WaitCondition wc(_exec);
     for (auto& i : _nodes) {
-        task::spawn_detached(_exec, [
+        yield.spawn([
             &,
-            ep = i.first,
-            p = i.second.get(),
+            node = i.second.get(),
             lock = wc.lock()
-        ] (asio::yield_context yield) {
-            sys::error_code ec;
-            std::set<udp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel, yield[ec]);
-            assert(!cancel || ec == asio::error::operation_aborted);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) { return; }
-            output.insert(peers.begin(), peers.end());
+        ] (Async yield) {
+            auto peers = node->tracker_announce(infohash, port, yield);
+
+            if (peers) {
+                output.insert(peers->begin(), peers->end());
+            }
         });
     }
 
     wc.wait(yield);
 
-    sys::error_code ec;
-
-    if (cancel) {
-        ec = asio::error::operation_aborted;
-    } else if (output.empty()) {
-        ec = asio::error::network_unreachable;
+    if (output.empty()) {
+        return std::unexpected(asio::error::network_unreachable);
     }
 
-    return or_throw<std::set<udp::endpoint>>(yield, ec, move(output));
+    return move(output);
 }
 
 void MainlineDht::mutable_put(

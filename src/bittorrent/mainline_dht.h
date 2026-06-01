@@ -72,15 +72,8 @@ class MainlineDht : public DhtBase {
 
     std::set<udp::endpoint> wan_endpoints() const override;
 
-    /*
-     * TODO: announce() and put() functions don't have any real error detection.
-     */
-    std::set<udp::endpoint> tracker_announce(
-        NodeID infohash,
-        boost::optional<int> port,
-        Cancel,
-        asio::yield_context
-    ) override;
+    std::expected<std::set<udp::endpoint>, sys::error_code>
+    tracker_announce(NodeID infohash, std::optional<int> port, Async) override;
 
     void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
 

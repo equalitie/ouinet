@@ -32,11 +32,10 @@ public:
 
     std::set<UdpEndpoint> wan_endpoints() const override;
 
-    std::set<UdpEndpoint> tracker_announce(
+    std::expected<std::set<UdpEndpoint>, sys::error_code> tracker_announce(
         NodeID infohash,
-        boost::optional<int> port,
-        Cancel,
-        asio::yield_context
+        std::optional<int> port,
+        Async
     ) override;
 
     std::set<UdpEndpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) override;
