@@ -501,7 +501,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         sys::error_code ec;
         cache_client->local_purge(cancel, yield[ec]);
         if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec = asio::error::operation_aborted) return or_throw(yield, ec);
+        if ((ec = asio::error::operation_aborted)) return or_throw(yield, ec);
         query_handled = true;
     }
 

@@ -399,7 +399,7 @@ private:
             auto fetch_wd = watch_dog(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
 
             auto orig_con = get_connection(cache_rq, dns_resolver, timeout_cancel, yield.tag("connect")[ec]);
-            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+            if ((ec = compute_error_code(ec, cancel, fetch_wd))) {
                 yield.log("Failed to get connection; ec=", ec);
                 return or_throw(yield, ec);
             }
@@ -408,7 +408,7 @@ private:
             auto orig_rq = util::to_origin_request(cache_rq);
             orig_rq.keep_alive(true);  // regardless of what client wants
             util::http_request(orig_con, orig_rq, timeout_cancel, yield[ec].tag("request"));
-            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+            if ((ec = compute_error_code(ec, cancel, fetch_wd))) {
                 yield.log("Failed to send request; ec=", ec);
                 return or_throw(yield, ec);
             }
@@ -429,7 +429,7 @@ private:
             orig_sess = Session::create( move(sig_reader), cache_rq_method == http::verb::head
                                        , timeout_cancel, yield[ec].tag("read_hdr"));
 
-            if (ec = compute_error_code(ec, cancel, fetch_wd)) {
+            if ((ec = compute_error_code(ec, cancel, fetch_wd))) {
                 yield.log("Failed to process response head; ec=", ec);
                 return or_throw(yield, ec);
             }
@@ -462,7 +462,7 @@ private:
             }
             , default_timeout::activity());
 
-        if (ec = compute_error_code(ec, cancel, overlong_wd)) {
+        if ((ec = compute_error_code(ec, cancel, overlong_wd))) {
             yield.log("Failed to process response; ec=", ec);
             return or_throw(yield, ec);
         } else {

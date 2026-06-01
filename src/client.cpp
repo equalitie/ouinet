@@ -1070,7 +1070,7 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
     } else {
         auto stream = connect_to_origin(rq, tls_ctx, timeout_cancel, yield[ec]);
 
-        if (ec = compute_error_code(ec, cancel, watch_dog)) {
+        if ((ec = compute_error_code(ec, cancel, watch_dog))) {
             if (metrics) metrics->finish(ec);
             return or_throw<Session>(yield, ec);
         }
@@ -1088,7 +1088,7 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
         http::async_write(con, rq_, yield[ec].tag("write_origin_req"));
     };
 
-    if (ec = compute_error_code(ec, cancel, watch_dog)) {
+    if ((ec = compute_error_code(ec, cancel, watch_dog))) {
         if (metrics) metrics->finish(ec);
         return or_throw<Session>(yield, ec);
     }
@@ -1097,7 +1097,7 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
                           , move(metrics)
                           , timeout_cancel, yield[ec].tag("read_hdr"));
 
-    if (ec = compute_error_code(ec, cancel, watch_dog)) {
+    if ((ec = compute_error_code(ec, cancel, watch_dog))) {
         return or_throw<Session>(yield, ec);
     }
 
@@ -1340,7 +1340,7 @@ Session Client::State::fetch_fresh_through_simple_proxy
         // Send request
         request.async_write(con, yield[ec].tag("write_injector_req"));
 
-        if (ec = compute_error_code(ec, cancel, watch_dog)) {
+        if ((ec = compute_error_code(ec, cancel, watch_dog))) {
             _YWARN(yield, "Failed to send request to the injector; ec=", ec);
             metrics.finish(ec);
             return or_throw<Session>(yield, ec);
