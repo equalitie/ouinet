@@ -284,7 +284,8 @@ public:
                                                       , _config.repo_root() / "dht"
                                                       , bt::bootstrap::Config()
                                                           .with_default(!_config.bt_bootstrap_no_default())
-                                                          .with_extras(_config.bt_bootstrap_extras()));
+                                                          .with_extras(_config.bt_bootstrap_extras())
+                                                      , _log_path.tag("dht"));
         }
 
 

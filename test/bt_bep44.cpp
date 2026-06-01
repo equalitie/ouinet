@@ -173,7 +173,8 @@ int main(int argc, const char** argv)
         dns_resolver,
         rx_limit,
         boost::filesystem::path{},
-        bootstrap::Config{}
+        bootstrap::Config{},
+        util::LogPath{}
     );
 
     vector<string> args;

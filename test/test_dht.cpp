@@ -115,6 +115,7 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
         dns_resolver,
         rx_limit,
         {},
+        {},
         {}
     );
 

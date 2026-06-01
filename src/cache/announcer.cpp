@@ -9,6 +9,7 @@
 #include "logger.h"
 #include "defer.h"
 #include "../util/compat.h"
+#include "../util/debug.h"
 #include "../util/wait_condition.h"
 #include "async_sleep.h"
 #include "bittorrent/node_id.h"
@@ -187,16 +188,21 @@ struct Announcer::Loop {
         }
     }
 
-    Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
+    std::expected<Entries::iterator, sys::error_code> pick_entry(Async yield)
     {
-        auto end = entries.end();
-
-        while (!cancel) {
+        while (true) {
             if (entries.empty()) {
-                sys::error_code ec;
-                LOG_DEBUG(_log_path, " No entries to update, waiting...");
-                entries.async_wait_for_push(cancel, yield[ec]);
-                return_or_throw_on_error(yield, cancel, ec, end);
+                LOG_DEBUG(yield, " No entries to update, waiting...");
+
+                auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+                    return entries.async_wait_for_push(cancel, yield);
+                })(yield);
+
+                if (!result) {
+                    return std::unexpected(result.error());
+                }
+
+                continue;
             }
 
             assert(!entries.empty());
@@ -205,68 +211,60 @@ struct Announcer::Loop {
 
             auto d = next_update_after(i->first);
 
-            LOG_DEBUG(_log_path, " Found entry to update. It'll be updated in "
-                  , chrono::duration_cast<chrono::seconds>(d).count()
-                  , " seconds: ", i->first.key);
+            LOG_DEBUG( yield, " Found entry to update. It'll be updated in "
+                            , chrono::duration_cast<chrono::seconds>(d).count()
+                            , " seconds: ", i->first.key);
 
             if (d == 0s) return i;
 
-            auto cc = cancel.connect([&] { _timer_cancel(); });
-            async_sleep(d, _timer_cancel, yield);
+            auto cc = yield.cancel_slot([&] { _timer_cancel(); });
+            async_sleep(d, yield);
         }
-
-        return or_throw(yield, asio::error::operation_aborted, end);
     }
 
     void start()
     {
-        task::spawn_detached(ex, [this] (asio::yield_context yield) {
-            Cancel cancel(_cancel);
-            sys::error_code ec;
-            loop(cancel, yield[ec]);
+        task::spawn_detached(ex, [this] (asio::yield_context y) {
+            loop(Async(y, _cancel, _log_path));
         });
     }
 
-    void loop(Cancel& cancel, asio::yield_context yield)
+    void loop(Async yield)
     {
-        auto on_exit = defer([log_path = _log_path, cancel] {
+        auto on_exit = defer([log_path = yield.log_path(), cancel = Cancel(yield.get_cancel())] {
             LOG_DEBUG(log_path, " Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
-        WaitCondition wcon(ex);
+        WaitCondition wc(ex);
 
-        while (!cancel) {
-            sys::error_code ec_wcon;
-
+        while (true) {
             for (size_t n = 0; n < _simultaneous_announcements; ++n) {
-                sys::error_code ec;
-                LOG_DEBUG(_log_path, " Picking entry to update");
-                auto ei = pick_entry(cancel, yield[ec]);
+                LOG_DEBUG(yield, " Picking entry to update");
+                auto ei = pick_entry(yield);
+                assert(ei);
 
-                if (cancel) return;
-                assert(!ec);
-                ec = {};
-
-                if (ei->first.to_remove) {
+                if ((**ei).first.to_remove) {
                     // Marked for removal, drop the entry and get another one.
-                    entries.erase(ei);
+                    entries.erase(*ei);
                     continue;
                 }
 
-                task::spawn_detached(ex, ([this, &cancel, &wcon, lock = wcon.lock()] (asio::yield_context yield) {
-                    sys::error_code ec_coro;
-
+                yield.spawn([this, lock = wc.lock()] (Async yield) {
                     // Try inserting three times before moving to the next entry
                     bool success = false;
 
                     Entry e = move(entries.begin()->first);
                     for (int i = 0; i != 3; ++i) {
-                        announce(e, cancel, yield[ec_coro]);
-                        if (cancel) return;
-                        if (!ec_coro) { success = true; break; }
-                        async_sleep(chrono::seconds(1+i), cancel, yield[ec_coro]);
-                        if (cancel) return;
-                        ec_coro = {};
+                        auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+                            announce(e, cancel, yield);
+                        })(yield);
+
+                        if (result) {
+                            success = true;
+                            break;
+                        }
+
+                        async_sleep(chrono::seconds(1+i), yield);
                     }
 
                     if (success) {
@@ -278,15 +276,13 @@ struct Announcer::Loop {
 
                     if (!e.to_remove) entries.push_back(move(e));
                     if (debug()) { print_entries(); }
-                }));
+                });
 
-                entries.erase(ei);
+                entries.erase(*ei);
             }
 
-            wcon.wait(yield[ec_wcon]);
+            wc.wait(yield);
         }
-
-        return or_throw(yield, asio::error::operation_aborted);
     }
 
     // Virtual announce method - to be overridden by children
@@ -312,17 +308,13 @@ struct Bep5Loop : public Announcer::Loop {
     void start()
     {
         task::spawn_detached(ex, [this] (asio::yield_context y) {
-            Async yield(y, _cancel);
+            Async yield(y, _cancel, _log_path);
 
             // Wait for DHT to be ready before starting the loop
-            {
-                LOG_DEBUG(_log_path, " Waiting for DHT");
-                dht->wait_all_ready(yield);
-            }
+            LOG_DEBUG(yield, " Waiting for DHT");
+            dht->wait_all_ready(yield);
 
-            compat([&](Cancel cancel, asio::yield_context yield) {
-                loop(cancel, yield);
-            })(yield);
+            loop(yield);
         });
     }
 

@@ -2,20 +2,22 @@
 // Temporary, shall be removed once I'm done with this branch
 #include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/system/detail/error_code.hpp>
 #include <cstddef>
+#include <expected>
 #define SPEED_DEBUG 0
 
-#include "mainline_dht.h"
-#include "udp_multiplexer.h"
 #include "code.h"
-#include "cxx/dns.h"
-#include "debug_ctx.h"
 #include "collect.h"
-#include "proximity_map.h"
 #include "debug_ctx.h"
-#include "is_martian.h"
 #include "dht_node.h"
+#include "is_martian.h"
+#include "mainline_dht.h"
+#include "node_contact.h"
+#include "proximity_map.h"
+#include "udp_multiplexer.h"
 
+#include "cxx/dns.h"
 #include "../async_sleep.h"
 #include "../defer.h"
 #include "../parse/endpoint.h"
@@ -26,6 +28,7 @@
 #include "../util/bytes.h"
 #include "../util/compat.h"
 #include "../util/condition_variable.h"
+#include "../util/debug.h"
 #include "../util/sign.h"
 #include "../util/str.h"
 #include "../util/success_condition.h"
@@ -50,12 +53,6 @@
 #include <set>
 
 #include <iostream>
-
-#define _LOGPFX "BT DHT: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
-#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 namespace ouinet {
 namespace bittorrent {
@@ -212,6 +209,7 @@ DhtNode::DhtNode( const AsioExecutor& exec
                 , const uint32_t mux_rx_limit
                 , fs::path storage_dir
                 , bootstrap::Config bs
+                , util::LogPath log_path
 ):
     _exec(exec),
     _ready(false),
@@ -220,15 +218,16 @@ DhtNode::DhtNode( const AsioExecutor& exec
     _mux_rx_limit(mux_rx_limit),
     _storage_dir(std::move(storage_dir)),
     _bootstrap_config(std::move(bs)),
-    _metrics(std::move(metrics))
+    _metrics(std::move(metrics)),
+    _log_path(std::move(log_path))
 {
 }
 
 std::expected<void, sys::error_code> DhtNode::start(udp::endpoint local_ep, Async yield)
 {
     if (local_ep.address().is_loopback()) {
-        _WARN( "Node shall be bound to the loopback address and "
-             , "thus won't be able to communicate with the world");
+        LOG_WARN(yield, " Node shall be bound to the loopback address and "
+                      , "thus won't be able to communicate with the world");
     }
 
     auto m = asio_utp::udp_multiplexer(_exec);
@@ -257,7 +256,7 @@ std::expected<void, sys::error_code> DhtNode::start(asio_utp::udp_multiplexer m,
         receive_loop(yield);
     });
 
-    auto result = compat([&](asio::yield_context yield) { bootstrap(yield); })(yield);
+    auto result = bootstrap(yield);
     if (!result) {
         return std::unexpected(result.error());
     }
@@ -277,27 +276,33 @@ fs::path DhtNode::stored_contacts_path() const
 }
 
 static
-std::set<NodeContact>
-read_stored_contacts( const AsioExecutor& exec
-                    , const fs::path& path
-                    , Cancel cancel
-                    , asio::yield_context yield)
+std::expected<std::set<NodeContact>, sys::error_code>
+read_stored_contacts(const fs::path& path, Async yield)
 {
     std::set<NodeContact> ret;
 
-    sys::error_code ec;
-    auto file = util::file_io::open_readonly(exec, path, ec);
-    if (ec) return or_throw(yield, ec, ret);
+    auto file = compat([&](sys::error_code& ec) {
+        return util::file_io::open_readonly(yield.get_executor(), path, ec);
+    })();
+    if (!file) {
+        return std::unexpected(file.error());
+    }
 
-    size_t filesize = util::file_io::file_size(file, ec);
-    if (ec) return or_throw(yield, ec, ret);
+    auto filesize = compat([&](sys::error_code& ec) {
+        return util::file_io::file_size(*file, ec);
+    })();
+    if (!filesize) {
+        return std::unexpected(filesize.error());
+    }
 
-    std::string data(filesize, '\0');
+    std::string data(*filesize, '\0');
 
-    util::file_io::read(file, asio::buffer(data), cancel, yield[ec]);
-    assert(!cancel || ec == asio::error::operation_aborted);
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw(yield, ec, ret);
+    auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+        util::file_io::read(*file, asio::buffer(data), cancel, yield);
+    })(yield);
+    if (!result) {
+        return std::unexpected(result.error());
+    }
 
     boost::string_view sw = data;
 
@@ -327,29 +332,35 @@ read_stored_contacts( const AsioExecutor& exec
 }
 
 static
-void write_stored_contacts( const AsioExecutor& exec
-                          , std::set<NodeContact> contacts
-                          , const fs::path& path
-                          , Cancel cancel
-                          , asio::yield_context yield)
+std::expected<void, sys::error_code>
+write_stored_contacts( const AsioExecutor& exec
+                     , std::set<NodeContact> contacts
+                     , const fs::path& path
+                     , Async yield)
 {
-    sys::error_code ec;
     sys::error_code ignored_ec;
 
-    auto report = defer([&ec] {
-        if (ec) _ERROR("Failed to store contacts; ec=", ec);
-        else _DEBUG("Successfully stored contacts");
-    });
+    auto old_contacts = read_stored_contacts(path, yield);
+    if (!old_contacts) {
+        return std::unexpected(old_contacts.error());
+    }
 
-    auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
-    if (cancel) return or_throw(yield, asio::error::operation_aborted);
+    auto result0 = compat([&](sys::error_code& ec) {
+        util::file_io::check_or_create_directory(path.parent_path(), ec);
+    })();
+    if (!result0) {
+        LOG_ERROR(yield, " Failed to store contacts: ", result0.error());
+        return std::unexpected(result0.error());
+    }
 
-    util::file_io::check_or_create_directory(path.parent_path(), ec);
-    if (ec) return or_throw(yield, ec);
-
-    auto atomic_file = util::atomic_file::make(exec, path, ec);
-    if (ec) return or_throw(yield, ec);
-    assert(atomic_file);
+    auto atomic_file = compat([&](sys::error_code& ec) {
+        return util::atomic_file::make(exec, path, ec);
+    })();
+    if (!atomic_file) {
+        LOG_ERROR(yield, " Failed to store contacts: ", atomic_file.error());
+        return std::unexpected(atomic_file.error());
+    }
+    assert(*atomic_file);
 
     string data;
 
@@ -360,10 +371,10 @@ void write_stored_contacts( const AsioExecutor& exec
             auto iter = contacts.begin();
             c = *iter;
             contacts.erase(iter);
-        } else if (!old_contacts.empty()) {
-            auto iter = old_contacts.begin();
+        } else if (!old_contacts->empty()) {
+            auto iter = old_contacts->begin();
             c = *iter;
-            old_contacts.erase(iter);
+            old_contacts->erase(iter);
         } else {
             break;
         }
@@ -372,9 +383,30 @@ void write_stored_contacts( const AsioExecutor& exec
         data += util::str(c.id, ",", c.endpoint);
     }
 
-    util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
-    if (!ec) atomic_file->commit(ec);
-    if (ec) return or_throw(yield, ec);
+    auto result1 = compat([&](Cancel cancel, asio::yield_context yield) {
+        return util::file_io::write(
+            (**atomic_file).lowest_layer(),
+            asio::buffer(data),
+            cancel,
+            yield
+        );
+    })(yield);
+    if (!result1) {
+        LOG_ERROR(yield, " Failed to store contacts: ", result1.error());
+        return std::unexpected(result1.error());
+    }
+
+    auto result2 = compat([&](sys::error_code& ec) {
+        (**atomic_file).commit(ec);
+    })();
+    if (!result2) {
+        LOG_ERROR(yield, " Failed to store contacts: ", result2.error());
+        return std::unexpected(result2.error());
+    }
+
+    LOG_DEBUG(yield, " Successfully stored contacts");
+
+    return {};
 }
 
 void DhtNode::store_contacts() const
@@ -390,11 +422,16 @@ void DhtNode::store_contacts() const
     task::spawn_detached(_exec, ([
         exec = _exec,
         path = move(path),
-        contacts = move(contacts)
+        contacts = move(contacts),
+        cancel = _cancel,
+        log_path = _log_path
     ] (asio::yield_context yield) mutable {
-        Cancel cancel;
-        sys::error_code ignored_ec;
-        write_stored_contacts(exec, move(contacts), path, cancel, yield[ignored_ec]);
+        (void) write_stored_contacts(
+            exec,
+            move(contacts),
+            path,
+            Async(yield, std::move(cancel), std::move(log_path))
+        );
     }));
 }
 
@@ -958,25 +995,20 @@ void DhtNode::receive_loop(asio::yield_context yield)
     }
 }
 
-void DhtNode::store_contacts_loop(asio::yield_context yield)
+void DhtNode::store_contacts_loop(asio::yield_context y)
 {
     fs::path path = stored_contacts_path();
     if (path == fs::path()) return;
 
-    Cancel cancel(_cancel);
+    Async yield(y, _cancel);
 
     while (true) {
         if (!_routing_table) return;
         auto contacts = _routing_table->dump_contacts();
 
-        sys::error_code ignored_ec;
-        write_stored_contacts(_exec, move(contacts), path, cancel, yield[ignored_ec]);
-        if (cancel) return;
+        (void) write_stored_contacts(_exec, move(contacts), path, yield);
 
-        sys::error_code ec;
-        async_sleep(std::chrono::minutes(6), cancel, yield[ec]);
-        if (cancel) return;
-        return_or_throw_on_error(yield, cancel, ec);
+        async_sleep(std::chrono::minutes(6), yield);
     }
 }
 
@@ -1635,111 +1667,93 @@ asio::ip::udp::endpoint resolve(
     return or_throw<udp::endpoint>(yield, asio::error::not_found);
 }
 
-static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
-{
-    assert(!cancel || ec == asio::error::operation_aborted);
-    if (cancel) ec = asio::error::operation_aborted;
-}
-
-DhtNode::BootstrapResult
+std::expected<DhtNode::BootstrapResult, sys::error_code>
 DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
-                         , Cancel cancel
-                         , asio::yield_context yield)
+                         , Async yield)
 {
-    sys::error_code ec;
+    std::expected<udp::endpoint, sys::error_code> bootstrap_ep =
+        util::apply(
+            bootstrap_address,
+            [&] (const udp::endpoint& ep) {
+                return ep;
+            },
+            [&] (const asio::ip::address& addr) {
+                return udp::endpoint{addr, bootstrap::default_port};
+            },
+            [&] (const std::string& addr) {
+                string_view hp(addr), host, port;
+                std::tie(host, port) = util::split_ep(hp);
+                auto ep = compat([&](Cancel cancel, asio::yield_context yield) {
+                    return resolve(
+                        _exec,
+                        _multiplexer->is_v4() ? udp::v4() : udp::v6(),
+                        std::string(host),
+                        port.empty() ? util::str(bootstrap::default_port) : std::string(port),
+                        _dns_resolver,
+                        cancel,
+                        yield
+                    );
+                })(yield);
 
-    udp::endpoint bootstrap_ep = util::apply(bootstrap_address,
-        [&] (const udp::endpoint& ep) {
-            return ep;
-        },
-        [&] (const asio::ip::address& addr) {
-            return udp::endpoint{addr, bootstrap::default_port};
-        },
-        [&] (const std::string& addr) {
-            string_view hp(addr), host, port;
-            std::tie(host, port) = util::split_ep(hp);
-            auto ep = resolve(
-                _exec,
-                _multiplexer->is_v4() ? udp::v4() : udp::v6(),
-                std::string(host),
-                port.empty() ? util::str(bootstrap::default_port) : std::string(port),
-                _dns_resolver,
-                cancel,
-                yield[ec]
-            );
+                if (!ep) {
+                    LOG_DEBUG(yield, "Unable to resolve bootstrap server, giving up: "
+                                   , addr, "; error=", ep.error());
+                }
 
-            fix_cancel_invariant(cancel, ec);
-
-            if (ec && !cancel) {
-                _DEBUG( "Unable to resolve bootstrap server, giving up: "
-                      , addr, "; ec=", ec);
+                return ep;
             }
+        );
 
-            return ep;
-        });
-
-    if (ec) {
-        return or_throw<BootstrapResult>(yield, ec);
+    if (!bootstrap_ep) {
+        return std::unexpected(bootstrap_ep.error());
     }
 
-    BencodedMap initial_ping_reply = send_query_await_reply(
-        { bootstrap_ep, boost::none },
-        "ping",
-        BencodedMap{{ "id" , _node_id.to_bytestring() }},
-        nullptr,
-        nullptr,
-        cancel,
-        yield[ec]
-    );
+    auto initial_ping_reply = compat([&](Cancel cancel, asio::yield_context yield) {
+        return send_query_await_reply(
+            { *bootstrap_ep, boost::none },
+            "ping",
+            BencodedMap{{ "id" , _node_id.to_bytestring() }},
+            nullptr,
+            nullptr,
+            cancel,
+            yield
+        );
+    })(yield);
 
-    fix_cancel_invariant(cancel, ec);
-
-    if (ec == asio::error::operation_aborted) {
-        return or_throw<BootstrapResult>(yield, ec);
+    if (!initial_ping_reply) {
+        LOG_DEBUG(yield, "Bootstrap server does not reply, giving up: "
+                       , bootstrap_address, "; error=", initial_ping_reply.error());
+        return std::unexpected(initial_ping_reply.error());
     }
 
-    if (ec) {
-        _DEBUG( "Bootstrap server does not reply, giving up: "
-              , bootstrap_address, "; ec=", ec);
-        return or_throw<BootstrapResult>(yield, ec);
-    }
-
-    auto my_ip = initial_ping_reply["ip"].as_string_view();
+    auto my_ip = (*initial_ping_reply)["ip"].as_string_view();
 
     if (!my_ip) {
-        _DEBUG("Unexpected bootstrap server reply, giving up (no IP)");
-        _DEBUG("   ", initial_ping_reply);
-        return or_throw<BootstrapResult>(yield, asio::error::fault);
+        LOG_DEBUG(yield, " Unexpected bootstrap server reply, giving up (no IP)");
+        LOG_DEBUG(yield, "   ", *initial_ping_reply);
+        return std::unexpected(asio::error::fault);
     }
 
-    boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
+    std::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
 
     if (!my_endpoint) {
-        _DEBUG("Unexpected bootstrap server reply, giving up (can't parse IP)");
-        _DEBUG("   ", initial_ping_reply);
-        return or_throw<BootstrapResult>(yield, asio::error::fault);
+        LOG_DEBUG(yield, " Unexpected bootstrap server reply, giving up (can't parse IP)");
+        LOG_DEBUG(yield, "   ", *initial_ping_reply);
+        return std::unexpected(asio::error::fault);
     }
 
-    return {*my_endpoint, bootstrap_ep};
+    return BootstrapResult{ *my_endpoint, *bootstrap_ep };
 }
 
-void DhtNode::bootstrap(asio::yield_context yield)
+std::expected<void, sys::error_code> DhtNode::bootstrap(Async yield)
 {
-    // Create on stack so that the member one isn't used after ~DhtNode
-    Cancel cancel(_cancel);
+    auto cancel_con = _cancel.connect([&] { yield.cancel(); });
 
     auto metrics = _metrics.bootstrap();
 
-    sys::error_code ec;
-    sys::error_code ignored_ec;
-
     auto bootstraps = _bootstrap_config.collect();
-    auto old_contacts = read_stored_contacts(_exec
-                                            , stored_contacts_path()
-                                            , cancel
-                                            , yield[ignored_ec]);
-
-    if (cancel) return or_throw(yield, asio::error::operation_aborted);
+    auto old_contacts = read_stored_contacts(stored_contacts_path(), yield)
+        .value_or(std::set<NodeContact>{});
 
     for (auto& c : old_contacts) {
         bootstraps.push_back(c.endpoint);
@@ -1754,8 +1768,8 @@ void DhtNode::bootstrap(asio::yield_context yield)
         using MyEndpoint   = udp::endpoint;
         using NodeEndpoint = udp::endpoint;
 
-        std::random_device r;
-        auto rng = std::default_random_engine(r());
+        std::random_device random_device;
+        auto rng = std::default_random_engine(random_device());
         std::shuffle(bootstraps.begin(), bootstraps.end(), rng);
 
         struct Stats {
@@ -1763,11 +1777,11 @@ void DhtNode::bootstrap(asio::yield_context yield)
             std::set<NodeEndpoint> nodes;
         };
 
-        auto add_result = [] (auto& rs, auto r, size_t score) -> Stats& {
-            auto p = rs.insert({r.my_ep, {score, {r.node_ep}}});
+        auto add_result = [] (auto& results, auto result, size_t score) -> Stats& {
+            auto p = results.insert({result.my_ep, {score, {result.node_ep}}});
             auto& stats = p.first->second;
             if (p.second) return stats;
-            if (stats.nodes.insert(r.node_ep).second) {
+            if (stats.nodes.insert(result.node_ep).second) {
                 stats.score += score;
             }
             return stats;
@@ -1783,64 +1797,60 @@ void DhtNode::bootstrap(asio::yield_context yield)
                                 , [](const std::string&)       { return SCORE_GOAL; });
         };
 
-        while (!cancel) {
+        while (true) {
             using namespace std::chrono;
 
-            Cancel done_cancel(cancel);
+            Async child_yield(yield);
 
-            std::map<MyEndpoint, Stats> rs;
-
+            std::map<MyEndpoint, Stats> results;
             WaitCondition wc(_exec);
-
             size_t k = 0;
-            for (const auto &bs : bootstraps) {
-                task::spawn_detached(_exec , ([
-                    &,
-                    lock = wc.lock(),
-                    bs = bs
-                ] (asio::yield_context yield) {
-                    sys::error_code ec;
 
-                    _DEBUG("Bootstrapping node: ", bs, "...");
+            try {
+                for (const auto &bs : bootstraps) {
+                    child_yield.spawn([
+                        &,
+                        lock = wc.lock(),
+                        bs = bs
+                    ] (Async yield) {
+                        LOG_DEBUG(yield, " Bootstrapping node: ", bs, "...");
 
-                    auto r = bootstrap_single(bs, done_cancel, yield[ec]);
+                        auto result = bootstrap_single(bs, yield);
+                        LOG_DEBUG(yield, " Bootstrapping node: ", bs, ": done; result=", debug(result));
 
-                    fix_cancel_invariant(done_cancel, ec);
+                        if (!result || is_martian(result->my_ep)) return;
 
-                    _DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec);
+                        auto& stats = add_result(results, *result, score_of(bs));
 
-                    if (ec || is_martian(r.my_ep)) return;
+                        if (stats.score >= SCORE_GOAL) {
+                            my_endpoint = result->my_ep;
+                            node_endpoints = move(stats.nodes);
+                            child_yield.cancel();
+                        }
+                    });
 
-                    auto& stats = add_result(rs, r, score_of(bs));
-
-                    if (stats.score >= SCORE_GOAL) {
-                        my_endpoint = r.my_ep;
-                        node_endpoints = move(stats.nodes);
-                        done_cancel();
+                    // Try enough nodes quickly in parallel. Then try the rest with
+                    // 300ms delays.
+                    k += score_of(bs);
+                    if (k < SCORE_GOAL) {
+                        async_sleep(milliseconds(300), child_yield);
                     }
-                }));
-
-                // Try enough nodes quickly in parallel. Then try the rest with
-                // 300ms delays.
-                k += score_of(bs);
-                if (k < SCORE_GOAL) {
-                    async_sleep(milliseconds(300), done_cancel, yield);
                 }
-
-                if (done_cancel) break;
+            } catch (Async::Cancelled& e) {
+                if (yield.is_cancelled()) {
+                    throw e;
+                }
             }
 
-            sys::error_code ec;
-            wc.wait(yield[ec]);
+            wc.wait(yield);
 
-            if (cancel) return or_throw(yield, asio::error::operation_aborted);
             if (node_endpoints.size()) break;
 
             // We did not get enough score, but perhaps we have at least
             // something. If so, let's use that.
-            if (rs.size()) {
+            if (results.size()) {
                 size_t max_score = 0;
-                for (auto r : rs) {
+                for (auto r : results) {
                     if (r.second.score > max_score) {
                         my_endpoint = r.first;
                         node_endpoints = move(r.second.nodes);
@@ -1852,17 +1862,15 @@ void DhtNode::bootstrap(asio::yield_context yield)
 
             // We could not bootstrap off any of the known nodes, wait a bit
             // and try again.
-            async_sleep(seconds(10), cancel, yield);
+            async_sleep(seconds(10), yield);
         }
     }
-
-    if (cancel) return or_throw(yield, asio::error::operation_aborted);
 
     assert(node_endpoints.size());
 
     _wan_endpoint = my_endpoint;
 
-    _INFO("WAN endpoint: ", _wan_endpoint);
+    LOG_INFO(yield, " WAN endpoint: ", _wan_endpoint);
 
     auto send_ping_fn = [&] (const NodeContact& c) { send_ping(c); };
     _node_id = NodeID::generate(_wan_endpoint.address());
@@ -1890,9 +1898,12 @@ void DhtNode::bootstrap(asio::yield_context yield)
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, cancel, yield[ec]);
-
-    if (ec) return or_throw(yield, ec);
+    auto contacts = compat([&](Cancel cancel, asio::yield_context yield) {
+        return find_closest_nodes(_node_id, cancel, yield);
+    })(yield);
+    if (!contacts) {
+        return std::unexpected(contacts.error());
+    }
 
     /*
      * We now know enough nodes that general DHT queries should succeed. The
@@ -1901,6 +1912,8 @@ void DhtNode::bootstrap(asio::yield_context yield)
      */
     _ready = true;
     metrics.mark_success();
+
+    return {};
 }
 
 
@@ -2522,7 +2535,7 @@ void DhtNode::tracker_do_search_peers(
                     auto peer_string = peer.as_string_view();
                     if (!peer_string) continue;
 
-                    boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
+                    std::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
                     if (!endpoint) continue;
 
                     node.peers.push_back(*endpoint);
@@ -2542,13 +2555,19 @@ void DhtNode::tracker_do_search_peers(
     or_throw(yield, ec);
 }
 
+std::ostream& operator << (std::ostream& os, const DhtNode::BootstrapResult& result) {
+    return os << "{ my_ep=" << result.my_ep << ", node_ep=" << result.node_ep << " }";
+}
+
+// -------------------------------------------------------------------------------------------------
 
 MainlineDht::MainlineDht( const AsioExecutor& exec
                         , metrics::MainlineDht metrics
                         , std::shared_ptr<dns::Resolver> dns_resolver
                         , uint32_t mux_rx_limit
                         , fs::path storage_dir
-                        , bootstrap::Config bootstrap_config)
+                        , bootstrap::Config bootstrap_config
+                        , util::LogPath log_path)
     : _exec(exec)
     , _ready_cv(exec)
     , _dns_resolver(std::move(dns_resolver))
@@ -2556,6 +2575,7 @@ MainlineDht::MainlineDht( const AsioExecutor& exec
     , _storage_dir(std::move(storage_dir))
     , _bootstrap_config(std::move(bootstrap_config))
     , _metrics(std::move(metrics))
+    , _log_path(std::move(log_path))
 {
 }
 
@@ -2616,7 +2636,8 @@ void MainlineDht::stop() {
     _nodes.clear();
 }
 
-Promise<asio::ip::udp::endpoint>::Future MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
+Promise<asio::ip::udp::endpoint>::Future
+MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
 
@@ -2626,7 +2647,8 @@ Promise<asio::ip::udp::endpoint>::Future MainlineDht::add_endpoint(asio_utp::udp
         _dns_resolver,
         _mux_rx_limit,
         _storage_dir,
-        _bootstrap_config
+        _bootstrap_config,
+        _log_path
     );
 
     Promise<asio::ip::udp::endpoint> promise(_exec);
@@ -2636,11 +2658,12 @@ Promise<asio::ip::udp::endpoint>::Future MainlineDht::add_endpoint(asio_utp::udp
         _exec,
         [
             this,
+            log_path = _log_path,
             m = std::move(m),
             promise = std::move(promise),
             local_ep
         ](auto y) mutable {
-            Async yield(y, _cancel);
+            Async yield(y, _cancel, std::move(log_path));
 
             yield.cancel_slot([&] {
                 if (auto it = _nodes.find(local_ep); it != _nodes.end()) {

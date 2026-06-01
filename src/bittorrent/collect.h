@@ -1,11 +1,14 @@
 #pragma once
 
 #include <iostream>
+#include <map>
+
 #include "../util/scheduler.h"
 #include "../util/watch_dog.h"
 #include "../util/async_queue.h"
 #include "../util/wait_condition.h"
 #include "contact.h"
+#include "debug_ctx.h"
 
 namespace ouinet::bittorrent {
 

@@ -73,6 +73,7 @@ class DhtNode {
            , uint32_t mux_rx_limit
            , boost::filesystem::path storage_dir
            , bootstrap::Config bs
+           , util::LogPath
     );
 
     std::expected<void, sys::error_code> start(udp::endpoint, Async yield);
@@ -248,15 +249,17 @@ class DhtNode {
 
     void handle_query(udp::endpoint sender, BencodedMap& query, Cancel cancel, asio::yield_context);
 
-    void bootstrap(asio::yield_context);
+    std::expected<void, sys::error_code> bootstrap(Async);
 
     struct BootstrapResult {
         asio::ip::udp::endpoint my_ep;
         asio::ip::udp::endpoint node_ep;
     };
 
-    BootstrapResult
-    bootstrap_single(bootstrap::Address, Cancel, asio::yield_context);
+    friend std::ostream& operator << (std::ostream&, const BootstrapResult&);
+
+    std::expected<BootstrapResult, sys::error_code>
+    bootstrap_single(bootstrap::Address, Async);
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
@@ -365,6 +368,7 @@ class DhtNode {
     boost::filesystem::path _storage_dir;
     bootstrap::Config _bootstrap_config;
     metrics::DhtNode _metrics;
+    util::LogPath _log_path;
 };
 
 } // namespace ouinet::bittorent

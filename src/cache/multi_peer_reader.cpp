@@ -585,11 +585,8 @@ public:
                 }
 
                 LOG_DEBUG(log_path, " Done fetching hash list; i2p_dest="
-                         , i2p_dest
-                         , " result=", debug(result));
-
-                // TODO: is this necessary?
-                if (yield.is_cancelled()) return;
+                                  , i2p_dest
+                                  , " result=", debug(result));
 
                 peer->_candidate_hook.unlink();
 

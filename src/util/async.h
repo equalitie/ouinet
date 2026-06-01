@@ -65,6 +65,7 @@ public:
 
     Async tag(std::string t)
     {
+        // FIXME: pass _cancel
         return Async(_asio_yield, _log_path.tag(std::move(t)));
     }
 

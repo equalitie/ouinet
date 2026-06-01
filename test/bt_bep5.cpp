@@ -13,6 +13,7 @@
 #include "../src/task.h"
 #include "../src/parse/number.h"
 #include "../src/async_sleep.h"
+#include "../src/util/compat.h"
 #include "progress.h"
 
 using namespace ouinet;
@@ -87,7 +88,7 @@ void wait_for_ready(DhtNode& dht, udp::endpoint ep, asio::yield_context yield)
     sys::error_code ec;
     Progress progress(ex, "Bootstrapping");
 
-    dht.start(ep, yield[ec]);
+    compat([&](Async yield) { return dht.start(ep, yield); })(yield[ec]);
 
     asio::steady_timer timer(ex);
 
@@ -111,6 +112,7 @@ int main(int argc, const char** argv)
         metrics_dht.dht_node_ipv4(),
         dns_resolver,
         rx_limit,
+        {},
         {},
         {}
     );

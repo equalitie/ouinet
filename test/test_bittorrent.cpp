@@ -74,6 +74,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
         std::make_shared<dns::Resolver>(),
         rx_limit,
         {},
+        {},
         {}
     );
 
@@ -149,6 +150,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
         metrics_dht.dht_node_ipv4(),
         std::make_shared<dns::Resolver>(),
         rx_limit,
+        {},
         {},
         {}
     );

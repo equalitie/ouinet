@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio/spawn.hpp>
 #include <concepts>
 #include <type_traits>
 #include <utility>
@@ -17,16 +18,50 @@
 
 namespace ouinet {
     namespace detail {
-        template<typename F>
+
+        // If `result` has value, return it. Otherwise return-or-throw the error code.
+        template<typename T>
+        T or_throw(
+            boost::asio::yield_context& yield,
+            std::expected<T, boost::system::error_code> result
+        ) {
+            if (result) {
+                if constexpr (std::is_void_v<T>) {
+                    return;
+                } else {
+                    return std::move(result).value();
+                }
+            } else {
+                if constexpr (std::is_void_v<T>) {
+                    return ouinet::or_throw(yield, result.error());
+                } else {
+                    return ouinet::or_throw(yield, result.error(), T{});
+                }
+            }
+        }
+    } // namespace detail
+
+    template<typename F>
+    struct Compat;
+
+    template<typename F>
+    Compat<F> compat(F f);
+
+    template<typename F>
+    struct Compat {
+        F _f;
+
+        // T f(error_code&) -> std::expected<T, error_code> f()
+        auto operator()()
         requires std::invocable<F, boost::system::error_code&>
-        auto invoke_expected(F f) {
+        {
             using R = std::invoke_result_t<F, boost::system::error_code&>;
             using E = std::expected<R, boost::system::error_code>;
 
             boost::system::error_code ec;
 
             if constexpr (std::is_void_v<R>) {
-                f(ec);
+                _f(ec);
 
                 if (ec) {
                     return E(std::unexpected(ec));
@@ -34,7 +69,7 @@ namespace ouinet {
                     return E();
                 }
             } else {
-                auto r = f(ec);
+                auto r = _f(ec);
 
                 if (ec) {
                     return E(std::unexpected(ec));
@@ -43,29 +78,32 @@ namespace ouinet {
                 }
             }
         }
-    }
 
-    template<typename F>
-    struct Compat {
-        F _f;
-
+        // T f(asio::yield_context) -> std::expected<T, error_code> f(Async)
         auto operator()(Async yield)
         requires std::invocable<F, boost::asio::yield_context>
         {
-            return detail::invoke_expected(
+            auto result = compat(
                 [
                     this,
                     yield = yield.asio_yield()
                 ](boost::system::error_code& ec) {
                     return _f(yield[ec]);
                 }
-            );
+            )();
+
+            if (yield.is_cancelled()) {
+                throw Async::Cancelled();
+            }
+
+            return result;
         }
 
+        // T f(Cancel, asio::yield_context) -> std::expected<T, error_code> f(Async)
         auto operator()(Async yield)
         requires std::invocable<F, Cancel, boost::asio::yield_context>
         {
-            return detail::invoke_expected(
+            auto result = compat(
                 [
                     this,
                     cancel = Cancel(yield.get_cancel()),
@@ -73,32 +111,32 @@ namespace ouinet {
                 ](boost::system::error_code& ec) {
                     return _f(std::move(cancel), yield[ec]);
                 }
-            );
+            )();
+
+            if (yield.is_cancelled()) {
+                throw Async::Cancelled();
+            }
+
+            return result;
         }
 
+        // std::expected<T, error_code> f(Async) -> T f(asio::yield_context)
+        auto operator()(boost::asio::yield_context yield)
+        requires std::invocable<F, Async> && is_expected_v<std::invoke_result_t<F, Async>>
+        {
+            auto result = _f(Async(yield));
+            return detail::or_throw(yield, result);
+        }
+
+        // std::expected<T, error_code> f(Async) -> T f(Cancel cancel, asio::yield_context)
         auto operator()(Cancel cancel, boost::asio::yield_context yield)
         requires std::invocable<F, Async> && is_expected_v<std::invoke_result_t<F, Async>>
         {
-            using R = std::invoke_result_t<F, Async>;
-            using V = typename R::value_type;
-
-            auto result = _f(Async(std::move(yield), std::move(cancel)));
-
-            if (result) {
-                if constexpr (std::is_void_v<V>) {
-                    return;
-                } else {
-                    return std::move(result).value();
-                }
-            } else {
-                if constexpr (std::is_void_v<V>) {
-                    return or_throw(yield, result.error());
-                } else {
-                    return or_throw(yield, result.error(), V{});
-                }
-            }
+            auto result = _f(Async(yield, std::move(cancel)));
+            return detail::or_throw(yield, result);
         }
 
+        // void f(Async) -> void f(Cancel cancel, asio::yield_context)
         auto operator()(Cancel cancel, boost::asio::yield_context yield)
         requires std::invocable<F, Async> && std::is_void_v<std::invoke_result_t<F, Async>>
         {
@@ -110,5 +148,4 @@ namespace ouinet {
     Compat<F> compat(F f) {
         return Compat { std::move(f) };
     }
-
 } // namespace ouinet

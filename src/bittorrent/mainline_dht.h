@@ -18,6 +18,7 @@
 
 #include "../util/condition_variable.h"
 #include "../util/executor.h"
+#include "../util/log_path.h"
 #include "../namespaces.h"
 
 namespace ouinet {
@@ -50,7 +51,8 @@ class MainlineDht : public DhtBase {
                , std::shared_ptr<dns::Resolver>
                , uint32_t mux_rx_limit
                , boost::filesystem::path storage_dir
-               , bootstrap::Config bs);
+               , bootstrap::Config bs
+               , util::LogPath);
 
     MainlineDht(const MainlineDht&) = delete;
     MainlineDht& operator=(const MainlineDht&) = delete;
@@ -120,6 +122,7 @@ class MainlineDht : public DhtBase {
     boost::filesystem::path _storage_dir;
     bootstrap::Config _bootstrap_config;
     metrics::MainlineDht _metrics;
+    util::LogPath _log_path;
 };
 
 } // namespace ouinet::bittorrent

@@ -870,11 +870,11 @@ Injector::Injector(
         , _config.repo_root() / OUINET_TLS_DH_FILE );
 
     if (!_config.is_proxy_enabled())
-        LOG_INFO(log_path, "Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+        LOG_INFO(log_path, " Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = _config.target_rx())
-        LOG_INFO(log_path, "Target URIs restricted to regular expression: ", *target_rx_o);
+        LOG_INFO(log_path, " Target URIs restricted to regular expression: ", *target_rx_o);
     if (_config.is_private_target_allowed()) {
-        LOG_INFO(log_path, "Allowing injection of private targets.");
+        LOG_INFO(log_path, " Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
     LOG_INFO( "DNS protocols enabled: ["
@@ -911,7 +911,7 @@ Injector::Injector(
 
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
-        LOG_INFO(log_path, "uTP address: ", endpoint);
+        LOG_INFO(log_path, " uTP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
@@ -929,7 +929,7 @@ Injector::Injector(
         auto local_ep = base->local_endpoint();
 
         if (local_ep) {
-            LOG_INFO(log_path, "uTP/TLS address: ", *local_ep);
+            LOG_INFO(log_path, " uTP/TLS address: ", *local_ep);
             util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
             proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, move(base), *_ssl_context));
@@ -950,7 +950,8 @@ Injector::Injector(
             , fs::path{}  // default storage dir
             , bt::bootstrap::Config()
                 .with_default(!_config.bt_bootstrap_no_default())
-                .with_extras(_config.bt_bootstrap_extras()));
+                .with_extras(_config.bt_bootstrap_extras())
+            , log_path.tag("dht"));
     }
 
 
