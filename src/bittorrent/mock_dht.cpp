@@ -119,7 +119,7 @@ bool MockDht::is_bootstrapped() const {
     return true;
 }
 
-void MockDht::wait_all_ready(Cancel&, asio::yield_context) {
+void MockDht::wait_all_ready(Async) {
 }
 
 void MockDht::stop() {

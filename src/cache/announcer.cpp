@@ -1,3 +1,4 @@
+#include <boost/asio/spawn.hpp>
 #include <list>
 #include <sstream>
 #include <iomanip>
@@ -7,6 +8,7 @@
 #include "util/async_queue.h"
 #include "logger.h"
 #include "defer.h"
+#include "../util/compat.h"
 #include "../util/wait_condition.h"
 #include "async_sleep.h"
 #include "bittorrent/node_id.h"
@@ -309,17 +311,18 @@ struct Bep5Loop : public Announcer::Loop {
 
     void start()
     {
-        task::spawn_detached(ex, [this] (asio::yield_context yield) {
-            Cancel cancel(_cancel);
-            sys::error_code ec;
+        task::spawn_detached(ex, [this] (asio::yield_context y) {
+            Async yield(y, _cancel);
 
             // Wait for DHT to be ready before starting the loop
             {
                 LOG_DEBUG(_log_path, " Waiting for DHT");
-                dht->wait_all_ready(cancel, yield[ec]);
+                dht->wait_all_ready(yield);
             }
 
-            loop(cancel, yield[ec]);
+            compat([&](Cancel cancel, asio::yield_context yield) {
+                loop(cancel, yield);
+            })(yield);
         });
     }
 

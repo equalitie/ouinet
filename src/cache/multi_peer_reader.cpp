@@ -441,13 +441,7 @@ public:
 
                 LOG_DEBUG(yield, " Waiting for DHT to be ready...");
 
-                auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-                    dht->wait_all_ready(cancel, yield);
-                })(yield);
-
-                if (!result) {
-                    LOG_WARN(yield, " DHT failed to get ready: ", result.error());
-                }
+                dht->wait_all_ready(yield);
 
                 _lan_my_eps = dht->local_endpoints();
                 _wan_my_eps = dht->wan_endpoints();
@@ -636,7 +630,7 @@ public:
             ] (auto y) mutable {
                 Async yield(y, cancel, log_path);
 
-                LOG_DEBUG(yield.log_path(), " Fetching hash list from: ", ep);
+                LOG_DEBUG(yield.log_path(), " Fetching hash list");
 
                 auto result = timeout(
                     MultiPeerReader::BEP5_HASH_LIST_TIMEOUT,
@@ -652,11 +646,10 @@ public:
                     yield
                 );
 
-                LOG_DEBUG( yield.log_path(), " Done fetching hash list from: ", ep
-                         , "; result=", debug(result));
+                LOG_DEBUG( yield.log_path(), " Done fetching hash list; result=", debug(result));
 
                 if (result == std::unexpected(asio::error::timed_out)) {
-                    LOG_DEBUG(yield.log_path(), " BEP5 hash list download timed out for: ", ep);
+                    LOG_DEBUG(yield.log_path(), " BEP5 hash list download timed out");
                     return;
                 }
 

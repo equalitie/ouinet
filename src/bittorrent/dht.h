@@ -50,7 +50,7 @@ public:
 
     virtual bool is_bootstrapped() const = 0;
 
-    virtual void wait_all_ready(Cancel&, asio::yield_context) = 0;
+    virtual void wait_all_ready(Async) = 0;
 
     virtual void stop() = 0;
 

@@ -16,6 +16,7 @@
 #include "cxx/metrics.h"
 #include "dht.h"
 
+#include "../util/condition_variable.h"
 #include "../util/executor.h"
 #include "../namespaces.h"
 
@@ -110,7 +111,7 @@ class MainlineDht : public DhtBase {
         return !local_endpoints().empty() && all_ready();
     }
 
-    void wait_all_ready(Cancel&, asio::yield_context) override;
+    void wait_all_ready(Async) override;
 
     void stop() override;
 
@@ -119,6 +120,7 @@ class MainlineDht : public DhtBase {
     private:
     AsioExecutor _exec;
     std::map<udp::endpoint, std::unique_ptr<DhtNode>> _nodes;
+    ConditionVariable _ready_cv; // notified every time a node becomes ready
     Cancel _cancel;
     std::shared_ptr<dns::Resolver> _dns_resolver;
     uint32_t _mux_rx_limit;

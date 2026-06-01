@@ -98,6 +98,12 @@ namespace ouinet {
                 }
             }
         }
+
+        auto operator()(Cancel cancel, boost::asio::yield_context yield)
+        requires std::invocable<F, Async> && std::is_void_v<std::invoke_result_t<F, Async>>
+        {
+            _f(Async(std::move(yield), std::move(cancel)));
+        }
     };
 
     template<typename F>

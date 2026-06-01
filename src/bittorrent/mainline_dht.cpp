@@ -2547,6 +2547,7 @@ MainlineDht::MainlineDht( const AsioExecutor& exec
                         , fs::path storage_dir
                         , bootstrap::Config bootstrap_config)
     : _exec(exec)
+    , _ready_cv(exec)
     , _dns_resolver(std::move(dns_resolver))
     , _mux_rx_limit(mux_rx_limit)
     , _storage_dir(std::move(storage_dir))
@@ -2652,6 +2653,8 @@ Promise<asio::ip::udp::endpoint>::Future MainlineDht::add_endpoint(asio_utp::udp
             }
 
             // TODO: should we send errors as well?
+
+            _ready_cv.notify();
         }
     );
 
@@ -2918,27 +2921,13 @@ bool MainlineDht::is_martian(UdpEndpoint const& ep) const {
     return bittorrent::is_martian(ep);
 }
 
-void MainlineDht::wait_all_ready(
-    Cancel& cancel_signal,
-    asio::yield_context yield
-) {
-    assert(!cancel_signal);
-    if (cancel_signal) return;
+void MainlineDht::wait_all_ready(Async yield) {
+    auto cancelled = _cancel.connect([&] { yield.cancel(); });
 
-    Cancel c(cancel_signal);
-    auto cancelled = _cancel.connect([&] { c(); });
-
-    sys::error_code ec;
-
-    while (!c && !all_ready()) {
-        async_sleep(std::chrono::milliseconds(200), c, yield[ec]);
+    while (!all_ready()) {
+        _ready_cv.wait(yield);
     }
-
-    if (c) ec = asio::error::operation_aborted;
-
-    return or_throw(yield, ec);
 }
-
 
 std::ostream& operator<<(std::ostream& os, const Contact& c)
 {

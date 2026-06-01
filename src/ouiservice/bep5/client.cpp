@@ -9,6 +9,7 @@
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../bittorrent/is_martian.h"
 #include "../../logger.h"
+#include "../../util/compat.h"
 #include "../../util/hash.h"
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
@@ -154,7 +155,7 @@ private:
 
         {
             sys::error_code ec;
-            _dht->wait_all_ready(cancel, yield[ec]);
+            compat([&](Async yield) { _dht->wait_all_ready(yield); })(cancel, yield);
             return_or_throw_on_error(yield, cancel, ec);
         }
 

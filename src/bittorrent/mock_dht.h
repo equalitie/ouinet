@@ -47,7 +47,7 @@ public:
 
     bool is_bootstrapped() const override;
 
-    void wait_all_ready(Cancel&, asio::yield_context) override;
+    void wait_all_ready(Async) override;
 
     void stop() override;
 
