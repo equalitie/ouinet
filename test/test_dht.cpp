@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <chrono>
 #include <constants.h>
+#include <util/compat.h>
 #include <util/hash.h>
 
 #define private public
@@ -71,10 +72,9 @@ void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
             Clock::time_point now;
 
             start = Clock::now();
-            auto r = dht_node.bootstrap_single(
-                    bs,
-                    dht_node._cancel,
-                    yield[ec]);
+            auto r = compat([&](Async yield) {
+                return dht_node.bootstrap_single(bs, yield);
+            })(dht_node._cancel, yield[ec]);
             now = Clock::now();
             auto elapsed = duration_cast<seconds>(now - start).count();
 

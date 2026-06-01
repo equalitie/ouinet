@@ -1,5 +1,7 @@
 #pragma once
 
+#include <expected>
+
 // Utilities to work with `std::expected`.
 
 namespace ouinet {

@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "async.h"
 #include "expected.h"
 #include "../or_throw.h"
 

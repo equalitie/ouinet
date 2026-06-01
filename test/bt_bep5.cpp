@@ -186,10 +186,9 @@ int main(int argc, const char** argv)
 
             auto peers = [&] {
                 Progress p(ctx.get_executor(), "Announcing");
-                return dht.tracker_announce( infohash
-                                           , boost::none
-                                           , cancel
-                                           , yield[ec]);
+                return compat([&](Async yield) {
+                    return dht.tracker_announce(infohash, std::nullopt, yield);
+                })(cancel, yield[ec]);
             }();
 
             std::cout << "Found " << peers.size() << " peers\n";

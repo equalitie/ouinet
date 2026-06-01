@@ -10,6 +10,7 @@
 #define private public
 #include <bittorrent/dht_node.h>
 #include <bittorrent/code.h>
+#include <util/compat.h>
 #include <util/hash.h>
 
 #include "constants.h"
@@ -84,7 +85,9 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
 
         NodeID infohash = util::sha1_digest("ouinet-test-" + to_string(time(0)));
 
-        dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
+        compat([&](Async yield) {
+            return dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield); // TODO: IPv6
+        })(yield[ec]);
 
         asio::steady_timer timer(dht.get_executor());
         while (!ec && !dht.ready()) {
@@ -96,7 +99,9 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
         const uint8_t max_retries = 5;
 
         for (uint8_t i = 0; i < max_retries; i++) {
-            dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
+            compat([&](Async yield) {
+                return dht.tracker_announce(infohash, dht.wan_endpoint().port(), yield);
+            })(cancel_signal, yield[ec]);
             if (!ec) {
                 break;
             } else {
@@ -181,7 +186,9 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     size_t success_count = 0;
 
     task::spawn_detached(ctx, [&] (auto yield) {
-        dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
+        compat([&](Async yield) {
+            return dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield); // TODO: IPv6
+        })(yield[ec]);
 
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE(dht.ready());

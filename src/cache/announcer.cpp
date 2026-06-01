@@ -197,7 +197,6 @@ struct Announcer::Loop {
                 auto result = compat([&](Cancel cancel, asio::yield_context yield) {
                     return entries.async_wait_for_push(cancel, yield);
                 })(yield);
-
                 if (!result) {
                     return std::unexpected(result.error());
                 }
@@ -255,10 +254,7 @@ struct Announcer::Loop {
 
                     Entry e = move(entries.begin()->first);
                     for (int i = 0; i != 3; ++i) {
-                        auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-                            announce(e, cancel, yield);
-                        })(yield);
-
+                        auto result = announce(e, yield);
                         if (result) {
                             success = true;
                             break;
@@ -286,7 +282,8 @@ struct Announcer::Loop {
     }
 
     // Virtual announce method - to be overridden by children
-    virtual void announce(Entry& e, Cancel& cancel, asio::yield_context yield) = 0;
+    virtual std::expected<void, sys::error_code>
+    announce(Entry& e, Async yield) = 0;
 
     virtual ~Loop() { _cancel(); }
 };
@@ -318,19 +315,20 @@ struct Bep5Loop : public Announcer::Loop {
         });
     }
 
-    void announce(Entry& e, Cancel& cancel, asio::yield_context yield) override
+    std::expected<void, sys::error_code> announce(Entry& e, Async yield) override
     {
         LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e.key, "...");
 
-        sys::error_code ec;
-        auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
-        compat([&](Async yield) {
-            return dht->tracker_announce(e.infohash, std::nullopt, yield);
-        })(cancel, yield[ec]);
+        auto endpoints = dht->tracker_announce(e.infohash, std::nullopt, yield);
 
-        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e_key, ": done; ec=", ec);
+        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e.key
+                           , ": done; result=", ouinet::debug(endpoints));
 
-        return or_throw(yield, ec);
+        if (!endpoints) {
+            return std::unexpected(endpoints.error());
+        }
+
+        return {};
     }
 };
 
