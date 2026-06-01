@@ -25,21 +25,21 @@ linux / build:
     - job: 'linux / prepare-builder-image'
       optional: true
 
-linux / unit-cpp-test:
+linux / cpp-tests:
   variables:
     TARGET_PLATFORM: 'linux'
     BUILD_PATH: 'build/$TARGET_PLATFORM'
   extends:
-    .linux-unit-cpp-test
+    .linux-cpp-tests
   needs:
     ['linux / build']
 
-linux / unit-rust-test:
+linux / rust-tests:
   variables:
     TARGET_PLATFORM: 'linux'
     BUILD_PATH: 'build/$TARGET_PLATFORM'
   extends:
-    .linux-unit-rust-test
+    .linux-rust-tests
   needs:
     ['linux / build']
 
@@ -50,7 +50,7 @@ linux / python-tests:
   extends:
     .linux-python-tests
   needs:
-    ['linux / unit-rust-test', 'linux / unit-cpp-test', 'linux / build']
+    ['linux / rust-tests', 'linux / cpp-tests', 'linux / build']
   before_script:
     - ln -s /usr/bin/python3 /usr/bin/python
 
@@ -69,12 +69,12 @@ linux / build-asan:
   when: manual
   allow_failure: true
 
-linux / unit-cpp-asan-test:
+linux / cpp-asan-tests:
   variables:
     TARGET_PLATFORM: 'linux'
     BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
   extends:
-    .linux-unit-cpp-test
+    .linux-cpp-tests
   needs:
     ['linux / build-asan']
   allow_failure: true
@@ -95,12 +95,12 @@ linux / build-release:
   when: manual
   allow_failure: true
 
-linux / unit-cpp-release-test:
+linux / cpp-release-tests:
   variables:
     TARGET_PLATFORM: 'linux'
     BUILD_PATH: 'build/$TARGET_PLATFORM-release'
   extends:
-    .linux-unit-cpp-test
+    .linux-cpp-tests
   needs:
     ['linux / build-release']
   allow_failure: true

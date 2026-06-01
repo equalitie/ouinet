@@ -24,7 +24,7 @@ windows / build:
   needs:
     []
 
-windows / unit-test:
+windows / cpp-tests:
   variables:
     TARGET_PLATFORM: 'windows'
     BUILD_PATH: 'build/$TARGET_PLATFORM'
