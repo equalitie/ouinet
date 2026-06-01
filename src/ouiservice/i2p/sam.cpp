@@ -108,7 +108,8 @@ std::expected<std::string, Error::Invoke> Sam::invoke(const std::string& request
     auto send_r = send_line(request, yield);
     if (!send_r) return std::unexpected(Error::Invoke { send_r.error() });
     auto recv_r = recv_line(yield);
-    return recv_r.transform_error(Error::wrap<Error::Invoke>());
+    if (!recv_r) return std::unexpected(Error::Invoke { recv_r.error() });
+    return std::move(*recv_r);
 }
 
 std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId const& session_id, Async yield) {
