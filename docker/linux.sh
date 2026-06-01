@@ -339,7 +339,7 @@ for target_os in ${target_oss[@]}; do
                 ${excluded_test_targets[@]/#/--exclude-test }
             )
 
-            exe -w $ouinet_dir bash -c "./scripts/run_unit_tests.sh ${args[*]}"
+            exe -w $ouinet_dir bash -c "./scripts/run_cpp_tests.sh ${args[*]}"
         fi
     fi
 
