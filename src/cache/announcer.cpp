@@ -229,8 +229,8 @@ struct Announcer::Loop {
 
     void loop(Cancel& cancel, asio::yield_context yield)
     {
-        auto on_exit = defer([&] {
-            LOG_DEBUG(_log_path, " Exiting the loop; cancel=", (cancel ? "true":"false"));
+        auto on_exit = defer([log_path = _log_path, cancel] {
+            LOG_DEBUG(log_path, " Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
         WaitCondition wcon(ex);
