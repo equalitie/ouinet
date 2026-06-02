@@ -129,7 +129,7 @@ namespace ouinet {
             return detail::or_throw(yield, result);
         }
 
-        // std::expected<T, error_code> f(Async) -> T f(Cancel cancel, asio::yield_context)
+        // std::expected<T, error_code> f(Async) -> T f(Cancel, asio::yield_context)
         auto operator()(Cancel cancel, boost::asio::yield_context yield)
         requires std::invocable<F, Async> && is_expected_v<std::invoke_result_t<F, Async>>
         {
@@ -137,11 +137,11 @@ namespace ouinet {
             return detail::or_throw(yield, result);
         }
 
-        // void f(Async) -> void f(Cancel cancel, asio::yield_context)
+        // T f(Async) -> T f(Cancel cancel, asio::yield_context)
         auto operator()(Cancel cancel, boost::asio::yield_context yield)
-        requires std::invocable<F, Async> && std::is_void_v<std::invoke_result_t<F, Async>>
+        requires std::invocable<F, Async>
         {
-            _f(Async(std::move(yield), std::move(cancel)));
+            return _f(Async(std::move(yield), std::move(cancel)));
         }
     };
 

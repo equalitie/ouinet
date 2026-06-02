@@ -4,6 +4,7 @@
 #include <set>
 #include <bittorrent/mainline_dht.h>
 #include "peer_lookup.h"
+#include "../util/compat.h"
 
 namespace std {
     template<> struct hash<ouinet::bittorrent::NodeID> {
@@ -22,7 +23,7 @@ public:
     DhtLookup(DhtLookup&&) = delete;
 
     DhtLookup(std::weak_ptr<bittorrent::DhtBase> dht_w, std::string swarm_name)
-        : PeerLookup(std::move(swarm_name), dht_w.lock()->get_executor())
+        : PeerLookup(std::move(swarm_name))
         , _dht_w(dht_w)
     {
         _lookup_strategy_name = "DHT BEP5";
@@ -33,16 +34,15 @@ public:
     }
 
 protected:
-    Ret do_lookup(Cancel& c, asio::yield_context y) override {
+    std::expected<Ret, sys::error_code> do_lookup(Async yield) override {
         auto dht = _dht_w.lock();
         assert(dht);
 
-        if (!dht)
-            return or_throw(y, asio::error::operation_aborted, Ret{});
+        if (!dht) {
+            return std::unexpected(asio::error::operation_aborted);
+        }
 
-        sys::error_code ec;
-        auto eps = dht->tracker_get_peers(infohash(), c, y[ec]);
-        return or_throw(y, ec, std::move(eps));
+        return dht->tracker_get_peers(infohash(), yield);
     }
 
 private:

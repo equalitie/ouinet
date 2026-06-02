@@ -3143,9 +3143,13 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, ec = asio::error::operation_not_supported);
         }
 
-        _bep5_client = make_shared<ouiservice::Bep5Client>
-                (dht, ep->value, *bridge_swarm_name, _config.is_bridge_announcement_enabled(),
-                 &inj_ctx);
+        _bep5_client = make_shared<ouiservice::Bep5Client>(
+            dht,
+            ep->value,
+            *bridge_swarm_name,
+            _config.is_bridge_announcement_enabled(),
+            &inj_ctx
+        );
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 

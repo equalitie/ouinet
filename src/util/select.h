@@ -134,7 +134,7 @@ struct Expired {
 
 static_assert(std::is_convertible_v<Expired, boost::system::error_code>);
 
-std::ostream& operator<<(std::ostream& os, const Expired&) {
+inline std::ostream& operator<<(std::ostream& os, const Expired&) {
     return os << "timeout expired";
 }
 

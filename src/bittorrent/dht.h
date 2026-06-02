@@ -35,7 +35,8 @@ public:
     virtual std::expected<std::set<UdpEndpoint>, sys::error_code>
     tracker_announce(NodeID infohash, std::optional<int> port, Async) = 0;
 
-    virtual std::set<UdpEndpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) = 0;
+    virtual std::expected<std::set<UdpEndpoint>, sys::error_code>
+    tracker_get_peers(NodeID infohash, Async) = 0;
 
     virtual Executor get_executor() = 0;
 

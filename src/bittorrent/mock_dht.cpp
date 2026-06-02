@@ -88,7 +88,8 @@ std::expected<std::set<UdpEndpoint>, sys::error_code> MockDht::tracker_announce(
     return (*_swarms)[infohash].endpoints(_no_see_filter);
 }
 
-std::set<UdpEndpoint> MockDht::tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) {
+std::expected<std::set<UdpEndpoint>, sys::error_code>
+MockDht::tracker_get_peers(NodeID infohash, Async) {
     auto swarm_i = _swarms->find(infohash);
     if (swarm_i == _swarms->end()) {
         std::cout << _name << ": get " << infohash << " -> {} (no such swarm)\n";

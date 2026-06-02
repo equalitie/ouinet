@@ -79,7 +79,8 @@ class MainlineDht : public DhtBase {
 
     void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
 
-    std::set<udp::endpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) override;
+    std::expected<std::set<udp::endpoint>, sys::error_code>
+    tracker_get_peers(NodeID infohash, Async) override;
 
     boost::optional<BencodedValue> immutable_get(NodeID key, Cancel&, asio::yield_context);
 

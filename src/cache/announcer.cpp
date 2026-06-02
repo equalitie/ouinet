@@ -93,7 +93,7 @@ struct Announcer::Loop {
             LOG_DEBUG(_log_path, " Adding ", key, " (already exists)");
             entry_i->first.to_remove = false;
         } else {
-            LOG_DEBUG(_log_path, "Adding ", key);
+            LOG_DEBUG(_log_path, " Adding ", key);
         }
 
         if (already_has_key) return false;
@@ -238,7 +238,7 @@ struct Announcer::Loop {
 
         while (true) {
             for (size_t n = 0; n < _simultaneous_announcements; ++n) {
-                LOG_DEBUG(yield, " Picking entry to update");
+                LOG_DEBUG(yield, " Picking entry to update (", (n + 1), "/", _simultaneous_announcements, ")");
                 auto ei = pick_entry(yield);
                 assert(ei);
 

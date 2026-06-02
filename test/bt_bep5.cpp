@@ -167,7 +167,9 @@ int main(int argc, const char** argv)
                 nc = NodeContact{my_id, ep};
             }
 
-            BencodedMap initial_ping_reply = dht.send_ping(nc, cancel, yield[ec]);
+            BencodedMap initial_ping_reply = compat([&](Async yield) {
+                return dht.send_ping(nc, yield);
+            })(cancel, yield[ec]);
             std::cout << initial_ping_reply << endl;
             if (!initial_ping_reply.empty()) {
                 NodeID their_id = NodeID::from_bytestring(*((*initial_ping_reply["r"].as_map())["id"].as_string()));
@@ -204,7 +206,9 @@ int main(int argc, const char** argv)
 
             auto peers = [&] {
                 Progress p(ctx.get_executor(), "Getting peers");
-                auto ps = dht.tracker_get_peers(infohash, cancel, yield[ec]);
+                auto ps = compat([&](Async yield) {
+                    return dht.tracker_get_peers(infohash, yield);
+                })(cancel, yield[ec]);
                 // Remove martian endpoints (cant't use `remove_if` on sets).
                 for (auto it = ps.begin(); it != ps.end();)
                     if (is_martian(*it))

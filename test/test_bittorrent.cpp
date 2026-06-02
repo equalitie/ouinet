@@ -117,7 +117,9 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
         std::set<udp::endpoint> peers;
 
         for (uint8_t i = 0; i < max_retries; i++) {
-            peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
+            peers = compat([&](Async yield) {
+                return dht.tracker_get_peers(infohash, yield);
+            })(cancel_signal, yield[ec]);
             if (!ec) {
                 break;
             } else {

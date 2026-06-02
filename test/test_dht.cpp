@@ -50,7 +50,7 @@ void init_without_bootstrapping(asio::io_context& ctx, DhtNode& dht_node) {
     });
 
     task::spawn_detached(ctx, [&](auto yield) {
-        dht_node.receive_loop(yield);
+        dht_node.receive_loop(Async(yield));
     });
 }
 

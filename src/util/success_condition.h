@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "async.h"
 #include "condition_variable.h"
 
 namespace ouinet {
@@ -73,6 +74,7 @@ public:
     SuccessCondition& operator=(const SuccessCondition&) = delete;
 
     bool wait_for_success(boost::asio::yield_context yield);
+    bool wait_for_success(Async yield);
 
     Lock lock();
 
@@ -163,6 +165,11 @@ bool SuccessCondition::wait_for_success(boost::asio::yield_context yield)
         wait_state->condition.wait(yield);
     }
     return wait_state->success;
+}
+
+inline
+bool SuccessCondition::wait_for_success(Async yield) {
+    return wait_for_success(yield.asio_yield());
 }
 
 inline

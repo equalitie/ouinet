@@ -94,6 +94,7 @@ private:
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
     const bool _connect_proxy;
+    util::LogPath _log_path;
 
 public:
     Swarm( Bep5Client* owner
@@ -102,7 +103,8 @@ public:
          , size_t capacity
          , SwarmType type
          , Cancel& cancel
-         , bool connect_proxy)
+         , bool connect_proxy
+         , util::LogPath log_path)
         : _owner(owner)
         , _dht(move(dht))
         , _infohash(infohash)
@@ -110,6 +112,7 @@ public:
         , _lifetime_cancel(cancel)
         , _peers(capacity)
         , _connect_proxy(connect_proxy)
+        , _log_path(std::move(log_path))
     {}
 
     ~Swarm() {
@@ -118,10 +121,8 @@ public:
     }
 
     void start() {
-        task::spawn_detached(_dht->get_executor(), [&] (asio::yield_context yield) {
-            Cancel cancel(_lifetime_cancel);
-            sys::error_code ec;
-            loop(cancel, yield[ec]);
+        task::spawn_detached(_dht->get_executor(), [&] (asio::yield_context y) {
+            loop(Async(y, _lifetime_cancel, _log_path));
         });
     }
 
@@ -150,46 +151,33 @@ public:
     AsioExecutor get_executor() { return _dht->get_executor(); }
 
 private:
-    void loop(Cancel& cancel, asio::yield_context yield) {
-        auto ex = _dht->get_executor();
+    void loop(Async yield) {
+        _dht->wait_all_ready(yield);
 
-        {
-            sys::error_code ec;
-            compat([&](Async yield) { _dht->wait_all_ready(yield); })(cancel, yield);
-            return_or_throw_on_error(yield, cancel, ec);
-        }
-
-        while (!cancel) {
-            sys::error_code ec;
-
+        while (true) {
             if (log_debug()) {
-                _DEBUG("Getting peers from swarm ", _infohash);
+                _DEBUG(yield, " Getting peers from swarm ", _infohash);
             }
 
-            auto endpoints = _dht->tracker_get_peers(_infohash, cancel, yield[ec]);
-
-            assert(!cancel || ec == asio::error::operation_aborted);
-
-            if (cancel) break;
-
-            if (ec) {
-                async_sleep(ERROR_WAIT_DURATION, cancel, yield);
+            auto endpoints = _dht->tracker_get_peers(_infohash, yield);
+            if (!endpoints) {
+                async_sleep(ERROR_WAIT_DURATION, yield);
                 continue;
             }
 
             _last_success_time = chrono::steady_clock::now();
 
             if (log_debug()) {
-                _DEBUG("New endpoints: ", endpoints.size());
-                for (auto ep: endpoints) {
-                    _DEBUG("    ", ep);
+                _DEBUG(yield, " New endpoints: ", endpoints->size());
+                for (auto ep: *endpoints) {
+                    _DEBUG(yield, "     ", ep);
                 }
             }
 
-            add_peers(move(endpoints));
+            add_peers(move(*endpoints));
             _wait_condition_locks.clear();
 
-            async_sleep(SUCCESS_WAIT_DURATION, cancel, yield);
+            async_sleep(SUCCESS_WAIT_DURATION, yield);
         }
 
         _wait_condition_locks.clear();
@@ -258,13 +246,15 @@ public:
         , _random_generator(std::random_device()())
         , _helper_announcer(std::make_unique<bt::Bep5ManualAnnouncer>( util::sha1_digest(helper_swarm_name)
                                                                      , dht
-                                                                     , std::move(log_path)))
+                                                                     , log_path))
         , _helper_announcement_enabled(helper_announcement_enabled)
     {
-        task::spawn_detached(_injector_swarm->get_executor(),
-                    [this] (asio::yield_context yield) {
-            loop(Async(yield, _lifetime_cancel));
-        });
+        task::spawn_detached(
+            _injector_swarm->get_executor(),
+            [this, log_path = std::move(log_path)] (asio::yield_context yield) {
+                loop(Async(yield, _lifetime_cancel, std::move(log_path)));
+            }
+        );
     }
 
     ~InjectorPinger() { _lifetime_cancel(); }
@@ -435,18 +425,36 @@ sys::error_code Bep5Client::start(Async yield)
     {
         bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
 
-        _INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
+        _INFO(yield, " Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
-        _injector_swarm.reset(new Swarm(this, infohash, _dht, injector_swarm_capacity, SwarmType::injector, _cancel, false));
+        _injector_swarm.reset(new Swarm(
+            this,
+            infohash,
+            _dht,
+            injector_swarm_capacity,
+            SwarmType::injector,
+            _cancel,
+            false,
+            yield.log_path()
+        ));
         _injector_swarm->start();
     }
 
     if (!_helpers_swarm_name.empty()) {
         bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
 
-        _INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
+        _INFO(yield, " Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
-        _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, SwarmType::helper, _cancel, true));
+        _helpers_swarm.reset(new Swarm(
+            this,
+            infohash,
+            _dht,
+            helper_swarm_capacity,
+            SwarmType::helper,
+            _cancel,
+            true,
+            yield.log_path()
+        ));
         _helpers_swarm->start();
 
         _helpers_swarm->wait_for_ready(yield);

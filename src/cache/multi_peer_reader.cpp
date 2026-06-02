@@ -453,10 +453,7 @@ public:
                 auto sleep = min_sleep;
 
                 while (true) {
-                    auto peer_eps = compat([&](Cancel cancel, asio::yield_context yield) {
-                        return _dht_lookup->get(cancel, yield);
-                    })(yield);
-
+                    auto peer_eps = _dht_lookup->get(yield);
                     if (peer_eps) {
                         LOG_DEBUG(yield, " Peer lookup successful: ", *peer_eps);
 

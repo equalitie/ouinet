@@ -3,6 +3,7 @@
 #include <set>
 #include <string>
 #include <util/async_job.h>
+#include <util/compat.h>
 #include <util/hash.h>
 #include <bittorrent/node_id.h>
 
@@ -28,7 +29,7 @@ protected:
         }
     };
 
-    static Clock::duration timeout() {
+    static Clock::duration timeout_duration() {
 #ifndef NDEBUG // debug
         return std::chrono::minutes(1);
 #else // release
@@ -39,19 +40,18 @@ protected:
 public:
     PeerLookup(PeerLookup&&) = delete;
 
-    PeerLookup(std::string swarm_name, AsioExecutor exec)
+    PeerLookup(std::string swarm_name)
         : _swarm_name(std::move(swarm_name))
         , _infohash(util::sha1_digest(_swarm_name))
-        , _exec(exec)
     { }
 
-    Ret get(Cancel c, asio::yield_context y) {
+    std::expected<Ret, sys::error_code> get(Async yield) {
         // * Start a new job if one isn't already running
         // * Use previously returned result if it's not older than 5mins
         // * Otherwise wait for the running job to finish
 
         if (!_job || !_job->is_running()) {
-            _job = make_job();
+            _job = make_job(yield.get_executor(), yield.log_path());
         }
 
         if (_last_result.is_fresh()) {
@@ -59,19 +59,24 @@ public:
         }
 
 #ifndef NDEBUG
-        auto wd = watch_dog(_exec, timeout() + std::chrono::seconds(5), [&] {
+        auto wd = watch_dog(
+            yield.get_executor(),
+            timeout_duration() + std::chrono::seconds(5),
+            [&] {
                 LOG_ERROR("PeerLookup::get failed to time out");
-            });
+            }
+        );
 #endif
 
-        sys::error_code ec;
-        _job->wait_for_finish(c, y[ec]);
-        return_or_throw_on_error(y, c, ec, Ret{});
+        compat([&](Cancel cancel, asio::yield_context yield) {
+            _job->wait_for_finish(cancel, yield);
+        })(yield);
 
-        // (ec == operation_aborted) implies (c == true)
-        assert(_last_result.ec != asio::error::operation_aborted || c);
-
-        return or_throw(y, _last_result.ec, _last_result.value);
+        if (_last_result.ec) {
+            return std::unexpected(_last_result.ec);
+        } else {
+            return _last_result.value;
+        }
     }
 
     NodeID infohash() const {
@@ -84,42 +89,49 @@ public:
 
 protected:
     // Children implement this to perform the actual peer lookup.
-    virtual Ret do_lookup(Cancel& c, asio::yield_context y) = 0;
+    virtual std::expected<Ret, sys::error_code> do_lookup(Async) = 0;
 
     // Used in log messages to identify the lookup strategy
     const char* _lookup_strategy_name = "Generic PeerLookup";
 
 private:
 
-    std::unique_ptr<Job> make_job() {
-        auto job = std::make_unique<Job>(_exec);
+    std::unique_ptr<Job> make_job(AsioExecutor exec, util::LogPath log_path) {
+        auto job = std::make_unique<Job>(exec);
 
-        job->start([this] (Cancel c, asio::yield_context y) mutable {
-            auto wd = watch_dog(_exec, timeout(), [&] {
-                    LOG_WARN(_lookup_strategy_name, " lookup ",
-                             _infohash, " timed out");
-                    c();
-                });
+        job->start(
+            [this, log_path = std::move(log_path)]
+            (Cancel cancel, asio::yield_context y) mutable {
+                Async yield(y, cancel, std::move(log_path));
 
-            sys::error_code ec;
+                auto result = timeout(
+                    timeout_duration(),
+                    [&](Async yield) { return do_lookup(yield); },
+                    yield
+                );
 
-            auto result = do_lookup(c, y[ec]);
+                if (!result) {
+                    if (result.error() == asio::error::timed_out) {
+                        LOG_WARN(yield, _lookup_strategy_name, " lookup ",
+                                        _infohash, " timed out");
+                    }
 
-            if (!c && !ec) {
-                _last_result.ec    = ec;
-                _last_result.value = std::move(result);
-                _last_result.time  = Clock::now();
+                    return or_throw(yield.asio_yield(), result.error(), boost::none);
+                }
+
+                _last_result.ec = sys::error_code();
+                _last_result.value = std::move(result).value();
+                _last_result.time = Clock::now();
+
+                return boost::none;
             }
-
-            return or_throw(y, ec, boost::none);
-        });
+        );
 
         return job;
     }
 
     std::string _swarm_name;
     NodeID _infohash;
-    AsioExecutor _exec;
     std::unique_ptr<Job> _job;
     Result _last_result;
 };
