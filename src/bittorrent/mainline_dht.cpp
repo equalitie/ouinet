@@ -1013,7 +1013,7 @@ void DhtNode::store_contacts_loop(Async yield)
 
 std::string DhtNode::new_transaction_string()
 {
-#if 1 // Useful for debugging
+#if 0 // Useful for debugging
     std::ostringstream ss;
     ss << _next_transaction_id++;
     return ss.str();

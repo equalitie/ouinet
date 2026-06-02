@@ -65,8 +65,7 @@ public:
 
     Async tag(std::string t)
     {
-        // FIXME: pass _cancel
-        return Async(_asio_yield, _log_path.tag(std::move(t)));
+        return Async(_asio_yield, _cancel, _log_path.tag(std::move(t)));
     }
 
     util::LogPath log_path() const {
@@ -85,7 +84,7 @@ public:
               log_path = _log_path.tag("spawn")
             ]
             (asio::yield_context yield) mutable {
-                lambda(Async(yield, std::move(cancel), log_path));
+                lambda(Async(yield, std::move(cancel), std::move(log_path)));
             });
     }
 
