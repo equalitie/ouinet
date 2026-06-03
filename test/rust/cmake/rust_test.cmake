@@ -9,7 +9,8 @@ function(add_rust_test name)
     set(include_dirs
         "$<JOIN:$<TARGET_PROPERTY:ouinet_test,INTERFACE_INCLUDE_DIRECTORIES>,$<COMMA>>"
     )
-    set(libs ouinet_test ouinet_asio)
+
+    set(libs ouinet_test ouinet_asio boost_filesystem)
     list(JOIN libs "," libs)
 
     set(lib_dirs ${CMAKE_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR})

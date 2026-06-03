@@ -144,24 +144,18 @@ endif()
 
 ######################################################################
 
-# Static library containing everything needed for the tests written in rust which are defined below.
-add_library(ouinet_test STATIC
-    $<TARGET_OBJECTS:ouinet_common>
-    $<TARGET_OBJECTS:ouinet_client>
-    $<TARGET_OBJECTS:ouinet_injector>
-)
+# Test-only library containing everything needed for the tests written in rust.
+add_library(ouinet_test SHARED)
 target_link_libraries(ouinet_test
-    ouinet_asio
-    ouinet_i2p
-    ouinet_rs
-    asio_utp
-    cpp_upnp
-    Boost::nowide
-    Boost::process
-    Boost::filesystem
-    Boost::url
-    Boost::iostreams
-    Boost::program_options
+        ouinet_common
+        ouinet_client
+        ouinet_injector
+        asio_utp
+        cpp_upnp
+        Boost::url
+        Boost::iostreams
+        Boost::filesystem
+        Boost::program_options
 )
 
 include(rust/cmake/rust_test.cmake)
