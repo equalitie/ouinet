@@ -1,6 +1,6 @@
 #include "mock_dht.h"
-#include "debug/set.h"
 #include "util/cancel.h"
+#include "util/debug.h"
 
 namespace ouinet::bittorrent {
 
@@ -33,10 +33,14 @@ void MockDht::set_endpoints(const std::set<UdpEndpoint>& eps) {
     _local_endpoints = eps;
 }
 
-UdpEndpoint MockDht::add_endpoint(asio_utp::udp_multiplexer m, asio::yield_context) {
+Promise<UdpEndpoint>::Future MockDht::add_endpoint(asio_utp::udp_multiplexer m) {
     _local_endpoints.insert(m.local_endpoint());
     std::cout << _name << ": add_endpoint to " << m.local_endpoint() << "\n";
-    return m.local_endpoint();
+
+    Promise<UdpEndpoint> promise(_exec);
+    promise.set_value(m.local_endpoint());
+
+    return promise.get_future();
 }
 
 std::set<UdpEndpoint> MockDht::local_endpoints() const {
@@ -61,11 +65,10 @@ std::set<UdpEndpoint> MockDht::Swarm::endpoints(const std::set<std::string>& no_
 /*
  * TODO: announce() and put() functions don't have any real error detection.
  */
-std::set<UdpEndpoint> MockDht::tracker_announce(
+std::expected<std::set<UdpEndpoint>, sys::error_code> MockDht::tracker_announce(
     NodeID infohash,
-    boost::optional<int> port,
-    Cancel,
-    asio::yield_context
+    std::optional<int> port,
+    Async
 ) {
     std::set<UdpEndpoint> my_endpoints;
 
@@ -85,7 +88,8 @@ std::set<UdpEndpoint> MockDht::tracker_announce(
     return (*_swarms)[infohash].endpoints(_no_see_filter);
 }
 
-std::set<UdpEndpoint> MockDht::tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) {
+std::expected<std::set<UdpEndpoint>, sys::error_code>
+MockDht::tracker_get_peers(NodeID infohash, Async) {
     auto swarm_i = _swarms->find(infohash);
     if (swarm_i == _swarms->end()) {
         std::cout << _name << ": get " << infohash << " -> {} (no such swarm)\n";
@@ -115,7 +119,7 @@ bool MockDht::is_bootstrapped() const {
     return true;
 }
 
-void MockDht::wait_all_ready(Cancel&, asio::yield_context) {
+void MockDht::wait_all_ready(Async) {
 }
 
 void MockDht::stop() {

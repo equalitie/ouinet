@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <chrono>
 #include <constants.h>
+#include <util/compat.h>
 #include <util/hash.h>
 
 #define private public
@@ -49,7 +50,7 @@ void init_without_bootstrapping(asio::io_context& ctx, DhtNode& dht_node) {
     });
 
     task::spawn_detached(ctx, [&](auto yield) {
-        dht_node.receive_loop(yield);
+        dht_node.receive_loop(Async(yield));
     });
 }
 
@@ -71,10 +72,9 @@ void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
             Clock::time_point now;
 
             start = Clock::now();
-            auto r = dht_node.bootstrap_single(
-                    bs,
-                    dht_node._cancel,
-                    yield[ec]);
+            auto r = compat([&](Async yield) {
+                return dht_node.bootstrap_single(bs, yield);
+            })(dht_node._cancel, yield[ec]);
             now = Clock::now();
             auto elapsed = duration_cast<seconds>(now - start).count();
 
@@ -109,7 +109,15 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
     auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4(), dns_resolver, rx_limit);
+    DhtNode dht_node(
+        ctx.get_executor(),
+        metrics_dht.dht_node_ipv4(),
+        dns_resolver,
+        rx_limit,
+        {},
+        {},
+        {}
+    );
 
     init_without_bootstrapping(ctx, dht_node);
     bootstrap(ctx, dht_node);

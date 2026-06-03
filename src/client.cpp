@@ -282,7 +282,10 @@ public:
                                                       , _dns_resolver
                                                       , _config.udp_mux_rx_limit_in_bytes()
                                                       , _config.repo_root() / "dht"
-                                                      , _config.bt_bootstrap_extras());
+                                                      , bt::bootstrap::Config()
+                                                          .with_default(!_config.bt_bootstrap_no_default())
+                                                          .with_extras(_config.bt_bootstrap_extras())
+                                                      , _log_path.tag("dht"));
         }
 
 
@@ -318,16 +321,19 @@ public:
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         task::spawn_detached(_ctx, ([
             bt_dht,
-            executor = _ctx.get_executor(),
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
             upnps = _upnps_ptr
-        ] (asio::yield_context yield) mutable {
-            sys::error_code ec;
-            auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
-            if (ec || shutdown_signal) return;
-            State::setup_upnp(executor, ext_ep.port(), local_ep, upnps);
+        ] (auto y) mutable {
+            Async yield(y, shutdown_signal);
+
+            auto ext_ep = bt_dht->add_endpoint(move(m)).wait(yield);
+            if (!ext_ep) {
+                return;
+            }
+
+            State::setup_upnp(yield.get_executor(), ext_ep->get().port(), local_ep, upnps);
         }));
 
         _bt_dht = move(bt_dht);
@@ -3137,9 +3143,13 @@ void Client::State::setup_injector(asio::yield_context yield)
             return or_throw(yield, ec = asio::error::operation_not_supported);
         }
 
-        _bep5_client = make_shared<ouiservice::Bep5Client>
-                (dht, ep->value, *bridge_swarm_name, _config.is_bridge_announcement_enabled(),
-                 &inj_ctx);
+        _bep5_client = make_shared<ouiservice::Bep5Client>(
+            dht,
+            ep->value,
+            *bridge_swarm_name,
+            _config.is_bridge_announcement_enabled(),
+            &inj_ctx
+        );
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 

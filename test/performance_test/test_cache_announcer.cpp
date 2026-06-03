@@ -34,7 +34,7 @@ void start_btdht(asio::io_context& ctx, BtUtils& btu) {
 
 void start_announcer_loop(asio::io_context& ctx) {
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        announcer = std::make_unique<Bep5Announcer>(btdht, TEST_SIMULTANEOUS_ANNOUNCEMENTS);
+        announcer = std::make_unique<Bep5Announcer>(btdht, TEST_SIMULTANEOUS_ANNOUNCEMENTS, util::LogPath{});
 
         start = Clock::now();
         for (size_t n = 0; n < N_GROUPS; n++) {

@@ -16,7 +16,9 @@
 #include "cxx/metrics.h"
 #include "dht.h"
 
+#include "../util/condition_variable.h"
 #include "../util/executor.h"
+#include "../util/log_path.h"
 #include "../namespaces.h"
 
 namespace ouinet {
@@ -48,8 +50,9 @@ class MainlineDht : public DhtBase {
                , metrics::MainlineDht
                , std::shared_ptr<dns::Resolver>
                , uint32_t mux_rx_limit
-               , boost::filesystem::path storage_dir = {}
-               , std::set<bootstrap::Address> extra_bs = {});
+               , boost::filesystem::path storage_dir
+               , bootstrap::Config bs
+               , util::LogPath);
 
     MainlineDht(const MainlineDht&) = delete;
     MainlineDht& operator=(const MainlineDht&) = delete;
@@ -61,9 +64,7 @@ class MainlineDht : public DhtBase {
     // you may want to check `local_endpoints()` after this operation.
     void set_endpoints(const std::set<udp::endpoint>&) override;
 
-    void add_endpoint(asio_utp::udp_multiplexer);
-
-    udp::endpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context) override;
+    Promise<udp::endpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
     std::set<udp::endpoint> local_endpoints() const override {
         std::set<udp::endpoint> ret;
@@ -73,19 +74,13 @@ class MainlineDht : public DhtBase {
 
     std::set<udp::endpoint> wan_endpoints() const override;
 
-    /*
-     * TODO: announce() and put() functions don't have any real error detection.
-     */
-    std::set<udp::endpoint> tracker_announce(
-        NodeID infohash,
-        boost::optional<int> port,
-        Cancel,
-        asio::yield_context
-    ) override;
+    std::expected<std::set<udp::endpoint>, sys::error_code>
+    tracker_announce(NodeID infohash, std::optional<int> port, Async) override;
 
     void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
 
-    std::set<udp::endpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) override;
+    std::expected<std::set<udp::endpoint>, sys::error_code>
+    tracker_get_peers(NodeID infohash, Async) override;
 
     boost::optional<BencodedValue> immutable_get(NodeID key, Cancel&, asio::yield_context);
 
@@ -112,7 +107,7 @@ class MainlineDht : public DhtBase {
         return !local_endpoints().empty() && all_ready();
     }
 
-    void wait_all_ready(Cancel&, asio::yield_context) override;
+    void wait_all_ready(Async) override;
 
     void stop() override;
 
@@ -121,12 +116,14 @@ class MainlineDht : public DhtBase {
     private:
     AsioExecutor _exec;
     std::map<udp::endpoint, std::unique_ptr<DhtNode>> _nodes;
+    ConditionVariable _ready_cv; // notified every time a node becomes ready
     Cancel _cancel;
     std::shared_ptr<dns::Resolver> _dns_resolver;
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
-    std::set<bootstrap::Address> _extra_bs;
+    bootstrap::Config _bootstrap_config;
     metrics::MainlineDht _metrics;
+    util::LogPath _log_path;
 };
 
 } // namespace ouinet::bittorrent

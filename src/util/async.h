@@ -65,7 +65,7 @@ public:
 
     Async tag(std::string t)
     {
-        return Async(_asio_yield, _log_path.tag(std::move(t)));
+        return Async(_asio_yield, _cancel, _log_path.tag(std::move(t)));
     }
 
     util::LogPath log_path() const {
@@ -84,7 +84,7 @@ public:
               log_path = _log_path.tag("spawn")
             ]
             (asio::yield_context yield) mutable {
-                lambda(Async(yield, std::move(cancel), log_path));
+                lambda(Async(yield, std::move(cancel), std::move(log_path)));
             });
     }
 
@@ -186,7 +186,7 @@ namespace boost::asio {
     class async_result<ouinet::Async, Signature> {
     public:
         using return_type = typename detail::ReturnType<Signature>::type;
-    
+
         template<typename Initiation, typename... Args>
         requires(!std::same_as<return_type, void>)
         static return_type
@@ -221,7 +221,7 @@ namespace boost::asio {
         async_initiate_impl(Initiation&& initiation, const ouinet::Async& token, Args&&... args)
         {
             auto asio_yield = token._asio_yield;
-    
+
             using OurSig = typename detail::ChangeSig<Signature>::type;
 
             return async_initiate<yield_context, OurSig>(

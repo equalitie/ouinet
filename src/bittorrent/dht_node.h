@@ -6,6 +6,7 @@
 #include <boost/filesystem/path.hpp>
 
 #include <chrono>
+#include <type_traits>
 #include <vector>
 #include <set>
 
@@ -23,6 +24,7 @@
 #include "dht.h"
 
 #include "../namespaces.h"
+#include "../util/async.h"
 #include "../util/sign.h"
 #include "../util/cancel.h"
 #include "../util/wait_condition.h"
@@ -70,11 +72,13 @@ class DhtNode {
            , metrics::DhtNode
            , std::shared_ptr<dns::Resolver>
            , uint32_t mux_rx_limit
-           , boost::filesystem::path storage_dir = {}
-           , std::set<bootstrap::Address> extra_bs = {});
+           , boost::filesystem::path storage_dir
+           , bootstrap::Config bs
+           , util::LogPath
+    );
 
-    void start(udp::endpoint, asio::yield_context yield);
-    void start(asio_utp::udp_multiplexer, asio::yield_context yield);
+    std::expected<void, sys::error_code> start(udp::endpoint, Async yield);
+    std::expected<void, sys::error_code> start(asio_utp::udp_multiplexer, Async yield);
     void stop();
 
     /**
@@ -89,10 +93,9 @@ class DhtNode {
      * Query peers for a bittorrent swarm surrounding a particular infohash.
      * This returns a randomized subset of all such peers, not the entire swarm.
      */
-    std::set<udp::endpoint> tracker_get_peers(
+    std::expected<std::set<udp::endpoint>, sys::error_code> tracker_get_peers(
         NodeID infohash,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
     /**
@@ -106,23 +109,18 @@ class DhtNode {
      *
      * TODO: [ruud] I am not clear to what degree this is actually followed in practice.
      */
-    std::set<udp::endpoint> tracker_announce(
+    std::expected<std::set<udp::endpoint>, sys::error_code> tracker_announce(
         NodeID infohash,
-        boost::optional<int> port,
-        Cancel&,
-        asio::yield_context
+        std::optional<int> port,
+        Async
     );
 
     /**
      * Search the DHT for BEP-44 immutable data item with key $key.
-     * @return The data stored in the DHT under $key, or boost::none if no such
+     * @return The data stored in the DHT under $key, or nullopt if no such
      *         data was found.
      */
-    boost::optional<BencodedValue> data_get_immutable(
-        const NodeID& key,
-        Cancel&,
-        asio::yield_context
-    );
+    std::optional<BencodedValue> data_get_immutable(const NodeID& key, Async);
 
     /**
      * Store $data in the DHT as a BEP-44 immutable data item.
@@ -165,10 +163,9 @@ class DhtNode {
     );
 
     // http://bittorrent.org/beps/bep_0005.html#ping
-    BencodedMap send_ping(
+    std::expected<BencodedMap, sys::error_code> send_ping(
         NodeContact contact,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
     void send_ping(NodeContact contact);
@@ -178,29 +175,26 @@ class DhtNode {
         NodeID target_id,
         Contact node,
         std::vector<NodeContact>& closer_nodes,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
-    bool query_find_node2(
+    std::expected<bool, sys::error_code> query_find_node2(
         NodeID target_id,
         Contact node,
         util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dead_man_switch,
         DebugCtx* dbg,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
     // http://bittorrent.org/beps/bep_0005.html#get-peers
-    boost::optional<BencodedMap> query_get_peers(
+    std::optional<BencodedMap> query_get_peers(
         NodeID infohash,
         Contact node,
         util::AsyncQueue<NodeContact>& closer_nodes,
         WatchDog& dms,
         DebugCtx* dbg,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
     bool is_v4() const { return _local_endpoint.address().is_v4(); }
@@ -216,46 +210,45 @@ class DhtNode {
     NodeID node_id() const { return _node_id; }
 
     private:
-    void receive_loop(asio::yield_context);
-    void store_contacts_loop(asio::yield_context);
+    void receive_loop(Async);
+    void store_contacts_loop(Async);
 
-    void send_datagram(
+    std::expected<void, sys::error_code> send_datagram(
         udp::endpoint destination,
         const BencodedMap& query_arguments,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
-    void send_query(
+    std::expected<void, sys::error_code> send_query(
         udp::endpoint destination,
         std::string transaction,
         std::string query_type,
         BencodedMap query_arguments,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
-    BencodedMap send_query_await_reply(
+    std::expected<BencodedMap, sys::error_code> send_query_await_reply(
         Contact,
         const std::string& query_type,
         const BencodedMap& query_arguments,
         WatchDog* dms,
         DebugCtx* dbg,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
     void handle_query(udp::endpoint sender, BencodedMap& query, Cancel cancel, asio::yield_context);
 
-    void bootstrap(asio::yield_context);
+    std::expected<void, sys::error_code> bootstrap(Async);
 
     struct BootstrapResult {
         asio::ip::udp::endpoint my_ep;
         asio::ip::udp::endpoint node_ep;
     };
 
-    BootstrapResult
-    bootstrap_single(bootstrap::Address, Cancel, asio::yield_context);
+    friend std::ostream& operator << (std::ostream&, const BootstrapResult&);
+
+    std::expected<BootstrapResult, sys::error_code>
+    bootstrap_single(bootstrap::Address, Async);
 
     std::vector<NodeContact> find_closest_nodes(
         NodeID target_id,
@@ -265,13 +258,12 @@ class DhtNode {
 
     std::string new_transaction_string();
 
-    void send_write_query(
+    std::expected<void, sys::error_code> send_write_query(
         udp::endpoint destination,
         NodeID destination_id,
         const std::string& query_type,
         const BencodedMap& query_arguments,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
     // http://bittorrent.org/beps/bep_0044.html#get-message
@@ -310,23 +302,30 @@ class DhtNode {
         asio::ip::udp::endpoint node_endpoint;
         std::string announce_token;
     };
-    void tracker_do_search_peers(
+    std::expected<void, sys::error_code> tracker_do_search_peers(
         NodeID infohash,
         std::set<udp::endpoint>& peers,
         std::map<NodeID, TrackerNode>& responsible_nodes,
-        Cancel&,
-        asio::yield_context
+        Async
     );
 
     static bool closer_to(const NodeID& reference, const NodeID& left, const NodeID& right);
 
     template<class Evaluate>
-    void collect(
+    requires
+        std::invocable<
+            Evaluate,
+            const Contact&,
+            WatchDog&,
+            util::AsyncQueue<NodeContact>&,
+            Async
+        >
+    std::expected<void, sys::error_code>
+    collect(
         DebugCtx&,
         const NodeID& target,
         Evaluate&&,
-        Cancel,
-        asio::yield_context
+        Async
     );
 
     fs::path stored_contacts_path() const;
@@ -362,8 +361,9 @@ class DhtNode {
     std::shared_ptr<dns::Resolver> _dns_resolver;
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
-    std::set<bootstrap::Address> _extra_bs;
+    bootstrap::Config _bootstrap_config;
     metrics::DhtNode _metrics;
+    util::LogPath _log_path;
 };
 
 } // namespace ouinet::bittorent

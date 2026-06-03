@@ -851,6 +851,7 @@ Injector::Injector(
         asio::io_context& ctx,
         util::LogPath log_path,
         std::shared_ptr<bittorrent::MockDht> dht) :
+    _exec(ctx.get_executor()),
     _config(std::move(config)),
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
     _inner(std::make_unique<Inner>())
@@ -868,21 +869,19 @@ Injector::Injector(
         , _config.repo_root() / OUINET_TLS_KEY_FILE
         , _config.repo_root() / OUINET_TLS_DH_FILE );
 
-    AsioExecutor ex = ctx.get_executor();
-
     if (!_config.is_proxy_enabled())
-        LOG_INFO(log_path, "Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+        LOG_INFO(log_path, " Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = _config.target_rx())
-        LOG_INFO(log_path, "Target URIs restricted to regular expression: ", *target_rx_o);
+        LOG_INFO(log_path, " Target URIs restricted to regular expression: ", *target_rx_o);
     if (_config.is_private_target_allowed()) {
-        LOG_INFO(log_path, "Allowing injection of private targets.");
+        LOG_INFO(log_path, " Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
     LOG_INFO( "DNS protocols enabled: ["
             , dns::Resolver::protos_to_str(_config.dns_config().protocols)
             , "].");
 
-    auto proxy_server = std::make_unique<OuiServiceServer>(ex);
+    auto proxy_server = std::make_unique<OuiServiceServer>(_exec);
 
     if (_config.tcp_endpoint()) {
         tcp::endpoint endpoint = *_config.tcp_endpoint();
@@ -891,7 +890,7 @@ Injector::Injector(
         util::create_state_file( _config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
 
-        proxy_server->add(make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint));
+        proxy_server->add(make_unique<ouiservice::TcpOuiServiceServer>(_exec, endpoint));
     }
 
     _ssl_context = std::make_unique<asio::ssl::context>(
@@ -906,18 +905,18 @@ Injector::Injector(
         util::create_state_file( _config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
-        auto base = make_unique<ouiservice::TcpOuiServiceServer>(ex, endpoint);
-        proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *_ssl_context));
+        auto base = make_unique<ouiservice::TcpOuiServiceServer>(_exec, endpoint);
+        proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, move(base), *_ssl_context));
     }
 
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
-        LOG_INFO(log_path, "uTP address: ", endpoint);
+        LOG_INFO(log_path, " uTP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint);
         proxy_server->add(move(srv));
     }
 
@@ -925,15 +924,15 @@ Injector::Injector(
 
         udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, endpoint);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint);
 
         auto local_ep = base->local_endpoint();
 
         if (local_ep) {
-            LOG_INFO(log_path, "uTP/TLS address: ", *local_ep);
+            LOG_INFO(log_path, " uTP/TLS address: ", *local_ep);
             util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
-            proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *_ssl_context));
+            proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, move(base), *_ssl_context));
 
         } else {
             LOG_ERROR(log_path, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
@@ -944,12 +943,15 @@ Injector::Injector(
         _dht = dht;
     } else {
         _dht = std::make_shared<bt::MainlineDht>
-            ( ex
+            ( _exec
             , metrics::Client::noop().mainline_dht()
             , _dns_resolver
             , config.udp_mux_rx_limit_in_bytes()
-            , fs::path{}
-            , _config.bt_bootstrap_extras());  // default storage dir
+            , fs::path{}  // default storage dir
+            , bt::bootstrap::Config()
+                .with_default(!_config.bt_bootstrap_no_default())
+                .with_extras(_config.bt_bootstrap_extras())
+            , log_path.tag("dht"));
     }
 
 
@@ -960,8 +962,12 @@ Injector::Injector(
     if (_dht->local_endpoints().empty())
         LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
 
-    proxy_server->add(make_unique<ouiservice::Bep5Server>
-            (_dht, _ssl_context.get(), _config.bep5_injector_swarm_name()));
+    proxy_server->add(make_unique<ouiservice::Bep5Server>(
+        _dht,
+        _ssl_context.get(),
+        _config.bep5_injector_swarm_name(),
+        log_path
+    ));
 
     if (_config.listen_on_i2p()) {
         struct Server : public OuiServiceImplementationServer {
@@ -970,7 +976,7 @@ Injector::Injector(
             }
 
             void stop_listen() { _cancel(); }
-        
+
             std::expected<GenericStream, sys::error_code> accept(Async yield) override {
                 auto future_result = _session_future.wait(yield);
 
@@ -1005,7 +1011,7 @@ Injector::Injector(
             util::LogPath _log_path;
         };
 
-        _inner->_i2p_session_future = create_i2p_session(_cancel, log_path, ex);
+        _inner->_i2p_session_future = create_i2p_session(_cancel, log_path, _exec);
 
         proxy_server->add(std::make_unique<Server>(
             *_inner->_i2p_session_future,
@@ -1016,7 +1022,7 @@ Injector::Injector(
 
     LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
-    task::spawn_detached(ex, [
+    task::spawn_detached(_exec, [
         this,
         proxy_server = std::move(proxy_server),
         cancel = _cancel,

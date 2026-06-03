@@ -176,7 +176,11 @@ struct Client::Impl {
         if (_dht || _bep5_announcer) return false;
 
         _dht = move(dht);
-        _bep5_announcer = std::make_unique<Bep5Announcer>(_dht, simultaneous_announcements);
+        _bep5_announcer = std::make_unique<Bep5Announcer>(
+            _dht,
+            simultaneous_announcements,
+            _log_path.tag("announcer")
+        );
 
         // Announce all groups.
         for (auto& group_name : _groups->groups())
@@ -496,8 +500,6 @@ struct Client::Impl {
                 , resource_key
                 , _cache_pk
                 , move(local_peers)
-                , _dht->local_endpoints()
-                , _dht->wan_endpoints()
                 , move(peer_lookup_)
                 , _newest_proto_seen
                 , log_path);
