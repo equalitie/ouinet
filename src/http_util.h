@@ -138,8 +138,9 @@ http_reply( StreamOut& out
 }
 
 template<class StreamOut, class Response>
+[[nodiscard]]
 inline
-std::expected<void, sys::error_code>
+sys::error_code
 http_reply( StreamOut& out
           , const Response& rs
           , Async yield)
@@ -147,11 +148,10 @@ http_reply( StreamOut& out
     auto wd = watch_dog( out.get_executor(), default_timeout::http_send_simple()
                        , [&] { out.close(); });
 
-    sys::error_code ec;
     auto r = http::async_write(out, rs, yield);
-    if (!wd.is_running()) return std::unexpected(asio::error::timed_out);
-    if (!r.has_value()) return std::unexpected(r.error());
-    return std::expected<void, sys::error_code>();
+    if (!wd.is_running()) return asio::error::timed_out;
+    if (!r.has_value()) return r.error();
+    return sys::error_code();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

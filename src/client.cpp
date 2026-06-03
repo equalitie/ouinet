@@ -668,41 +668,38 @@ private:
 };
 
 //------------------------------------------------------------------------------
-template<class Resp, class Token>
+template<class Token>
 static
-void handle_http_error( GenericStream& con
-                      , Resp& res
-                      , Token yield)
+auto send_error_response( GenericStream& con
+                        , bool keep_alive
+                        , http::status status
+                        , const string& message
+                        , Token yield)
 {
-    LOG_DEBUG(yield, " === Sending back response ===");
-    LOG_DEBUG(yield, " ", res);
+    auto res = util::http_error( keep_alive, status
+                               , OUINET_CLIENT_SERVER_STRING
+                               , "", message);
 
-    util::http_reply(con, res, yield);
+    LOG_DEBUG(yield, "=== Sending back response ===");
+    LOG_DEBUG(yield, res);
+
+    return util::http_reply(con, res, yield);
 }
 
 template<class Token>
 static
-void handle_bad_request( GenericStream& con
+auto handle_bad_request( GenericStream& con
                        , bool keep_alive
                        , const string& message
                        , Token yield)
 {
-    auto res = util::http_error( keep_alive, http::status::bad_request
-                               , OUINET_CLIENT_SERVER_STRING
-                               , "", message);
-    return handle_http_error(con, res, yield);
+    return send_error_response(con, keep_alive, http::status::bad_request, message, yield);
 }
 
 //------------------------------------------------------------------------------
 void
 Client::State::serve_peer_request(GenericStream con, Async yield)
 {
-    assert(_cache);
-    if (!_cache) {
-        LOG_WARN(yield, " Received uTP request, but cache is not initialized");
-        return;
-    }
-
     Cancel cancel = _shutdown_signal;
     auto cancel_slot = cancel.connect([&] { con.close(); });
 
@@ -731,6 +728,14 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
         }
 
         if (auto* cache_req = std::get_if<PeerCacheRequest>(&req)) {
+            if (!_cache) {
+                LOG_WARN(yield, " Received uTP request, but cache is not initialized");
+                auto ec = send_error_response(con, cache_req->keep_alive(), http::status::not_found
+                                             , "cache not initialized", yield);
+                if (ec || !cache_req->keep_alive()) return;
+                continue;
+            }
+
             auto keep_alive = _cache->serve_local(
                         *cache_req,
                         con,
@@ -748,8 +753,8 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
         auto cyield = yield.tag("connect");
 
         if (!connect_req) {
-            return handle_bad_request( con, false, "Invalid request"
-                                     , cyield.tag("invalid request"));
+            handle_bad_request( con, false, "Invalid request", cyield.tag("invalid request"));
+            return;
         }
 
         LOG_DEBUG(cyield, " Client: Received uTP/CONNECT request");
@@ -757,16 +762,18 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
         // Connect to the injector and tunnel the transaction through it
 
         if (!_bep5_client) {
-            return handle_bad_request( con, false, "No known injectors"
-                                     , cyield.tag("handle_no_injectors_error"));
+            handle_bad_request( con, false, "No known injectors"
+                              , cyield.tag("handle_no_injectors_error"));
+            return;
         }
 
         auto inj = _bep5_client->connect( cyield.tag("connect_to_injector")
                                         , false, ouiservice::Bep5Client::injectors);
 
         if (!inj.has_value()) {
-            return handle_bad_request( con, false, "Failed to connect to injector"
-                                     , cyield.tag("handle_injector_unreachable"));
+            handle_bad_request( con, false, "Failed to connect to injector"
+                              , cyield.tag("handle_injector_unreachable"));
+            return;
         }
 
         // Send the client an OK message indicating that the tunnel
@@ -783,8 +790,8 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
             LOG_DEBUG(cyield, " END; ec=", ec, " fwd_bytes_c2i=", fwd_bytes_c2i, " fwd_bytes_i2c=", fwd_bytes_i2c);
         });
 
-        auto reply_r = util::http_reply(con, res, cyield.tag("write_res"));
-        if (!reply_r.has_value()) return;
+        ec = util::http_reply(con, res, cyield.tag("write_res"));
+        if (ec) return;
 
         // Forward the rest of data in both directions.
         ec = full_duplex(
@@ -2479,7 +2486,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
                 // but for the moment we only accept proxy requests.
                 sys::error_code ec_;
                 handle_bad_request(con, req.keep_alive(), "Not a proxy request", yield[ec_]);
-                if (req.keep_alive()) continue;
+                if (!ec_ && req.keep_alive()) continue;
                 else break;
             }
         }
@@ -2490,11 +2497,10 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
                 auto message = "The request is missing a valid "
                     + std::string(header_key)
                     + " HTTP header\n";
-                auto res = util::http_error( req.keep_alive(), http::status::unauthorized
-                                            , OUINET_CLIENT_SERVER_STRING
-                                            , "", message);
-                handle_http_error(con, res, yield);
-                break;
+                sys::error_code ec_;
+                send_error_response(con, req.keep_alive(), http::status::unauthorized, message, yield[ec_]);
+                if (!ec_ && req.keep_alive()) continue;
+                else break;
             }
         }
 
@@ -2503,7 +2509,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         if (!util::req_ensure_host(req)) {
             sys::error_code ec_;
             handle_bad_request(con, req.keep_alive(), "Invalid or missing host in request", yield[ec_]);
-            if (req.keep_alive()) continue;
+            if (!ec_ && req.keep_alive()) continue;
             else break;
         }
 
