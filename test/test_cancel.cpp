@@ -262,3 +262,14 @@ BOOST_AUTO_TEST_CASE(code) {
         BOOST_REQUIRE_EQUAL(c1.error_code(), asio::error::operation_aborted);
     }
 }
+
+BOOST_AUTO_TEST_CASE(connection) {
+    Cancel c;
+    bool cancelled = false;
+    auto con = c.connect([&]() {
+        cancelled = true;
+    });
+    BOOST_REQUIRE_EQUAL(cancelled, false);
+    c();
+    BOOST_REQUIRE_EQUAL(cancelled, true);
+}

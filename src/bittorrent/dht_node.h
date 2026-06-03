@@ -303,6 +303,7 @@ class OUINET_COMMON_API DhtNode {
         asio::ip::udp::endpoint node_endpoint;
         std::string announce_token;
     };
+
     std::expected<void, sys::error_code> tracker_do_search_peers(
         NodeID infohash,
         std::set<udp::endpoint>& peers,

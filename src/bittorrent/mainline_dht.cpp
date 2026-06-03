@@ -1930,30 +1930,14 @@ DhtNode::collect(
         seed_candidates.insert({ ep, boost::none });
     }
 
-    return compat([&](Cancel cancel, asio::yield_context yield) {
-        ::ouinet::bittorrent::collect(
-            dbg,
-            _exec,
-            std::move(seed_candidates),
-            [
-                evaluate = std::forward<Evaluate>(evaluate)
-            ]
-            (
-                const Contact& candidate,
-                WatchDog& dms,
-                util::AsyncQueue<NodeContact>& closer_nodes,
-                Cancel cancel,
-                asio::yield_context yield
-            )
-            {
-                compat([&](Async yield) {
-                    evaluate(candidate, dms, closer_nodes, yield);
-                })(cancel, yield);
-            },
-            cancel,
-            yield
-        );
-    })(yield);
+    ::ouinet::bittorrent::collect(
+        dbg,
+        std::move(seed_candidates),
+        std::forward<Evaluate>(evaluate),
+        yield
+    );
+
+    return {};
 }
 
 std::vector<NodeContact> DhtNode::find_closest_nodes(

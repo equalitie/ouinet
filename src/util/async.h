@@ -85,7 +85,8 @@ public:
             _asio_yield.get_executor(),
             [ lambda = std::move(lambda),
               cancel = std::move(cancel),
-              log_path = _log_path.tag("spawn")
+              // log_path = _log_path.tag("spawn")
+              log_path = _log_path
             ]
             (asio::yield_context yield) mutable {
                 lambda(Async(yield, std::move(cancel), std::move(log_path)));
