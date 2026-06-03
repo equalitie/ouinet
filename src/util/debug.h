@@ -2,6 +2,7 @@
 
 #include <ostream>
 #include <expected>
+#include <map>
 #include <set>
 
 namespace ouinet {
@@ -57,6 +58,23 @@ std::ostream& operator<<(std::ostream& os, const Debug<std::set<T>>& d) {
     return os << "}";
 }
 
+// std::map
+template<typename K, typename V>
+std::ostream& operator<<(std::ostream& os, const Debug<std::map<K, V>>& d) {
+    os << "{";
+    bool is_first = true;
+    for (auto& v : d.inner) {
+        if (is_first) {
+            is_first = false;
+        } else {
+            os << ", ";
+        }
+
+        os << debug(v.first) << ": " << debug(v.second);
+    }
+    return os << "}";
+}
+
 // std::vector
 template<typename T>
 std::ostream& operator<<(std::ostream& os, const Debug<std::vector<T>>& d) {
@@ -71,6 +89,16 @@ std::ostream& operator<<(std::ostream& os, const Debug<std::vector<T>>& d) {
         }
     }
     return os << "}";
+}
+
+// std::optional
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const Debug<std::optional<T>>& d) {
+    if (d.inner) {
+        return os << "some(" << debug(*d.inner) << ")";
+    } else {
+        return os << "none";
+    }
 }
 
 // Fallback
