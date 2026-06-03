@@ -8,8 +8,7 @@ test = false
 
 [dependencies]
 anyhow = "1.0"
-# btdht = { git = "https://github.com/equalitie/btdht.git" }
-btdht = { path = "../../../btdht" }
+btdht = { git = "https://github.com/equalitie/btdht.git" }
 cxx = "1.0"
 futures-util = "0.3.32"
 reqwest = "0.13.3"
