@@ -918,7 +918,7 @@ Client::State::fetch_via_self( Rq request
     request.prepare_payload();
     http::async_write(con, request, yield[ec].tag("write_self_req"));
 
-    if (ec = compute_error_code(ec, cancel)) {
+    if ((ec = compute_error_code(ec, cancel))) {
         _YERROR(yield, "Failed to send request to self; ec=", ec);
         return or_throw<Session>(yield, ec);
     }
