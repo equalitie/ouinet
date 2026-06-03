@@ -675,12 +675,18 @@ private:
 };
 
 //------------------------------------------------------------------------------
-template<class Resp>
+template<class ReqBody>
 static
-void handle_http_error( GenericStream& con
-                      , Resp& res
-                      , YieldContext yield)
+void send_error_response( GenericStream& con
+                        , const http::request<ReqBody>& req
+                        , http::status status
+                        , const string& message
+                        , YieldContext yield)
 {
+    auto res = util::http_error( req, status
+                               , OUINET_CLIENT_SERVER_STRING
+                               , "", message);
+
     _YDEBUG(yield, "=== Sending back response ===");
     _YDEBUG(yield, res);
 
@@ -694,22 +700,13 @@ void handle_bad_request( GenericStream& con
                        , const string& message
                        , YieldContext yield)
 {
-    auto res = util::http_error( req, http::status::bad_request
-                               , OUINET_CLIENT_SERVER_STRING
-                               , "", message);
-    return handle_http_error(con, res, yield);
+    send_error_response(con, req, http::status::bad_request, message, yield);
 }
 
 //------------------------------------------------------------------------------
 void
 Client::State::serve_utp_request(GenericStream con, YieldContext yield)
 {
-    assert(_cache);
-    if (!_cache) {
-        LOG_WARN(yield, " Received uTP request, but cache is not initialized");
-        return;
-    }
-
     Cancel cancel = _shutdown_signal;
     auto cancel_slot = cancel.connect([&] { con.close(); });
 
@@ -739,6 +736,15 @@ Client::State::serve_utp_request(GenericStream con, YieldContext yield)
         }
 
         if (req.method() != http::verb::connect) {
+            if (!_cache) {
+                LOG_WARN(yield, " Received uTP request, but cache is not initialized");
+                send_error_response(con, req, http::status::not_found
+                                   , "cache not initialized", yield[ec]);
+                ec = compute_error_code(ec, cancel);
+                if (ec) return;
+                continue;
+            }
+
             auto keep_alive = _cache->serve_local(
                     req,
                     con,
@@ -2708,10 +2714,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
                 auto message = "The request is missing a valid "
                     + std::string(header_key)
                     + " HTTP header\n";
-                auto res = util::http_error(req, http::status::unauthorized
-                                            , OUINET_CLIENT_SERVER_STRING
-                                            , "", message);
-                handle_http_error(con, res, yield);
+                send_error_response(con, req, http::status::unauthorized, message, yield);
                 break;
             }
         }
