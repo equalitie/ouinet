@@ -40,6 +40,10 @@ public:
         virtual ~Cancelled() noexcept {}
     };
 
+private:
+    template<class F> using DeprecatedApiResult
+        = std::invoke_result_t<F, util::LogPath, Cancel, asio::yield_context>;
+
 public:
     explicit Async(asio::yield_context asio_yield, util::LogPath log_path = {})
         : _asio_yield(asio_yield)
@@ -116,6 +120,29 @@ public:
     // re-implementing the cancellation throwing logic.
     asio::yield_context asio_yield() const {
         return _asio_yield;
+    }
+
+    template<class F>
+    requires(!std::same_as<DeprecatedApiResult<F>, void>)
+    [[nodiscard]]
+    std::expected<DeprecatedApiResult<F>, sys::error_code>
+    call_deprecated(F f) {
+        sys::error_code ec;
+        auto ret = f(_log_path, _cancel, _asio_yield[ec]);
+        if (_cancel) throw Cancelled();
+        if (ec) return std::unexpected(ec);
+        return ret;
+    }
+
+    template<class F>
+    requires(std::same_as<DeprecatedApiResult<F>, void>)
+    [[nodiscard]]
+    sys::error_code
+    call_deprecated(F f) {
+        sys::error_code ec;
+        f(_log_path, _cancel, _asio_yield[ec]);
+        if (_cancel) throw Cancelled();
+        return ec;
     }
 
 private:
