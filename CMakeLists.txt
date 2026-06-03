@@ -139,6 +139,10 @@ function(ouinet_setup)
         set(OUINET_ROOT_DIR ${CMAKE_SOURCE_DIR})
     endif()
 
+    if (WITH_OUISYNC)
+        target_compile_definitions(${ARG_TARGET} PUBLIC WITH_OUISYNC)
+    endif()
+
     target_compile_definitions(${ARG_TARGET} PRIVATE BOOST_ASIO_SEPARATE_COMPILATION ${maybe_decl_export})
     target_compile_options(${ARG_TARGET} PRIVATE -std=c++23)
     target_include_directories(${ARG_TARGET} PUBLIC

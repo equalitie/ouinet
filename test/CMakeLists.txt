@@ -15,7 +15,7 @@ set(OUINET_TEST_TARGETS)
 function(add_test)
     set(options)
     set(oneValueArgs TARGET TYPE TARGET_SRC)
-    set(multiValueArgs SRCS LINK)
+    set(multiValueArgs SRCS)
 
     cmake_parse_arguments(
         ARG
@@ -42,10 +42,10 @@ function(add_test)
     else ()
         ouinet_setup(TARGET ${ARG_TARGET}
             LINK
-                ${ARG_LINK}
                 $<TARGET_OBJECTS:ouinet_common>
                 $<TARGET_OBJECTS:ouinet_client>
                 $<TARGET_OBJECTS:ouinet_injector>
+                ouinet_ouisync
                 ouinet_asio
                 ouinet_i2p
                 ouinet_rs
@@ -131,7 +131,7 @@ add_test(TARGET test_i2p_fetch)
 add_test(TARGET test_i2p_tracker)
 
 if (WITH_OUISYNC)
-    add_test(TARGET test_ouisync LINK ouinet_ouisync)
+    add_test(TARGET test_ouisync)
 endif()
 
 if(UNIX AND NOT APPLE AND NOT CYGWIN)

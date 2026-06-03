@@ -860,13 +860,12 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
     }
     else if(_ouisync && _ouisync->is_running() && _config.cache_type() == ClientConfig::CacheType::Ouisync) {
         auto rq = request.to_ouisync_request();
-        sys::error_code ec;
-        auto session = _ouisync->load(rq, yield[ec]);
-        if (ec) {
-            return or_throw<CacheEntry>(yield, ec);
+        auto session = _ouisync->load(rq, Async(yield, _shutdown_signal));
+        if (!session.has_value()) {
+            return or_throw<CacheEntry>(yield, session.error());
         }
-        auto date = get_date(session.response_header());
-        return CacheEntry{date, move(session)};
+        auto date = get_date(session->response_header());
+        return CacheEntry{date, move(*session)};
     }
     else {
         _YDEBUG(yield, "Cache is disabled");
@@ -2909,17 +2908,14 @@ void Client::State::start_ouinet()
             this,
             self = shared_from_this()
         ] (asio::yield_context yield) mutable {
-            try {
-                _ouisync->start(yield);
+            sys::error_code ec = _ouisync->start(Async(yield, _shutdown_signal, _log_path));
 
+            if (!ec) {
                 LOG_INFO("Ouisync started");
-             }
-             catch (const std::exception& e) {
-                LOG_ERROR("Failed to start Ouisync: ", e.what());
-             }
-             catch (...) {
-                LOG_ERROR("Failed to start Ouisync: Unknown exception");
-             }
+            }
+            else {
+                LOG_ERROR("Failed to start Ouisync: ", ec.message());
+            }
         });
     }
 

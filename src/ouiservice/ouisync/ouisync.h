@@ -2,10 +2,13 @@
 
 #include "request.h"
 #include "session.h"
+#include <expected>
+
+namespace ouinet { class Async; }
 
 #ifdef WITH_OUISYNC
 
-#include <ouisync/file_stream.hpp>
+namespace ouisync { class FileStream; }
 
 namespace ouinet {
 namespace ouisync_service {
@@ -17,15 +20,14 @@ public:
     Ouisync(Ouisync&&) = default;
     Ouisync operator=(const Ouisync&) = delete;
 
-    void start(boost::asio::yield_context);
+    [[nodiscard]]
+    sys::error_code start(Async);
     void stop();
 
     bool is_running() const;
 
-    Session load(
-        const CacheOuisyncRetrieveRequest&,
-        YieldContext
-    );
+    [[nodiscard]]
+    std::expected<Session, sys::error_code> load(const CacheOuisyncRetrieveRequest&, Async);
 
 private:
     boost::filesystem::path _service_dir;
@@ -39,16 +41,10 @@ private:
 } // namespace ouisync_service
 
 namespace util::file_io {
-
-inline size_t file_size(ouisync::FileStream& file, sys::error_code& ec) {
-    return file.size();
-}
-
-inline void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec) {
-    file.seek(pos);
-}
-
+    size_t file_size(ouisync::FileStream& file, sys::error_code& ec);
+    void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec);
 } // namespace util::file_io
+
 } // namespace ouinet
 
 #else // ifdef WITH_OUISYNC
@@ -62,19 +58,18 @@ public:
     Ouisync(Ouisync&&) = default;
     Ouisync operator=(const Ouisync&) = delete;
 
-    void start(boost::asio::yield_context yield) {
-        return or_throw(yield, asio::error::operation_not_supported);
+    [[nodiscard]]
+    sys::error_code start(Async) {
+        return asio::error::operation_not_supported;
     }
 
     void stop() {}
 
     bool is_running() const { return false; }
 
-    Session load(
-        const CacheOuisyncRetrieveRequest&,
-        YieldContext yield
-    ) {
-        return or_throw<Session>(yield, asio::error::operation_not_supported);
+    [[nodiscard]]
+    std::expected<Session, sys::error_code> load(const CacheOuisyncRetrieveRequest&, Async) {
+        return std::unexpected(asio::error::operation_not_supported);
     }
 };
 

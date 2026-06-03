@@ -42,7 +42,6 @@ if (WITH_OUISYNC)
         "./error.cpp"
     )
     ouinet_setup(TARGET ouinet_ouisync LINK PUBLIC ouinet_rs cpp_ouisync_service cpp_ouisync_client)
-    target_compile_definitions(ouinet_ouisync PUBLIC WITH_OUISYNC)
 else()
     add_library(ouinet_ouisync INTERFACE EXCLUDE_FROM_ALL)
     target_include_directories(ouinet_ouisync INTERFACE "${CMAKE_SOURCE_DIR}/src")

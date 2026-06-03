@@ -9,6 +9,7 @@
 #include "http_util.h"
 #include "generic_stream.h"
 #include "util/keep_alive.h"
+#include "util/async.h"
 #include "cache/cache_entry.h"
 #include "cache/resource.h"
 #include "cache/http_store.h"
@@ -26,73 +27,89 @@ static const bool SYNC_ENABLED = true;
 static const bool DHT_ENABLED = true;
 static const bool PEX_ENABLED = true;
 
+template<class V> V unwrap(std::expected<V, sys::error_code> exp) {
+    if (!exp.has_value()) {
+        throw sys::system_error(exp.error());
+    }
+    return std::move(*exp);
+}
+
+void unwrap(sys::error_code ec) {
+    if (ec) throw sys::system_error(ec);
+}
+
 static
-Repository open_or_create_repo(Session& session, std::string_view name, const ShareToken& token, asio::yield_context yield) {
+Repository open_or_create_repo(Session& session, std::string_view name, const ShareToken& token, Async yield) {
     // TODO: The session should use std::string_view.
     std::string name_str(name);
 
     try {
-        return session.create_repository(
+        return unwrap(session.create_repository(
             name_str,
             {},
             {},
             token,
             SYNC_ENABLED, DHT_ENABLED, PEX_ENABLED,
-            yield);
+            yield));
     }
     catch (const sys::system_error& e) {
         if (e.code() != ouisync::error::Service::already_exists) {
             throw;
         }
         // TODO: Check the returned repo corresponds to the `token`.
-        return session.find_repository(name_str, yield);
+        return unwrap(session.find_repository(name_str, yield));
     }
 }
 
-void set_repo_defaults(Repository& repo, bool can_mount, asio::yield_context yield) {
+void set_repo_defaults(Repository& repo, bool can_mount, Async yield) {
     if (can_mount) {
-        repo.mount(yield);
+        unwrap(repo.mount(yield));
     }
-    repo.set_sync_enabled(true, yield);
-    repo.set_pex_enabled(true, yield);
+
+    unwrap(repo.set_sync_enabled(true, yield));
+    unwrap(repo.set_pex_enabled(true, yield));
 }
 
-File open_file(Repository& repo, std::string const& path, YieldContext yield) {
+File open_file(Repository& repo, std::string const& path, Async yield) {
     auto sub = repo.subscribe();
     bool is_fully_loaded = false;
 
     while (true) {
-        try {
-            return repo.open_file(path, yield);
+        auto file = repo.open_file(path, yield);
+        if (file.has_value()) return std::move(*file);
+
+        if (is_fully_loaded) {
+            throw sys::system_error(file.error());
         }
-        catch (const sys::system_error& e) {
-            if (is_fully_loaded) {
-                throw;
-            }
 
-            // We get STORE_ERROR when the file is there but its first block
-            // has not yet been downloaded.
-            if (e.code() != ouisync::error::Service::not_found &&
-                    e.code() != ouisync::error::Service::store_error) {
-                throw;
-            }
-
-            auto progress = repo.get_sync_progress(yield);
-
-            // If `progress.total == 0`, then the repo has been imported but no
-            // syncing happened yet. Otherwise if `progress.total !=
-            // progress.value` then the repos hasn't synced fully yet and new
-            // data may still arrive.
-            if (progress.total != 0 && progress.total == progress.value) {
-                // Since `total == value` could have happened after
-                // `open_file`, we try one more time.
-                is_fully_loaded = true;
-                continue;
-            }
-
-            sub.async_receive(yield);
+        // We get STORE_ERROR when the file is there but its first block
+        // has not yet been downloaded.
+        if (file.error() != ouisync::error::Service::not_found &&
+            file.error() != ouisync::error::Service::store_error) {
+            throw sys::system_error(file.error());
         }
+
+        auto progress = unwrap(repo.get_sync_progress(yield));
+
+        // If `progress.total == 0`, then the repo has been imported but no
+        // syncing happened yet. Otherwise if `progress.total !=
+        // progress.value` then the repos hasn't synced fully yet and new
+        // data may still arrive.
+        if (progress.total != 0 && progress.total == progress.value) {
+            // Since `total == value` could have happened after
+            // `open_file`, we try one more time.
+            is_fully_loaded = true;
+            continue;
+        }
+
+        unwrap(sub.async_receive(yield));
     }
+}
+
+FileStream
+open_stream(Repository& repo, const std::string& path, Async yield) {
+    auto file = open_file(repo, path, yield);
+    return unwrap(FileStream::init(std::move(file), yield));
 }
 
 struct Ouisync::Impl {
@@ -104,15 +121,15 @@ struct Ouisync::Impl {
     Sites sites;
     bool can_mount; // Whether Ouisync was compiled with mount support
 
-    std::shared_ptr<Repository> resolve(std::string repo_name, YieldContext yield) {
+    std::shared_ptr<Repository> resolve(std::string repo_name, Async yield) {
         auto repo_i = sites.find(repo_name);
         if (repo_i != sites.end()) {
             return repo_i->second;
         }
 
         auto file = open_file(page_index, std::string("/") + repo_name, yield.tag("open_file"));
-        auto len = file.get_length(yield);
-        auto token_vec = file.read(0, len, yield);
+        auto len = unwrap(file.get_length(yield));
+        auto token_vec = unwrap(file.read(0, len, yield));
         auto token = ShareToken{std::string(token_vec.begin(), token_vec.end())};
 
         auto repo = open_or_create_repo(session, repo_name, token, yield);
@@ -135,48 +152,44 @@ Ouisync::Ouisync(fs::path service_dir, std::string page_index_token) :
     fs::create_directories(_mount_dir);
 }
 
-void Ouisync::start(asio::yield_context yield)
+sys::error_code Ouisync::start(Async yield)
 {
-    ouisync::Service service(yield.get_executor());
-    service.start(_service_dir, "ouisync", yield);
-
-    auto session = ouisync::Session::connect(_service_dir, yield);
-
-    session.bind_network({"quic/0.0.0.0:0"}, yield);
-    session.set_store_dirs({_store_dir.string()}, yield);
-    bool can_mount = true;
     try {
-        session.set_mount_root(_mount_dir.string(), yield);
-    } catch (std::exception& e) {
-        can_mount = false;
+        ouisync::Service service(yield.get_executor());
+
+        unwrap(yield.call_deprecated([&] (auto, auto, auto yield) {
+            service.start(_service_dir, "ouisync", yield);
+        }));
+
+        auto session = unwrap(yield.call_deprecated([&] (auto, auto, auto yield) {
+            return ouisync::Session::connect(_service_dir, yield);
+        }));
+
+        unwrap(session.bind_network({"quic/0.0.0.0:0"}, yield));
+        unwrap(session.set_store_dirs({_store_dir.string()}, yield));
+
+        auto mount_ec = session.set_mount_root(_mount_dir.string(), yield);
+
+        unwrap(session.set_local_discovery_enabled(true, yield));
+
+        auto page_index = open_or_create_repo(session, "page_index", ShareToken{_page_index_token}, yield);
+
+        set_repo_defaults(page_index, !mount_ec, yield);
+
+        _impl = std::make_shared<Impl>(Impl {
+            std::move(service),
+            std::move(session),
+            std::move(page_index),
+            {},
+            !mount_ec
+        });
+
+        return sys::error_code();
     }
-    session.set_local_discovery_enabled(true, yield);
-
-    auto page_index = open_or_create_repo(session, "page_index", ShareToken{_page_index_token}, yield);
-    set_repo_defaults(page_index, can_mount, yield);
-
-    _impl = std::make_shared<Impl>(Impl {
-        std::move(service),
-        std::move(session),
-        std::move(page_index),
-        {},
-        can_mount
-    });
-}
-
-template<class Request>
-void reply_error(const Request& rq, sys::system_error e, GenericStream& con, YieldContext yield) {
-    std::stringstream ss;
-    ss << "Error: " << e.what() << "\n";
-    auto rs = util::http_error(
-        util::get_keep_alive(rq),
-        http::status::bad_request,
-        OUINET_CLIENT_SERVER_STRING,
-        "",
-        ss.str()
-    );
-
-    util::http_reply(con, rs, yield);
+    catch(sys::system_error const& e) {
+        LOG_WARN(yield, " Ouisync::start exception: ", e.what());
+        return e.code();
+    }
 }
 
 static bool has_body(http::response_header<> const& hdr) {
@@ -199,9 +212,8 @@ static bool has_sigs(http::response_header<> const& hdr) {
     return true;
 }
 
-ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContext yield_) {
-    auto yield = yield_.throwing();
-
+std::expected<ouinet::Session, sys::error_code>
+Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
     try {
         if (!_impl) {
             throw_error(asio::error::not_connected);
@@ -213,20 +225,26 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
 
         using Reader = ouinet::cache::GenericResourceReader<FileStream>;
 
-        Cancel cancel;
-        auto head_file = FileStream::init(open_file(*repo, (path / cache::head_fname).string(), yield), yield);
-        auto head = Reader::read_signed_head(head_file, cancel, yield);
-        head_file.close(yield);
+        auto head_file = open_stream(*repo, (path / cache::head_fname).string(), yield);
+
+        auto head = unwrap(yield.call_deprecated([&] (auto, auto cancel, auto yield) {
+            return Reader::read_signed_head(head_file, cancel, yield);
+        }));
+
+        unwrap(yield.call_deprecated([&] (auto, auto, auto yield) {
+            head_file.close(yield);
+        }));
 
         std::optional<FileStream> sigs_file, body_file;
 
         if (has_sigs(head)) {
-            sigs_file.emplace(FileStream::init(open_file(*repo, (path / cache::sigs_fname).string(), yield), yield));
+            sigs_file.emplace(open_stream(*repo, (path / cache::sigs_fname).string(), yield));
         } else {
             sigs_file.emplace(FileStream{});
         }
+
         if (has_body(head)) {
-            body_file.emplace(FileStream::init(open_file(*repo, (path / cache::body_fname).string(), yield), yield));
+            body_file.emplace(open_stream(*repo, (path / cache::body_fname).string(), yield));
         } else {
             body_file.emplace(FileStream{});
         }
@@ -238,22 +256,24 @@ ouinet::Session Ouisync::load(const CacheOuisyncRetrieveRequest& rq, YieldContex
             boost::optional<cache::Range>() // range
         );
 
-        auto session = ouinet::Session::create(
-            std::move(reader),
-            rq.method() == http::verb::head,
-            cancel,
-            yield
-        );
+        auto session = unwrap(yield.call_deprecated([&] (auto, auto cancel, auto yield) {
+            return ouinet::Session::create(
+                std::move(reader),
+                rq.method() == http::verb::head,
+                cancel,
+                yield
+            );
+        }));
 
         session
             .response_header()
             .set(http_::response_source_hdr, http_::response_source_hdr_ouisync);
 
-        return session;
+        return std::move(session);
     }
     catch (const sys::system_error& e) {
-        LOG_WARN(yield_, " Ouisync::serve exception: ", e.what());
-        return or_throw<ouinet::Session>(yield_, e.code());
+        LOG_WARN(yield, " Ouisync::serve exception: ", e.what());
+        return std::unexpected(e.code());
     }
 }
 
@@ -266,3 +286,14 @@ void Ouisync::stop() {
 }
 
 } // namespace ouinet::ouisync_service
+
+namespace ouinet::util::file_io {
+    size_t file_size(ouisync::FileStream& file, sys::error_code& ec) {
+        return file.size();
+    }
+    
+    void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec) {
+        file.seek(pos);
+    }
+} // namespace util::file_io
+
