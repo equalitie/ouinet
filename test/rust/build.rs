@@ -2,13 +2,13 @@ use std::env;
 
 fn main() {
     let include_dirs = env::var("INCLUDE_DIRS").unwrap_or_default();
-    let include_dirs = include_dirs.split(";").filter(|s| !s.trim().is_empty());
+    let include_dirs = include_dirs.split(",").filter(|s| !s.trim().is_empty());
 
     let lib_dirs = env::var("LIB_DIRS").unwrap_or_default();
-    let lib_dirs = lib_dirs.split(";").filter(|s| !s.trim().is_empty());
+    let lib_dirs = lib_dirs.split(",").filter(|s| !s.trim().is_empty());
 
     let libs = env::var("LIBS").unwrap_or_default();
-    let libs = libs.split(";").filter(|s| !s.trim().is_empty());
+    let libs = libs.split(",").filter(|s| !s.trim().is_empty());
 
     for dir in lib_dirs {
         println!("cargo:rustc-link-search=native={dir}");

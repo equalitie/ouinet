@@ -1,32 +1,19 @@
 # Add a rust integration test with the specified name to the project
 function(add_rust_test name)
-    set(options "")
-    set(single_value_args "")
-    set(multi_value_args "DEPENDENCIES")
-
-    cmake_parse_arguments(arg "${options}" "${single_value_args}" "${multi_value_args}" ${ARGN})
-
     # TODO: consider making this an argument
     set(output_dir "${CMAKE_CURRENT_BINARY_DIR}")
 
     set(manifest_path "${CMAKE_CURRENT_SOURCE_DIR}/rust/Cargo.toml")
     set(target_dir "${CMAKE_CURRENT_BINARY_DIR}/rust/target")
 
-    set(include_dirs "")
+    set(include_dirs
+        "$<JOIN:$<TARGET_PROPERTY:ouinet_test,INTERFACE_INCLUDE_DIRECTORIES>,$<COMMA>>"
+    )
+    set(libs ouinet_test ouinet_asio)
+    list(JOIN libs "," libs)
 
-    foreach(dep IN LISTS arg_DEPENDENCIES)
-        list(APPEND include_dirs
-            "$<JOIN:$<TARGET_PROPERTY:${dep},INTERFACE_INCLUDE_DIRECTORIES>,$<SEMICOLON>>"
-        )
-    endforeach()
-
-    list(JOIN include_dirs "$<SEMICOLON>" include_dirs)
-
-    # TODO: Is it possible to find these libs automatically?
-    set(libs injector client ouiservice-i2p ouinet_asio boost_filesystem)
-    list(JOIN libs "$<SEMICOLON>" libs)
-
-    set(lib_dirs ${CMAKE_BINARY_DIR})
+    set(lib_dirs ${CMAKE_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+    list(JOIN lib_dirs "," lib_dirs)
 
     set(cargo_output_file "${CMAKE_CURRENT_BINARY_DIR}/rust/${name}.output.json")
 
@@ -45,9 +32,7 @@ function(add_rust_test name)
         VERBATIM
     )
 
-    foreach(dep IN LISTS arg_DEPENDENCIES)
-        add_dependencies("_check_${name}" ${dep})
-    endforeach()
+    add_dependencies("_check_${name}" ouinet_test)
 
     # Build the test and write the machine-processable output to a file
     add_custom_target(

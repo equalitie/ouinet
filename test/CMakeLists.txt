@@ -143,8 +143,29 @@ if(LINUX)
 endif()
 
 ######################################################################
+
+# Static library containing everything needed for the tests written in rust which are defined below.
+add_library(ouinet_test STATIC
+    $<TARGET_OBJECTS:ouinet_common>
+    $<TARGET_OBJECTS:ouinet_client>
+    $<TARGET_OBJECTS:ouinet_injector>
+)
+target_link_libraries(ouinet_test
+    ouinet_asio
+    ouinet_i2p
+    ouinet_rs
+    asio_utp
+    cpp_upnp
+    Boost::nowide
+    Boost::process
+    Boost::filesystem
+    Boost::url
+    Boost::iostreams
+    Boost::program_options
+)
+
 include(rust/cmake/rust_test.cmake)
-add_rust_test(test_connectivity DEPENDENCIES ouinet_client ouinet_injector)
+add_rust_test(test_connectivity)
 
 ######################################################################
 string(REPLACE ";" " " OUINET_TEST_TARGETS_STR "tests: ${OUINET_TEST_TARGETS}")
