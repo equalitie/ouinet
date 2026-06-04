@@ -147,15 +147,19 @@ endif()
 # Test-only library containing everything needed for the tests written in rust.
 add_library(ouinet_test SHARED)
 target_link_libraries(ouinet_test
-        ouinet_common
-        ouinet_client
-        ouinet_injector
-        asio_utp
-        cpp_upnp
-        Boost::url
-        Boost::iostreams
-        Boost::filesystem
-        Boost::program_options
+    ouinet_common
+    ouinet_client
+    ouinet_injector
+    ouinet_i2p
+    ouinet_ouisync
+    asio_utp
+    cpp_upnp
+    Boost::url
+    Boost::nowide
+    Boost::iostreams
+    Boost::filesystem
+    Boost::program_options
+    Boost::process
 )
 
 include(rust/cmake/rust_test.cmake)
