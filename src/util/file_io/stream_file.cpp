@@ -68,6 +68,7 @@ open_readonly( const AsioExecutor& exec
 native_handle_t
 dup_fd(async_file_handle&, sys::error_code&){
     assert(false && "file_io::dup_fd not implemented yet for Windows");
+    std::terminate();
 }
 
 void
