@@ -14,6 +14,9 @@
 #include <bittorrent/dht_storage.h>
 #include <bittorrent/dht_node.h>
 
+#include "util/async_test.h"
+#include "util/dht.h"
+
 BOOST_AUTO_TEST_SUITE(dht)
 
 using namespace std;
@@ -122,6 +125,19 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
     init_without_bootstrapping(ctx, dht_node);
     bootstrap(ctx, dht_node);
     ctx.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_local)
+{
+    async_test([](Async yield) {
+        auto start = steady_clock::now();
+        auto nodes = spawn_dht_nodes(16, yield);
+        auto elapsed = duration_cast<milliseconds>(steady_clock::now() - start);
+
+        cout << nodes.size() << " nodes bootstrapped in " << elapsed.count() << "ms." << endl;
+
+       // TODO: do something interesting with the nodes, e.g., test announce and lookup
+    });
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -463,7 +463,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto dhts = spawn_dht_nodes(2, yield);
+        auto dhts = spawn_dht_nodes(8, yield);
         auto dht_ep = *dhts[0]->local_endpoints().begin();
 
         const std::string injector_credentials = "username:password";
