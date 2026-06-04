@@ -7,10 +7,11 @@
 #include <string>
 #include "ouiservice/i2p/address.h"
 #include "namespaces.h"
+#include "api.h"
 
 namespace ouinet {
 
-class Endpoint {
+class OUINET_COMMON_API Endpoint {
 public:
     struct Utp {
         asio::ip::udp::endpoint value;
@@ -35,8 +36,10 @@ public:
     bool operator<(const Endpoint& other) const { return _alternative < other._alternative; }
     bool operator==(const Endpoint& other) const { return _alternative == other._alternative; }
 
+    OUINET_COMMON_API
     static std::optional<Endpoint> parse(std::string_view);
 
+    OUINET_COMMON_API
     friend
     std::ostream& operator<<(std::ostream&, const Endpoint&);
 

@@ -6,12 +6,13 @@
 #include <boost/optional.hpp>
 #include <asio_utp.hpp>
 
+#include "api.h"
 #include "../ouiservice.h"
 
 namespace ouinet {
 namespace ouiservice {
 
-class UtpOuiServiceServer : public OuiServiceImplementationServer
+class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
     UtpOuiServiceServer(asio::any_io_executor, asio::ip::udp::endpoint endpoint);
@@ -39,7 +40,7 @@ class UtpOuiServiceServer : public OuiServiceImplementationServer
     asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
 };
 
-class UtpOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API UtpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
     UtpOuiServiceClient( asio::any_io_executor

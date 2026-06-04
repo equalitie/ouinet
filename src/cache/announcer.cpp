@@ -76,7 +76,7 @@ struct Announcer::Loop {
         , _log_path(move(log_path))
     { }
 
-    inline static bool debug() { return logger.get_threshold() <= DEBUG; }
+    inline static bool debug() { return get_logger().get_threshold() <= DEBUG; }
 
     Entries::iterator find_entry_by_key(const Key& key) {
         for (auto i = entries.begin(); i != entries.end(); ++i) {

@@ -3,7 +3,7 @@
 #include "ouiservice/i2p/session.h"
 #include "util/cancel.h"
 #include "util/promise.h"
-#include "declspec.h"
+#include "api.h"
 
 namespace ouinet {
 

@@ -10,7 +10,8 @@
 #include <boost/variant.hpp>
 #include <vector>
 
-#include "../namespaces.h"
+#include "namespaces.h"
+#include "api.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -25,14 +26,17 @@ using Address = boost::variant< asio::ip::udp::endpoint
 // Parse an address in `<HOST>` or `<HOST>:<PORT>` format,
 // where `<HOST>` can be a host name, `<IPv4>` address, or `<[IPv6]>` address (bracketed).
 // Host names are always converted to lower case.
+OUINET_COMMON_API
 boost::optional<Address>
 parse_address(const std::string& addr);
 
+OUINET_COMMON_API
 boost::optional<Address>
 parse_address(boost::string_view addr);
 
 // Represent the address as `<HOST>` or `<HOST>:<PORT>`,
 // where `<HOST>` can be a host name, `<IPv4>` address, or `<[IPv6]>` address (bracketed).
+OUINET_COMMON_API
 std::ostream&
 operator<<(std::ostream&, const Address&);
 

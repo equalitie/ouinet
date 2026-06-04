@@ -8,7 +8,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/regex.hpp>
 #include <boost/filesystem/path.hpp>
-#include "declspec.h"
+#include "api.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
 #include "util/sign.h"
@@ -28,7 +28,7 @@ std::runtime_error error(Args&&... args) {
 #define _HTTP_LOG_FILE_NAME "access.log"
 static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
 
-class OUINET_DECL InjectorConfig {
+class OUINET_INJECTOR_API InjectorConfig {
 public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 

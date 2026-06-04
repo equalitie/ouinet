@@ -42,23 +42,10 @@ function(add_test)
     else ()
         ouinet_setup(TARGET ${ARG_TARGET}
             LINK
-                $<TARGET_OBJECTS:ouinet_common>
-                $<TARGET_OBJECTS:ouinet_client>
-                $<TARGET_OBJECTS:ouinet_injector>
-                ouinet_ouisync
-                ouinet_asio
-                ouinet_i2p
+                ouinet_client
+                ouinet_injector
                 ouinet_rs
-                asio_utp
-                cpp_upnp
-                Boost::nowide
-                Boost::process
-                Boost::filesystem
-                Boost::url
-                Boost::iostreams
-                Boost::program_options
                 Boost::unit_test_framework
-            NO_API
         )
     endif()
 endfunction()
@@ -144,26 +131,10 @@ endif()
 
 ######################################################################
 
-# Test-only library containing everything needed for the tests written in rust.
-add_library(ouinet_test SHARED)
-target_link_libraries(ouinet_test
-    ouinet_common
-    ouinet_client
-    ouinet_injector
-    ouinet_i2p
-    ouinet_ouisync
-    asio_utp
-    cpp_upnp
-    Boost::url
-    Boost::nowide
-    Boost::iostreams
-    Boost::filesystem
-    Boost::program_options
-    Boost::process
-)
-
-include(rust/cmake/rust_test.cmake)
-add_rust_test(test_connectivity)
+if (LINUX)
+    include(rust/cmake/rust_test.cmake)
+    add_rust_test(test_connectivity)
+endif()
 
 ######################################################################
 string(REPLACE ";" " " OUINET_TEST_TARGETS_STR "tests: ${OUINET_TEST_TARGETS}")

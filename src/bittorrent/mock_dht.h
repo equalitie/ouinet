@@ -1,11 +1,12 @@
 #pragma once
 
-#include "dht.h"
 #include <map>
+#include "dht.h"
+#include "api.h"
 
 namespace ouinet::bittorrent {
 
-class MockDht : public DhtBase {
+class OUINET_COMMON_API MockDht : public DhtBase {
     struct Peer {
         std::string name;
         UdpEndpoint endpoint;

@@ -77,7 +77,7 @@ class Swarm {
 
 } // namespace detail
 
-class Tracker {
+class OUINET_COMMON_API Tracker {
     public:
     Tracker(const AsioExecutor&);
     ~Tracker();
@@ -102,7 +102,7 @@ class Tracker {
     Cancel _terminate_signal;
 };
 
-class DataStore {
+class OUINET_COMMON_API DataStore {
     public:
     /*
      * Validity specified at

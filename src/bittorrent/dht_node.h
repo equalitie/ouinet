@@ -22,6 +22,7 @@
 #include "cxx/dns.h"
 #include "cxx/metrics.h"
 #include "dht.h"
+#include "api.h"
 
 #include "../namespaces.h"
 #include "../util/async.h"
@@ -63,7 +64,7 @@ class DebugCtx;
  *   methods in member objects. It takes special attention otherwise.
  */
 
-class DhtNode {
+class OUINET_COMMON_API DhtNode {
     public:
     const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 

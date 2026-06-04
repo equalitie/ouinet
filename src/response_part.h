@@ -16,6 +16,7 @@
 #include "util/watch_dog.h"
 #include "namespaces.h"
 #include "or_throw.h"
+#include "api.h"
 
 namespace ouinet::http_response {
 
@@ -42,7 +43,7 @@ namespace detail {
     }
 }
 
-struct Head : public http::response_header<> {
+struct OUINET_COMMON_API Head : public http::response_header<> {
     using Base = http::response_header<>;
     using Base::Base;
     Head(const Head&) = default;
@@ -193,7 +194,7 @@ struct ChunkBody : public std::vector<uint8_t> {
     { return detail::async_write_c(this, s, d, c, y); }
 };
 
-struct Trailer : public http::fields {
+struct OUINET_COMMON_API Trailer : public http::fields {
     using Base = http::fields;
     using Base::Base;
     Trailer(const Trailer&) = default;
@@ -286,12 +287,12 @@ struct Part : public detail::PartVariant
     { return detail::async_write_c(this, s, d, c, y); }
 };
 
-std::ostream& operator<<(std::ostream& os, ouinet::http_response::Part::Type);
-std::ostream& operator<<(std::ostream& os, Part const&);
-std::ostream& operator<<(std::ostream& os, Head const&);
-std::ostream& operator<<(std::ostream& os, ChunkHdr const&);
-std::ostream& operator<<(std::ostream& os, ChunkBody const&);
-std::ostream& operator<<(std::ostream& os, Body const&);
-std::ostream& operator<<(std::ostream& os, Trailer const&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, ouinet::http_response::Part::Type);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, Part const&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, Head const&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, ChunkHdr const&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, ChunkBody const&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, Body const&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, Trailer const&);
 
 } // namespace ouinet::http_response

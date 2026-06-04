@@ -10,6 +10,7 @@
 #include "util/cancel.h"
 #include "util/watch_dog.h"
 #include <boost/beast.hpp>
+#include "api.h"
 
 namespace ouinet::http_response {
 
@@ -85,7 +86,7 @@ slurp_response( AbstractReader& reader, size_t max_body_size
     return or_throw(yield, ec, std::move(rs));
 }
 
-class Reader : public AbstractReader {
+class OUINET_COMMON_API Reader : public AbstractReader {
 private:
     static const size_t http_forward_block = 16384;
     using string_view = boost::string_view;

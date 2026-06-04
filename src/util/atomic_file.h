@@ -6,10 +6,11 @@
 
 #include "../namespaces.h"
 #include "temp_file.h"
+#include "api.h"
 
 namespace ouinet { namespace util {
 
-class atomic_file {
+class OUINET_COMMON_API atomic_file {
 public:
     // Create a file to atomically replace `path` once it is committed.
     // Storage is backed by a temporary file in the parent directory of `path`

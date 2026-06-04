@@ -1,6 +1,6 @@
 #pragma once
 
-#include "declspec.h"
+#include "api.h"
 
 #include <openssl/evp.h>
 #include <openssl/err.h>
@@ -23,7 +23,7 @@ struct Signature {
     }
 };
 
-class OUINET_DECL PublicKey {
+class OUINET_COMMON_API PublicKey {
 public:
     static const size_t size = 32;
     using Bytes = std::array<uint8_t, size>;
@@ -57,7 +57,7 @@ private:
     EVP_PKEY* _pubkey = nullptr;
 };
 
-class OUINET_DECL SecretKey {
+class OUINET_COMMON_API SecretKey {
 public:
     static const size_t size = 32;
     using Bytes = std::array<uint8_t, size>;
@@ -89,6 +89,7 @@ public:
         return os << sk.to_hex();
     }
 
+    OUINET_COMMON_API
     friend std::istream& operator>>(std::istream&, SecretKey&);
 
     ~SecretKey();

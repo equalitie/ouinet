@@ -2,7 +2,7 @@
 
 #include "address.h"
 #include "tracker.h"
-#include "declspec.h"
+#include "api.h"
 
 namespace ouinet {
 

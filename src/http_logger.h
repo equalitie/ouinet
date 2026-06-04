@@ -3,7 +3,7 @@
 #include <boost/beast/http.hpp>
 #include <boost/filesystem.hpp>
 
-#include "declspec.h"
+#include "api.h"
 #include "generic_stream.h"
 #include "namespaces.h"
 #include "session.h"

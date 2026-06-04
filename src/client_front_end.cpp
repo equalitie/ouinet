@@ -221,7 +221,7 @@ void ClientFrontEnd::disable_log_to_file(ClientConfig& config) {
 
 static void load_log_file(ClientConfig& config, ostringstream& out_ss) {
     if (!config.is_log_file_enabled()) return;
-    std::fstream* logfile = logger.get_log_file();
+    std::fstream* logfile = get_logger().get_log_file();
     assert(logfile && "No log file in spite of configuration saying so");
     logfile->flush();
     logfile->seekg(0);
@@ -558,7 +558,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     bool log_file_enabled = config.is_log_file_enabled();
     ss << ToggleInput{"<u>L</u>og file", 'l', "logfile", log_file_enabled};
     if (log_file_enabled)
-        ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
+        ss << "Logging debug output to file: " << as_safe_html(get_logger().current_log_file())
            << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
            << "Download log file" << "</a><br>\n";
 

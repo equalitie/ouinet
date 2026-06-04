@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dht.h"
+#include "api.h"
 
 namespace ouinet::bittorrent {
 
@@ -8,7 +9,7 @@ namespace detail {
     struct Bep5AnnouncerImpl;
 }
 
-class Bep5PeriodicAnnouncer {
+class OUINET_COMMON_API Bep5PeriodicAnnouncer {
 public:
     Bep5PeriodicAnnouncer() = default;
 
@@ -26,7 +27,7 @@ private:
     std::shared_ptr<detail::Bep5AnnouncerImpl> _impl;
 };
 
-class Bep5ManualAnnouncer {
+class OUINET_COMMON_API Bep5ManualAnnouncer {
 private:
     struct Impl;
 

@@ -9,11 +9,11 @@
 #include <boost/filesystem.hpp>
 #include <boost/nowide/fstream.hpp>
 
-#include "../generic_stream.h"
-#include "../or_throw.h"
-#include "../util/ssl_stream.h"
-#include "../util/async.h"
-
+#include "generic_stream.h"
+#include "or_throw.h"
+#include "util/ssl_stream.h"
+#include "util/async.h"
+#include "api.h"
 
 namespace ouinet::ssl::util {
 
@@ -118,7 +118,7 @@ get_server_context( const std::string& cert_chain
     return ssl_context;
 }
 
-void load_tls_ca_certificates(asio::ssl::context& ctx);
-void load_tls_ca_certificates(asio::ssl::context& ctx, const std::string& path_str);
+OUINET_COMMON_API void load_tls_ca_certificates(asio::ssl::context& ctx);
+OUINET_COMMON_API void load_tls_ca_certificates(asio::ssl::context& ctx, const std::string& path_str);
 
 } // namespace

@@ -6,13 +6,14 @@
 #include "../ouiservice.h"
 #include "../util/cancel.h"
 #include "../util/async.h"
+#include "api.h"
 
 namespace ouinet {
 
 namespace ouiservice {
 
 // Wraps TLS over an existing service.
-class TlsOuiServiceServer : public OuiServiceImplementationServer
+class OUINET_COMMON_API TlsOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
@@ -43,7 +44,7 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
 };
 
-class TlsOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API TlsOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationClient>;

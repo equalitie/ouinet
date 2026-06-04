@@ -2,10 +2,11 @@
 
 #include "http_sign.h"
 #include "util.h"
+#include "api.h"
 
 namespace ouinet::cache {
 
-class SignedHead : public http_response::Head {
+class OUINET_COMMON_API SignedHead : public http_response::Head {
 private:
     using Base = http_response::Head;
 
@@ -18,6 +19,7 @@ public:
         boost::string_view algorithm;  // always "hs2019"
         size_t size;
     
+        OUINET_COMMON_API
         static
         boost::optional<BlockSigs> parse(boost::string_view);
     };
@@ -78,10 +80,12 @@ private:
     {}
 
 public:
+    OUINET_COMMON_API
     static
     boost::optional<SignedHead>
     verify_and_create(http::response_header<>, const sign::PublicKey&);
 
+    OUINET_COMMON_API
     static
     boost::optional<SignedHead>
     create_from_trusted_source(http::response_header<>);

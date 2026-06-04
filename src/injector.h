@@ -15,11 +15,13 @@
 #include "injector_config.h"
 #include "bittorrent/mock_dht.h"
 #include "ouiservice/i2p/address.h"
+#include "api.h"
 
 namespace ouinet {
 
 using TcpLookup = asio::ip::tcp::resolver::results_type;
 
+OUINET_INJECTOR_API
 TcpLookup
 resolve_target(const http::request_header<>& req
               , bool allow_private_targets
@@ -30,7 +32,7 @@ resolve_target(const http::request_header<>& req
 
 // This class needs to outlive the `asio::io_context`. Mainly because of the
 // `ssl::context` which is passed to `ssl::stream`s by reference.
-class Injector {
+class OUINET_INJECTOR_API Injector {
 public:
     Injector(
         InjectorConfig config,

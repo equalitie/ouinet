@@ -1,5 +1,6 @@
 #include "error.h"
 #include "namespaces.h"
+#include "api.h"
 
 namespace ouinet {
 
@@ -27,6 +28,7 @@ public:
     }
 };
 
+OUINET_COMMON_API
 sys::error_category const& ouinet_error_category() {
     static const OuinetErrorCategory instance;
     return instance;

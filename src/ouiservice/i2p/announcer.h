@@ -1,6 +1,6 @@
 #pragma once
 
-#include "declspec.h"
+#include "api.h"
 #include <memory>
 
 namespace ouinet {

@@ -2,6 +2,7 @@
 
 #include "request.h"
 #include "session.h"
+#include "api.h"
 #include <expected>
 
 namespace ouinet { class Async; }
@@ -13,7 +14,7 @@ namespace ouisync { class FileStream; }
 namespace ouinet {
 namespace ouisync_service {
 
-class Ouisync {
+class OUINET_OUISYNC_API Ouisync {
 public:
     Ouisync(boost::filesystem::path, std::string page_index_token);
     Ouisync(const Ouisync&) = delete;
@@ -51,7 +52,7 @@ namespace util::file_io {
 
 namespace ouinet::ouisync_service {
 
-class Ouisync {
+class OUINET_OUISYNC_API Ouisync {
 public:
     Ouisync(boost::filesystem::path, std::string page_index_token) {}
     Ouisync(const Ouisync&) = delete;

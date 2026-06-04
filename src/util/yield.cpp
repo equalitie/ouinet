@@ -11,13 +11,13 @@ void YieldContext::log(log_level_t log_level, boost::string_view str)
 {
     using boost::string_view;
 
-    if (logger.get_threshold() > log_level)
+    if (get_logger().get_threshold() > log_level)
         return;
 
     while (str.size()) {
         auto endl = str.find('\n');
 
-        logger.log(log_level, util::str(_log_path, " ", str.substr(0, endl)));
+        get_logger().log(log_level, util::str(_log_path, " ", str.substr(0, endl)));
 
         if (endl == std::string::npos) {
             break;

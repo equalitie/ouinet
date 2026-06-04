@@ -6,16 +6,17 @@
 #include <array>
 #include "../namespaces.h"
 #include "../util/bytes.h"
+#include "api.h"
 
 namespace ouinet { namespace bittorrent {
 
-struct NodeID {
+struct OUINET_COMMON_API NodeID {
     static constexpr size_t size     = 20;
     static constexpr size_t bit_size = size * 8;
 
     using Buffer = std::array<uint8_t, size>;
 
-    struct Range {
+    struct OUINET_COMMON_API Range {
         Buffer stencil;
         size_t mask;
 
@@ -84,7 +85,7 @@ struct NodeID {
                           , boost::optional<uint8_t> test_rnd);
 };
 
-std::ostream& operator<<(std::ostream&, const NodeID&);
-std::ostream& operator<<(std::ostream&, const NodeID::Range&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream&, const NodeID&);
+OUINET_COMMON_API std::ostream& operator<<(std::ostream&, const NodeID::Range&);
 
 }} // namespaces

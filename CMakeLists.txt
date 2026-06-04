@@ -110,10 +110,8 @@ target_compile_definitions(cpp_upnp PUBLIC BOOST_ASIO_SEPARATE_COMPILATION)
 add_subdirectory(./rust)
 
 function(ouinet_setup)
-    # Use NO_API when linking with the object only (not with the dll libraries).
-    set(options NO_API)
     set(oneValueArgs TARGET)
-    set(multiValueArgs LINK)
+    set(multiValueArgs LINK DEFS)
 
     cmake_parse_arguments(
         ARG
@@ -125,25 +123,19 @@ function(ouinet_setup)
 
     get_target_property(target_type ${ARG_TARGET} TYPE)
 
-    if (WIN32 OR MINGW)
-        if (ARG_NO_API)
-            set(maybe_decl_export OUINET_DECL_NONE)
-        elseif (NOT ${target_type} STREQUAL "EXECUTABLE")
-            set(maybe_decl_export OUINET_DECL_EXPORT)
-        endif()
-    endif()
-
     if (ANDROID)
         set(OUINET_ROOT_DIR ${CMAKE_SOURCE_DIR}/../../)
     else()
         set(OUINET_ROOT_DIR ${CMAKE_SOURCE_DIR})
     endif()
 
+    list(APPEND ARG_DEFS BOOST_ASIO_SEPARATE_COMPILATION)
+
     if (WITH_OUISYNC)
-        target_compile_definitions(${ARG_TARGET} PUBLIC WITH_OUISYNC)
+        list(APPEND ARG_DEFS WITH_OUISYNC)
     endif()
 
-    target_compile_definitions(${ARG_TARGET} PRIVATE BOOST_ASIO_SEPARATE_COMPILATION ${maybe_decl_export})
+    target_compile_definitions(${ARG_TARGET} PRIVATE ${ARG_DEFS})
     target_compile_options(${ARG_TARGET} PRIVATE -std=c++23)
     target_include_directories(${ARG_TARGET} PUBLIC
         ${OUINET_ROOT_DIR}/src
@@ -200,9 +192,24 @@ file(GLOB ouinet_common_sources
 # TODO: Some low level openssl functions we use are deprecated.
 set_source_files_properties("./src/ssl/ca_certificate.cpp" PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 
-add_library(ouinet_common OBJECT ${ouinet_common_sources})
+add_library(ouinet_common SHARED ${ouinet_common_sources})
 add_dependencies(ouinet_common ouinet_rs)
-ouinet_setup(TARGET ouinet_common LINK ouinet_rs)
+ouinet_setup(TARGET ouinet_common
+    LINK
+        ouinet_i2p
+        ouinet_rs
+        ouinet_asio
+        asio_utp
+        Boost::nowide
+        Boost::url
+        Boost::process
+        Boost::iostreams
+        Boost::program_options
+        Boost::filesystem
+    DEFS
+        OUINET_COMMON_EXPORT
+        OUINET_I2P_NOAPI
+)
 
 if (OUINET_HARDCODE_CA_CERTS)
     set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
@@ -237,15 +244,10 @@ file(GLOB client_sources
     ${VERSION_CPP}
 )
 
-add_library(ouinet_client OBJECT ${client_sources})
-ouinet_setup(TARGET ouinet_client LINK lib_json ouinet_rs)
-
 set(client_link_libs
-    ouinet_client
     ouinet_common
     ouinet_ouisync
     ouinet_i2p
-    ouinet_rs
     asio_utp
     cpp_upnp
     Boost::nowide
@@ -257,25 +259,36 @@ set(client_link_libs
     lib::json
 )
 
-if (IOS OR ANDROID)
-    set(CLIENT_LIB_TYPE STATIC)
-elseif(WIN32 OR MINGW)
-    set(CLIENT_LIB_TYPE SHARED)
+if (ANDROID)
+    find_library(android_log log)
+    list(APPEND client_link_libs ${android_log})
 endif()
 
+if (IOS)
+    set(client_lib_type STATIC)
+else()
+    set(client_lib_type SHARED)
+endif()
+
+add_library(ouinet_client ${client_lib_type} ${client_sources})
+ouinet_setup(TARGET ouinet_client
+    LINK
+        ${client_link_libs}
+    DEFS
+        OUINET_DECL_EXPORT
+        OUINET_CLIENT_EXPORT
+        OUINET_COMMON_NOAPI
+        OUINET_I2P_NOAPI
+)
+
 if (CLIENT_LIB_TYPE)
-    add_library(client_lib ${CLIENT_LIB_TYPE})
+    #add_library(client_lib ${CLIENT_LIB_TYPE})
 
-    if (NOT WIN32 AND NOT MINGW)
-        set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
-    endif()
+    #if (NOT WIN32 AND NOT MINGW)
+    #    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
+    #endif()
 
-    if (ANDROID)
-        find_library(android_log log)
-        list(APPEND client_link_libs ${android_log})
-    endif()
-
-    ouinet_setup(TARGET client_lib LINK PUBLIC ${client_link_libs})
+    #ouinet_setup(TARGET client_lib LINK PUBLIC ${client_link_libs})
 
     if (IOS)
         set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
@@ -283,8 +296,7 @@ if (CLIENT_LIB_TYPE)
     endif()
 else()
     add_executable(client "./src/client_main.cpp")
-    target_link_libraries(client ${client_link_libs})
-    target_compile_definitions(client PRIVATE OUINET_DECL_NONE)
+    target_link_libraries(client ouinet_client)
 endif()
 
 ################################################################################
@@ -295,28 +307,29 @@ file(GLOB injector_sources
     "./src/http_logger.cpp"
 )
 
-add_library(ouinet_injector OBJECT ${injector_sources})
-ouinet_setup(TARGET ouinet_injector LINK lib_json ouinet_rs)
-
-set(injector_link_libs
-    ouinet_injector
-    ouinet_common
-    ouinet_i2p
-    ouinet_rs
-    ouinet_asio
-    asio_utp
-    Boost::nowide
-    Boost::url
-    Boost::process
-    Boost::iostreams
-    Boost::program_options
-    Boost::filesystem
+add_library(ouinet_injector SHARED ${injector_sources})
+ouinet_setup(TARGET ouinet_injector
+    LINK
+        ouinet_rs
+        ouinet_common
+        ouinet_i2p
+        ouinet_asio
+        asio_utp
+        lib_json
+        Boost::nowide
+        Boost::url
+        Boost::process
+        Boost::iostreams
+        Boost::program_options
+        Boost::filesystem
+    DEFS
+        OUINET_INJECTOR_EXPORT
+        OUINET_I2P_NOAPI
 )
 
 if (NOT ANDROID AND NOT IOS)
     add_executable(injector "./src/injector_main.cpp")
-    target_link_libraries(injector ${injector_link_libs})
-    target_compile_definitions(injector PRIVATE OUINET_DECL_NONE)
+    target_link_libraries(injector ouinet_injector)
 endif()
 
 ################################################################################

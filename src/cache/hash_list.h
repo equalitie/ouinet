@@ -4,12 +4,12 @@
 #include "../util/hash.h"
 #include "../util/sign.h"
 #include "../response_part.h"
-#include "../declspec.h"
+#include "../api.h"
 #include "signed_head.h"
 
 namespace ouinet::cache {
 
-struct HashList {
+struct OUINET_CLIENT_API HashList {
     using Digest    = util::SHA512::digest_type;
     using PubKey    = sign::PublicKey;
 

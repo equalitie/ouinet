@@ -1,13 +1,14 @@
 #pragma once
 
 #include <string>
+#include "api.h"
 
 namespace ouinet::util::random {
 
 // NOTE: These are not cryptographically safe.
 
-void data(void*, size_t);
-std::string string(size_t size);
+OUINET_COMMON_API void data(void*, size_t);
+OUINET_COMMON_API std::string string(size_t size);
 
 template<typename N /* e.g. uint64_t */>
 inline N number()

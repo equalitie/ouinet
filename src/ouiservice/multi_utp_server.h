@@ -5,10 +5,11 @@
 #include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <set>
+#include "api.h"
 
 namespace ouinet::ouiservice {
 
-class MultiUtpServer : public OuiServiceImplementationServer
+class OUINET_COMMON_API MultiUtpServer : public OuiServiceImplementationServer
 {
 private:
     struct State;

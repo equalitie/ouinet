@@ -13,7 +13,7 @@
 #include "namespaces.h"
 #include "cache_control.h"
 #include "util.h"
-#include "declspec.h"
+#include "api.h"
 #include "util/bytes.h"
 #include "parse/endpoint.h"
 #include "util/sign.h"
@@ -59,7 +59,7 @@ struct OuisyncCacheConfig {
     std::string page_index_token;
 };
 
-class OUINET_DECL ClientConfig {
+class OUINET_CLIENT_API ClientConfig {
 public:
     enum class CacheType { None, Bep5Http, Bep3HTTPOverI2P, Ouisync };
 
@@ -493,8 +493,8 @@ public:
 }
 #define CHANGE_AND_SAVE(_F, _V) CHANGE_AND_SAVE_OPS((_V) == _F, _F = (_V))
 
-    log_level_t log_level() const { return logger.get_threshold(); }
-    void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
+    log_level_t log_level() const { return get_logger().get_threshold(); }
+    void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == get_logger().get_threshold(), get_logger().set_threshold(level)); }
 
     const ExtraBtBsServers& bt_bootstrap_extras() const {
         return _bt_bootstrap_extras;
@@ -533,23 +533,23 @@ public:
 
 private:
     inline bool _is_log_file_enabled() const {
-        return logger.get_log_file() != nullptr;
+        return get_logger().get_log_file() != nullptr;
     }
 
     inline void _is_log_file_enabled(bool v) {
         if (!v) {
-            logger.log_to_file("");
+            get_logger().log_to_file("");
             return;
         }
 
         if (_is_log_file_enabled()) return;
 
-        auto current_log_path = logger.current_log_file();
+        auto current_log_path = get_logger().current_log_file();
         auto ouinet_log_path = current_log_path.empty()
             ? (_repo_root / log_file_name).string()
             : current_log_path;
 
-        logger.log_to_file(ouinet_log_path);
+        get_logger().log_to_file(ouinet_log_path);
         LOG_INFO("Log file set to: ", ouinet_log_path);
     }
 

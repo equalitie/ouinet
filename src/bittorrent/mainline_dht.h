@@ -15,6 +15,7 @@
 #include "cxx/dns.h"
 #include "cxx/metrics.h"
 #include "dht.h"
+#include "api.h"
 
 #include "../util/condition_variable.h"
 #include "../util/executor.h"
@@ -35,6 +36,7 @@ using ip::udp;
 using util::AsioExecutor;
 
 // TODO: This is exposed here in this header only because it's also used in tests.
+OUINET_COMMON_API
 asio::ip::udp::endpoint resolve(
     const AsioExecutor& exec,
     asio::ip::udp ipv,
@@ -44,7 +46,7 @@ asio::ip::udp::endpoint resolve(
     Cancel& cancel_signal,
     asio::yield_context yield);
 
-class MainlineDht : public DhtBase {
+class OUINET_COMMON_API MainlineDht : public DhtBase {
     public:
     MainlineDht( const AsioExecutor&
                , metrics::MainlineDht

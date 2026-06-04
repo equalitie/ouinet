@@ -506,7 +506,7 @@ void Bep5Client::status_loop(Async yield)
         auto inj_n = _injector_swarm->peers().size();
         auto hlp_n = _helpers_swarm ? _helpers_swarm->peers().size() : 0;
 
-        logger.debug(util::str(
+        get_logger().debug(util::str(
             "Bep5Client: Swarm status;",
             " injectors=", inj_n, (inj_n == injector_swarm_capacity ? " (max)" : ""),
             " bridges=", hlp_n, (hlp_n == helper_swarm_capacity ? " (max)" : "")));

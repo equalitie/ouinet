@@ -5,6 +5,7 @@
 #include "util/watch_dog.h"
 #include "util/yield.h"
 #include <cxx/metrics.h>
+#include "api.h"
 
 namespace ouinet {
 
@@ -14,7 +15,7 @@ enum PartModifier {
     RemoveChunkHeaderExtension,
 };
 
-class Session : public http_response::AbstractReader {
+class OUINET_COMMON_API Session : public http_response::AbstractReader {
 public:
     using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 

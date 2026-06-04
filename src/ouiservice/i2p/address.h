@@ -5,16 +5,17 @@
 #include <ostream>
 #include <span>
 #include <cstdint>
-#include "declspec.h"
+#include "api.h"
 
 namespace ouinet {
 
-class I2pAddress {
+class OUINET_I2P_API I2pAddress {
 public:
     static constexpr size_t B32_ADDR_BINARY_SIZE = 32; // Size of sha256 hash
 
     std::string value;
 
+    OUINET_I2P_API
     static std::optional<I2pAddress> parse(std::string_view);
 
     static std::optional<I2pAddress> from_binary_b32(std::span<unsigned char>);

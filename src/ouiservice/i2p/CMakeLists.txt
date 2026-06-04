@@ -70,7 +70,12 @@ add_library(ouinet_i2p OBJECT
     "./util/create_i2p_session.cpp"
 )
 
-ouinet_setup(TARGET ouinet_i2p LINK ouinet_asio)
+ouinet_setup(TARGET ouinet_i2p
+    LINK ouinet_asio
+    DEFS
+        OUINET_I2P_EXPORT
+        OUINET_COMMON_NOAPI
+)
 
 if (WITH_I2PD)
     add_dependencies(ouinet_i2p i2pd)

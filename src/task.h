@@ -2,9 +2,11 @@
 
 #include <boost/asio/spawn.hpp>
 #include "namespaces.h"
+#include "api.h"
 
 namespace ouinet::task {
 
+OUINET_COMMON_API
 void handle_exception_ptr(std::exception_ptr);
 
 template<

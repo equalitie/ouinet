@@ -234,7 +234,7 @@ struct LocalPeerDiscovery::Impl {
 
         if (i == _peers.end()) return;
 
-        if (logger.would_log(INFO)) {
+        if (get_logger().would_log(INFO)) {
             ostringstream ss;
             for (auto ep : i->second.advertised_eps) { ss << ep << ";"; }
             LOG_INFO("LocalPeerDiscovery: Lost local ouinet peer(s) ", ss.str());
@@ -245,7 +245,7 @@ struct LocalPeerDiscovery::Impl {
 
     void add_endpoints(PeerId peer_id, udp::endpoint peer_ep, set<udp::endpoint> eps)
     {
-        if (logger.would_log(INFO)) {
+        if (get_logger().would_log(INFO)) {
             ostringstream ss;
             for (auto ep : eps) { ss << ep << ";"; }
             LOG_INFO("LocalPeerDiscovery: Found local ouinet peer(s) ", ss.str());

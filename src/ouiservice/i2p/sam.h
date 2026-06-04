@@ -2,7 +2,7 @@
 
 #include "error.h"
 #include "namespaces.h"
-#include "declspec.h"
+#include "api.h"
 
 #include <boost/asio/ip/tcp.hpp>
 
@@ -20,7 +20,7 @@ class Async;
 class I2pAddress;
 
 // https://i2p.net/en/docs/api/samv3/
-struct Sam {
+struct OUINET_I2P_API Sam {
 private:
     struct Keypair {
         std::string pub;

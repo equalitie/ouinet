@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE(test_generate_node_id)
     log.debug("This should not make it out");
     log.silly("This should not make it out");
 
-    logger.set_threshold(VERBOSE);
+    get_logger().set_threshold(VERBOSE);
     LOG_VERBOSE("This should make it out from the default logger with the macro");
     LOG_WARN("This should make it out with from the default logger the macro");
     LOG_DEBUG("This should not make it out from the default logger with the macro");

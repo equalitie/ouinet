@@ -14,7 +14,7 @@
 
 #include "logger.h"
 
-#define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+#define _YDEBUG(y, ...) do { if (get_logger().get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
 
 namespace ouinet {
 

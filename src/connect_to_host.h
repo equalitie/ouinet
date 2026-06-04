@@ -10,12 +10,14 @@
 #include <boost/beast/core/string.hpp>
 
 #include "cxx/dns.h"
+#include "api.h"
 
 namespace ouinet {
 
 class Cancel;
 using ouinet::util::AsioExecutor;
 
+OUINET_COMMON_API
 asio::ip::tcp::socket
 connect_to_host( const AsioExecutor&
                , const std::string& host
@@ -24,12 +26,14 @@ connect_to_host( const AsioExecutor&
                , Cancel& cancel_signal
                , asio::yield_context yield);
 
+OUINET_COMMON_API
 asio::ip::tcp::socket
 connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
                , const AsioExecutor&
                , Cancel& cancel_signal
                , asio::yield_context yield);
 
+OUINET_COMMON_API
 asio::ip::tcp::socket
 connect_to_host( const asio::ip::tcp::resolver::results_type& lookup
                , const AsioExecutor&

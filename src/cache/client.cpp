@@ -32,8 +32,8 @@
 #define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
 #define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
-#define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
-#define _YERROR(y, ...) do { if (logger.get_threshold() <= ERROR) y.log(ERROR, __VA_ARGS__); } while (false)
+#define _YDEBUG(y, ...) do { if (get_logger().get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+#define _YERROR(y, ...) do { if (get_logger().get_threshold() <= ERROR) y.log(ERROR, __VA_ARGS__); } while (false)
 
 using namespace std;
 using namespace ouinet;
@@ -485,7 +485,7 @@ struct Client::Impl {
 
             auto local_peers = _local_peer_discovery.found_peers();
 
-            if (logger.get_threshold() <= DEBUG) {
+            if (get_logger().get_threshold() <= DEBUG) {
                 LOG_DEBUG(yield, " Peer lookup with DHT and local discovery:");
                 LOG_DEBUG(yield, "    resource_id= ", resource_id);
                 LOG_DEBUG(yield, "    group=       ", group);
@@ -509,7 +509,7 @@ struct Client::Impl {
 
             auto local_peers = _local_peer_discovery.found_peers();
 
-            if (logger.get_threshold() <= DEBUG) {
+            if (get_logger().get_threshold() <= DEBUG) {
                 LOG_DEBUG(yield, " Peer lookup with I2P tracker and local discovery:");
                 LOG_DEBUG(yield, "    resource_id= ", resource_id);
                 LOG_DEBUG(yield, "    group=       ", group);
@@ -532,7 +532,7 @@ struct Client::Impl {
         else {
             auto local_peers = _local_peer_discovery.found_peers();
 
-            if (logger.get_threshold() <= DEBUG) {
+            if (get_logger().get_threshold() <= DEBUG) {
                 LOG_DEBUG(yield, " Peer lookup with local discovery only:");
                 LOG_DEBUG(yield, "    resource_id= ", resource_id);
                 LOG_DEBUG(yield, "    local_peers= ", local_peers);

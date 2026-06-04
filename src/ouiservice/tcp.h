@@ -5,6 +5,7 @@
 #include <boost/optional.hpp>
 
 #include "../ouiservice.h"
+#include "api.h"
 
 namespace ouinet {
 
@@ -12,7 +13,7 @@ class Async;
 
 namespace ouiservice {
 
-class TcpOuiServiceServer : public OuiServiceImplementationServer
+class OUINET_COMMON_API TcpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
     TcpOuiServiceServer(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
@@ -31,7 +32,7 @@ class TcpOuiServiceServer : public OuiServiceImplementationServer
     asio::ip::tcp::endpoint _endpoint;
 };
 
-class TcpOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API TcpOuiServiceClient : public OuiServiceImplementationClient
 {
     public:
     TcpOuiServiceClient(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);

@@ -8,6 +8,7 @@
 #include "node_id.h"
 
 #include "../util/sign.h"
+#include "api.h"
 
 namespace ouinet {
 
@@ -15,7 +16,7 @@ class Cancel;
 
 namespace bittorrent {
 
-struct MutableDataItem {
+struct OUINET_COMMON_API MutableDataItem {
     sign::PublicKey public_key;
     std::string salt;
     BencodedValue value;

@@ -18,6 +18,7 @@
 #include "../util/executor.h"
 
 #include "../namespaces.h"
+#include "../api.h"
 
 namespace ouinet { namespace http_ {
     // A prefix for HTTP signature headers at the response head,
@@ -85,6 +86,7 @@ using ouinet::util::AsioExecutor;
 //       headers="(response-status) (created) ... x-ouinet-injection x-ouinet-data-size digest",
 //       signature="..."
 //
+OUINET_COMMON_API
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
@@ -122,6 +124,7 @@ http_injection_trailer( const http::response_header<>& rsh
 // Please note that framing headers are also removed,
 // so if you want to reuse the header in a response,
 // you must either add a `Content-Length` or a `Transfer-Encoding: chunked` header.
+OUINET_COMMON_API
 http::response_header<>
 http_injection_merge( http::response_header<> rsh
                     , const http::fields& rst);
@@ -131,13 +134,14 @@ std::string
 http_key_id_for_injection(const sign::PublicKey&);
 
 // Create HTTP chunk extension
+OUINET_COMMON_API
 std::string
 block_chunk_ext( const boost::optional<sign::Signature>& sig
                , const boost::optional<util::SHA512::digest_type>& prev_digest = {});
 
 // Allows reading parts of a response from stream `in`
 // while signing with the private key `sk`.
-class SigningReader : public ouinet::http_response::Reader {
+class OUINET_COMMON_API SigningReader : public ouinet::http_response::Reader {
 public:
     SigningReader( GenericStream in
                  , http::request_header<> rqh
@@ -174,7 +178,7 @@ private:
 //
 // The resulting output preserves all the information and formatting needed
 // to be verified again.
-class VerifyingReader : public ouinet::http_response::AbstractReader {
+class OUINET_COMMON_API VerifyingReader : public ouinet::http_response::AbstractReader {
 public:
     using reader_uptr = std::unique_ptr<ouinet::http_response::AbstractReader>;
     using status_set = std::set<http::status>;
@@ -209,7 +213,7 @@ private:
 // Use this reader to clean a signed response from
 // headers added after its verification
 // (e.g. used for internal purposes).
-class KeepSignedReader : public ouinet::http_response::AbstractReader {
+class OUINET_COMMON_API KeepSignedReader : public ouinet::http_response::AbstractReader {
 public:
     KeepSignedReader( ouinet::http_response::AbstractReader& r
                     , std::set<std::string> extra = {})

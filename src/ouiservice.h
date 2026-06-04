@@ -10,6 +10,7 @@
 #include "endpoint.h"
 #include "util/condition_variable.h"
 #include "util/cancel.h"
+#include "api.h"
 
 #include <expected>
 
@@ -30,7 +31,7 @@ class OuiServiceImplementationServer
     virtual std::expected<GenericStream, sys::error_code> accept(Async) = 0;
 };
 
-class OuiServiceServer
+class OUINET_COMMON_API OuiServiceServer
 {
 public:
     OuiServiceServer(const asio::any_io_executor&);
@@ -76,7 +77,7 @@ class OuiServiceImplementationClient
  * therefore is just an empty shell. Later versions will support functionality
  * like trying multiple parallel implementations.
  */
-class OuiServiceClient
+class OUINET_COMMON_API OuiServiceClient
 {
     public:
     struct ConnectInfo {

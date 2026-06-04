@@ -7,11 +7,11 @@ function(add_rust_test name)
     set(target_dir "${CMAKE_CURRENT_BINARY_DIR}/rust/target")
 
     set(include_dirs
-        "$<JOIN:$<TARGET_PROPERTY:ouinet_test,INTERFACE_INCLUDE_DIRECTORIES>,$<COMMA>>"
+        "$<JOIN:$<TARGET_PROPERTY:ouinet_client,INTERFACE_INCLUDE_DIRECTORIES>,$<COMMA>>"
     )
 
-    set(libs ouinet_test ouinet_asio boost_filesystem)
-    list(JOIN libs "," libs)
+    set(libs ouinet_client ouinet_injector ouinet_common ouinet_asio)
+    list(JOIN libs "," libs_str)
 
     set(lib_dirs ${CMAKE_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR})
     list(JOIN lib_dirs "," lib_dirs)
@@ -26,14 +26,14 @@ function(add_rust_test name)
             ${CMAKE_COMMAND} -E env
                 INCLUDE_DIRS=${include_dirs}
                 LIB_DIRS=${lib_dirs}
-                LIBS=${libs}
+                LIBS=${libs_str}
             cargo build --test ${name}
                         --manifest-path ${manifest_path}
                         --target-dir ${target_dir}
         VERBATIM
     )
 
-    add_dependencies("_check_${name}" ouinet_test)
+    add_dependencies("_check_${name}" ${libs})
 
     # Build the test and write the machine-processable output to a file
     add_custom_target(
@@ -43,7 +43,7 @@ function(add_rust_test name)
             ${CMAKE_COMMAND} -E env
                 INCLUDE_DIRS=${include_dirs}
                 LIB_DIRS=${lib_dirs}
-                LIBS=${libs}
+                LIBS=${libs_str}
             cargo build --test ${name}
                         --manifest-path ${manifest_path}
                         --target-dir ${target_dir}

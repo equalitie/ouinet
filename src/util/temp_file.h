@@ -7,12 +7,13 @@
 #include "../namespaces.h"
 #include "../util/file_io/async_file_handle.h"
 #include "../util/executor.h"
+#include "api.h"
 
 namespace ouinet { namespace util {
 
 static const fs::path default_temp_model{"tmp.%%%%-%%%%-%%%%-%%%%"};
 
-class temp_file {
+class OUINET_COMMON_API temp_file {
 public:
     // Create a temporary file named after the given `temp_model` under `dir`
     // and open it for reading and writing.

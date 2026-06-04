@@ -18,6 +18,7 @@
 #include "constants.h"
 #include "default_timeout.h"
 #include "or_throw.h"
+#include "api.h"
 #include "util.h"
 #include "util/cancel.h"
 #include "util/watch_dog.h"
@@ -31,6 +32,7 @@ namespace util {
 // Get the host and port a request refers to,
 // either from the ``Host:`` header or from the target URI.
 // IPv6 addresses are returned without brackets.
+OUINET_COMMON_API
 std::optional<std::pair<std::string, uint16_t>>
 get_host_port(const http::request_header<>&);
 
@@ -53,6 +55,7 @@ struct HttpResponseByteRange {
     matches_length(boost::string_view) const;
 };
 
+OUINET_COMMON_API
 std::ostream&
 operator<<(std::ostream&, const HttpResponseByteRange&);
 
@@ -61,6 +64,7 @@ struct HttpRequestByteRange {
     size_t last;
 
     // Returns none on parse error
+    OUINET_COMMON_API
     static
     std::optional<std::vector<HttpRequestByteRange>>
     parse(boost::string_view);
@@ -72,11 +76,13 @@ struct HttpRequestByteRange {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Returns ptime() if parsing fails.
+OUINET_COMMON_API
 boost::posix_time::ptime parse_date(beast::string_view);
 
 std::string format_date(boost::posix_time::ptime);
 
 // Return empty is missing or malformed.
+OUINET_COMMON_API
 boost::string_view http_injection_field( const http::response_header<>&
                                        , const std::string&);
 
@@ -156,6 +162,7 @@ http_reply( StreamOut& out
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace detail {
+    OUINET_COMMON_API
     boost::optional<http::response<http::empty_body>>
     http_proto_version_error( unsigned rv
                             , beast::string_view ov
@@ -188,6 +195,7 @@ http_proto_version_error( const Request& rq
 }
 
 namespace detail {
+    OUINET_COMMON_API
     bool http_proto_version_check_trusted(boost::string_view, unsigned&);
 }
 
@@ -410,6 +418,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
 }
 
 namespace detail {
+    OUINET_COMMON_API
     std::string http_host_header(const std::string&, const std::string&);
 }
 

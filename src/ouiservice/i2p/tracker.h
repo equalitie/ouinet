@@ -2,7 +2,7 @@
 
 #include "address.h"
 #include "session.h"
-#include "declspec.h"
+#include "api.h"
 
 #include <boost/beast/http/status.hpp>
 #include <set>
@@ -12,7 +12,7 @@ namespace ouinet {
 class Async;
 namespace bittorrent { class NodeID; }
 
-class I2pTrackerClient {
+class OUINET_I2P_API I2pTrackerClient {
 public:
     struct Error {
         struct HttpSend {

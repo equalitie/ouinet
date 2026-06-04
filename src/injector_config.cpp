@@ -160,7 +160,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         auto ll_o = log_level_from_string(level);
         if (!ll_o)
             throw std::runtime_error(util::str("Invalid log level: ", level));
-        logger.set_threshold(*ll_o);
+        get_logger().set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
     }
 

@@ -40,6 +40,8 @@ log_level_t default_log_level() {
 
 Logger logger(default_log_level());
 
+Logger& get_logger() { return logger; }
+
 /************************* Time Functions **************************/
 
 static

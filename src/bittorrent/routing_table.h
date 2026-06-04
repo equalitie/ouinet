@@ -7,12 +7,13 @@
 #include <set>
 
 #include "node_contact.h"
+#include "api.h"
 
 namespace ouinet::bittorrent {
 
 class DhtNode;
 
-class RoutingTable {
+class OUINET_COMMON_API RoutingTable {
 public:
     static constexpr size_t BUCKET_SIZE = 8;
 

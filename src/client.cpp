@@ -76,9 +76,9 @@
 #include "task.h"
 #include "logger.h"
 
-#define _YDEBUG(y, ...) do { if (logger.get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
-#define _YWARN(y, ...) do { if (logger.get_threshold() <= WARN) y.log(WARN, __VA_ARGS__); } while (false)
-#define _YERROR(y, ...) do { if (logger.get_threshold() <= ERROR_LEVEL) y.log(ERROR_LEVEL, __VA_ARGS__); } while (false)
+#define _YDEBUG(y, ...) do { if (get_logger().get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+#define _YWARN(y, ...) do { if (get_logger().get_threshold() <= WARN) y.log(WARN, __VA_ARGS__); } while (false)
+#define _YERROR(y, ...) do { if (get_logger().get_threshold() <= ERROR_LEVEL) y.log(ERROR_LEVEL, __VA_ARGS__); } while (false)
 
 using namespace std;
 using namespace ouinet;
@@ -576,7 +576,7 @@ private:
                 }
                 yield.spawn([this, con = move(*con)] (Async yield) mutable {
                     // Do not log other users' addresses unless debugging.
-                    if (logger.get_threshold() <= DEBUG) {
+                    if (get_logger().get_threshold() <= DEBUG) {
                         yield = yield.tag(con.remote_endpoint());
                     }
                     serve_peer_request(move(con), yield.tag("serve"));
@@ -1787,7 +1787,7 @@ public:
             && rq->header().method() == http::verb::get  // TODO: storing HEAD response not yet supported
             && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
             && CacheControl::ok_to_cache( rq->header(), rsh, client_state._config.do_cache_private()
-                                        , (logger.get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
+                                        , (get_logger().get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
 
         if (do_cache) {
             yield.spawn_detached([ &, cache = std::move(cache), lock = wc.lock() ] (YieldContext yield) {

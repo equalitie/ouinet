@@ -4,8 +4,8 @@
 #include "../util/log_path.h"
 #include "../logger.h"
 #include "../or_throw.h"
-#include "../logger.h"
 #include "../task.h"
+#include "api.h"
 
 #include <boost/asio/spawn.hpp>
 #include <boost/utility/string_view.hpp>
@@ -13,7 +13,7 @@
 
 namespace ouinet {
 
-class YieldContext
+class OUINET_COMMON_API YieldContext
 {
 public:
     explicit YieldContext( asio::yield_context asio_yield, util::LogPath log_path = {})
@@ -93,7 +93,7 @@ template<class... Args>
 inline
 void YieldContext::log(Args&&... args)
 {
-    if (logger.get_threshold() > INFO)
+    if (get_logger().get_threshold() > INFO)
         return;  // avoid string conversion early
 
     YieldContext::log(INFO, boost::string_view(util::str(std::forward<Args>(args)...)));
@@ -103,7 +103,7 @@ template<class... Args>
 inline
 void YieldContext::log(log_level_t log_level, Args&&... args)
 {
-    if (logger.get_threshold() > log_level)
+    if (get_logger().get_threshold() > log_level)
         return;  // avoid string conversion early
 
     YieldContext::log(log_level, boost::string_view(util::str(std::forward<Args>(args)...)));
