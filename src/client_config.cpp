@@ -418,7 +418,6 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
     boost::optional<std::string> server_token;
     boost::optional<asio::ssl::context> server_cacert;
     std::optional<metrics::EncryptionKey> encryption_key;
-    uint64_t delete_after_seconds;
 
     if (auto opt = as_optional<std::string>(vm, "metrics-server-url")) {
         auto url = util::Url::from(*opt);
@@ -480,9 +479,7 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
 
     if (!server_url) return nullptr;
 
-    if (auto opt = as_optional<std::uint64_t>(vm, "metrics-delete-after")) {
-        delete_after_seconds = *opt;
-    }
+    auto delete_after_seconds = *as_optional<std::uint64_t>(vm, "metrics-delete-after");
 
     return std::unique_ptr<MetricsConfig>(
             new MetricsConfig {
