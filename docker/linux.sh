@@ -92,7 +92,7 @@ echo "Clean:          $([ "$clean" = y ] && echo yes || echo no)"
 echo ""
 
 function build_image (
-    rust_version=1.92.0
+    rust_version=1.96.0
 
     rust_target=(
         aarch64-linux-android
