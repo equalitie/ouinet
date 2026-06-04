@@ -421,12 +421,6 @@ public:
             return;
         }
 
-        if (auto dht_lock = _dht_lookup->get_dht_lock()) {
-            for (auto ep : _lan_peer_eps) {
-                add_candidate(ep, *dht_lock);
-            }
-        }
-
         task::spawn_detached(
             _exec,
             [
@@ -445,6 +439,12 @@ public:
 
                 _wan_my_eps = dht->wan_endpoints();
                 LOG_DEBUG(yield, "DHT is ready (lan=", _lan_my_eps, " wan=", _wan_my_eps, "). Looking up peers...");
+
+                if (auto dht = _dht_lookup->get_dht_lock()) {
+                    for (auto ep : _lan_peer_eps) {
+                        add_candidate(ep, *dht);
+                    }
+                }
 
                 // Keep looking up for peers until success or until `this` is destroyed.
                 const auto min_sleep = chrono::milliseconds(100);
