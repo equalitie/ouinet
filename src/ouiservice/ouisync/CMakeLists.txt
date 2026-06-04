@@ -37,11 +37,14 @@ if (WITH_OUISYNC)
     add_library(
         ouinet_ouisync
         EXCLUDE_FROM_ALL
-        SHARED
+        OBJECT
         "./ouisync.cpp"
         "./error.cpp"
     )
-    ouinet_setup(TARGET ouinet_ouisync LINK PUBLIC ouinet_common ouinet_rs cpp_ouisync_service cpp_ouisync_client NO_API)
+    ouinet_setup(TARGET ouinet_ouisync
+        LINK PUBLIC ouinet_rs cpp_ouisync_service cpp_ouisync_client
+        DEFS OUINET_API_OUISYNC_EXPORT
+    )
 else()
     add_library(ouinet_ouisync INTERFACE EXCLUDE_FROM_ALL)
     target_include_directories(ouinet_ouisync INTERFACE "${CMAKE_SOURCE_DIR}/src")

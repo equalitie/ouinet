@@ -158,7 +158,6 @@ file(GLOB ouinet_common_sources
     "./src/util/log_path.cpp"
     "./src/util/random.cpp"
     "./src/async_sleep.cpp"
-    "./src/cache/http_store_path.cpp"
     "./src/cache/resource_id.cpp"
     "./src/connect_to_host.cpp"
     "./src/response_part.cpp"
