@@ -68,6 +68,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     // you may want to check `local_endpoints()` after this operation.
     void set_endpoints(const std::set<udp::endpoint>&) override;
 
+    [[nodiscard]]
     Promise<udp::endpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
     std::set<udp::endpoint> local_endpoints() const override {
