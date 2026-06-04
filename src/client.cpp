@@ -50,7 +50,6 @@
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
 #include "bittorrent/mainline_dht.h"
-#include "bittorrent/mutable_data.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p/session.h"
@@ -274,15 +273,23 @@ public:
             bt_dht = (*_bt_dht_builder)();
         }
         else {
-            bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
-                                                      , _metrics.mainline_dht()
-                                                      , _dns_resolver
-                                                      , _config.udp_mux_rx_limit_in_bytes()
-                                                      , _config.repo_root() / "dht"
-                                                      , bt::bootstrap::Config()
-                                                          .with_default(!_config.bt_bootstrap_no_default())
-                                                          .with_extras(_config.bt_bootstrap_extras())
-                                                      , _log_path.tag("dht"));
+            auto dht = std::make_shared<bt::MainlineDht>(
+                _ctx.get_executor(),
+                _metrics.mainline_dht(),
+                _dns_resolver,
+                _config.udp_mux_rx_limit_in_bytes(),
+                _config.repo_root() / "dht",
+                bt::bootstrap::Config()
+                    .with_default(!_config.bt_bootstrap_no_default())
+                    .with_extras(_config.bt_bootstrap_extras()),
+                _log_path.tag("dht")
+            );
+
+            if (_config.bt_allow_martians()) {
+                dht->set_peer_filter(bt::PeerFilter::none);
+            }
+
+            bt_dht = std::move(dht);
         }
 
 

@@ -1,5 +1,4 @@
 #include <bittorrent/mainline_dht.h>
-#include <bittorrent/is_martian.h>
 #include <bittorrent/routing_table.h>
 
 #include <iostream>
@@ -211,7 +210,7 @@ int main(int argc, const char** argv)
                 })(cancel, yield[ec]);
                 // Remove martian endpoints (cant't use `remove_if` on sets).
                 for (auto it = ps.begin(); it != ps.end();)
-                    if (is_martian(*it))
+                    if (!PeerFilter::martian.is_allowed(*it))
                         it = ps.erase(it);
                     else
                         it++;

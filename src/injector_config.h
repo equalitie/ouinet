@@ -55,6 +55,10 @@ public:
         return _bt_bootstrap_no_default;
     }
 
+    bool bt_allow_martians() const {
+        return _bt_allow_martians;
+    }
+
     uint32_t udp_mux_rx_limit_in_bytes() const {
         // The value is set in Kbps in the configuration but required in bytes
         // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
@@ -132,6 +136,7 @@ private:
     boost::filesystem::path _repo_root;
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
+    bool _bt_allow_martians = false;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_injector;
     boost::optional<size_t> _open_file_limit;
     bool _listen_on_i2p = false;

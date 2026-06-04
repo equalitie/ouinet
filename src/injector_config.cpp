@@ -30,12 +30,12 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("bt-bootstrap-extra", po::value<std::vector<string>>()->composing()
          , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
            "to start the DHT (can be used several times). "
-           "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
-           "This option is persistent.")
+           "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. ")
         ("bt-bootstrap-no-default", po::bool_switch()->default_value(false)
          , "Don't use default BitTorrent bootstrap servers."
-           "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used."
-           "This option is persistent.")
+           "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used.")
+        ("bt-allow-martians", po::bool_switch()->default_value(false)
+         , "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful mostly for testing.")
         ("udp-mux-rx-limit"
          , po::value<uint32_t>()->default_value(500)
          , "Max rate limit that's allowed for incoming packets to the "
@@ -183,6 +183,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
     if (vm["bt-bootstrap-no-default"].as<bool>()) {
         _bt_bootstrap_no_default = true;
+    }
+
+    if (vm["bt-allow-martians"].as<bool>()) {
+        _bt_allow_martians = true;
     }
 
     if (vm.count("udp-mux-rx-limit")) {

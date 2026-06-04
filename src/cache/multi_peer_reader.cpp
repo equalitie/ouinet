@@ -596,7 +596,7 @@ public:
     }
 
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
-        if (dht.is_martian(ep)) return;
+        if (!dht.is_peer_allowed(ep)) return;
         if (_wan_my_eps.count(ep)) return;
 
         auto ip = _all_udp_peers.insert({ep, unique_ptr<Peer>()});

@@ -105,6 +105,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _bt_bootstrap_no_default = true;
     }
 
+    if (vm["bt-allow-martians"].as<bool>()) {
+        _bt_allow_martians = true;
+    }
+
 #ifndef __WIN32
     if (auto opt = as_optional<unsigned int>(vm, "open-file-limit")) {
         increase_open_file_limit(*opt);

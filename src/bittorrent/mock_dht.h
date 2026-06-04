@@ -50,7 +50,7 @@ public:
     void stop() override;
 
     // Normal DHT wouldn't allow localhost endpoints.
-    bool is_martian(const UdpEndpoint&) const override { return false; }
+    bool is_peer_allowed(const UdpEndpoint&) const override { return true; }
 
     void can_not_see(std::string peer_name);
 

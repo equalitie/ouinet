@@ -7,7 +7,6 @@
 #include "../../async_sleep.h"
 #include "../../bittorrent/mainline_dht.h"
 #include "../../bittorrent/bep5_announcer.h"
-#include "../../bittorrent/is_martian.h"
 #include "../../logger.h"
 #include "../../util/compat.h"
 #include "../../util/hash.h"
@@ -219,7 +218,7 @@ private:
         auto lan_eps = _dht->local_endpoints();
 
         for (auto ep : eps) {
-            if (_dht->is_martian(ep)) continue;
+            if (!_dht->is_peer_allowed(ep)) continue;
 
             // Don't connect to self
             if (wan_eps.count(ep) || lan_eps.count(ep)) continue;

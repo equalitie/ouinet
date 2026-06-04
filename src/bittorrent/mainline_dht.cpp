@@ -26,7 +26,6 @@
 #include "collect.h"
 #include "debug_ctx.h"
 #include "dht_node.h"
-#include "is_martian.h"
 #include "mainline_dht.h"
 #include "node_contact.h"
 #include "proximity_map.h"
@@ -165,6 +164,7 @@ private:
 
 static bool read_nodes( bool is_v4
                       , const BencodedMap& response
+                      , PeerFilter peer_filter
                       , util::AsyncQueue<NodeContact>& sink
                       , Async yield)
 {
@@ -185,11 +185,14 @@ static bool read_nodes( bool is_v4
     }
 
     // Remove invalid endpoints
-    nodes.erase( std::remove_if
-                  ( nodes.begin()
-                  , nodes.end()
-                  , [] (auto& n) { return is_martian(n.endpoint); })
-               , nodes.end());
+    nodes.erase(
+        std::remove_if(
+            nodes.begin(),
+            nodes.end(),
+            [peer_filter] (auto& n) { return !peer_filter.is_allowed(n.endpoint); }
+        ),
+        nodes.end()
+    );
 
     if (nodes.empty()) return false;
 
@@ -1778,7 +1781,7 @@ std::expected<void, sys::error_code> DhtNode::bootstrap(Async yield)
                         auto result = bootstrap_single(bs, yield);
                         LOG_DEBUG(yield, " Bootstrapping node: ", bs, ": done; result=", debug(result));
 
-                        if (!result || is_martian(result->my_ep)) return;
+                        if (!result || !_peer_filter.is_allowed(result->my_ep)) return;
 
                         auto& stats = add_result(results, *result, score_of(bs));
 
@@ -2139,7 +2142,7 @@ std::expected<bool, sys::error_code> DhtNode::query_find_node2(
         return false;
     }
 
-    return read_nodes(is_v4(), *response, closer_nodes, yield);
+    return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
 }
 
 // http://bittorrent.org/beps/bep_0005.html#get-peers
@@ -2281,7 +2284,7 @@ boost::optional<BencodedMap> DhtNode::query_get_data(
     if (!response) return boost::none;
 
     compat([&](Async yield) {
-        return read_nodes(is_v4(), *response, closer_nodes, yield);
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
     })(cancel, yield[ec]);
 
     return {std::move(*response)};
@@ -2360,7 +2363,7 @@ boost::optional<BencodedMap> DhtNode::query_get_data2(
     if (!response) return boost::none;
 
     compat([&](Async yield) {
-        return read_nodes(is_v4(), *response, closer_nodes, yield);
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
     })(cancel_signal, yield[ec]);
 
     return {std::move(*response)};
@@ -2418,7 +2421,7 @@ boost::optional<BencodedMap> DhtNode::query_get_data3(
     if (!response) return boost::none;
 
     compat([&](Async yield) {
-        return read_nodes(is_v4(), *response, closer_nodes, yield);
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
     })(cancel_signal, yield[ec]);
 
     return {std::move(*response)};
@@ -2585,7 +2588,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
 
-    _nodes[local_ep] = make_unique<DhtNode>(
+    auto& node = _nodes[local_ep] = make_unique<DhtNode>(
         _exec,
         metrics_dht_node_for(_metrics, local_ep.address()),
         _dns_resolver,
@@ -2594,6 +2597,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         _bootstrap_config,
         _log_path
     );
+    node->set_peer_filter(_peer_filter);
 
     Promise<asio::ip::udp::endpoint> promise(_exec);
     auto future = promise.get_future();
@@ -2865,8 +2869,15 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     return or_throw(yield, ec, std::move(output));
 }
 
-bool MainlineDht::is_martian(UdpEndpoint const& ep) const {
-    return bittorrent::is_martian(ep);
+bool MainlineDht::is_peer_allowed(UdpEndpoint const& ep) const {
+    return _peer_filter.is_allowed(ep);
+}
+
+void MainlineDht::set_peer_filter(PeerFilter filter) {
+    _peer_filter = filter;
+    for (auto& p : _nodes) {
+        p.second->set_peer_filter(filter);
+    }
 }
 
 void MainlineDht::wait_all_ready(Async yield) {

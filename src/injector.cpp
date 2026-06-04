@@ -828,7 +828,7 @@ Injector::Injector(
         InjectorConfig config,
         asio::io_context& ctx,
         util::LogPath log_path,
-        std::shared_ptr<bittorrent::MockDht> dht) :
+        std::shared_ptr<bittorrent::MockDht> mock_dht) :
     _exec(ctx.get_executor()),
     _config(std::move(config)),
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
@@ -917,21 +917,27 @@ Injector::Injector(
         }
     }
 
-    if (dht) {
-        _dht = dht;
+    if (mock_dht) {
+        _dht = mock_dht;
     } else {
-        _dht = std::make_shared<bt::MainlineDht>
-            ( _exec
-            , metrics::Client::noop().mainline_dht()
-            , _dns_resolver
-            , config.udp_mux_rx_limit_in_bytes()
-            , fs::path{}  // default storage dir
-            , bt::bootstrap::Config()
+        auto dht = std::make_shared<bt::MainlineDht>(
+            _exec,
+            metrics::Client::noop().mainline_dht(),
+            _dns_resolver,
+            config.udp_mux_rx_limit_in_bytes(),
+            fs::path{},  // default storage dir
+            bt::bootstrap::Config()
                 .with_default(!_config.bt_bootstrap_no_default())
-                .with_extras(_config.bt_bootstrap_extras())
-            , log_path.tag("dht"));
-    }
+                .with_extras(_config.bt_bootstrap_extras()),
+            log_path.tag("dht")
+        );
 
+        if (_config.bt_allow_martians()) {
+            dht->set_peer_filter(bt::PeerFilter::none);
+        }
+
+        _dht = std::move(dht);
+    }
 
     _dht->set_endpoints({_config.bittorrent_endpoint()});
 

@@ -17,6 +17,7 @@
 #include "dht_storage.h"
 #include "mutable_data.h"
 #include "node_id.h"
+#include "peer_filter.h"
 #include "routing_table.h"
 #include "contact.h"
 #include "cxx/dns.h"
@@ -210,6 +211,10 @@ class OUINET_COMMON_API DhtNode {
 
     NodeID node_id() const { return _node_id; }
 
+    void set_peer_filter(PeerFilter filter) {
+        _peer_filter = filter;
+    }
+
     private:
     void receive_loop(Async);
     void store_contacts_loop(Async);
@@ -364,6 +369,7 @@ class OUINET_COMMON_API DhtNode {
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
     bootstrap::Config _bootstrap_config;
+    PeerFilter _peer_filter = PeerFilter::martian;
     metrics::DhtNode _metrics;
     util::LogPath _log_path;
 };
