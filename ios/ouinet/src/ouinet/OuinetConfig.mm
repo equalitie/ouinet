@@ -2,6 +2,7 @@
 
 @interface OuinetConfig()
 - (NSString*)setupInjectorTlsCert:(NSString*)ouinetDirectory;
+- (NSString*)setupMetricsTlsCaCert:(NSString*)ouinetDirectory;
 @end
 
 @implementation OuinetConfig
@@ -15,6 +16,14 @@
   NSString* cacheType;
   NSString* listenOnTcp;
   NSString* frontEndEp;
+  NSString* frontEndAccessToken;
+  BOOL metricsEnableOnStart;
+  NSString* metricsServerUrl;
+  NSString* metricsServerToken;
+  NSString* metricsServerTlsCaCert;
+  NSString* metricsServerTlsCaCertPath;
+  NSString* metricsEncryptionKey;
+  NSString* metricsDeleteAfter;
   NSString* logLevel;
   BOOL disableOriginAccess;
   BOOL disableProxyAccess;
@@ -80,6 +89,49 @@
 - (OuinetConfig*)setFrontEndEp:(NSString*)address
 {
   frontEndEp = address;
+  return self;
+}
+
+- (OuinetConfig*)setFrontEndAccessToken:(NSString*)token
+{
+  frontEndAccessToken = token;
+  return self;
+}
+
+- (OuinetConfig*)setMetricsEnableOnStart:(BOOL)value
+{
+  metricsEnableOnStart = value;
+  return self;
+}
+
+- (OuinetConfig*)setMetricsServerUrl:(NSString*)url
+{
+  metricsServerUrl = url;
+  return self;
+}
+
+- (OuinetConfig*)setMetricsServerToken:(NSString*)token
+{
+  metricsServerToken = token;
+  return self;
+}
+
+- (OuinetConfig*)setMetricsServerTlsCaCert:(NSString*)caCert
+{
+  metricsServerTlsCaCert = caCert;
+  metricsServerTlsCaCertPath = [self setupMetricsTlsCaCert:ouinetDirectory];
+  return self;
+}
+
+- (OuinetConfig*)setMetricsEncryptionKey:(NSString*)key
+{
+  metricsEncryptionKey = key;
+  return self;
+}
+
+- (OuinetConfig*)setMetricsDeleteAfter:(NSString*)duration
+{
+  metricsDeleteAfter = duration;
   return self;
 }
 
@@ -159,6 +211,41 @@
   return frontEndEp;
 }
 
+- (NSString*)getFrontEndAccessToken
+{
+  return frontEndAccessToken;
+}
+
+- (BOOL)getMetricsEnableOnStart
+{
+  return metricsEnableOnStart;
+}
+
+- (NSString*)getMetricsServerUrl
+{
+  return metricsServerUrl;
+}
+
+- (NSString*)getMetricsServerToken
+{
+  return metricsServerToken;
+}
+
+- (NSString*)getMetricsServerTlsCaCertPath
+{
+  return metricsServerTlsCaCertPath;
+}
+
+- (NSString*)getMetricsEncryptionKey
+{
+  return metricsEncryptionKey;
+}
+
+- (NSString*)getMetricsDeleteAfter
+{
+  return metricsDeleteAfter;
+}
+
 - (NSString*)getLogLevel
 {
   return logLevel;
@@ -199,12 +286,25 @@
       return nil;
   }
   NSString* tlsCertPath = [NSString stringWithFormat: @"%@%@", ouinetDir, @"/injector-tls-cert.pem"];
-  NSString *content = injectorTlsCert; 
+  NSString *content = injectorTlsCert;
   NSData *fileContents = [content dataUsingEncoding:NSUTF8StringEncoding];
   [[NSFileManager defaultManager] createFileAtPath:tlsCertPath
                                 contents:fileContents
                                 attributes:nil];
   return tlsCertPath;
+}
+
+- (NSString*)setupMetricsTlsCaCert:(NSString*)ouinetDir
+{
+  if (metricsServerTlsCaCert == nil) {
+      return nil;
+  }
+  NSString* caCertPath = [NSString stringWithFormat: @"%@%@", ouinetDir, @"/metrics-tls-ca-cert.pem"];
+  NSData *fileContents = [metricsServerTlsCaCert dataUsingEncoding:NSUTF8StringEncoding];
+  [[NSFileManager defaultManager] createFileAtPath:caCertPath
+                                contents:fileContents
+                                attributes:nil];
+  return caCertPath;
 }
 
 @end
