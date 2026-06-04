@@ -1184,7 +1184,8 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
                 BencodedMap {
                     { "y", "e" },
                     { "t", std::string(transaction) },
-                    { "e", BencodedList{code, description} }
+                    { "e", BencodedList{code, description} },
+                    { "ip", encode_endpoint(sender) }
                 },
                 yield
             );
@@ -1198,13 +1199,14 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
             return send_datagram(
                 sender,
                 BencodedMap {
-                    // TODO: Send version "v" and sender endpoint "ip" (same in
+                    // TODO: Send version "v" (same in
                     // above error reply).
                     // https://wiki.theory.org/BitTorrentSpecification
                     // http://www.bittorrent.org/beps/bep_0020.html
                     { "y", "r" },
                     { "t", std::string(transaction) },
-                    { "r", std::move(reply) }
+                    { "r", std::move(reply) },
+                    { "ip", encode_endpoint(sender) },
                 },
                 yield
             );
@@ -1679,7 +1681,7 @@ DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
     );
 
     if (!initial_ping_reply) {
-        LOG_DEBUG(yield, "Bootstrap server does not reply, giving up: "
+        LOG_DEBUG(yield, " Bootstrap server does not reply, giving up: "
                        , bootstrap_address, "; error=", initial_ping_reply.error());
         return std::unexpected(initial_ping_reply.error());
     }
