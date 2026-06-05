@@ -73,8 +73,8 @@ add_library(ouinet_i2p OBJECT
 ouinet_setup(TARGET ouinet_i2p
     LINK ouinet_asio
     DEFS
-        OUINET_I2P_EXPORT
-        OUINET_COMMON_NOAPI
+        OUINET_API_I2P_EXPORT
+        OUINET_API_COMMON_LOCAL
 )
 
 if (WITH_I2PD)

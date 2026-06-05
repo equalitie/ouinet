@@ -5,9 +5,9 @@
 #endif
 
 #ifdef OUINET_USES_API
-#    if defined(OUINET_COMMON_NOAPI)
+#    if defined(OUINET_API_COMMON_LOCAL)
 #        define OUINET_COMMON_API
-#    elif defined(OUINET_COMMON_EXPORT)
+#    elif defined(OUINET_API_COMMON_EXPORT)
 #        define OUINET_COMMON_API __declspec(dllexport)
 #    else
 #        define OUINET_COMMON_API __declspec(dllimport)
@@ -17,9 +17,9 @@
 #endif
 
 #ifdef OUINET_USES_API
-#    if defined(OUINET_INJECTOR_NOAPI)
+#    if defined(OUINET_API_INJECTOR_LOCAL)
 #        define OUINET_INJECTOR_API
-#    elif defined(OUINET_INJECTOR_EXPORT)
+#    elif defined(OUINET_API_INJECTOR_EXPORT)
 #        define OUINET_INJECTOR_API __declspec(dllexport)
 #    else
 #        define OUINET_INJECTOR_API __declspec(dllimport)
@@ -29,9 +29,9 @@
 #endif
 
 #ifdef OUINET_USES_API
-#    if defined(OUINET_CLIENT_NOAPI)
+#    if defined(OUINET_API_CLIENT_LOCAL)
 #        define OUINET_CLIENT_API
-#    elif defined(OUINET_CLIENT_EXPORT)
+#    elif defined(OUINET_API_CLIENT_EXPORT)
 #        define OUINET_CLIENT_API __declspec(dllexport)
 #    else
 #        define OUINET_CLIENT_API __declspec(dllimport)
@@ -41,9 +41,9 @@
 #endif
 
 #ifdef OUINET_USES_API
-#    if defined(OUINET_OUISYNC_NOAPI)
+#    if defined(OUINET_API_OUISYNC_LOCAL)
 #        define OUINET_OUISYNC_API
-#    elif defined(OUINET_OUISYNC_EXPORT)
+#    elif defined(OUINET_API_OUISYNC_EXPORT)
 #        define OUINET_OUISYNC_API __declspec(dllexport)
 #    else
 #        define OUINET_OUISYNC_API __declspec(dllimport)
@@ -53,9 +53,9 @@
 #endif
 
 #ifdef OUINET_USES_API
-#    if defined(OUINET_I2P_NOAPI)
+#    if defined(OUINET_API_I2P_LOCAL)
 #        define OUINET_I2P_API
-#    elif defined(OUINET_I2P_EXPORT)
+#    elif defined(OUINET_API_I2P_EXPORT)
 #        define OUINET_I2P_API __declspec(dllexport)
 #    else
 #        define OUINET_I2P_API __declspec(dllimport)

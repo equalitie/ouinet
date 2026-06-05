@@ -207,8 +207,8 @@ ouinet_setup(TARGET ouinet_common
         Boost::program_options
         Boost::filesystem
     DEFS
-        OUINET_COMMON_EXPORT
-        OUINET_I2P_NOAPI
+        OUINET_API_COMMON_EXPORT
+        OUINET_API_I2P_LOCAL
 )
 
 if (OUINET_HARDCODE_CA_CERTS)
@@ -276,9 +276,10 @@ ouinet_setup(TARGET ouinet_client
         ${client_link_libs}
     DEFS
         OUINET_DECL_EXPORT
-        OUINET_CLIENT_EXPORT
-        OUINET_COMMON_NOAPI
-        OUINET_I2P_NOAPI
+        OUINET_API_CLIENT_EXPORT
+        OUINET_API_COMMON_LOCAL
+        OUINET_API_OUISYNC_LOCAL
+        OUINET_API_I2P_LOCAL
 )
 
 if (CLIENT_LIB_TYPE)
@@ -323,8 +324,8 @@ ouinet_setup(TARGET ouinet_injector
         Boost::program_options
         Boost::filesystem
     DEFS
-        OUINET_INJECTOR_EXPORT
-        OUINET_I2P_NOAPI
+        OUINET_API_INJECTOR_EXPORT
+        OUINET_API_I2P_LOCAL
 )
 
 if (NOT ANDROID AND NOT IOS)
