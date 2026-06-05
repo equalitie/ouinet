@@ -2,6 +2,7 @@
 
 #include "util/async.h"
 #include "util/wait_condition.h"
+#include <optional>
 
 namespace ouinet {
 
