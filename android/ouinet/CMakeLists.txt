@@ -64,7 +64,7 @@ endif()
 
 target_link_libraries(native-lib
     PRIVATE
-        client_lib
+        ouinet_client
         ${android_log}
 )
 
@@ -79,6 +79,3 @@ add_custom_command(
 add_custom_target(libcpp_shared ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so)
 
 add_dependencies(native-lib libcpp_shared)
-if(WITH_DEPRECATED)
-    add_dependencies(native-lib obfs4proxy)
-endif()
