@@ -3,6 +3,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/utility/string_view.hpp>
+#include <optional>
 
 namespace ouinet { namespace bittorrent {
 
