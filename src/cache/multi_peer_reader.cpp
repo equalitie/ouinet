@@ -443,7 +443,6 @@ public:
 
                 dht->wait_all_ready(yield);
 
-                _lan_my_eps = dht->local_endpoints();
                 _wan_my_eps = dht->wan_endpoints();
                 LOG_DEBUG(yield, "DHT is ready (lan=", _lan_my_eps, " wan=", _wan_my_eps, "). Looking up peers...");
 
@@ -808,7 +807,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _log_path(std::move(log_path))
 {
     _peers = make_unique<Peers>(ex
-                               , std::set<udp::endpoint>{}
+                               , peer_lookup->get_dht_lock()->local_endpoints()
                                , std::set<udp::endpoint>{}
                                , move(lan_peer_eps)
                                , move(cache_pk)
