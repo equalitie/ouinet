@@ -242,7 +242,8 @@ class OUINET_COMMON_API DhtNode {
         Async
     );
 
-    void handle_query(udp::endpoint sender, BencodedMap& query, Cancel cancel, asio::yield_context);
+    std::expected<void, sys::error_code>
+    handle_query(udp::endpoint sender, BencodedMap& query, Async);
 
     std::expected<void, sys::error_code> bootstrap(Async);
 
