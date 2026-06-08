@@ -433,12 +433,13 @@ public:
                 auto dht = _dht_lookup->get_dht_lock();
                 assert(dht);
 
-                LOG_DEBUG(yield, " Waiting for DHT to be ready...");
+                LOG_DEBUG(yield, " Waiting for DHT to get ready...");
 
                 dht->wait_all_ready(yield);
 
                 _wan_my_eps = dht->wan_endpoints();
-                LOG_DEBUG(yield, " DHT is ready (lan=", _lan_my_eps, " wan=", _wan_my_eps, "). Looking up peers...");
+                LOG_DEBUG(yield, " Waiting for DHT to get ready: done (lan=", _lan_my_eps, " wan=", _wan_my_eps, ")");
+                LOG_DEBUG(yield, " Looking up peers...");
 
                 if (auto dht = _dht_lookup->get_dht_lock()) {
                     for (auto ep : _lan_peer_eps) {

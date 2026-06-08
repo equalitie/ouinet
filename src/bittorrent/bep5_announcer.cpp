@@ -87,6 +87,12 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
             auto dht = dht_w.lock();
             if (!dht) return;
 
+            if (!dht->all_ready()) {
+                LOG_DEBUG(yield, " Waiting for DHT to get ready...");
+                dht->wait_all_ready(yield);
+                LOG_DEBUG(yield, " Waiting for DHT to get ready: done");
+            }
+
             LOG_DEBUG(yield, " Announcing infohash: ", infohash, "...");
 
             auto result = dht->tracker_announce(infohash, std::nullopt, yield);
@@ -113,7 +119,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
             auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 12min);
 
             LOG_DEBUG(yield, "Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
-                        , "s to announce infohash: ", infohash);
+                           , "s to announce infohash: ", infohash);
 
             async_sleep(sleep, yield);
         }
