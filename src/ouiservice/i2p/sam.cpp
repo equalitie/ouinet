@@ -56,6 +56,12 @@ Sam::Sam(Sam&& other) :
 {}
 
 std::expected<void, Error::IoSend> Sam::send_line(const std::string& line, Async yield) {
+    auto slot = yield.cancel_slot([&] {
+        if (_inner->socket.is_open()) {
+            _inner->socket.close();
+        }
+    });
+
     auto r = asio::async_write(_inner->socket, asio::buffer(line + '\n'), yield);
     if (!r) {
         if (_inner->socket.is_open()) _inner->socket.close();
@@ -65,6 +71,12 @@ std::expected<void, Error::IoSend> Sam::send_line(const std::string& line, Async
 }
 
 std::expected<std::string, Error::IoRecv> Sam::recv_line(Async yield) {
+    auto slot = yield.cancel_slot([&] {
+        if (_inner->socket.is_open()) {
+            _inner->socket.close();
+        }
+    });
+
     // NOTE: Reading byte-by-byte instead of using `asio::async_read_until` to avoid
     // reading past the '\n'.
     std::string line;
