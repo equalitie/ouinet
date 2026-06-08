@@ -2,9 +2,10 @@
 #include "../async_sleep.h"
 #include "../logger.h"
 #include "../task.h"
-#include "../util/compat.h"
 #include "../util/condition_variable.h"
+#include "../util/debug.h"
 #include "../util/wait_condition.h"
+#include <chrono>
 #include <random>
 #include <iostream>
 
@@ -74,6 +75,12 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
 
         UniformRandomDuration random_timeout;
 
+        // Retry failed announces with exponential backoff strategy.
+        const chrono::milliseconds min_fail_sleep(0);
+        const chrono::milliseconds max_fail_sleep(60000);
+        chrono::milliseconds fail_sleep = min_fail_sleep;
+
+
         while (true) {
             if (type == Type::Manual && !go_again) {
                 LOG_DEBUG(yield, " Waiting for manual announce for infohash: ", infohash, "...");
@@ -99,11 +106,20 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
 
             dht.reset();
 
-            if (!result) {
-                LOG_WARN(yield, " Announcing infohash: ", infohash, ": failed; error=", result.error());
-                // TODO: Arbitrary timeout
+            LOG_WARN(yield, " Announcing infohash: ", infohash, ": result=", ouinet::debug(result));
+
+            if (result) {
+                fail_sleep = min_fail_sleep;
+            } else {
                 LOG_DEBUG(yield, " Will retry infohash because of announcement error: ", infohash);
-                async_sleep(random_timeout(1s, 1min), yield);
+
+                if (fail_sleep == chrono::milliseconds(0)) {
+                    fail_sleep = chrono::milliseconds(1);
+                } else {
+                    async_sleep(fail_sleep, yield);
+                    fail_sleep = min(2 * fail_sleep, max_fail_sleep);
+                }
+
                 go_again = true;  // do not wait for manual request
                 continue;
             }
