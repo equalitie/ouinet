@@ -454,15 +454,22 @@ public:
 
                 while (true) {
                     auto peer_eps = _dht_lookup->get(yield);
-                    if (peer_eps) {
-                        LOG_DEBUG(yield, " Peer lookup successful: ", *peer_eps);
+
+                    if (peer_eps && !peer_eps->empty()) {
+                        LOG_DEBUG(yield, " Found ", peer_eps->size(), " peers");
 
                         if (auto dht = _dht_lookup->get_dht_lock()) {
                             for (auto ep : *peer_eps) add_candidate(ep, *dht);
                         }
+
                         break;
                     } else {
-                        LOG_DEBUG(yield, " Peer lookup failed: ", peer_eps.error(), ". Retry in ", sleep);
+                        if (peer_eps) {
+                            LOG_DEBUG(yield, " Found 0 peers. Retry in ", sleep);
+                        } else {
+                            LOG_DEBUG(yield, " Peer lookup failed: ", peer_eps.error(), ". Retry in ", sleep);
+                        }
+
                         async_sleep(sleep, yield);
                         sleep = min(2 * sleep, max_sleep);
                     }
