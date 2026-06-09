@@ -3150,7 +3150,9 @@ void Client::State::setup_injector(asio::yield_context yield)
             ep->value,
             *bridge_swarm_name,
             _config.is_bridge_announcement_enabled(),
-            &inj_ctx
+            &inj_ctx,
+            ouiservice::Bep5Client::injectors | ouiservice::Bep5Client::helpers,
+            _log_path
         );
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
@@ -3167,7 +3169,7 @@ void Client::State::setup_injector(asio::yield_context yield)
     _injector->add(*injector_ep, std::move(client));
 
     try {
-        ec = _injector->start(Async(yield, _shutdown_signal, _log_path.tag("start_injector")));
+        ec = _injector->start(Async(yield, _shutdown_signal, _log_path));
     }
     catch (Async::Cancelled const&) {
         return or_throw(yield, asio::error::operation_aborted);

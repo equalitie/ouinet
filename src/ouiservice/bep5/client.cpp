@@ -8,7 +8,6 @@
 #include "../../bittorrent/mainline_dht.h"
 #include "../../bittorrent/bep5_announcer.h"
 #include "../../logger.h"
-#include "../../util/compat.h"
 #include "../../util/hash.h"
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
@@ -17,12 +16,6 @@
 #include "../../util/watch_dog.h"
 #include "../../util/semaphore.h"
 #include <boost/asio/experimental/channel.hpp>
-
-#define _LOGPFX "Bep5Client: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _VERBOSE(...)  LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
-#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 // It is ok to have many of these as a resort if injectors are not reachable,
 // as long as they are fresh in the DHT.
@@ -155,7 +148,7 @@ private:
 
         while (true) {
             if (log_debug()) {
-                _DEBUG(yield, " Getting peers from swarm ", _infohash);
+                LOG_DEBUG(_log_path, " Getting peers from swarm ", _infohash);
             }
 
             auto endpoints = _dht->tracker_get_peers(_infohash, yield);
@@ -167,13 +160,13 @@ private:
             _last_success_time = chrono::steady_clock::now();
 
             if (log_debug()) {
-                _DEBUG(yield, " New endpoints: ", endpoints->size());
+                LOG_DEBUG(_log_path, " New endpoints: ", endpoints->size());
                 for (auto ep: *endpoints) {
-                    _DEBUG(yield, "     ", ep);
+                    LOG_DEBUG(_log_path, "     ", ep);
                 }
             }
 
-            add_peers(move(*endpoints));
+            add_peers(move(*endpoints), yield.log_path());
             _wait_condition_locks.clear();
 
             async_sleep(SUCCESS_WAIT_DURATION, yield);
@@ -187,12 +180,12 @@ private:
         return _owner->_log_debug;
     }
 
-    shared_ptr<Peer> make_peer(const udp::endpoint& ep)
+    shared_ptr<Peer> make_peer(const udp::endpoint& ep, const util::LogPath& log_path)
     {
         auto opt_m = choose_multiplexer_for(*_dht, ep);
 
         if (!opt_m) {
-            _ERROR("Failed to choose multiplexer");
+            LOG_ERROR(log_path, " Failed to choose multiplexer");
             return nullptr;
         }
 
@@ -200,7 +193,7 @@ private:
             (_dht->get_executor(), move(*opt_m), ep);
 
         if (!utp_client->verify_remote_endpoint()) {
-            _ERROR("Failed to bind uTP client");
+            LOG_ERROR(log_path, " Failed to bind uTP client");
             return nullptr;
         }
 
@@ -212,7 +205,7 @@ private:
         }
     }
 
-    void add_peers(set<udp::endpoint> eps)
+    void add_peers(set<udp::endpoint> eps, const util::LogPath& log_path)
     {
         auto wan_eps = _dht->wan_endpoints();
         auto lan_eps = _dht->local_endpoints();
@@ -225,7 +218,7 @@ private:
 
             auto r = _peers.get(ep);
             if (r) continue;  // already known, moved to front
-            auto p = make_peer(ep);
+            auto p = make_peer(ep, log_path);
             if (!p) continue;
             _peers.put(ep, move(p));
         }
@@ -239,7 +232,7 @@ public:
                   , bool helper_announcement_enabled
                   , shared_ptr<bt::DhtBase> dht
                   , Cancel& cancel
-                  , util::LogPath log_path)
+                  , const util::LogPath& log_path)
         : _lifetime_cancel(cancel)
         , _injector_swarm(move(injector_swarm))
         , _random_generator(std::random_device()())
@@ -247,6 +240,7 @@ public:
                                                                      , dht
                                                                      , log_path))
         , _helper_announcement_enabled(helper_announcement_enabled)
+        , _log_path(log_path)
     {
         task::spawn_detached(
             _injector_swarm->get_executor(),
@@ -276,33 +270,33 @@ private:
         boost::optional<chrono::steady_clock::time_point> _last_ping_time;
 
         while (true) {
-            _DEBUG("Waiting to ping injectors...");
+            LOG_DEBUG(_log_path, " Waiting to ping injectors...");
             _injector_was_seen = false;
             if (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
                 auto d = (*_last_ping_time + _ping_frequency) - Clock::now();
                 async_sleep(d, yield);
             }
-            _DEBUG("Waiting to ping injectors: done");
+            LOG_DEBUG(_log_path, " Waiting to ping injectors: done");
 
             bool got_reply = _injector_was_seen;
 
             if (got_reply) {
                 // A succesful direct connection during the pause is taken as a sign of reachability.
                 if (_helper_announcement_enabled)
-                    _DEBUG("Made connection to injector, announcing as helper (bridge)");
+                    LOG_DEBUG(_log_path, " Made connection to injector, announcing as helper (bridge)");
                 else
-                    _DEBUG("Made connection to injector, announcements as helper (bridge) are disabled");
+                    LOG_DEBUG(_log_path, " Made connection to injector, announcements as helper (bridge) are disabled");
             } else {
                 got_reply = ping_injectors(select_injectors_to_ping(), yield);
 
                 if (got_reply){
                     if (_helper_announcement_enabled)
-                        _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+                        LOG_DEBUG(_log_path, " Got pong from injectors, announcing as helper (bridge)");
                     else
-                        _DEBUG("Got pong from injectors, announcements as helper (bridge) are disabled");
+                        LOG_DEBUG(_log_path, " Got pong from injectors, announcements as helper (bridge) are disabled");
                 }
                 else {
-                    _ERROR("Failed to ping injectors");
+                    LOG_ERROR(yield, " Failed to ping injectors");
                 }
             }
 
@@ -312,8 +306,8 @@ private:
                 if (_helper_announcement_enabled)
                     _helper_announcer->update();
             } else {
-                _VERBOSE("Did not get pong from injectors,"
-                         " the network may be down or they may be blocked");
+                LOG_VERBOSE(_log_path, " Did not get pong from injectors,"
+                                       " the network may be down or they may be blocked");
             }
         }
     }
@@ -379,20 +373,23 @@ private:
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
     bool _helper_announcement_enabled = true;
+    util::LogPath _log_path;
 };
 
 Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
                       , string injector_swarm_name
                       , asio::ssl::context* injector_tls_ctx
-                      , Target targets)
+                      , Target targets
+                      , util::LogPath log_path)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
     , _default_targets(targets)
+    , _log_path(std::move(log_path))
 {
     if (_dht->local_endpoints().empty()) {
-        _ERROR("DHT has no endpoints!");
+        LOG_ERROR(_log_path, " DHT has no endpoints!");
     }
 }
 
@@ -401,7 +398,8 @@ Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
                       , string helpers_swarm_name
                       , bool helper_announcement_enabled
                       , asio::ssl::context* injector_tls_ctx
-                      , Target targets)
+                      , Target targets
+                      , util::LogPath log_path)
     : _dht(dht)
     , _injector_swarm_name(move(injector_swarm_name))
     , _helpers_swarm_name(move(helpers_swarm_name))
@@ -409,9 +407,10 @@ Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
     , _default_targets(targets)
+    , _log_path(std::move(log_path))
 {
     if (_dht->local_endpoints().empty()) {
-        _ERROR("DHT has no endpoints!");
+        LOG_ERROR(_log_path, " DHT has no endpoints!");
     }
 
     assert(_helpers_swarm_name.size());
@@ -424,7 +423,7 @@ sys::error_code Bep5Client::start(Async yield)
     {
         bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
 
-        _INFO(yield, " Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
+        LOG_INFO(_log_path, " Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
         _injector_swarm.reset(new Swarm(
             this,
@@ -442,7 +441,7 @@ sys::error_code Bep5Client::start(Async yield)
     if (!_helpers_swarm_name.empty()) {
         bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
 
-        _INFO(yield, " Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
+        LOG_INFO(_log_path, " Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
         _helpers_swarm.reset(new Swarm(
             this,
@@ -683,9 +682,10 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
                 use_tls,
                 &spawn_cancel,
                 &result,
-                lock = wc.lock()
+                lock = wc.lock(),
+                log_path = _log_path
             ] (Async yield) mutable {
-                _DEBUG("trying to contact", peer->endpoint);
+                LOG_DEBUG(log_path, " trying to contact", peer->endpoint);
 
                 auto con = self->connect_single(*peer->client, use_tls, yield);
                 if (!con.has_value()) return;
@@ -703,7 +703,7 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
     wc.wait(yield);
 
     if (!result) {
-        _DEBUG("Did not connect to injector");
+        LOG_DEBUG(_log_path, " Did not connect to injector");
         _last_working_ep = boost::none;
         return std::unexpected(asio::error::network_unreachable);
     }
@@ -714,7 +714,7 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
         _injector_pinger->injector_was_seen_now();
     }
 
-    _DEBUG("Connected to ", result->swarm_type, "; ep=", result->endpoint);
+    LOG_DEBUG(_log_path, " Connected to ", result->swarm_type, "; ep=", result->endpoint);
     return std::move(result->connection);
 }
 

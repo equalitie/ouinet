@@ -438,7 +438,7 @@ public:
                 dht->wait_all_ready(yield);
 
                 _wan_my_eps = dht->wan_endpoints();
-                LOG_DEBUG(yield, " Waiting for DHT to get ready: done (lan=", _lan_my_eps, " wan=", _wan_my_eps, ")");
+                LOG_DEBUG(yield, " Waiting for DHT to get ready: done");
                 LOG_DEBUG(yield, " Looking up peers...");
 
                 if (auto dht = _dht_lookup->get_dht_lock()) {

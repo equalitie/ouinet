@@ -283,6 +283,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     	Injector injector(
     	    make_config<InjectorConfig>({
                 "./no_injector_exec"s,
+                "--log-level=DEBUG",
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
                 "--tls-ca-cert-store-file="s + server.certificate_path().string(),
