@@ -76,7 +76,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
         UniformRandomDuration random_timeout;
 
         // Retry failed announces with exponential backoff strategy.
-        const chrono::milliseconds min_fail_sleep(0);
+        const chrono::milliseconds min_fail_sleep(100);
         const chrono::milliseconds max_fail_sleep(60000);
         chrono::milliseconds fail_sleep = min_fail_sleep;
 
@@ -100,31 +100,26 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
                 LOG_DEBUG(yield, " Waiting for DHT to get ready: done");
             }
 
-            LOG_DEBUG(yield, " Announcing infohash: ", infohash, "...");
+            LOG_DEBUG(yield, " Announcing infohash ", infohash, "...");
 
             auto result = dht->tracker_announce(infohash, std::nullopt, yield);
 
             dht.reset();
 
-            LOG_WARN(yield, " Announcing infohash: ", infohash, ": result=", ouinet::debug(result));
-
             if (result) {
+                LOG_DEBUG(yield, " Announcing infohash ", infohash, ": ok");
                 fail_sleep = min_fail_sleep;
             } else {
-                LOG_DEBUG(yield, " Will retry infohash because of announcement error: ", infohash);
+                LOG_DEBUG(yield, " Announcing infohash ", infohash
+                               , " failed: ", result.error().what()
+                               , ". Retry in ", fail_sleep, "ms");
 
-                if (fail_sleep == chrono::milliseconds(0)) {
-                    fail_sleep = chrono::milliseconds(1);
-                } else {
-                    async_sleep(fail_sleep, yield);
-                    fail_sleep = min(2 * fail_sleep, max_fail_sleep);
-                }
+                async_sleep(fail_sleep, yield);
+                fail_sleep = min(2 * fail_sleep, max_fail_sleep);
 
                 go_again = true;  // do not wait for manual request
                 continue;
             }
-
-            LOG_DEBUG(yield, " Announcing infohash: ", infohash, ": done");
 
             if (type == Type::Manual) continue;  // wait for new manual request immediately
 
@@ -134,7 +129,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
             // Alternatively, set a closer period but use a normal (instead of uniform) distribution.
             auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 12min);
 
-            LOG_DEBUG(yield, "Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
+            LOG_DEBUG(yield, " Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
                            , "s to announce infohash: ", infohash);
 
             async_sleep(sleep, yield);

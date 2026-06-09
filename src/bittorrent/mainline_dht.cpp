@@ -2643,9 +2643,12 @@ MainlineDht::tracker_announce(
 ) {
     auto cc = _cancel.connect([&] { yield.cancel(); });
 
-    std::set<udp::endpoint> output;
+    std::expected<std::set<udp::endpoint>, sys::error_code> output(
+        std::unexpected(asio::error::network_unreachable)
+    );
 
-    WaitCondition wc(_exec);
+    WaitCondition wc(yield.get_executor());
+
     for (auto& i : _nodes) {
         yield.spawn([
             &,
@@ -2655,100 +2658,60 @@ MainlineDht::tracker_announce(
             auto peers = node->tracker_announce(infohash, port, yield);
 
             if (peers) {
-                output.insert(peers->begin(), peers->end());
+                if (output) {
+                    output->insert(peers->begin(), peers->end());
+                } else {
+                    output = std::move(peers);
+                }
+            } else {
+                if (!output) {
+                    output = std::unexpected(peers.error());
+                }
             }
         });
     }
 
     wc.wait(yield);
 
-    if (output.empty()) {
-        return std::unexpected(asio::error::network_unreachable);
-    }
-
-    return move(output);
-}
-
-void MainlineDht::mutable_put(
-    const MutableDataItem& data,
-    Cancel& top_cancel,
-    asio::yield_context yield
-) {
-    Cancel cancel(top_cancel);
-
-    SuccessCondition condition(_exec);
-    WaitCondition wait_all(_exec);
-
-    for (auto& i : _nodes) {
-        task::spawn_detached(_exec, [
-            &,
-            lock = condition.lock(),
-            lock_all = wait_all.lock()
-        ] (asio::yield_context yield) {
-            if (!i.second->ready()) {
-                return;
-            }
-
-            sys::error_code ec;
-            i.second->data_put_mutable(data, cancel, yield[ec]);
-
-            if (ec) return;
-
-            lock.release(true);
-        });
-    }
-
-    auto cancelled = cancel.connect([&] {
-        condition.cancel();
-    });
-
-    auto terminated = _cancel.connect([&] {
-        condition.cancel();
-    });
-
-    sys::error_code ec;
-
-    if (condition.wait_for_success(yield)) {
-        cancel();
-    } else {
-        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
-        else                       { ec = asio::error::network_unreachable; }
-    }
-
-    wait_all.wait(yield);
-
-    return or_throw(yield, ec);
+    return output;
 }
 
 std::expected<std::set<udp::endpoint>, sys::error_code>
 MainlineDht::tracker_get_peers(NodeID infohash, Async yield)
 {
     auto terminated = _cancel.connect([&] { yield.cancel(); });
-    std::set<udp::endpoint> output;
-    Async nodes_yield(yield);
-    SuccessCondition success_condition(yield.get_executor());
+
+    std::expected<std::set<udp::endpoint>, sys::error_code> output(
+        std::unexpected(asio::error::network_unreachable)
+    );
+
+    WaitCondition wc(yield.get_executor());
 
     for (auto& i : _nodes) {
-        nodes_yield.spawn([&, success = success_condition.lock()] (auto yield) {
+        yield.spawn([&, lock = wc.lock()] (auto yield) {
             if (!i.second->ready()) {
                 return;
             }
 
             auto peers = i.second->tracker_get_peers(infohash, yield);
-            if (!peers || peers->empty()) {
-                return;
-            }
 
-            output.insert(peers->begin(), peers->end());
-            success.release(true);
+            if (peers) {
+                if (output) {
+                    output->insert(peers->begin(), peers->end());
+                } else {
+                    output = std::move(*peers);
+                }
+            } else {
+                if (!output) {
+                    output = std::unexpected(peers.error());
+                }
+            }
         });
     }
 
-    if (!success_condition.wait_for_success(yield)) {
-        return std::unexpected(asio::error::network_unreachable);
-    }
+    wc.wait(yield);
 
-    return std::move(output);
+    return output;
 }
 
 boost::optional<BencodedValue> MainlineDht::immutable_get(
@@ -2807,6 +2770,57 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
     completed_condition.wait(yield);
 
     return or_throw<boost::optional<BencodedValue>>(yield, ec);
+}
+
+void MainlineDht::mutable_put(
+    const MutableDataItem& data,
+    Cancel& top_cancel,
+    asio::yield_context yield
+) {
+    Cancel cancel(top_cancel);
+
+    SuccessCondition condition(_exec);
+    WaitCondition wait_all(_exec);
+
+    for (auto& i : _nodes) {
+        task::spawn_detached(_exec, [
+            &,
+            lock = condition.lock(),
+            lock_all = wait_all.lock()
+        ] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
+            sys::error_code ec;
+            i.second->data_put_mutable(data, cancel, yield[ec]);
+
+            if (ec) return;
+
+            lock.release(true);
+        });
+    }
+
+    auto cancelled = cancel.connect([&] {
+        condition.cancel();
+    });
+
+    auto terminated = _cancel.connect([&] {
+        condition.cancel();
+    });
+
+    sys::error_code ec;
+
+    if (condition.wait_for_success(yield)) {
+        cancel();
+    } else {
+        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
+        else                       { ec = asio::error::network_unreachable; }
+    }
+
+    wait_all.wait(yield);
+
+    return or_throw(yield, ec);
 }
 
 boost::optional<MutableDataItem> MainlineDht::mutable_get(

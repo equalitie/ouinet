@@ -82,12 +82,12 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     std::expected<std::set<udp::endpoint>, sys::error_code>
     tracker_announce(NodeID infohash, std::optional<int> port, Async) override;
 
-    void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
-
     std::expected<std::set<udp::endpoint>, sys::error_code>
     tracker_get_peers(NodeID infohash, Async) override;
 
     boost::optional<BencodedValue> immutable_get(NodeID key, Cancel&, asio::yield_context);
+
+    void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
 
     /*
      * TODO:
