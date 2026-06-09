@@ -1298,7 +1298,6 @@ Session Client::State::fetch_fresh_through_simple_proxy
         auto watch_dog = ouinet::watch_dog( _ctx
                                           , default_timeout::fetch_http()
                                           , [&]{ timeout_cancel(); });
-
         sys::error_code ec;
 
         // Connect to the injector.
