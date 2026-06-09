@@ -119,8 +119,6 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
 
-    cc.parallel_fresh = [] (auto) { return true; };
-
     unsigned cache_check = 0;
     unsigned origin_check = 0;
 
@@ -363,8 +361,6 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
 
-    cc.parallel_fresh = [] (auto) { return true; };
-
     unsigned origin_check = 0;
 
     cc.fetch_stored = [&](auto rq, auto&, auto y) {
@@ -399,8 +395,6 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
 {
     asio::io_context ctx;
     CacheControl cc(ctx, "test");
-
-    cc.parallel_fresh = [] (auto) { return true; };
 
     unsigned origin_check = 0;
 

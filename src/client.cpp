@@ -1643,11 +1643,6 @@ public:
             return or_throw(yield, ec, move(r));
         };
 
-        // Do not even attempt parallel fetch fresh if the injector is still starting.
-        // This prevents requests from getting stuck waiting for the injector
-        // when missing connectivity.
-        cache_control.parallel_fresh = [&] (auto) { return !client_state._injector_starting; };
-
         //------------------------------------------------------------
         cache_control.max_cached_age(client_state._config.max_cached_age());
     }

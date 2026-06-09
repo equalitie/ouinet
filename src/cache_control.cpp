@@ -508,9 +508,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
 
     // Fetching from the distributed cache is often very slow and thus we need
     // to fetch from the origin im parallel and then return the first we get.
-    if (!fs.fetch_fresh && parallel_fresh && parallel_fresh(rq)) {
-        fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
-    }
+    fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
 
     if (!fs.fetch_stored) {
         fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
