@@ -143,31 +143,24 @@ public:
 
     AsioExecutor get_executor() { return _dht->get_executor(); }
 
+    friend std::ostream& operator << (std::ostream& os, const Swarm& swarm) {
+        return os << swarm._type << "/" << swarm._infohash;
+    }
+
 private:
     void loop(Async yield) {
-        _dht->wait_all_ready(yield);
-
         while (true) {
-            if (log_debug()) {
-                LOG_DEBUG(_log_path, " Getting peers from swarm ", _infohash);
-            }
+            _dht->wait_all_ready(yield);
 
             auto endpoints = _dht->tracker_get_peers(_infohash, yield);
-            if (!endpoints) {
+            if (!endpoints || endpoints->empty()) {
                 async_sleep(ERROR_WAIT_DURATION, yield);
                 continue;
             }
 
             _last_success_time = chrono::steady_clock::now();
 
-            if (log_debug()) {
-                LOG_DEBUG(_log_path, " New endpoints: ", endpoints->size());
-                for (auto ep: *endpoints) {
-                    LOG_DEBUG(_log_path, "     ", ep);
-                }
-            }
-
-            add_peers(move(*endpoints), yield.log_path());
+            add_peers(move(*endpoints));
             _wait_condition_locks.clear();
 
             async_sleep(SUCCESS_WAIT_DURATION, yield);
@@ -629,9 +622,26 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
         if (swarm == nullptr) continue;
 
         yield.spawn(spawn_cancel, [&job_count, &channel, swarm, lock = wc.lock()] (Async yield) {
-            swarm->wait_for_ready(yield);
-            auto peers = swarm->candidates();
+            std::vector<Candidate> peers;
+
+            LOG_DEBUG(yield, " Looking up peers in swarm ", *swarm);
+
+            while (true) {
+                swarm->wait_for_ready(yield);
+                peers = swarm->candidates();
+
+                if (!peers.empty()) {
+                    break;
+                }
+            }
+
+            LOG_DEBUG(yield, " Found ", peers.size(), " peers in swarm ", *swarm, ":");
+            for (auto peer: peers) {
+                LOG_DEBUG(yield, "     ", peer.endpoint);
+            }
+
             channel.async_send(sys::error_code(), std::move(peers), yield);
+
             if (--job_count == 0 && channel.is_open()) {
                 channel.close();
             }
