@@ -14,6 +14,7 @@
 #include "../../task.h"
 #include "../../util/wait_condition.h"
 #include "../../util/watch_dog.h"
+#include "../../util/select.h"
 #include "../../util/semaphore.h"
 #include <boost/asio/experimental/channel.hpp>
 
@@ -455,8 +456,12 @@ sys::error_code Bep5Client::start(Async yield)
         ));
         _helpers_swarm->start();
 
-        _helpers_swarm->wait_for_ready(yield);
-        _injector_swarm->wait_for_ready(yield);
+        // At least one of the swarm must be ready
+        select(
+            yield,
+            [&](auto yield) { _helpers_swarm->wait_for_ready(yield);  },
+            [&](auto yield) { _injector_swarm->wait_for_ready(yield); }
+        );
 
         _injector_pinger.reset(new InjectorPinger(  _injector_swarm
                                                   , _helpers_swarm_name
@@ -464,6 +469,8 @@ sys::error_code Bep5Client::start(Async yield)
                                                   , _dht
                                                   , _cancel
                                                   , yield.log_path()));
+    } else {
+        _injector_swarm->wait_for_ready(yield);
     }
 
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
