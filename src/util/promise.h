@@ -48,7 +48,7 @@ public:
     }
 
     void set_value(Value value) {
-        _state->value = std::move(value);
+        _state->value.emplace(std::move(value));
         _state->lock.release();
     }
 
