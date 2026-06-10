@@ -22,35 +22,37 @@ Session::create(
     );
 }
 
-std::optional<http_response::Part>
-Session::async_read_part(Cancel cancel, asio::yield_context yield)
+std::expected<std::optional<http_response::Part>, sys::error_code>
+Session::async_read_part(Async yield)
 {
-    auto destroyed = _destroyed.connect([&cancel] { cancel(); });
+    auto destroyed = _destroyed.connect([&] { yield.cancel(); });
 
-    if (!_reader)
-        return or_throw(yield, asio::error::not_connected, std::nullopt);
+    if (!_reader) {
+        return std::unexpected(asio::error::not_connected);
+    }
 
     if (!_head_was_read) {
         _head_was_read = true;
-        return {{_head}};
+        return _head;
     }
 
-    sys::error_code ec;
-    auto part = _reader->async_read_part(cancel, yield[ec]);
+    auto part = _reader->async_read_part(yield);
 
-    if (!ec && part && _metrics) {
-        if (auto size = payload_size(*part)) {
+    if (part && *part && _metrics) {
+        if (auto size = payload_size(**part)) {
             _metrics->increment_transfer_size(size);
         }
     }
 
-    if (ec || _reader->is_done()) {
-        finish_metering(_metrics, ec);
+    if (!part || _reader->is_done()) {
+        finish_metering(_metrics, part ? sys::error_code() : part.error());
     }
 
-    if (ec) return or_throw(yield, ec, std::nullopt);
+    if (!part) {
+        return std::unexpected(part.error());
+    }
 
-    return part;
+    return *part;
 }
 
 Session::~Session() = default;

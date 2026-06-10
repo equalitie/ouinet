@@ -637,7 +637,9 @@ struct Client::Impl {
         Cancel lc(_lifetime_cancel);
 
         sys::error_code ec;
-        auto part = reader.async_read_part(lc, yield[ec]);
+        auto part = compat([&](Async yield) {
+            return reader.async_read_part(yield);
+        })(lc, yield[ec]);
         if (!ec && !part)
             ec = sys::errc::make_error_code(sys::errc::no_message);
         return_or_throw_on_error(yield, lc, ec, http::response_header<>());

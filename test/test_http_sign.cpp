@@ -451,7 +451,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             sys::error_code e;
             http_response::Reader rr(std::move(signed_r));
             while (true) {
-                auto opt_part = rr.async_read_part(cancel, y[e]);
+                auto opt_part = compat([&](Async yield) { return rr.async_read_part(yield); })(cancel, y[e]);
                 BOOST_REQUIRE(!e);
                 if (!opt_part) break;
                 if (auto inh = opt_part->as_head()) {
@@ -571,7 +571,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             sys::error_code e;
             http_response::Reader rr(std::move(hashed_r));
             while (true) {
-                auto opt_part = rr.async_read_part(cancel, y[e]);
+                auto opt_part = compat([&](Async yield) { return rr.async_read_part(yield); })(cancel, y[e]);
                 BOOST_REQUIRE(!e);
                 if (!opt_part) break;
                 if (auto ch = opt_part->as_chunk_hdr()) {
@@ -789,7 +789,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             sys::error_code e;
             http_response::Reader rr(std::move(hashed_r));
             while (true) {
-                auto opt_part = rr.async_read_part(cancel, y[e]);
+                auto opt_part = compat([&](Async yield) { return rr.async_read_part(yield); })(cancel, y[e]);
                 BOOST_REQUIRE(!e);
                 if (!opt_part) break;
                 if (auto ch = opt_part->as_chunk_hdr()) {

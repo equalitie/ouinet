@@ -61,7 +61,8 @@ public:
     MultiPeerReader(MultiPeerReader&&) = delete;
     MultiPeerReader(const MultiPeerReader&) = delete;
 
-    std::optional<http_response::Part> async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     bool is_done() const override
     {
@@ -78,8 +79,11 @@ public:
     }
 
 private:
-    std::optional<http_response::Part> async_read_part_impl(Cancel&, asio::yield_context);
+    std::expected<std::optional<http_response::Part>, sys::error_code>
+    async_read_part_impl(Async);
+
     std::optional<Block> fetch_block(size_t block_id, Cancel&, asio::yield_context);
+
     void unmark_as_good(Peer& peer);
 
     void mark_done();

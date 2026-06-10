@@ -331,28 +331,43 @@ public:
 
     ~GenericResourceReader() override {};
 
-    std::optional<ouinet::http_response::Part>
-    async_read_part(Cancel cancel, asio::yield_context yield) override
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async yield) override
     {
         if (!_is_open || _is_done) return std::nullopt;
 
-        sys::error_code ec;
-
         if (!_is_head_done) {
-            auto head = prepare_head(ec);
-            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+            auto head = compat([&](sys::error_code& ec) { return prepare_head(ec); })();
+            if (!head) {
+                return std::unexpected(head.error());
+            }
+
             _is_head_done = true;
-            seek_to_range_begin(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
-            return http_response::Part(std::move(head));
+
+            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+                return seek_to_range_begin(cancel, yield);
+            })(yield);
+            if (!result) {
+                return std::unexpected(result.error());
+            }
+
+            return http_response::Part(std::move(*head));
         }
 
         if (!_is_body_done) {
-            auto chunk_part = get_chunk_part(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
-            if (!chunk_part) return std::nullopt;
-            if (auto ch = chunk_part->as_chunk_hdr())
+            auto chunk_part = compat([&](Cancel cancel, asio::yield_context yield) {
+                return get_chunk_part(cancel, yield);
+            })(yield);
+            if (!chunk_part) {
+                return std::unexpected(chunk_part.error());
+            }
+            if (!*chunk_part) {
+                return std::nullopt;
+            }
+            if (auto ch = (**chunk_part).as_chunk_hdr()) {
                 _is_body_done = (ch->size == 0);  // last chunk
+            }
+
             return chunk_part;
         }
 

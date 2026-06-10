@@ -150,8 +150,8 @@ public:
                  , sign::SecretKey sk);
     ~SigningReader() override;
 
-    std::optional<ouinet::http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
 private:
     struct Impl;
@@ -190,8 +190,8 @@ public:
                    , status_set statuses = {});
     ~VerifyingReader() override;
 
-    std::optional<ouinet::http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     bool is_done() const override { return _reader->is_done(); }
     void close() override { _reader->close(); }
@@ -225,8 +225,8 @@ public:
 
     ~KeepSignedReader() override {}
 
-    std::optional<ouinet::http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     bool is_done() const override { return _reader.is_done(); }
     void close() override { _reader.close(); }

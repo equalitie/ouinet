@@ -23,6 +23,7 @@
 #include "../split_string.h"
 #include "../util.h"
 #include "../util/bytes.h"
+#include "../util/compat.h"
 #include "../util/hash.h"
 #include "../util/quantized_buffer.h"
 #include "../util/variant.h"
@@ -574,10 +575,9 @@ SigningReader::~SigningReader()
 {
 }
 
-optional_part
-SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
+std::expected<optional_part, sys::error_code>
+SigningReader::async_read_part(Async yield)
 {
-    sys::error_code ec;
     optional_part part;
 
     if (!_impl->_pending_parts.empty()) {
@@ -586,19 +586,34 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
     }
 
     while (!part) {
-        part = http_response::Reader::async_read_part(cancel, yield[ec]);
-        assert(!_impl->_is_done || (_impl->_is_done && !part));
-        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+        auto result0 = http_response::Reader::async_read_part(yield);
+        assert(!_impl->_is_done || (_impl->_is_done && !result0));
+        if (!result0) {
+            return std::unexpected(result0.error());
+        }
+        part = std::move(*result0);
+
         if (!part) {  // no more input, but stuff may still need to be sent
-            part = _impl->process_end(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+            auto result1 = compat([&](Cancel cancel, asio::yield_context yield) {
+                return _impl->process_end(cancel, yield);
+            })(yield);
+            if (!result1) {
+                return std::unexpected(result1.error());
+            }
+            part = std::move(*result1);
+
             break;
         }
 
-        part = util::apply(std::move(*part), [&](auto&& p) {
-            return _impl->process_part(std::move(p), cancel, yield[ec]);
+        auto result2 = util::apply(std::move(*part), [&](auto&& part) {
+            return compat([&](Cancel cancel, asio::yield_context yield) {
+                return _impl->process_part(std::move(part), cancel, yield);
+            })(yield);
         });
-        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+        if (!result2) {
+            return std::unexpected(result2.error());
+        }
+        part = std::move(*result2);
     };
 
     return part;
@@ -985,76 +1000,84 @@ VerifyingReader::~VerifyingReader()
 {
 }
 
-optional_part
-VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
+std::expected<optional_part, sys::error_code>
+VerifyingReader::async_read_part(Async yield)
 {
-    sys::error_code ec;
-    optional_part part;
+    return compat([&](Cancel cancel, asio::yield_context yield) -> optional_part {
+        sys::error_code ec;
+        optional_part part;
 
-    if (!_impl->_pending_parts.empty()) {
-        part = std::move(_impl->_pending_parts.front());
-        _impl->_pending_parts.pop();
-    }
+        if (!_impl->_pending_parts.empty()) {
+            part = std::move(_impl->_pending_parts.front());
+            _impl->_pending_parts.pop();
+        }
 
-    while (!part) {
-        part = _reader->async_read_part(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
-        if (!part) break;
+        while (!part) {
+            part = compat([&](Async yield) {
+                return _reader->async_read_part(yield);
+            })(cancel, yield[ec]);
+            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+            if (!part) break;
 
-        part = util::apply(std::move(*part), [&](auto&& p) {
-            return _impl->process_part(std::move(p), cancel, yield[ec]);
-        });
-        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
-    }
+            part = util::apply(std::move(*part), [&](auto&& p) {
+                return _impl->process_part(std::move(p), cancel, yield[ec]);
+            });
+            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+        }
 
-    if (_reader->is_done()) {
-        // Check full body hash and length.
-        _impl->check_body(ec);
-        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
-    }
+        if (_reader->is_done()) {
+            // Check full body hash and length.
+            _impl->check_body(ec);
+            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+        }
 
-    return part;
+        return part;
+    })(yield);
 }
 
 // end VerifyingReader
 
 // begin KeepSignedReader
 
-std::optional<http_response::Part>
-KeepSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
+std::expected<std::optional<http_response::Part>, sys::error_code>
+KeepSignedReader::async_read_part(Async yield)
 {
-    sys::error_code ec;
-    auto part = _reader.async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, std::nullopt);
-    if (!part) return std::nullopt;  // no part
-    auto headp = part->as_head();
-    if (!headp) return part;  // not a head, use as is
+    return compat([&](Cancel cancel, asio::yield_context yield) -> std::optional<http_response::Part> {
+        sys::error_code ec;
+        auto part = compat([&](Async yield) {
+            return _reader.async_read_part(yield);
+        })(cancel, yield[ec]);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+        if (!part) return std::nullopt;  // no part
+        auto headp = part->as_head();
+        if (!headp) return part;  // not a head, use as is
 
-    // Process head, remove unsigned headers.
-    std::set<boost::string_view> keep_headers;
-    for (const auto& hn : _extra_headers) {  // keep explicit extras
-        keep_headers.emplace(hn);
-    }
-    for (const auto& h : *headp) {  // get set of signed headers
-        auto hn = h.name_string();
-        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
-            continue;  // not a signature header
-        auto hsig = HttpSignature::parse(h.value());
-        assert(hsig);  // no invalid signatures should have been passed
-        for (const auto& sh : SplitString(hsig->headers, ' '))
-            keep_headers.emplace(sh);
-    }
-    for (auto hit = headp->begin(); hit != headp->end();) {  // remove unsigned (except sigs)
-        auto hn = std::string(hit->name_string());
-        boost::algorithm::to_lower(hn);  // signed headers are lower-case
-        if ( !boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)
-           && keep_headers.find(hn) == keep_headers.end()) {
-            LOG_DEBUG("Filtering out unsigned header: ", hn);
-            hit = headp->erase(hit);
-        } else ++hit;
-    }
+        // Process head, remove unsigned headers.
+        std::set<boost::string_view> keep_headers;
+        for (const auto& hn : _extra_headers) {  // keep explicit extras
+            keep_headers.emplace(hn);
+        }
+        for (const auto& h : *headp) {  // get set of signed headers
+            auto hn = h.name_string();
+            if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+                continue;  // not a signature header
+            auto hsig = HttpSignature::parse(h.value());
+            assert(hsig);  // no invalid signatures should have been passed
+            for (const auto& sh : SplitString(hsig->headers, ' '))
+                keep_headers.emplace(sh);
+        }
+        for (auto hit = headp->begin(); hit != headp->end();) {  // remove unsigned (except sigs)
+            auto hn = std::string(hit->name_string());
+            boost::algorithm::to_lower(hn);  // signed headers are lower-case
+            if ( !boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)
+            && keep_headers.find(hn) == keep_headers.end()) {
+                LOG_DEBUG("Filtering out unsigned header: ", hn);
+                hit = headp->erase(hit);
+            } else ++hit;
+        }
 
-    return http_response::Part{*headp};
+        return http_response::Part{*headp};
+    })(yield);
 }
 
 // end KeepSignedReader

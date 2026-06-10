@@ -6,6 +6,7 @@
 #include <variant>
 
 #include "async.h"
+#include "async_sleep.h"
 #include "condition_variable.h"
 #include "expected.h"
 

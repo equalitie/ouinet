@@ -18,8 +18,8 @@ public:
         : _ex(ex), _queue(std::move(q))
     {}
 
-    std::optional<Part> async_read_part(Cancel cancel, asio::yield_context yield) override {
-        if (cancel) return or_throw<Part>(yield, asio::error::operation_aborted);
+    std::expected<std::optional<Part>, sys::error_code>
+    async_read_part(Async yield) override {
         if (_is_done) return std::nullopt;
 
         assert(!_queue.empty());

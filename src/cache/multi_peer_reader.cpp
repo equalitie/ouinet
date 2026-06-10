@@ -187,14 +187,18 @@ public:
         auto cl = _lifetime_cancel.connect([&] { c(); });
         auto cc = c.connect([&] { if (_connection.is_open()) _connection.close(); });
 
-        auto head = reader.timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
+        auto head = compat([&](Async yield) {
+            return reader.timed_async_read_part(READ_HEAD_TIMEOUT, yield);
+        })(c, yield[ec]);
         return_or_throw_on_error(yield, c, ec, OptBlock{});
 
         if (!head || !head->is_head()) {
             return or_throw<OptBlock>(yield, Errc::expected_head);
         }
 
-        auto p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+        auto p = compat([&](Async yield) {
+            return reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, yield);
+        })(c, yield[ec]);
         return_or_throw_on_error(yield, c, ec, OptBlock{});
 
         // This may happen when the message has no body
@@ -219,7 +223,9 @@ public:
         if (first_chunk_hdr->size) {
             // Read the block and the chunk header that comes after it.
             while (true) {
-                p = reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
+                p = compat([&](Async yield) {
+                    return reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, yield);
+                })(c, yield[ec]);
                 return_or_throw_on_error(yield, c, ec, OptBlock{});
 
                 auto chunk_body = p->as_chunk_body();
@@ -242,7 +248,9 @@ public:
                 }
             }
 
-            p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+            p = compat([&](Async yield) {
+                return reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, yield);
+            })(c, yield[ec]);
 
             ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
@@ -269,7 +277,9 @@ public:
 
         // Read the trailer (if any), and make sure we're done with this response
         while (true) {
-            p = reader.timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
+            p = compat([&](Async yield) {
+                return reader.timed_async_read_part(READ_TRAILER_TIMEOUT, yield);
+            })(c, yield[ec]);
             return_or_throw_on_error(yield, c, ec, OptBlock{});
             if (!p) {
                 // We're done with this request
@@ -987,43 +997,42 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
     }
 }
 
-std::optional<Part>
-MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
+std::expected<std::optional<Part>, sys::error_code>
+MultiPeerReader::async_read_part(Async yield)
 {
-    using Ret = std::optional<Part>;
+    auto lc = _lifetime_cancel.connect([&] { yield.cancel(); });
 
-    sys::error_code ec;
-
-    auto lc = _lifetime_cancel.connect([&] { cancel(); });
-
-    if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
-    if (_state == State::closed) return or_throw<Ret>(yield, asio::error::bad_descriptor);
+    if (_state == State::closed) return std::unexpected(asio::error::bad_descriptor);
     if (_state == State::done) return std::nullopt;
 
-    auto r = async_read_part_impl(cancel, yield[ec]);
-    ec = compute_error_code(ec, cancel);
-
-    if (ec) {
+    auto result = async_read_part_impl(yield);
+    if (!result) {
         _state = State::closed;
         _peers = nullptr;
-        return or_throw<Ret>(yield, ec);
-    } else if (!r) {
+        return std::unexpected(result.error());
+    }
+
+    if (!*result) {
         _state = State::done;
         _peers = nullptr;
     }
 
-    return r;
+    return *result;
 }
 
-std::optional<Part>
-MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
+std::expected<std::optional<Part>, sys::error_code>
+MultiPeerReader::async_read_part_impl(Async yield)
 {
-    sys::error_code ec;
-
     if (!_reference_hash_list) {
-        auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptPart{});
-        _reference_hash_list = std::move(hl);
+        auto hl = compat([&](Cancel cancel, asio::yield_context yield) {
+            return _peers->choose_reference_hash_list(cancel, yield);
+        })(yield);
+
+        if (!hl) {
+            return std::unexpected(hl.error());
+        }
+
+        _reference_hash_list = std::move(*hl);
     }
 
     if (!_head_sent) {
@@ -1034,7 +1043,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
     if (_next_chunk_body) {
         auto p = std::move(*_next_chunk_body);
         _next_chunk_body = std::nullopt;
-        return {{std::move(p)}};
+        return std::move(p);
     }
 
     if (_next_trailer) {
@@ -1045,7 +1054,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
         auto p = std::move(*_next_trailer);
         _next_trailer = std::nullopt;
         mark_done();
-        return {{std::move(p)}};
+        return std::move(p);
     }
 
     if (_block_id >= _reference_hash_list->blocks.size()) {
@@ -1058,8 +1067,13 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
     }
 
     while (true /* do until successful block retrieval */) {
-        auto block = fetch_block(_block_id, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptPart{});
+        auto block_e = compat([&](Cancel cancel, asio::yield_context yield) {
+            return fetch_block(_block_id, cancel, yield);
+        })(yield);
+        if (!block_e) {
+            return std::unexpected(block_e.error());
+        }
+        auto block = std::move(*block_e);
 
         ++_block_id;
 
@@ -1081,7 +1095,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             _next_trailer = std::move(block->trailer);
         }
 
-        return {{std::move(chunk_hdr)}};
+        return std::move(chunk_hdr);
     }
 
     assert(0 && "This shouldn't happen");

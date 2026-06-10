@@ -63,8 +63,8 @@ public:
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
 
-    std::optional<http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     template<class SinkStream>
     void flush_response(
@@ -163,10 +163,7 @@ std::expected<Session, sys::error_code> Session::create(
     Async yield
 )
 {
-    auto head_opt_part = compat([&](Cancel cancel, asio::yield_context yield) {
-        return reader->async_read_part(cancel, yield);
-    })(yield);
-
+    auto head_opt_part = reader->async_read_part(yield);
     if (head_opt_part && !*head_opt_part) {
         // This is ok for the reader,
         // but it should be made explicit to code creating sessions.
@@ -223,7 +220,9 @@ Session::flush_response(Cancel cancel,
         if (!_reader)
             return or_throw(yield, asio::error::not_connected);
 
-        auto opt_part = _reader->async_read_part(cancel, yield[ec]);
+        auto opt_part = compat([&](Async yield) {
+            return _reader->async_read_part(yield);
+        })(cancel, yield[ec]);
         assert(ec != http::error::end_of_stream);
         ec = compute_error_code(ec, cancel);
 

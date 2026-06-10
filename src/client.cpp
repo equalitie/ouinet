@@ -1211,7 +1211,9 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
         {
             auto r = std::make_unique<http_response::Reader>(std::move(inj->connection));
 
-            auto part = r->async_read_part(timeout_cancel, yield[ec].tag("read_hdr"));
+            auto part = compat([&](Async yield) {
+                return r->async_read_part(yield.tag("read_hdr"));
+            })(timeout_cancel, yield[ec]);
 
             ec = compute_error_code(ec, cancel, watch_dog);
             if (ec) {
