@@ -126,7 +126,7 @@ namespace ouinet {
         requires std::invocable<F, Async> && is_expected_v<std::invoke_result_t<F, Async>>
         {
             auto result = _f(Async(yield));
-            return detail::or_throw(yield, result);
+            return detail::or_throw(yield, std::move(result));
         }
 
         // std::expected<T, error_code> f(Async) -> T f(Cancel, asio::yield_context)
@@ -134,7 +134,7 @@ namespace ouinet {
         requires std::invocable<F, Async> && is_expected_v<std::invoke_result_t<F, Async>>
         {
             auto result = _f(Async(yield, std::move(cancel)));
-            return detail::or_throw(yield, result);
+            return detail::or_throw(yield, std::move(result));
         }
 
         // T f(Async) -> T f(Cancel cancel, asio::yield_context)

@@ -1108,9 +1108,14 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
         return or_throw<Session>(yield, ec);
     }
 
-    auto ret = Session::create( std::move(con), rq.method() == http::verb::head
-                          , move(metrics)
-                          , timeout_cancel, yield[ec].tag("read_hdr"));
+    auto ret = compat([&](Async yield) {
+        return Session::create(
+            std::move(con),
+            rq.method() == http::verb::head,
+            move(metrics),
+            yield.tag("read_hdr")
+        );
+    })(timeout_cancel, yield[ec]);
 
     if ((ec = compute_error_code(ec, cancel, watch_dog))) {
         return or_throw<Session>(yield, ec);
@@ -1262,10 +1267,14 @@ Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
             return or_throw<Session>(yield, ec);
         }
 
-        auto session = Session::create( move(con)
-                                      , rq.method() == http::verb::head
-                                      , std::move(metrics)
-                                      , timeout_cancel, yield[ec].tag("read_hdr"));
+        auto session = compat([&](Async yield) {
+            return Session::create(
+                move(con),
+                rq.method() == http::verb::head,
+                std::move(metrics),
+                yield.tag("read_hdr")
+            );
+        })(timeout_cancel, yield[ec]);
 
         ec = compute_error_code(ec, cancel, watch_dog);
         if (ec) {
@@ -1365,9 +1374,14 @@ Session Client::State::fetch_fresh_through_simple_proxy
         cancel_slot = {};
 
         // Receive response
-        auto session = Session::create( move(con), request.method() == http::verb::head
-                                      , move(metrics)
-                                      , timeout_cancel, yield[ec].tag("read_hdr"));
+        auto session = compat([&](Async yield) {
+            return Session::create(
+                move(con),
+                request.method() == http::verb::head,
+                move(metrics),
+                yield.tag("read_hdr")
+            );
+        })(timeout_cancel, yield[ec]);
 
         auto& hdr = session.response_header();
 
@@ -1805,7 +1819,13 @@ public:
         yield.spawn_detached([ &, lock = wc.lock() ] (YieldContext yield) {
             sys::error_code ec;
             auto rr = std::make_unique<AsyncQueueReader>(qag);
-            Session sag = Session::create(std::move(rr), tnx.request().method() == http::verb::head, cancel, yield[ec]);
+            Session sag = compat([&](Async yield) {
+                return Session::create(
+                    std::move(rr),
+                    tnx.request().method() == http::verb::head,
+                    yield
+                );
+            })(cancel, yield[ec]);
             if (cancel) return;
             if (ec) return;
             tnx.write_to_user_agent(sag, cancel, yield[ec]);

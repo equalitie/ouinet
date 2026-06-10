@@ -101,7 +101,9 @@ Session make_session(
     });
 
     Cancel c;
-    return Session::create(move(pipe.source), false, c, y);
+    return compat([&](Async yield) {
+        return Session::create(move(pipe.source), false, yield);
+    })(c, y);
 }
 
 Entry make_entry(

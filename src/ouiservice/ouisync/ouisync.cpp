@@ -256,14 +256,11 @@ Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
             boost::optional<cache::Range>() // range
         );
 
-        auto session = unwrap(yield.call_deprecated([&] (auto, auto cancel, auto yield) {
-            return ouinet::Session::create(
-                std::move(reader),
-                rq.method() == http::verb::head,
-                cancel,
-                yield
-            );
-        }));
+        auto session = unwrap(ouinet::Session::create(
+            std::move(reader),
+            rq.method() == http::verb::head,
+            yield
+        ));
 
         session
             .response_header()
@@ -291,9 +288,8 @@ namespace ouinet::util::file_io {
     size_t file_size(ouisync::FileStream& file, sys::error_code& ec) {
         return file.size();
     }
-    
+
     void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec) {
         file.seek(pos);
     }
 } // namespace util::file_io
-

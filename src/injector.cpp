@@ -412,8 +412,13 @@ private:
                 sig_reader = make_unique<http_response::Reader>(move(orig_con));
             }
 
-            orig_sess = Session::create( move(sig_reader), cache_rq_method == http::verb::head
-                                       , timeout_cancel, yield[ec].tag("read_hdr"));
+            orig_sess = compat([&](Async yield) {
+                return Session::create(
+                    move(sig_reader),
+                    cache_rq_method == http::verb::head,
+                    yield.tag("read_hdr")
+                );
+            })(timeout_cancel, yield[ec]);
 
             if ((ec = compute_error_code(ec, cancel, fetch_wd))) {
                 yield.log("Failed to process response head; ec=", ec);
@@ -684,7 +689,13 @@ void serve( InjectorConfig& config
             if (!ec) {
                 using OrigReader = http_response::Reader;
                 Session::reader_uptr rrp = std::make_unique<OrigReader>(move(orig_con));
-                auto orig_sess = Session::create(move(rrp), req.method() == http::verb::head, cancel, pyield[ec].tag("read_hdr"));
+                auto orig_sess = compat([&](Async yield) {
+                    return Session::create(
+                        move(rrp),
+                        req.method() == http::verb::head,
+                        yield.tag("read_hdr")
+                    );
+                })(cancel, pyield[ec]);
                 if (!ec) {
                     auto& inh = orig_sess.response_header();
                     // Keep proxy connection if the proxy wants to.

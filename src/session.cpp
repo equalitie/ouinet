@@ -2,25 +2,24 @@
 
 namespace ouinet {
 
-Session Session::create( GenericStream con
-                       , bool is_head_response
-                       , Cancel cancel
-                       , asio::yield_context yield)
-{
-    return Session::create(std::move(con), is_head_response, {}, std::move(cancel), yield);
+std::expected<Session, sys::error_code>
+Session::create(GenericStream con, bool is_head_response, Async yield) {
+    return Session::create(std::move(con), is_head_response, {}, std::move(yield));
 }
 
-Session Session::create( GenericStream con
-                       , bool is_head_response
-                       , std::optional<metrics::Request> metrics
-                       , Cancel cancel
-                       , asio::yield_context yield)
-{
-    assert(!cancel);
-
-    reader_uptr reader = std::make_unique<http_response::Reader>(std::move(con));
-
-    return Session::create(std::move(reader), is_head_response, std::move(metrics), cancel, yield);
+std::expected<Session, sys::error_code>
+Session::create(
+    GenericStream con,
+    bool is_head_response,
+    std::optional<metrics::Request> metrics,
+    Async yield
+) {
+    return Session::create(
+        std::make_unique<http_response::Reader>(std::move(con)),
+        is_head_response,
+        std::move(metrics),
+        std::move(yield)
+    );
 }
 
 boost::optional<http_response::Part>

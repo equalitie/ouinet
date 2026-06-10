@@ -515,7 +515,9 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
             auto store_rr = cache::http_store_reader(tmpdir, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
+            auto store_s = compat([&](Async yield) {
+                return Session::create(std::move(store_rr), false, yield);
+            })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), complete ? sys::errc::success : connection_aborted);
@@ -629,7 +631,9 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
             auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
+            auto store_s = compat([&](Async yield) {
+                return Session::create(std::move(store_rr), false, yield);
+            })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK(!e);
@@ -734,7 +738,9 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
             auto store_rr = cache::http_store_reader(tmpdir, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
+            auto store_s = compat([&](Async yield) {
+                return Session::create(std::move(store_rr), false, yield);
+            })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
@@ -851,7 +857,9 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
                 (tmpdir, first, last, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
-            auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
+            auto store_s = compat([&](Async yield) {
+                return Session::create(std::move(store_rr), false, yield);
+            })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             store_s.flush_response(loaded_w, c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
