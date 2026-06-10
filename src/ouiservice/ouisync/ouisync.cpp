@@ -253,7 +253,7 @@ Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
             std::move(head),
             std::move(*sigs_file),
             std::move(*body_file),
-            boost::optional<cache::Range>() // range
+            std::optional<cache::Range>() // range
         );
 
         auto session = unwrap(ouinet::Session::create(

@@ -63,7 +63,7 @@ public:
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
 
-    boost::optional<http_response::Part>
+    std::optional<http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
     template<class SinkStream>

@@ -61,7 +61,7 @@ public:
     MultiPeerReader(MultiPeerReader&&) = delete;
     MultiPeerReader(const MultiPeerReader&) = delete;
 
-    boost::optional<http_response::Part> async_read_part(Cancel, asio::yield_context) override;
+    std::optional<http_response::Part> async_read_part(Cancel, asio::yield_context) override;
 
     bool is_done() const override
     {
@@ -78,8 +78,8 @@ public:
     }
 
 private:
-    boost::optional<http_response::Part> async_read_part_impl(Cancel&, asio::yield_context);
-    boost::optional<Block> fetch_block(size_t block_id, Cancel&, asio::yield_context);
+    std::optional<http_response::Part> async_read_part_impl(Cancel&, asio::yield_context);
+    std::optional<Block> fetch_block(size_t block_id, Cancel&, asio::yield_context);
     void unmark_as_good(Peer& peer);
 
     void mark_done();
@@ -101,8 +101,8 @@ private:
     size_t _block_id = 0;
 
     std::string _next_chunk_hdr_ext;
-    boost::optional<http_response::ChunkBody> _next_chunk_body;
-    boost::optional<http_response::Trailer> _next_trailer;
+    std::optional<http_response::ChunkBody> _next_chunk_body;
+    std::optional<http_response::Trailer> _next_trailer;
     bool _last_chunk_hdr_sent = false;
 
     State _state = State::active;

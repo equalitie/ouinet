@@ -45,12 +45,12 @@ void Reader::setup_parser()
     _parser.on_chunk_body(_on_chunk_body);
 }
 
-boost::optional<Part>
+std::optional<Part>
 Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
     assert(!cancel);
 
     if (_is_done) {
-        return boost::none;
+        return std::nullopt;
     }
 
     // Cancellation, time out and error handling
@@ -63,7 +63,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
     // -------------------------------------------------------
     if (!_parser.is_header_done()) {
         http::async_read_header(_in, _buffer, _parser, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
 
         if (_parser.is_done() && !_is_done) {  // e.g. no body
             _is_done = true;
@@ -89,7 +89,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         ec = compute_error_code(ec, cancel);
         assert(ec != http::error::end_of_stream);
         if (ec == http::error::end_of_chunk) ec = {};
-        if (ec) return or_throw(yield, ec, boost::none);
+        if (ec) return or_throw(yield, ec, std::nullopt);
 
         assert(_next_part);
         Part ret = std::move(*_next_part);
@@ -100,7 +100,7 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
     else {
         if (_parser.is_done() && !_is_done) {
             _is_done = true;
-            return boost::none;
+            return std::nullopt;
         }
 
         char buf[http_forward_block];
@@ -113,13 +113,13 @@ Reader::async_read_part(Cancel cancel, asio::yield_context yield) {
         ec = compute_error_code(ec, cancel);
         assert(ec != http::error::end_of_stream);
         if (ec == http::error::need_buffer) ec = {};
-        if (ec) return or_throw(yield, ec, boost::none);
+        if (ec) return or_throw(yield, ec, std::nullopt);
 
         size_t s = sizeof(buf) - _parser.get().body().size;
 
         if (s == 0 && _parser.is_done()) {
             _is_done = true;
-            return boost::none;
+            return std::nullopt;
         }
 
         return Part(Body(std::vector<uint8_t>(buf, buf + s)));

@@ -1785,7 +1785,7 @@ public:
 
         using http_response::Part;
 
-        util::AsyncQueue<boost::optional<Part>> qst(exec), qag(exec); // to storage, agent
+        util::AsyncQueue<std::optional<Part>> qst(exec), qag(exec); // to storage, agent
 
         WaitCondition wc(exec);
 
@@ -1856,8 +1856,8 @@ public:
             },
             default_timeout::activity());
 
-        if (do_cache) qst.push_back(boost::none);
-        qag.push_back(boost::none);
+        if (do_cache) qst.push_back(std::nullopt);
+        qag.push_back(std::nullopt);
 
         // Wait for the spawned tasks to finish
         wc.wait(yield.tag("wait"));

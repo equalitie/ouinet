@@ -1608,7 +1608,7 @@ asio::ip::udp::endpoint resolve(
     auto answers = dns_resolver->resolve(addr, yield[ec]);
     if (!ec) {
         string_view port_strv = port;
-        auto port_int = parse::number<uint16_t>(port_strv).get();
+        auto port_int = parse::number<uint16_t>(port_strv).value();
         util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
         results = UdpLookup::create(eps.begin(), eps.end(),
                                     addr, port);

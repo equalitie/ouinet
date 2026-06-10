@@ -8,21 +8,21 @@ namespace ouinet {
 class AsyncQueueReader : public http_response::AbstractReader {
 public:
     using Part = http_response::Part;
-    using Queue = util::AsyncQueue<boost::optional<Part>>;
+    using Queue = util::AsyncQueue<std::optional<Part>>;
 
     AsyncQueueReader(Queue& q)
         : _queue(q)
     {}
 
-    boost::optional<Part> async_read_part(Cancel cancel, asio::yield_context yield) override {
-        if (_cancel) return boost::none;
+    std::optional<Part> async_read_part(Cancel cancel, asio::yield_context yield) override {
+        if (_cancel) return std::nullopt;
         auto c = _cancel.connect([&] { cancel(); });
         sys::error_code ec;
         auto opt_p = _queue.async_pop(cancel, yield[ec]);
         if (ec || !opt_p) {
             _is_done = !ec;
             _cancel(); // Indicate we're done
-            return or_throw(yield, ec, boost::none);
+            return or_throw(yield, ec, std::nullopt);
         }
         return opt_p;
     }
@@ -37,7 +37,7 @@ public:
     }
 
     void close() override {
-        _queue.push_back(boost::none);
+        _queue.push_back(std::nullopt);
         _cancel();
     }
 

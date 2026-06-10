@@ -42,10 +42,10 @@ struct HttpResponseByteRange {
     size_t first;
     size_t last;
     // Total size of the document (if known)
-    boost::optional<size_t> length;
+    std::optional<size_t> length;
 
     static
-    boost::optional<HttpResponseByteRange>
+    std::optional<HttpResponseByteRange>
     parse(boost::string_view);
 
     bool

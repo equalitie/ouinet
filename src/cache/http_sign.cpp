@@ -302,7 +302,7 @@ response_status_ph(const http::response_header<>& rsh)
 //
 //     X-Foo: foo
 //     X-Bar: xxx
-//     X-Foo: 
+//     X-Foo:
 //     X-Foo: bar
 //
 // into optional ``foo, , bar``, and:
@@ -413,7 +413,7 @@ http_signature( const http::response_header<>& rsh
 
 // begin SigningReader
 
-using optional_part = boost::optional<http_response::Part>;
+using optional_part = std::optional<http_response::Part>;
 
 struct SigningReader::Impl {
     const http::request_header<> _rqh;
@@ -466,7 +466,7 @@ struct SigningReader::Impl {
         // since we use our own block size.
         // Origin chunk extensions are ignored and dropped
         // since we have no way to sign them.
-        return boost::none;
+        return std::nullopt;
     }
 
     size_t _body_length = 0;
@@ -491,7 +491,7 @@ struct SigningReader::Impl {
             (inbuf.size() > 0) ? _qbuf.get() : _qbuf.get_rest();  // send rest if no more input
 
         if (block_buf.size() == 0)
-            return boost::none;  // no data to send yet
+            return std::nullopt;  // no data to send yet
         // Keep block as chunk body.
         auto block_vec = util::bytes::to_vector<uint8_t>(block_buf);
         _pending_parts.push(http_response::ChunkBody(std::move(block_vec), 0));
@@ -519,7 +519,7 @@ struct SigningReader::Impl {
     process_part(http_response::Trailer intr, Cancel, asio::yield_context)
     {
         _trailer_in = _do_inject ? util::to_cache_trailer(std::move(intr)) : std::move(intr);
-        return boost::none;
+        return std::nullopt;
     }
 
     bool _is_done = false;
@@ -527,11 +527,11 @@ struct SigningReader::Impl {
     optional_part
     process_end(Cancel cancel, asio::yield_context yield)
     {
-        if (_is_done) return boost::none;  // avoid adding a last chunk indefinitely
+        if (_is_done) return std::nullopt;  // avoid adding a last chunk indefinitely
 
         sys::error_code ec;
         auto last_block_ch = process_part(std::vector<uint8_t>(), cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
         if (last_block_ch) return last_block_ch;
 
         _is_done = true;
@@ -588,17 +588,17 @@ SigningReader::async_read_part(Cancel cancel, asio::yield_context yield)
     while (!part) {
         part = http_response::Reader::async_read_part(cancel, yield[ec]);
         assert(!_impl->_is_done || (_impl->_is_done && !part));
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
         if (!part) {  // no more input, but stuff may still need to be sent
             part = _impl->process_end(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, boost::none);
+            return_or_throw_on_error(yield, cancel, ec, std::nullopt);
             break;
         }
 
         part = util::apply(std::move(*part), [&](auto&& p) {
             return _impl->process_part(std::move(p), cancel, yield[ec]);
         });
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
     };
 
     return part;
@@ -770,7 +770,7 @@ struct VerifyingReader::Impl {
 
         if (!head_o) {
             LOG_WARN("Failed to verify HTTP head signatures");
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), std::nullopt);
         }
 
         _head = std::move(*head_o);
@@ -778,20 +778,20 @@ struct VerifyingReader::Impl {
         // Check that the response is chunked.
         if (_check_framing && !_head.chunked()) {
             LOG_WARN("Verification of non-chunked HTTP responses is not supported; uri=", _head.uri());
-            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), std::nullopt);
         }
         // Parse range in partial responses (since it may not be signed).
         if (!resp_range.empty()) {
             auto br = util::HttpResponseByteRange::parse(resp_range);
             if (!br) {
                 LOG_WARN("Malformed byte range in HTTP head; uri=", _head.uri());
-                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), std::nullopt);
             }
             auto dszh = _head[http_::response_data_size_hdr];
             if (!br->matches_length(dszh)) {
                 LOG_WARN( "Invalid byte range in HTTP head: "
                         , *br, " (/", dszh, "); uri=", _head.uri());
-                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), boost::none);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::no_message), std::nullopt);
             }
             _range_begin = _block_offset = br->first;
             _range_end = br->last + 1;
@@ -819,7 +819,7 @@ struct VerifyingReader::Impl {
         if (inch.size > _head.block_size()) {
             LOG_WARN( "Chunk size exceeds expected data block size: "
                     , inch.size, " > ", _head.block_size(), "; uri=", _head.uri());
-            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
         }
 
         // Have we buffered a whole data block?
@@ -835,7 +835,7 @@ struct VerifyingReader::Impl {
         auto block_sig = block_sig_from_exts(inch.exts);
         if (!block_sig) {
             LOG_WARN("Missing signature for data block with offset ", _block_offset, "; uri=", _head.uri());
-            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
         }
 
         // TODO: implement `ouipsig`
@@ -847,7 +847,7 @@ struct VerifyingReader::Impl {
             if (!_prev_block_dig) {
                 LOG_WARN( "Missing chain hash for data block with offset "
                         , _block_offset - _head.block_size(), "; uri=", _head.uri());
-                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
             }
             _chain_hasher.set_prev_chained_digest(*_prev_block_dig);
             _chain_hasher.set_offset(_block_offset);
@@ -857,7 +857,7 @@ struct VerifyingReader::Impl {
 
         if (!chain_hash.verify(_head.public_key(), _head.injection_id())) {
             LOG_WARN("Failed to verify data block with offset ", _block_offset, "; uri=", _head.uri());
-            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
         }
 
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] DHASH[i])
@@ -883,13 +883,13 @@ struct VerifyingReader::Impl {
 
         if (_block_data.size() + ind.size() > _head.block_size()) {
             LOG_ERROR("Chunk data overflows data block boundary; uri=", _head.uri());
-            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
         }
 
         _block_data.insert(_block_data.end(), ind.begin(), ind.end());
 
         // Data is returned when processing chunk headers.
-        return boost::none;
+        return std::nullopt;
     }
 
     // If we process trailers, we may have a chance to
@@ -910,7 +910,7 @@ struct VerifyingReader::Impl {
         if (sigs_in_trailer) {
             auto head_o = cache::SignedHead::verify_and_create(std::move(_head), _pk);
             if (!head_o)  // bad signature in trailer
-                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+                return or_throw(y, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
             _head = std::move(*head_o);
         }
 
@@ -998,19 +998,19 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
 
     while (!part) {
         part = _reader->async_read_part(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
         if (!part) break;
 
         part = util::apply(std::move(*part), [&](auto&& p) {
             return _impl->process_part(std::move(p), cancel, yield[ec]);
         });
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
     }
 
     if (_reader->is_done()) {
         // Check full body hash and length.
         _impl->check_body(ec);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
     }
 
     return part;
@@ -1020,13 +1020,13 @@ VerifyingReader::async_read_part(Cancel cancel, asio::yield_context yield)
 
 // begin KeepSignedReader
 
-boost::optional<http_response::Part>
+std::optional<http_response::Part>
 KeepSignedReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
     sys::error_code ec;
     auto part = _reader.async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, boost::none);
-    if (!part) return boost::none;  // no part
+    return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+    if (!part) return std::nullopt;  // no part
     auto headp = part->as_head();
     if (!headp) return part;  // not a head, use as is
 

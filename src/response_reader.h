@@ -18,21 +18,21 @@ using ouinet::util::AsioExecutor;
 
 class AbstractReader {
 public:
-    virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
+    virtual std::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
     virtual bool is_done() const = 0;
     virtual void close()   = 0;
     virtual AsioExecutor get_executor() = 0;
     virtual ~AbstractReader() = default;
 
     template<class Duration>
-    boost::optional<Part> timed_async_read_part(Duration d, Cancel c, asio::yield_context y)
+    std::optional<Part> timed_async_read_part(Duration d, Cancel c, asio::yield_context y)
     {
         Cancel tc(c);
         auto wd = watch_dog(get_executor(), d, [&] { tc(); });
         sys::error_code ec;
 
         auto retval = async_read_part(tc, y[ec]);
-        fail_on_error_or_timeout(y, c, ec, wd, boost::none);
+        fail_on_error_or_timeout(y, c, ec, wd, std::nullopt);
 
         return retval;
     }
@@ -105,7 +105,7 @@ public:
     //
     // Head >> Body* >> boost::none*
     //
-    boost::optional<Part> async_read_part(Cancel, asio::yield_context) override;
+    std::optional<Part> async_read_part(Cancel, asio::yield_context) override;
     bool is_done() const override { return _is_done; }
 
     // This leaves the reader in an undefined state,

@@ -412,7 +412,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
     if (ec && ec != sys::errc::no_such_file_or_directory) return or_throw<reader_uptr>(yield, ec);
     ec = {};
 
-    boost::optional<Range> range;
+    std::optional<Range> range;
 
     if (range_first) {
         // Check and convert range.

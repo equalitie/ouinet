@@ -150,7 +150,7 @@ public:
                  , sign::SecretKey sk);
     ~SigningReader() override;
 
-    boost::optional<ouinet::http_response::Part>
+    std::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
 private:
@@ -190,7 +190,7 @@ public:
                    , status_set statuses = {});
     ~VerifyingReader() override;
 
-    boost::optional<ouinet::http_response::Part>
+    std::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
     bool is_done() const override { return _reader->is_done(); }
@@ -225,7 +225,7 @@ public:
 
     ~KeepSignedReader() override {}
 
-    boost::optional<ouinet::http_response::Part>
+    std::optional<ouinet::http_response::Part>
     async_read_part(Cancel, asio::yield_context) override;
 
     bool is_done() const override { return _reader.is_done(); }

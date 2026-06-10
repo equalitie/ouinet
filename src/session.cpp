@@ -22,13 +22,13 @@ Session::create(
     );
 }
 
-boost::optional<http_response::Part>
+std::optional<http_response::Part>
 Session::async_read_part(Cancel cancel, asio::yield_context yield)
 {
     auto destroyed = _destroyed.connect([&cancel] { cancel(); });
 
     if (!_reader)
-        return or_throw(yield, asio::error::not_connected, boost::none);
+        return or_throw(yield, asio::error::not_connected, std::nullopt);
 
     if (!_head_was_read) {
         _head_was_read = true;
@@ -48,7 +48,7 @@ Session::async_read_part(Cancel cancel, asio::yield_context yield)
         finish_metering(_metrics, ec);
     }
 
-    if (ec) return or_throw(yield, ec, boost::none);
+    if (ec) return or_throw(yield, ec, std::nullopt);
 
     return part;
 }

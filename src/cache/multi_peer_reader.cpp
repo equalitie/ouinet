@@ -28,6 +28,7 @@
 
 #include <boost/asio/spawn.hpp>
 #include <chrono>
+#include <optional>
 #include <random>
 
 using namespace std;
@@ -47,12 +48,12 @@ using udp = asio::ip::udp;
 namespace bt = bittorrent;
 using namespace ouinet::http_response;
 using Errc = MultiPeerReaderErrc;
-using OptPart = boost::optional<Part>;
+using OptPart = std::optional<Part>;
 
 struct MultiPeerReader::Block {
     ChunkBody chunk_body;
     ChunkHdr chunk_hdr;
-    boost::optional<Trailer> trailer;
+    std::optional<Trailer> trailer;
 };
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
@@ -170,9 +171,9 @@ public:
     }
 
     // May return boost::none and no error if the response has no body (e.g. redirect msg)
-    boost::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
+    std::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
     {
-        using OptBlock = boost::optional<Block>;
+        using OptBlock = std::optional<Block>;
 
         if (!_connection.is_open()) return or_throw<OptBlock>(yield, asio::error::not_connected);
 
@@ -198,7 +199,7 @@ public:
 
         // This may happen when the message has no body
         if (!p) {
-            return boost::none;
+            return std::nullopt;
         }
 
         auto first_chunk_hdr = p->as_chunk_hdr();
@@ -212,7 +213,7 @@ public:
             return or_throw<OptBlock>(yield, Errc::block_is_too_big);
         }
 
-        Block block{{{}, 0},{0, {}}, boost::none};
+        Block block{{{}, 0},{0, {}}, std::nullopt};
         util::SHA512 block_hasher;
 
         if (first_chunk_hdr->size) {
@@ -376,7 +377,7 @@ public:
 };
 
 struct MultiPeerReader::PreFetch {
-    using OptBlock = boost::optional<MultiPeerReader::Block>;
+    using OptBlock = std::optional<MultiPeerReader::Block>;
 
     size_t block_id;
     Peer* peer;
@@ -848,17 +849,17 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
 }
 
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
-    AsyncJob<boost::none_t> job;
+    AsyncJob<std::nullopt_t> job;
 
     PreFetchSequential(size_t block_id, Peer* peer, AsioExecutor ex)
         : PreFetch(block_id, peer)
         , job(ex)
     {
-        job.start([=] (auto& cancel, auto yield) -> boost::none_t {
+        job.start([=] (auto& cancel, auto yield) -> std::nullopt_t {
             sys::error_code ec;
             peer->send_block_request(block_id, cancel, yield[ec]);
             ec = compute_error_code(ec, cancel);
-            return or_throw(yield, ec, boost::none);
+            return or_throw(yield, ec, std::nullopt);
         });
     }
 
@@ -936,14 +937,14 @@ MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Cancel& cancel,
     return std::unique_ptr<PreFetch>(pre_fetch);
 }
 
-// May return boost::none and no error if the response has no body (e.g. redirect msg)
-boost::optional<MultiPeerReader::Block>
+// May return std::nullopt and no error if the response has no body (e.g. redirect msg)
+std::optional<MultiPeerReader::Block>
 MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield)
 {
     //   Q0   Q1   R0   Q2   R1   Q3   R2
     // |----|----|----|----|----|----|----|...
 
-    using OptBlock = boost::optional<MultiPeerReader::Block>;
+    using OptBlock = std::optional<MultiPeerReader::Block>;
 
     sys::error_code ec;
 
@@ -986,10 +987,10 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
     }
 }
 
-boost::optional<Part>
+std::optional<Part>
 MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 {
-    using Ret = boost::optional<Part>;
+    using Ret = std::optional<Part>;
 
     sys::error_code ec;
 
@@ -997,7 +998,7 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
 
     if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
     if (_state == State::closed) return or_throw<Ret>(yield, asio::error::bad_descriptor);
-    if (_state == State::done) return boost::none;
+    if (_state == State::done) return std::nullopt;
 
     auto r = async_read_part_impl(cancel, yield[ec]);
     ec = compute_error_code(ec, cancel);
@@ -1014,7 +1015,7 @@ MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
     return r;
 }
 
-boost::optional<Part>
+std::optional<Part>
 MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 {
     sys::error_code ec;
@@ -1032,7 +1033,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 
     if (_next_chunk_body) {
         auto p = std::move(*_next_chunk_body);
-        _next_chunk_body = boost::none;
+        _next_chunk_body = std::nullopt;
         return {{std::move(p)}};
     }
 
@@ -1042,7 +1043,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
         }
         auto p = std::move(*_next_trailer);
-        _next_trailer = boost::none;
+        _next_trailer = std::nullopt;
         mark_done();
         return {{std::move(p)}};
     }
@@ -1053,7 +1054,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             _last_chunk_hdr_sent = true;
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
         }
-        return boost::none;
+        return std::nullopt;
     }
 
     while (true /* do until successful block retrieval */) {
@@ -1068,7 +1069,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
                 _last_chunk_hdr_sent = true;
                 return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
             }
-            return boost::none;
+            return std::nullopt;
         }
 
         ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
@@ -1084,7 +1085,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
     }
 
     assert(0 && "This shouldn't happen");
-    return boost::none;
+    return std::nullopt;
 }
 
 void MultiPeerReader::close()
