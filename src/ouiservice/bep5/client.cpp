@@ -650,7 +650,6 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
 
     while (!spawn_cancel) {
         auto new_candidates = channel.async_receive(yield);
-
         if (!new_candidates.has_value()) {
             break;
         }
@@ -688,16 +687,18 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
                 &result,
                 lock = wc.lock()
             ] (Async yield) mutable {
-                LOG_DEBUG(yield, " trying to contact ", peer->endpoint);
-
+                LOG_DEBUG(yield, " Connecting to ", peer->swarm_type, "; ep=", peer->endpoint, "...");
                 auto con = self->connect_single(*peer->client, use_tls, yield);
-                if (!con.has_value()) return;
+                if (!con) {
+                    return;
+                }
 
                 result = Result {
                     peer->swarm_type,
                     peer->endpoint,
                     std::move(*con)
                 };
+
                 spawn_cancel();
             });
         }

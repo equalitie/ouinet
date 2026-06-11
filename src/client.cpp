@@ -1295,7 +1295,7 @@ Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
 
             ConnectionPool<Endpoint>::Connection con;
             if (_injector_connections.empty()) {
-                LOG_DEBUG(yield, "Connecting to the injector");
+                LOG_DEBUG(yield, " Connecting to the injector");
 
                 auto connect_e = _injector->connect(yield);
 

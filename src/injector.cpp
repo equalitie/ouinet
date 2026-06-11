@@ -602,7 +602,6 @@ void serve( InjectorConfig& config
             auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
 
             http::async_read(con, con_rbuf, req, yield[ec].tag("read_req"));
-
             ec = compute_error_code(ec, cancel, wd);
             if (ec) break;
         }

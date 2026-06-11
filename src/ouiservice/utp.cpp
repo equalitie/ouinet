@@ -1,12 +1,10 @@
 #include "utp.h"
-#include "util/async.h"
-#include "../or_throw.h"
-#include "../parse/endpoint.h"
-#include "../logger.h"
-#include "../util/str.h"
-#include "../util/watch_dog.h"
-#include "../task.h"
 #include "../async_sleep.h"
+#include "../logger.h"
+#include "../parse/endpoint.h"
+#include "../util/async.h"
+#include "../util/select.h"
+#include "../util/str.h"
 
 namespace ouinet {
 namespace ouiservice {
@@ -119,21 +117,17 @@ UtpOuiServiceClient::connect(Async yield)
         socket.bind(_udp_multiplexer, ec);
         assert(!ec);
 
-        auto cancel_slot = yield.cancel_slot([&] {
-            socket.close();
-        });
+        auto result = timeout(
+            retry_timeout[i],
+            [&](auto yield) { return socket.async_connect(*_remote_endpoint, yield); },
+            yield
+        );
 
-        bool timed_out = false;
-
-        auto wd = watch_dog(_ex, retry_timeout[i], [&] {
-                timed_out = true;
-                socket.close();
-        });
-
-        ec = socket.async_connect(*_remote_endpoint, yield);
-
-        if (!timed_out) break;
-        ec = asio::error::timed_out;
+        if (!result) {
+            ec = result.error();
+        } else {
+            break;
+        }
     }
 
     if (ec) {
