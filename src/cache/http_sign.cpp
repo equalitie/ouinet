@@ -587,11 +587,11 @@ SigningReader::async_read_part(Async yield)
 
     while (!part) {
         auto result0 = http_response::Reader::async_read_part(yield);
-        assert(!_impl->_is_done || (_impl->_is_done && !result0));
         if (!result0) {
             return std::unexpected(result0.error());
         }
         part = std::move(*result0);
+        assert(!_impl->_is_done || (_impl->_is_done && !part));
 
         if (!part) {  // no more input, but stuff may still need to be sent
             auto result1 = compat([&](Cancel cancel, asio::yield_context yield) {
