@@ -101,7 +101,7 @@ class TestFixtures:
     CACHE_CLIENT_PEER_FOUND = (
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
-    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve_utp_req/serve_local END[\s\S]*"
+    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve/serve_local END[\s\S]*"
     BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*BEP3 announcer successfully initiated[\s\S]*"
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
@@ -133,7 +133,7 @@ class TestFixtures:
         r'[\s\S]*(?:fresh|cache_miss)/injector Finish; ec="Success"[\s\S]*'
     )
     DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
-    DHT_INITIALIZED_REGEX = r"[\s\S]*BT DHT: WAN endpoint[\s\S]*"
+    DHT_INITIALIZED_REGEX = r"[\s\S]*/dht WAN endpoint[\s\S]*"
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
