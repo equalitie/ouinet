@@ -407,17 +407,17 @@ private:
     // Metrics is optional because we use this function also for sending
     // statistics which we don't want to meter.
     template<class Rq>
-    Session fetch_fresh_through_connect_proxy( const Rq&
-                                             , asio::ssl::context&
-                                             , std::optional<metrics::Request>
-                                             , Cancel&
-                                             , YieldContext);
+    std::expected<Session, sys::error_code>
+    fetch_fresh_through_connect_proxy( const Rq&
+                                     , asio::ssl::context&
+                                     , std::optional<metrics::Request>
+                                     , Async);
 
-    Session fetch_fresh_through_simple_proxy( PublicInjectorRequest
-                                            , const CacheEntry* cached
-                                            , metrics::Request
-                                            , Cancel& cancel
-                                            , YieldContext);
+    std::expected<Session, sys::error_code>
+    fetch_fresh_through_simple_proxy( PublicInjectorRequest
+                                    , const CacheEntry* cached
+                                    , metrics::Request
+                                    , Async);
 
     void send_metrics_record( std::string_view record_name
                             , asio::const_buffer record_content
@@ -458,21 +458,27 @@ private:
         return (bool) _shutdown_signal;
     }
 
-#define DEF_WAIT_FOR(WHAT) \
-    void wait_for_##WHAT(Cancel& cancel, YieldContext yield) { \
-        if (!_##WHAT##_starting) \
-            return or_throw(yield, _##WHAT##_start_ec); \
-        \
-        sys::error_code ec; \
-        _##WHAT##_starting->wait(cancel, yield[ec].tag("wait_for_" #WHAT)); \
-        ec = compute_error_code(ec, cancel); \
-        if (ec && ec != asio::error::operation_aborted) \
-            LOG_ERROR("Error while waiting for " #WHAT " setup; ec=", ec); \
-        return or_throw(yield, ec); \
+    inline
+    std::expected<void, sys::error_code> wait_for_injector(Async yield) {
+        if (!_injector_starting) {
+            return std::unexpected(_injector_start_ec);
+        }
+
+        _injector_starting->wait(yield.tag("wait_for_injector"));
+
+        return {};
     }
-    DEF_WAIT_FOR(injector)
-    DEF_WAIT_FOR(cache)
-#undef DEF_WAIT_FOR
+
+    inline
+    std::expected<void, sys::error_code> wait_for_cache(Async yield) {
+        if (!_cache_starting) {
+            return std::unexpected(_cache_start_ec);
+        }
+
+        _cache_starting->wait(yield.tag("wait_for_cache"));
+
+        return {};
+    }
 
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
     fs::path ca_key_path()  const { return _config.repo_root() / OUINET_CA_KEY_FILE;  }
@@ -822,7 +828,7 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
     sys::error_code ec;
 
     if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-        wait_for_cache(timeout_cancel, yield[ec]);
+        compat([&](Async yield) { wait_for_cache(yield); })(timeout_cancel, yield[ec]);
         fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
     }
 
@@ -1131,294 +1137,256 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
 
 //------------------------------------------------------------------------------
 template<class Rq>
-Session Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
-                                                        , asio::ssl::context& tls_ctx
-                                                        , std::optional<metrics::Request> metrics
-                                                        , Cancel& cancel
-                                                        , YieldContext yield)
+std::expected<Session, sys::error_code>
+Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
+                                                , asio::ssl::context& tls_ctx
+                                                , std::optional<metrics::Request> metrics
+                                                , Async yield)
 {
     // TODO: We're not re-using connections here. It's because the
     // ConnectionPool as it is right now can only work with http requests
     // and responses and thus can't be used for full-dupplex forwarding.
 
-    try {
-        Cancel timeout_cancel(cancel);
-        auto watch_dog = ouinet::watch_dog( _ctx
-                                          , default_timeout::fetch_http()
-                                          , [&]{ timeout_cancel(); });
-
-        // Parse the URL to tell HTTP/HTTPS, host, port.
-        auto url = util::Url::from(rq.target());
-
-        if (!url) {
-            _YERROR(yield, "Unsupported target URL");
-            auto ec = asio::error::operation_not_supported;
-            if (metrics) metrics->finish(ec);
-            return or_throw<Session>(yield, ec);
-        }
-
-        // Connect to the injector/proxy.
-        sys::error_code ec;
-
-        wait_for_injector(timeout_cancel, yield[ec]);
-
-        ec = compute_error_code(ec, cancel, watch_dog);
-        if (ec) {
-            if (metrics) metrics->finish(ec);
-            return or_throw<Session>(yield, ec);
-        }
-
-        assert(_injector);
-
-        auto inj = _injector->connect(Async(yield, timeout_cancel));
-
-        if (!inj.has_value()) {
-            ec = compute_error_code(inj.error(), cancel, watch_dog);
-        }
-
-        if (ec) {
-            if (metrics) metrics->finish(ec);
-            return or_throw<Session>(yield, ec);
-        }
-
-        // Build the actual request to send to the proxy.
-        Request connreq = { http::verb::connect
-                          , url->host + ":" + (url->port.empty() ? "443" : url->port)
-                          , 11 /* HTTP/1.1 */};
-
-        // HTTP/1.1 requires a ``Host:`` header in all requests:
-        // <https://tools.ietf.org/html/rfc7230#section-5.4>.
-        connreq.set(http::field::host, connreq.target());
-
-        if (auto credentials = _config.credentials_for(inj->remote_endpoint))
-            authorize(connreq, *credentials);
-
-        // Open a tunnel to the origin
-        // (to later perform the SSL handshake and send the request).
-        connreq.prepare_payload();
-        util::http_request(inj->connection, connreq, timeout_cancel, yield[ec].tag("connreq"));
-
-        ec = compute_error_code(ec, cancel, watch_dog);
-        if (ec) {
-            if (metrics) metrics->finish(ec);
-            return or_throw<Session>(yield, ec);
-        }
-
-        // Only get the head of the CONNECT response
-        // (otherwise we would get stuck waiting to read
-        // a body whose length we do not know
-        // since a successful respone should have no content length as per RFC7231#4.3.6).
-        {
-            auto r = std::make_unique<http_response::Reader>(std::move(inj->connection));
-
-            auto part = compat([&](Async yield) {
-                return r->async_read_part(yield.tag("read_hdr"));
-            })(timeout_cancel, yield[ec]);
-
-            ec = compute_error_code(ec, cancel, watch_dog);
-            if (ec) {
+    return timeout(
+        default_timeout::fetch_http(),
+        [&](auto yield) -> std::expected<Session, sys::error_code> {
+            // Parse the URL to tell HTTP/HTTPS, host, port.
+            auto url = util::Url::from(rq.target());
+            if (!url) {
+                LOG_ERROR(yield, " Unsupported target URL");
+                auto ec = asio::error::operation_not_supported;
                 if (metrics) metrics->finish(ec);
-                return or_throw<Session>(yield, ec);
+                return std::unexpected(ec);
             }
 
-            assert(part && part->is_head());
+            // Connect to the injector/proxy.
+            wait_for_injector(yield);
+            assert(_injector);
 
-            if (http::to_status_class(part->as_head()->result()) != http::status_class::successful) {
-                auto rsh = std::move(*(part->as_head()));
-                _YERROR(yield.tag("proxy_connect"), rsh);
+            auto inj_e = _injector->connect(yield);
+            if (!inj_e) {
+                if (metrics) metrics->finish(inj_e.error());
+                return std::unexpected(inj_e.error());
+            }
+            auto inj = std::move(*inj_e);
 
-                util::remove_ouinet_nonerrors_ref(rsh);
-                rsh.set(http_::response_source_hdr, http_::response_source_hdr_proxy);
+            // Build the actual request to send to the proxy.
+            Request connreq = { http::verb::connect
+                                , url->host + ":" + (url->port.empty() ? "443" : url->port)
+                                , 11 /* HTTP/1.1 */};
 
-                return Session(std::move(rsh), std::move(metrics), rq.method() == http::verb::head, std::move(r));
+            // HTTP/1.1 requires a ``Host:`` header in all requests:
+            // <https://tools.ietf.org/html/rfc7230#section-5.4>.
+            connreq.set(http::field::host, connreq.target());
+
+            if (auto credentials = _config.credentials_for(inj.remote_endpoint))
+                authorize(connreq, *credentials);
+
+            // Open a tunnel to the origin
+            // (to later perform the SSL handshake and send the request).
+            connreq.prepare_payload();
+
+            auto req_e = compat([&](Cancel cancel, asio::yield_context yield) {
+                util::http_request(inj.connection, connreq, cancel, yield);
+            })(yield.tag("connreq"));
+            if (!req_e) {
+                if (metrics) metrics->finish(req_e.error());
+                return std::unexpected(req_e.error());
             }
 
-            inj->connection = r->release_stream();
-        }
+            // Only get the head of the CONNECT response
+            // (otherwise we would get stuck waiting to read
+            // a body whose length we do not know
+            // since a successful respone should have no content length as per RFC7231#4.3.6).
+            {
+                auto r = std::make_unique<http_response::Reader>(std::move(inj.connection));
 
-        GenericStream con;
+                auto part_e = r->async_read_part(yield.tag("read_hdr"));
+                if (!part_e) {
+                    if (metrics) metrics->finish(part_e.error());
+                    return std::unexpected(part_e.error());
+                }
+                auto part = std::move(*part_e);
 
-        if (url->scheme == "https") {
-            auto c = ssl::util::client_handshake( move(inj->connection)
-                                                , tls_ctx
-                                                , url->host
-                                                , Async(yield, timeout_cancel));
-            if (!c.has_value()) { ec = c.error(); }
-            else { con = std::move(*c); }
-        } else {
-            con = move(inj->connection);
-        }
+                assert(part && part->is_head());
 
-        ec = compute_error_code(ec, cancel, watch_dog);
-        if (ec) {
-            if (metrics) metrics->finish(ec);
-            return or_throw<Session>(yield, ec);
-        }
+                if (http::to_status_class(part->as_head()->result()) != http::status_class::successful) {
+                    auto rsh = std::move(*(part->as_head()));
+                    LOG_ERROR(yield.tag("proxy_connect"), " ", rsh);
 
-        // TODO: move
-        auto rq_ = util::req_form_from_absolute_to_origin(rq);
+                    util::remove_ouinet_nonerrors_ref(rsh);
+                    rsh.set(http_::response_source_hdr, http_::response_source_hdr_proxy);
 
-        {
-            auto slot = timeout_cancel.connect([&con] { con.close(); });
-            http::async_write(con, rq_, yield[ec].tag("write_req"));
-        };
+                    return Session(std::move(rsh), std::move(metrics), rq.method() == http::verb::head, std::move(r));
+                }
 
-        ec = compute_error_code(ec, cancel, watch_dog);
-        if (ec) {
-            if (metrics) metrics->finish(ec);
-            return or_throw<Session>(yield, ec);
-        }
+                inj.connection = r->release_stream();
+            }
 
-        auto session = compat([&](Async yield) {
-            return Session::create(
+            std::expected<GenericStream, sys::error_code> con_e;
+            if (url->scheme == "https") {
+                con_e = ssl::util::client_handshake( move(inj.connection)
+                                                   , tls_ctx
+                                                   , url->host
+                                                   , yield);
+            } else {
+                con_e = move(inj.connection);
+            }
+
+            if (!con_e) {
+                if (metrics) metrics->finish(con_e.error());
+                return std::unexpected(con_e.error());
+            }
+            auto con = std::move(*con_e);
+
+            // TODO: move
+            auto rq_ = util::req_form_from_absolute_to_origin(rq);
+
+            auto write_e = http::async_write(con, rq_, yield.tag("write_req"));
+            if (!write_e) {
+                if (metrics) metrics->finish(write_e.error());
+                return std::unexpected(write_e.error());
+            }
+
+            auto session_e = Session::create(
                 move(con),
                 rq.method() == http::verb::head,
                 std::move(metrics),
                 yield.tag("read_hdr")
             );
-        })(timeout_cancel, yield[ec]);
+            if (!session_e) {
+                return std::unexpected(session_e.error());
+            }
+            auto session = std::move(*session_e);
 
-        ec = compute_error_code(ec, cancel, watch_dog);
-        if (ec) {
-            return or_throw<Session>(yield, ec);
-        }
+            // Prevent others from inserting ouinet headers.
+            util::remove_ouinet_fields_ref(session.response_header());
 
-        // Prevent others from inserting ouinet headers.
-        util::remove_ouinet_fields_ref(session.response_header());
-
-        session.response_header().set( http_::response_source_hdr  // for agent
-                                     , http_::response_source_hdr_proxy);
-        return session;
-    }
-    catch (Async::Cancelled const&) {
-        if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
-        return or_throw<Session>(yield, asio::error::timed_out);
-    }
+            session.response_header().set( http_::response_source_hdr  // for agent
+                                         , http_::response_source_hdr_proxy);
+            return session;
+        },
+        yield
+    );
 }
 
 //------------------------------------------------------------------------------
-Session Client::State::fetch_fresh_through_simple_proxy
-        ( PublicInjectorRequest request
-        , const CacheEntry* cached
-        , metrics::Request metrics
-        , Cancel& cancel
-        , YieldContext yield)
+std::expected<Session, sys::error_code>
+Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
+                                               , const CacheEntry* cached
+                                               , metrics::Request metrics
+                                               , Async yield)
 {
-    try {
-        Cancel timeout_cancel(cancel);
-        auto watch_dog = ouinet::watch_dog( _ctx
-                                          , default_timeout::fetch_http()
-                                          , [&]{ timeout_cancel(); });
-        sys::error_code ec;
+    return timeout(
+        default_timeout::fetch_http(),
+        [&](auto yield) -> std::expected<Session, sys::error_code> {
+            // Connect to the injector.
+            // TODO: Maybe refactor with `fetch_via_self`.
 
-        // Connect to the injector.
-        // TODO: Maybe refactor with `fetch_via_self`.
-
-        if (cached && _injector_starting) {
-            // This is a revalidation, so go with the available cache entry
-            // and do not even try to get a response from the injector
-            // (as it would probably block, indefinitely when missing connectivity).
-            return or_throw<Session>(yield, asio::error::try_again);
-        }
-
-        wait_for_injector(timeout_cancel, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, Session{});
-        assert(_injector);
-
-        ConnectionPool<Endpoint>::Connection con;
-        if (_injector_connections.empty()) {
-            _YDEBUG(yield, "Connecting to the injector");
-
-            auto c = _injector->connect(Async(yield, timeout_cancel));
-
-            if (!c.has_value()) {
-                _YWARN(yield, "Failed to connect to injector; ec=", c.error());
-                metrics.finish(ec);
-                return or_throw<Session>(yield, c.error());
+            if (cached && _injector_starting) {
+                // This is a revalidation, so go with the available cache entry
+                // and do not even try to get a response from the injector
+                // (as it would probably block, indefinitely when missing connectivity).
+                return std::unexpected(asio::error::try_again);
             }
 
-            assert(c->connection.has_implementation());
+            wait_for_injector(yield);
+            assert(_injector);
 
-            con = _injector_connections.wrap(std::move(c->connection));
-            *con = c->remote_endpoint;
-        } else {
-            _YDEBUG(yield, "Reusing existing injector connection");
+            ConnectionPool<Endpoint>::Connection con;
+            if (_injector_connections.empty()) {
+                LOG_DEBUG(yield, "Connecting to the injector");
 
-            con = _injector_connections.pop_front();
-        }
+                auto connect_e = _injector->connect(yield);
 
-        auto cancel_slot = timeout_cancel.connect([&] {
-            con.close();
-        });
+                if (!connect_e) {
+                    LOG_WARN(yield, " Failed to connect to injector; ec=", connect_e.error());
+                    metrics.finish(connect_e.error());
+                    return std::unexpected(connect_e.error());
+                }
 
-        if (auto credentials = _config.credentials_for(*con))
-            request.authorize(*credentials);
+                auto connect = std::move(*connect_e);
 
-        if (_metrics.is_enabled()) {
-            if (auto druid = _metrics.current_device_id()) {
-                // Add DRUID header to the request sent to the injector
-                request.set_druid(*druid);
+                assert(connect.connection.has_implementation());
+
+                con = _injector_connections.wrap(std::move(connect.connection));
+                *con = connect.remote_endpoint;
+            } else {
+                LOG_DEBUG(yield, " Reusing existing injector connection");
+                con = _injector_connections.pop_front();
             }
-        }
 
-        _YDEBUG(yield, "Sending a request to the injector");
-        // Send request
-        request.async_write(con, yield[ec].tag("write_injector_req"));
+            auto cancel_slot = yield.cancel_slot([&] { con.close(); });
 
-        if ((ec = compute_error_code(ec, cancel, watch_dog))) {
-            _YWARN(yield, "Failed to send request to the injector; ec=", ec);
-            metrics.finish(ec);
-            return or_throw<Session>(yield, ec);
-        }
+            if (auto credentials = _config.credentials_for(*con)) {
+                request.authorize(*credentials);
+            }
 
-        _YDEBUG(yield, "Reading response");
+            if (_metrics.is_enabled()) {
+                if (auto druid = _metrics.current_device_id()) {
+                    // Add DRUID header to the request sent to the injector
+                    request.set_druid(*druid);
+                }
+            }
 
-        cancel_slot = {};
+            LOG_DEBUG(yield, " Sending a request to the injector");
 
-        // Receive response
-        auto session = compat([&](Async yield) {
-            return Session::create(
+            // Send request
+            auto write_e = compat([&](asio::yield_context yield) {
+                return request.async_write(con, yield);
+            })(yield.tag("write_injector_req"));
+            if (!write_e) {
+                LOG_WARN(yield, " Failed to send request to the injector; ec=", write_e.error());
+                metrics.finish(write_e.error());
+                return std::unexpected(write_e.error());
+            }
+
+            LOG_DEBUG(yield, " Reading response");
+
+            cancel_slot = {};
+
+            // Receive response
+            auto session_e = Session::create(
                 move(con),
                 request.method() == http::verb::head,
                 move(metrics),
                 yield.tag("read_hdr")
             );
-        })(timeout_cancel, yield[ec]);
 
-        auto& hdr = session.response_header();
+            if (!session_e) {
+                LOG_WARN(yield, " Reading response failed: ", session_e.error());
+                return std::unexpected(session_e.error());
+            }
+            auto session = std::move(*session_e);
 
-        ec = compute_error_code(ec, cancel, watch_dog);
-        if ( !ec
-             && request.is_inject_request()
-             && !util::http_proto_version_check_trusted(hdr, newest_proto_seen)) {
-            // This is treated like the Injector mechanism being disabled.
-            _YWARN(yield, "Injector is using an unacceptable protocol version: ", hdr);
-            ec = asio::error::operation_not_supported;
-        }
+            LOG_DEBUG(yield, " Reading response completed");
 
-        _YDEBUG(yield, "End reading response; ec=", ec);
+            auto& hdr = session.response_header();
 
-        if (ec) return or_throw(yield, ec, std::move(session));
+            if (request.is_inject_request() &&
+                !util::http_proto_version_check_trusted(hdr, newest_proto_seen))
+            {
+                // This is treated like the Injector mechanism being disabled.
+                LOG_WARN(yield, " Injector is using an unacceptable protocol version: ", hdr);
+                return std::unexpected(asio::error::operation_not_supported);
+            }
 
-        // Store keep-alive connections in connection pool
+            // Store keep-alive connections in connection pool
 
-        if (request.is_inject_request()) {
-            maybe_add_proto_version_warning(hdr);
+            if (request.is_inject_request()) {
+                maybe_add_proto_version_warning(hdr);
+                hdr.set(http_::response_source_hdr, http_::response_source_hdr_injector);  // for agent
+            } else {
+                // Prevent others from inserting ouinet headers
+                // (except a protocol error, if present and well-formed).
+                util::remove_ouinet_nonerrors_ref(hdr);
+                hdr.set(http_::response_source_hdr, http_::response_source_hdr_proxy);  // for agent
+            }
 
-            hdr.set(http_::response_source_hdr, http_::response_source_hdr_injector);  // for agent
-        } else {
-            // Prevent others from inserting ouinet headers
-            // (except a protocol error, if present and well-formed).
-            util::remove_ouinet_nonerrors_ref(hdr);
-
-            hdr.set(http_::response_source_hdr, http_::response_source_hdr_proxy);  // for agent
-        }
-        return session;
-    }
-    catch (Async::Cancelled const&) {
-        if (cancel) return or_throw<Session>(yield, asio::error::operation_aborted);
-        return or_throw<Session>(yield, asio::error::timed_out);
-    }
+            return session;
+        },
+        yield
+    );
 }
 
 void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Cancel& cancel, YieldContext yield) {
@@ -1487,7 +1455,9 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     sys::error_code injector_ec;
 
     // Sending directly failed, try sending through the injector.
-    auto injector_session = fetch_fresh_through_connect_proxy(req, tls_ctx, {}, cancel, yield[injector_ec]);
+    auto injector_session = compat([&](Async yield) {
+        return fetch_fresh_through_connect_proxy(req, tls_ctx, {}, yield);
+    })(yield[injector_ec]);
 
     LOG_DEBUG(yield, " Metrics injector: ec:\"", injector_ec.message(), "\" result:", injector_session.response_header().result());
 
@@ -1627,11 +1597,14 @@ public:
             auto metrics = client_state._metrics.new_public_injector_request();
 
             sys::error_code ec;
-            auto s = client_state.fetch_fresh_through_simple_proxy( rq
-                                                                  , cached
-                                                                  , move(metrics)
-                                                                  , cancel
-                                                                  , yield[ec]);
+            auto s = compat([&](Async yield) {
+                return client_state.fetch_fresh_through_simple_proxy(
+                    rq,
+                    cached,
+                    move(metrics),
+                    yield
+                );
+            })(cancel, yield);
 
             if (!ec) {
                 _YDEBUG(yield, "Finish; ec=", ec, " status=", s.response_header().result());
@@ -1716,8 +1689,14 @@ public:
 
             util::remove_ouinet_fields_ref(rq);
 
-            session = client_state.fetch_fresh_through_connect_proxy
-                    (rq, client_state._config.origin_ssl_ctx(), std::move(metrics), cancel, yield[ec].tag("connect"));
+            session = compat([&](Async yield) {
+                return client_state.fetch_fresh_through_connect_proxy(
+                    rq,
+                    client_state._config.origin_ssl_ctx(),
+                    std::move(metrics),
+                    yield.tag("connect")
+                );
+            })(cancel, yield[ec]);
         }
         else {
             auto metrics = client_state._metrics.new_public_injector_request();
@@ -1728,11 +1707,14 @@ public:
                 return or_throw(yield, asio::error::invalid_argument);
             }
 
-            session = client_state.fetch_fresh_through_simple_proxy(
+            session = compat([&](Async yield) {
+                return client_state.fetch_fresh_through_simple_proxy(
                     std::move(*insecure_rq),
                     nullptr,
                     std::move(metrics),
-                    cancel, yield[ec].tag("simple"));
+                    yield.tag("simple")
+                );
+            })(cancel, yield[ec]);
         }
 
         _YDEBUG(yield, "Proxy fetch; ec=", ec);

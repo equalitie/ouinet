@@ -149,7 +149,7 @@ auto select(Async yield, Fs... fs) {
         // Cancel the other branches
         yield.cancel();
 
-        return result.value();
+        return std::move(result).value();
     }
 }
 
@@ -183,7 +183,7 @@ auto timeout(boost::asio::steady_timer::duration duration, F f, Async yield) {
         }
     );
 
-    return detail::maybe_flatten(result);
+    return detail::maybe_flatten(std::move(result));
 }
 
 
