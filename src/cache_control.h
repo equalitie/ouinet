@@ -32,10 +32,19 @@ private:
 public:
     using Response = http::response<http::dynamic_body>;
 
-    using FetchStored = std::function<CacheEntry(const CacheRetrieveRequest&, Cancel&, YieldContext)>;
+    using FetchStored = std::function<
+        std::expected<CacheEntry, sys::error_code>(const CacheRetrieveRequest&, Async)
+    >;
+
     // If not null, the given cache entry is already available
     // (e.g. this may be a revalidation).
-    using FetchFresh  = std::function<Session(const CacheInjectRequest&, const CacheEntry*, Cancel&, YieldContext)>;
+    using FetchFresh  = std::function<
+        std::expected<Session, sys::error_code>(
+            const CacheInjectRequest&,
+            const CacheEntry*,
+            Async
+        )
+    >;
 
 public:
     CacheControl(const AsioExecutor& ex, std::string server_name)

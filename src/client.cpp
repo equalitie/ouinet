@@ -1582,53 +1582,61 @@ public:
         //------------------------------------------------------------
         cache_control.fetch_fresh = [&] ( const CacheInjectRequest& rq
                              , const CacheEntry* cached
-                             , Cancel& cancel, YieldContext yield_) {
+                             , Async yield_) -> std::expected<Session, sys::error_code>
+        {
             auto yield = yield_.tag("injector");
 
             namespace err = asio::error;
 
-            _YDEBUG(yield, "Start");
+            LOG_DEBUG(yield, " Start");
 
             if (!client_state._config.is_injector_access_enabled()) {
-                _YDEBUG(yield, "Disabled");
-                return or_throw<Session>(yield, err::operation_not_supported);
+                LOG_DEBUG(yield, " Disabled");
+                return std::unexpected(err::operation_not_supported);
             }
 
             auto metrics = client_state._metrics.new_public_injector_request();
 
-            sys::error_code ec;
-            auto s = compat([&](Async yield) {
-                return client_state.fetch_fresh_through_simple_proxy(
-                    rq,
-                    cached,
-                    move(metrics),
-                    yield
-                );
-            })(cancel, yield);
+            auto session = client_state.fetch_fresh_through_simple_proxy(
+                rq,
+                cached,
+                move(metrics),
+                yield
+            );
 
-            if (!ec) {
-                _YDEBUG(yield, "Finish; ec=", ec, " status=", s.response_header().result());
+            if (!session) {
+                LOG_DEBUG(yield, " Finish with error: ", session.error());
             } else {
-                _YDEBUG(yield, "Finish; ec=", ec);
+                LOG_DEBUG(yield, " Finish successfully; status="
+                               , session->response_header().result());
             }
 
-            return or_throw(yield, ec, move(s));
+            return session;
         };
 
         //------------------------------------------------------------
-        cache_control.fetch_stored = [&] (const CacheRetrieveRequest& rq, Cancel& cancel, YieldContext yield_) {
+        cache_control.fetch_stored = [&] (const CacheRetrieveRequest& rq, Async yield_) {
             auto yield = yield_.tag("cache");
 
-            _YDEBUG(yield, "Start");
+            LOG_DEBUG(yield, " Start");
 
-            sys::error_code ec;
-            auto r = client_state.fetch_stored_in_dcache( rq
-                                                        , cancel
-                                                        , yield[ec]);
+            auto entry = compat(
+                [&, log_path = yield.log_path()](Cancel cancel, asio::yield_context yield) {
+                    return client_state.fetch_stored_in_dcache(
+                        rq,
+                        cancel,
+                        YieldContext(yield, std::move(log_path))
+                    );
+                }
+            )(yield);
 
-            _YDEBUG(yield, "Finish; ec=", ec, " canceled=", bool(cancel));
+            if (!entry) {
+                LOG_DEBUG(yield, " Finish with error: ", entry.error());
+            } else {
+                LOG_DEBUG(yield, " Finish successfully");
+            }
 
-            return or_throw(yield, ec, move(r));
+            return entry;
         };
 
         //------------------------------------------------------------

@@ -458,13 +458,20 @@ auto CacheControl::make_fetch_fresh_job( const CacheRequest& rq
 {
     AsyncJob<Session> job(_ex);
 
-    job.start([&] (Cancel& cancel, asio::yield_context yield_) mutable {
-            auto y = YieldContext(yield_, yield.log_path());
+    job.start(
+        [this, &rq, cached, log_path = yield.log_path()]
+        (Cancel& cancel, asio::yield_context yield) mutable {
             sys::error_code ec;
-            auto r = fetch_fresh(rq.to_inject_request(), cached, cancel, y[ec]);
-            ec = compute_error_code(ec, cancel);
-            return or_throw(y, ec, move(r));
-        });
+            auto r = compat([&](Async yield) {
+                return fetch_fresh(
+                    rq.to_inject_request(),
+                    cached,
+                    yield.with_log_path(std::move(log_path))
+                );
+            })(cancel, yield[ec]);
+            return or_throw(yield, ec, move(r));
+        }
+    );
 
     return job;
 }
@@ -513,10 +520,16 @@ CacheControl::do_fetch_stored(FetchState& fs,
     if (!fs.fetch_stored) {
         fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
         fs.fetch_stored->start(
-                [&] (Cancel& cancel, asio::yield_context yield_) mutable {
-                    auto y = YieldContext(yield_, yield.log_path());
-                    return fetch_stored(rq.to_retrieve_request(), cancel, y);
-                });
+            [&, log_path = yield.log_path()]
+            (Cancel& cancel, asio::yield_context yield) mutable {
+                return compat([&](Async yield) {
+                    return fetch_stored(
+                        rq.to_retrieve_request(),
+                        yield.with_log_path(std::move(log_path))
+                    );
+                })(cancel, yield);
+            }
+        );
     }
 
     enum Which { fresh, stored, none };
