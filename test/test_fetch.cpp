@@ -16,6 +16,7 @@
 #include "injector.h"
 #include "client.h"
 #include "util/str.h"
+#include "util/random.h"
 #include "ssl/util.h"
 #include "async_sleep.h"
 
@@ -190,13 +191,22 @@ asio::ssl::context client_ssl_context_for(const HttpServer& server) {
     return ctx;
 }
 
+std::string generate_random_body() {
+    // TODO: Some tests fail with larger body sizes
+    //size_t min_size = 64;
+    //size_t max_size = 2 * 1024 * 1024;
+    //auto size = util::random::number<size_t>(min_size, max_size);
+    size_t size = 65536;
+    return util::random::printable_ascii(size);
+}
+
 BOOST_AUTO_TEST_CASE(server) {
     asio::io_context ctx;
     run(ctx, [] (asio::yield_context yield) {
         TestDir root;
         auto server = HttpServer(yield.get_executor(), root.path());
 
-        std::string body = "hello";
+        std::string body = generate_random_body();
         server.add_resource("/", body);
 
         auto ssl_ctx = client_ssl_context_for(server);
@@ -238,7 +248,7 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     client.start();
 
     run(ctx, [&, server = std::move(server)] (asio::yield_context yield) mutable {
-        auto body = "hello world\n";
+        auto body = generate_random_body();
         server.add_resource("/", body);
 
         auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
@@ -269,7 +279,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     TestDir root;
 
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    server.add_resource("/", "hello test server\n");
+    server.add_resource("/", generate_random_body());
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     const std::string injector_credentials = "username:password";
@@ -339,7 +349,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
         // Give "injector" time to announce
         Cancel cancel;
-        async_sleep(5s, cancel, yield);
+        async_sleep(1s, cancel, yield);
 
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(seeder, rq, yield);
@@ -373,7 +383,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
     TestDir root;
 
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    server.add_resource("/", "hello test server\n");
+    server.add_resource("/", generate_random_body());
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     auto swarms = std::make_shared<MockDht::Swarms>();
@@ -448,7 +458,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
     TestDir root;
 
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    server.add_resource("/", "hello test server\n");
+    server.add_resource("/", generate_random_body());
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     const std::string injector_credentials = "username:password";
