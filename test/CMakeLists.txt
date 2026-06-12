@@ -12,6 +12,9 @@ endif()
 
 set(OUINET_TEST_TARGETS)
 
+add_library(ouinet_test_utils OBJECT ./util/http_server.cpp)
+ouinet_setup(TARGET ouinet_test_utils LINK ouinet_asio)
+
 function(add_test)
     set(options)
     set(oneValueArgs TARGET TYPE TARGET_SRC)
@@ -45,6 +48,7 @@ function(add_test)
                 ouinet_client
                 ouinet_injector
                 ouinet_rs
+                ouinet_test_utils
                 Boost::unit_test_framework
         )
     endif()
