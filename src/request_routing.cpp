@@ -243,152 +243,58 @@ route_choose_config(const http::request_header<>& req, const ClientConfig& confi
 
     static const boost::regex localhost_exact_rx{"localhost", rx_icase};
 
-    std::vector<Match> matches({
-        // Please keep host-specific matches at a bare minimum
-        // as they require curation and they may have undesired side-effects;
-        // instead, use user agent-side mechanisms like browser settings and extensions when possible,
-        // and only leave those that really break things and cannot be otherwise disabled.
-        //
-        // Also note that using the normal mechanisms for these may help users
-        // keep their browsers up-to-date (by retrieving via the injector in case of interference),
-        // and they may still not pollute the cache unless
-        // the requests are explicitly marked for caching and announcement.
-
-        // Disable cache and always go to origin for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://ident\\.me/.*")
-        //     , {deque<fresh_channel>({fresh_channel::origin})} ),
-
-        /* Requests which may be considered public but too noisy and of little value for caching
-         * should be processed by something like browser extensions.
-        // Google Search completion
-        Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?google\\.com/complete/.*")
-             , unrequested ),
-        */
-
-        /* To stop these requests in Firefox,
-         * uncheck "Preferences / Privacy & Security / Deceptive Content and Dangerous Software Protection".
-        // Safe Browsing API <https://developers.google.com/safe-browsing/>.
-        // These should not be very frequent after start,
-        // plus they use POST requests, so there is no risk of accidental injection.
-        Match( reqexpr::from_regex(target_getter, "https://safebrowsing\\.googleapis\\.com/.*")
-             , unrequested ),
-        */
-
-        /* These are used to retrieve add-ons and all kinds of minor security updates from Mozilla,
-         * and they mostly happen on browser start only.
-        // Disable cache and always go to origin for these mozilla sites.
-        Match( reqexpr::from_regex(target_getter, "https?://content-signature\\.cdn\\.mozilla\\.net/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*services\\.mozilla\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*cdn\\.mozilla\\.net/.*")
-             , unrequested ),
-        */
-
-        /* To stop these requests,
-         * uncheck "Preferences / Add-ons / (gear icon) / Update Add-ons Automatically".
-        // Firefox add-ons hotfix (auto-update)
-        Match( reqexpr::from_regex(target_getter, "https?://services\\.addons\\.mozilla\\.org/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://versioncheck-bg\\.addons\\.mozilla\\.org/.*")
-             , unrequested ),
-        */
-
-        /* To stop these requests,
-         * uncheck all options from "Preferences / Privacy & Security / Firefox Data Collection and Use",
-         * maybe clear `toolkit.telemetry.server` in `about:config`.
-        // Firefox telemetry
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.net/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*telemetry\\.mozilla\\.org/.*")
-             , unrequested ),
-        */
-
-        /* This should work as expected as long as Origin is enabled.
-         * To stop these requests, set `network.captive-portal-service.enabled` to false in `about:config`.
-        // Firefox' captive portal detection
-        Match( reqexpr::from_regex(target_getter, "https?://detectportal\\.firefox\\.com/.*")
-             , unrequested ),
-        */
-
-        /* To avoid these at the client, use some kind of ad blocker (like uBlock Origin).
-        // Ads and tracking
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*google-analytics\\.com/.*")
-             , unrequested ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googlesyndication\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*googletagservices\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*moatads\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*amazon-adsystem\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*adsafeprotected\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*ads-twitter\\.com/.*")
-             , unrequested ),
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*doubleclick\\.net/.*")
-             , unrequested ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://([^/\\.]+\\.)*summerhamster\\.com/.*")
-             , unrequested ),
-
-        Match( reqexpr::from_regex(target_getter, "https?://ping.chartbeat.net/.*")
-             , unrequested ),
-        */
-
-        // Handle requests to <http://localhost/> internally.
+    std::vector<Match> matches;
+    
+    // Handle requests to <http://localhost/> internally.
+    matches.push_back(
         Match( reqexpr::from_regex(host_getter, localhost_exact_rx)
-             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
+             , {deque<fresh_channel>({fresh_channel::_front_end})} ));
 
+    matches.push_back(
         Match( reqexpr::from_regex(host_getter, util::str(config.front_end_endpoint()))
-             , {deque<fresh_channel>({fresh_channel::_front_end})} ),
+             , {deque<fresh_channel>({fresh_channel::_front_end})} ));
 
-        // Other requests to the local host should not use the network
-        // to avoid leaking internal services accessed through the client.
-        Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
-             , {deque<fresh_channel>({fresh_channel::origin})} ),
+    // Other requests to the local host should not use the network
+    // to avoid leaking internal services accessed through the client.
+    if (!config.is_private_target_allowed())
+        matches.push_back(
+            Match( reqexpr::from_regex(hostname_getter, util::localhost_rx)
+                 , {deque<fresh_channel>({fresh_channel::origin})} ));
 
-        // Access to sites under the local TLD are always accessible
-        // with good connectivity, so always use the Origin channel
-        // and never cache them.
+    // Access to sites under the local TLD are always accessible
+    // with good connectivity, so always use the Origin channel
+    // and never cache them.
+    matches.push_back(
         Match( reqexpr::from_regex(target_getter, local_rx)
-             , {deque<fresh_channel>({fresh_channel::origin})} ),
+             , {deque<fresh_channel>({fresh_channel::origin})} ));
 
-        // Do not use caching for requests tagged as private with Ouinet headers.
+    // Do not use caching for requests tagged as private with Ouinet headers.
+    matches.push_back(
         Match( reqexpr::from_regex( x_private_getter
                                   , boost::regex(http_::request_private_true, rx_icase))
-             , nocache_request_config),
+             , nocache_request_config));
 
-        // When to try to cache or not, depending on the request method:
-        //
-        //   - Unsafe methods (CONNECT, DELETE, PATCH, POST, PUT): do not cache
-        //   - Safe but uncacheable methods (OPTIONS, TRACE): do not cache
-        //   - Safe and cacheable (GET, HEAD): cache
-        //
-        // Thus the only remaining method that implies caching is GET.
+    // When to try to cache or not, depending on the request method:
+    //
+    //   - Unsafe methods (CONNECT, DELETE, PATCH, POST, PUT): do not cache
+    //   - Safe but uncacheable methods (OPTIONS, TRACE): do not cache
+    //   - Safe and cacheable (GET, HEAD): cache
+    //
+    // Thus the only remaining method that implies caching is GET.
+    matches.push_back(
         Match( !reqexpr::from_regex(method_getter, "(GET|HEAD)")
-             , nocache_request_config),
-        // Requests declaring a method override are checked by that method.
-        // This is not a standard header,
-        // but for instance Firefox uses it for Safe Browsing requests,
-        // which according to this standard should actually be POST requests
-        // (probably in the hopes of having more chances that requests get through,
-        // in spite of using HTTPS).
-        Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
-             , nocache_request_config),
+             , nocache_request_config));
 
-        // Disable cache and always go to proxy for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://ifconfig\\.co/.*")
-        //     , {deque<fresh_channel>({fresh_channel::proxy})} ),
-        // Force cache and default channels for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.com/.*")
-        //     , {deque<fresh_channel>()} ),
-        // Force cache and particular channels for this site.
-        //Match( reqexpr::from_regex(target_getter, "https?://(www\\.)?example\\.net/.*")
-        //     , {deque<fresh_channel>({fresh_channel::injector})} ),
-    });
+    // Requests declaring a method override are checked by that method.
+    // This is not a standard header,
+    // but for instance Firefox uses it for Safe Browsing requests,
+    // which according to this standard should actually be POST requests
+    // (probably in the hopes of having more chances that requests get through,
+    // in spite of using HTTPS).
+    matches.push_back(
+        Match( !reqexpr::from_regex(method_override_getter, "(|GET)")
+             , nocache_request_config));
+
     // Requests to the private addresses should not use the network
     // to avoid leaking internal services accessed through the client,
     // unless the option `allow-private-targets` is set to true.

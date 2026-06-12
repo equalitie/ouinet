@@ -154,7 +154,7 @@ resolve_target(const http::request_header<>& req
     bool priv = boost::regex_match(host, util::private_addr_rx);
 
     // Resolve address and also use result for more sophisticaded checking.
-    if (!local && (!priv || allow_private_targets))
+    if ((!local && !priv) || allow_private_targets)
     {
         lookup = dns_resolver->resolve( host, port
                                       , cancel
@@ -175,7 +175,7 @@ resolve_target(const http::request_header<>& req
                 break;
     }
 
-    if (local || (priv && !allow_private_targets))
+    if ((local || priv) && !allow_private_targets)
     {
         ec = asio::error::invalid_argument;
         return or_throw<TcpLookup>(yield, ec);

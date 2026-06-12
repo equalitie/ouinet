@@ -4,9 +4,6 @@
 #include <boost/beast/core.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/stacktrace.hpp>
-#include <boost/asio/ssl.hpp>
-#include <boost/system/result.hpp>
 #include <namespaces.h>
 #include <chrono>
 #include "util/test_dir.h"
