@@ -313,7 +313,7 @@ public:
         m.bind(mpl, ec);
         if (ec) return or_throw(yield, ec, _bt_dht);
 
-        auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
+        auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         task::spawn_detached(_ctx, ([
@@ -1585,10 +1585,10 @@ class Client::ClientCacheControl {
 public:
     ClientCacheControl(Client::State& client_state)
         : client_state(client_state)
-        , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
+        , cache_control(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] ( const CacheInjectRequest& rq
+        cache_control.fetch_fresh = [&] ( const CacheInjectRequest& rq
                              , const CacheEntry* cached
                              , Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("injector");
@@ -1621,7 +1621,7 @@ public:
         };
 
         //------------------------------------------------------------
-        cc.fetch_stored = [&] (const CacheRetrieveRequest& rq, Cancel& cancel, YieldContext yield_) {
+        cache_control.fetch_stored = [&] (const CacheRetrieveRequest& rq, Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("cache");
 
             _YDEBUG(yield, "Start");
@@ -1639,10 +1639,10 @@ public:
         // Do not even attempt parallel fetch fresh if the injector is still starting.
         // This prevents requests from getting stuck waiting for the injector
         // when missing connectivity.
-        cc.parallel_fresh = [&] (auto) { return !client_state._injector_starting; };
+        cache_control.parallel_fresh = [&] (auto) { return !client_state._injector_starting; };
 
         //------------------------------------------------------------
-        cc.max_cached_age(client_state._config.max_cached_age());
+        cache_control.max_cached_age(client_state._config.max_cached_age());
     }
 
     void front_end_job_func(Transaction& tnx, Cancel& cancel, YieldContext yield) {
@@ -1747,7 +1747,7 @@ public:
             return or_throw(yield, asio::error::invalid_argument);
         }
 
-        auto session = cc.fetch( *rq, fresh_ec, cache_ec
+        auto session = cache_control.fetch( *rq, fresh_ec, cache_ec
                                , cancel, yield[ec].tag("cc_fetch"));
         _YDEBUG( yield.tag("cc_fetch")
                , "Done; ec=", ec, " fresh_ec=", fresh_ec, " cache_ec=", cache_ec);
@@ -1766,14 +1766,13 @@ public:
             return or_throw(yield, ec);
         }
 
-        auto& ctx = client_state.get_io_context();
-        auto exec = ctx.get_executor();
+        auto exec = yield.get_executor();
 
         using http_response::Part;
 
         util::AsyncQueue<boost::optional<Part>> qst(exec), qag(exec); // to storage, agent
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         auto cache = client_state.get_cache();
 
@@ -2003,7 +2002,7 @@ public:
         using JobCon = Job::Connection;
         using OptJobCon = boost::optional<JobCon>;
 
-        auto exec = client_state.get_io_context().get_executor();
+        auto exec = yield.get_executor();
 
         Jobs jobs(exec, [&] { return bool(client_state._injector_starting); });
 
@@ -2140,7 +2139,7 @@ public:
 
 private:
     Client::State& client_state;
-    CacheControl cc;
+    CacheControl cache_control;
 };
 
 //------------------------------------------------------------------------------
