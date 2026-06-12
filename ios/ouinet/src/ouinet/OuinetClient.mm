@@ -39,7 +39,7 @@ NativeLib _n;
   args = [self maybeAdd:args stringOfKey:@"--cache-http-public-key" stringOfValue:[config getCacheHttpPubKey]];
   args = [self maybeAdd:args stringOfKey:@"--cache-type" stringOfValue:[config getCacheType]];
   args = [self maybeAdd:args stringOfKey:@"--injector-tls-cert-file" stringOfValue:[config getInjectorTlsCertPath]];
-  args = [self maybeAdd:args stringOfKey:@"--tls-ca-cert-store-path" stringOfValue:[config getTlsCaCertStorePath]];
+  args = [self maybeAdd:args stringOfKey:@"--tls-ca-cert-store-path" stringOfValue:[config getTlsCaCertStoreDir]];
   args = [self maybeAdd:args stringOfKey:@"--log-level" stringOfValue:[config getLogLevel]];
   if ([config getDisableOriginAccess]) {
     args.push_back("--disable-origin-access");

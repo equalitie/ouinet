@@ -101,7 +101,7 @@ public class ConfigTest {
                 .setCacheHttpPubKey(CACHE_HTTP_PUB_KEY)
                 .setInjectorCredentials(INJECTOR_CREDENTIALS)
                 .setInjectorTlsCert(INJECTOR_TLS_CERT)
-                .setTlsCaCertStorePath(TLS_CA_CERT_PATH)
+                .setTlsCaCertStoreDir(TLS_CA_CERT_PATH)
                 .setCacheType(CACHE_TYPE)
                 .setCacheStaticPath(cacheStaticPath)
                 .setCacheStaticContentPath(cacheStaticContentPath)
@@ -131,8 +131,8 @@ public class ConfigTest {
         assertThat(config.getLocalDomain(), is(LOCAL_DOMAIN));
         assertThat(config.getDnsProtocols(), is(DNS_PROTOCOLS));
 
-        assertThat(config.getTlsCaCertStorePath(), is(tlsCaCertPath));
-        assertThat(contentOf(new File(config.getTlsCaCertStorePath())), is(TLS_CA_CERT));
+        assertThat(config.getTlsCaCertStoreDir(), is(tlsCaCertPath));
+        assertThat(contentOf(new File(config.getTlsCaCertStoreDir())), is(TLS_CA_CERT));
 
         assertThat(config.getInjectorTlsCertPath(), is(injectorTlsCertPath));
         assertThat(contentOf(new File(config.getInjectorTlsCertPath())), is(INJECTOR_TLS_CERT));

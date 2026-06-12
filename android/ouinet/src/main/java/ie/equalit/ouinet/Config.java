@@ -48,7 +48,7 @@ public class Config implements Parcelable {
         private String cacheHttpPubKey;
         private String injectorCredentials;
         private String injectorTlsCert;
-        private String tlsCaCertStorePath;
+        private String tlsCaCertStoreDir;
         private String errorPagePath;
         private String cacheType;
         private boolean cachePrivate = false;
@@ -121,8 +121,8 @@ public class Config implements Parcelable {
          * Path to a .pem file with CA certificates.
          * One can get it from e.g.: https://curl.haxx.se/docs/caextract.html
          */
-        public ConfigBuilder setTlsCaCertStorePath(@Nullable String tlsCaCertStorePath){
-            this.tlsCaCertStorePath = tlsCaCertStorePath;
+        public ConfigBuilder setTlsCaCertStoreDir(@Nullable String tlsCaCertStoreDir){
+            this.tlsCaCertStoreDir = tlsCaCertStoreDir;
             return this;
         }
         /**
@@ -285,18 +285,18 @@ public class Config implements Parcelable {
          * certificate.
          */
         private @Nullable String setupTlsCaCertStore(String ouinetDirectory) {
-            if (tlsCaCertStorePath == null || !tlsCaCertStorePath.startsWith(ASSET_PATH)) {
+            if (tlsCaCertStoreDir == null || !tlsCaCertStoreDir.startsWith(ASSET_PATH)) {
                 // Nothing to be done.
-                return tlsCaCertStorePath;
+                return tlsCaCertStoreDir;
             }
 
             // TODO: Ouinet's C++ code doesn't yet have a way to read asset
             // files from the apk. As a temporary workaround we copy the
             // asset file to a regular file and the pass path to that to
             // the C++ code.
-            String filename = tlsCaCertStorePath.substring(ASSET_PATH.length());
+            String filename = tlsCaCertStoreDir.substring(ASSET_PATH.length());
             String dest = ouinetDirectory + "/assets/" + filename;
-            if (copyAssetToFile(tlsCaCertStorePath, dest)) {
+            if (copyAssetToFile(tlsCaCertStoreDir, dest)) {
                 return dest;
             }
             return null;
@@ -464,7 +464,7 @@ public class Config implements Parcelable {
     private String cacheHttpPubKey;
     private String injectorCredentials;
     private String injectorTlsCertPath;
-    private String tlsCaCertStorePath;
+    private String tlsCaCertStoreDir;
     private String errorPagePath;
     private String caRootCertPath;
     private String obfs4ProxyPath;
@@ -503,7 +503,7 @@ public class Config implements Parcelable {
                   String cacheHttpPubKey,
                   String injectorCredentials,
                   String injectorTlsCertPath,
-                  String tlsCaCertStorePath,
+                  String tlsCaCertStoreDir,
                   String errorPagePath,
                   String caRootCertPath,
                   String obfs4ProxyPath,
@@ -541,7 +541,7 @@ public class Config implements Parcelable {
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
         this.injectorTlsCertPath = injectorTlsCertPath;
-        this.tlsCaCertStorePath = tlsCaCertStorePath;
+        this.tlsCaCertStoreDir = tlsCaCertStoreDir;
         this.errorPagePath = errorPagePath;
         this.caRootCertPath = caRootCertPath;
         this.obfs4ProxyPath = obfs4ProxyPath;
@@ -590,8 +590,8 @@ public class Config implements Parcelable {
     public String getInjectorTlsCertPath() {
         return injectorTlsCertPath;
     }
-    public String getTlsCaCertStorePath() {
-        return tlsCaCertStorePath;
+    public String getTlsCaCertStoreDir() {
+        return tlsCaCertStoreDir;
     }
     public String getErrorPagePath() {
         return errorPagePath;
@@ -713,7 +713,7 @@ public class Config implements Parcelable {
         out.writeString(cacheHttpPubKey);
         out.writeString(injectorCredentials);
         out.writeString(injectorTlsCertPath);
-        out.writeString(tlsCaCertStorePath);
+        out.writeString(tlsCaCertStoreDir);
         out.writeString(errorPagePath);
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
@@ -762,7 +762,7 @@ public class Config implements Parcelable {
         cacheHttpPubKey = in.readString();
         injectorCredentials = in.readString();
         injectorTlsCertPath = in.readString();
-        tlsCaCertStorePath = in.readString();
+        tlsCaCertStoreDir = in.readString();
         errorPagePath = in.readString();
         caRootCertPath = in.readString();
         obfs4ProxyPath = in.readString();

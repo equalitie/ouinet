@@ -134,7 +134,6 @@ public:
         , _cache_starting{get_executor()}
         , _front_end(_config)
         , _origin_pools(OriginPools())
-        , pub_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
         , _log_path(std::move(log_path))
         , _bt_dht_builder(std::move(dht_builder))
@@ -148,8 +147,6 @@ public:
         , _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
     {
         LOG_INFO("Repo root: ", _config.repo_root());
-
-        pub_ctx.set_verify_mode(asio::ssl::verify_peer);
 
         // We do *not* want to do this since
         // we will not be checking certificate names,
@@ -635,7 +632,6 @@ private:
     ConnectionPool<bool> _self_connections;  // stored value is unused
     std::optional<OriginPools> _origin_pools;
 
-    asio::ssl::context pub_ctx;
     asio::ssl::context inj_ctx;
 
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
@@ -1434,7 +1430,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
 
     auto& tls_ctx = metrics_conf->server_cacert
                   ? *metrics_conf->server_cacert
-                  : pub_ctx;
+                  : _config.origin_ssl_ctx();
 
     sys::error_code direct_ec;
 
@@ -1674,7 +1670,7 @@ public:
 
         sys::error_code ec;
         auto session = client_state.fetch_fresh_from_origin( rq
-                                                           , client_state.pub_ctx
+                                                           , client_state._config.origin_ssl_ctx()
                                                            , move(metrics)
                                                            , cancel, yield[ec]);
 
@@ -1704,7 +1700,7 @@ public:
             util::remove_ouinet_fields_ref(rq);
 
             session = client_state.fetch_fresh_through_connect_proxy
-                    (rq, client_state.pub_ctx, std::move(metrics), cancel, yield[ec].tag("connect"));
+                    (rq, client_state._config.origin_ssl_ctx(), std::move(metrics), cancel, yield[ec].tag("connect"));
         }
         else {
             auto metrics = client_state._metrics.new_public_injector_request();
@@ -2245,7 +2241,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     // TODO: Reuse existing connections to origin and injectors.  Currently
     // this is hard because those are stored not as streams but as
     // ConnectionPool::Connection.
-    auto origin = connect_to_origin(rq, pub_ctx, cancel, yield[ec]);
+    auto origin = connect_to_origin(rq, _config.origin_ssl_ctx(), cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec, true);
 
@@ -2882,8 +2878,6 @@ void Client::State::start_ouinet()
         const fs::path endpoints_json_file { _config.repo_root() / "endpoints.json" };
         boost::nowide::ofstream(endpoints_json_file) << endpoints_json;
     }
-
-    ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
         ( "Your own local Ouinet client"

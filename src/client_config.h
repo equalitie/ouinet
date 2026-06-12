@@ -86,8 +86,8 @@ public:
         return _tls_injector_cert_path;
     }
 
-    const std::string& tls_ca_cert_store_path() const {
-        return _tls_ca_cert_store_path;
+    asio::ssl::context& origin_ssl_ctx() {
+        return _origin_ssl_ctx;
     }
 
     size_t i2p_hops_per_tunnel() const {
@@ -269,8 +269,10 @@ private:
              "unlimited, set it to zero.")
            ("client-credentials", po::value<string>()
             , "<username>:<password> authentication pair for the client")
-           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
-            , "Path to the CA certificate store file")
+           ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir)
+            , "Path to the CA certificate store directory")
+           ("tls-ca-cert-store-file", po::value<vector<string>>(&_tls_ca_cert_store_files)
+            , "Add CA certificate store file")
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
@@ -563,7 +565,11 @@ private:
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     boost::optional<Endpoint> _injector_ep;
     std::string _tls_injector_cert_path;
-    std::string _tls_ca_cert_store_path;
+
+    std::string _tls_ca_cert_store_dir;
+    std::vector<std::string> _tls_ca_cert_store_files;
+    asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
     bool _disable_cache_access = false;

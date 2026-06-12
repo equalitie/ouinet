@@ -106,7 +106,7 @@ Config config = new Config.ConfigBuilder(this)
             .setCacheHttpPubKey(<CACHE_PUB_KEY>)
             .setInjectorCredentials(<INJECTOR_USERNAME>:<INJECTOR_PASSWORD>)
             .setInjectorTlsCert(<INJECTOR_TLS_CERT>)
-            .setTlsCaCertStorePath(<TLS_CA_CERT_STORE_PATH>)
+            .setTlsCaCertStoreDir(<TLS_CA_CERT_STORE_DIR_PATH>)
             .build()
 
 ouinet = new Ouinet(this, config);

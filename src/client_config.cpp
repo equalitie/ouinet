@@ -1,5 +1,6 @@
 #include <boost/optional/optional_io.hpp>
 #include "client_config.h"
+#include "ssl/util.h"
 
 namespace ouinet {
 
@@ -405,6 +406,16 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
     if (vm["allow-private-targets"].as<bool>()) {
         _allow_private_targets = true;
+    }
+
+    {
+        _origin_ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+        ssl::util::load_tls_ca_certificates(_origin_ssl_ctx, _tls_ca_cert_store_dir);
+        for (auto& verify_file : _tls_ca_cert_store_files) {
+            sys::error_code ec;
+            _origin_ssl_ctx.load_verify_file(verify_file, ec);
+            if (ec) throw error("Failed to load origin CA certificate from \"", verify_file, "\"");
+        }
     }
 
     _metrics = MetricsConfig::parse(vm);

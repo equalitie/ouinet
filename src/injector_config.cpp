@@ -7,6 +7,7 @@
 #include "http_logger.h"
 #include "logger.h"
 #include "constants.h"
+#include "ssl/util.h"
 
 namespace ouinet {
 
@@ -78,7 +79,9 @@ boost::program_options::options_description InjectorConfig::options_description(
            "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
            "the nameservers. The option can be used multiple times to select more than one protocol.")
 
-        ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
+        ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir)
+         , "Path to the CA certificate store directory")
+        ("tls-ca-cert-store-file", po::value<std::vector<string>>(&_tls_ca_cert_store_files)
          , "Path to the CA certificate store file")
         // Cache options
         ("ed25519-private-key", po::value<string>()
@@ -304,6 +307,16 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     _bep5_injector_swarm_name
         = bep5::compute_injector_swarm_name( _ed25519_private_key.public_key()
                                            , http_::protocol_version_current);
+
+    {
+        _origin_ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+        ssl::util::load_tls_ca_certificates(_origin_ssl_ctx, _tls_ca_cert_store_dir);
+        for (auto& verify_file : _tls_ca_cert_store_files) {
+            sys::error_code ec;
+            _origin_ssl_ctx.load_verify_file(verify_file, ec);
+            if (ec) throw error("Failed to load origin CA certificate from \"", verify_file, "\"");
+        }
+    }
 }
 
 void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
