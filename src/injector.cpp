@@ -236,20 +236,6 @@ void handle_connect_request( GenericStream client_c
 
     assert(!lookup.empty());
 
-    // Restrict connections to well-known ports.
-    auto port = lookup.begin()->endpoint().port();  // all entries use same port
-    // TODO: This is quite arbitrary;
-    // enhance this filter or remove the restriction altogether.
-    if (port != 80 && port != 443 && port != 8080 && port != 8443) {
-        ec = asio::error::invalid_argument;
-        auto ep = util::format_ep(lookup.begin()->endpoint());
-        return handle_error( client_c, req
-                           , http::status::forbidden
-                           , http_::response_error_hdr_target_not_allowed
-                           , "Illegal CONNECT target: " + ep
-                           , yield[ec].tag("handle_bad_port_error"));
-    }
-
     yield.log("BEGIN");
 
     // Remember to always set `ec` before return in case of error,
