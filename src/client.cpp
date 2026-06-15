@@ -1868,10 +1868,7 @@ public:
             injector_or_dcache
         };
 
-        // XXX: Currently `AsyncJob` isn't specialized for `void`, so using
-        // boost::none_t as a temporary hack.
-        using Retval = boost::none_t;
-        using Job = AsyncJob<Retval>;
+        using Job = AsyncJob<void>;
         using BoolFunc = std::function<bool(void)>;
 
         Jobs(AsioExecutor exec, BoolFunc is_injector_starting)
@@ -1959,7 +1956,7 @@ public:
                 if (!origin.is_running()) return;
 
                 Cancel c(cancel);
-                boost::optional<Job::Connection> jc;
+                std::optional<Job::Connection> jc;
 
                 if (origin.is_running()) {
                     jc = origin.on_finish_sig([&c] { c(); });
@@ -2013,7 +2010,7 @@ public:
 
         using Job = Jobs::Job;
         using JobCon = Job::Connection;
-        using OptJobCon = boost::optional<JobCon>;
+        using OptJobCon = std::optional<JobCon>;
 
         auto exec = yield.get_executor();
 
@@ -2120,14 +2117,15 @@ public:
 
             auto&& result = which->result();
 
-            _YDEBUG( yield, "Got result; job=", jobs.as_string(which), " ec=", result.ec
+            _YDEBUG( yield, "Got result; job=", jobs.as_string(which)
+                   , " ec=", (result ? sys::error_code() : result.error())
                    , " target=", short_target);
 
             if (auto h = tnx.response_header()) {
                 _YDEBUG(yield, *h);
             }
 
-            if (!result.ec) {
+            if (result) {
                 final_job = jobs.as_string(which);
                 final_ec = sys::error_code{}; // success
                 for (auto& job : jobs.running()) {
@@ -2136,7 +2134,7 @@ public:
                 break;
             } else if (!final_ec) {
                 final_job = jobs.as_string(which);
-                final_ec = result.ec;
+                final_ec = result.error();
             }
         }
 

@@ -14,7 +14,7 @@ class PeerLookup {
 protected:
     using Clock = std::chrono::steady_clock;
     using Ret = PeerSet;
-    using Job = AsyncJob<boost::none_t>;
+    using Job = AsyncJob<void>;
     using NodeID = bittorrent::NodeID;
 
     struct Result {
@@ -116,14 +116,12 @@ private:
                                         _infohash, " timed out");
                     }
 
-                    return or_throw(yield.asio_yield(), result.error(), boost::none);
+                    return or_throw(yield.asio_yield(), result.error());
                 }
 
                 _last_result.ec = sys::error_code();
                 _last_result.value = std::move(result).value();
                 _last_result.time = Clock::now();
-
-                return boost::none;
             }
         );
 

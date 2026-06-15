@@ -905,13 +905,12 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
         job.wait_for_finish(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
-        Job::Result r = std::move(job.result());
-
-        if (r.ec) {
-            if (ec) return or_throw<OptBlock>(yield, ec);
+        auto r = std::move(job.result());
+        if (!r) {
+            return or_throw(yield, r.error(), OptBlock{});
         }
 
-        return std::move(r.retval);
+        return std::move(*r);
     }
 };
 

@@ -1,7 +1,9 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
+#include <optional>
 
 #include "cache_control.h"
+#include "cache/cache_entry.h"
 #include "or_throw.h"
 #include "split_string.h"
 #include "util.h"
@@ -495,9 +497,11 @@ CacheControl::do_fetch_fresh( FetchState& fs
     fs.fetch_fresh->wait_for_finish(yield);
 
     auto result = move(fs.fetch_fresh->result());
-    auto rs = move(result.retval);
-
-    return or_throw(yield, result.ec, move(rs));
+    if (result) {
+        return std::move(*result);
+    } else {
+        return or_throw(yield, result.error(), Session());
+    }
 }
 
 CacheEntry
@@ -536,8 +540,8 @@ CacheControl::do_fetch_stored(FetchState& fs,
     Which which = none;
     ConditionVariable cv(_ex);
 
-    boost::optional<AsyncJob<Session>::Connection>    fetch_fresh_con;
-    boost::optional<AsyncJob<CacheEntry>::Connection> fetch_stored_con;
+    std::optional<AsyncJob<Session>::Connection>    fetch_fresh_con;
+    std::optional<AsyncJob<CacheEntry>::Connection> fetch_stored_con;
 
     if (fs.fetch_fresh) {
         fs.fetch_fresh->was_started();
@@ -545,13 +549,13 @@ CacheControl::do_fetch_stored(FetchState& fs,
 
         fetch_fresh_con = fs.fetch_fresh->on_finish_sig([&] {
             which = fresh;
-            fetch_stored_con = boost::none;
+            fetch_stored_con = std::nullopt;
             cv.notify();
         });
 
         if (!fetch_fresh_con) {
             assert(fs.fetch_fresh->has_result());
-            if (!fs.fetch_fresh->result().ec) {
+            if (fs.fetch_fresh->result()) {
                 which = fresh;
             }
         }
@@ -562,7 +566,7 @@ CacheControl::do_fetch_stored(FetchState& fs,
 
         fetch_stored_con = fs.fetch_stored->on_finish_sig([&] {
             which = stored;
-            fetch_fresh_con = boost::none;
+            fetch_fresh_con = std::nullopt;
             cv.notify();
         });
 
@@ -578,11 +582,11 @@ CacheControl::do_fetch_stored(FetchState& fs,
 
     if (which == fresh) {
         auto& r = fs.fetch_fresh->result();
-        if (!r.ec) {
+        if (r) {
             is_fresh = true;
             return {
                 posix_time::second_clock::universal_time(),
-                move(r.retval)
+                move(*r)
             };
         }
 
@@ -590,11 +594,19 @@ CacheControl::do_fetch_stored(FetchState& fs,
         fs.fetch_stored->wait_for_finish(yield);
 
         auto& r2 = fs.fetch_stored->result();
-        return or_throw(yield, r2.ec, move(r2.retval));
+        if (r2) {
+            return std::move(*r2);
+        } else {
+            return or_throw(yield, r2.error(), CacheEntry());
+        }
     }
     else if (which == stored) {
         auto& r = fs.fetch_stored->result();
-        return or_throw(yield, r.ec, move(r.retval));
+        if (r) {
+            return std::move(*r);
+        } else {
+            return or_throw(yield, r.error(), CacheEntry());
+        }
     }
 
     assert(0);

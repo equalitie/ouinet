@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "async.h"
 #include "cancel.h"
 #include "intrusive_list.h"
 #include "yield.h"

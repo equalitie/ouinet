@@ -2,6 +2,7 @@
 
 #include "../defer.h"
 #include "condition_variable.h"
+#include <optional>
 
 namespace ouinet {
 
@@ -11,10 +12,7 @@ public:
     using OnFinish = std::function<void()>;
     using Connection = typename Cancel::Connection;
 
-    struct Result {
-        sys::error_code ec;
-        Retval retval;
-    };
+    using Result = std::expected<Retval, sys::error_code>;
 
 public:
     AsyncJob(const AsioExecutor& ex)
@@ -63,17 +61,19 @@ public:
             self->_self = &self;
             self->_cancel_signal = &cancel;
 
-            sys::error_code ec;
-            Retval retval = job(cancel, yield[ec]);
+            Result result = compat([&](sys::error_code& ec) {
+                return job(cancel, yield[ec]);
+            })();
+            if (cancel) {
+                result = std::unexpected(asio::error::operation_aborted);
+            }
 
             if (!self) return;
 
             self->_self = nullptr;
             self->_cancel_signal = nullptr;
 
-            ec = compute_error_code(ec, cancel);
-
-            self->_result = Result{ ec, std::move(retval) };
+            self->_result = std::move(result);
 
             auto on_finish_sig = std::move(self->_on_finish_sig);
             on_finish_sig();
@@ -97,10 +97,10 @@ public:
           Result&  result() &      { return *_result; }
           Result&& result() &&     { return std::move(*_result); }
 
-    boost::optional<Connection> on_finish_sig(OnFinish on_finish)
+    std::optional<Connection> on_finish_sig(OnFinish on_finish)
     {
         if (!_self) {
-            return boost::none;
+            return std::nullopt;
         }
         else {
             return _on_finish_sig.connect(std::move(on_finish));
@@ -140,7 +140,7 @@ public:
 
 private:
     AsioExecutor _ex;
-    boost::optional<Result> _result;
+    std::optional<Result> _result;
     Cancel* _cancel_signal = nullptr;
     AsyncJob** _self = nullptr;
     Cancel _on_finish_sig;
