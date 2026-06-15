@@ -1033,7 +1033,7 @@ Response ClientFrontEnd::serve( ClientConfig& config
                     const int64_t response_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
                     const auto response_timestamp_str = std::to_string(response_timestamp);
 
-                    res.set(timestamp_header_key, response_timestamp_str);
+                    res.set("X-Ouinet-Response-Timestamp"sv, response_timestamp_str);
 
                     std::string front_end_access_token_response = hash_hex_calculator(response_timestamp_str);
                     res.set(token_header_key, front_end_access_token_response);
