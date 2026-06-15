@@ -176,6 +176,8 @@ function list_artifacts_for_target_os (
                 $build_dir/libouinet_common.so
                 $build_dir/libouinet_client.so
                 $build_dir/libouinet_injector.so
+                $build_dir/libcpp_ouisync_client.so
+                $build_dir/libcpp_ouisync_service.so
             )
             ;;
         windows)
@@ -186,6 +188,8 @@ function list_artifacts_for_target_os (
                 $build_dir/libouinet_common.dll
                 $build_dir/libouinet_client.dll
                 $build_dir/libouinet_injector.dll
+                $build_dir/libcpp_ouisync_client.dll
+                $build_dir/libcpp_ouisync_service.dll
             )
             ;;
         android)

@@ -19,11 +19,13 @@ if (WITH_OUISYNC)
         FetchContent_Declare(
             ouisync
             GIT_REPOSITORY "https://github.com/equalitie/ouisync"
-            GIT_TAG        "392385b040277123bb315165e20c43176a9ad8c0"
+            GIT_TAG        "42c763a0bf2abf58515230631676ccc7fcec84be"
         )
+
         FetchContent_MakeAvailable(ouisync)
     
         FetchContent_GetProperties(ouisync)
+
         add_subdirectory(
             "${ouisync_SOURCE_DIR}/bindings/cpp"
             "${CMAKE_BINARY_DIR}/ouisync"
@@ -44,6 +46,13 @@ if (WITH_OUISYNC)
     ouinet_setup(TARGET ouinet_ouisync
         LINK PUBLIC ouinet_rs cpp_ouisync_service cpp_ouisync_client
         DEFS OUINET_API_OUISYNC_EXPORT
+    )
+
+    set_target_properties(cpp_ouisync_service PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+    set_target_properties(cpp_ouisync_client PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
 else()
     add_library(ouinet_ouisync INTERFACE EXCLUDE_FROM_ALL)
