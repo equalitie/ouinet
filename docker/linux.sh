@@ -342,6 +342,7 @@ for target_os in ${target_oss[@]}; do
         if [ "$target_os" != android ]; then
             args=(
                 --build-dir $build_dir
+                ${run_cpp_tests[@]/#/--run-test }
                 ${excluded_test_targets[@]/#/--exclude-test }
             )
 

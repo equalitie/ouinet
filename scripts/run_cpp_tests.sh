@@ -49,26 +49,6 @@ TEST_DIR=$BUILD_DIR/test
 function get_target  {( echo $1 | cut -d':' -f1 )}
 function get_subtest {( echo $1 | cut -s -d':' -f2 )}
 
-function cmake_configure {(
-    configure_args=(
-        -DCMAKE_BUILD_TYPE=Debug
-        -DWITH_ASAN=OFF
-        -DWITH_OUISYNC=OFF
-        -DCORROSION_BUILD_TESTS=ON
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-        # Uncomment for verbose
-        #--trace
-        # Use if Ouisync sources are to be taken from local directory
-        #-DOUISYNC_SRC_DIR=$<PATH-TO-OUISYNC-SOURCE-DIR>
-        -DOUINET_MEASURE_BUILD_TIMES=ON
-    )
-    if [ ! -d $BUILD_DIR ]; then
-        mkdir -p 
-    fi
-    cd $BUILD_DIR
-    cmake $SRC_DIR ${configure_args[@]}
-)}
-
 # If no tests are provided, this must run after configuration phase.
 function collect_targets {(
     if [ -z "${TEST_SPECS[@]}" ]; then
