@@ -342,8 +342,6 @@ for target_os in ${target_oss[@]}; do
         if [ "$target_os" != android ]; then
             args=(
                 --build-dir $build_dir
-                # We don't want the script to re-configure and rebuild the tests
-                --skip-cmake-configure
                 ${excluded_test_targets[@]/#/--exclude-test }
             )
 
