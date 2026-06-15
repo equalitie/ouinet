@@ -165,7 +165,9 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _front_end_unix_socket_endpoint = socket_path.generic_string();
     }
 
-    if (auto opt = as_optional<string>(vm, "front-end-access-token")) {
+    if (const char *env_var = std::getenv("FRONT_END_ACCESS_TOKEN"); env_var != nullptr && env_var[0] != '\0') {
+        _front_end_access_token = env_var;
+    } else if (auto opt = as_optional<string>(vm, "front-end-access-token")) {
         if (opt->empty()) {
             throw error("--front-end-access-token must not be an empty string");
         }
@@ -199,17 +201,16 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
     }
 
-    if (auto opt = as_optional<string>(vm, "client-credentials")) {
-        auto cred = *opt;
-
-        if (!cred.empty() && cred.find(':') == string::npos) {
-            throw error(
-                "The '--client-credentials' argument expects a string "
-                "in the format <username>:<password>, but the provided "
-                "string is missing a colon: ", cred);
-        }
-
-        _client_credentials = move(cred);
+    if (const char *env_var = std::getenv("CLIENT_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
+        _client_credentials = env_var;
+    } else if (auto opt = as_optional<string>(vm, "client-credentials")) {
+        _client_credentials = std::move(*opt);
+    }
+    if (!_client_credentials.empty() && _client_credentials.find(':') == string::npos) {
+        throw error(
+            "The '--client-credentials' argument expects a string "
+            "in the format <username>:<password>, but the provided "
+            "string is missing a colon: ", _client_credentials);
     }
 
     auto maybe_set_pk = [&] (const string& opt_name, auto& pk) {

@@ -2,6 +2,7 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "util/bytes.h"
+#include "util/hash.h"
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
@@ -24,9 +25,10 @@
 #include <cstddef>
 #include <memory>
 #include <nlohmann/json.hpp>
-
+#include <openssl/crypto.h>
 
 using namespace std;
+using namespace std::string_view_literals;
 using namespace ouinet;
 using json = nlohmann::json;
 
@@ -963,37 +965,105 @@ Response ClientFrontEnd::serve( ClientConfig& config
                               , Cancel cancel
                               , YieldContext yield)
 {
-    if (auto& token = config.front_end_access_token()) {
-        std::string_view header_key = "X-Ouinet-Front-End-Token";
-        if (*token != req[header_key]) {
-            Response res{http::status::forbidden, req.version()};
-            res.keep_alive(false);
-
-            auto body = std::string("The request is missing a valid ")
-                      + std::string(header_key)
-                      + " HTTP header\n";
-
-            Response::body_type::reader reader(res, res.body());
-            sys::error_code ec;
-            reader.put(asio::buffer(body), ec);
-            assert(!ec);
-
-            res.prepare_payload();
-            return res;
-        }
-    }
+    const auto url = util::Url::from(req.target());
+    const auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
+    std::string_view path(path_str);
 
     Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.keep_alive(false);
 
+    if (auto& token = config.front_end_access_token()) {
+        /*
+        Frontend token on the caller side is used like this:
+        const now = Date.now();
+        const frontend_token_hash = sha256hex(`${url}:${frontend_token}:${now}`);
+        const response = await fetch(`127.0.0.1:8078${url}`, {
+          headers: {
+            "X-Ouinet-Front-End-Token-Hash": frontend_token_hash,
+            "X-Ouinet-Request-Timestamp": now,
+          }
+        });
+        */
+        bool authenticated = false;
+        constexpr auto token_header_key = "X-Ouinet-Front-End-Token-Hash"sv;
+        constexpr auto timestamp_header_key = "X-Ouinet-Request-Timestamp"sv;
+
+        const auto request_token_hash = req[token_header_key];
+        const auto request_timestamp = req[timestamp_header_key];
+        if (request_token_hash.length() == 64 && !request_timestamp.empty()) {
+            int64_t req_timestamp_int = 0;
+            std::from_chars(request_timestamp.data(), request_timestamp.data() + request_timestamp.size(), req_timestamp_int);
+            const std::chrono::system_clock::time_point req_timestamp_chrono {std::chrono::milliseconds(req_timestamp_int)};
+            const auto now = std::chrono::system_clock::now();
+
+            constexpr auto allowed_delay_in_verification = std::chrono::seconds(1);
+            if (
+                // Requests from the future are not allowed
+                req_timestamp_chrono < now &&
+                // Requests cannot be too old (protection against replay attacks)
+                req_timestamp_chrono + allowed_delay_in_verification > now
+            ) {
+                const auto hash_hex_calculator = [&path, &token](const std::string_view timestamp) -> std::string {
+                    util::SHA256 hasher;
+                    hasher.update(path);
+                    hasher.update(":");
+                    hasher.update(token.value());
+                    hasher.update(":");
+                    hasher.update(timestamp);
+                    const auto computed_hash = hasher.close(); // array<uint8_t, 32>
+
+                    std::string output;
+                    output.resize(computed_hash.size() * 2);
+                    for (size_t i = 0; i < computed_hash.size(); ++i) {
+                        constexpr char hex[] = "0123456789ABCDEF";
+                        output[i * 2]     = hex[computed_hash[i] >> 4];
+                        output[i * 2 + 1] = hex[computed_hash[i] & 0xf];
+                    }
+                    return output;
+                };
+                const std::string computed_hash = hash_hex_calculator(request_timestamp);
+
+                auto r = request_token_hash | std::views::transform([](const char c) { return (c >= 'a' && c <= 'f') ? c - 32 : c; });
+                std::string request_token_hash_uppercase { r.begin(), r.end() };
+                if (0 == CRYPTO_memcmp(computed_hash.data(), request_token_hash_uppercase.c_str(), computed_hash.size())) {
+                    authenticated = true;
+                    // Generate hash for response but use a different timestamp from supplied one
+                    // This way requester will be able to verify that Ouinet also knows the token
+                    const int64_t response_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+                    const auto response_timestamp_str = std::to_string(response_timestamp);
+
+                    res.set(timestamp_header_key, response_timestamp_str);
+
+                    std::string front_end_access_token_response = hash_hex_calculator(response_timestamp_str);
+                    res.set(token_header_key, front_end_access_token_response);
+                }
+            }
+        }
+
+        if (!authenticated) {
+            constexpr auto header_key_legacy = "X-Ouinet-Front-End-Token"sv;
+            if (token->length() == req[header_key_legacy].length()) {
+                authenticated = 0 == CRYPTO_memcmp(token->c_str(), req[header_key_legacy].data(), token->length());
+            }
+        }
+
+        if (!authenticated) {
+            Response forbidden_res{http::status::forbidden, req.version()};
+            forbidden_res.keep_alive(false);
+            forbidden_res.set(http::field::content_type, "text/plain");
+            beast::ostream(forbidden_res.body())
+                << "The request is missing a valid HTTP headers: "sv
+                << token_header_key
+                << " and "
+                << timestamp_header_key << "\n"
+                << std::flush;
+            forbidden_res.prepare_payload();
+            return forbidden_res;
+        }
+    }
+
     ostringstream ss;
-
-    auto url = util::Url::from(req.target());
-
-    auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
-    std::string_view path(path_str);
-
     std::string_view groups_api_path = "/api/groups";
     std::string_view metrics_api_path = "/api/metrics";
     std::string_view status_api_path = "/api/status";
@@ -1001,6 +1071,9 @@ Response ClientFrontEnd::serve( ClientConfig& config
 
     if (path == "/ca.pem") {
         handle_ca_pem(req, res, ss, ca);
+    } else if (path == "/ping"sv) {
+        res.set(http::field::content_type, "text/plain");
+        ss << "pong\r\n";
     } else if (path == log_file_apath) {
         res.set(http::field::content_type, "text/plain");
         load_log_file(config, ss);
