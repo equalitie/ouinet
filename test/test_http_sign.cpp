@@ -40,8 +40,6 @@ namespace boost { namespace test_tools { namespace tt_detail {
     };
 }}} // namespace boost::test_tools::tt_detail
 
-BOOST_AUTO_TEST_SUITE(ouinet_http_sign)
-
 using namespace std;
 using namespace ouinet;
 
@@ -489,7 +487,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
 
             sys::error_code e;
             while (!e) asio::async_read(tested_r, b, y[e]);
-            BOOST_REQUIRE(e == asio::error::eof || !e);
+            BOOST_REQUIRE_MESSAGE(e == asio::error::eof || !e, e.message());
             tested_r.close();
         });
 
@@ -928,5 +926,3 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         wc.wait(yield);
     });
 }
-
-BOOST_AUTO_TEST_SUITE_END()

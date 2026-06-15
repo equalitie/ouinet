@@ -246,6 +246,9 @@ externalproject_add(built_boost
             -q # Stop at first error
             ${ENABLE_BOOST_COMPONENTS}
             ${BOOST_ARCH_CONFIGURATION}
+            # Possibly others, but in partucular `boost_process` includes Asio
+            # which then causes it to have different error categories
+            cxxflags="-DBOOST_ASIO_SEPARATE_COMPILATION"
             stage
     BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
     INSTALL_COMMAND ""
