@@ -9,7 +9,6 @@
 #include "client.h"
 #include "util/random.h"
 #include "ssl/util.h"
-#include "async_sleep.h"
 
 using namespace std;
 using namespace ouinet;
@@ -350,18 +349,12 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
         auto rq = build_cache_request(url);
 
-        // Give "injector" time to announce
-        async_sleep(1s, yield);
-
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(seeder, rq, yield);
 
         BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
         BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
-
-        // Give "seeder" time to announce
-        async_sleep(1s, yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
         auto rs2 = fetch_through_client(leecher, rq, yield);
@@ -464,7 +457,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto dhts = spawn_dht_nodes(8, yield);
+        auto dhts = spawn_dht_nodes(2, yield);
         auto dht_ep = *dhts[0]->local_endpoints().begin();
 
         const std::string injector_credentials = "username:password";
@@ -497,6 +490,8 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
                 // Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
                 "--front-end-ep=127.0.0.1:0"s,
+                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+                "--allow-private-targets",
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_ep),
                 "--bt-allow-martians"
@@ -504,10 +499,12 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
             util::LogPath("client")
         );
 
+
         // Clients are started explicitly
         client.start();
 
-        auto control_body = fetch_from_origin(url, yield).body();
+        auto ssl_ctx = client_ssl_context_for(server);
+        auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
         auto rq = build_private_request(url);
 
