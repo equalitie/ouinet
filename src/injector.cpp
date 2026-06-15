@@ -154,7 +154,7 @@ resolve_target(const http::request_header<>& req
     bool priv = boost::regex_match(host, util::private_addr_rx);
 
     // Resolve address and also use result for more sophisticaded checking.
-    if (!local && (!priv || allow_private_targets))
+    if ((!local && !priv) || allow_private_targets)
     {
         lookup = dns_resolver->resolve( host, port
                                       , cancel
@@ -175,7 +175,7 @@ resolve_target(const http::request_header<>& req
                 break;
     }
 
-    if (local || (priv && !allow_private_targets))
+    if ((local || priv) && !allow_private_targets)
     {
         ec = asio::error::invalid_argument;
         return or_throw<TcpLookup>(yield, ec);
@@ -235,20 +235,6 @@ void handle_connect_request( GenericStream client_c
     }
 
     assert(!lookup.empty());
-
-    // Restrict connections to well-known ports.
-    auto port = lookup.begin()->endpoint().port();  // all entries use same port
-    // TODO: This is quite arbitrary;
-    // enhance this filter or remove the restriction altogether.
-    if (port != 80 && port != 443 && port != 8080 && port != 8443) {
-        ec = asio::error::invalid_argument;
-        auto ep = util::format_ep(lookup.begin()->endpoint());
-        return handle_error( client_c, req
-                           , http::status::forbidden
-                           , http_::response_error_hdr_target_not_allowed
-                           , "Illegal CONNECT target: " + ep
-                           , yield[ec].tag("handle_bad_port_error"));
-    }
 
     yield.log("BEGIN");
 
@@ -566,10 +552,9 @@ void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
 
 //------------------------------------------------------------------------------
 static
-void serve( const InjectorConfig& config
+void serve( InjectorConfig& config
           , std::shared_ptr<dns::Resolver> dns_resolver
           , GenericStream con
-          , asio::ssl::context& ssl_ctx
           , OriginPools& origin_pools
           , uuid_generator& genuuid
           , Cancel cancel
@@ -580,7 +565,7 @@ void serve( const InjectorConfig& config
     });
 
     InjectorCacheControl cc( con.get_executor()
-                           , ssl_ctx
+                           , config.origin_ssl_ctx()
                            , origin_pools
                            , config
                            , genuuid);
@@ -773,7 +758,7 @@ void serve( const InjectorConfig& config
 
 //------------------------------------------------------------------------------
 static
-void listen( const InjectorConfig& config
+void listen( InjectorConfig& config
            , std::shared_ptr<dns::Resolver> dns_resolver
            , OuiServiceServer& proxy_server
            , Async yield)
@@ -798,11 +783,6 @@ void listen( const InjectorConfig& config
 
     OriginPools origin_pools;
 
-    asio::ssl::context ssl_ctx{asio::ssl::context::tls_client};
-    ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
-
-    ssl::util::load_tls_ca_certificates(ssl_ctx, config.tls_ca_cert_store_path());
-
     while (true) {
         auto connection = proxy_server.accept(yield);
 
@@ -816,7 +796,6 @@ void listen( const InjectorConfig& config
 
         yield.spawn([
             connection = std::move(*connection),
-            &ssl_ctx,
             &config,
             &dns_resolver,
             &genuuid,
@@ -830,7 +809,6 @@ void listen( const InjectorConfig& config
             serve( config
                  , dns_resolver
                  , std::move(connection)
-                 , ssl_ctx
                  , origin_pools
                  , genuuid
                  , yield.get_cancel()

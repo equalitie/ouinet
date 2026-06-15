@@ -11,7 +11,7 @@
   NSString* injectorCredentials;
   NSString* injectorTlsCert;
   NSString* injectorTlsCertPath;
-  NSString* tlsCaCertStorePath;
+  NSString* tlsCaCertStoreDir;
   NSString* cacheType;
   NSString* listenOnTcp;
   NSString* frontEndEp;
@@ -139,7 +139,7 @@
   return injectorTlsCertPath;
 }
 
-- (NSString*)getTlsCaCertStorePath;
+- (NSString*)getTlsCaCertStoreDir;
 {
   return [NSString stringWithFormat: @"%@/cacert.pem", ouinetDirectory];
 }

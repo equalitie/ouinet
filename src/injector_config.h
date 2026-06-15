@@ -6,6 +6,7 @@
 #include <boost/program_options.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl/context.hpp>
 #include <boost/regex.hpp>
 #include <boost/filesystem/path.hpp>
 #include "api.h"
@@ -112,11 +113,12 @@ public:
     dns::Config dns_config() const
     { return _dns_config; }
 
-    const std::string& tls_ca_cert_store_path() const
-    { return _tls_ca_cert_store_path; }
-
     sign::SecretKey cache_private_key() const
     { return _ed25519_private_key; }
+
+    asio::ssl::context& origin_ssl_ctx() {
+        return _origin_ssl_ctx;
+    }
 
 private:
     void setup_ed25519_private_key(const std::string& hex);
@@ -134,7 +136,11 @@ private:
     boost::optional<size_t> _open_file_limit;
     bool _listen_on_i2p = false;
     size_t _i2p_hops_per_tunnel = 3;
-    std::string _tls_ca_cert_store_path;
+
+    std::string _tls_ca_cert_store_dir;
+    std::vector<std::string> _tls_ca_cert_store_files;
+    asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_endpoint;

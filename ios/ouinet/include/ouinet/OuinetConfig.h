@@ -36,7 +36,7 @@
 
 - (NSString*)getInjectorTlsCertPath;
 
-- (NSString*)getTlsCaCertStorePath;
+- (NSString*)getTlsCaCertStoreDir;
 
 - (NSString*)getCacheType;
 

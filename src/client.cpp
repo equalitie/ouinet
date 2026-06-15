@@ -134,7 +134,6 @@ public:
         , _cache_starting{get_executor()}
         , _front_end(_config)
         , _origin_pools(OriginPools())
-        , pub_ctx{asio::ssl::context::tls_client}
         , inj_ctx{asio::ssl::context::tls_client}
         , _log_path(std::move(log_path))
         , _bt_dht_builder(std::move(dht_builder))
@@ -148,8 +147,6 @@ public:
         , _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
     {
         LOG_INFO("Repo root: ", _config.repo_root());
-
-        pub_ctx.set_verify_mode(asio::ssl::verify_peer);
 
         // We do *not* want to do this since
         // we will not be checking certificate names,
@@ -316,7 +313,7 @@ public:
         m.bind(mpl, ec);
         if (ec) return or_throw(yield, ec, _bt_dht);
 
-        auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
+        auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
         task::spawn_detached(_ctx, ([
@@ -635,7 +632,6 @@ private:
     ConnectionPool<bool> _self_connections;  // stored value is unused
     std::optional<OriginPools> _origin_pools;
 
-    asio::ssl::context pub_ctx;
     asio::ssl::context inj_ctx;
 
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
@@ -1434,7 +1430,7 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
 
     auto& tls_ctx = metrics_conf->server_cacert
                   ? *metrics_conf->server_cacert
-                  : pub_ctx;
+                  : _config.origin_ssl_ctx();
 
     sys::error_code direct_ec;
 
@@ -1589,10 +1585,10 @@ class Client::ClientCacheControl {
 public:
     ClientCacheControl(Client::State& client_state)
         : client_state(client_state)
-        , cc(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
+        , cache_control(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
         //------------------------------------------------------------
-        cc.fetch_fresh = [&] ( const CacheInjectRequest& rq
+        cache_control.fetch_fresh = [&] ( const CacheInjectRequest& rq
                              , const CacheEntry* cached
                              , Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("injector");
@@ -1625,7 +1621,7 @@ public:
         };
 
         //------------------------------------------------------------
-        cc.fetch_stored = [&] (const CacheRetrieveRequest& rq, Cancel& cancel, YieldContext yield_) {
+        cache_control.fetch_stored = [&] (const CacheRetrieveRequest& rq, Cancel& cancel, YieldContext yield_) {
             auto yield = yield_.tag("cache");
 
             _YDEBUG(yield, "Start");
@@ -1643,10 +1639,10 @@ public:
         // Do not even attempt parallel fetch fresh if the injector is still starting.
         // This prevents requests from getting stuck waiting for the injector
         // when missing connectivity.
-        cc.parallel_fresh = [&] (auto) { return !client_state._injector_starting; };
+        cache_control.parallel_fresh = [&] (auto) { return !client_state._injector_starting; };
 
         //------------------------------------------------------------
-        cc.max_cached_age(client_state._config.max_cached_age());
+        cache_control.max_cached_age(client_state._config.max_cached_age());
     }
 
     void front_end_job_func(Transaction& tnx, Cancel& cancel, YieldContext yield) {
@@ -1674,7 +1670,7 @@ public:
 
         sys::error_code ec;
         auto session = client_state.fetch_fresh_from_origin( rq
-                                                           , client_state.pub_ctx
+                                                           , client_state._config.origin_ssl_ctx()
                                                            , move(metrics)
                                                            , cancel, yield[ec]);
 
@@ -1704,7 +1700,7 @@ public:
             util::remove_ouinet_fields_ref(rq);
 
             session = client_state.fetch_fresh_through_connect_proxy
-                    (rq, client_state.pub_ctx, std::move(metrics), cancel, yield[ec].tag("connect"));
+                    (rq, client_state._config.origin_ssl_ctx(), std::move(metrics), cancel, yield[ec].tag("connect"));
         }
         else {
             auto metrics = client_state._metrics.new_public_injector_request();
@@ -1751,7 +1747,7 @@ public:
             return or_throw(yield, asio::error::invalid_argument);
         }
 
-        auto session = cc.fetch( *rq, fresh_ec, cache_ec
+        auto session = cache_control.fetch( *rq, fresh_ec, cache_ec
                                , cancel, yield[ec].tag("cc_fetch"));
         _YDEBUG( yield.tag("cc_fetch")
                , "Done; ec=", ec, " fresh_ec=", fresh_ec, " cache_ec=", cache_ec);
@@ -1770,14 +1766,13 @@ public:
             return or_throw(yield, ec);
         }
 
-        auto& ctx = client_state.get_io_context();
-        auto exec = ctx.get_executor();
+        auto exec = yield.get_executor();
 
         using http_response::Part;
 
         util::AsyncQueue<boost::optional<Part>> qst(exec), qag(exec); // to storage, agent
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         auto cache = client_state.get_cache();
 
@@ -2007,7 +2002,7 @@ public:
         using JobCon = Job::Connection;
         using OptJobCon = boost::optional<JobCon>;
 
-        auto exec = client_state.get_io_context().get_executor();
+        auto exec = yield.get_executor();
 
         Jobs jobs(exec, [&] { return bool(client_state._injector_starting); });
 
@@ -2144,7 +2139,7 @@ public:
 
 private:
     Client::State& client_state;
-    CacheControl cc;
+    CacheControl cache_control;
 };
 
 //------------------------------------------------------------------------------
@@ -2245,7 +2240,7 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     // TODO: Reuse existing connections to origin and injectors.  Currently
     // this is hard because those are stored not as streams but as
     // ConnectionPool::Connection.
-    auto origin = connect_to_origin(rq, pub_ctx, cancel, yield[ec]);
+    auto origin = connect_to_origin(rq, _config.origin_ssl_ctx(), cancel, yield[ec]);
 
     if (ec) return or_throw(yield, ec, true);
 
@@ -2882,8 +2877,6 @@ void Client::State::start_ouinet()
         const fs::path endpoints_json_file { _config.repo_root() / "endpoints.json" };
         boost::nowide::ofstream(endpoints_json_file) << endpoints_json;
     }
-
-    ssl::util::load_tls_ca_certificates(pub_ctx, _config.tls_ca_cert_store_path());
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
         ( "Your own local Ouinet client"

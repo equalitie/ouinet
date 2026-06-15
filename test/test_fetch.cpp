@@ -1,4 +1,4 @@
-#define BOOST_TEST_MODULE utility
+#define BOOST_TEST_MODULE test_fetch
 #include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
@@ -11,10 +11,12 @@
 #include <iostream>
 #include <chrono>
 #include "util/test_dir.h"
+#include "util/http_server.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "client.h"
 #include "util/str.h"
+#include "util/random.h"
 #include "ssl/util.h"
 #include "async_sleep.h"
 
@@ -41,10 +43,11 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-Request build_cache_request() {
+Request build_cache_request(const util::Url& url) {
     int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.reassemble();
+    std::string host = url.host;
+    if (!url.port.empty()) host += ":" + url.port;
+    std::string target = url.reassemble();
 
     Request req{http::verb::get, target, version};
     req.set(http::field::host, host);
@@ -53,10 +56,11 @@ Request build_cache_request() {
     return req;
 }
 
-Request build_origin_request() {
+Request build_origin_request(const util::Url& url) {
     int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.path;
+    std::string host = url.host;
+    if (!url.port.empty()) host += ":" + url.port;
+    std::string target = url.path;
 
     Request req{http::verb::get, target, version};
     req.set(http::field::host, host);
@@ -64,10 +68,11 @@ Request build_origin_request() {
     return req;
 }
 
-Request build_private_request() {
+Request build_private_request(const util::Url& url) {
     int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.reassemble();
+    std::string host = url.host;
+    if (!url.port.empty()) host += ":" + url.port;
+    std::string target = url.reassemble();
 
     Request req{http::verb::get, target, version};
     req.set(http::field::host, host);
@@ -101,9 +106,7 @@ asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket,
     return stream;
 }
 
-Response fetch_from_origin(asio::yield_context yield) {
-    auto url = test_url;
-
+Response fetch_from_origin(util::Url url, asio::ssl::context& ctx, asio::yield_context yield) {
     if (url.port.empty()) url.port = "443";
     if (url.path.empty()) url.path = "/";
 
@@ -112,17 +115,13 @@ Response fetch_from_origin(asio::yield_context yield) {
     tcp::resolver resolver(exec);
     auto const results = resolver.async_resolve(url.host, url.port, yield);
 
-    asio::ssl::context ctx{asio::ssl::context::tls_client};
-    ouinet::ssl::util::load_tls_ca_certificates(ctx);
-    ctx.set_verify_mode(asio::ssl::verify_peer);
-
-    auto req = build_origin_request();
+    auto req = build_origin_request(url);
     std::string host = req[http::field::host];
 
     tcp::socket socket(exec);
     asio::async_connect(socket, results, yield);
 
-    auto stream = setup_tls_stream(std::move(socket), ctx, host);
+    auto stream = setup_tls_stream(std::move(socket), ctx, url.host);
     stream.async_handshake(asio::ssl::stream_base::client, yield);
 
     http::async_write(stream, req, yield);
@@ -132,11 +131,19 @@ Response fetch_from_origin(asio::yield_context yield) {
     http::async_read(stream, b, res, yield);
 
     sys::error_code ignored_ec;
-    stream.shutdown(ignored_ec);
+    stream.async_shutdown(yield[ignored_ec]);
 
     BOOST_REQUIRE_EQUAL(res.result(), http::status::ok);
 
     return res;
+}
+
+Response fetch_from_origin(util::Url url, asio::yield_context yield) {
+    asio::ssl::context ctx{asio::ssl::context::tls_client};
+    ouinet::ssl::util::load_tls_ca_certificates(ctx);
+    ctx.set_verify_mode(asio::ssl::verify_peer);
+
+    return fetch_from_origin(std::move(url), ctx, yield);
 }
 
 void check_exception(std::exception_ptr e) {
@@ -157,7 +164,7 @@ void run(asio::io_context& ctx, F&& async_test) {
 
     std::optional<steady_clock::time_point> spawn_end;
 
-    asio::spawn(ctx, [&spawn_end, async_test = std::move(async_test)] (asio::yield_context yield) {
+    asio::spawn(ctx, [&spawn_end, async_test = std::move(async_test)] (asio::yield_context yield) mutable {
             async_test(yield);
             spawn_end = steady_clock::now();
         },
@@ -175,6 +182,42 @@ void run(asio::io_context& ctx, F&& async_test) {
     }
 }
 
+asio::ssl::context client_ssl_context_for(const HttpServer& server) {
+    asio::ssl::context ctx{asio::ssl::context::tls_client};
+    
+    ctx.load_verify_file(server.certificate_path().string());
+    ctx.set_verify_mode(asio::ssl::verify_peer);
+
+    return ctx;
+}
+
+std::string generate_random_body() {
+    // TODO: Some tests fail with larger body sizes
+    //size_t min_size = 64;
+    //size_t max_size = 2 * 1024 * 1024;
+    //auto size = util::random::number<size_t>(min_size, max_size);
+    size_t size = 65536;
+    return util::random::printable_ascii(size);
+}
+
+BOOST_AUTO_TEST_CASE(server) {
+    asio::io_context ctx;
+    run(ctx, [] (asio::yield_context yield) {
+        TestDir root;
+        auto server = HttpServer(yield.get_executor(), root.path());
+
+        std::string body = generate_random_body();
+        server.add_resource("/", body);
+
+        auto ssl_ctx = client_ssl_context_for(server);
+
+        auto url = util::Url::from(util::str("https://", server.authority())).value();
+        auto rs = fetch_from_origin(url, ssl_ctx, yield);
+
+        BOOST_CHECK_EQUAL(rs.body(), body);
+    });
+}
+
 BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     asio::io_context ctx;
 
@@ -184,6 +227,8 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
 
     auto swarms = std::make_shared<MockDht::Swarms>();
 
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
     Client client(ctx, make_config<ClientConfig>({
             "./no_client_exec"s,
             "--log-level=DEBUG"s,
@@ -192,6 +237,7 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
+            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
         }),
         util::LogPath("client"),
         [&ctx, swarms] () {
@@ -201,17 +247,20 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     // Clients are started explicitly
     client.start();
 
-    run(ctx, [&] (asio::yield_context yield) {
-        auto control_body = fetch_from_origin(yield).body();
+    run(ctx, [&, server = std::move(server)] (asio::yield_context yield) mutable {
+        auto body = generate_random_body();
+        server.add_resource("/", body);
 
-        auto rq = build_cache_request();
+        auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+
+        auto rq = build_cache_request(url);
 
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(client, rq, yield);
 
-        BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_origin);
-        BOOST_CHECK_EQUAL(rs1.body(), control_body);
+        BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
+        BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_origin);
+        BOOST_REQUIRE(rs1.body() == body);
 
         client.stop();
     });
@@ -229,6 +278,10 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
     TestDir root;
 
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+    server.add_resource("/", generate_random_body());
+    auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+
     const std::string injector_credentials = "username:password";
 
     auto swarms = std::make_shared<MockDht::Swarms>();
@@ -237,6 +290,8 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             "./no_injector_exec"s,
             "--repo"s, root.make_subdir("injector").string(),
             "--credentials"s, injector_credentials,
+            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+            "--allow-private-targets",
         }),
         ctx,
         util::LogPath("injector"),
@@ -254,6 +309,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
+            "--allow-private-targets",
         }),
         util::LogPath("seeder"),
         [&ctx, swarms] () {
@@ -272,6 +328,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
+            "--allow-private-targets",
         }),
         util::LogPath("leecher"),
         [&ctx, swarms] () {
@@ -284,10 +341,15 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     seeder.start();
     leecher.start();
 
-    run(ctx, [&] (asio::yield_context yield) {
-        auto control_body = fetch_from_origin(yield).body();
+    run(ctx, [&, server = std::move(server)] (asio::yield_context yield) {
+        auto ssl_ctx = client_ssl_context_for(server);
+        auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
-        auto rq = build_cache_request();
+        auto rq = build_cache_request(url);
+
+        // Give "injector" time to announce
+        Cancel cancel;
+        async_sleep(1s, cancel, yield);
 
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(seeder, rq, yield);
@@ -297,7 +359,6 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
         // Give "seeder" time to announce
-        Cancel cancel;
         async_sleep(1s, cancel, yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
@@ -321,6 +382,10 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
     TestDir root;
 
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+    server.add_resource("/", generate_random_body());
+    auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     tcp::endpoint injector_ep{
@@ -333,19 +398,18 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--repo"s, root.make_subdir("injector").string(),
             // TODO: Listen on a random port
             "--listen-on-tcp"s, util::str(injector_ep),
+            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+            "--allow-private-targets",
         }),
         ctx,
         util::LogPath("injector"),
         std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
-    run(ctx, [&] (asio::yield_context yield) {
-        auto control_body = fetch_from_origin(yield).body();
+    run(ctx, [&, server = std::move(server)] (asio::yield_context yield) {
+        auto ssl_ctx = client_ssl_context_for(server);
+        auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
-        auto rq = build_private_request();
-
-        asio::ssl::context ctx{asio::ssl::context::tls_client};
-        ouinet::ssl::util::load_tls_ca_certificates(ctx);
-        ctx.set_verify_mode(asio::ssl::verify_peer);
+        auto rq = build_private_request(url);
 
         for (uint16_t i = 0; i < 30; ++i) {
             // Connect to injector and establish HTTP CONNECT tunnel
@@ -355,7 +419,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
             auto connect_rq = Request{
                 http::verb::connect
-                , test_url.host + ":" + (test_url.port.empty() ? "443" : test_url.port)
+                , url.host + ":" + (url.port.empty() ? "443" : url.port)
                 , 11 /* HTTP/1.1 */
             };
             connect_rq.set(http::field::host, connect_rq.target());
@@ -371,7 +435,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             BOOST_REQUIRE_EQUAL(buf.size(), 0);
 
             // Do TLS handshake with the origin over the established tunnel
-            auto stream = setup_tls_stream(std::move(socket), ctx, test_url.host);
+            auto stream = setup_tls_stream(std::move(socket), ssl_ctx, url.host);
             stream.async_handshake(asio::ssl::stream_base::client, yield);
 
             // Send and receive through the secure tunnel
@@ -393,6 +457,10 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
 
     TestDir root;
 
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+    server.add_resource("/", generate_random_body());
+    auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+
     const std::string injector_credentials = "username:password";
 
     auto swarms = std::make_shared<MockDht::Swarms>();
@@ -401,6 +469,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
             "./no_injector_exec"s,
             "--repo"s, root.make_subdir("injector").string(),
             "--credentials"s, injector_credentials,
+            "--allow-private-targets",
         }),
         ctx,
         util::LogPath("injector"),
@@ -418,6 +487,8 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
+            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+            "--allow-private-targets",
         }),
         util::LogPath("client"),
         [&ctx, swarms] () {
@@ -427,10 +498,11 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
     // Clients are started explicitly
     client.start();
 
-    run(ctx, [&] (asio::yield_context yield) {
-        auto control_body = fetch_from_origin(yield).body();
+    run(ctx, [&, server = std::move(server)] (asio::yield_context yield) {
+        auto ssl_ctx = client_ssl_context_for(server);
+        auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
-        auto rq = build_private_request();
+        auto rq = build_private_request(url);
 
         for (uint16_t i = 0; i < 30; ++i) {
             auto rs = fetch_through_client(client, rq, yield);

@@ -136,7 +136,7 @@ public class Ouinet {
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
-        maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
+        maybeAdd(args, "--tls-ca-cert-store-dir",  config.getTlsCaCertStoreDir());
         maybeAdd(args, "--injector-tls-cert-file", config.getInjectorTlsCertPath());
         maybeAdd(args, "--cache-type",             config.getCacheType());
         maybeAdd(args, "--cache-static-repo",      config.getCacheStaticPath());
