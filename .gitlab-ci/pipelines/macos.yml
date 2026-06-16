@@ -26,7 +26,12 @@ macos / build:
       - build.darwin/xcodebuild.log
     expire_in: 6h
   before_script:
-    - brew install cmake ruby
+    - curl --silent --location --retry 3 "https://github.com/Kitware/CMake/releases/download/v3.31.12/cmake-3.31.12-macos-universal.dmg" --output ~/cmake-macos.dmg
+    - yes | PAGER=cat hdiutil attach -quiet -mountpoint /Volumes/cmake-macos ~/cmake-macos.dmg
+    - cp -R /Volumes/cmake-macos/CMake.app /Applications/
+    - hdiutil detach /Volumes/cmake-macos
+    - sudo "/Applications/CMake.app/Contents/bin/cmake-gui" --install=/usr/local/bin
+    - brew install ruby
     - gem install xcpretty
   script:
     - mkdir -p build.darwin
