@@ -2,10 +2,15 @@ variables:
   IOS_BUILD_PATH: 'build.darwin/build-os64/Debug-iphoneos'
   SIM_BUILD_PATH: 'build.darwin/build-simulatorarm64/Debug-iphonesimulator'
 
+.macos_saas_runners:
+  tags:
+    - saas-macos-large-m2pro
+  image: macos-26-xcode-26
+
 iphoneos / build:
   stage: build
-  tags:
-    - macos-shell
+  extends:
+    - .macos_saas_runners
   needs:
     - job: 'macos / build'
   artifacts:
@@ -23,8 +28,8 @@ iphoneos / build:
 
 iphonesimulator / build:
   stage: build
-  tags:
-    - macos-shell
+  extends:
+    - .macos_saas_runners
   needs:
     - job: 'macos / build'
   artifacts:
@@ -42,8 +47,8 @@ iphonesimulator / build:
 
 combined / build:
   stage: build
-  tags:
-    - macos-shell
+  extends:
+    - .macos_saas_runners
   needs:
     - job: 'iphoneos / build'
     - job: 'iphonesimulator / build'

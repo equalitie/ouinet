@@ -7,7 +7,8 @@ variables:
 macos / build:
   stage: build
   tags:
-    - macos-shell
+    - saas-macos-large-m2pro
+  image: macos-26-xcode-26
   artifacts:
     paths:
       - $BUILD_PATH/client.app
