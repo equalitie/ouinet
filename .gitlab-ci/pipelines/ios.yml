@@ -1,5 +1,5 @@
 include:
-  - .gitlab-ci/common/prepare-macos-image.yml
+  - .gitlab-ci/jobs/common/prepare-macos-image.yml
 
 variables:
   IOS_BUILD_PATH: 'build.darwin/build-os64/Debug-iphoneos'
