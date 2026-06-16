@@ -20,7 +20,8 @@ class TestFixtures:
     BEP5_CACHE_TIMEOUT = 900
     BEP3_CACHE_TIMEOUT = I2P_TRANSPORT_TIMEOUT + BEP5_CACHE_TIMEOUT
 
-    BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p"
+    #BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
+    BEP3_TRACKER_ID = "2qqoqlnajwd7qbtdfdn7enadnwktiqnn5ysear3ammt4dq6m65iq.b32.i2p"  #opentracker-i2p
 
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
@@ -123,6 +124,12 @@ class TestFixtures:
     # the I2P path (lease-set + tunnel) is actually usable for tracker requests.
     BEP3_HANDSHAKE_DONE_REGEX = (
         r'[\s\S]*BEP3 tracker: tracker handshake successful; ec="Success"[\s\S]*'
+    )
+    # Logged once in Bep3Tracker's constructor; the captured group is the
+    # 52-char base32 of our serving destination's IdentHash — i.e. the b32
+    # other clients should see as a peer for our infohash.
+    BEP3_SERVING_IDENTITY_REGEX = (
+        r"[\s\S]*BEP3 tracker: serving identity b32=([a-z2-7]{52})\.b32\.i2p[\s\S]*"
     )
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"

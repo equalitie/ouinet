@@ -24,6 +24,7 @@ class OuinetProcessProtocol(object):
         self.benchmarks: dict[str, bool] = {}
         self._proc_config = proc_config
         self.app_name = proc_config.app_name
+        self.bep3_serving_b32 = ""
 
         for regex in self.regexes:
             self.benchmarks[regex] = False
@@ -50,11 +51,18 @@ class OuinetProcessProtocol(object):
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
             raise Exception("Fatal error")
 
+        self.look_for_serving_b32(data)
+
         for regex in self.benchmarks.keys():
             match = re.match(regex, data)
             if match:
                 if not self.benchmarks[regex]:
                     self.benchmarks[regex] = True
+
+    def look_for_serving_b32(self, data):
+        m = re.match(TestFixtures.BEP3_SERVING_IDENTITY_REGEX, data)
+        if m:
+            self.bep3_serving_b32 = m.group(1)
 
     # maybe have a different class for that?
     # def check_i2p_error_received(self, data):

@@ -60,6 +60,7 @@ private:
     std::shared_ptr<ouiservice::i2poui::Client> _i2p_client;
     std::shared_ptr<i2p::client::ClientDestination> _destination;
     std::string _serving_i2p_id;
+    std::string _serving_i2p_id_b32;
 
     enum class StartState { not_started, starting, started };
     StartState _start_state = StartState::not_started;

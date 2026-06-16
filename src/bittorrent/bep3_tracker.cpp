@@ -34,6 +34,10 @@ Bep3Tracker::Bep3Tracker( shared_ptr<ouiservice::i2poui::Service> i2p_service
 {
     assert(_destination && "Bep3Tracker requires a valid destination");
     _serving_i2p_id = _destination->GetIdentity()->ToBase64(); //We are sure _destination isn't null Q.E.D
+    _serving_i2p_id_b32 = _destination->GetIdentHash().ToBase32();
+    LOG_DEBUG("BEP3 tracker: serving identity"
+              " b32=", _serving_i2p_id_b32, ".b32.i2p"
+              " b64_len=", _serving_i2p_id.size());
 }
 
 Bep3Tracker::~Bep3Tracker()
@@ -143,7 +147,9 @@ string Bep3Tracker::send_request( const string& extra_params
     req.set(http::field::host, _i2p_client->get_target_id());
     req.set(http::field::user_agent, "Ouinet/1.0");
 
-    LOG_DEBUG("BEP3 tracker: sending request: ", req);
+    LOG_DEBUG("BEP3 tracker: sending request"
+              " our_b32=", _serving_i2p_id_b32, ".b32.i2p"
+              " req=", req);
 
     auto cancelled = cancel.connect([&] { stream.close(); });
 
@@ -168,7 +174,10 @@ string Bep3Tracker::send_request( const string& extra_params
     }
 
     LOG_DEBUG("BEP3 tracker: HTTP ", static_cast<int>(res.result()),
-              " ", res.reason(), " body=", util::bytes::to_printable(res.body()));
+              " ", res.reason(),
+              " body_len=", res.body().size(),
+              " body_hex=", util::bytes::to_hex(res.body()),
+              " body_printable=", util::bytes::to_printable(res.body()));
 
     if (res.result() != http::status::ok) {
         LOG_WARN("BEP3 tracker: tracker returned status ",
@@ -198,7 +207,7 @@ void Bep3Tracker::tracker_handshake(Cancel& cancel, asio::yield_context yield)
     // remove, so it should treats the request as a no-op.
     params << "&left=1"
            << "&info_hash=" << info_hash_encoded
-           << "&compact=0"
+           << "&compact=1"
            << "&numwant=0"
            << "&event=stopped";
     auto params_str = params.str();
@@ -265,7 +274,7 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
     ostringstream params;
     params << "&left=1"  // leecher: looking for peers
            << "&info_hash=" << info_hash_encoded
-           << "&compact=0" //Zzzot somehow ignores this, it always returns 32byte ids
+           << "&compact=1" //Zzzot somehow ignores this, it always returns 32byte ids
            << "&numwant=50";
 
     sys::error_code ec;
@@ -281,6 +290,17 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
     }
 
     auto* map = decoded->as_map();
+
+    // Surface tracker-side rejections (opentracker emits "failure reason" on
+    // bad announces — e.g. unaccepted ip= format) before bailing on the
+    // missing-peers branch, which otherwise hides the actual cause.
+    auto failure_it = map->find("failure reason");
+    if (failure_it != map->end() && failure_it->second.is_string()) {
+        LOG_WARN("BEP3 tracker: tracker failure reason=\"",
+                 *failure_it->second.as_string(), "\"");
+        return or_throw(yield, asio::error::invalid_argument, set<string>{});
+    }
+
     auto peers_it = map->find("peers");
     if (peers_it == map->end()) {
         LOG_WARN("BEP3 tracker: no peers key in response");
@@ -309,11 +329,15 @@ set<string> Bep3Tracker::tracker_get_peers( NodeID infohash
             peers.insert(*ip);
         }
     } else if (peers_it->second.is_string()) {
-        // Compact I2P format: concatenated 32-byte DestHashes
-        const auto& data = *peers_it->second.as_string();
+        // Compact I2P format: concatenated 32-byte DestHashes.
+        // Copy into a local string: as_string() returns optional<string> by
+        // value, so binding a reference into the dereferenced temporary
+        // dangles once the full-expression ends.
+        std::string data = *peers_it->second.as_string();
         const size_t DEST_HASH_LEN = 32;
         for (size_t i = 0; i + DEST_HASH_LEN <= data.size(); i += DEST_HASH_LEN) {
-            std::string dest = i2p::data::ByteStreamToBase32((const uint8_t*)data.data() + i, DEST_HASH_LEN);
+            std::string dest = i2p::data::ByteStreamToBase32(
+                (const uint8_t*)data.data() + i, DEST_HASH_LEN);
             dest += ".b32.i2p";
             LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
             peers.insert(move(dest));

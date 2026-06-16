@@ -18,6 +18,7 @@ from math import floor
 import tempfile
 from multiprocessing import Process
 import asyncio
+import re
 
 # Making random requests not to rely on cache
 import random
@@ -224,6 +225,7 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
                 TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX,
                 TestFixtures.BEP3_HANDSHAKE_DONE_REGEX,
+                TestFixtures.BEP3_SERVING_IDENTITY_REGEX,
             ],
         ),
     )
@@ -902,6 +904,13 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # through its retries before the i2p transport has any peers to offer.
     await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX)
 
+    # Capture client1's serving b32 (the canonical address the tracker should
+    # hand to client2). The constructor of Bep3Tracker logs this line very
+    # early, so by the time the announce has succeeded it must be set.
+    client1_b32 = client._proc_protocol.bep3_serving_b32
+    assert client1_b32, "client1 did not log its serving b32 identity"
+    print(f"client1 serving b32: {client1_b32}.b32.i2p")
+
     # Client2: retrieves from BEP3 distributed cache (no injector)
     cache_client = run_tcp_client(
         TestFixtures.CACHE_CLIENT[1]["name"],
@@ -933,6 +942,18 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # and only logs success once that path actually works.
     await wait_for_benchmark(cache_client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
+    # Register a dynamic benchmark on client2 that fires when the BEP3 parser
+    # emits a `found peer dest:` line carrying client1's exact b32. The process
+    # protocol re-reads its benchmarks dict on every line, so adding at runtime
+    # is safe. We await it after get_cached_echo, when the lookup has surely
+    # fired.
+    b32_match_regex = (
+        r"[\s\S]*BEP3 tracker: found peer dest: "
+        + re.escape(client1_b32)
+        + r"\.b32\.i2p[\s\S]*"
+    )
+    cache_client.callbacks[b32_match_regex] = False
+
     # TODO: Consider waiting for a debug line instead of period
     # print(
     #     "waiting "
@@ -947,6 +968,22 @@ async def test_bep3_cache_over_i2p(http_server, log):
         content,
         retry_delay=TestFixtures.I2P_TUNNEL_HEALING_PERIOD,
     )
+
+    # By this point client2 has gone through one or more get_peers rounds; if
+    # the tracker is doing its job and our parser decoded it correctly, one of
+    # those `found peer dest:` lines must equal client1's b32. Stall here
+    # otherwise — a non-match means the tracker/parser path is broken even if
+    # the rest of the cache flow happens to work for unrelated reasons.
+    await wait_for_benchmark(cache_client, b32_match_regex)
+    banner = (
+        "\n" + "*" * 78
+        + f"\n*** BEP3 B32 MATCH: client2 parsed client1's b32 from tracker"
+        + f"\n*** client1.b32 = {client1_b32}.b32.i2p"
+        + "\n" + "*" * 78 + "\n"
+    )
+    print(banner)
+    logging.info(banner)
+
     # Make sure client1 served it and client2 got it from cache
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED)
     await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
