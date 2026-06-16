@@ -1,22 +1,19 @@
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/optional.hpp>
 #include <optional>
+#include <type_traits>
+#include <variant>
 
 #include "cache_control.h"
 #include "cache/cache_entry.h"
-#include "or_throw.h"
-#include "split_string.h"
-#include "util.h"
-#include "http_util.h"
 #include "generic_stream.h"
-#include "util/async_job.h"
-#include "util/condition_variable.h"
-#include "util/watch_dog.h"
-#include "parse/number.h"
-
 #include "logger.h"
-
-#define _YDEBUG(y, ...) do { if (get_logger().get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
+#include "split_string.h"
+#include "http_util.h"
+#include "parse/number.h"
+#include "util.h"
+#include "util/condition_variable.h"
 
 namespace ouinet {
 
@@ -184,25 +181,6 @@ Session add_stale_warning(Session response)
                       , "110 Ouinet \"Response is stale\"");
 }
 
-Session
-CacheControl::fetch(const CacheRequest& request,
-                    sys::error_code& fresh_ec,
-                    sys::error_code& cache_ec,
-                    Cancel& cancel,
-                    YieldContext yield)
-{
-    sys::error_code ec;
-
-    auto response = do_fetch(
-            request,
-            fresh_ec,
-            cache_ec,
-            cancel,
-            yield[ec]);
-
-    return or_throw(yield, ec, move(response));
-}
-
 static bool must_revalidate(const CacheRequest& request)
 {
     if (get(request, http::field::if_none_match))
@@ -226,173 +204,114 @@ static bool must_revalidate(const CacheRequest& request)
     return false;
 }
 
-//------------------------------------------------------------------------------
-bool CacheControl::has_temporary_result(const Session& rs) const
-{
-    auto& hdr = rs.response_header();
-
-    // TODO: More statuses
-    return hdr.result() == http::status::found
-        || hdr.result() == http::status::temporary_redirect;
-}
-
-//------------------------------------------------------------------------------
-struct CacheControl::FetchState {
-    boost::optional<AsyncJob<Session>> fetch_fresh;
-    boost::optional<AsyncJob<CacheEntry>> fetch_stored;
-};
-
-//------------------------------------------------------------------------------
-Session
-CacheControl::do_fetch(
-        const CacheRequest& request,
-        sys::error_code& fresh_ec,
-        sys::error_code& cache_ec,
-        Cancel& cancel,
-        YieldContext yield)
-{
-    FetchState fetch_state;
-
-    auto cancel_slot = cancel.connect([&] {
-            if (fetch_state.fetch_fresh) fetch_state.fetch_fresh->cancel();
-            if (fetch_state.fetch_stored) fetch_state.fetch_stored->cancel();
-        });
-
-    auto on_exit = defer([&] {
-        auto& fs = fetch_state;
-        // Create new yield context so that we don't accidentally reset the
-        // returned error code.
-        {
-#           ifndef NDEBUG
-            auto wdog = watch_dog(_ex, std::chrono::seconds(10), [&] {
-                    yield.log("Fetch fresh failed to stop");
-                    assert(0);
-                });
-#           endif
-            sys::error_code ignored_ec;
-            if (fs.fetch_fresh)  fs.fetch_fresh ->stop(yield[ignored_ec]);
-        }
-        {
-#           ifndef NDEBUG
-            auto wdog = watch_dog(_ex, std::chrono::seconds(10), [&] {
-                    yield.log("Fetch stored failed to stop");
-                    assert(0);
-                });
-#           endif
-            sys::error_code ignored_ec;
-            if (fs.fetch_stored) fs.fetch_stored->stop(yield[ignored_ec]);
-        }
-    });
-
+std::expected<Session, sys::error_code>
+CacheControl::fetch(const CacheRequest& request, Async yield) {
     namespace err = asio::error;
 
     if (must_revalidate(request)) {
         auto ryield = yield.tag("force_reval");
-        _YDEBUG(ryield, "User requested revalidation, attempting to fetch fresh");
+        LOG_DEBUG(ryield, " User requested revalidation, attempting to fetch fresh");
 
-        auto res = do_fetch_fresh(fetch_state, request, nullptr, ryield[fresh_ec]);
-
-        if (!fresh_ec) {
-            cache_ec = err::operation_aborted;
-            _YDEBUG(ryield, "Got revalidated fresh response");
-            return res;
+        auto fresh_result = do_fetch_fresh(request, ryield);
+        if (fresh_result) {
+            LOG_DEBUG(ryield, " Got revalidated fresh response");
+            return std::move(*fresh_result);
         }
 
-        if (fresh_ec == err::operation_aborted) {
-            cache_ec = err::operation_aborted;
-            _YDEBUG(ryield, "Revalidation aborted");
-            return or_throw(ryield, fresh_ec, move(res));
+        if (fresh_result.error() == err::operation_aborted) {
+            LOG_DEBUG(ryield, " Revalidation aborted");
+            return std::unexpected(fresh_result.error());
         }
 
-        _YDEBUG(ryield, "Revalidation failed, attempting to fetch from cache");
-        bool is_fresh = false;
-        auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, ryield[cache_ec]);
-        if (!cache_ec) {
-            if (is_fresh) {
-                _YDEBUG(ryield, "Revalidation failed, cached response is fresh");
-                return move(cache_entry.response);
-            }
-            _YDEBUG(ryield, "Revalidation failed, cached response is stale");
-            return add_warning( move(cache_entry.response)
-                                    , "111 Ouinet \"Revalidation Failed\"");
+        LOG_DEBUG(ryield, " Revalidation failed, attempting to fetch from cache");
+        auto stored_result = do_fetch_stored(request, ryield);
+        if (stored_result) {
+            LOG_DEBUG(ryield, " Revalidation failed, cached response is stale");
+            return add_warning(
+                move(stored_result->response),
+                "111 Ouinet \"Revalidation Failed\""
+            );
         }
 
-        if (cache_ec == err::operation_aborted) {
-            _YDEBUG(ryield, "Revalidation failed and cache retrieval was aborted");
-            return or_throw(ryield, fresh_ec, move(res));
-        }
-
-        _YDEBUG(ryield, "Revalidation and cache retrieval failed");
-        return or_throw<Session>(ryield, err::service_not_found);
+        LOG_DEBUG(ryield, " Revalidation and cache retrieval failed");
+        return std::unexpected(stored_result.error());
     }
 
-    bool is_fresh = false;
-    auto cache_entry = do_fetch_stored(fetch_state, request, is_fresh, yield[cache_ec]);
+    // Fetching from the distributed cache is often very slow and thus we need
+    // to fetch from the origin im parallel and then return the first we get.
+    std::optional<std::expected<Session, sys::error_code>> fresh_result;
+    std::optional<std::expected<CacheEntry, sys::error_code>> stored_result;
+    ConditionVariable cv(yield.get_executor());
 
-    if (cache_ec == err::operation_aborted) {
-        fresh_ec = err::operation_aborted;
-        _YDEBUG(yield, "Revalidation not needed, cache retrieval aborted");
-        return or_throw<Session>(yield, err::operation_aborted);
+    // Cancel the child coroutines on scope exit
+    Cancel cancel;
+    auto cancelled = defer([&] {
+        cancel();
+    });
+
+    yield.spawn(cancel, [&](auto yield) {
+        fresh_result = do_fetch_fresh(request, yield);
+        cv.notify();
+    });
+
+    yield.spawn(cancel, [&](auto yield) {
+       stored_result = do_fetch_stored(request, yield);
+       cv.notify();
+    });
+
+    // Wait until either one of the job completes successfully or both fail. If one completes
+    // successfully, keep the other one running as it might still be needed later.
+    while (true) {
+        if (fresh_result && *fresh_result) break;
+        if (stored_result && *stored_result) break;
+        if (fresh_result && stored_result) break;
+
+        cv.wait(yield);
     }
 
-    if (cache_ec) {
-        auto myield = yield.tag("cache_miss");
-        _YDEBUG(myield, "Cache retrieval failed, attempting to fetch fresh");
-
-        // Retrieving from cache failed.
-        auto res = do_fetch_fresh(fetch_state, request, nullptr, myield[fresh_ec]);
-
-        if (!fresh_ec) {
-            _YDEBUG(myield, "Cache retrieval failed, but we got fresh response");
-            return res;
-        }
-
-        if (fresh_ec == err::operation_aborted) {
-            _YDEBUG(myield, "Cache retrieval failed, fetching fresh aborted");
-            return or_throw<Session>(myield, err::operation_aborted);
-        }
-
-        _YDEBUG(myield, "Cache and fresh retrievals failed");
-        return or_throw<Session>(myield, err::no_data);
+    // Both failed
+    if (fresh_result && !*fresh_result && stored_result && !*stored_result) {
+        LOG_DEBUG(yield, " Revalidation not needed, fresh and cache retrieval failed");
+        return std::unexpected(fresh_result->error()); // arbitrarily return one of the error
     }
 
-    if (is_fresh) {
-        cache_ec = err::operation_aborted;
-        fresh_ec = {};
-        _YDEBUG(yield, "Fresh retrieval succeeded first");
-        return move(cache_entry.response);
+    // `fetch_fresh` completed successfully
+    if (fresh_result && *fresh_result) {
+        LOG_DEBUG(yield, " Fresh retrieval succeeded first");
+        return std::move(**fresh_result);
     }
 
-    // If we're here that means that we were able to retrieve something
-    // from the cache.
-    _YDEBUG(yield, "Response was retrieved from cache");  // used by integration tests
+    // `fetch_stored` completed successfully
+    LOG_DEBUG(yield, " Response was retrieved from cache");  // used by integration tests
+    auto cache_entry = std::move(**stored_result);
 
     if (has_cache_control_directive(cache_entry.response, "private")
         || is_older_than_max_cache_age(cache_entry.time_stamp)
         || has_temporary_result(cache_entry.response)) {
         auto oyield = yield.tag("cache_old");
-        _YDEBUG(oyield, "Cached response is private or too old, attempting to fetch fresh");
+        LOG_DEBUG(oyield, " Cached response is private or too old, attempting to fetch fresh");
 
-        auto response = do_fetch_fresh(fetch_state, request, &cache_entry, oyield[fresh_ec]);
-
-        if (!fresh_ec) {
-            cache_ec = err::operation_aborted;
-            _YDEBUG(oyield, "Response was served from injector: cached response is private or too old");
-            return response;
+        // `fetch_fresh` has already been started. Wait for it to complete.
+        while (!fresh_result) {
+            cv.wait(yield);
+        }
+        if (*fresh_result) {
+            LOG_DEBUG(oyield, " Response was served from injector: cached response is private or too old");
+            return std::move(**fresh_result);
         }
 
-        _YDEBUG(oyield, "Response was served from cache: cannot reach the injector");
+        LOG_DEBUG(oyield, " Response was served from cache: cannot reach the injector");
 
         if (is_expired(cache_entry)) {
             cache_entry.response = add_stale_warning(move(cache_entry.response));
         }
 
-        return move(cache_entry.response);
+        return std::move(cache_entry.response);
     }
 
     if (!is_expired(cache_entry)) {
-        _YDEBUG(yield, "Response was served from cache: not expired");
-        fresh_ec = err::operation_aborted;
+        LOG_DEBUG(yield, " Response was served from cache: not expired");
+        // yield.cancel();
         return move(cache_entry.response);
     }
 
@@ -401,44 +320,57 @@ CacheControl::do_fetch(
 
     if (cache_etag && !rq_etag) {
         auto ryield = yield.tag("cache_reval");
-        _YDEBUG(ryield, "Attempting to revalidate cached response");
+        LOG_DEBUG(ryield, " Attempting to revalidate cached response");
 
         auto rq = request;
-
         rq.set_if_none_match(*cache_etag);
 
-        auto response = do_fetch_fresh(fetch_state, rq, &cache_entry, ryield[fresh_ec]);
-
-        if (fresh_ec) {
-            _YDEBUG(ryield, "Response was served from cache: revalidation failed");
-            return add_stale_warning(move(cache_entry.response));
+        // Restart `fetch_fresh` with modified request
+        cancel();
+        auto new_fresh_result = do_fetch_fresh(rq, yield);
+        if (!new_fresh_result) {
+            LOG_DEBUG(ryield, " Response was served from cache: revalidation failed");
+            return add_stale_warning(std::move(cache_entry.response));
         }
 
+        auto response = std::move(*new_fresh_result);
         auto& hdr = response.response_header();
 
         if (hdr.result() == http::status::not_modified) {
-            _YDEBUG(ryield, "Response was served from cache: not modified");
-            return move(cache_entry.response);
+            LOG_DEBUG(ryield, " Response was served from cache: not modified");
+            return std::move(cache_entry.response);
         }
 
-        _YDEBUG(ryield, "Response was served from injector: cached response is modified");
-        cache_ec = err::operation_aborted;  // discard cached, use from injector
-        return response;
+        LOG_DEBUG(ryield, " Response was served from injector: cached response is modified");
+        return std::move(response);
     }
 
-    auto eyield = yield.tag("cache_notag");
-    _YDEBUG(eyield, "Cached response has no tag, attempting to fetch fresh");
+    {
+        auto eyield = yield.tag("cache_notag");
+        LOG_DEBUG(eyield, " Cached response has no tag, attempting to fetch fresh");
 
-    auto response = do_fetch_fresh(fetch_state, request, &cache_entry, eyield[fresh_ec]);
+        // `fetch_fresh` has already been started. Wait for it to complete.
+        while (!fresh_result) {
+            cv.wait(yield);
+        }
+        if (!*fresh_result) {
+            LOG_DEBUG(eyield, " Response was served from cache: requesting fresh response failed");
+            return add_stale_warning(std::move(cache_entry.response));
+        }
 
-    if (fresh_ec) {
-        _YDEBUG(eyield, "Response was served from cache: requesting fresh response failed");
-        return add_stale_warning(move(cache_entry.response));
-    } else {
-        cache_ec = err::operation_aborted;
-        _YDEBUG(eyield, "Response was served from injector: cached expired without etag");
-        return response;
+        LOG_DEBUG(eyield, " Response was served from injector: cached expired without etag");
+        return std::move(**fresh_result);
     }
+}
+
+//------------------------------------------------------------------------------
+bool CacheControl::has_temporary_result(const Session& rs) const
+{
+    auto& hdr = rs.response_header();
+
+    // TODO: More statuses
+    return hdr.result() == http::status::found
+        || hdr.result() == http::status::temporary_redirect;
 }
 
 //------------------------------------------------------------------------------
@@ -454,165 +386,24 @@ posix_time::time_duration CacheControl::max_cached_age() const
 }
 
 //------------------------------------------------------------------------------
-auto CacheControl::make_fetch_fresh_job( const CacheRequest& rq
-                                       , const CacheEntry* cached
-                                       , YieldContext yield)
-{
-    AsyncJob<Session> job(_ex);
-
-    job.start(
-        [this, &rq, cached, log_path = yield.log_path()]
-        (Cancel& cancel, asio::yield_context yield) mutable {
-            sys::error_code ec;
-            auto r = compat([&](Async yield) {
-                return fetch_fresh(
-                    rq.to_inject_request(),
-                    cached,
-                    yield.with_log_path(std::move(log_path))
-                );
-            })(cancel, yield[ec]);
-            return or_throw(yield, ec, move(r));
-        }
-    );
-
-    return job;
-}
-
-//------------------------------------------------------------------------------
-Session
-CacheControl::do_fetch_fresh( FetchState& fs
-                            , const CacheRequest& rq
-                            , const CacheEntry* cached
-                            , YieldContext yield)
-{
+std::expected<Session, sys::error_code>
+CacheControl::do_fetch_fresh(const CacheRequest& rq, Async yield) {
     if (!fetch_fresh) {
-        _YDEBUG(yield, "No fetch fresh operation");
-        return or_throw<Session>(yield, asio::error::operation_not_supported);
+        LOG_DEBUG(yield, " No fetch fresh operation");
+        return std::unexpected(asio::error::operation_not_supported);
     }
 
-    if (!fs.fetch_fresh) {
-        fs.fetch_fresh = make_fetch_fresh_job(rq, cached, yield);
-    }
-
-    fs.fetch_fresh->wait_for_finish(yield);
-
-    auto result = move(fs.fetch_fresh->result());
-    if (result) {
-        return std::move(*result);
-    } else {
-        return or_throw(yield, result.error(), Session());
-    }
+    return fetch_fresh(rq.to_inject_request(), yield);
 }
 
-CacheEntry
-CacheControl::do_fetch_stored(FetchState& fs,
-                              const CacheRequest& rq,
-                              bool& is_fresh,
-                              YieldContext yield)
-{
-    is_fresh = false;
-
+std::expected<CacheEntry, sys::error_code>
+CacheControl::do_fetch_stored(const CacheRequest& rq, Async yield) {
     if (!fetch_stored) {
-        _YDEBUG(yield, "No fetch stored_operation provided");
-        return or_throw<CacheEntry>(yield, asio::error::operation_not_supported);
+        LOG_DEBUG(yield, " No fetch stored_operation provided");
+        return std::unexpected(asio::error::operation_not_supported);
     }
 
-    // Fetching from the distributed cache is often very slow and thus we need
-    // to fetch from the origin im parallel and then return the first we get.
-    if (!fs.fetch_fresh) {
-        fs.fetch_fresh = make_fetch_fresh_job(rq, nullptr, yield.tag("fresh"));
-    }
-
-    if (!fs.fetch_stored) {
-        fs.fetch_stored = AsyncJob<CacheEntry>(_ex);
-        fs.fetch_stored->start(
-            [&, log_path = yield.log_path()]
-            (Cancel& cancel, asio::yield_context yield) mutable {
-                return compat([&](Async yield) {
-                    return fetch_stored(
-                        rq.to_retrieve_request(),
-                        yield.with_log_path(std::move(log_path))
-                    );
-                })(cancel, yield);
-            }
-        );
-    }
-
-    enum Which { fresh, stored, none };
-    Which which = none;
-    ConditionVariable cv(_ex);
-
-    std::optional<AsyncJob<Session>::Connection>    fetch_fresh_con;
-    std::optional<AsyncJob<CacheEntry>::Connection> fetch_stored_con;
-
-    if (fs.fetch_fresh) {
-        fs.fetch_fresh->was_started();
-        assert(fs.fetch_fresh->was_started());
-
-        fetch_fresh_con = fs.fetch_fresh->on_finish_sig([&] {
-            which = fresh;
-            fetch_stored_con = std::nullopt;
-            cv.notify();
-        });
-
-        if (!fetch_fresh_con) {
-            assert(fs.fetch_fresh->has_result());
-            if (fs.fetch_fresh->result()) {
-                which = fresh;
-            }
-        }
-    }
-
-    if (which == none) {
-        assert(fs.fetch_stored->was_started());
-
-        fetch_stored_con = fs.fetch_stored->on_finish_sig([&] {
-            which = stored;
-            fetch_fresh_con = std::nullopt;
-            cv.notify();
-        });
-
-        if (!fetch_stored_con) {
-            assert(fs.fetch_stored->has_result());
-            which = stored;
-        }
-
-        if (!fs.fetch_stored->has_result()) {
-            cv.wait(yield);
-        }
-    }
-
-    if (which == fresh) {
-        auto& r = fs.fetch_fresh->result();
-        if (r) {
-            is_fresh = true;
-            return {
-                posix_time::second_clock::universal_time(),
-                move(*r)
-            };
-        }
-
-        // fetch_fresh errored, wait for the stored version
-        fs.fetch_stored->wait_for_finish(yield);
-
-        auto& r2 = fs.fetch_stored->result();
-        if (r2) {
-            return std::move(*r2);
-        } else {
-            return or_throw(yield, r2.error(), CacheEntry());
-        }
-    }
-    else if (which == stored) {
-        auto& r = fs.fetch_stored->result();
-        if (r) {
-            return std::move(*r);
-        } else {
-            return or_throw(yield, r.error(), CacheEntry());
-        }
-    }
-
-    assert(0);
-    return CacheEntry();
+    return fetch_stored(rq.to_retrieve_request(), yield);
 }
 
 //------------------------------------------------------------------------------

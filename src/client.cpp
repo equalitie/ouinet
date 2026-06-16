@@ -415,7 +415,6 @@ private:
 
     std::expected<Session, sys::error_code>
     fetch_fresh_through_simple_proxy( PublicInjectorRequest
-                                    , const CacheEntry* cached
                                     , metrics::Request
                                     , Async);
 
@@ -1273,7 +1272,6 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 //------------------------------------------------------------------------------
 std::expected<Session, sys::error_code>
 Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
-                                               , const CacheEntry* cached
                                                , metrics::Request metrics
                                                , Async yield)
 {
@@ -1282,14 +1280,6 @@ Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
         [&](auto yield) -> std::expected<Session, sys::error_code> {
             // Connect to the injector.
             // TODO: Maybe refactor with `fetch_via_self`.
-
-            if (cached && _injector_starting) {
-                // This is a revalidation, so go with the available cache entry
-                // and do not even try to get a response from the injector
-                // (as it would probably block, indefinitely when missing connectivity).
-                return std::unexpected(asio::error::try_again);
-            }
-
             wait_for_injector(yield);
             assert(_injector);
 
@@ -1581,8 +1571,7 @@ public:
     {
         //------------------------------------------------------------
         cache_control.fetch_fresh = [&] ( const CacheInjectRequest& rq
-                             , const CacheEntry* cached
-                             , Async yield_) -> std::expected<Session, sys::error_code>
+                                        , Async yield_) -> std::expected<Session, sys::error_code>
         {
             auto yield = yield_.tag("injector");
 
@@ -1599,7 +1588,6 @@ public:
 
             auto session = client_state.fetch_fresh_through_simple_proxy(
                 rq,
-                cached,
                 move(metrics),
                 yield
             );
@@ -1718,7 +1706,6 @@ public:
             session = compat([&](Async yield) {
                 return client_state.fetch_fresh_through_simple_proxy(
                     std::move(*insecure_rq),
-                    nullptr,
                     std::move(metrics),
                     yield.tag("simple")
                 );
@@ -1745,26 +1732,20 @@ public:
 
         _YDEBUG(yield, "Start");
 
-        const auto rq = CacheRequest::from(tnx.request(), yield[ec]);
-        if (cancel) ec = asio::error::operation_aborted;
-        if (ec) return or_throw(yield, ec);
-
+        const auto rq = CacheRequest::from(tnx.request());
         if (!rq) {
             _YERROR(yield, "Invalid request");
             return or_throw(yield, asio::error::invalid_argument);
         }
 
-        auto session = cache_control.fetch( *rq, fresh_ec, cache_ec
-                               , cancel, yield[ec].tag("cc_fetch"));
-        _YDEBUG( yield.tag("cc_fetch")
-               , "Done; ec=", ec, " fresh_ec=", fresh_ec, " cache_ec=", cache_ec);
+        auto session = compat([&](Async yield) {
+            return cache_control.fetch(*rq, yield.tag("cc_fetch"));
+        })(cancel, yield[ec]);
+        _YDEBUG(yield.tag("cc_fetch"), "Done; ec=", ec);
 
         if (ec) return or_throw(yield, ec);
 
         auto& rsh = session.response_header();
-
-        assert(!fresh_ec || !cache_ec); // At least one success
-        assert( fresh_ec ||  cache_ec); // One needs to fail
 
         auto injector_error = rsh[http_::response_error_hdr];
         if (!injector_error.empty()) {

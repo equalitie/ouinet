@@ -102,6 +102,7 @@ public:
         spawn(_cancel, std::move(lambda));
     }
 
+    [[nodiscard]]
     Cancel::Connection cancel_slot(auto lambda) {
         return _cancel.connect(std::move(lambda));
     }
