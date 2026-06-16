@@ -1,21 +1,15 @@
+include:
+  - .gitlab-ci/common/prepare-macos-image.yml
+
 variables:
   IOS_BUILD_PATH: 'build.darwin/build-os64/Debug-iphoneos'
   SIM_BUILD_PATH: 'build.darwin/build-simulatorarm64/Debug-iphonesimulator'
   HOMEBREW_NO_AUTO_UPDATE: 1
 
-.macos_saas_runners:
-  tags:
-    - saas-macos-large-m2pro
-  image: macos-26-xcode-26
-  before_script:
-    - brew install cmake ruby
-    - gem install xcpretty
-    - rustup target add --toolchain 1.93.0-aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
-
 iphoneos / build:
   stage: build
   extends:
-    - .macos_saas_runners
+    - .prepare-macos-image
   needs:
     - job: 'macos / build'
   artifacts:
@@ -35,7 +29,7 @@ iphoneos / build:
 iphonesimulator / build:
   stage: build
   extends:
-    - .macos_saas_runners
+    - .prepare-macos-image
   needs:
     - job: 'macos / build'
   artifacts:
@@ -55,7 +49,7 @@ iphonesimulator / build:
 combined / build:
   stage: build
   extends:
-    - .macos_saas_runners
+    - .prepare-macos-image
   needs:
     - job: 'iphoneos / build'
     - job: 'iphonesimulator / build'

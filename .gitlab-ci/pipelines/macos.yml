@@ -1,3 +1,6 @@
+include:
+  - .gitlab-ci/common/prepare-macos-image.yml
+
 variables:
   BUILD_PATH: 'build.darwin/build-mac_arm64/Debug'
   BOOST_PATH: 'build.darwin/build-mac_arm64/boost/src/built_boost'
@@ -7,9 +10,8 @@ variables:
 
 macos / build:
   stage: build
-  tags:
-    - saas-macos-large-m2pro
-  image: macos-26-xcode-26
+  extends:
+    - .prepare-macos-image
   artifacts:
     paths:
       - $BUILD_PATH/client.app
