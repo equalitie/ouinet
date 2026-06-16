@@ -8,7 +8,9 @@ variables:
     - saas-macos-large-m2pro
   image: macos-26-xcode-26
   before_script:
-    - brew install cmake
+    - brew install cmake ruby
+    - gem install xcpretty
+    - rustup target add --toolchain 1.93.0-aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 
 iphoneos / build:
   stage: build
@@ -21,11 +23,12 @@ iphoneos / build:
       - $IOS_BUILD_PATH/ouinet.framework
       - $IOS_BUILD_PATH/injector.app
       - $IOS_BUILD_PATH/lib*.a
+      - build.darwin/xcodebuild-ios.log
     expire_in: 6h
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=OS64 ../scripts/build-darwin.sh
+    - PLATFORM=OS64 ../scripts/build-darwin.sh | tee xcodebuild-ios.log | xcpretty
   when: manual
   allow_failure: true
 
@@ -40,11 +43,12 @@ iphonesimulator / build:
       - $SIM_BUILD_PATH/ouinet.framework
       - $SIM_BUILD_PATH/injector.app
       - $SIM_BUILD_PATH/lib*.a
+      - build.darwin/xcodebuild-iossim.log
     expire_in: 6h
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=SIMULATORARM64 ../scripts/build-darwin.sh
+    - PLATFORM=SIMULATORARM64 ../scripts/build-darwin.sh | tee xcodebuild-iossim.log | xcpretty
   when: manual
   allow_failure: true
 
@@ -58,10 +62,11 @@ combined / build:
   artifacts:
     paths:
       - build.darwin/build-combined/ouinet.xcframework
+      - build.darwin/xcodebuild-combined.log
     expire_in: 6h
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=COMBINED ../scripts/build-darwin.sh
+    - PLATFORM=COMBINED ../scripts/build-darwin.sh | tee xcodebuild-combined.log | xcpretty
   when: manual
   allow_failure: true

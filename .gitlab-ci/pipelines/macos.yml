@@ -23,12 +23,14 @@ macos / build:
       - $GPGERROR_PATH/doc/yat2m-for-build
       - $GPGERROR_PATH/src/mkerrcodes
       - $GPGERROR_PATH/src/mkheader
+      - build.darwin/xcodebuild.log
     expire_in: 6h
   before_script:
-    - brew install cmake
+    - brew install cmake ruby
+    - gem install xcpretty
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh
+    - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh | tee xcodebuild.log | xcpretty
   when: manual
   allow_failure: true
