@@ -3,6 +3,7 @@ variables:
   BOOST_PATH: 'build.darwin/build-mac_arm64/boost/src/built_boost'
   GCRYPT_PATH: 'build.darwin/build-mac_arm64/gcrypt/src/gcrypt'
   GPGERROR_PATH: 'build.darwin/build-mac_arm64/gpg_error/src/gpg_error'
+  HOMEBREW_NO_AUTO_UPDATE: 1
 
 macos / build:
   stage: build
@@ -23,6 +24,8 @@ macos / build:
       - $GPGERROR_PATH/src/mkerrcodes
       - $GPGERROR_PATH/src/mkheader
     expire_in: 6h
+  before_script:
+    - brew install cmake
   script:
     - mkdir -p build.darwin
     - cd build.darwin

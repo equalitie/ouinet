@@ -1,11 +1,14 @@
 variables:
   IOS_BUILD_PATH: 'build.darwin/build-os64/Debug-iphoneos'
   SIM_BUILD_PATH: 'build.darwin/build-simulatorarm64/Debug-iphonesimulator'
+  HOMEBREW_NO_AUTO_UPDATE: 1
 
 .macos_saas_runners:
   tags:
     - saas-macos-large-m2pro
   image: macos-26-xcode-26
+  before_script:
+    - brew install cmake
 
 iphoneos / build:
   stage: build
