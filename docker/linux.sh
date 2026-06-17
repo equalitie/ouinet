@@ -14,7 +14,6 @@ artifact_dir=
 with_ouisync=n
 host_ouisync_dir=
 with_asan=n
-#docker_platform="--platform linux/amd64"
 
 source $(dirname $0)/util.sh linux
 
@@ -78,8 +77,25 @@ if [ -z "$target_oss" ]; then
     error "Missing --target-os parameter"
 fi
 
-image_name=$(choose_docker_image_name)
-container_name=$(choose_docker_container_name)
+# Most likely returns 'amd64' or 'arm64'
+docker_default_platform=$(dock version --format '{{.Server.Arch}}')
+
+# Being explicit about docker platform is useful when building on Arm based
+# Mackintosh PCs as cross compilation for Android or Windows doesn't work on
+# Arm.
+function docker_choose_platform {(
+    # Windows and Android don't build on arm
+    if is_in android ${target_oss[@]} || is_in windows ${target_oss[@]} ; then
+        echo 'amd64'
+    else
+        echo $docker_default_platform
+    fi
+)}
+
+docker_platform=$(docker_choose_platform)
+name_suffix=$([ "$docker_platform" = "$docker_default_platform" ] && echo "" || echo ".$docker_platform")
+image_name=$(choose_docker_image_name)$name_suffix
+container_name=$(choose_docker_container_name)$name_suffix
 
 work_dir=/opt
 ouinet_dir=$work_dir/ouinet
@@ -154,7 +170,7 @@ function build_image (
         "RUN echo 'PS1=\"\\h/$container_name:\\W \\u$ \"' >> ~/.bashrc"
     )
 
-    echo -e "${dockerfile[@]/*/&'\n'}" | dock build $docker_platform -t $image_name -
+    echo -e "${dockerfile[@]/*/&'\n'}" | dock build --platform linux/$docker_platform -t $image_name -
 )
 
 function enter (
@@ -227,7 +243,7 @@ function check_artifacts_exist_for_target_os (
 build_image
 
 if ! is_container_running; then
-    dock run $docker_platform -d --rm --name $container_name $image_name sleep 1d
+    dock run --platform linux/$docker_platform -d --rm --name $container_name $image_name sleep 1d
 fi
 
 if [ "$enter_on_exit" = y ]; then
