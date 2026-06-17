@@ -271,8 +271,6 @@ BOOST_DATA_TEST_CASE(
     dht_impls,
     dht_impl
 ) {
-    get_logger().set_threshold(DEBUG);
-
     asio::io_context ctx;
 
     TestDir root;

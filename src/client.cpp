@@ -459,24 +459,20 @@ private:
 
     inline
     std::expected<void, sys::error_code> wait_for_injector(Async yield) {
-        if (!_injector_starting) {
-            return std::unexpected(_injector_start_ec);
+        while (true) {
+            if (_injector) return {};
+            if (!_injector_starting) return std::unexpected(_injector_start_ec);
+            _injector_starting->wait(yield);
         }
-
-        _injector_starting->wait(yield.tag("wait_for_injector"));
-
-        return {};
     }
 
     inline
     std::expected<void, sys::error_code> wait_for_cache(Async yield) {
-        if (!_cache_starting) {
-            return std::unexpected(_cache_start_ec);
+        while (true) {
+            if (_cache) return {};
+            if (!_cache_starting) return std::unexpected(_cache_start_ec);
+            _cache_starting->wait(yield);
         }
-
-        _cache_starting->wait(yield.tag("wait_for_cache"));
-
-        return {};
     }
 
     fs::path ca_cert_path() const { return _config.repo_root() / OUINET_CA_CERT_FILE; }
@@ -1159,7 +1155,9 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
             }
 
             // Connect to the injector/proxy.
-            wait_for_injector(yield);
+            if (auto result = wait_for_injector(yield); !result) {
+                return std::unexpected(result.error());
+            }
             assert(_injector);
 
             auto inj_e = _injector->connect(yield);
@@ -1280,6 +1278,7 @@ Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
         [&](auto yield) -> std::expected<Session, sys::error_code> {
             // Connect to the injector.
             // TODO: Maybe refactor with `fetch_via_self`.
+
             if (auto result = wait_for_injector(yield); !result) {
                 return std::unexpected(result.error());
             }
