@@ -4,8 +4,8 @@ include:
 variables:
   BUILD_PATH: 'build.darwin/build-mac_arm64/Debug'
   BOOST_PATH: 'build.darwin/build-mac_arm64/boost/src/built_boost'
-  GCRYPT_PATH: 'build.darwin/build-mac_arm64/gcrypt/src/gcrypt'
-  GPGERROR_PATH: 'build.darwin/build-mac_arm64/gpg_error/src/gpg_error'
+  GCRYPT_PATH: 'build.darwin/build-mac_arm64/gcrypt'
+  GPGERROR_PATH: 'build.darwin/build-mac_arm64/gpg_error'
   TESTS_PATH: 'build.darwin/build-mac_arm64/test/Debug'
   HOMEBREW_NO_AUTO_UPDATE: 1
 
@@ -20,14 +20,11 @@ macos / build:
       - $BUILD_PATH/lib*.dylib
       - $BUILD_PATH/lib*.a
       - $BOOST_PATH/b2
-      - $GCRYPT_PATH/cipher/gost-s-box
-      - $GCRYPT_PATH/doc/yat2m
+      - $GCRYPT_PATH/src/gcrypt/cipher/gost-s-box
       - $GCRYPT_PATH/out/lib/lib*.dylib
-      - $GCRYPT_PATH/tests/testdrv-build
-      - $GPGERROR_PATH/doc/yat2m-for-build
       - $GPGERROR_PATH/out/lib/lib*.dylib
-      - $GPGERROR_PATH/src/mkerrcodes
-      - $GPGERROR_PATH/src/mkheader
+      - $GPGERROR_PATH/src/gpg_error/src/mkerrcodes
+      - $GPGERROR_PATH/src/gpg_error/src/mkheader
       - $TESTS_PATH/bt-*
       - $TESTS_PATH/test-*
       - build.darwin/xcodebuild.log
