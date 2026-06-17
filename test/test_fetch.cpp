@@ -1,5 +1,7 @@
 #define BOOST_TEST_MODULE test_fetch
 #include <boost/test/unit_test.hpp>
+#include <boost/test/data/test_case.hpp>
+#include <boost/test/data/monomorphic.hpp>
 
 #include <boost/asio/ssl.hpp>
 #include "util/dht.h"
@@ -16,6 +18,8 @@ using namespace ouinet::bittorrent;
 using namespace std::chrono_literals;
 using namespace boost::asio::ip;
 using tcp = asio::ip::tcp;
+
+const auto dht_impls = boost::unit_test::data::make({ DhtImpl::mock, DhtImpl::real });
 
 template<class Config>
 static Config make_config(const std::vector<std::string>& args) {
@@ -262,7 +266,11 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
 // * The 'leecher' client then fetches the resource from the 'seeder'.
 //
 // The test is using `MockDht` because the `MainlineDht` wouldn't work locally.
-BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
+BOOST_DATA_TEST_CASE(
+    test_storing_into_and_fetching_from_the_cache,
+    dht_impls,
+    dht_impl
+) {
     get_logger().set_threshold(DEBUG);
 
     asio::io_context ctx;
@@ -274,7 +282,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(2, yield);
+        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 2, yield);
 
         const std::string injector_credentials = "username:password";
 
@@ -447,7 +455,11 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
     });
 }
 
-BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
+BOOST_DATA_TEST_CASE(
+    test_fetching_private_route_30_times,
+    dht_impls,
+    dht_impl
+) {
     asio::io_context ctx;
 
     TestDir root;
@@ -457,7 +469,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(2, yield);
+        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 2, yield);
 
         const std::string injector_credentials = "username:password";
 

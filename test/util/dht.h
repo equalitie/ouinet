@@ -2,6 +2,7 @@
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/address_v4.hpp>
+#include <stdexcept>
 #include "../../src/bittorrent/mainline_dht.h"
 #include "../../src/bittorrent/mock_dht.h"
 
@@ -63,70 +64,92 @@ std::vector<std::unique_ptr<MainlineDht>> spawn_dht_nodes(size_t count, Async yi
     return dhts;
 }
 
-// Setup DHT for tests, respecting the `WITH_MOCK_DHT` flag.
+// Which DHT implementation to use
+enum class DhtImpl {
+    // Read DHT running on the localhost
+    real,
+    // Mock DHT
+    mock
+};
+
+inline std::ostream& operator << (std::ostream& os, DhtImpl impl) {
+    switch (impl) {
+        case DhtImpl::real: return os << "real";
+        case DhtImpl::mock: return os << "mock";
+        default: throw std::invalid_argument("invalid DHT impl");
+    }
+}
+
+// Setup DHT for tests according to the DHT impl.
 //
-// If `WITH_MOCK_DHT` is defined, returns:
-//     - empty vector
-//     - dummy endpoint
-//     - instance of `MockDht::Swarms`
-//
-// If `WITH_MOCK_DHT` is not defined, returns:
+// For `DhtImpl::real` it returns:
 //     - vector of `count` `MainlineDht` instances listening on the localhost and connected to each
 //       other
 //     - local endpoint of one of them
 //     - nullptr
+//
+// For `DhtImpl::mock` it returns:
+//     - empty vector
+//     - dummy endpoint
+//     - instance of `MockDht::Swarms`
+//
 std::tuple<
     std::vector<std::unique_ptr<MainlineDht>>,
     boost::asio::ip::udp::endpoint,
     std::shared_ptr<MockDht::Swarms>
 >
-setup_dht(size_t count, Async yield) {
-#ifdef WITH_MOCK_DHT
-    return std::make_tuple(
-        std::vector<std::unique_ptr<MainlineDht>>(),
-        boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 0),
-        std::make_shared<MockDht::Swarms>()
-    );
-#else
-    auto nodes = spawn_dht_nodes(count, yield);
-    auto endpoint = *nodes[0]->local_endpoints().begin();
+setup_dht(DhtImpl impl, size_t count, Async yield) {
+    switch (impl) {
+    case DhtImpl::real: {
+        auto nodes = spawn_dht_nodes(count, yield);
+        auto endpoint = *nodes[0]->local_endpoints().begin();
 
-    return std::make_tuple(std::move(nodes), endpoint, nullptr);
-#endif
+        return std::make_tuple(std::move(nodes), endpoint, nullptr);
+    }
+    case DhtImpl::mock: {
+        return std::make_tuple(
+            std::vector<std::unique_ptr<MainlineDht>>(),
+            boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 0),
+            std::make_shared<MockDht::Swarms>()
+        );
+    }
+    default:
+        throw std::invalid_argument("invalid DHT impl");
+    }
 }
 
-// If `WITH_MOCK_DHT` is defined, returns a `MockDht` instance, otherwise returns `nullptr`.
+// If `swarms` is `nullptr`, returns `nullptr`, otherwise returns a new `MockDht` instance.
 std::shared_ptr<MockDht> mock_dht(
     std::string name,
     MockDht::Executor exec,
     std::shared_ptr<MockDht::Swarms> swarms
 ) {
-#ifdef WITH_MOCK_DHT
-    return std::make_shared<MockDht>(std::move(name), std::move(exec), std::move(swarms));
-#else
-    return nullptr;
-#endif
+    if (swarms) {
+        return std::make_shared<MockDht>(std::move(name), std::move(exec), std::move(swarms));
+    } else {
+        return nullptr;
+    }
 }
 
-// If `WITH_MOCK_DHT` is defined, returns a function that returns a `MockDht` instance, otherwise
-// returns `nullopt`.
+// If `swarms` is `nullptr`, returns `nullopt`, otherwise returns a function that returns a new
+// `MockDht` instance.
 std::optional<std::function<std::shared_ptr<MockDht>()>>
 mock_dht_builder(
     std::string name,
     MockDht::Executor exec,
     std::shared_ptr<MockDht::Swarms> swarms
 ) {
-#ifdef WITH_MOCK_DHT
-    return [
-        name = std::move(name),
-        exec = std::move(exec),
-        swarms = std::move(swarms)
-    ] () {
-        return std::make_shared<MockDht>(name, exec, swarms);
-    };
-#else
-    return std::nullopt;
-#endif
+    if (swarms) {
+        return [
+            name = std::move(name),
+            exec = std::move(exec),
+            swarms = std::move(swarms)
+        ] () {
+            return std::make_shared<MockDht>(name, exec, swarms);
+        };
+    } else {
+        return std::nullopt;
+    }
 }
 
 } // namespace ouinet::bittorrent

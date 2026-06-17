@@ -52,10 +52,6 @@ function(add_test)
                 Boost::unit_test_framework
         )
     endif()
-
-    if (WITH_MOCK_DHT)
-        target_compile_definitions(${ARG_TARGET} PRIVATE WITH_MOCK_DHT)
-    endif()
 endfunction()
 
 add_test(TARGET test_cancel TYPE HEADER)
