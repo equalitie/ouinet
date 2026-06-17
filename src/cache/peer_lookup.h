@@ -14,7 +14,7 @@ class PeerLookup {
 protected:
     using Clock = std::chrono::steady_clock;
     using Ret = PeerSet;
-    using Job = AsyncJob<boost::none_t>;
+    using Job = AsyncJob<void>;
     using NodeID = bittorrent::NodeID;
 
     struct Result {
@@ -99,10 +99,10 @@ private:
     std::unique_ptr<Job> make_job(AsioExecutor exec, util::LogPath log_path) {
         auto job = std::make_unique<Job>(exec);
 
-        job->start(
+        job->start(compat(
             [this, log_path = std::move(log_path)]
-            (Cancel cancel, asio::yield_context y) mutable {
-                Async yield(y, cancel, std::move(log_path));
+            (Async yield_) mutable -> std::expected<void, sys::error_code> {
+                auto yield = yield_.with_log_path(std::move(log_path));
 
                 auto result = timeout(
                     timeout_duration(),
@@ -116,16 +116,16 @@ private:
                                         _infohash, " timed out");
                     }
 
-                    return or_throw(yield.asio_yield(), result.error(), boost::none);
+                    return std::unexpected(result.error());
                 }
 
                 _last_result.ec = sys::error_code();
                 _last_result.value = std::move(result).value();
                 _last_result.time = Clock::now();
 
-                return boost::none;
+                return {};
             }
-        );
+        ));
 
         return job;
     }

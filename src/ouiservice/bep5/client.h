@@ -64,14 +64,16 @@ public:
     Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , asio::ssl::context*
-              , Target targets = helpers | injectors);
+              , Target targets
+              , const util::LogPath& log_path);
 
     Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , std::string helpers_swarm_name
               , bool helper_announcement_enabled
               , asio::ssl::context*
-              , Target targets = helpers | injectors);
+              , Target targets
+              , const util::LogPath& log_path);
 
     [[nodiscard]]
     sys::error_code start(Async) override;

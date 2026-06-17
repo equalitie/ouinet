@@ -6,6 +6,7 @@
 #include <variant>
 
 #include "async.h"
+#include "async_sleep.h"
 #include "condition_variable.h"
 #include "expected.h"
 
@@ -98,31 +99,58 @@ auto select(Async yield, Fs... fs) {
     using Result = detail::select_result<std::invoke_result_t<Fs, Async>...>;
 
     ConditionVariable cv(yield.get_executor());
-    std::optional<Result> result;
 
-    (
-        yield.spawn([f = std::move(fs), &cv, &result](Async yield) {
-            auto local_result = Result(f(yield));
+    if constexpr (std::is_void_v<Result>) {
+        bool result = false;
 
-            // TODO: This shouldn't be necessary but I was getting segfaults without it...
-            if (yield.is_cancelled()) {
-                return;
-            }
+        (
+            yield.spawn([f = std::move(fs), &cv, &result](Async yield) {
+                f(yield);
 
-            result = std::move(local_result);
-            cv.notify();
-        }),
-        ...
-    );
+                // TODO: This shouldn't be necessary but I was getting segfaults without it...
+                if (yield.is_cancelled()) {
+                    return;
+                }
 
-    while (!result.has_value()) {
-        cv.wait(yield);
+                result = true;
+                cv.notify();
+            }),
+            ...
+        );
+
+        while (!result) {
+            cv.wait(yield);
+        }
+
+        // Cancel the other branches
+        yield.cancel();
+    } else {
+        std::optional<Result> result;
+
+        (
+            yield.spawn([f = std::move(fs), &cv, &result](Async yield) {
+                auto local_result = Result(f(yield));
+
+                // TODO: This shouldn't be necessary but I was getting segfaults without it...
+                if (yield.is_cancelled()) {
+                    return;
+                }
+
+                result = std::move(local_result);
+                cv.notify();
+            }),
+            ...
+        );
+
+        while (!result.has_value()) {
+            cv.wait(yield);
+        }
+
+        // Cancel the other branches
+        yield.cancel();
+
+        return std::move(result).value();
     }
-
-    // Cancel the other branches
-    yield.cancel();
-
-    return result.value();
 }
 
 // Error returned from `timeout` when the timeout expires before the coroutine was able to complete.
@@ -155,7 +183,7 @@ auto timeout(boost::asio::steady_timer::duration duration, F f, Async yield) {
         }
     );
 
-    return detail::maybe_flatten(result);
+    return detail::maybe_flatten(std::move(result));
 }
 
 

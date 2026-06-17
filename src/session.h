@@ -1,9 +1,12 @@
 #pragma once
 
+#include <expected>
 #include "generic_stream.h"
 #include "response_reader.h"
 #include "util/watch_dog.h"
-#include "util/yield.h"
+#include "util/async.h"
+#include "util/compat.h"
+#include <boost/asio/spawn.hpp>
 #include <cxx/metrics.h>
 #include "api.h"
 
@@ -41,23 +44,27 @@ public:
     {}
 
     // Construct the session and read response head
-    static Session create(GenericStream, bool is_head_response, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(GenericStream, bool is_head_response, Async);
 
-    static Session create(GenericStream, bool is_head_response, std::optional<metrics::Request>, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(GenericStream, bool is_head_response, std::optional<metrics::Request>, Async);
 
     template<class Reader>
-    static Session create(std::unique_ptr<Reader>&&, bool is_head_response, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(std::unique_ptr<Reader>&&, bool is_head_response, Async);
 
     template<class Reader>
-    static Session create(std::unique_ptr<Reader>&&, bool is_head_response, std::optional<metrics::Request>, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(std::unique_ptr<Reader>&&, bool is_head_response, std::optional<metrics::Request>, Async);
 
     bool head_was_read() const { return _head_was_read; }
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
 
-    boost::optional<http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     template<class SinkStream>
     void flush_response(
@@ -135,50 +142,53 @@ private:
 
 template<class Reader>
 inline
-Session Session::create( std::unique_ptr<Reader>&& reader
-                       , bool is_head_response
-                       , Cancel cancel, asio::yield_context yield)
+std::expected<Session, sys::error_code> Session::create(
+    std::unique_ptr<Reader>&& reader,
+    bool is_head_response,
+    Async yield
+)
 {
     return Session::create( std::forward<std::unique_ptr<Reader>>(reader)
                           , is_head_response
                           , {}
-                          , std::move(cancel)
                           , std::move(yield));
 }
 
 template<class Reader>
 inline
-Session Session::create( std::unique_ptr<Reader>&& reader
-                       , bool is_head_response
-                       , std::optional<metrics::Request> metrics
-                       , Cancel cancel, asio::yield_context yield)
+std::expected<Session, sys::error_code> Session::create(
+    std::unique_ptr<Reader>&& reader,
+    bool is_head_response,
+    std::optional<metrics::Request> metrics,
+    Async yield
+)
 {
-    assert(!cancel);
-
-    sys::error_code ec;
-
-    auto head_opt_part = reader->async_read_part(cancel, yield[ec]);
-
-    if (!ec && !head_opt_part) {
+    auto head_opt_part = reader->async_read_part(yield);
+    if (head_opt_part && !*head_opt_part) {
         // This is ok for the reader,
         // but it should be made explicit to code creating sessions.
-        ec = http::error::end_of_stream;
+        head_opt_part = std::unexpected(http::error::end_of_stream);
     }
 
-    if (ec) {
-        finish_metering(metrics, ec);
-        return or_throw<Session>(yield, ec);
+    if (!head_opt_part) {
+        finish_metering(metrics, head_opt_part.error());
+        return std::unexpected(head_opt_part.error());
     }
 
-    auto head = head_opt_part->as_head();
+    auto head = (**head_opt_part).as_head();
 
     if (!head) {
-        ec = http::error::unexpected_body;
+        auto ec = http::error::unexpected_body;
         finish_metering(metrics, ec);
-        return or_throw<Session>(yield, ec);
+        return std::unexpected(ec);
     }
 
-    return Session{std::move(*head), std::move(metrics), is_head_response, std::move(reader)};
+    return Session(
+        std::move(*head),
+        std::move(metrics),
+        is_head_response,
+        std::move(reader)
+    );
 }
 
 //--------------------------------------------------------------------
@@ -210,7 +220,9 @@ Session::flush_response(Cancel cancel,
         if (!_reader)
             return or_throw(yield, asio::error::not_connected);
 
-        auto opt_part = _reader->async_read_part(cancel, yield[ec]);
+        auto opt_part = compat([&](Async yield) {
+            return _reader->async_read_part(yield);
+        })(cancel, yield[ec]);
         assert(ec != http::error::end_of_stream);
         ec = compute_error_code(ec, cancel);
 

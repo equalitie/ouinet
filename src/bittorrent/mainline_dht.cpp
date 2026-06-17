@@ -26,7 +26,6 @@
 #include "collect.h"
 #include "debug_ctx.h"
 #include "dht_node.h"
-#include "is_martian.h"
 #include "mainline_dht.h"
 #include "node_contact.h"
 #include "proximity_map.h"
@@ -165,6 +164,7 @@ private:
 
 static bool read_nodes( bool is_v4
                       , const BencodedMap& response
+                      , PeerFilter peer_filter
                       , util::AsyncQueue<NodeContact>& sink
                       , Async yield)
 {
@@ -185,11 +185,14 @@ static bool read_nodes( bool is_v4
     }
 
     // Remove invalid endpoints
-    nodes.erase( std::remove_if
-                  ( nodes.begin()
-                  , nodes.end()
-                  , [] (auto& n) { return is_martian(n.endpoint); })
-               , nodes.end());
+    nodes.erase(
+        std::remove_if(
+            nodes.begin(),
+            nodes.end(),
+            [peer_filter] (auto& n) { return !peer_filter.is_allowed(n.endpoint); }
+        ),
+        nodes.end()
+    );
 
     if (nodes.empty()) return false;
 
@@ -937,7 +940,9 @@ NodeID DhtNode::data_put_mutable(
 
 void DhtNode::receive_loop(Async yield)
 {
-    while (true) {
+    bool handle_query_ok = true;
+
+    while (handle_query_ok) {
         /*
          * Later versions of boost::asio make it possible to (1) wait for a
          * datagram, (2) find out the size, (3) allocate a buffer, (4) recv
@@ -983,10 +988,12 @@ void DhtNode::receive_loop(Async yield)
         }
 
         if (*message_type == "q") {
-            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-                handle_query(sender, *message_map, cancel, yield);
-            })(yield);
-            if (!result) break;
+            yield.spawn([&](Async yield) {
+                auto result = handle_query(sender, *message_map, yield);
+                if (!result) {
+                    handle_query_ok = false;
+                }
+            });
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
@@ -1167,66 +1174,64 @@ std::expected<BencodedMap, sys::error_code> DhtNode::send_query_await_reply(
     return result;
 }
 
-void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel cancel, asio::yield_context yield)
+std::expected<void, sys::error_code> DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Async yield)
 {
     assert(query["y"] == "q");
 
     const auto transaction_ = query["t"].as_string_view();
 
-    if (!transaction_) { return; }
+    if (!transaction_) { return {}; }
 
     const auto transaction = *transaction_;
 
-    auto send_error = [&] (int code, std::string description, Cancel cancel, asio::yield_context yield) {
-        compat([&](Async yield) {
-            return send_datagram(
-                sender,
-                BencodedMap {
-                    { "y", "e" },
-                    { "t", std::string(transaction) },
-                    { "e", BencodedList{code, description} }
-                },
-                yield
-            );
-        })(cancel, yield);
+    auto send_error = [&] (int code, std::string description, Async yield) {
+        return send_datagram(
+            sender,
+            BencodedMap {
+                { "y", "e" },
+                { "t", std::string(transaction) },
+                { "e", BencodedList{code, description} },
+                { "ip", encode_endpoint(sender) }
+            },
+            yield
+        );
     };
 
-    auto send_reply = [&] (BencodedMap reply, Cancel cancel, asio::yield_context yield) {
+    auto send_reply = [&] (BencodedMap reply, Async yield) {
         reply["id"] = _node_id.to_bytestring();
 
-        compat([&](Async yield) {
-            return send_datagram(
-                sender,
-                BencodedMap {
-                    // TODO: Send version "v" and sender endpoint "ip" (same in
-                    // above error reply).
-                    // https://wiki.theory.org/BitTorrentSpecification
-                    // http://www.bittorrent.org/beps/bep_0020.html
-                    { "y", "r" },
-                    { "t", std::string(transaction) },
-                    { "r", std::move(reply) }
-                },
-                yield
-            );
-        })(cancel, yield);
+        return send_datagram(
+            sender,
+            BencodedMap {
+                // TODO: Send version "v" (same in
+                // above error reply).
+                // https://wiki.theory.org/BitTorrentSpecification
+                // http://www.bittorrent.org/beps/bep_0020.html
+                { "y", "r" },
+                { "t", std::string(transaction) },
+                { "r", std::move(reply) },
+                { "ip", encode_endpoint(sender) },
+            },
+            yield
+        );
     };
 
     if (!query["q"].is_string()) {
-        return send_error(203, "Missing field 'q'", cancel, yield);
+        return send_error(203, "Missing field 'q'", yield);
     }
     string_view query_type = *query["q"].as_string_view();
 
     if (!query["a"].is_map()) {
-        return send_error(203, "Missing field 'a'", cancel, yield);
+        return send_error(203, "Missing field 'a'", yield);
     }
     BencodedMap& arguments = *query["a"].as_map();
 
     boost::optional<string_view> sender_id = arguments["id"].as_string_view();
     if (!sender_id) {
-        return send_error(203, "Missing argument 'id'", cancel, yield);
+        return send_error(203, "Missing argument 'id'", yield);
     }
     if (sender_id->size() != 20) {
-        return send_error(203, "Malformed argument 'id'", cancel, yield);
+        return send_error(203, "Malformed argument 'id'", yield);
     }
     NodeContact contact;
     contact.id = NodeID::from_bytestring(*sender_id);
@@ -1245,14 +1250,14 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
     }
 
     if (query_type == "ping") {
-        return send_reply({}, cancel, yield);
+        return send_reply({}, yield);
     } else if (query_type == "find_node") {
         boost::optional<string_view> target_id_ = arguments["target"].as_string_view();
         if (!target_id_) {
-            return send_error(203, "Missing argument 'target'", cancel, yield);
+            return send_error(203, "Missing argument 'target'", yield);
         }
         if (target_id_->size() != 20) {
-            return send_error(203, "Malformed argument 'target'", cancel, yield);
+            return send_error(203, "Malformed argument 'target'", yield);
         }
         NodeID target_id = NodeID::from_bytestring(*target_id_);
 
@@ -1280,14 +1285,14 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
             reply["nodes6"] = nodes;
         }
 
-        return send_reply(reply, cancel, yield);
+        return send_reply(reply, yield);
     } else if (query_type == "get_peers") {
         boost::optional<string_view> infohash_ = arguments["info_hash"].as_string_view();
         if (!infohash_) {
-            return send_error(203, "Missing argument 'info_hash'", cancel, yield);
+            return send_error(203, "Missing argument 'info_hash'", yield);
         }
         if (infohash_->size() != 20) {
-            return send_error(203, "Malformed argument 'info_hash'", cancel, yield);
+            return send_error(203, "Malformed argument 'info_hash'", yield);
         }
         NodeID infohash = NodeID::from_bytestring(*infohash_);
 
@@ -1326,25 +1331,25 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
             reply["values"] = peer_list;
         }
 
-        return send_reply(reply, cancel, yield);
+        return send_reply(reply, yield);
     } else if (query_type == "announce_peer") {
         boost::optional<string_view> infohash_ = arguments["info_hash"].as_string_view();
         if (!infohash_) {
-            return send_error(203, "Missing argument 'info_hash'", cancel, yield);
+            return send_error(203, "Missing argument 'info_hash'", yield);
         }
         if (infohash_->size() != 20) {
-            return send_error(203, "Malformed argument 'info_hash'", cancel, yield);
+            return send_error(203, "Malformed argument 'info_hash'", yield);
         }
         NodeID infohash = NodeID::from_bytestring(*infohash_);
 
         boost::optional<string_view> token_ = arguments["token"].as_string_view();
         if (!token_) {
-            return send_error(203, "Missing argument 'token'", cancel, yield);
+            return send_error(203, "Missing argument 'token'", yield);
         }
         string_view token = *token_;
         boost::optional<int64_t> port_ = arguments["port"].as_int();
         if (!port_) {
-            return send_error(203, "Missing argument 'port'", cancel, yield);
+            return send_error(203, "Missing argument 'port'", yield);
         }
         boost::optional<int64_t> implied_port_ = arguments["implied_port"].as_int();
         int effective_port;
@@ -1370,24 +1375,24 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
                 }
             }
             if (!contains_self) {
-                return send_error(201, "This torrent is not my responsibility", cancel, yield);
+                return send_error(201, "This torrent is not my responsibility", yield);
             }
         }
 
         if (!_tracker->verify_token(sender.address(), infohash, token)) {
-            return send_error(203, "Incorrect announce token", cancel, yield);
+            return send_error(203, "Incorrect announce token", yield);
         }
 
         _tracker->add_peer(infohash, tcp::endpoint(sender.address(), effective_port));
 
-        return send_reply({}, cancel, yield);
+        return send_reply({}, yield);
     } else if (query_type == "get") {
         boost::optional<string_view> target_ = arguments["target"].as_string_view();
         if (!target_) {
-            return send_error(203, "Missing argument 'target'", cancel, yield);
+            return send_error(203, "Missing argument 'target'", yield);
         }
         if (target_->size() != 20) {
-            return send_error(203, "Malformed argument 'target'", cancel, yield);
+            return send_error(203, "Malformed argument 'target'", yield);
         }
         NodeID target = NodeID::from_bytestring(*target_);
 
@@ -1414,39 +1419,39 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
             boost::optional<BencodedValue> immutable_value = _data_store->get_immutable(target);
             if (immutable_value) {
                 reply["v"] = *immutable_value;
-                return send_reply(reply, cancel, yield);
+                return send_reply(reply, yield);
             }
         }
 
         boost::optional<MutableDataItem> mutable_item = _data_store->get_mutable(target);
         if (mutable_item) {
             if (sequence_number_ && *sequence_number_ <= mutable_item->sequence_number) {
-                return send_reply(reply, cancel, yield);
+                return send_reply(reply, yield);
             }
 
             reply["k"] = util::bytes::to_string(mutable_item->public_key.to_bytes());
             reply["seq"] = mutable_item->sequence_number;
             reply["sig"] = util::bytes::to_string(mutable_item->signature.bytes);
             reply["v"] = mutable_item->value;
-            return send_reply(reply, cancel, yield);
+            return send_reply(reply, yield);
         }
 
-        return send_reply(reply, cancel, yield);
+        return send_reply(reply, yield);
     } else if (query_type == "put") {
         boost::optional<string_view> token_ = arguments["token"].as_string_view();
         if (!token_) {
-            return send_error(203, "Missing argument 'token'", cancel, yield);
+            return send_error(203, "Missing argument 'token'", yield);
         }
 
         if (!arguments.count("v")) {
-            return send_error(203, "Missing argument 'v'", cancel, yield);
+            return send_error(203, "Missing argument 'v'", yield);
         }
         BencodedValue value = arguments["v"];
         /*
          * Size limit specified in BEP 44
          */
         if (bencoding_encode(value).size() >= 1000) {
-            return send_error(205, "Argument 'v' too big", cancel, yield);
+            return send_error(205, "Argument 'v' too big", yield);
         }
 
         if (arguments["k"].is_string()) {
@@ -1455,25 +1460,25 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
              */
             boost::optional<string_view> public_key_ = arguments["k"].as_string_view();
             if (!public_key_) {
-                return send_error(203, "Missing argument 'k'", cancel, yield);
+                return send_error(203, "Missing argument 'k'", yield);
             }
             if (public_key_->size() != sign::PublicKey::size) {
-                return send_error(203, "Malformed argument 'k'", cancel, yield);
+                return send_error(203, "Malformed argument 'k'", yield);
             }
             sign::PublicKey public_key(util::bytes::to_array<uint8_t, sign::PublicKey::size>(*public_key_));
 
             boost::optional<string_view> signature_ = arguments["sig"].as_string_view();
             if (!signature_) {
-                return send_error(203, "Missing argument 'sig'", cancel, yield);
+                return send_error(203, "Missing argument 'sig'", yield);
             }
             if (signature_->size() != sign::Signature::size) {
-                return send_error(203, "Malformed argument 'sig'", cancel, yield);
+                return send_error(203, "Malformed argument 'sig'", yield);
             }
             sign::Signature::Bytes signature = util::bytes::to_array<uint8_t, sign::Signature::size>(*signature_);
 
             boost::optional<int64_t> sequence_number_ = arguments["seq"].as_int();
             if (!sequence_number_) {
-                return send_error(203, "Missing argument 'seq'", cancel, yield);
+                return send_error(203, "Missing argument 'seq'", yield);
             }
             int64_t sequence_number = *sequence_number_;
 
@@ -1482,14 +1487,14 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
              * Size limit specified in BEP 44
              */
             if (salt_ && salt_->size() > 64) {
-                return send_error(207, "Argument 'salt' too big", cancel, yield);
+                return send_error(207, "Argument 'salt' too big", yield);
             }
             std::string salt = salt_ ? std::move(*salt_) : "";
 
             NodeID target = _data_store->mutable_get_id(public_key, salt);
 
             if (!_data_store->verify_token(sender.address(), target, *token_)) {
-                return send_error(203, "Incorrect put token", cancel, yield);
+                return send_error(203, "Incorrect put token", yield);
             }
 
             /*
@@ -1508,7 +1513,7 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
                     }
                 }
                 if (!contains_self) {
-                    return send_error(201, "This data item is not my responsibility", cancel, yield);
+                    return send_error(201, "This data item is not my responsibility", yield);
                 }
             }
 
@@ -1520,31 +1525,31 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
                 signature
             };
             if (!item.verify()) {
-                return send_error(206, "Invalid signature", cancel, yield);
+                return send_error(206, "Invalid signature", yield);
             }
 
             boost::optional<MutableDataItem> existing_item = _data_store->get_mutable(target);
             if (existing_item) {
                 if (sequence_number < existing_item->sequence_number) {
-                    return send_error(302, "Sequence number less than current", cancel, yield);
+                    return send_error(302, "Sequence number less than current", yield);
                 }
 
                 if (
                        sequence_number == existing_item->sequence_number
                     && bencoding_encode(value) != bencoding_encode(existing_item->value)
                 ) {
-                    return send_error(302, "Sequence number not updated", cancel, yield);
+                    return send_error(302, "Sequence number not updated", yield);
                 }
 
                 boost::optional<int64_t> compare_and_swap_ = arguments["cas"].as_int();
                 if (compare_and_swap_ && *compare_and_swap_ != existing_item->sequence_number) {
-                    return send_error(301, "Compare-and-swap mismatch", cancel, yield);
+                    return send_error(301, "Compare-and-swap mismatch", yield);
                 }
             }
 
             _data_store->put_mutable(item);
 
-            return send_reply({}, cancel, yield);
+            return send_reply({}, yield);
         } else {
             /*
              * This is an immutable data item.
@@ -1552,7 +1557,7 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
             NodeID target = _data_store->immutable_get_id(value);
 
             if (!_data_store->verify_token(sender.address(), target, *token_)) {
-                return send_error(203, "Incorrect put token", cancel, yield);
+                return send_error(203, "Incorrect put token", yield);
             }
 
             /*
@@ -1571,16 +1576,16 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Cancel canc
                     }
                 }
                 if (!contains_self) {
-                    return send_error(201, "This data item is not my responsibility", cancel, yield);
+                    return send_error(201, "This data item is not my responsibility", yield);
                 }
             }
 
             _data_store->put_immutable(value);
 
-            return send_reply({}, cancel, yield);
+            return send_reply({}, yield);
         }
     } else {
-        return send_error(204, "Query type not implemented", cancel, yield);
+        return send_error(204, "Query type not implemented", yield);
     }
 }
 
@@ -1603,7 +1608,7 @@ asio::ip::udp::endpoint resolve(
     auto answers = dns_resolver->resolve(addr, yield[ec]);
     if (!ec) {
         string_view port_strv = port;
-        auto port_int = parse::number<uint16_t>(port_strv).get();
+        auto port_int = parse::number<uint16_t>(port_strv).value();
         util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
         results = UdpLookup::create(eps.begin(), eps.end(),
                                     addr, port);
@@ -1679,7 +1684,7 @@ DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
     );
 
     if (!initial_ping_reply) {
-        LOG_DEBUG(yield, "Bootstrap server does not reply, giving up: "
+        LOG_DEBUG(yield, " Bootstrap server does not reply, giving up: "
                        , bootstrap_address, "; error=", initial_ping_reply.error());
         return std::unexpected(initial_ping_reply.error());
     }
@@ -1776,7 +1781,7 @@ std::expected<void, sys::error_code> DhtNode::bootstrap(Async yield)
                         auto result = bootstrap_single(bs, yield);
                         LOG_DEBUG(yield, " Bootstrapping node: ", bs, ": done; result=", debug(result));
 
-                        if (!result || is_martian(result->my_ep)) return;
+                        if (!result || !_peer_filter.is_allowed(result->my_ep)) return;
 
                         auto& stats = add_result(results, *result, score_of(bs));
 
@@ -1930,30 +1935,14 @@ DhtNode::collect(
         seed_candidates.insert({ ep, boost::none });
     }
 
-    return compat([&](Cancel cancel, asio::yield_context yield) {
-        ::ouinet::bittorrent::collect(
-            dbg,
-            _exec,
-            std::move(seed_candidates),
-            [
-                evaluate = std::forward<Evaluate>(evaluate)
-            ]
-            (
-                const Contact& candidate,
-                WatchDog& dms,
-                util::AsyncQueue<NodeContact>& closer_nodes,
-                Cancel cancel,
-                asio::yield_context yield
-            )
-            {
-                compat([&](Async yield) {
-                    evaluate(candidate, dms, closer_nodes, yield);
-                })(cancel, yield);
-            },
-            cancel,
-            yield
-        );
-    })(yield);
+    ::ouinet::bittorrent::collect(
+        dbg,
+        std::move(seed_candidates),
+        std::forward<Evaluate>(evaluate),
+        yield
+    );
+
+    return {};
 }
 
 std::vector<NodeContact> DhtNode::find_closest_nodes(
@@ -2153,7 +2142,7 @@ std::expected<bool, sys::error_code> DhtNode::query_find_node2(
         return false;
     }
 
-    return read_nodes(is_v4(), *response, closer_nodes, yield);
+    return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
 }
 
 // http://bittorrent.org/beps/bep_0005.html#get-peers
@@ -2295,7 +2284,7 @@ boost::optional<BencodedMap> DhtNode::query_get_data(
     if (!response) return boost::none;
 
     compat([&](Async yield) {
-        return read_nodes(is_v4(), *response, closer_nodes, yield);
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
     })(cancel, yield[ec]);
 
     return {std::move(*response)};
@@ -2374,7 +2363,7 @@ boost::optional<BencodedMap> DhtNode::query_get_data2(
     if (!response) return boost::none;
 
     compat([&](Async yield) {
-        return read_nodes(is_v4(), *response, closer_nodes, yield);
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
     })(cancel_signal, yield[ec]);
 
     return {std::move(*response)};
@@ -2432,7 +2421,7 @@ boost::optional<BencodedMap> DhtNode::query_get_data3(
     if (!response) return boost::none;
 
     compat([&](Async yield) {
-        return read_nodes(is_v4(), *response, closer_nodes, yield);
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
     })(cancel_signal, yield[ec]);
 
     return {std::move(*response)};
@@ -2599,7 +2588,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
 
-    _nodes[local_ep] = make_unique<DhtNode>(
+    auto& node = _nodes[local_ep] = make_unique<DhtNode>(
         _exec,
         metrics_dht_node_for(_metrics, local_ep.address()),
         _dns_resolver,
@@ -2608,6 +2597,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         _bootstrap_config,
         _log_path
     );
+    node->set_peer_filter(_peer_filter);
 
     Promise<asio::ip::udp::endpoint> promise(_exec);
     auto future = promise.get_future();
@@ -2623,7 +2613,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         ](auto y) mutable {
             Async yield(y, _cancel, std::move(log_path));
 
-            yield.cancel_slot([&] {
+            auto cancelled = yield.cancel_slot([&] {
                 if (auto it = _nodes.find(local_ep); it != _nodes.end()) {
                     _nodes.erase(it);
                 }
@@ -2653,9 +2643,12 @@ MainlineDht::tracker_announce(
 ) {
     auto cc = _cancel.connect([&] { yield.cancel(); });
 
-    std::set<udp::endpoint> output;
+    std::expected<std::set<udp::endpoint>, sys::error_code> output(
+        std::unexpected(asio::error::network_unreachable)
+    );
 
-    WaitCondition wc(_exec);
+    WaitCondition wc(yield.get_executor());
+
     for (auto& i : _nodes) {
         yield.spawn([
             &,
@@ -2665,100 +2658,60 @@ MainlineDht::tracker_announce(
             auto peers = node->tracker_announce(infohash, port, yield);
 
             if (peers) {
-                output.insert(peers->begin(), peers->end());
+                if (output) {
+                    output->insert(peers->begin(), peers->end());
+                } else {
+                    output = std::move(peers);
+                }
+            } else {
+                if (!output) {
+                    output = std::unexpected(peers.error());
+                }
             }
         });
     }
 
     wc.wait(yield);
 
-    if (output.empty()) {
-        return std::unexpected(asio::error::network_unreachable);
-    }
-
-    return move(output);
-}
-
-void MainlineDht::mutable_put(
-    const MutableDataItem& data,
-    Cancel& top_cancel,
-    asio::yield_context yield
-) {
-    Cancel cancel(top_cancel);
-
-    SuccessCondition condition(_exec);
-    WaitCondition wait_all(_exec);
-
-    for (auto& i : _nodes) {
-        task::spawn_detached(_exec, [
-            &,
-            lock = condition.lock(),
-            lock_all = wait_all.lock()
-        ] (asio::yield_context yield) {
-            if (!i.second->ready()) {
-                return;
-            }
-
-            sys::error_code ec;
-            i.second->data_put_mutable(data, cancel, yield[ec]);
-
-            if (ec) return;
-
-            lock.release(true);
-        });
-    }
-
-    auto cancelled = cancel.connect([&] {
-        condition.cancel();
-    });
-
-    auto terminated = _cancel.connect([&] {
-        condition.cancel();
-    });
-
-    sys::error_code ec;
-
-    if (condition.wait_for_success(yield)) {
-        cancel();
-    } else {
-        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
-        else                       { ec = asio::error::network_unreachable; }
-    }
-
-    wait_all.wait(yield);
-
-    return or_throw(yield, ec);
+    return output;
 }
 
 std::expected<std::set<udp::endpoint>, sys::error_code>
 MainlineDht::tracker_get_peers(NodeID infohash, Async yield)
 {
     auto terminated = _cancel.connect([&] { yield.cancel(); });
-    std::set<udp::endpoint> output;
-    Async nodes_yield(yield);
-    SuccessCondition success_condition(yield.get_executor());
+
+    std::expected<std::set<udp::endpoint>, sys::error_code> output(
+        std::unexpected(asio::error::network_unreachable)
+    );
+
+    WaitCondition wc(yield.get_executor());
 
     for (auto& i : _nodes) {
-        nodes_yield.spawn([&, success = success_condition.lock()] (auto yield) {
+        yield.spawn([&, lock = wc.lock()] (auto yield) {
             if (!i.second->ready()) {
                 return;
             }
 
             auto peers = i.second->tracker_get_peers(infohash, yield);
-            if (!peers || peers->empty()) {
-                return;
-            }
 
-            output.insert(peers->begin(), peers->end());
-            success.release(true);
+            if (peers) {
+                if (output) {
+                    output->insert(peers->begin(), peers->end());
+                } else {
+                    output = std::move(*peers);
+                }
+            } else {
+                if (!output) {
+                    output = std::unexpected(peers.error());
+                }
+            }
         });
     }
 
-    if (!success_condition.wait_for_success(yield)) {
-        return std::unexpected(asio::error::network_unreachable);
-    }
+    wc.wait(yield);
 
-    return std::move(output);
+    return output;
 }
 
 boost::optional<BencodedValue> MainlineDht::immutable_get(
@@ -2817,6 +2770,57 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
     completed_condition.wait(yield);
 
     return or_throw<boost::optional<BencodedValue>>(yield, ec);
+}
+
+void MainlineDht::mutable_put(
+    const MutableDataItem& data,
+    Cancel& top_cancel,
+    asio::yield_context yield
+) {
+    Cancel cancel(top_cancel);
+
+    SuccessCondition condition(_exec);
+    WaitCondition wait_all(_exec);
+
+    for (auto& i : _nodes) {
+        task::spawn_detached(_exec, [
+            &,
+            lock = condition.lock(),
+            lock_all = wait_all.lock()
+        ] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
+            sys::error_code ec;
+            i.second->data_put_mutable(data, cancel, yield[ec]);
+
+            if (ec) return;
+
+            lock.release(true);
+        });
+    }
+
+    auto cancelled = cancel.connect([&] {
+        condition.cancel();
+    });
+
+    auto terminated = _cancel.connect([&] {
+        condition.cancel();
+    });
+
+    sys::error_code ec;
+
+    if (condition.wait_for_success(yield)) {
+        cancel();
+    } else {
+        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
+        else                       { ec = asio::error::network_unreachable; }
+    }
+
+    wait_all.wait(yield);
+
+    return or_throw(yield, ec);
 }
 
 boost::optional<MutableDataItem> MainlineDht::mutable_get(
@@ -2879,8 +2883,15 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     return or_throw(yield, ec, std::move(output));
 }
 
-bool MainlineDht::is_martian(UdpEndpoint const& ep) const {
-    return bittorrent::is_martian(ep);
+bool MainlineDht::is_peer_allowed(UdpEndpoint const& ep) const {
+    return _peer_filter.is_allowed(ep);
+}
+
+void MainlineDht::set_peer_filter(PeerFilter filter) {
+    _peer_filter = filter;
+    for (auto& p : _nodes) {
+        p.second->set_peer_filter(filter);
+    }
 }
 
 void MainlineDht::wait_all_ready(Async yield) {

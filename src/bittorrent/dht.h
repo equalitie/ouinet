@@ -48,7 +48,7 @@ public:
 
     virtual void stop() = 0;
 
-    virtual bool is_martian(const UdpEndpoint&) const = 0;
+    virtual bool is_peer_allowed(const UdpEndpoint&) const = 0;
 };
 
 }} // namespace ouinet::bittorrent

@@ -43,6 +43,24 @@ BOOST_AUTO_TEST_CASE(select_sanity_check) {
     subcase(1);
 }
 
+BOOST_AUTO_TEST_CASE(select_void) {
+    async_test([](Async yield) {
+        int result = 0;
+
+        select(
+            yield,
+            [&](auto yield) {
+                result = 1;
+            },
+            [&](auto yield) {
+                result = 2;
+            }
+        );
+
+        BOOST_REQUIRE_GT(result, 0);
+    });
+}
+
 BOOST_AUTO_TEST_CASE(timeout_sanity_check) {
     async_test([](Async yield) {
        auto result = timeout(std::chrono::milliseconds(100), [](auto yield) {

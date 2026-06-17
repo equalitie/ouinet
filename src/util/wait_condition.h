@@ -2,10 +2,12 @@
 
 #include <memory>
 
+#include "async.h"
 #include "cancel.h"
 #include "intrusive_list.h"
 #include "yield.h"
 #include <boost/asio/any_completion_handler.hpp>
+#include <type_traits>
 
 namespace ouinet {
 
@@ -203,7 +205,13 @@ template<class CompletionToken>
 inline
 auto WaitCondition::wait(CompletionToken token)
 {
-    return do_wait(nullptr, std::forward<CompletionToken>(token));
+    // HACK: correctly support cancellation when called with `Async`.
+    if constexpr (std::is_same_v<std::decay_t<CompletionToken>, Async>) {
+        Cancel cancel(token.get_cancel());
+        return do_wait(&cancel, std::forward<CompletionToken>(token));
+    } else {
+        return do_wait(nullptr, std::forward<CompletionToken>(token));
+    }
 }
 
 template<class CompletionToken>

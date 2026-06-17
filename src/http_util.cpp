@@ -38,7 +38,7 @@ ouinet::util::get_host_port(const http::request_header<>& req)
         }
         if (!url->port().empty()) {
             boost::string_view port_sv = url->port();
-            port = parse::number<unsigned>(port_sv).get();
+            port = parse::number<unsigned>(port_sv).value();
         }
         return make_pair(url->host(), port);
     }
@@ -46,33 +46,33 @@ ouinet::util::get_host_port(const http::request_header<>& req)
     auto [host, port_sv] = split_ep(hp);
 
     if ( !port_sv.empty() ) {
-        port = parse::number<uint16_t>(port_sv).get();
+        port = parse::number<uint16_t>(port_sv).value();
     }
     return make_pair(std::string(host), port);
 }
 
-boost::optional<ouinet::util::HttpResponseByteRange>
+std::optional<ouinet::util::HttpResponseByteRange>
 ouinet::util::HttpResponseByteRange::parse(boost::string_view s)
 {
     static const boost::regex range_rx("^bytes ([0-9]+)-([0-9]+)/([0-9]+|\\*)$");
     boost::cmatch m;
     if (!boost::regex_match(s.begin(), s.end(), m, range_rx))
-        return boost::none;
+        return std::nullopt;
 
     // Get values, check for overflows.
     s.remove_prefix(m.position(1));
     auto first = parse::number<size_t>(s);
-    if (!first) return boost::none;
+    if (!first) return std::nullopt;
     s.remove_prefix(1);  // '-'
     auto last = parse::number<size_t>(s);
-    if (!last) return boost::none;
+    if (!last) return std::nullopt;
     s.remove_prefix(1);  // '/'
     auto length = parse::number<size_t>(s);
-    if (m[3] != "*" && !length) return boost::none;
+    if (m[3] != "*" && !length) return std::nullopt;
 
     if ( (*last < *first)
        || (length && *last >= *length))
-        return boost::none;  // off-limits
+        return std::nullopt;  // off-limits
 
     return ouinet::util::HttpResponseByteRange{*first, *last, std::move(length)};
 }

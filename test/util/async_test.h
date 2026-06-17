@@ -6,15 +6,12 @@
 
 namespace ouinet {
 
-// Run the given `void(Async)` function and block until it completes.
 template<typename F>
 requires std::invocable<F, ouinet::Async>
-void async_test(F work) {
-    namespace asio = boost::asio;
-
-    asio::io_context ctx;
-
-    asio::spawn(ctx, [work = std::move(work)] (asio::yield_context yield) mutable {
+void async_test(asio::io_context& ctx, F work) {
+    boost::asio::spawn(
+        ctx,
+        [work = std::forward<F>(work)] (asio::yield_context yield) mutable {
             // Wrap `asio::yield_context` in `Async` and pass `util::LogPath`
             // to it for convenient logging.
             work(
@@ -39,8 +36,16 @@ void async_test(F work) {
             catch (...) {
                 BOOST_ERROR("Unknown exception");
             }
-        });
+        }
+    );
+}
 
+// Run the given `void(Async)` function and block until it completes.
+template<typename F>
+requires std::invocable<F, ouinet::Async>
+void async_test(F work) {
+    boost::asio::io_context ctx;
+    async_test(ctx, std::forward<F>(work));
     ctx.run();
 }
 

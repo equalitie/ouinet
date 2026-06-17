@@ -85,7 +85,7 @@ HR::Part read_full_body(RR& rr, Cancel& c, asio::yield_context y) {
 
     while (true) {
         sys::error_code ec;
-        auto opt_part = rr.async_read_part(c, y[ec]);
+        auto opt_part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y[ec]);
         if (!opt_part) break;
         BOOST_REQUIRE(!ec);
         auto body_p = opt_part->as_body();
@@ -109,14 +109,14 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -136,20 +136,20 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, body("abcdef"));
         // No way to know when done until hitting EOT.
         //BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -171,14 +171,14 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -201,14 +201,14 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body_big_header) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -231,18 +231,19 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(!rr.is_done());
 
         part = read_full_body(rr, c, y);
-        BOOST_REQUIRE_EQUAL(part, body("0123456789"));
+        BOOST_REQUIRE(part);
+        BOOST_REQUIRE_EQUAL(*part, body("0123456789"));
         BOOST_REQUIRE(rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -268,34 +269,34 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, trailer({}));
         BOOST_REQUIRE(rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -323,34 +324,34 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
         BOOST_REQUIRE(!rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE_EQUAL(*part, trailer({{"Hash", "hash_of_1234"}}));
         BOOST_REQUIRE(rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -380,9 +381,9 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(!rr.is_done());
@@ -392,13 +393,13 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         BOOST_REQUIRE_EQUAL(*part, body("0123456789"));
         BOOST_REQUIRE(rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
 
         rr.restart();
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(part);
         BOOST_REQUIRE(part->is_head());
         BOOST_REQUIRE(!rr.is_done());
@@ -408,7 +409,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
         BOOST_REQUIRE_EQUAL(*part, body("abcde"));
         BOOST_REQUIRE(rr.is_done());
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });
@@ -441,43 +442,43 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
         RR rr(stream(move(rsp), ctx, y));
 
         Cancel c;
-        boost::optional<HR::Part> part;
+        std::optional<HR::Part> part;
 
         {
-            part = rr.async_read_part(c, y);
+            part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
             BOOST_REQUIRE(!rr.is_done());
 
-            part = rr.async_read_part(c, y);
+            part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, chunk_hdr(4, ""));
             BOOST_REQUIRE(!rr.is_done());
 
-            part = rr.async_read_part(c, y);
+            part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, chunk_body("1234"));
             BOOST_REQUIRE(!rr.is_done());
 
-            part = rr.async_read_part(c, y);
+            part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, chunk_hdr(0, ""));
             BOOST_REQUIRE(!rr.is_done());
 
-            part = rr.async_read_part(c, y);
+            part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE_EQUAL(*part, trailer({}));
             BOOST_REQUIRE(rr.is_done());
         }
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
 
         rr.restart();
 
         {
-            part = rr.async_read_part(c, y);
+            part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
             BOOST_REQUIRE(part);
             BOOST_REQUIRE(part->is_head());
             BOOST_REQUIRE(!rr.is_done());
@@ -488,7 +489,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             BOOST_REQUIRE(rr.is_done());
         }
 
-        part = rr.async_read_part(c, y);
+        part = compat([&](Async yield) { return rr.async_read_part(yield); })(c, y);
         BOOST_REQUIRE(!part);
         BOOST_REQUIRE(rr.is_done());
     });

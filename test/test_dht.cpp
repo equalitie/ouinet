@@ -1,3 +1,4 @@
+#include <boost/test/tools/old/interface.hpp>
 #define BOOST_TEST_MODULE dht
 #include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
@@ -6,13 +7,19 @@
 #include <chrono>
 #include <constants.h>
 #include <util/compat.h>
+#include <util/debug.h>
 #include <util/hash.h>
 
 #define private public
-#include <bittorrent/mainline_dht.h>
-#include <bittorrent/udp_multiplexer.h>
 #include <bittorrent/dht_storage.h>
 #include <bittorrent/dht_node.h>
+#include <bittorrent/mainline_dht.h>
+#include <bittorrent/node_id.h>
+#include <bittorrent/udp_multiplexer.h>
+
+#include "util/async_test.h"
+#include "util/dht.h"
+#include "util/unwrap.h"
 
 BOOST_AUTO_TEST_SUITE(dht)
 
@@ -122,6 +129,33 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
     init_without_bootstrapping(ctx, dht_node);
     bootstrap(ctx, dht_node);
     ctx.run();
+}
+
+BOOST_AUTO_TEST_CASE(test_local)
+{
+    get_logger().set_threshold(DEBUG);
+
+    async_test([](Async yield) {
+        auto start = steady_clock::now();
+        auto nodes = spawn_dht_nodes(8, yield);
+        auto elapsed = duration_cast<milliseconds>(steady_clock::now() - start);
+
+        cout << nodes.size() << " nodes bootstrapped in " << elapsed.count() << "ms." << endl;
+
+        NodeID infohash = util::sha1_digest("hello world");
+
+        {
+            auto peers = unwrap(nodes[0]->tracker_announce(infohash, std::nullopt, yield));
+            BOOST_REQUIRE(peers.empty());
+        }
+
+        {
+            auto actual = unwrap(nodes[1]->tracker_get_peers(infohash, yield));
+            auto expected = nodes[0]->local_endpoints();
+
+            BOOST_REQUIRE_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected.begin(), expected.end());
+        }
+    });
 }
 
 BOOST_AUTO_TEST_SUITE_END()

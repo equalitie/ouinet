@@ -265,13 +265,13 @@ private:
         return {std::vector<uint8_t>(body_buffer.cbegin(), body_buffer.cbegin() + len), 0};
     }
 
-    boost::optional<http_response::Part>
+    std::optional<http_response::Part>
     get_chunk_part(Cancel cancel, asio::yield_context yield)
     {
         if (next_chunk_body) {
             // We just sent a chunk header, body comes next.
             auto part = std::move(next_chunk_body);
-            next_chunk_body = boost::none;
+            next_chunk_body = std::nullopt;
             return part;
         }
 
@@ -280,7 +280,7 @@ private:
         // Get block signature and previous hash,
         // and then its data (which may be empty).
         auto sig_entry = get_sig_entry(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
         // Even if there is no new signature entry,
         // if the signature of the previous block was read
         // it may still be worth sending it in this chunk header
@@ -288,14 +288,14 @@ private:
         // Otherwise it is not worth sending anything.
         if (!sig_entry && next_chunk_exts.empty()) {
             if (!data_size) ec = asio::error::connection_aborted;  // incomplete
-            return or_throw(yield, ec, boost::none);
+            return or_throw(yield, ec, std::nullopt);
         }
         auto chunk_body = get_chunk_body(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, boost::none);
+        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
         // Validate block offset and size.
         if (sig_entry && sig_entry->offset != block_offset) {
             CACHE_RESOURCE_ERROR("Data block offset mismatch: ", sig_entry->offset, " != ", block_offset);
-            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
         }
         block_offset += chunk_body.size();
 
@@ -322,7 +322,7 @@ public:
     GenericResourceReader( SignedHead head
                          , File sigsf
                          , File bodyf
-                         , boost::optional<Range> range)
+                         , std::optional<Range> range)
         : head(std::move(head))
         , sigsf(std::move(sigsf))
         , bodyf(std::move(bodyf))
@@ -331,28 +331,43 @@ public:
 
     ~GenericResourceReader() override {};
 
-    boost::optional<ouinet::http_response::Part>
-    async_read_part(Cancel cancel, asio::yield_context yield) override
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async yield) override
     {
-        if (!_is_open || _is_done) return boost::none;
-
-        sys::error_code ec;
+        if (!_is_open || _is_done) return std::nullopt;
 
         if (!_is_head_done) {
-            auto head = prepare_head(ec);
-            return_or_throw_on_error(yield, cancel, ec, boost::none);
+            auto head = compat([&](sys::error_code& ec) { return prepare_head(ec); })();
+            if (!head) {
+                return std::unexpected(head.error());
+            }
+
             _is_head_done = true;
-            seek_to_range_begin(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, boost::none);
-            return http_response::Part(std::move(head));
+
+            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+                return seek_to_range_begin(cancel, yield);
+            })(yield);
+            if (!result) {
+                return std::unexpected(result.error());
+            }
+
+            return http_response::Part(std::move(*head));
         }
 
         if (!_is_body_done) {
-            auto chunk_part = get_chunk_part(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, boost::none);
-            if (!chunk_part) return boost::none;
-            if (auto ch = chunk_part->as_chunk_hdr())
+            auto chunk_part = compat([&](Cancel cancel, asio::yield_context yield) {
+                return get_chunk_part(cancel, yield);
+            })(yield);
+            if (!chunk_part) {
+                return std::unexpected(chunk_part.error());
+            }
+            if (!*chunk_part) {
+                return std::nullopt;
+            }
+            if (auto ch = (**chunk_part).as_chunk_hdr()) {
                 _is_body_done = (ch->size == 0);  // last chunk
+            }
+
             return chunk_part;
         }
 
@@ -390,11 +405,11 @@ protected:
     File sigsf;
     File bodyf;
 
-    boost::optional<Range> range;
+    std::optional<Range> range;
 
     std::string uri;  // for warnings
-    boost::optional<std::size_t> data_size;
-    boost::optional<std::size_t> block_size;
+    std::optional<std::size_t> data_size;
+    std::optional<std::size_t> block_size;
 
 private:
     bool _is_head_done = false;
@@ -409,7 +424,7 @@ private:
     std::vector<uint8_t> body_buffer;
 
     std::string next_chunk_exts;
-    boost::optional<http_response::Part> next_chunk_body;
+    std::optional<http_response::Part> next_chunk_body;
 };
 
 using ResourceReader = GenericResourceReader<async_file_handle>;

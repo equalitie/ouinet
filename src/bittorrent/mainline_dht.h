@@ -9,13 +9,15 @@
 
 #include <asio_utp/udp_multiplexer.hpp>
 
+#include "api.h"
 #include "bootstrap.h"
-#include "mutable_data.h"
-#include "node_id.h"
 #include "cxx/dns.h"
 #include "cxx/metrics.h"
 #include "dht.h"
-#include "api.h"
+#include "mutable_data.h"
+#include "node_id.h"
+#include "peer_filter.h"
+
 
 #include "../util/condition_variable.h"
 #include "../util/executor.h"
@@ -66,6 +68,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     // you may want to check `local_endpoints()` after this operation.
     void set_endpoints(const std::set<udp::endpoint>&) override;
 
+    [[nodiscard]]
     Promise<udp::endpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
     std::set<udp::endpoint> local_endpoints() const override {
@@ -79,12 +82,12 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     std::expected<std::set<udp::endpoint>, sys::error_code>
     tracker_announce(NodeID infohash, std::optional<int> port, Async) override;
 
-    void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
-
     std::expected<std::set<udp::endpoint>, sys::error_code>
     tracker_get_peers(NodeID infohash, Async) override;
 
     boost::optional<BencodedValue> immutable_get(NodeID key, Cancel&, asio::yield_context);
+
+    void mutable_put(const MutableDataItem&, Cancel&, asio::yield_context);
 
     /*
      * TODO:
@@ -113,7 +116,8 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
 
     void stop() override;
 
-    bool is_martian(const UdpEndpoint&) const override;
+    bool is_peer_allowed(const UdpEndpoint&) const override;
+    void set_peer_filter(PeerFilter);
 
     private:
     AsioExecutor _exec;
@@ -124,6 +128,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
     bootstrap::Config _bootstrap_config;
+    PeerFilter _peer_filter = PeerFilter::martian;
     metrics::MainlineDht _metrics;
     util::LogPath _log_path;
 };

@@ -67,13 +67,18 @@ public:
 
     Async(const Async&) = default;
 
-    Async tag(std::string t)
-    {
-        return Async(_asio_yield, _cancel, _log_path.tag(std::move(t)));
-    }
 
     util::LogPath log_path() const {
         return _log_path;
+    }
+
+    Async with_log_path(util::LogPath log_path) const {
+        return Async(_asio_yield, _cancel, std::move(log_path));
+    }
+
+    Async tag(std::string t)
+    {
+        return with_log_path(_log_path.tag(std::move(t)));
     }
 
     asio::any_io_executor get_executor() const {
@@ -85,7 +90,8 @@ public:
             _asio_yield.get_executor(),
             [ lambda = std::move(lambda),
               cancel = std::move(cancel),
-              log_path = _log_path.tag("spawn")
+              // log_path = _log_path.tag("spawn")
+              log_path = _log_path
             ]
             (asio::yield_context yield) mutable {
                 lambda(Async(yield, std::move(cancel), std::move(log_path)));
@@ -96,6 +102,7 @@ public:
         spawn(_cancel, std::move(lambda));
     }
 
+    [[nodiscard]]
     Cancel::Connection cancel_slot(auto lambda) {
         return _cancel.connect(std::move(lambda));
     }

@@ -8,23 +8,32 @@ namespace ouinet {
 class AsyncQueueReader : public http_response::AbstractReader {
 public:
     using Part = http_response::Part;
-    using Queue = util::AsyncQueue<boost::optional<Part>>;
+    using Queue = util::AsyncQueue<std::optional<Part>>;
 
     AsyncQueueReader(Queue& q)
         : _queue(q)
     {}
 
-    boost::optional<Part> async_read_part(Cancel cancel, asio::yield_context yield) override {
-        if (_cancel) return boost::none;
-        auto c = _cancel.connect([&] { cancel(); });
-        sys::error_code ec;
-        auto opt_p = _queue.async_pop(cancel, yield[ec]);
-        if (ec || !opt_p) {
-            _is_done = !ec;
+    std::expected<std::optional<Part>, sys::error_code>
+    async_read_part(Async yield) override {
+        auto c = _cancel.connect([&] { yield.cancel(); });
+
+        auto part_e = compat([&](Cancel cancel, asio::yield_context yield) {
+            return _queue.async_pop(cancel, yield);
+        })(yield);
+
+        if (!part_e) {
             _cancel(); // Indicate we're done
-            return or_throw(yield, ec, boost::none);
+            return std::unexpected(part_e.error());
         }
-        return opt_p;
+
+        auto part = std::move(*part_e);
+        if (!part) {
+            _is_done = true;
+            _cancel(); // Indicate we're done
+        }
+
+        return part;
     }
 
     bool is_done() const override
@@ -37,7 +46,7 @@ public:
     }
 
     void close() override {
-        _queue.push_back(boost::none);
+        _queue.push_back(std::nullopt);
         _cancel();
     }
 

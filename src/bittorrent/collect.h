@@ -1,8 +1,11 @@
 #pragma once
 
+#include <boost/asio/spawn.hpp>
 #include <iostream>
 #include <map>
 
+#include "../util/compat.h"
+#include "../util/debug.h"
 #include "../util/scheduler.h"
 #include "../util/watch_dog.h"
 #include "../util/async_queue.h"
@@ -15,14 +18,10 @@ namespace ouinet::bittorrent {
 template<class CandidateSet, class Evaluate>
 void collect(
     DebugCtx dbg,
-    AsioExecutor& exec,
     CandidateSet first_candidates,
     Evaluate&& evaluate,
-    Cancel& cancel_signal_,
-    asio::yield_context yield
+    Async yield
 ) {
-    Cancel cancel_signal(cancel_signal_);
-
     using namespace std;
 
     enum Progress { unused, used };
@@ -41,10 +40,9 @@ void collect(
         candidates.insert(candidates.end(), { c, unused });
     }
 
-    WaitCondition all_done(exec);
-    util::AsyncQueue<NodeContact> new_candidates(exec);
-
-    Scheduler scheduler(exec, 8);
+    WaitCondition all_done(yield.get_executor());
+    util::AsyncQueue<NodeContact> new_candidates(yield.get_executor());
+    Scheduler scheduler(yield.get_executor(), 8);
 
     auto pick_candidate = [&] {
         // Pick the closest untried candidate...
@@ -59,27 +57,24 @@ void collect(
     std::set<size_t> active_jobs;
     size_t next_job_id = 0;
 
-    Cancel local_cancel(cancel_signal);
+    Async local_yield(yield);
 
     while (true) {
-        sys::error_code ec;
-
         if (dbg) cerr << dbg << "Start waiting for job (current count:" << scheduler.slot_count() << ")\n";
 
-        auto slot = scheduler.wait_for_slot(local_cancel, yield[ec]);
+        auto slot = compat([&](Cancel cancel, asio::yield_context yield) {
+            return scheduler.wait_for_slot(cancel, yield);
+        })(local_yield);
 
         if (dbg) cerr << dbg << " Done waiting for job (job count:" << scheduler.slot_count() << ")\n";
 
-        assert(!local_cancel || ec == asio::error::operation_aborted);
-        if (ec) break;
+        if (!slot) break;
 
         auto candidate_i = pick_candidate();
 
         std::queue<NodeContact> cs;
 
         while (candidate_i == candidates.end()) {
-            sys::error_code ec2;
-
             if (active_jobs.empty() && new_candidates.size() == 0) {
                 break;
             }
@@ -87,19 +82,18 @@ void collect(
             if (dbg) cerr << dbg << " Start waiting for candidate (active jobs:"
                           << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
 
-            assert(!local_cancel);
-            new_candidates.async_flush(cs, local_cancel, yield[ec2]);
+            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
+                new_candidates.async_flush(cs, cancel, yield);
+            })(local_yield);
 
             if (dbg) cerr << dbg << " End waiting for candidate "
-                          << ec2.message() << " " << cs.size() << "\n";
+                          << debug(result) << " " << cs.size() << "\n";
 
-            assert(!local_cancel || ec2 == asio::error::operation_aborted);
-
-            if (ec2 == asio::error::eof) {
+            if (result == std::unexpected(asio::error::eof)) {
                 continue;
             }
 
-            if (ec2 || local_cancel) break;
+            if (!result) break;
 
             while (!cs.empty()) {
                 auto c = std::move(cs.front());
@@ -113,19 +107,15 @@ void collect(
 
         if (candidate_i == candidates.end()) break;
 
-        assert(!local_cancel);
-
         auto job_id = next_job_id++;
         active_jobs.insert(job_id);
 
-        task::spawn_detached(exec, [ &
-                            , candidate = candidate_i->first
-                            , job_id
-                            , lock = all_done.lock()
-                            , slot = std::move(slot)
-                            ] (asio::yield_context yield) mutable {
-            sys::error_code ec;
-
+        local_yield.spawn([ &
+                          , candidate = candidate_i->first
+                          , job_id
+                          , lock = all_done.lock()
+                          , slot = std::move(slot)
+                          ] (auto yield) mutable {
             bool on_finish_called = false;
 
             auto on_finish = [&] () mutable {
@@ -139,53 +129,49 @@ void collect(
                 // Make sure we don't get stuck waiting for candidates when
                 // there is no more work and this candidate has not returned
                 // any new ones.
-                new_candidates.async_push( NodeContact()
-                                         , asio::error::eof
-                                         , local_cancel
-                                         , yield);
+                compat([&](Cancel cancel, asio::yield_context yield) {
+                    new_candidates.async_push( NodeContact()
+                                                , asio::error::eof
+                                                , cancel
+                                                , yield);
+                })(yield);
             };
 
             bool is_first_round = first_candidates.count(candidate);
 
             if (is_first_round) {
-                WatchDog wd(exec, std::chrono::seconds(5), [&] () mutable {
-                        if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
-                        on_finish();
-                    });
+                WatchDog wd(yield.get_executor(), std::chrono::seconds(5), [&] () mutable {
+                    if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
+                    on_finish();
+                });
 
                 WatchDog dummy_wd;
 
                 evaluate( candidate
                         , dummy_wd
                         , new_candidates
-                        , local_cancel
-                        , yield[ec]);
+                        , yield);
             } else {
-                WatchDog wd(exec, std::chrono::milliseconds(200), [&] () mutable {
-                        if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
-                        on_finish();
-                    });
+                WatchDog wd(yield.get_executor(), std::chrono::milliseconds(200), [&] () mutable {
+                    if (dbg) cerr << dbg << "dismiss " << candidate << "\n";
+                    on_finish();
+                });
 
                 evaluate( candidate
                         , wd
                         , new_candidates
-                        , local_cancel
-                        , yield[ec]);
+                        , yield);
             }
 
             on_finish();
         });
     }
 
-    local_cancel();
+    local_yield.cancel();
 
     if (dbg) cerr << dbg << " >>>>>>>>>>>>>>>>>>> DONE <<<<<<<<<<<<<<<<<<<<\n";
 
     all_done.wait(yield);
-
-    if (cancel_signal) {
-        or_throw(yield, asio::error::operation_aborted);
-    }
 }
 
 } // namespaces

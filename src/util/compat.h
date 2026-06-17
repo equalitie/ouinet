@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
 #include <concepts>
 #include <type_traits>
@@ -8,6 +9,7 @@
 #include "async.h"
 #include "expected.h"
 #include "../or_throw.h"
+#include "yield.h"
 
 // Compatibility layer between the "new style" and "old style" async function.
 //
@@ -125,23 +127,50 @@ namespace ouinet {
         auto operator()(boost::asio::yield_context yield)
         requires std::invocable<F, Async> && is_expected_v<std::invoke_result_t<F, Async>>
         {
-            auto result = _f(Async(yield));
-            return detail::or_throw(yield, result);
+            using V = typename std::invoke_result_t<F, Async>::value_type;
+
+            try {
+                auto result = _f(Async(yield));
+                return detail::or_throw(yield, std::move(result));
+            } catch (Async::Cancelled& e) {
+                return detail::or_throw<V>(
+                    yield,
+                    std::unexpected(boost::asio::error::operation_aborted)
+                );
+            }
         }
 
         // std::expected<T, error_code> f(Async) -> T f(Cancel, asio::yield_context)
         auto operator()(Cancel cancel, boost::asio::yield_context yield)
         requires std::invocable<F, Async> && is_expected_v<std::invoke_result_t<F, Async>>
         {
-            auto result = _f(Async(yield, std::move(cancel)));
-            return detail::or_throw(yield, result);
+            using V = typename std::invoke_result_t<F, Async>::value_type;
+
+            try {
+                auto result = _f(Async(yield, std::move(cancel)));
+                return detail::or_throw(yield, std::move(result));
+            } catch (Async::Cancelled& e) {
+                return detail::or_throw<V>(
+                    yield,
+                    std::unexpected(boost::asio::error::operation_aborted)
+                );
+            }
         }
 
         // T f(Async) -> T f(Cancel cancel, asio::yield_context)
         auto operator()(Cancel cancel, boost::asio::yield_context yield)
         requires std::invocable<F, Async>
         {
-            return _f(Async(std::move(yield), std::move(cancel)));
+            using V = std::invoke_result_t<F, Async>;
+
+            try {
+                return _f(Async(std::move(yield), std::move(cancel)));
+            } catch (Async::Cancelled& e) {
+                return detail::or_throw<V>(
+                    yield,
+                    std::unexpected(boost::asio::error::operation_aborted)
+                );
+            }
         }
     };
 

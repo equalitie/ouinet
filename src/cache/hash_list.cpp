@@ -100,7 +100,9 @@ HashList HashList::load(
 
     sys::error_code ec;
 
-    auto part = r.timed_async_read_part(5s, c, y[ec]);
+    auto part = compat([&](Async yield) {
+        return r.timed_async_read_part(5s, yield);
+    })(c, y[ec]);
 
     if (!ec && !part) {
         assert(0);
@@ -145,7 +147,7 @@ HashList HashList::load(
     std::vector<Block> blocks;
 
     while (true) {
-        part = r.timed_async_read_part(5s, c, y[ec]);
+        part = compat([&](Async yield) { return r.timed_async_read_part(5s, yield); })(c, y[ec]);
         return_or_throw_on_error(y, c, ec, HashList{});
 
         if (!part) break;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/program_options/value_semantic.hpp>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -247,6 +248,8 @@ private:
             , "Don't use default BitTorrent bootstrap servers."
               "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used."
               "This option is persistent.")
+           ("bt-allow-martians", po::bool_switch()->default_value(false)
+            , "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful mostly for testing.")
 #ifndef __WIN32
            ("open-file-limit"
             , po::value<unsigned int>()
@@ -466,8 +469,10 @@ private:
         ss << "log-level = " << log_level() << endl;
         ss << "enable-log-file = " << is_log_file_enabled() << endl;
 
-        for (const auto& btbs_addr : _bt_bootstrap_extras)
+        for (const auto& btbs_addr : _bt_bootstrap_extras) {
             ss << "bt-bootstrap-extra = " << btbs_addr << endl;
+        }
+        ss << "bt-bootstrap-no-default" << _bt_bootstrap_no_default << endl;
 
         ss << "disable-origin-access = " << _disable_origin_access << endl;
         ss << "disable-injector-access = " << _disable_injector_access << endl;
@@ -511,6 +516,14 @@ public:
 
     void bt_bootstrap_no_default(bool value) {
         CHANGE_AND_SAVE_OPS(value == _bt_bootstrap_no_default, _bt_bootstrap_no_default = value);
+    }
+
+    bool bt_allow_martians() const {
+        return _bt_allow_martians;
+    }
+
+    void bt_allow_martians(bool value) {
+        _bt_allow_martians = value;
     }
 
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
@@ -572,6 +585,7 @@ private:
 
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
+    bool _bt_allow_martians = false;
     bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;

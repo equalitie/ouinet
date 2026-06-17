@@ -210,7 +210,8 @@ async fn create_dht_nodes(lab: &Lab, count: usize) -> Vec<DhtNode> {
             .unwrap()
             .unwrap();
 
-        let _span = tracing::info_span!("dht-node", message = i).entered();
+        let _span =
+            tracing::info_span!("dht-node", message = i, addr = %device.ip().unwrap()).entered();
 
         let dht = ips
             .iter()

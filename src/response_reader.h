@@ -6,8 +6,11 @@
 #include "namespaces.h"
 #include "or_throw.h"
 #include "response_part.h"
+#include "util/async.h"
 #include "util/executor.h"
 #include "util/cancel.h"
+#include "util/compat.h"
+#include "util/select.h"
 #include "util/watch_dog.h"
 #include <boost/beast.hpp>
 #include "api.h"
@@ -18,23 +21,17 @@ using ouinet::util::AsioExecutor;
 
 class AbstractReader {
 public:
-    virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
+    virtual std::expected<std::optional<Part>, sys::error_code> async_read_part(Async) = 0;
     virtual bool is_done() const = 0;
     virtual void close()   = 0;
     virtual AsioExecutor get_executor() = 0;
     virtual ~AbstractReader() = default;
 
     template<class Duration>
-    boost::optional<Part> timed_async_read_part(Duration d, Cancel c, asio::yield_context y)
+    std::expected<std::optional<Part>, sys::error_code>
+    timed_async_read_part(Duration d, Async yield)
     {
-        Cancel tc(c);
-        auto wd = watch_dog(get_executor(), d, [&] { tc(); });
-        sys::error_code ec;
-
-        auto retval = async_read_part(tc, y[ec]);
-        fail_on_error_or_timeout(y, c, ec, wd, boost::none);
-
-        return retval;
+        return timeout(d, [&](Async yield) { return async_read_part(yield); }, yield);
     }
 };
 
@@ -50,7 +47,9 @@ slurp_response( AbstractReader& reader, size_t max_body_size
     sys::error_code ec;
     http::response<RsBody> rs;
 
-    auto part = reader.async_read_part(cancel, yield[ec]);
+    auto part = compat([&](Async yield) {
+        return reader.async_read_part(yield);
+    })(cancel, yield[ec]);
     return_or_throw_on_error(yield, cancel, ec, std::move(rs));
 
     if (!part) ec = http::error::end_of_stream;
@@ -61,7 +60,9 @@ slurp_response( AbstractReader& reader, size_t max_body_size
     typename RsBody::reader rsr(rs, rs.body());
     size_t body_size = 0;
     while (true) {
-        part = reader.async_read_part(cancel, yield[ec]);
+        part = compat([&](Async yield) {
+            return reader.async_read_part(yield);
+        })(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, std::move(rs));
 
         if (!part) break;  // end of transfer
@@ -105,7 +106,7 @@ public:
     //
     // Head >> Body* >> boost::none*
     //
-    boost::optional<Part> async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<Part>, sys::error_code> async_read_part(Async) override;
     bool is_done() const override { return _is_done; }
 
     // This leaves the reader in an undefined state,
@@ -153,7 +154,7 @@ private:
     std::function<void(size_t, string_view, sys::error_code&)> _on_chunk_header;
     std::function<size_t(size_t, string_view, sys::error_code&)> _on_chunk_body;
 
-    boost::optional<Part> _next_part;
+    std::optional<Part> _next_part;
 
     bool _is_done;
 };

@@ -28,6 +28,7 @@
 
 #include <boost/asio/spawn.hpp>
 #include <chrono>
+#include <optional>
 #include <random>
 
 using namespace std;
@@ -47,12 +48,12 @@ using udp = asio::ip::udp;
 namespace bt = bittorrent;
 using namespace ouinet::http_response;
 using Errc = MultiPeerReaderErrc;
-using OptPart = boost::optional<Part>;
+using OptPart = std::optional<Part>;
 
 struct MultiPeerReader::Block {
     ChunkBody chunk_body;
     ChunkHdr chunk_hdr;
-    boost::optional<Trailer> trailer;
+    std::optional<Trailer> trailer;
 };
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
@@ -105,7 +106,7 @@ connect( udp::endpoint ep
     s.bind(*opt_m, ec);
     if (ec) return std::unexpected(ec);
 
-    yield.cancel_slot([&] { s.close(); });
+    auto cancelled = yield.cancel_slot([&] { s.close(); });
     ec = s.async_connect(ep, yield);
     if (ec) {
         return std::unexpected(ec);
@@ -170,9 +171,9 @@ public:
     }
 
     // May return boost::none and no error if the response has no body (e.g. redirect msg)
-    boost::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
+    std::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
     {
-        using OptBlock = boost::optional<Block>;
+        using OptBlock = std::optional<Block>;
 
         if (!_connection.is_open()) return or_throw<OptBlock>(yield, asio::error::not_connected);
 
@@ -186,19 +187,23 @@ public:
         auto cl = _lifetime_cancel.connect([&] { c(); });
         auto cc = c.connect([&] { if (_connection.is_open()) _connection.close(); });
 
-        auto head = reader.timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
+        auto head = compat([&](Async yield) {
+            return reader.timed_async_read_part(READ_HEAD_TIMEOUT, yield);
+        })(c, yield[ec]);
         return_or_throw_on_error(yield, c, ec, OptBlock{});
 
         if (!head || !head->is_head()) {
             return or_throw<OptBlock>(yield, Errc::expected_head);
         }
 
-        auto p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+        auto p = compat([&](Async yield) {
+            return reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, yield);
+        })(c, yield[ec]);
         return_or_throw_on_error(yield, c, ec, OptBlock{});
 
         // This may happen when the message has no body
         if (!p) {
-            return boost::none;
+            return std::nullopt;
         }
 
         auto first_chunk_hdr = p->as_chunk_hdr();
@@ -212,13 +217,15 @@ public:
             return or_throw<OptBlock>(yield, Errc::block_is_too_big);
         }
 
-        Block block{{{}, 0},{0, {}}, boost::none};
+        Block block{{{}, 0},{0, {}}, std::nullopt};
         util::SHA512 block_hasher;
 
         if (first_chunk_hdr->size) {
             // Read the block and the chunk header that comes after it.
             while (true) {
-                p = reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
+                p = compat([&](Async yield) {
+                    return reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, yield);
+                })(c, yield[ec]);
                 return_or_throw_on_error(yield, c, ec, OptBlock{});
 
                 auto chunk_body = p->as_chunk_body();
@@ -241,7 +248,9 @@ public:
                 }
             }
 
-            p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+            p = compat([&](Async yield) {
+                return reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, yield);
+            })(c, yield[ec]);
 
             ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
@@ -268,7 +277,9 @@ public:
 
         // Read the trailer (if any), and make sure we're done with this response
         while (true) {
-            p = reader.timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
+            p = compat([&](Async yield) {
+                return reader.timed_async_read_part(READ_TRAILER_TIMEOUT, yield);
+            })(c, yield[ec]);
             return_or_throw_on_error(yield, c, ec, OptBlock{});
             if (!p) {
                 // We're done with this request
@@ -316,7 +327,7 @@ public:
         Async yield
     )
     {
-        yield.cancel_slot([&] { con.close(); });
+        auto cancelled = yield.cancel_slot([&] { con.close(); });
 
         auto result = compat([&](asio::yield_context yield) {
             return http::async_write(con, request(http::verb::propfind, _resource_id), yield);
@@ -376,7 +387,7 @@ public:
 };
 
 struct MultiPeerReader::PreFetch {
-    using OptBlock = boost::optional<MultiPeerReader::Block>;
+    using OptBlock = std::optional<MultiPeerReader::Block>;
 
     size_t block_id;
     Peer* peer;
@@ -421,12 +432,6 @@ public:
             return;
         }
 
-        if (auto dht_lock = _dht_lookup->get_dht_lock()) {
-            for (auto ep : _lan_peer_eps) {
-                add_candidate(ep, *dht_lock);
-            }
-        }
-
         task::spawn_detached(
             _exec,
             [
@@ -439,12 +444,19 @@ public:
                 auto dht = _dht_lookup->get_dht_lock();
                 assert(dht);
 
-                LOG_DEBUG(yield, " Waiting for DHT to be ready...");
+                LOG_DEBUG(yield, " Waiting for DHT to get ready...");
 
                 dht->wait_all_ready(yield);
 
                 _wan_my_eps = dht->wan_endpoints();
-                LOG_DEBUG(yield, "DHT is ready (lan=", _lan_my_eps, " wan=", _wan_my_eps, "). Looking up peers...");
+                LOG_DEBUG(yield, " Waiting for DHT to get ready: done");
+                LOG_DEBUG(yield, " Looking up peers...");
+
+                if (auto dht = _dht_lookup->get_dht_lock()) {
+                    for (auto ep : _lan_peer_eps) {
+                        add_candidate(ep, *dht);
+                    }
+                }
 
                 // Keep looking up for peers until success or until `this` is destroyed.
                 const auto min_sleep = chrono::milliseconds(100);
@@ -453,15 +465,22 @@ public:
 
                 while (true) {
                     auto peer_eps = _dht_lookup->get(yield);
-                    if (peer_eps) {
-                        LOG_DEBUG(yield, " Peer lookup successful: ", *peer_eps);
+
+                    if (peer_eps && !peer_eps->empty()) {
+                        LOG_DEBUG(yield, " Found ", peer_eps->size(), " peers");
 
                         if (auto dht = _dht_lookup->get_dht_lock()) {
                             for (auto ep : *peer_eps) add_candidate(ep, *dht);
                         }
+
                         break;
                     } else {
-                        LOG_DEBUG(yield, " Peer lookup failed: ", peer_eps.error(), ". Retry in ", sleep);
+                        if (peer_eps) {
+                            LOG_DEBUG(yield, " Found 0 peers. Retry in ", sleep);
+                        } else {
+                            LOG_DEBUG(yield, " Peer lookup failed: ", peer_eps.error(), ". Retry in ", sleep);
+                        }
+
                         async_sleep(sleep, yield);
                         sleep = min(2 * sleep, max_sleep);
                     }
@@ -596,7 +615,7 @@ public:
     }
 
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
-        if (dht.is_martian(ep)) return;
+        if (!dht.is_peer_allowed(ep)) return;
         if (_wan_my_eps.count(ep)) return;
 
         auto ip = _all_udp_peers.insert({ep, unique_ptr<Peer>()});
@@ -840,17 +859,17 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
 }
 
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
-    AsyncJob<boost::none_t> job;
+    AsyncJob<std::nullopt_t> job;
 
     PreFetchSequential(size_t block_id, Peer* peer, AsioExecutor ex)
         : PreFetch(block_id, peer)
         , job(ex)
     {
-        job.start([=] (auto& cancel, auto yield) -> boost::none_t {
+        job.start([=] (auto& cancel, auto yield) -> std::nullopt_t {
             sys::error_code ec;
             peer->send_block_request(block_id, cancel, yield[ec]);
             ec = compute_error_code(ec, cancel);
-            return or_throw(yield, ec, boost::none);
+            return or_throw(yield, ec, std::nullopt);
         });
     }
 
@@ -886,13 +905,12 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
         job.wait_for_finish(cancel, yield[ec]);
         return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
-        Job::Result r = std::move(job.result());
-
-        if (r.ec) {
-            if (ec) return or_throw<OptBlock>(yield, ec);
+        auto r = std::move(job.result());
+        if (!r) {
+            return or_throw(yield, r.error(), OptBlock{});
         }
 
-        return std::move(r.retval);
+        return std::move(*r);
     }
 };
 
@@ -928,14 +946,14 @@ MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Cancel& cancel,
     return std::unique_ptr<PreFetch>(pre_fetch);
 }
 
-// May return boost::none and no error if the response has no body (e.g. redirect msg)
-boost::optional<MultiPeerReader::Block>
+// May return std::nullopt and no error if the response has no body (e.g. redirect msg)
+std::optional<MultiPeerReader::Block>
 MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield)
 {
     //   Q0   Q1   R0   Q2   R1   Q3   R2
     // |----|----|----|----|----|----|----|...
 
-    using OptBlock = boost::optional<MultiPeerReader::Block>;
+    using OptBlock = std::optional<MultiPeerReader::Block>;
 
     sys::error_code ec;
 
@@ -978,43 +996,42 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
     }
 }
 
-boost::optional<Part>
-MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
+std::expected<std::optional<Part>, sys::error_code>
+MultiPeerReader::async_read_part(Async yield)
 {
-    using Ret = boost::optional<Part>;
+    auto lc = _lifetime_cancel.connect([&] { yield.cancel(); });
 
-    sys::error_code ec;
+    if (_state == State::closed) return std::unexpected(asio::error::bad_descriptor);
+    if (_state == State::done) return std::nullopt;
 
-    auto lc = _lifetime_cancel.connect([&] { cancel(); });
-
-    if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
-    if (_state == State::closed) return or_throw<Ret>(yield, asio::error::bad_descriptor);
-    if (_state == State::done) return boost::none;
-
-    auto r = async_read_part_impl(cancel, yield[ec]);
-    ec = compute_error_code(ec, cancel);
-
-    if (ec) {
+    auto result = async_read_part_impl(yield);
+    if (!result) {
         _state = State::closed;
         _peers = nullptr;
-        return or_throw<Ret>(yield, ec);
-    } else if (!r) {
+        return std::unexpected(result.error());
+    }
+
+    if (!*result) {
         _state = State::done;
         _peers = nullptr;
     }
 
-    return r;
+    return *result;
 }
 
-boost::optional<Part>
-MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
+std::expected<std::optional<Part>, sys::error_code>
+MultiPeerReader::async_read_part_impl(Async yield)
 {
-    sys::error_code ec;
-
     if (!_reference_hash_list) {
-        auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptPart{});
-        _reference_hash_list = std::move(hl);
+        auto hl = compat([&](Cancel cancel, asio::yield_context yield) {
+            return _peers->choose_reference_hash_list(cancel, yield);
+        })(yield);
+
+        if (!hl) {
+            return std::unexpected(hl.error());
+        }
+
+        _reference_hash_list = std::move(*hl);
     }
 
     if (!_head_sent) {
@@ -1024,8 +1041,8 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 
     if (_next_chunk_body) {
         auto p = std::move(*_next_chunk_body);
-        _next_chunk_body = boost::none;
-        return {{std::move(p)}};
+        _next_chunk_body = std::nullopt;
+        return std::move(p);
     }
 
     if (_next_trailer) {
@@ -1034,9 +1051,9 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
         }
         auto p = std::move(*_next_trailer);
-        _next_trailer = boost::none;
+        _next_trailer = std::nullopt;
         mark_done();
-        return {{std::move(p)}};
+        return std::move(p);
     }
 
     if (_block_id >= _reference_hash_list->blocks.size()) {
@@ -1045,12 +1062,17 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             _last_chunk_hdr_sent = true;
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
         }
-        return boost::none;
+        return std::nullopt;
     }
 
     while (true /* do until successful block retrieval */) {
-        auto block = fetch_block(_block_id, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptPart{});
+        auto block_e = compat([&](Cancel cancel, asio::yield_context yield) {
+            return fetch_block(_block_id, cancel, yield);
+        })(yield);
+        if (!block_e) {
+            return std::unexpected(block_e.error());
+        }
+        auto block = std::move(*block_e);
 
         ++_block_id;
 
@@ -1060,7 +1082,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
                 _last_chunk_hdr_sent = true;
                 return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
             }
-            return boost::none;
+            return std::nullopt;
         }
 
         ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
@@ -1072,11 +1094,11 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             _next_trailer = std::move(block->trailer);
         }
 
-        return {{std::move(chunk_hdr)}};
+        return std::move(chunk_hdr);
     }
 
     assert(0 && "This shouldn't happen");
-    return boost::none;
+    return std::nullopt;
 }
 
 void MultiPeerReader::close()

@@ -286,12 +286,14 @@ struct Client::Impl {
 
         _YDEBUG(yield, "Serving: ", req.resource_id());
 
-        auto s = Session::create(
-                    move(rr),
-                    req.method() == http::verb::head,
-                    metrics_client.new_cache_out_request(),
-                    cancel,
-                    yield[ec].tag("read_hdr"));
+        auto s = compat([&](Async yield) {
+            return Session::create(
+                move(rr),
+                req.method() == http::verb::head,
+                metrics_client.new_cache_out_request(),
+                yield.tag("read_hdr")
+            );
+        })(cancel, yield[ec]);
 
         CryptoStreamKey key;
 
@@ -549,7 +551,14 @@ struct Client::Impl {
                 , log_path);
         }
 
-        auto s = Session::create(std::move(reader), is_head_request, std::move(metrics), cancel, yield[ec].tag("read_hdr"));
+        auto s = compat([&](Async yield) {
+            return Session::create(
+                std::move(reader),
+                is_head_request,
+                std::move(metrics),
+                yield.tag("read_hdr")
+            );
+        })(cancel, yield[ec]);
 
         if (!ec) {
             s.response_header().set( http_::response_source_hdr  // for agent
@@ -580,7 +589,15 @@ struct Client::Impl {
         else
             std::tie(rr, body_size) = _http_store->reader_and_size(resource_id, cancel, yield[ec]);
         if (ec) return or_throw<Session>(yield, ec);
-        auto rs = Session::create(move(rr), is_head_request, cancel, yield[ec].tag("read_hdr"));
+
+        auto rs = compat([&](Async yield) {
+            return Session::create(
+                move(rr),
+                is_head_request,
+                yield.tag("read_hdr")
+            );
+        })(cancel, yield[ec]);
+
         return_or_throw_on_error(yield, cancel, ec, move(rs));
 
         rs.response_header().set( http_::response_source_hdr  // for agent
@@ -620,7 +637,9 @@ struct Client::Impl {
         Cancel lc(_lifetime_cancel);
 
         sys::error_code ec;
-        auto part = reader.async_read_part(lc, yield[ec]);
+        auto part = compat([&](Async yield) {
+            return reader.async_read_part(yield);
+        })(lc, yield[ec]);
         if (!ec && !part)
             ec = sys::errc::make_error_code(sys::errc::no_message);
         return_or_throw_on_error(yield, lc, ec, http::response_header<>());

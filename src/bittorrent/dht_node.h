@@ -17,6 +17,7 @@
 #include "dht_storage.h"
 #include "mutable_data.h"
 #include "node_id.h"
+#include "peer_filter.h"
 #include "routing_table.h"
 #include "contact.h"
 #include "cxx/dns.h"
@@ -210,6 +211,10 @@ class OUINET_COMMON_API DhtNode {
 
     NodeID node_id() const { return _node_id; }
 
+    void set_peer_filter(PeerFilter filter) {
+        _peer_filter = filter;
+    }
+
     private:
     void receive_loop(Async);
     void store_contacts_loop(Async);
@@ -237,7 +242,8 @@ class OUINET_COMMON_API DhtNode {
         Async
     );
 
-    void handle_query(udp::endpoint sender, BencodedMap& query, Cancel cancel, asio::yield_context);
+    std::expected<void, sys::error_code>
+    handle_query(udp::endpoint sender, BencodedMap& query, Async);
 
     std::expected<void, sys::error_code> bootstrap(Async);
 
@@ -303,6 +309,7 @@ class OUINET_COMMON_API DhtNode {
         asio::ip::udp::endpoint node_endpoint;
         std::string announce_token;
     };
+
     std::expected<void, sys::error_code> tracker_do_search_peers(
         NodeID infohash,
         std::set<udp::endpoint>& peers,
@@ -363,6 +370,7 @@ class OUINET_COMMON_API DhtNode {
     uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
     bootstrap::Config _bootstrap_config;
+    PeerFilter _peer_filter = PeerFilter::martian;
     metrics::DhtNode _metrics;
     util::LogPath _log_path;
 };
