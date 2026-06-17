@@ -29,6 +29,7 @@ option(WITH_OUISYNC "Build with Ouisync" OFF)
 option(WITH_I2PD "Build with i2pd" OFF)
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
+option(WITH_MOCK_DHT "Use mock DHT in tests" OFF)
 
 ################################################################################
 # show summary
@@ -40,6 +41,7 @@ message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
 message(STATUS "  WITH_I2PD                : ${WITH_I2PD}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
+message(STATUS "  WITH_MOCK_DHT            : ${WITH_MOCK_DHT}")
 message(STATUS "")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 message(STATUS "C++ compiler ID: ${CMAKE_CXX_COMPILER_ID}")
