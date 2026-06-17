@@ -1280,7 +1280,9 @@ Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
         [&](auto yield) -> std::expected<Session, sys::error_code> {
             // Connect to the injector.
             // TODO: Maybe refactor with `fetch_via_self`.
-            wait_for_injector(yield);
+            if (auto result = wait_for_injector(yield); !result) {
+                return std::unexpected(result.error());
+            }
             assert(_injector);
 
             ConnectionPool<Endpoint>::Connection con;
