@@ -48,8 +48,9 @@ macos / unit-test:
       - $BUILD_PATH/lib*.a
       - $TESTS_PATH/test-*
     expire_in: 6h
-  image: $BUILDER_IMAGE
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
     - for test in ./$TESTS_PATH/test*; do "$test" --log_level=test_suite; done
   allow_failure: true
+  needs:
+    ['macos / build']
