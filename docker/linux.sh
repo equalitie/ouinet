@@ -184,28 +184,28 @@ function is_container_running (
 function list_artifacts_for_target_os (
     target_os=$1
     case "$target_os" in
-        linux)
-            artifacts=(
-                $build_dir/client
-                $build_dir/injector
-                $build_dir/libouinet_asio.so
-                $build_dir/libouinet_common.so
-                $build_dir/libouinet_client.so
-                $build_dir/libouinet_injector.so
-                $build_dir/libcpp_ouisync_client.so
-                $build_dir/libcpp_ouisync_service.so
-            )
+        linux|android)
+            exe_suffix=""
+            lib_suffix=".so"
             ;;
         windows)
+            exe_suffix=".exe"
+            lib_suffix=".dll"
+            ;;
+        *) error "Invalid target_os ($target_os) in 'list_artifacts_for_target_os'"
+    esac
+    case "$target_os" in
+        linux|windows)
             artifacts=(
-                $build_dir/client.exe
-                $build_dir/injector.exe
-                $build_dir/libouinet_asio.dll
-                $build_dir/libouinet_common.dll
-                $build_dir/libouinet_client.dll
-                $build_dir/libouinet_injector.dll
-                $build_dir/libcpp_ouisync_client.dll
-                $build_dir/libcpp_ouisync_service.dll
+                $build_dir/client$exe_suffix
+                $build_dir/injector$exe_suffix
+                $build_dir/libasio_utp$lib_suffix
+                $build_dir/libouinet_asio$lib_suffix
+                $build_dir/libouinet_common$lib_suffix
+                $build_dir/libouinet_client$lib_suffix
+                $build_dir/libouinet_injector$lib_suffix
+                $build_dir/libcpp_ouisync_client$lib_suffix
+                $build_dir/libcpp_ouisync_service$lib_suffix
             )
             ;;
         android)
@@ -308,8 +308,6 @@ for target_os in ${target_oss[@]}; do
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
-            # For testing with custom Ouisync sources
-            #-DOUISYNC_SRC_DIR=$HOME/work/ouisync
             -DOUINET_MEASURE_BUILD_TIMES=OFF
         )
         
@@ -324,7 +322,7 @@ for target_os in ${target_oss[@]}; do
         fi
 
         exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
-        exe -w $build_dir cmake --build . -j $(exe nproc)
+        exe -w $build_dir cmake --build . -j $(exe nproc) ${run_cpp_tests[@]/#/--target }
     else
         if [ "$clean" = y ]; then
             exe -w $ouinet_dir git clean -dfX
