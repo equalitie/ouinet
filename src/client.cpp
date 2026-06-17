@@ -559,7 +559,7 @@ private:
 
         _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
             _ctx.get_executor()
-            , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr);
+            , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr, _log_path);
 
         task::spawn_detached(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield_) mutable {
             auto yield = Async(yield_, c, _log_path.tag("accept_utp"));

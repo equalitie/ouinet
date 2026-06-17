@@ -58,21 +58,22 @@ struct MultiUtpServer::State
 
 MultiUtpServer::MultiUtpServer( asio::any_io_executor ex
                               , std::set<asio::ip::udp::endpoint> endpoints
-                              , boost::asio::ssl::context* ssl_context)
+                              , boost::asio::ssl::context* ssl_context
+                              , util::LogPath log_path)
     : _accept_queue(ex)
 {
     if (endpoints.empty()) {
-        LOG_ERROR("MultiUtpServer: endpoint set is empty!");
+        LOG_ERROR(log_path, " MultiUtpServer: endpoint set is empty!");
     }
 
     for (auto ep : endpoints) {
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep, log_path);
         if (ssl_context) {
-            LOG_INFO("Bep5: uTP/TLS Address: ", ep);
+            LOG_INFO(log_path, " Bep5: uTP/TLS Address: ", ep);
             auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *ssl_context);
             _states.emplace_back(new State(ex, move(tls)));
         } else {
-            LOG_INFO("Bep5: uTP Address: ", ep);
+            LOG_INFO(log_path, " Bep5: uTP Address: ", ep);
             _states.emplace_back(new State(ex, move(base)));
         }
     }
@@ -84,7 +85,7 @@ sys::error_code MultiUtpServer::start_listen(Async yield)
     for (auto& s : _states) {
         sys::error_code ec = s->start(_accept_queue, _cancel, yield);
         if (ec) {
-            LOG_ERROR("MultiUtpServer: Failed to start listen; ec=", ec);
+            LOG_ERROR(yield, " MultiUtpServer: Failed to start listen; ec=", ec);
             if (!ret_ec) ret_ec = ec;
         }
     }

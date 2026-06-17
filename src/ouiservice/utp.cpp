@@ -13,7 +13,8 @@ using udp = asio::ip::udp;
 using namespace std;
 
 UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
-                                        , udp::endpoint local_endpoint):
+                                        , udp::endpoint local_endpoint
+                                        , util::LogPath log_path):
     _ex(std::move(ex)),
     _udp_multiplexer(new asio_utp::udp_multiplexer(_ex)),
     _accept_queue(_ex)
@@ -24,10 +25,10 @@ UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
 
     assert(_udp_multiplexer->is_open());
     if (ec) {
-        LOG_ERROR("uTP: Failed to bind UtpOuiServiceServer to "
+        LOG_ERROR(log_path, " uTP: Failed to bind UtpOuiServiceServer to "
                  , local_endpoint, "; ec=", ec);
     } else {
-        LOG_DEBUG("uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
+        LOG_DEBUG(log_path, " uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
     }
 }
 
@@ -49,7 +50,7 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
             assert(!ec);
             ec = s.async_accept(yield);
             if (ec) {
-                LOG_ERROR("UtpOuiServiceServer: failed to accept, will retry in 5s;"
+                LOG_ERROR(yield, " UtpOuiServiceServer: failed to accept, will retry in 5s;"
                          , " lep=", local_ep, " ec=", ec);
                 async_sleep(5s, yield);
                 continue;

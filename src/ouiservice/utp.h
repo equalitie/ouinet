@@ -15,7 +15,7 @@ namespace ouiservice {
 class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    UtpOuiServiceServer(asio::any_io_executor, asio::ip::udp::endpoint endpoint);
+    UtpOuiServiceServer(asio::any_io_executor, asio::ip::udp::endpoint endpoint, util::LogPath);
 
     [[nodiscard]]
     sys::error_code start_listen(Async) override;

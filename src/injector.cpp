@@ -904,7 +904,7 @@ Injector::Injector(
         util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, log_path);
         proxy_server->add(move(srv));
     }
 
@@ -912,7 +912,7 @@ Injector::Injector(
 
         udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, log_path);
 
         auto local_ep = base->local_endpoint();
 
