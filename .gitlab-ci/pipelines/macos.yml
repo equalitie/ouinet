@@ -6,6 +6,7 @@ variables:
   BOOST_PATH: 'build.darwin/build-mac_arm64/boost/src/built_boost'
   GCRYPT_PATH: 'build.darwin/build-mac_arm64/gcrypt/src/gcrypt'
   GPGERROR_PATH: 'build.darwin/build-mac_arm64/gpg_error/src/gpg_error'
+  TESTS_PATH: 'build.darwin/build-mac_arm64/test/Debug'
   HOMEBREW_NO_AUTO_UPDATE: 1
 
 macos / build:
@@ -25,15 +26,9 @@ macos / build:
       - $GPGERROR_PATH/doc/yat2m-for-build
       - $GPGERROR_PATH/src/mkerrcodes
       - $GPGERROR_PATH/src/mkheader
+      - $TESTS_PATH/*
       - build.darwin/xcodebuild.log
     expire_in: 6h
-  before_script:
-    - curl -sL "https://github.com/Kitware/CMake/releases/download/v3.31.12/cmake-3.31.12-macos-universal.tar.gz" -o ~/cmake-macos.tar.gz
-    - tar -xf ~/cmake-macos.tar.gz -C ~/.
-    - cp -R ~/cmake-3.31.12-macos-universal/CMake.app /Applications/
-    - sudo "/Applications/CMake.app/Contents/bin/cmake-gui" --install=/usr/local/bin
-    - brew install ruby
-    - gem install xcpretty
   script:
     - mkdir -p build.darwin
     - cd build.darwin

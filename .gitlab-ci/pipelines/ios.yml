@@ -15,6 +15,7 @@ iphoneos / build:
   artifacts:
     paths:
       - $IOS_BUILD_PATH/ouinet.framework
+      - $IOS_BUILD_PATH/ouinet.framework.dSYM
       - $IOS_BUILD_PATH/injector.app
       - $IOS_BUILD_PATH/lib*.a
       - build.darwin/xcodebuild-ios.log
@@ -35,6 +36,7 @@ iphonesimulator / build:
   artifacts:
     paths:
       - $SIM_BUILD_PATH/ouinet.framework
+      - $SIM_BUILD_PATH/ouinet.framework.dSYM
       - $SIM_BUILD_PATH/injector.app
       - $SIM_BUILD_PATH/lib*.a
       - build.darwin/xcodebuild-iossim.log
