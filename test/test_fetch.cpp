@@ -274,8 +274,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto dht_nodes = spawn_dht_nodes(2, yield);
-        auto dht_endpoint = *dht_nodes[0]->local_endpoints().begin();
+        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(2, yield);
 
         const std::string injector_credentials = "username:password";
 
@@ -292,7 +291,8 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--bt-allow-martians"
             }),
             ctx,
-            util::LogPath("injector")
+            util::LogPath("injector"),
+            mock_dht("injector", yield.get_executor(), mock_dht_swarms)
         );
 
         Client seeder(
@@ -314,7 +314,8 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians"
             }),
-            util::LogPath("seeder")
+            util::LogPath("seeder"),
+            mock_dht_builder("seeder", yield.get_executor(), mock_dht_swarms)
         );
 
         Client leecher(
@@ -337,7 +338,8 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians"
             }),
-            util::LogPath("leecher")
+            util::LogPath("leecher"),
+            mock_dht_builder("leecher", yield.get_executor(), mock_dht_swarms)
         );
 
         // Clients are started explicitly
@@ -446,8 +448,6 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 }
 
 BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
-    get_logger().set_threshold(DEBUG);
-
     asio::io_context ctx;
 
     TestDir root;
@@ -457,8 +457,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto dhts = spawn_dht_nodes(2, yield);
-        auto dht_ep = *dhts[0]->local_endpoints().begin();
+        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(2, yield);
 
         const std::string injector_credentials = "username:password";
 
@@ -469,11 +468,12 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
                 "--credentials"s, injector_credentials,
                 "--allow-private-targets",
                 "--bt-bootstrap-no-default",
-                "--bt-bootstrap-extra", util::str(dht_ep),
+                "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians"
             }),
             ctx,
-            util::LogPath("injector")
+            util::LogPath("injector"),
+            mock_dht("injector", yield.get_executor(), mock_dht_swarms)
         );
 
         Client client(
@@ -493,10 +493,11 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route_30_times) {
                 "--tls-ca-cert-store-file="s + server.certificate_path().string(),
                 "--allow-private-targets",
                 "--bt-bootstrap-no-default",
-                "--bt-bootstrap-extra", util::str(dht_ep),
+                "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians"
             }),
-            util::LogPath("client")
+            util::LogPath("client"),
+            mock_dht_builder("client", yield.get_executor(), mock_dht_swarms)
         );
 
 
