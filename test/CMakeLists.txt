@@ -138,6 +138,10 @@ add_executable(test_fetch "test_fetch.cpp")
 target_link_libraries(test_fetch injector_lib client_lib)
 
 ######################################################################
+add_executable(test-client-stop "test_client_stop.cpp")
+target_link_libraries(test-client-stop client_lib)
+
+######################################################################
 if(UNIX AND NOT APPLE AND NOT CYGWIN)
     set(LINUX TRUE)
 endif()
