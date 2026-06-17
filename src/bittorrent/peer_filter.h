@@ -1,10 +1,11 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
+#include "api.h"
 
 namespace ouinet::bittorrent {
 
-class PeerFilter {
+class OUINET_COMMON_API PeerFilter {
     enum class Kind {
         none,
         martian
