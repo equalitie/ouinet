@@ -106,7 +106,7 @@ connect( udp::endpoint ep
     s.bind(*opt_m, ec);
     if (ec) return std::unexpected(ec);
 
-    yield.cancel_slot([&] { s.close(); });
+    auto cancelled = yield.cancel_slot([&] { s.close(); });
     ec = s.async_connect(ep, yield);
     if (ec) {
         return std::unexpected(ec);
@@ -327,7 +327,7 @@ public:
         Async yield
     )
     {
-        yield.cancel_slot([&] { con.close(); });
+        auto cancelled = yield.cancel_slot([&] { con.close(); });
 
         auto result = compat([&](asio::yield_context yield) {
             return http::async_write(con, request(http::verb::propfind, _resource_id), yield);

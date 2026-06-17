@@ -2613,7 +2613,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         ](auto y) mutable {
             Async yield(y, _cancel, std::move(log_path));
 
-            yield.cancel_slot([&] {
+            auto cancelled = yield.cancel_slot([&] {
                 if (auto it = _nodes.find(local_ep); it != _nodes.end()) {
                     _nodes.erase(it);
                 }
