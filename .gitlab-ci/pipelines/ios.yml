@@ -24,7 +24,6 @@ iphoneos / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=OS64 ../scripts/build-darwin.sh | tee xcodebuild-ios.log | xcpretty
-  when: manual
   allow_failure: true
 
 iphonesimulator / build:
@@ -45,7 +44,6 @@ iphonesimulator / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=SIMULATORARM64 ../scripts/build-darwin.sh | tee xcodebuild-iossim.log | xcpretty
-  when: manual
   allow_failure: true
 
 combined / build:
@@ -64,5 +62,4 @@ combined / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=COMBINED ../scripts/build-darwin.sh | tee xcodebuild-combined.log | xcpretty
-  when: manual
   allow_failure: true
