@@ -26,7 +26,8 @@ macos / build:
       - $GPGERROR_PATH/doc/yat2m-for-build
       - $GPGERROR_PATH/src/mkerrcodes
       - $GPGERROR_PATH/src/mkheader
-      - $TESTS_PATH/*
+      - $TESTS_PATH/bt-*
+      - $TESTS_PATH/test-*
       - build.darwin/xcodebuild.log
     expire_in: 6h
   script:
@@ -34,4 +35,22 @@ macos / build:
     - cd build.darwin
     - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh | tee xcodebuild.log | xcpretty
   when: manual
+  allow_failure: true
+
+macos / unit-test:
+  stage: test
+  extends:
+    - .prepare-macos-image
+  artifacts:
+    paths:
+      - $BUILD_PATH/client.app
+      - $BUILD_PATH/injector.app
+      - $BUILD_PATH/lib*.dylib
+      - $BUILD_PATH/lib*.a
+      - $TESTS_PATH/test-*
+    expire_in: 6h
+  image: $BUILDER_IMAGE
+  script:
+    - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
+    - for test in ./$TESTS_PATH/test*; do "$test" --log_level=test_suite; done
   allow_failure: true
