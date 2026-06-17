@@ -22,8 +22,10 @@ macos / build:
       - $BOOST_PATH/b2
       - $GCRYPT_PATH/cipher/gost-s-box
       - $GCRYPT_PATH/doc/yat2m
+      - $GCRYPT_PATH/out/lib/lib*.dylib
       - $GCRYPT_PATH/tests/testdrv-build
       - $GPGERROR_PATH/doc/yat2m-for-build
+      - $GPGERROR_PATH/out/lib/lib*.dylib
       - $GPGERROR_PATH/src/mkerrcodes
       - $GPGERROR_PATH/src/mkheader
       - $TESTS_PATH/bt-*
@@ -46,6 +48,8 @@ macos / unit-test:
       - $BUILD_PATH/injector.app
       - $BUILD_PATH/lib*.dylib
       - $BUILD_PATH/lib*.a
+      - $GCRYPT_PATH/out/lib/lib*.dylib
+      - $GPGERROR_PATH/out/lib/lib*.dylib
       - $TESTS_PATH/test-*
     expire_in: 6h
   script:
