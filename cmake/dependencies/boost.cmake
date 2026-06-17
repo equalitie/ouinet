@@ -2,24 +2,8 @@ if(NOT BOOST_VERSION)
     set(BOOST_VERSION 1.88.0)
 endif ()
 
-if (${BOOST_VERSION} EQUAL 1.79.0)
-    set(BOOST_VERSION_HASH 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
-    set(BOOST_COROUTINE_BACKEND coroutine)
-elseif (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
-    if (${BOOST_VERSION} EQUAL 1.87.0)
-      set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
-      if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
-          # There is a bug in boost::outcome (used by cpp-upnp) which causes
-          # compilation issues. This works around it but also disables some nicer
-          # GDB error messages. I'm not sure it matters much on Android, plus
-          # AFAIK we always check the `outcome::result` type before we access
-          # it's value, so probably will also never happen.
-          # Github issue for the bug is here: https://github.com/ned14/outcome/pull/308
-          add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
-          add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
-      endif()
-      list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
-    elseif (${BOOST_VERSION} EQUAL 1.88.0)
+if (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
+    if (${BOOST_VERSION} EQUAL 1.88.0)
       set(BOOST_VERSION_HASH 46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b)
       list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-1_88_0.patch)
     endif ()
@@ -48,13 +32,6 @@ string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 set(OUINET_BOOST_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost")
 set(OUINET_BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
 
-if(BOOST_VERSION LESS_EQUAL 1.72.0)
-    list(APPEND BOOST_PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
-        ${CMAKE_CURRENT_LIST_DIR}/inline-boost/thread-pthread-stack-min-def-${BOOST_VERSION_FILENAME}.patch
-    )
-endif()
-
 set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
 set(BOOST_BUILD_SHARED ON)
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
@@ -77,10 +54,6 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         set(BOOST_ABI "sysv")
     else()
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
-    endif()
-
-    if(BOOST_VERSION LESS_EQUAL 1.77.0)
-        list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
     endif()
 
     set(BOOST_ENVIRONMENT
@@ -129,9 +102,6 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
 
     link_libraries(ws2_32 mswsock)
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    if(BOOST_VERSION EQUAL 1.79.0)
-      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
-    endif()
     # Unary function is deprecated in clang 16, this definition avoids using it
     set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
     set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
@@ -141,9 +111,6 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     # iOS libraries must to be built as static libs that are linked into a single dynamic lib
     set(BOOST_BUILD_SHARED OFF)
-    if(BOOST_VERSION EQUAL 1.79.0)
-      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
-    endif()
     set(OUINET_BOOST_CONFIGURE_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
     # Unary function is deprecated in clang 16, this definition avoids using it
     set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
