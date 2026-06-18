@@ -104,7 +104,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     # Unary function is deprecated in clang 16, this definition avoids using it
     set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
-    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++23 -DBOOST_NO_CXX98_FUNCTION_BASE")
     set(BOOST_ARCH_CONFIGURATION
             cxxflags=${BOOST_CXXFLAGS}
     )
@@ -114,7 +114,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     set(OUINET_BOOST_CONFIGURE_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
     # Unary function is deprecated in clang 16, this definition avoids using it
     set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
-    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++23 -DBOOST_NO_CXX98_FUNCTION_BASE")
     string(TOLOWER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
     set(BOOST_ENVIRONMENT )
     if (${PLATFORM} STREQUAL "OS64")
