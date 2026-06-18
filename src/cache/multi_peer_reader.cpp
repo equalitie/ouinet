@@ -112,7 +112,7 @@ connect( udp::endpoint ep
         return std::unexpected(ec);
     }
 
-    return GenericStream(move(s));
+    return GenericStream(std::move(s));
 }
 
 class MultiPeerReader::Peer {
@@ -359,7 +359,7 @@ public:
             return std::unexpected(asio::error::not_found);
         }
 
-        _hash_list = move(*hash_list);
+        _hash_list = std::move(*hash_list);
         _connection = std::move(con);
 
         return {};
@@ -416,15 +416,15 @@ public:
          , util::LogPath log_path)
         : _exec(exec)
         , _cv(_exec)
-        , _cache_pk(move(cache_pk))
-        , _lan_peer_eps(move(lan_peer_eps))
-        , _lan_my_eps(move(lan_my_eps))
-        , _wan_my_eps(move(wan_my_eps))
-        , _resource_id(move(resource_id))
+        , _cache_pk(std::move(cache_pk))
+        , _lan_peer_eps(std::move(lan_peer_eps))
+        , _lan_my_eps(std::move(lan_my_eps))
+        , _wan_my_eps(std::move(wan_my_eps))
+        , _resource_id(std::move(resource_id))
         , _resource_key(resource_key)
-        , _dht_lookup(move(peer_lookup))
-        , _newest_proto_seen(move(newest_proto_seen))
-        , _log_path(move(log_path))
+        , _dht_lookup(std::move(peer_lookup))
+        , _newest_proto_seen(std::move(newest_proto_seen))
+        , _log_path(std::move(log_path))
         , _random_generator(_random_device())
     {
         if (!_dht_lookup) {
@@ -499,9 +499,9 @@ public:
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
          , util::LogPath log_path)
-        : Peers( exec, move(lan_my_eps), {}, move(lan_peer_eps)
-               , move(cache_pk), resource_id, resource_key, nullptr
-               , move(newest_proto_seen), move(log_path))
+        : Peers( exec, std::move(lan_my_eps), {}, std::move(lan_peer_eps)
+               , std::move(cache_pk), resource_id, resource_key, nullptr
+               , std::move(newest_proto_seen), std::move(log_path))
     {}
 
     // Constructor for BEP3 tracker + I2P peers
@@ -517,18 +517,16 @@ public:
          , util::LogPath log_path)
         : _exec(exec)
         , _cv(_exec)
-        , _cache_pk(move(cache_pk))
+        , _cache_pk(std::move(cache_pk))
         , _resource_id(resource_id)
         , _resource_key(resource_key)
-        , _i2p_lookup(move(i2p_lookup))
-        , _i2p_session(move(i2p_session))
-        , _newest_proto_seen(move(newest_proto_seen))
-        , _log_path(move(log_path))
+        , _i2p_lookup(std::move(i2p_lookup))
+        , _i2p_session(std::move(i2p_session))
+        , _newest_proto_seen(std::move(newest_proto_seen))
+        , _log_path(std::move(log_path))
         , _random_generator(_random_device())
     {
         task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
-            sys::error_code ec;
-
             auto i2p_dests = _i2p_lookup->get(Async(y, c, log_path));
 
             if (!i2p_dests.has_value()) {
@@ -805,12 +803,12 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _log_path(std::move(log_path))
 {
     _peers = make_unique<Peers>(ex
-                               , move(lan_my_eps)
-                               , move(lan_peer_eps)
-                               , move(cache_pk)
-                               , move(resource_id)
-                               , move(resource_key)
-                               , move(newest_proto_seen)
+                               , std::move(lan_my_eps)
+                               , std::move(lan_peer_eps)
+                               , std::move(cache_pk)
+                               , std::move(resource_id)
+                               , std::move(resource_key)
+                               , std::move(newest_proto_seen)
                                , _log_path.tag("Peers"));
 }
 
@@ -828,12 +826,12 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     _peers = make_unique<Peers>(ex
                                , peer_lookup->get_dht_lock()->local_endpoints()
                                , std::set<udp::endpoint>{}
-                               , move(lan_peer_eps)
-                               , move(cache_pk)
-                               , move(resource_id)
-                               , move(resource_key)
-                               , move(peer_lookup)
-                               , move(newest_proto_seen)
+                               , std::move(lan_peer_eps)
+                               , std::move(cache_pk)
+                               , std::move(resource_id)
+                               , std::move(resource_key)
+                               , std::move(peer_lookup)
+                               , std::move(newest_proto_seen)
                                , _log_path.tag("Peers"));
 }
 
@@ -849,12 +847,12 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _log_path(log_path)
 {
     _peers = make_unique<Peers>(ex
-                               , move(cache_pk)
-                               , move(resource_id)
-                               , move(resource_key)
-                               , move(i2p_lookup)
-                               , move(i2p_session)
-                               , move(newest_proto_seen)
+                               , std::move(cache_pk)
+                               , std::move(resource_id)
+                               , std::move(resource_key)
+                               , std::move(i2p_lookup)
+                               , std::move(i2p_session)
+                               , std::move(newest_proto_seen)
                                , log_path);
 }
 

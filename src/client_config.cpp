@@ -218,7 +218,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 "string is missing a colon: ", cred);
         }
 
-        _client_credentials = move(cred);
+        _client_credentials = std::move(cred);
     }
 
     auto maybe_set_pk = [&] (const string& opt_name, auto& pk) {

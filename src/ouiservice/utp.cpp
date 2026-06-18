@@ -81,7 +81,7 @@ std::expected<GenericStream, sys::error_code> UtpOuiServiceServer::accept(Async 
     if (!s.has_value()) {
         return std::unexpected(s.error());
     }
-    return move(*s);
+    return std::move(*s);
 }
 
 UtpOuiServiceClient::UtpOuiServiceClient( asio::any_io_executor ex
@@ -89,7 +89,7 @@ UtpOuiServiceClient::UtpOuiServiceClient( asio::any_io_executor ex
                                         , asio::ip::udp::endpoint endpoint):
     _ex(std::move(ex)),
     _remote_endpoint(endpoint),
-    _udp_multiplexer(move(m))
+    _udp_multiplexer(std::move(m))
 {
 }
 

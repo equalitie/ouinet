@@ -305,12 +305,12 @@ ouinet::util::to_cache_response(http::response_header<> rs, sys::error_code& ec)
         return rs;
     }
 
-    rs = remove_ouinet_fields(move(rs));
+    rs = remove_ouinet_fields(std::move(rs));
     // TODO: Handle `Trailer:` properly.
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is
     // needed.
-    return filter_fields( move(rs)
+    return filter_fields( std::move(rs)
                         , http::field::server
                         , http::field::retry_after
                         , http::field::content_length

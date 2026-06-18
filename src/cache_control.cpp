@@ -177,7 +177,7 @@ Session add_warning(Session s, const char* value)
 static
 Session add_stale_warning(Session response)
 {
-    return add_warning( move(response)
+    return add_warning( std::move(response)
                       , "110 Ouinet \"Response is stale\"");
 }
 
@@ -228,7 +228,7 @@ CacheControl::fetch(const CacheRequest& request, Async yield) {
         if (stored_result) {
             LOG_DEBUG(ryield, " Revalidation failed, cached response is stale");
             return add_warning(
-                move(stored_result->response),
+                std::move(stored_result->response),
                 "111 Ouinet \"Revalidation Failed\""
             );
         }
@@ -303,7 +303,7 @@ CacheControl::fetch(const CacheRequest& request, Async yield) {
         LOG_DEBUG(oyield, " Response was served from cache: cannot reach the injector");
 
         if (is_expired(cache_entry)) {
-            cache_entry.response = add_stale_warning(move(cache_entry.response));
+            cache_entry.response = add_stale_warning(std::move(cache_entry.response));
         }
 
         return std::move(cache_entry.response);
@@ -312,7 +312,7 @@ CacheControl::fetch(const CacheRequest& request, Async yield) {
     if (!is_expired(cache_entry)) {
         LOG_DEBUG(yield, " Response was served from cache: not expired");
         // yield.cancel();
-        return move(cache_entry.response);
+        return std::move(cache_entry.response);
     }
 
     auto cache_etag  = get(cache_entry.response, http::field::etag);

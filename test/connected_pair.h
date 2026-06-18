@@ -35,10 +35,10 @@ connected_pair(asio::yield_context yield)
     s1.async_connect(a.local_endpoint(), yield[connect_ec]);
     wc.wait(yield);
 
-    if (accept_ec)  return or_throw(yield, accept_ec, Ret(move(s1),move(s2)));
-    if (connect_ec) return or_throw(yield, connect_ec, Ret(move(s1),move(s2)));
+    if (accept_ec)  return or_throw(yield, accept_ec, Ret(std::move(s1),std::move(s2)));
+    if (connect_ec) return or_throw(yield, connect_ec, Ret(std::move(s1),std::move(s2)));
 
-    return make_pair(move(s1), move(s2));
+    return make_pair(std::move(s1), std::move(s2));
 }
 
 }} // namespaces

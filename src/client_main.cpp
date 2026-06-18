@@ -27,7 +27,7 @@ int main(int argc, const char* argv[])
 
     asio::signal_set signals(ctx, SIGINT, SIGTERM);
 
-    Client client(ctx, move(cfg));
+    Client client(ctx, std::move(cfg));
 
     unique_ptr<ForceExitOnSignal> force_exit;
 

@@ -26,16 +26,16 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
 #endif
 
     X509_set_pubkey(_x, ca_cert.get_private_key());
-    
+
     string wc_cn("*." + cn);
-    X509_NAME* name = X509_get_subject_name(_x); 
+    X509_NAME* name = X509_get_subject_name(_x);
 
     if (!X509_NAME_add_entry_by_txt( name, "CN"
                                    , MBSTRING_ASC,
                                      (const unsigned char*) wc_cn.data()
                                      , wc_cn.size(), -1, 0))
         throw runtime_error("Failed in X509_NAME_add_entry_by_txt");
-    
+
     if (!X509_set_issuer_name(_x, ca_cert.get_subject_name()))
         throw runtime_error("Failed in X509_set_issuer_name");
 
@@ -76,7 +76,7 @@ DummyCertificate& DummyCertificate::operator=(DummyCertificate&& other)
 
     _x = other._x;
     other._x = nullptr;
-    _pem_certificate = move(other._pem_certificate);
+    _pem_certificate = std::move(other._pem_certificate);
 
     return *this;
 }

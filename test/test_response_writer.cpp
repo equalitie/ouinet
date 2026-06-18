@@ -42,10 +42,10 @@ stream(stringstream& outs, WaitCondition& outwc, asio::any_io_executor exec, asi
     s1.async_connect(a.local_endpoint(), yield[connect_ec]);
     wc.wait(yield);
 
-    if (accept_ec)  return or_throw(yield, accept_ec, move(s1));
-    if (connect_ec) return or_throw(yield, connect_ec, move(s1));
+    if (accept_ec)  return or_throw(yield, accept_ec, std::move(s1));
+    if (connect_ec) return or_throw(yield, connect_ec, std::move(s1));
 
-    task::spawn_detached(exec, [&outs, done = outwc.lock(), s = move(s2)]
+    task::spawn_detached(exec, [&outs, done = outwc.lock(), s = std::move(s2)]
                      (asio::yield_context yield) mutable {
         array<uint8_t, 2048> outd;
         auto outb = asio::buffer(outd);

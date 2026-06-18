@@ -526,7 +526,7 @@ struct Client::Impl {
                 , resource_id
                 , resource_key
                 , _cache_pk
-                , move(i2p_lookup)
+                , std::move(i2p_lookup)
                 , _i2p_tracker->get_session()
                 , _newest_proto_seen
                 , log_path);
@@ -545,7 +545,7 @@ struct Client::Impl {
                 , resource_id
                 , resource_key
                 , _cache_pk
-                , move(local_peers)
+                , std::move(local_peers)
                 , _lan_my_endpoints
                 , _newest_proto_seen
                 , log_path);
@@ -573,7 +573,7 @@ struct Client::Impl {
             return rs;
         }
 
-        return or_throw<Session>(yield, ec, move(s));
+        return or_throw<Session>(yield, ec, std::move(s));
     }
 
     Session load_from_local( const ResourceId& resource_id
@@ -592,13 +592,13 @@ struct Client::Impl {
 
         auto rs = compat([&](Async yield) {
             return Session::create(
-                move(rr),
+                std::move(rr),
                 is_head_request,
                 yield.tag("read_hdr")
             );
         })(cancel, yield[ec]);
 
-        return_or_throw_on_error(yield, cancel, ec, move(rs));
+        return_or_throw_on_error(yield, cancel, ec, std::move(rs));
 
         rs.response_header().set( http_::response_source_hdr  // for agent
                                 , http_::response_source_hdr_local_cache);
@@ -750,7 +750,7 @@ struct Client::Impl {
 
         auto groups_dir = _cache_dir / groups_curver_subdir;
         _groups = static_groups
-            ? load_backed_dht_groups(groups_dir, move(static_groups), _ex, cancel, y[e])
+            ? load_backed_dht_groups(groups_dir, std::move(static_groups), _ex, cancel, y[e])
             : load_dht_groups(groups_dir, _ex, cancel, y[e]);
         return_or_throw_on_error(y, cancel, e);
 
@@ -844,8 +844,8 @@ Client::build( AsioExecutor ex
             // before further propagating it.
             // The verification is also done for content retrieved for the local agent,
             // and in this case it is indeed desirable to do so.
-            static_http_store = make_static_http_store( move(store_dir)
-                                                      , move(canon_content_dir)
+            static_http_store = make_static_http_store( std::move(store_dir)
+                                                      , std::move(canon_content_dir)
                                                       , cache_pk
                                                       , ex);
         ec = {};
@@ -866,12 +866,12 @@ Client::build( AsioExecutor ex
     fs::create_directories(store_dir, ec);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     auto http_store = static_http_store
-        ? make_backed_http_store(move(store_dir), move(static_http_store), ex)
-        : make_http_store(move(store_dir), ex);
+        ? make_backed_http_store(std::move(store_dir), std::move(static_http_store), ex)
+        : make_http_store(std::move(store_dir), ex);
 
-    unique_ptr<Impl> impl(new Impl( ex, move(lan_my_eps)
-                                  , cache_pk, move(cache_dir), std::move(static_cache_dir)
-                                  , move(http_store), max_cached_age, yield.log_path()));
+    unique_ptr<Impl> impl(new Impl( ex, std::move(lan_my_eps)
+                                  , cache_pk, std::move(cache_dir), std::move(static_cache_dir)
+                                  , std::move(http_store), max_cached_age, yield.log_path()));
 
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);

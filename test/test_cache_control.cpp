@@ -80,16 +80,16 @@ Pipe make_pipe(util::AsioExecutor exec) {
 Session make_session(Response rs, Async yield) {
     auto pipe = make_pipe(yield.get_executor());
 
-    task::spawn_detached(yield.get_executor(), [rs, sink = move(pipe.sink)] (auto yield) mutable {
+    task::spawn_detached(yield.get_executor(), [rs, sink = std::move(pipe.sink)] (auto yield) mutable {
         http::async_write(sink, rs, yield);
     });
 
-    return unwrap(Session::create(move(pipe.source), false, yield));
+    return unwrap(Session::create(std::move(pipe.source), false, yield));
 }
 
 Entry make_entry(posix_time::ptime created, Response rs, Async yield) {
-    Session s = make_session(move(rs), yield);
-    return Entry{ created , move(s) };
+    Session s = make_session(std::move(rs), yield);
+    return Entry{ created , std::move(s) };
 }
 
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)

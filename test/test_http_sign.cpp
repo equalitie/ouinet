@@ -434,7 +434,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
             auto req_h = get_request_header();
             auto sk = get_private_key();
             Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
-                (move(origin_r), move(req_h), inj_id, inj_ts, sk);
+                (std::move(origin_r), std::move(req_h), inj_id, inj_ts, sk);
             auto origin_rs = compat([&](Async yield) {
                 return Session::create(std::move(origin_rvr), false, yield);
             })(cancel, y[e]);
@@ -538,7 +538,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             auto req_h = get_request_header();
             auto sk = get_private_key();
             Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
-                (move(origin_r), move(req_h), inj_id, inj_ts, sk);
+                (std::move(origin_r), std::move(req_h), inj_id, inj_ts, sk);
             auto origin_rs = compat([&](Async yield) {
                 return Session::create(std::move(origin_rvr), false, yield);
             })(cancel, y[e]);
@@ -650,7 +650,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             auto req_h = get_request_header();
             auto sk = get_private_key();
             Session::reader_uptr origin_rvr = make_unique<cache::SigningReader>
-                (move(origin_r), move(req_h), inj_id, inj_ts, sk);
+                (std::move(origin_r), std::move(req_h), inj_id, inj_ts, sk);
 
             auto origin_rs = compat([&](Async yield) {
                 return Session::create(std::move(origin_rvr), false, yield);
@@ -922,7 +922,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
             sys::error_code e;
             auto pk = get_public_key();
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
-                ( move(signed_r), pk
+                ( std::move(signed_r), pk
                 , cache::VerifyingReader::status_set{http::status::partial_content});
             auto signed_rs = compat([&](Async yield) {
                 return Session::create(move(signed_rvr), false, yield);

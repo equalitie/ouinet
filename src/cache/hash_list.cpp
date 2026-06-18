@@ -112,7 +112,7 @@ HashList HashList::load(
 
     if (!part->is_head()) return or_throw<HashList>(y, bad_msg);
 
-    auto raw_head = move(*part->as_head());
+    auto raw_head = std::move(*part->as_head());
 
     if (raw_head.result() == http::status::not_found) {
         return or_throw<HashList>(y, asio::error::not_found);
@@ -202,7 +202,7 @@ HashList HashList::load(
 
     if (blocks.empty()) return or_throw<HashList>(y, bad_msg);
 
-    HashList hs{move(*head_o), move(blocks)};
+    HashList hs{std::move(*head_o), std::move(blocks)};
 
     if (!hs.verify()) {
         return or_throw<HashList>(y, bad_msg);

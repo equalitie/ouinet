@@ -23,8 +23,8 @@ using namespace std::chrono_literals;
 struct MultiUtpServer::State
 {
     State( asio::any_io_executor ex, unique_ptr<AbstractServer> srv)
-        : ex(move(ex))
-        , server(move(srv))
+        : ex(std::move(ex))
+        , server(std::move(srv))
     {
     }
 
@@ -44,7 +44,7 @@ struct MultiUtpServer::State
                     continue;
                 }
 
-                sys::error_code ec = accept_queue.async_send(sys::error_code(), move(*con), yield);
+                sys::error_code ec = accept_queue.async_send(sys::error_code(), std::move(*con), yield);
                 if (ec) break;
             }
         });
@@ -70,11 +70,11 @@ MultiUtpServer::MultiUtpServer( asio::any_io_executor ex
         auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep, log_path);
         if (ssl_context) {
             LOG_INFO(log_path, " Bep5: uTP/TLS Address: ", ep);
-            auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *ssl_context);
-            _states.emplace_back(new State(ex, move(tls)));
+            auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, std::move(base), *ssl_context);
+            _states.emplace_back(new State(ex, std::move(tls)));
         } else {
             LOG_INFO(log_path, " Bep5: uTP Address: ", ep);
-            _states.emplace_back(new State(ex, move(base)));
+            _states.emplace_back(new State(ex, std::move(base)));
         }
     }
 }
@@ -103,7 +103,7 @@ std::expected<GenericStream, sys::error_code> MultiUtpServer::accept(Async yield
     sys::error_code ec;
     auto s = _accept_queue.async_receive(yield);
     if (!s.has_value()) return std::unexpected(s.error());
-    return move(*s);
+    return std::move(*s);
 }
 
 MultiUtpServer::~MultiUtpServer()

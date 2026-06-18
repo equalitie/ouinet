@@ -212,7 +212,7 @@ struct LocalPeerDiscovery::Impl {
     {
         auto opt_eps = consume_endpoints(sv, peer_ep.address());
         if (!opt_eps) return;
-        add_endpoints(peer_id, peer_ep, move(*opt_eps));
+        add_endpoints(peer_id, peer_ep, std::move(*opt_eps));
         sys::error_code ec;
         _socket.async_send_to( asio::buffer(reply_message())
                              , peer_ep
@@ -225,7 +225,7 @@ struct LocalPeerDiscovery::Impl {
     {
         auto opt_eps = consume_endpoints(sv, peer_ep.address());
         if (!opt_eps) return;
-        add_endpoints(peer_id, peer_ep, move(*opt_eps));
+        add_endpoints(peer_id, peer_ep, std::move(*opt_eps));
     }
 
     void handle_bye(boost::string_view sv, PeerId peer_id)
@@ -250,7 +250,7 @@ struct LocalPeerDiscovery::Impl {
             for (auto ep : eps) { ss << ep << ";"; }
             LOG_INFO("LocalPeerDiscovery: Found local ouinet peer(s) ", ss.str());
         }
-        _peers[peer_id] = {peer_ep, move(eps)};
+        _peers[peer_id] = {peer_ep, std::move(eps)};
     }
 };
 

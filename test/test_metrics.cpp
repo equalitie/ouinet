@@ -29,7 +29,7 @@ BOOST_AUTO_TEST_CASE(enable_enable) {
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), move(encryption_key));
+        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
         Cancel cancel;
 
@@ -53,7 +53,7 @@ BOOST_AUTO_TEST_CASE(disable_disable) {
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), move(encryption_key));
+        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
         Cancel cancel;
 
@@ -77,7 +77,7 @@ BOOST_AUTO_TEST_CASE(enable_disable_enable) {
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), move(encryption_key));
+        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
         Cancel cancel;
 
@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE(disable_enable_disable) {
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), move(encryption_key));
+        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
         Cancel cancel;
 
@@ -125,4 +125,3 @@ BOOST_AUTO_TEST_CASE(disable_enable_disable) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

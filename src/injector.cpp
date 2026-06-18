@@ -181,7 +181,7 @@ resolve_target(const http::request_header<>& req
         return or_throw<TcpLookup>(yield, ec);
     }
 
-    return or_throw(yield, ec, move(lookup));
+    return or_throw(yield, ec, std::move(lookup));
 }
 
 //------------------------------------------------------------------------------
@@ -279,8 +279,8 @@ void handle_connect_request( GenericStream client_c
 
     // Forward the rest of data in both directions.
     full_duplex(
-            move(client_c),
-            move(origin_c),
+            std::move(client_c),
+            std::move(origin_c),
             [&] (size_t byte_count) { fwd_bytes_c2o += byte_count; },
             [&] (size_t byte_count) { fwd_bytes_o2c += byte_count; },
             cancel,
@@ -327,7 +327,7 @@ class InjectorCacheControl {
             if (ec) return or_throw<GenericStream>(yield, ec);
 
             if (url->scheme == "https") {
-                auto c = ssl::util::client_handshake( move(socket)
+                auto c = ssl::util::client_handshake( std::move(socket)
                                                     , ssl_ctx
                                                     , url->host
                                                     , Async(yield, cancel));
@@ -335,7 +335,7 @@ class InjectorCacheControl {
                 if (!c.has_value()) return or_throw<GenericStream>(yield, c.error());
                 return std::move(*c);
             } else {
-                return GenericStream(move(socket));
+                return GenericStream(std::move(socket));
             }
         }
         catch (Async::Cancelled const&) {
@@ -351,7 +351,7 @@ public:
                         , OriginPools& origin_pools
                         , const InjectorConfig& config
                         , uuid_generator& genuuid)
-        : executor(move(executor))
+        : executor(std::move(executor))
         , ssl_ctx(ssl_ctx)
         , config(config)
         , genuuid(genuuid)
@@ -405,16 +405,16 @@ private:
                 auto insert_id = to_string(genuuid());
                 auto insert_ts = chrono::seconds(time(nullptr)).count();
                 sig_reader = make_unique<cache::SigningReader>
-                    (move(orig_con), cache_rq, move(insert_id), insert_ts, config.cache_private_key());
+                    (std::move(orig_con), cache_rq, std::move(insert_id), insert_ts, config.cache_private_key());
             } else {
                 // Responses of unsafe or uncacheable requests should not be cached.
                 yield.log("Not signing response: not a GET or HEAD request");
-                sig_reader = make_unique<http_response::Reader>(move(orig_con));
+                sig_reader = make_unique<http_response::Reader>(std::move(orig_con));
             }
 
             orig_sess = compat([&](Async yield) {
                 return Session::create(
-                    move(sig_reader),
+                    std::move(sig_reader),
                     cache_rq_method == http::verb::head,
                     yield.tag("read_hdr")
                 );
@@ -460,7 +460,7 @@ private:
             http_logger.log(druid, cache_rq, orig_sess, fwd_bytes);
         }
 
-        keep_connection_if(move(orig_sess), rs_keep_alive);
+        keep_connection_if(std::move(orig_sess), rs_keep_alive);
     }
 
 public:
@@ -479,7 +479,7 @@ public:
             druid = std::string(dr_it->value());
 
         // Sanitize and pop out Ouinet internal HTTP headers.
-        auto crq = util::to_cache_request(move(rq));
+        auto crq = util::to_cache_request(std::move(rq));
         if (!crq) {
             yield.log("Invalid request");
             ec = asio::error::invalid_argument;
@@ -633,7 +633,7 @@ void serve( InjectorConfig& config
                 if (ec || !req_keep_alive) break;
                 continue;
             }
-            return handle_connect_request( move(con), move(con_rbuf)
+            return handle_connect_request( std::move(con), std::move(con_rbuf)
                                          , req
                                          , dns_resolver
                                          , cancel  // do not propagate error
@@ -687,10 +687,10 @@ void serve( InjectorConfig& config
             bool client_was_written_to = false;
             if (!ec) {
                 using OrigReader = http_response::Reader;
-                Session::reader_uptr rrp = std::make_unique<OrigReader>(move(orig_con));
+                Session::reader_uptr rrp = std::make_unique<OrigReader>(std::move(orig_con));
                 auto orig_sess = compat([&](Async yield) {
                     return Session::create(
-                        move(rrp),
+                        std::move(rrp),
                         req.method() == http::verb::head,
                         yield.tag("read_hdr")
                     );
@@ -739,7 +739,7 @@ void serve( InjectorConfig& config
                 continue;
             }
 
-            cc.keep_connection_if(move(orig_con), res_keep_alive);
+            cc.keep_connection_if(std::move(orig_con), res_keep_alive);
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
@@ -756,7 +756,7 @@ void serve( InjectorConfig& config
                             , yield[ec].tag("inject/handle_restricted"));
             }
             else {
-                cc.fetch( con, move(req)
+                cc.fetch( con, std::move(req)
                         , dns_resolver
                         , cancel, yield[ec].tag("inject/fetch"));
             }
@@ -894,7 +894,7 @@ Injector::Injector(
                                , util::str(endpoint));
 
         auto base = make_unique<ouiservice::TcpOuiServiceServer>(_exec, endpoint);
-        proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, move(base), *_ssl_context));
+        proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
     }
 
     if (_config.utp_endpoint()) {
@@ -905,7 +905,7 @@ Injector::Injector(
                                , util::str(endpoint));
 
         auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, log_path);
-        proxy_server->add(move(srv));
+        proxy_server->add(std::move(srv));
     }
 
     if (_config.utp_tls_endpoint()) {
@@ -920,7 +920,7 @@ Injector::Injector(
             LOG_INFO(log_path, " uTP/TLS address: ", *local_ep);
             util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
-            proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, move(base), *_ssl_context));
+            proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
 
         } else {
             LOG_ERROR(log_path, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
@@ -965,11 +965,11 @@ Injector::Injector(
 
     if (_config.listen_on_i2p()) {
         struct Server : public OuiServiceImplementationServer {
-            sys::error_code start_listen(Async) {
+            sys::error_code start_listen(Async) override {
                 return sys::error_code();
             }
 
-            void stop_listen() { _cancel(); }
+            void stop_listen() override { _cancel(); }
 
             std::expected<GenericStream, sys::error_code> accept(Async yield) override {
                 auto future_result = _session_future.wait(yield);

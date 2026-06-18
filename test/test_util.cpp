@@ -58,7 +58,7 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
 
                 auto start = Clock::now();
 
-                task::spawn_detached(ctx, [c1 = move(c1), &ctx]
+                task::spawn_detached(ctx, [c1 = std::move(c1), &ctx]
                                  (asio::yield_context yield) mutable {
                     asio::post(ctx, yield);
                     c1();
@@ -157,4 +157,3 @@ BOOST_AUTO_TEST_CASE(test_async_generator) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

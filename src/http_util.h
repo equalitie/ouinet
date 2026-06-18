@@ -479,7 +479,7 @@ _to_canonical_request(Request rq, const Fields&... keep_fields) {
     // do not break privacy and can not break browsing for others.
     // For the moment we do not yet care about
     // requests coming from Ouinet injector being fingerprinted as such.
-    return filter_fields( move(rq)
+    return filter_fields( std::move(rq)
                         // Still DROP some fields that may break browsing for others
                         // and which have no sensible default (for all).
                         , http::field::connection
@@ -510,7 +510,7 @@ to_injector_request(Request rq) {
     // to behave like an injector instead of a proxy.
     rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
 
-    return _to_canonical_request( move(rq)
+    return _to_canonical_request( std::move(rq)
                                // PROXY AUTHENTICATION HEADERS (PASS)
                                , http::field::proxy_authorization
                                // CACHING AND RANGE HEADERS (PASS)
@@ -535,9 +535,9 @@ to_injector_request(Request rq) {
 // The rest of headers are left intact.
 template<class Request>
 static Request to_origin_request(Request rq) {
-    rq = req_form_from_absolute_to_origin(move(rq));
+    rq = req_form_from_absolute_to_origin(std::move(rq));
     rq.erase(http::field::proxy_authorization);
-    return remove_ouinet_fields(move(rq));
+    return remove_ouinet_fields(std::move(rq));
 }
 
 // Make the given request ready to be sent to the cache.
@@ -548,7 +548,7 @@ static Request to_origin_request(Request rq) {
 template<class Request>
 static boost::optional<Request>
 to_cache_request(Request rq) {
-    return _to_canonical_request(move(rq));
+    return _to_canonical_request(std::move(rq));
 }
 
 // Make the given response ready to be sent to the cache.

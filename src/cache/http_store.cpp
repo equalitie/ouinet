@@ -580,7 +580,7 @@ http_store_load_hash_list( const fs::path& dir
         auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
         if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
 
-        hl.blocks.push_back({*d, *sig});
+        hl.blocks.push_back({*d, { *sig }});
     }
 
     if (hl.blocks.empty()) {
@@ -735,7 +735,7 @@ make_static_http_store( fs::path path, fs::path content_path
                       , sign::PublicKey pk, AsioExecutor ex)
 {
     using namespace std;
-    return make_unique<StaticHttpStore>(move(path), move(content_path), move(pk), move(ex));
+    return make_unique<StaticHttpStore>(std::move(path), std::move(content_path), std::move(pk), std::move(ex));
 }
 
 static
@@ -938,7 +938,7 @@ make_http_store(fs::path path, AsioExecutor ex)
 {
     using namespace std;
     auto read_store = make_unique<HttpReadStore>(path, ex);
-    return make_unique<FullHttpStore>(move(path), move(ex), move(read_store));
+    return make_unique<FullHttpStore>(std::move(path), std::move(ex), std::move(read_store));
 }
 
 class BackedHttpStore : public FullHttpStore {
@@ -1022,8 +1022,8 @@ make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_s
 {
     using namespace std;
     auto read_store = make_unique<HttpReadStore>(path, ex);
-    return make_unique<BackedHttpStore>( move(path), move(ex)
-                                       , move(read_store), move(fallback_store));
+    return make_unique<BackedHttpStore>( std::move(path), std::move(ex)
+                                       , std::move(read_store), std::move(fallback_store));
 }
 
 }} // namespaces
