@@ -118,7 +118,7 @@ function build_image (
     )
 
     apt_dependencies=(
-        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev
+        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev gdb
         # For building Ouisync
         pkg-config
         # For building and testing Windows binaries
