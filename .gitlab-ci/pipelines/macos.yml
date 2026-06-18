@@ -25,7 +25,7 @@ macos / build:
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh | tee xcodebuild.log | xcpretty
+    - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh | tee xcodebuild.log
   allow_failure: true
 
 macos / unit-test:
