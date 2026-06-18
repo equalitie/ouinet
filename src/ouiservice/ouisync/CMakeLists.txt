@@ -1,10 +1,10 @@
 if (WITH_OUISYNC)
     # Tell Ouisync cmake file we're using a separately Boost.Asio library
     set(OUISYNC_BOOST_ASIO_SEPARATE_COMPILATION ON CACHE BOOL "" FORCE)
-    
+
     # Enable/Disable mounting (Virtual File System)
     set(OUISYNC_WITH_VFS OFF CACHE BOOL "" FORCE)
-    
+
     if (OUISYNC_SRC_DIR)
         # Use this to debug with local Ouisync sources
         add_subdirectory(
@@ -15,15 +15,15 @@ if (WITH_OUISYNC)
     else()
         # Otherwise download from Git
         include(FetchContent)
-    
+
         FetchContent_Declare(
             ouisync
             GIT_REPOSITORY "https://github.com/equalitie/ouisync"
-            GIT_TAG        "42c763a0bf2abf58515230631676ccc7fcec84be"
+            GIT_TAG        "caeeded47c17b6a9f21c08ed4c1a02b18371207d"
         )
 
         FetchContent_MakeAvailable(ouisync)
-    
+
         FetchContent_GetProperties(ouisync)
 
         add_subdirectory(
