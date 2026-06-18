@@ -195,6 +195,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
             recv += size;
             if (_rx_limit > 0) {
                 maintain_max_rate_bytes_per_sec(_rc_rx.rate(), _rx_limit, yield[ec]);
+                if (terminated) return;
             }
 
             for (auto& entry : std::move(_receive_queue)) {
