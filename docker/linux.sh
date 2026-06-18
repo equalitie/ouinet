@@ -331,8 +331,10 @@ for target_os in ${target_oss[@]}; do
         exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh
     fi
 
-    check_artifacts_exist_for_target_os $target_os
-
+    if [ -n "$artifact_dir" ]; then
+        check_artifacts_exist_for_target_os $target_os
+    fi
+    
     ### Rust Tests
 
     if [ "$run_all_tests" == y ]; then
