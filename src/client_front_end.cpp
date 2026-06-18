@@ -87,10 +87,10 @@ struct ClientFrontEnd::Input {
 
     Input( string html_label, char shortcut, string name
          , vector<E> values, E current_value)
-        : html_label(move(html_label))
+        : html_label(std::move(html_label))
         , shortcut(shortcut)
-        , name(move(name))
-        , values(move(values))
+        , name(std::move(name))
+        , values(std::move(values))
         , current_value(current_value)
     {}
 
@@ -1030,4 +1030,3 @@ Response ClientFrontEnd::serve( ClientConfig& config
 }
 
 ClientFrontEnd::~ClientFrontEnd() {}
-

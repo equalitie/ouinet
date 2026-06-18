@@ -252,7 +252,7 @@ struct Announcer::Loop {
                     // Try inserting three times before moving to the next entry
                     bool success = false;
 
-                    Entry e = move(entries.begin()->first);
+                    Entry e = std::move(entries.begin()->first);
                     for (int i = 0; i != 3; ++i) {
                         auto result = announce(e, yield);
                         if (result) {
@@ -298,8 +298,8 @@ struct Bep5Loop : public Announcer::Loop {
         size_t simultaneous_announcements,
         util::LogPath log_path
     )
-        : Loop(dht->get_executor(), simultaneous_announcements, move(log_path))
-        , dht(move(dht))
+        : Loop(dht->get_executor(), simultaneous_announcements, std::move(log_path))
+        , dht(std::move(dht))
     { }
 
     void start()
@@ -359,7 +359,7 @@ Bep5Announcer::Bep5Announcer(
 )
     : Announcer(dht->get_executor(), simultaneous_announcements)
 {
-    _loop = make_unique<Bep5Loop>(move(dht), simultaneous_announcements, move(log_path));
+    _loop = make_unique<Bep5Loop>(std::move(dht), simultaneous_announcements, std::move(log_path));
     static_cast<Bep5Loop*>(_loop.get())->start();
 }
 

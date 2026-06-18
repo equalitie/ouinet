@@ -57,7 +57,7 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
             }
 
             auto ep = util::str("uTP/", s.remote_endpoint());
-            ec = _accept_queue.async_send(sys::error_code(), {move(s), move(ep)}, yield);
+            ec = _accept_queue.async_send(sys::error_code(), {std::move(s), std::move(ep)}, yield);
             if (ec) break;
         }
     });

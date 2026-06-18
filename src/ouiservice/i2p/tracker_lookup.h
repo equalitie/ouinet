@@ -9,7 +9,7 @@ namespace ouinet {
 class Async;
 class I2pTrackerClient;
 
-namespace bittorrent { class NodeID; }
+namespace bittorrent { struct NodeID; }
 
 class I2pTrackerLookup {
 private:

@@ -58,7 +58,7 @@ private:
     };
 
     struct Candidates;
-    friend class Candidates;
+    friend struct Candidates;
 
 public:
     Bep5Client( std::shared_ptr<bittorrent::DhtBase>

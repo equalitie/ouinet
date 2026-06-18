@@ -5,7 +5,7 @@
 
 namespace ouinet {
 
-namespace bittorrent { class NodeID; }
+namespace bittorrent { struct NodeID; }
 
 class I2pTrackerClient;
 class I2pAddress;

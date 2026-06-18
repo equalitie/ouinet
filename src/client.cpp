@@ -124,7 +124,7 @@ public:
          , util::LogPath log_path
          , std::optional<Client::MockDhtBuilder> dht_builder)
         : _ctx(ctx)
-        , _config(move(cfg))
+        , _config(std::move(cfg))
         // A certificate chain with OUINET_CA + SUBJECT_CERT
         // can be around 2 KiB, so this would be around 2 MiB.
         // TODO: Fine tune if necessary.
@@ -323,16 +323,16 @@ public:
         auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
-        task::spawn_detached(_ctx, ([
+        task::spawn_detached(_ctx.get_executor(), ([
             bt_dht,
             local_ep = mpl.local_endpoint(),
-            m = move(m),
+            m = std::move(m),
             shutdown_signal = _shutdown_signal,
             upnps = _upnps_ptr
         ] (auto y) mutable {
             Async yield(y, shutdown_signal);
 
-            auto ext_ep = bt_dht->add_endpoint(move(m)).wait(yield);
+            auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(yield);
             if (!ext_ep) {
                 return;
             }
@@ -340,7 +340,7 @@ public:
             State::setup_upnp(yield.get_executor(), ext_ep->get().port(), local_ep, upnps);
         }));
 
-        _bt_dht = move(bt_dht);
+        _bt_dht = std::move(bt_dht);
         return _bt_dht;
     }
 
@@ -363,7 +363,7 @@ public:
                 YieldContext yield(yield_, util::LogPath("metrics"));
 
                 try {
-                    client->send_metrics_record(record_name, record_content, *cancel, move(yield));
+                    client->send_metrics_record(record_name, record_content, *cancel, std::move(yield));
                 } catch (std::exception& e) {
                     LOG_WARN("Failed to send metrics: ", e.what());
                     throw;
@@ -460,18 +460,34 @@ private:
     inline
     std::expected<void, sys::error_code> wait_for_injector(Async yield) {
         while (true) {
-            if (_injector) return {};
-            if (!_injector_starting) return std::unexpected(_injector_start_ec);
-            _injector_starting->wait(yield);
+            if (_injector) {
+                return {};
+            }
+
+            if (!_injector_starting) {
+                return std::unexpected(_injector_start_ec);
+            }
+
+            if (auto ec = _injector_starting->wait(yield)) {
+                return std::unexpected(ec);
+            }
         }
     }
 
     inline
     std::expected<void, sys::error_code> wait_for_cache(Async yield) {
         while (true) {
-            if (_cache) return {};
-            if (!_cache_starting) return std::unexpected(_cache_start_ec);
-            _cache_starting->wait(yield);
+            if (_cache) {
+                return {};
+            }
+
+            if (!_cache_starting) {
+                return std::unexpected(_cache_start_ec);
+            }
+
+            if (auto ec = _cache_starting->wait(yield)) {
+                return std::unexpected(ec);
+            }
         }
     }
 
@@ -579,12 +595,12 @@ private:
                     async_sleep(200ms, yield);
                     continue;
                 }
-                yield.spawn([this, con = move(*con)] (Async yield) mutable {
+                yield.spawn([this, con = std::move(*con)] (Async yield) mutable {
                     // Do not log other users' addresses unless debugging.
                     if (get_logger().get_threshold() <= DEBUG) {
                         yield = yield.tag(con.remote_endpoint());
                     }
-                    serve_peer_request(move(con), yield.tag("serve"));
+                    serve_peer_request(std::move(con), yield.tag("serve"));
                 });
             }
         });
@@ -607,8 +623,8 @@ private:
                     continue;
                 }
                 LOG_INFO("Accepted I2P connection");
-                yield.spawn([this, con = move(*con)] (Async yield) mutable {
-                    serve_peer_request(move(con), yield.tag("serve_i2p_req"));
+                yield.spawn([this, con = std::move(*con)] (Async yield) mutable {
+                    serve_peer_request(std::move(con), yield.tag("serve_i2p_req"));
                 });
             }
         });
@@ -799,8 +815,8 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
 
         // Forward the rest of data in both directions.
         ec = full_duplex(
-            move(con),
-            move(*inj),
+            std::move(con),
+            std::move(*inj),
             [&] (size_t byte_count) { fwd_bytes_c2i += byte_count; _metrics.bridge_transfer_c2i(byte_count); },
             [&] (size_t byte_count) { fwd_bytes_i2c += byte_count; _metrics.bridge_transfer_i2c(byte_count); },
             cyield.tag("full_duplex"));
@@ -823,7 +839,7 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
     sys::error_code ec;
 
     if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-        compat([&](Async yield) { wait_for_cache(yield); })(timeout_cancel, yield[ec]);
+        compat([&](Async yield) { return wait_for_cache(yield); })(timeout_cancel, yield[ec]);
         fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
     }
 
@@ -860,7 +876,7 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
         maybe_add_proto_version_warning(hdr);
         assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
         auto date = get_date(hdr);
-        return CacheEntry{date, move(s)};
+        return CacheEntry{date, std::move(s)};
     }
     else if(_ouisync && _ouisync->is_running() && _config.cache_type() == ClientConfig::CacheType::Ouisync) {
         auto rq = request.to_ouisync_request();
@@ -869,7 +885,7 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
             return or_throw<CacheEntry>(yield, session.error());
         }
         auto date = get_date(session->response_header());
-        return CacheEntry{date, move(*session)};
+        return CacheEntry{date, std::move(*session)};
     }
     else {
         _YDEBUG(yield, "Cache is disabled");
@@ -933,7 +949,7 @@ Client::State::fetch_via_self( Rq request
         return or_throw<Session>(yield, ec);
     }
 
-    return Session::create( move(con), request.method() == http::verb::head
+    return Session::create( std::move(con), request.method() == http::verb::head
                           , cancel, yield.tag("read_hdr"));
 }
 
@@ -972,7 +988,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     GenericStream stream;
 
     if (rq.target().starts_with("https:") || rq.target().starts_with("wss:")) {
-        auto sr = ssl::util::client_handshake( move(sock)
+        auto sr = ssl::util::client_handshake( std::move(sock)
                                              , tls_ctx
                                              , host
                                              , Async(yield, cancel, yield.log_path()));
@@ -982,7 +998,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
         stream = std::move(*sr);
     }
     else {
-        stream = move(sock);
+        stream = std::move(sock);
     }
 
     return stream;
@@ -1113,7 +1129,7 @@ Session Client::State::fetch_fresh_from_origin( Rq rq
         return Session::create(
             std::move(con),
             rq.method() == http::verb::head,
-            move(metrics),
+            std::move(metrics),
             yield.tag("read_hdr")
         );
     })(timeout_cancel, yield[ec]);
@@ -1222,12 +1238,12 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
             std::expected<GenericStream, sys::error_code> con_e;
             if (url->scheme == "https") {
-                con_e = ssl::util::client_handshake( move(inj.connection)
+                con_e = ssl::util::client_handshake( std::move(inj.connection)
                                                    , tls_ctx
                                                    , url->host
                                                    , yield);
             } else {
-                con_e = move(inj.connection);
+                con_e = std::move(inj.connection);
             }
 
             if (!con_e) {
@@ -1246,7 +1262,7 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
             }
 
             auto session_e = Session::create(
-                move(con),
+                std::move(con),
                 rq.method() == http::verb::head,
                 std::move(metrics),
                 yield.tag("read_hdr")
@@ -1338,9 +1354,9 @@ Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
 
             // Receive response
             auto session_e = Session::create(
-                move(con),
+                std::move(con),
                 request.method() == http::verb::head,
-                move(metrics),
+                std::move(metrics),
                 yield.tag("read_hdr")
             );
 
@@ -1589,7 +1605,7 @@ public:
 
             auto session = client_state.fetch_fresh_through_simple_proxy(
                 rq,
-                move(metrics),
+                std::move(metrics),
                 yield
             );
 
@@ -1658,7 +1674,7 @@ public:
         sys::error_code ec;
         auto session = client_state.fetch_fresh_from_origin( rq
                                                            , client_state._config.origin_ssl_ctx()
-                                                           , move(metrics)
+                                                           , std::move(metrics)
                                                            , cancel, yield[ec]);
 
         _YDEBUG(yield, "Fetch; ec=", ec);
@@ -1728,8 +1744,6 @@ public:
         namespace err = asio::error;
 
         sys::error_code ec;
-        sys::error_code fresh_ec;
-        sys::error_code cache_ec;
 
         _YDEBUG(yield, "Start");
 
@@ -2168,7 +2182,7 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
         DummyCertificate dummy_crt(*_ca_certificate, base_domain);
 
         crt_chain
-            = _ssl_certificate_cache.put(move(base_domain)
+            = _ssl_certificate_cache.put(std::move(base_domain)
                                         , dummy_crt.pem_certificate()
                                           + _ca_certificate->pem_certificate());
     }
@@ -2186,11 +2200,11 @@ GenericStream Client::State::ssl_mitm_handshake( GenericStream&& con
 
     sys::error_code ec;
 
-    auto ssl_sock = SslStream<GenericStream>(move(con), ssl_context);
+    auto ssl_sock = SslStream<GenericStream>(std::move(con), ssl_context);
     ssl_sock->async_handshake(asio::ssl::stream_base::server, yield[ec]);
     if (ec) return or_throw<GenericStream>(yield, ec);
 
-    return GenericStream(move(ssl_sock));
+    return GenericStream(std::move(ssl_sock));
 }
 
 //------------------------------------------------------------------------------
@@ -2255,8 +2269,8 @@ bool Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
 
     // Forward the rest of data in both directions.
     full_duplex(
-            move(browser),
-            move(origin),
+            std::move(browser),
+            std::move(origin),
             [&] (size_t) {},
             [&] (size_t) {},
             cancel,
@@ -2428,7 +2442,7 @@ void Client::State::serve_request(GenericStream&& con, YieldContext yield_)
         if (!mitm && req.method() == http::verb::connect) {
             sys::error_code ec;
             // Subsequent access to the connection will use the encrypted channel.
-            con = ssl_mitm_handshake(move(con), req, yield[ec].tag("mitm_handshake"));
+            con = ssl_mitm_handshake(std::move(con), req, yield[ec].tag("mitm_handshake"));
             if (ec) {
                 _YERROR(yield, "MitM exception; ec=", ec);
                 break;
@@ -2756,17 +2770,17 @@ void Client::State::listen_tcp
                 s.close(ec);
             };
 
-            GenericStream connection(move(socket) , move(tcp_shutter));
+            GenericStream connection(std::move(socket) , std::move(tcp_shutter));
 
             task::spawn_detached( _ctx, [
                 this,
                 self = shared_from_this(),
-                c = move(connection),
+                c = std::move(connection),
                 handler,
                 lock = wait_condition.lock()
             ](asio::yield_context yield) mutable {
                 if (was_stopped()) return;
-                handler(move(c), YieldContext(yield, _log_path));
+                handler(std::move(c), YieldContext(yield, _log_path));
             });
         }
     }
@@ -2812,17 +2826,17 @@ void Client::State::listen_unix_socket
                 s.close(ec);
             };
 
-            GenericStream connection(move(socket) , move(unix_socket_shutter));
+            GenericStream connection(std::move(socket) , std::move(unix_socket_shutter));
 
             task::spawn_detached( _ctx, [
                 this,
                 self = shared_from_this(),
-                c = move(connection),
+                c = std::move(connection),
                 handler,
                 lock = wait_condition.lock()
             ](asio::yield_context yield) mutable {
                 if (was_stopped()) return;
-                handler(move(c), YieldContext(yield, util::LogPath("unix_socket")));
+                handler(std::move(c), YieldContext(yield, util::LogPath("unix_socket")));
             });
         }
     }
@@ -2908,13 +2922,13 @@ void Client::State::start_ouinet()
     task::spawn_detached(_ctx, [
         this,
         self = shared_from_this(),
-        acceptor = move(proxy_acceptor)
+        acceptor = std::move(proxy_acceptor)
     ] (asio::yield_context yield) mutable {
         if (was_stopped()) return;
 
         sys::error_code ec;
         listen_tcp( yield[ec]
-                  , move(acceptor)
+                  , std::move(acceptor)
                   , [this, self]
                     (GenericStream c, YieldContext yield) {
                 auto connection_id = _next_connection_id++;
@@ -2923,7 +2937,7 @@ void Client::State::start_ouinet()
 
                 LOG_DEBUG(y, " Accepted connection from UA");
 
-                serve_request(move(c), y);
+                serve_request(std::move(c), y);
             });
     });
 
@@ -2931,7 +2945,7 @@ void Client::State::start_ouinet()
         task::spawn_detached( _ctx, [
             this,
             self = shared_from_this(),
-            acceptor = move(*front_end_acceptor)
+            acceptor = std::move(*front_end_acceptor)
         ] (asio::yield_context yield) mutable {
             if (was_stopped()) return;
 
@@ -2939,7 +2953,7 @@ void Client::State::start_ouinet()
 
             sys::error_code ec;
             listen_tcp( yield[ec]
-                      , move(acceptor)
+                      , std::move(acceptor)
                       , [this, self]
                         (GenericStream c, YieldContext yield_) {
                   YieldContext yield = yield_.tag("frontend");
@@ -2963,7 +2977,7 @@ void Client::State::start_ouinet()
         task::spawn_detached( _ctx, [
             this,
             self = shared_from_this(),
-            acceptor = move(*front_end_unix_socket_acceptor)
+            acceptor = std::move(*front_end_unix_socket_acceptor)
         ] (asio::yield_context yield) mutable {
             if (was_stopped()) return;
 
@@ -2971,7 +2985,7 @@ void Client::State::start_ouinet()
 
             sys::error_code ec;
             listen_unix_socket( yield[ec]
-                      , move(acceptor)
+                      , std::move(acceptor)
                       , [this, self]
                         (GenericStream c, YieldContext yield_) {
                   YieldContext yield = yield_.tag("frontend_u_s");
@@ -3027,7 +3041,7 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
         return client;
     }
 
-    return make_unique<ouiservice::TlsOuiServiceClient>(move(client), inj_ctx);
+    return make_unique<ouiservice::TlsOuiServiceClient>(std::move(client), inj_ctx);
 }
 
 void Client::State::setup_injector(asio::yield_context yield)
@@ -3101,20 +3115,20 @@ void Client::State::setup_injector(asio::yield_context yield)
         if (!tcp_client->verify_endpoint()) {
             return or_throw(yield, ec = asio::error::invalid_argument);
         }
-        client = maybe_wrap_tls(move(tcp_client));
+        client = maybe_wrap_tls(std::move(tcp_client));
     } else if (auto ep = injector_ep->get_if<Endpoint::Utp>()) {
         asio_utp::udp_multiplexer m(_ctx);
         m.bind(common_udp_multiplexer(), ec);
         assert(!ec);
 
         auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
-            (_ctx.get_executor(), move(m), ep->value);
+            (_ctx.get_executor(), std::move(m), ep->value);
 
         if (!utp_client->verify_remote_endpoint()) {
             return or_throw(yield, ec = asio::error::invalid_argument);
         }
 
-        client = maybe_wrap_tls(move(utp_client));
+        client = maybe_wrap_tls(std::move(utp_client));
     } else if (auto ep = injector_ep->get_if<Endpoint::Bep5>()) {
         auto dht = bittorrent_dht(yield[ec]);
         if (ec) {
@@ -3170,7 +3184,7 @@ Client::Client(
         ClientConfig cfg,
         util::LogPath log_path,
         std::optional<MockDhtBuilder> dht_builder)
-    : _state(make_shared<State>(ctx, move(cfg), std::move(log_path), move(dht_builder)))
+    : _state(make_shared<State>(ctx, std::move(cfg), std::move(log_path), std::move(dht_builder)))
 {
 }
 

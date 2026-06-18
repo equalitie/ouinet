@@ -54,16 +54,14 @@
 namespace ouinet {
 namespace bittorrent {
 
-using std::move;
 using std::make_unique;
 using std::vector;
 using std::string;
 using boost::string_view;
-using std::cerr; using std::endl;
+using std::cerr;
 using Candidates = std::vector<NodeContact>;
 namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
-using std::make_shared;
 namespace fs = boost::filesystem;
 
 #define DEBUG_SHOW_MESSAGES 0
@@ -237,12 +235,12 @@ std::expected<void, sys::error_code> DhtNode::start(udp::endpoint local_ep, Asyn
         return std::unexpected(ec);
     }
 
-    return start(move(m), yield);
+    return start(std::move(m), yield);
 }
 
 std::expected<void, sys::error_code> DhtNode::start(asio_utp::udp_multiplexer m, Async yield)
 {
-    _multiplexer = std::make_unique<UdpMultiplexer>(move(m), _mux_rx_limit);
+    _multiplexer = std::make_unique<UdpMultiplexer>(std::move(m), _mux_rx_limit);
 
     _tracker = std::make_unique<Tracker>(_exec);
     _data_store = std::make_unique<DataStore>(_exec);
@@ -415,13 +413,13 @@ void DhtNode::store_contacts() const
     auto contacts = _routing_table->dump_contacts();
 
     task::spawn_detached(_exec, ([
-        path = move(path),
-        contacts = move(contacts),
+        path = std::move(path),
+        contacts = std::move(contacts),
         cancel = _cancel,
         log_path = _log_path
     ] (asio::yield_context yield) mutable {
         (void) write_stored_contacts(
-            move(contacts),
+            std::move(contacts),
             path,
             Async(yield, std::move(cancel), std::move(log_path))
         );
@@ -744,7 +742,7 @@ boost::optional<MutableDataItem> DhtNode::data_get_mutable(
                 std::string(salt),
                 response["v"],
                 *sequence_number,
-                util::bytes::to_array<uint8_t, sign::Signature::size>(*signature)
+                { util::bytes::to_array<uint8_t, sign::Signature::size>(*signature) }
             };
             if (item.verify()) {
                 if (!data || *sequence_number > data->sequence_number) {
@@ -906,7 +904,7 @@ NodeID DhtNode::data_put_mutable(
                 data.salt,
                 response["v"],
                 *response_seq,
-                util::bytes::to_array<uint8_t, sign::Signature::size>(*response_sig)
+                { util::bytes::to_array<uint8_t, sign::Signature::size>(*response_sig) }
             };
 
             if (item.verify()) {
@@ -1012,7 +1010,7 @@ void DhtNode::store_contacts_loop(Async yield)
         if (!_routing_table) return;
         auto contacts = _routing_table->dump_contacts();
 
-        (void) write_stored_contacts(move(contacts), path, yield);
+        (void) write_stored_contacts(std::move(contacts), path, yield);
 
         async_sleep(std::chrono::minutes(6), yield);
     }
@@ -1522,7 +1520,7 @@ std::expected<void, sys::error_code> DhtNode::handle_query(udp::endpoint sender,
                 salt,
                 value,
                 sequence_number,
-                signature
+                { signature }
             };
             if (!item.verify()) {
                 return send_error(206, "Invalid signature", yield);
@@ -1787,7 +1785,7 @@ std::expected<void, sys::error_code> DhtNode::bootstrap(Async yield)
 
                         if (stats.score >= SCORE_GOAL) {
                             my_endpoint = result->my_ep;
-                            node_endpoints = move(stats.nodes);
+                            node_endpoints = std::move(stats.nodes);
                             child_yield.cancel();
                         }
                     });
@@ -1816,7 +1814,7 @@ std::expected<void, sys::error_code> DhtNode::bootstrap(Async yield)
                 for (auto r : results) {
                     if (r.second.score > max_score) {
                         my_endpoint = r.first;
-                        node_endpoints = move(r.second.nodes);
+                        node_endpoints = std::move(r.second.nodes);
                         max_score = r.second.score;
                     }
                 }
@@ -2552,7 +2550,7 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
         assert(!ec);
         if (ec) continue;
 
-        (void) add_endpoint(move(m));
+        (void) add_endpoint(std::move(m));
     }
 }
 
@@ -2620,7 +2618,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
             });
 
             auto& node = _nodes[local_ep];
-            auto result = node->start(move(m), yield);
+            auto result = node->start(std::move(m), yield);
 
             if (result) {
                 promise.set_value(node->wan_endpoint());
@@ -2643,9 +2641,8 @@ MainlineDht::tracker_announce(
 ) {
     auto cc = _cancel.connect([&] { yield.cancel(); });
 
-    std::expected<std::set<udp::endpoint>, sys::error_code> output(
-        std::unexpected(asio::error::network_unreachable)
-    );
+    std::expected<std::set<udp::endpoint>, sys::error_code> output =
+        std::unexpected(asio::error::network_unreachable);
 
     WaitCondition wc(yield.get_executor());
 
@@ -2681,9 +2678,8 @@ MainlineDht::tracker_get_peers(NodeID infohash, Async yield)
 {
     auto terminated = _cancel.connect([&] { yield.cancel(); });
 
-    std::expected<std::set<udp::endpoint>, sys::error_code> output(
-        std::unexpected(asio::error::network_unreachable)
-    );
+    std::expected<std::set<udp::endpoint>, sys::error_code> output =
+        std::unexpected(asio::error::network_unreachable);
 
     WaitCondition wc(yield.get_executor());
 

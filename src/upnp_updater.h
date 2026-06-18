@@ -116,7 +116,7 @@ private:
             }
             _is_available = true;
 
-            auto igds = move(r_igds.value());
+            auto igds = std::move(r_igds.value());
 
             LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\"...");
             size_t success_cnt = 0;
@@ -187,7 +187,7 @@ private:
 
                 mapping_enabled();
             }
-            _external_endpoints = move(ext_eps);
+            _external_endpoints = std::move(ext_eps);
             LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\": done");
 
             if (success_cnt == 0 && !earlier_buggy_timeout) mapping_disabled();

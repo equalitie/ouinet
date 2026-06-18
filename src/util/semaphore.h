@@ -21,8 +21,8 @@ public:
         }
 
     private:
-        friend class State;
-        friend class Semaphore;
+        friend struct State;
+        friend struct Semaphore;
         std::weak_ptr<State> _state;
         Lock(std::weak_ptr<State> state) : _state(std::move(state)) {}
     };

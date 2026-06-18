@@ -201,7 +201,7 @@ public:
             // socket it continues reading from it.
             // Test vector: uTP x TLS x bbc.com
             // (Same with the async_write_some operation)
-            _shared->impl->read_impl([h = move(handler), shared = _shared]
+            _shared->impl->read_impl([h = std::move(handler), shared = _shared]
                              (const system::error_code& ec, size_t size) {
                                  if (!shared->impl || !shared->impl->is_open()) {
                                     (*h)(asio::error::shut_down, 0);
@@ -242,7 +242,7 @@ public:
                 , _shared->impl->write_buffers.begin());
 
             // TODO: Same as the comment in async_read_some operation
-            _shared->impl->write_impl([h = move(handler), shared = _shared]
+            _shared->impl->write_impl([h = std::move(handler), shared = _shared]
                               (const system::error_code& ec, size_t size) {
                                  if (!shared->impl || !shared->impl->is_open()) {
                                     (*h)(asio::error::shut_down, 0);

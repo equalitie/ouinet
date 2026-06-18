@@ -10,19 +10,15 @@
 namespace ouinet {
 namespace ouiservice {
 
-using namespace std;
-
 sys::error_code TlsOuiServiceServer::start_listen(Async yield) /* override */
 {
     sys::error_code ec = _base->start_listen(yield);
     if (ec) return ec;
 
     yield.spawn(_cancel, [this] (Async yield) {
-            using namespace chrono_literals;
+            using namespace std::chrono_literals;
 
             while (true) {
-                sys::error_code ec;
-
                 auto base_con = _base->accept(yield);
 
                 if (!base_con.has_value()) {
@@ -30,11 +26,11 @@ sys::error_code TlsOuiServiceServer::start_listen(Async yield) /* override */
                     continue;
                 }
 
-                auto tls_con = SslStream(move(*base_con), _ssl_context);
+                auto tls_con = SslStream(std::move(*base_con), _ssl_context);
 
                 // Spawn a new coroutine to avoid blocking accept of the next
                 // socket.
-                yield.spawn([ tls_con = move(tls_con)
+                yield.spawn([ tls_con = std::move(tls_con)
                             , &q = _accept_queue
                             , ex = _ex
                             ] (Async yield) mutable {
@@ -50,7 +46,7 @@ sys::error_code TlsOuiServiceServer::start_listen(Async yield) /* override */
                         if (ec) return; // do not propagate error
                     }
 
-                    ec = q.async_send({}, GenericStream(move(tls_con)), yield);
+                    ec = q.async_send({}, GenericStream(std::move(tls_con)), yield);
                     if (ec) return; // do not propagate error
                 });
             }
@@ -77,7 +73,7 @@ std::expected<GenericStream, sys::error_code> TlsOuiServiceServer::accept(Async 
 {
     auto s = _accept_queue.async_receive(yield);
     if (!s.has_value()) return std::unexpected(s.error());
-    return move(*s);
+    return std::move(*s);
 }
 
 TlsOuiServiceServer::~TlsOuiServiceServer()

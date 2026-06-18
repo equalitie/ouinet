@@ -34,14 +34,14 @@ static const auto injector_ping_period = std::chrono::minutes(10);
 static const auto injector_ping_period_debug = std::chrono::minutes(2);
 static const auto injector_pong_timeout = std::chrono::seconds(60);
 
-using namespace std;
 using namespace ouinet;
 using namespace ouiservice;
+using namespace std::chrono_literals;
 
 namespace bt = bittorrent;
 
 using udp = asio::ip::udp;
-using Clock = chrono::steady_clock;
+using Clock = std::chrono::steady_clock;
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 {
@@ -68,8 +68,8 @@ choose_multiplexer_for(bt::DhtBase& dht, const udp::endpoint& ep)
     return boost::none;
 }
 
-constexpr chrono::duration ERROR_WAIT_DURATION = 1s;
-constexpr chrono::duration SUCCESS_WAIT_DURATION = 1min;
+constexpr std::chrono::duration ERROR_WAIT_DURATION = 1s;
+constexpr std::chrono::duration SUCCESS_WAIT_DURATION = 1min;
 
 struct Bep5Client::Swarm
 {
@@ -78,11 +78,11 @@ private:
     using Peers = util::LruCache<asio::ip::udp::endpoint, std::shared_ptr<Peer>>;
 
 private:
-    shared_ptr<bt::DhtBase> _dht;
+    std::shared_ptr<bt::DhtBase> _dht;
     bt::NodeID _infohash;
     SwarmType _type;
     Cancel _lifetime_cancel;
-    std::optional<chrono::steady_clock::time_point> _last_success_time;
+    std::optional<std::chrono::steady_clock::time_point> _last_success_time;
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
     const bool _connect_proxy;
@@ -90,13 +90,13 @@ private:
 
 public:
     Swarm( bt::NodeID infohash
-         , shared_ptr<bt::DhtBase> dht
+         , std::shared_ptr<bt::DhtBase> dht
          , size_t capacity
          , SwarmType type
          , Cancel& cancel
          , bool connect_proxy
          , util::LogPath log_path)
-        : _dht(move(dht))
+        : _dht(std::move(dht))
         , _infohash(infohash)
         , _type(type)
         , _lifetime_cancel(cancel)
@@ -127,7 +127,7 @@ public:
 
     bool is_ready() const {
         if (!_last_success_time) return false;
-        auto duration = chrono::steady_clock::now() - *_last_success_time;
+        auto duration = std::chrono::steady_clock::now() - *_last_success_time;
         return duration < 5 * SUCCESS_WAIT_DURATION;
     }
 
@@ -155,9 +155,9 @@ private:
                 continue;
             }
 
-            _last_success_time = chrono::steady_clock::now();
+            _last_success_time = std::chrono::steady_clock::now();
 
-            add_peers(move(*endpoints));
+            add_peers(std::move(*endpoints));
             _wait_condition_locks.clear();
 
             async_sleep(SUCCESS_WAIT_DURATION, yield);
@@ -166,7 +166,7 @@ private:
         _wait_condition_locks.clear();
     }
 
-    shared_ptr<Peer> make_peer(const udp::endpoint& ep)
+    std::shared_ptr<Peer> make_peer(const udp::endpoint& ep)
     {
         auto opt_m = choose_multiplexer_for(*_dht, ep);
 
@@ -175,8 +175,8 @@ private:
             return nullptr;
         }
 
-        auto utp_client = make_unique<UtpOuiServiceClient>
-            (_dht->get_executor(), move(*opt_m), ep);
+        auto utp_client = std::make_unique<UtpOuiServiceClient>
+            (_dht->get_executor(), std::move(*opt_m), ep);
 
         if (!utp_client->verify_remote_endpoint()) {
             LOG_ERROR(_log_path, " Failed to bind uTP client");
@@ -184,14 +184,14 @@ private:
         }
 
         if (_connect_proxy) {
-            return make_unique<ConnectProxyOuiServiceClient>(move(utp_client));
+            return std::make_unique<ConnectProxyOuiServiceClient>(std::move(utp_client));
         }
         else {
             return utp_client;
         }
     }
 
-    void add_peers(set<udp::endpoint> eps)
+    void add_peers(std::set<udp::endpoint> eps)
     {
         auto wan_eps = _dht->wan_endpoints();
         auto lan_eps = _dht->local_endpoints();
@@ -206,21 +206,21 @@ private:
             if (r) continue;  // already known, moved to front
             auto p = make_peer(ep);
             if (!p) continue;
-            _peers.put(ep, move(p));
+            _peers.put(ep, std::move(p));
         }
     }
 };
 
 class Bep5Client::InjectorPinger {
 public:
-    InjectorPinger( shared_ptr<Bep5Client::Swarm> injector_swarm
-                  , string helper_swarm_name
+    InjectorPinger( std::shared_ptr<Bep5Client::Swarm> injector_swarm
+                  , std::string helper_swarm_name
                   , bool helper_announcement_enabled
-                  , shared_ptr<bt::DhtBase> dht
+                  , std::shared_ptr<bt::DhtBase> dht
                   , Cancel& cancel
                   , const util::LogPath& log_path)
         : _lifetime_cancel(cancel)
-        , _injector_swarm(move(injector_swarm))
+        , _injector_swarm(std::move(injector_swarm))
         , _random_generator(std::random_device()())
         , _helper_announcer(std::make_unique<bt::Bep5ManualAnnouncer>( util::sha1_digest(helper_swarm_name)
                                                                      , dht
@@ -252,7 +252,7 @@ private:
     void loop(Async yield) {
         _injector_swarm->wait_for_ready(yield);
 
-        boost::optional<chrono::steady_clock::time_point> _last_ping_time;
+        boost::optional<std::chrono::steady_clock::time_point> _last_ping_time;
 
         while (true) {
             LOG_DEBUG(yield, " Waiting to ping injectors...");
@@ -298,14 +298,14 @@ private:
     }
 
     [[nodiscard]]
-    sys::error_code ping_one_injector(shared_ptr<AbstractClient> injector, Async yield)
+    sys::error_code ping_one_injector(std::shared_ptr<AbstractClient> injector, Async yield)
     {
         auto con = injector->connect(yield);
         if (!con.has_value()) return con.error();
         return sys::error_code();
     }
 
-    bool ping_injectors( const std::vector<shared_ptr<AbstractClient>>& injectors
+    bool ping_injectors( const std::vector<std::shared_ptr<AbstractClient>>& injectors
                        , Async yield)
     {
         WaitCondition wc(get_executor());
@@ -332,10 +332,10 @@ private:
         return bool(success_cancel);
     }
 
-    std::vector<shared_ptr<AbstractClient>> select_injectors_to_ping() {
+    std::vector<std::shared_ptr<AbstractClient>> select_injectors_to_ping() {
         // Select the first (at most) `injectors_to_ping` injectors after shuffling them.
         auto injector_map = _injector_swarm->peers();
-        std::vector<shared_ptr<AbstractClient>> injectors;
+        std::vector<std::shared_ptr<AbstractClient>> injectors;
         injectors.reserve(injector_map.size());
         for (auto& p : injector_map)
             injectors.push_back(p.second);
@@ -352,7 +352,7 @@ private:
 private:
     static const bool _debug = false;  // for development testing only
     Cancel _lifetime_cancel;
-    shared_ptr<Bep5Client::Swarm> _injector_swarm;
+    std::shared_ptr<Bep5Client::Swarm> _injector_swarm;
     bool _injector_was_seen = false;
     const Clock::duration _ping_frequency = (_debug ? injector_ping_period_debug : injector_ping_period);
     std::mt19937 _random_generator;
@@ -361,13 +361,13 @@ private:
     util::LogPath _log_path;
 };
 
-Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
-                      , string injector_swarm_name
+Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
+                      , std::string injector_swarm_name
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets
                       , const util::LogPath& log_path)
     : _dht(dht)
-    , _injector_swarm_name(move(injector_swarm_name))
+    , _injector_swarm_name(std::move(injector_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
     , _default_targets(targets)
@@ -377,16 +377,16 @@ Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
     }
 }
 
-Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
-                      , string injector_swarm_name
-                      , string helpers_swarm_name
+Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
+                      , std::string injector_swarm_name
+                      , std::string helpers_swarm_name
                       , bool helper_announcement_enabled
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets
                       , const util::LogPath& log_path)
     : _dht(dht)
-    , _injector_swarm_name(move(injector_swarm_name))
-    , _helpers_swarm_name(move(helpers_swarm_name))
+    , _injector_swarm_name(std::move(injector_swarm_name))
+    , _helpers_swarm_name(std::move(helpers_swarm_name))
     , _helper_announcement_enabled(helper_announcement_enabled)
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
@@ -515,7 +515,7 @@ struct Bep5Client::Candidates {
 
     Candidates(boost::optional<udp::endpoint> const& preferred_ep) :
         preferred_ep(preferred_ep),
-        rand_engine(chrono::system_clock::now().time_since_epoch().count())
+        rand_engine(std::chrono::system_clock::now().time_since_epoch().count())
     {}
 
     void try_insert(Candidate candidate) {

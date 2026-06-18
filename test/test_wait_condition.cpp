@@ -28,9 +28,9 @@ constexpr milliseconds wait_limit = 20ms;
 BOOST_AUTO_TEST_CASE(one) {
     asio::io_context ctx;
 
-    task::spawn_detached(ctx, [](auto yield) {
+    task::spawn_detached(ctx.get_executor(), [](auto yield) {
         WaitCondition wait_condition(yield.get_executor());
-        
+
         milliseconds wait_duration = 100ms;
 
         task::spawn_detached(yield.get_executor(), [&, lock = wait_condition.lock()](auto yield) {
@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE(one) {
                 timer.expires_after(wait_duration);
                 timer.async_wait(yield);
             });
-        
+
         auto start = Clock::now();
 
         wait_condition.wait(yield);
@@ -51,13 +51,13 @@ BOOST_AUTO_TEST_CASE(one) {
 
     ctx.run();
 }
-    
+
 BOOST_AUTO_TEST_CASE(one_with_callback) {
     asio::io_context ctx;
 
-    task::spawn_detached(ctx, [](auto yield) {
+    task::spawn_detached(ctx.get_executor(), [](auto yield) {
         auto wait_condition = std::make_shared<WaitCondition>(yield.get_executor());
-        
+
         milliseconds wait_duration = 100ms;
 
         auto start = Clock::now();
@@ -78,13 +78,13 @@ BOOST_AUTO_TEST_CASE(one_with_callback) {
 
     ctx.run();
 }
-    
+
 BOOST_AUTO_TEST_CASE(two) {
     asio::io_context ctx;
 
-    task::spawn_detached(ctx, [&ctx](auto yield) {
-        WaitCondition wait_condition(ctx);
-        
+    task::spawn_detached(ctx.get_executor(), [&ctx](auto yield) {
+        WaitCondition wait_condition(yield.get_executor());
+
         optional<milliseconds> actual0, actual1;
 
         task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) {
@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(two) {
                 timer.async_wait(yield);
                 actual0 = duration_cast<milliseconds>(Clock::now() - start);
             });
-        
+
         task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) {
                 auto start = Clock::now();
                 Timer timer(ctx);
@@ -102,7 +102,7 @@ BOOST_AUTO_TEST_CASE(two) {
                 timer.async_wait(yield);
                 actual1 = duration_cast<milliseconds>(Clock::now() - start);
             });
-        
+
         auto start = Clock::now();
 
         wait_condition.wait(yield); // shall wait 200ms (=max(100ms, 200ms)).
@@ -116,13 +116,13 @@ BOOST_AUTO_TEST_CASE(two) {
 
     ctx.run();
 }
-    
+
 BOOST_AUTO_TEST_CASE(test_release) {
     asio::io_context ctx;
 
     task::spawn_detached(ctx, [&ctx](auto yield) {
         WaitCondition wait_condition(ctx);
-        
+
         optional<milliseconds> actual0, actual1;
 
         task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) mutable {
@@ -137,7 +137,7 @@ BOOST_AUTO_TEST_CASE(test_release) {
                 timer.expires_after(200ms);
                 timer.async_wait(yield);
             });
-   
+
         task::spawn_detached(ctx, [&, lock = wait_condition.lock()](auto yield) mutable {
                 auto start = Clock::now();
                 Timer timer(ctx);
@@ -145,7 +145,7 @@ BOOST_AUTO_TEST_CASE(test_release) {
                 timer.async_wait(yield);
                 actual1 = duration_cast<milliseconds>(Clock::now() - start);
             });
-   
+
         auto start = Clock::now();
         wait_condition.wait(yield); // shall wait 200ms.
 
@@ -158,12 +158,12 @@ BOOST_AUTO_TEST_CASE(test_release) {
 
     ctx.run();
 }
-    
+
 BOOST_AUTO_TEST_CASE(two_consumers) {
     asio::io_context ctx;
 
     WaitCondition wait_condition(ctx);
-    
+
     optional<milliseconds> actual0;
 
     milliseconds sleep_duration = 200ms;
@@ -177,7 +177,7 @@ BOOST_AUTO_TEST_CASE(two_consumers) {
 
             actual0 = duration_cast<milliseconds>(Clock::now() - start);
         });
-   
+
     milliseconds d0, d1;
 
     task::spawn_detached(ctx, [&](auto yield) {
@@ -185,19 +185,19 @@ BOOST_AUTO_TEST_CASE(two_consumers) {
             wait_condition.wait(yield);
             d0 = duration_cast<milliseconds>(Clock::now() - start);
         });
-   
+
     task::spawn_detached(ctx, [&](auto yield) {
             auto start = Clock::now();
             wait_condition.wait(yield);
             d1 = duration_cast<milliseconds>(Clock::now() - start);
         });
-   
+
     ctx.run();
 
     BOOST_TEST(std::chrono::abs(sleep_duration - d0) < wait_limit);
     BOOST_TEST(std::chrono::abs(sleep_duration - d1) < wait_limit);
 }
-    
+
 BOOST_AUTO_TEST_CASE(destroy_lock_before_wait)
 {
     asio::io_context ctx;
@@ -206,7 +206,7 @@ BOOST_AUTO_TEST_CASE(destroy_lock_before_wait)
 
     task::spawn_detached(ctx, [&](auto yield) {
         WaitCondition wait_condition(ctx);
-        
+
         {
             auto lock = wait_condition.lock();
         }
@@ -233,7 +233,7 @@ BOOST_AUTO_TEST_CASE(destroy_lock_before_wait_then_relock)
 
     task::spawn_detached(ctx, [&](auto yield) {
         WaitCondition wait_condition(ctx);
-        
+
         {
             auto lock = wait_condition.lock();
         }
@@ -243,7 +243,7 @@ BOOST_AUTO_TEST_CASE(destroy_lock_before_wait_then_relock)
                 timer.expires_after(100ms);
                 timer.async_wait(yield);
             });
-        
+
         auto start = Clock::now();
 
         wait_condition.wait(yield);

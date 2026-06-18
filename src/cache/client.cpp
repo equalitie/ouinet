@@ -140,7 +140,7 @@ struct Client::Impl {
         , _http_store(move(http_store_))
         , _max_cached_age(max_cached_age)
         , _gc(*_http_store, [&] (const auto& resource_id, auto rr, auto y) {
-              return keep_cache_entry(resource_id, move(rr), y);
+              return keep_cache_entry(resource_id, std::move(rr), y);
           }, log_path, _ex)
         , _dht_peer_lookups(256)
         , _i2p_peer_lookups(256)
@@ -175,7 +175,7 @@ struct Client::Impl {
     bool enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
         if (_dht || _bep5_announcer) return false;
 
-        _dht = move(dht);
+        _dht = std::move(dht);
         _bep5_announcer = std::make_unique<Bep5Announcer>(
             _dht,
             simultaneous_announcements,
@@ -288,7 +288,7 @@ struct Client::Impl {
 
         auto s = compat([&](Async yield) {
             return Session::create(
-                move(rr),
+                std::move(rr),
                 req.method() == http::verb::head,
                 metrics_client.new_cache_out_request(),
                 yield.tag("read_hdr")
@@ -501,8 +501,8 @@ struct Client::Impl {
                 , resource_id
                 , resource_key
                 , _cache_pk
-                , move(local_peers)
-                , move(peer_lookup_)
+                , std::move(local_peers)
+                , std::move(peer_lookup_)
                 , _newest_proto_seen
                 , log_path);
         }

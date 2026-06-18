@@ -10,7 +10,7 @@
 namespace ouinet {
 
 class Async;
-namespace bittorrent { class NodeID; }
+namespace bittorrent { struct NodeID; }
 
 class OUINET_I2P_API I2pTrackerClient {
 public:

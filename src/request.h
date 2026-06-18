@@ -8,7 +8,6 @@
 #include "namespaces.h"
 #include "cache/resource_id.h"
 #include "util/crypto_stream_key.h"
-#include "util/yield.h"
 #include "api.h"
 
 namespace ouinet {
@@ -74,16 +73,14 @@ public:
 private:
     friend class CacheRetrieveRequest;
 
-    CacheOuisyncRetrieveRequest(http::verb method, cache::ResourceId resource_id, CryptoStreamKey resource_key, std::string dht_group) :
+    CacheOuisyncRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group) :
         _method(method),
         _resource_id(std::move(resource_id)),
-        _resource_key(std::move(resource_key)),
         _dht_group(std::move(dht_group))
     {}
 
     http::verb _method;
     cache::ResourceId _resource_id;
-    CryptoStreamKey _resource_key;
     std::string _dht_group;
 };
 
@@ -107,7 +104,7 @@ public:
     }
 
     CacheOuisyncRetrieveRequest to_ouisync_request() const {
-        return CacheOuisyncRetrieveRequest(_method, _resource_id, _resource_key, _dht_group);
+        return CacheOuisyncRetrieveRequest(_method, _resource_id, _dht_group);
     }
 
 private:

@@ -91,7 +91,7 @@ struct OUINET_COMMON_API Head : public http::response_header<> {
 struct Body : public std::vector<uint8_t> {
     using Base = std::vector<uint8_t>;
 
-    Body(Base data) : Base(move(data)) {}
+    Body(Base data) : Base(std::move(data)) {}
 
     Body(const Body&) = default;
     Body(Body&&) = default;
@@ -177,9 +177,9 @@ struct ChunkBody : public std::vector<uint8_t> {
     {
         sys::error_code ec;
         asio::async_write(s, asio::buffer(*this), yield[ec]);
-    
+
         if (ec) return or_throw(yield, ec);
-    
+
         if (remain == 0) {
             asio::async_write(s, http::chunk_crlf{}, yield[ec]);
         }

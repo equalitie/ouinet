@@ -53,7 +53,7 @@ public:
                             break;
                         }
                         action = complete;
-                        shared->async_write_some(buffers, move(self));
+                        shared->async_write_some(buffers, std::move(self));
                         break;
                     case complete:
                         if (!shared->next_layer().is_open()) {
@@ -64,7 +64,7 @@ public:
                 }
             },
             token,
-            get_executor()         
+            get_executor()
         );
     }
 
@@ -88,7 +88,7 @@ public:
                             break;
                         }
                         action = complete;
-                        shared->async_read_some(buffers, move(self));
+                        shared->async_read_some(buffers, std::move(self));
                         break;
                     case complete:
                         if (!shared->next_layer().is_open()) {
@@ -99,7 +99,7 @@ public:
                 }
             },
             token,
-            get_executor()         
+            get_executor()
         );
     }
 

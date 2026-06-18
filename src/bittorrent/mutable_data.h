@@ -72,7 +72,7 @@ struct OUINET_COMMON_API MutableDataItem {
             sign::PublicKey::Bytes ka;
             copy(begin(k), end(k), begin(ka));
 
-            item.public_key      = move(ka);
+            item.public_key      = std::move(ka);
             item.salt            = ins_map->at("salt").as_string().value();
             item.value           = ins_map->at("v");
             item.sequence_number = ins_map->at("seq").as_int().value();

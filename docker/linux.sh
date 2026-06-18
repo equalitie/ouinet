@@ -310,13 +310,13 @@ for target_os in ${target_oss[@]}; do
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
             -DOUINET_MEASURE_BUILD_TIMES=OFF
         )
-        
+
         if [ "$target_os" == windows ]; then
             cmake_configure_options+=(
                 -DCMAKE_TOOLCHAIN_FILE=$ouinet_dir/cmake/toolchain-mingw64.cmake
             )
         fi
-    
+
         if [ -n "$container_ouisync_dir" ]; then
             cmake_configure_options+=(-DOUISYNC_SRC_DIR=$container_ouisync_dir)
         fi
@@ -332,7 +332,7 @@ for target_os in ${target_oss[@]}; do
     fi
 
     check_artifacts_exist_for_target_os $target_os
-    
+
     ### Rust Tests
 
     if [ "$run_all_tests" == y ]; then
@@ -365,7 +365,7 @@ for target_os in ${target_oss[@]}; do
     fi
 
     ### Python Tests
-    
+
     # TODO: Run these when `$target_os = windows` as well (through Wine)
     if [ "$target_os" = linux ]; then
         if [ "$run_python_tests" = y -o "$run_all_tests" = y ]; then
@@ -375,13 +375,13 @@ for target_os in ${target_oss[@]}; do
                 "fi;"
                 "source $build_dir/venv/bin/activate;"
                 "pip install twisted pytest requests pytest_asyncio;"
-            
+
                 "export OUINET_BUILD_DIR=$build_dir;"
                 "export OUINET_REPO_DIR=$ouinet_dir;"
-            
+
                 "$ouinet_dir/scripts/run_python_tests.sh;"
             )
-            
+
             exe bash -c "${script[*]}"
         fi
     fi

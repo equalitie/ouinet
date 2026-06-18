@@ -65,7 +65,7 @@ client_handshake( Stream&& con
 
     boost::system::error_code ec;
 
-    auto ssl_sock = SslStream<Stream>(move(con), ssl_context);
+    auto ssl_sock = SslStream<Stream>(std::move(con), ssl_context);
     bool check_host = host.length() > 0;
 
     if (check_host)
@@ -83,7 +83,7 @@ client_handshake( Stream&& con
 
     if (ec) return std::unexpected(ec);
 
-    return GenericStream(move(ssl_sock));
+    return GenericStream(std::move(ssl_sock));
 }
 
 static inline

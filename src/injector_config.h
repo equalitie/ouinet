@@ -34,10 +34,11 @@ public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 
     InjectorConfig() = default;
-    InjectorConfig(const InjectorConfig&) = default;
     InjectorConfig(InjectorConfig&&) = default;
-    InjectorConfig& operator=(const InjectorConfig&) = default;
     InjectorConfig& operator=(InjectorConfig&&) = default;
+
+    InjectorConfig(const InjectorConfig&) = delete;
+    InjectorConfig& operator=(const InjectorConfig&) = delete;
 
     // May thow on error.
     InjectorConfig(int argc, const char** argv);

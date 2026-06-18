@@ -64,7 +64,7 @@ std::expected<asio::ip::tcp::socket, Error::Connect> I2pSession::connect(const I
     auto i_rs = sam->invoke("STREAM CONNECT ID=" + _inner->id.value + " DESTINATION=" + remote_addr.value + " SILENT=false", yield);
     if (!i_rs) return error(i_rs.error());
 
-    return std::move(sam->release_socket());
+    return sam->release_socket();
 }
 
 std::expected<asio::ip::tcp::socket, Error::Accept> I2pSession::accept(Async yield) {
@@ -83,7 +83,7 @@ std::expected<asio::ip::tcp::socket, Error::Accept> I2pSession::accept(Async yie
     auto l_rs = sam->recv_line(yield);
     if (!l_rs) return error(Sam::Error::Invoke { l_rs.error() });
 
-    return std::move(sam->release_socket());
+    return sam->release_socket();
 }
 
 std::expected<std::optional<I2pAddress>, Sam::Error::Lookup> I2pSession::lookup(const std::string& name, Async yield) {

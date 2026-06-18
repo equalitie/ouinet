@@ -45,7 +45,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
         : type(type)
         , cv(dht_w.lock()->get_executor())
         , infohash(infohash)
-        , dht_w(move(dht_w))
+        , dht_w(std::move(dht_w))
         , log_path(log_path.tag("Bep5Announcer"))
     {}
 
@@ -58,7 +58,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
 
             task::spawn_detached(
                 exec,
-                [self = move(self)] (asio::yield_context y) mutable {
+                [self = std::move(self)] (asio::yield_context y) mutable {
                     self->loop(Async(y, self->log_path));
                 }
             );
@@ -157,7 +157,7 @@ Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
                                             , std::weak_ptr<DhtBase> dht
                                             , util::LogPath log_path)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
-                                                  , move(dht)
+                                                  , std::move(dht)
                                                   , Type::Periodic
                                                   , std::move(log_path)))
 {
@@ -174,7 +174,7 @@ Bep5ManualAnnouncer::Bep5ManualAnnouncer( NodeID infohash
                                         , std::weak_ptr<DhtBase> dht
                                         , util::LogPath log_path)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
-                                                  , move(dht)
+                                                  , std::move(dht)
                                                   , Type::Manual
                                                   , std::move(log_path)))
 {

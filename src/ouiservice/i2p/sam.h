@@ -15,7 +15,7 @@
 
 namespace ouinet {
 
-class SessionId;
+struct SessionId;
 class Async;
 class I2pAddress;
 
