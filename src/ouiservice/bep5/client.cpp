@@ -664,9 +664,7 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
             std::optional<util::Semaphore::Lock> concurrency_lock;
 
             try {
-                auto lock = concurrency->await_lock(yield);
-                assert(lock.has_value());
-                auto concurrencty_lock = std::move(*lock);
+                concurrency_lock = concurrency->await_lock(yield).value();
             }
             catch (Async::Cancelled const&) {
                 if (yield.is_cancelled()) throw;
@@ -677,7 +675,7 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
 
             asio::steady_timer timer(exec);
             timer.expires_after(100ms);
-            timer.async_wait([cl = std::move(*concurrency_lock)] (auto) {});
+            timer.async_wait([cl = std::move(concurrency_lock).value()] (auto) {});
 
             yield.spawn([
                 self = this,

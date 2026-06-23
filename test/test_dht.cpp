@@ -48,7 +48,7 @@ void init_without_bootstrapping(asio::any_io_executor exec, DhtNode& dht_node) {
         auto m = asio_utp::udp_multiplexer(exec);
         m.bind(local_ep, ec);
 
-        dht_node._multiplexer = make_unique<UdpMultiplexer>(move(m));
+        dht_node._multiplexer = make_unique<UdpMultiplexer>(std::move(m));
         dht_node._tracker = make_unique<Tracker>(exec);
         dht_node._data_store = make_unique<DataStore>(exec);
 

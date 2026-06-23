@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <optional>
 #include <boost/filesystem.hpp>
 #include "namespaces.h"
@@ -71,7 +72,6 @@ public:
     void delete_content() const {
         auto begin = fs::directory_iterator(_tempdir);
         auto end = fs::directory_iterator();
-        sys::error_code ec;
         for (auto i = begin; i != end; ++i) {
             try {
                 fs::remove_all(*i);

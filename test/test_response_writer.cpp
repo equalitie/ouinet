@@ -85,7 +85,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
             GenericStream con = stream(outs, outwc, exec, y);
             HR::Part part;
 
-            part = HR::Head(move(rh));
+            part = HR::Head(std::move(rh));
             part.async_write(con, c, y);
         }
         outwc.wait(y);
@@ -118,7 +118,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
             GenericStream con = stream(outs, outwc, exec, y);
             HR::Part part;
 
-            part = HR::Head(move(rh));
+            part = HR::Head(std::move(rh));
             part.async_write(con, c, y);
 
             part = HR::Body(str_to_vec(rb));
@@ -158,7 +158,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             GenericStream con = stream(outs, outwc, exec, y);
             HR::Part part;
 
-            part = HR::Head(move(rh));
+            part = HR::Head(std::move(rh));
             part.async_write(con, c, y);
 
             part = HR::Body(str_to_vec(rb));
@@ -199,7 +199,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             GenericStream con = stream(outs, outwc, exec, y);
             HR::Part part;
 
-            part = HR::Head(move(rh));
+            part = HR::Head(std::move(rh));
             part.async_write(con, c, y);
 
             part = HR::ChunkHdr(4, "");
@@ -256,7 +256,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             GenericStream con = stream(outs, outwc, exec, y);
             HR::Part part;
 
-            part = HR::Head(move(rh));
+            part = HR::Head(std::move(rh));
             part.async_write(con, c, y);
 
             part = HR::ChunkHdr(4, "");
@@ -274,7 +274,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             http::fields trailer;
             trailer.set("Hash", "hash_of_1234");
 
-            part = HR::Trailer(move(trailer));
+            part = HR::Trailer(std::move(trailer));
             part.async_write(con, c, y);
         }
         outwc.wait(y);
@@ -328,13 +328,13 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             GenericStream con = stream(outs, outwc, exec, y);
             HR::Part part;
 
-            part = HR::Head(move(rh1));
+            part = HR::Head(std::move(rh1));
             part.async_write(con, c, y);
 
             part = HR::Body(str_to_vec(rb1));
             part.async_write(con, c, y);
 
-            part = HR::Head(move(rh2));
+            part = HR::Head(std::move(rh2));
             part.async_write(con, c, y);
 
             part = HR::Body(str_to_vec(rb2));
@@ -391,7 +391,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             GenericStream con = stream(outs, outwc, exec, y);
             HR::Part part;
 
-            part = HR::Head(move(rh1));
+            part = HR::Head(std::move(rh1));
             part.async_write(con, c, y);
 
             part = HR::ChunkHdr(4, "");
@@ -409,7 +409,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             part = HR::Trailer();
             part.async_write(con, c, y);
 
-            part = HR::Head(move(rh2));
+            part = HR::Head(std::move(rh2));
             part.async_write(con, c, y);
 
             part = HR::Body(str_to_vec(rb2));

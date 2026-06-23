@@ -217,7 +217,7 @@ static const auto rs_chunk_ext_empty = rs_block_sig_cx_empty;
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    task::spawn_detached(ctx.get_executor(), [f = forward<F>(f)] (auto yield) {
+    task::spawn_detached(ctx.get_executor(), [f = std::forward<F>(f)] (auto yield) {
             try {
                 f(YieldContext(yield));
             }
@@ -555,9 +555,9 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
             sys::error_code e;
             auto pk = get_public_key();
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
-                (move(signed_r), pk);
+                (std::move(signed_r), pk);
             auto signed_rs = compat([&](Async yield) {
-                return Session::create(move(signed_rvr), false, yield);
+                return Session::create(std::move(signed_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_rs.flush_response(hashed_w, cancel, y[e]);
@@ -695,9 +695,9 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             sys::error_code e;
             auto pk = get_public_key();
             Session::reader_uptr forged_rvr = make_unique<cache::VerifyingReader>
-                (move(forged_r), pk);
+                (std::move(forged_r), pk);
             auto forged_rs = compat([&](Async yield) {
-                return Session::create(move(forged_rvr), false, yield);
+                return Session::create(std::move(forged_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
             forged_rs.flush_response(tested_w, cancel, y[e]);
@@ -775,9 +775,9 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             sys::error_code e;
             auto pk = get_public_key();
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
-                (move(signed_r), pk);
+                (std::move(signed_r), pk);
             auto signed_rs = compat([&](Async yield) {
-                return Session::create(move(signed_rvr), false, yield);
+                return Session::create(std::move(signed_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
             signed_rs.flush_response(hashed_w, cancel, y[e]);
@@ -925,7 +925,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
                 ( std::move(signed_r), pk
                 , cache::VerifyingReader::status_set{http::status::partial_content});
             auto signed_rs = compat([&](Async yield) {
-                return Session::create(move(signed_rvr), false, yield);
+                return Session::create(std::move(signed_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE_EQUAL(e.value(), sys::errc::success);
             signed_rs.flush_response(tested_w, cancel, y[e]);

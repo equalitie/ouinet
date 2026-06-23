@@ -57,7 +57,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
 
         auto timeout_duration = 500ms;
 
-        TimeoutStream<tcp::socket> t(move(s));
+        TimeoutStream<tcp::socket> t(std::move(s));
         t.set_read_timeout(timeout_duration);
 
         std::string rx_buf(1, '\0');
@@ -92,7 +92,7 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
 
         auto timeout_duration = 500ms;
 
-        TimeoutStream<tcp::socket> t(move(s));
+        TimeoutStream<tcp::socket> t(std::move(s));
         t.set_read_timeout(timeout_duration);
 
         std::string rx_buf(1, '\0');

@@ -74,7 +74,7 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
         }
     }
 
-    auto hdr = util::to_injector_request(move(orig_hdr));
+    auto hdr = util::to_injector_request(std::move(orig_hdr));
 
     if (!hdr) {
         return {};

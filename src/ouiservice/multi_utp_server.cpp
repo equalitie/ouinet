@@ -100,7 +100,6 @@ void MultiUtpServer::stop_listen()
 
 std::expected<GenericStream, sys::error_code> MultiUtpServer::accept(Async yield)
 {
-    sys::error_code ec;
     auto s = _accept_queue.async_receive(yield);
     if (!s.has_value()) return std::unexpected(s.error());
     return std::move(*s);

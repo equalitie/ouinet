@@ -44,7 +44,7 @@ struct Entry {
     Entry() = default;
 
     Entry(Announcer::Key key)
-        : key(move(key))
+        : key(std::move(key))
         , infohash(util::sha1_digest(this->key))
     { }
 
@@ -73,7 +73,7 @@ struct Announcer::Loop {
         : ex(ex)
         , entries(ex)
         , _simultaneous_announcements(simultaneous_announcements)
-        , _log_path(move(log_path))
+        , _log_path(std::move(log_path))
     { }
 
     inline static bool debug() { return get_logger().get_threshold() <= DEBUG; }
@@ -107,7 +107,7 @@ struct Announcer::Loop {
             if (e.attempted_update()) break;
         }
 
-        entries.insert(i, Entry(move(key)));
+        entries.insert(i, Entry(std::move(key)));
         _timer_cancel();
         _timer_cancel = Cancel();
         return true;
@@ -270,14 +270,14 @@ struct Announcer::Loop {
                         e.failed_update     = Clock::now();
                     }
 
-                    if (!e.to_remove) entries.push_back(move(e));
+                    if (!e.to_remove) entries.push_back(std::move(e));
                     if (debug()) { print_entries(); }
                 });
 
                 entries.erase(*ei);
             }
 
-            wc.wait(yield);
+            std::ignore = wc.wait(yield);
         }
     }
 
@@ -341,7 +341,7 @@ Announcer::Announcer(AsioExecutor ex, size_t simultaneous_announcements)
 
 bool Announcer::add(Key key)
 {
-    return _loop->add(move(key));
+    return _loop->add(std::move(key));
 }
 
 bool Announcer::remove(const Key& key) {

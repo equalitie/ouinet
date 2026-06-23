@@ -77,7 +77,7 @@ HR::Part trailer(map<string, string> trailer) {
     for (auto& p : trailer) {
         fields.insert(p.first, p.second);
     }
-    return HR::Trailer{move(fields)};
+    return HR::Trailer{std::move(fields)};
 }
 
 HR::Part read_full_body(RR& rr, Cancel& c, asio::yield_context y) {
@@ -107,7 +107,7 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
             "HTTP/1.0 200 OK\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -135,7 +135,7 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
             "\r\n"
             "abcdef";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -171,7 +171,7 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
             "Content-Length: 0\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -202,7 +202,7 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body_big_header) {
             "X-Long-Header: " + std::string(8 * 1024, 'x') + "\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -233,7 +233,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             "\r\n"
             "0123456789";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             "0\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -328,7 +328,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             "Hash: hash_of_1234\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -386,7 +386,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             "\r\n"
             "abcde";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
@@ -448,7 +448,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             "\r\n"
             "abcde";
 
-        RR rr(stream(move(rsp), exec, y));
+        RR rr(stream(std::move(rsp), exec, y));
 
         Cancel c;
         std::optional<HR::Part> part;
