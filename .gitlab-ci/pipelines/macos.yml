@@ -18,8 +18,8 @@ macos / build:
       - $BUILD_PATH/lib*.dylib
       - $BUILD_PATH/lib*.a
       - $BOOST_PATH/b2
-      - $TESTS_PATH/bt-*
-      - $TESTS_PATH/test-*
+      - $TESTS_PATH/bt_*
+      - $TESTS_PATH/test_*
       - build.darwin/xcodebuild.log
     expire_in: 6h
   script:
@@ -38,9 +38,8 @@ macos / unit-test:
       - $BUILD_PATH/injector.app
       - $BUILD_PATH/lib*.dylib
       - $BUILD_PATH/lib*.a
-      - $GCRYPT_PATH/out/lib/lib*.dylib
-      - $GPGERROR_PATH/out/lib/lib*.dylib
-      - $TESTS_PATH/test-*
+      - $TESTS_PATH/bt_*
+      - $TESTS_PATH/test_*
     expire_in: 6h
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
