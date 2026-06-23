@@ -14,6 +14,9 @@ public:
         Lock(Lock&&) = default;
         Lock(Lock const&) = delete;
 
+        Lock& operator=(Lock&&) = default;
+        Lock& operator=(Lock const&) = delete;
+
         ~Lock() {
             if (std::shared_ptr<State> s = _state.lock()) {
                 s->on_one_unlocked(sys::error_code());
