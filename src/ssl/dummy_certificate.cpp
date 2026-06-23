@@ -65,7 +65,7 @@ DummyCertificate::~DummyCertificate()
 
 DummyCertificate::DummyCertificate(DummyCertificate&& other)
     : _x(other._x)
-    , _pem_certificate(move(other._pem_certificate))
+    , _pem_certificate(std::move(other._pem_certificate))
 {
     other._x = nullptr;
 }

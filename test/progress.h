@@ -1,22 +1,25 @@
 #pragma once
 
-#include "../src/namespaces.h"
+#include <iostream>
+
+#include "async_sleep.h"
+#include "task.h"
+#include "util/cancel.h"
+#include "util/executor.h"
 
 namespace ouinet {
 
 struct Progress {
-    Progress(const AsioExecutor& ex, std::string message)
-        : _message(move(message))
+    Progress(const util::AsioExecutor& ex, std::string message)
+        : _message(std::move(message))
     {
-        using namespace std;
-
-        task::spawn_detached(ex, [&, ex] (asio::yield_context yield) {
+        task::spawn_detached(ex, [&, ex] (boost::asio::yield_context yield) {
             Cancel cancel(_cancel);
             const char p[] = {'|', '/', '-', '\\'};
 
             while (!cancel) {
-                cerr << _message << "... " << p[_i++ % 4] << '\r';
-                async_sleep(chrono::milliseconds(200), cancel, yield);
+                std::cerr << _message << "... " << p[_i++ % 4] << '\r';
+                async_sleep(std::chrono::milliseconds(200), cancel, yield);
             }
         });
     }

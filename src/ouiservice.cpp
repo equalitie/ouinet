@@ -1,6 +1,7 @@
 #include "ouiservice.h"
 #include "or_throw.h"
 #include <boost/asio.hpp>
+#include <expected>
 #include "namespaces.h"
 
 #include "util/wait_condition.h"
@@ -69,7 +70,10 @@ sys::error_code OuiServiceServer::start_listen(Async yield)
     }
 
     lock.reset();
-    wc.wait(yield);
+
+    if (auto ec = wc.wait(yield); ec) {
+        return ec;
+    }
 
     return success ? sys::error_code() : asio::error::network_down;
 }
@@ -88,7 +92,9 @@ std::expected<GenericStream, sys::error_code>
 OuiServiceServer::accept(Async yield)
 {
     if (_connection_queue.empty()) {
-        _connection_available.wait(yield);
+        if (auto ec = _connection_available.wait(yield); ec) {
+            return std::unexpected(ec);
+        }
     }
 
     if (_connection_queue.empty()) {
@@ -179,7 +185,9 @@ OuiServiceClient::connect(Async yield)
     }
 
     if (!_started) {
-        _started_condition.wait(yield);
+        if (auto ec = _started_condition.wait(yield); ec) {
+            return std::unexpected(ec);
+        }
         if (!_started) {
             return std::unexpected(err::operation_aborted);
         }
@@ -198,7 +206,7 @@ OuiServiceClient::connect(Async yield)
         return std::unexpected(con.error());
     }
 
-    return ConnectInfo{move(*con), *_endpoint};
+    return ConnectInfo{std::move(*con), *_endpoint};
 }
 
 } // namespace

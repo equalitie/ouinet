@@ -185,7 +185,7 @@ static const array<string, 4> rs_chunk_ext{
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    task::spawn_detached(ctx.get_executor(), [f = forward<F>(f)] (auto yield) {
+    task::spawn_detached(ctx.get_executor(), [f = std::forward<F>(f)] (auto yield) {
             try {
                 f(YieldContext(yield));
             }
@@ -511,7 +511,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
 
         // Load response.
         yield.spawn_detached([ &loaded_w, &tmpdir, complete
-                         , &exec, lock = wc.lock()] (auto y) {
+                             , lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
             auto store_rr = cache::http_store_reader(tmpdir, c, y[e]);
@@ -628,7 +628,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
 
         // Load response.
         yield.spawn_detached([ &loaded_w, &tmpdir, &tmpcdir
-                         , &exec, lock = wc.lock()] (auto y) {
+                             , lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
             auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, c, y[e]);
@@ -736,7 +736,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
 
         // Load response.
         yield.spawn_detached([ &loaded_w, &tmpdir
-                         , &exec, lock = wc.lock()] (auto y) {
+                             , lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
             auto store_rr = cache::http_store_reader(tmpdir, c, y[e]);
@@ -853,7 +853,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
         tie(first_block, last_block) = firstb_lastb;
         yield.spawn_detached([ &loaded_w, &tmpdir
                          , first_block, last_block
-                         , &exec, lock = wc.lock()] (auto y) {
+                         , lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
             size_t first = (first_block * http_::response_data_block) + rs_block_data[first_block].size() / 2;

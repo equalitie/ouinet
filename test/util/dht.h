@@ -54,7 +54,7 @@ std::vector<std::unique_ptr<MainlineDht>> spawn_dht_nodes(size_t count, Async yi
 
     for (size_t i = 0; i < count; ++i) {
         dhts[i]->set_peer_filter(PeerFilter::none);
-        dhts[i]->add_endpoint(std::move(sockets[i]));
+        std::ignore = dhts[i]->add_endpoint(std::move(sockets[i]));
     }
 
     for (size_t i = 0; i < count; ++i) {
