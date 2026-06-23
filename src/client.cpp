@@ -1160,7 +1160,7 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
     return timeout(
         default_timeout::fetch_http(),
-        [&](auto yield) -> std::expected<Session, sys::error_code> {
+        [&](Async yield) -> std::expected<Session, sys::error_code> {
             // Parse the URL to tell HTTP/HTTPS, host, port.
             auto url = util::Url::from(rq.target());
             if (!url) {
@@ -1291,7 +1291,7 @@ Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
 {
     return timeout(
         default_timeout::fetch_http(),
-        [&](auto yield) -> std::expected<Session, sys::error_code> {
+        [&](Async yield) -> std::expected<Session, sys::error_code> {
             // Connect to the injector.
             // TODO: Maybe refactor with `fetch_via_self`.
 
