@@ -66,6 +66,10 @@ namespace fs = boost::filesystem;
 
 #define DEBUG_SHOW_MESSAGES 0
 
+// Max number of queries that can be handled concurrently. When this number is reached, any incoming
+// queries are ignored.
+const int MAX_HANDLE_QUERY_CONCURRENCY = 32;
+
 class Stat {
 private:
     using AccumSet = accum::accumulator_set< float
@@ -418,7 +422,7 @@ void DhtNode::store_contacts() const
         cancel = _cancel,
         log_path = _log_path
     ] (asio::yield_context yield) mutable {
-        (void) write_stored_contacts(
+        std::ignore = write_stored_contacts(
             std::move(contacts),
             path,
             Async(yield, std::move(cancel), std::move(log_path))
@@ -490,6 +494,8 @@ std::expected<std::set<udp::endpoint>, sys::error_code> DhtNode::tracker_announc
 
             if (result) {
                 success = true;
+            } else {
+                LOG_WARN(yield, " failed to send announce_peer query to ", i.second.node_endpoint, ": ", result.error());
             }
         });
     }
@@ -913,7 +919,7 @@ NodeID DhtNode::data_put_mutable(
                     * This node has an old version of this data entry.
                     * Update it even if it is no longer responsible.
                     */
-                    (void) compat([&](Cancel cancel, asio::yield_context yield) {
+                    std::ignore = compat([&](Cancel cancel, asio::yield_context yield) {
                         return write_to_node( *candidate.id
                                             , candidate.endpoint
                                             , *put_token
@@ -939,6 +945,7 @@ NodeID DhtNode::data_put_mutable(
 void DhtNode::receive_loop(Async yield)
 {
     bool handle_query_ok = true;
+    int concurrency = 0;
 
     while (handle_query_ok) {
         /*
@@ -986,12 +993,31 @@ void DhtNode::receive_loop(Async yield)
         }
 
         if (*message_type == "q") {
-            yield.spawn([&](Async yield) {
-                auto result = handle_query(sender, *message_map, yield);
-                if (!result) {
-                    handle_query_ok = false;
+            if (concurrency >= MAX_HANDLE_QUERY_CONCURRENCY) {
+                LOG_WARN(yield, " too many concurrent queries");
+                continue;
+            }
+
+            ++concurrency;
+
+            yield.spawn(
+                [
+                    this,
+                    sender,
+                    message_map = std::move(*message_map),
+                    &handle_query_ok,
+                    &concurrency
+                ] (Async yield) mutable {
+                    auto cleanup = defer([&] {
+                        --concurrency;
+                    });
+
+                    auto result = handle_query(sender, message_map, yield);
+                    if (!result) {
+                        handle_query_ok = false;
+                    }
                 }
-            });
+            );
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
@@ -1010,7 +1036,7 @@ void DhtNode::store_contacts_loop(Async yield)
         if (!_routing_table) return;
         auto contacts = _routing_table->dump_contacts();
 
-        (void) write_stored_contacts(std::move(contacts), path, yield);
+        std::ignore = write_stored_contacts(std::move(contacts), path, yield);
 
         async_sleep(std::chrono::minutes(6), yield);
     }
@@ -2018,7 +2044,7 @@ void DhtNode::send_ping(NodeContact contact)
         cancel = _cancel,
         log_path = _log_path
     ] (asio::yield_context yield) mutable {
-        send_ping(contact, Async(yield, cancel, std::move(log_path)));
+        std::ignore = send_ping(contact, Async(yield, cancel, std::move(log_path)));
     });
 }
 
@@ -2193,10 +2219,10 @@ std::optional<BencodedMap> DhtNode::query_get_peers(
          * We got a reply to get_peers, but it does not contain nodes.
          * Follow up with a find_node to fill the gap.
          */
-        (void) query_find_node(infohash, node, closer_nodes_v, yield);
+        std::ignore = query_find_node(infohash, node, closer_nodes_v, yield);
     }
 
-    (void) compat([&](Cancel cancel, asio::yield_context yield) {
+    std::ignore = compat([&](Cancel cancel, asio::yield_context yield) {
         closer_nodes.async_push_many(closer_nodes_v, cancel, yield);
     })(yield);
 
