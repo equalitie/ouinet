@@ -23,13 +23,14 @@ UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
 
     _udp_multiplexer->bind(local_endpoint, ec);
 
-    assert(_udp_multiplexer->is_open());
     if (ec) {
         LOG_ERROR(log_path, " uTP: Failed to bind UtpOuiServiceServer to "
                  , local_endpoint, "; ec=", ec);
     } else {
         LOG_DEBUG(log_path, " uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
     }
+
+    assert(_udp_multiplexer->is_open());
 }
 
 sys::error_code UtpOuiServiceServer::start_listen(Async yield)
@@ -107,7 +108,7 @@ UtpOuiServiceClient::connect(Async yield)
     }
 
     sys::error_code ec;
-    asio_utp::socket socket;
+    asio_utp::socket socket(_ex);
 
     static const chrono::seconds retry_timeout[] = { 4s , 8s , 16s };
 

@@ -199,6 +199,10 @@ public:
             _ouisync.reset();
         }
 
+        if (_udp_multiplexer) {
+            _udp_multiplexer.reset();
+        }
+
         _origin_pools = {};
     }
 
@@ -316,9 +320,7 @@ public:
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);
-
-        m.bind(mpl, ec);
-        if (ec) return or_throw(yield, ec, _bt_dht);
+        m.bind(mpl);
 
         auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
@@ -3118,8 +3120,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = maybe_wrap_tls(std::move(tcp_client));
     } else if (auto ep = injector_ep->get_if<Endpoint::Utp>()) {
         asio_utp::udp_multiplexer m(_ctx);
-        m.bind(common_udp_multiplexer(), ec);
-        assert(!ec);
+        m.bind(common_udp_multiplexer());
 
         auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
             (_ctx.get_executor(), std::move(m), ep->value);

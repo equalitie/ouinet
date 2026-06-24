@@ -1,4 +1,4 @@
-#define BOOST_TEST_MODULE utility
+#define BOOST_TEST_MODULE test_ouisync
 #include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
