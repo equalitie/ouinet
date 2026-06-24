@@ -3,9 +3,11 @@
 #include "util/str.h"
 #include "task.h"
 
+#ifdef OUINET_WITH_I2PD
 #include <boost/process.hpp>
 #include <boost/asio/readable_pipe.hpp>
 #include <boost/asio/read_until.hpp>
+#endif
 #include <boost/asio/streambuf.hpp>
 #include <boost/filesystem/path.hpp>
 
@@ -19,8 +21,10 @@
 
 namespace ouinet {
 
+#ifdef OUINET_WITH_I2PD
 namespace bp = boost::process::v2;
 
+// NOTE: iOS does not allow starting processes (macOS does).
 struct I2pd::Inner {
     bp::process _process;
     asio::readable_pipe _out;
@@ -64,10 +68,6 @@ struct I2pd::Inner {
     }
 };
 
-I2pd::I2pd(std::unique_ptr<Inner> inner):
-    _inner(std::move(inner))
-{}
-
 // Ensure the process is killed when the main process dies.
 // https://github.com/boostorg/process/issues/454
 // TODO: Windows, MacOS, iOS
@@ -83,8 +83,13 @@ struct ExecHandler {
 };
 #   endif
 
+#else // ifdef OUINET_WITH_I2PD
+struct I2pd::Inner {};
+#endif // ifdef OUINET_WITH_I2PD
+
 // static
 std::expected<I2pd, sys::error_code> I2pd::start(fs::path i2pd_binary_path, fs::path root_dir_path, asio::any_io_executor exec, util::LogPath log_path) {
+#ifdef OUINET_WITH_I2PD
     asio::readable_pipe out{exec};
 
     bp::process proc(exec, i2pd_binary_path.string(), {
@@ -102,18 +107,25 @@ std::expected<I2pd, sys::error_code> I2pd::start(fs::path i2pd_binary_path, fs::
             out, // stdout
             out // stdcerr
         }
-#ifdef __unix__
+#       ifdef __unix__
         , ExecHandler{});
-#else
+#       else
         );
-#endif
+#       endif
 
     return I2pd(std::make_unique<Inner>(
             std::move(proc),
             std::move(out),
             std::move(log_path)
         ));
+#else // ifdef OUINET_WITH_I2PD
+    return std::unexpected(make_error_code(sys::errc::not_supported));
+#endif // ifdef OUINET_WITH_I2PD
 }
+
+I2pd::I2pd(std::unique_ptr<Inner> inner):
+    _inner(std::move(inner))
+{}
 
 I2pd::I2pd(I2pd&&) = default;
 I2pd& I2pd::operator=(I2pd&& other) = default;

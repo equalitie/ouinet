@@ -208,7 +208,6 @@ ouinet_setup(TARGET ouinet_common
         asio_utp
         Boost::nowide
         Boost::url
-        Boost::process
         Boost::iostreams
         Boost::program_options
         Boost::filesystem
@@ -258,7 +257,6 @@ set(client_link_libs
     cpp_upnp
     Boost::nowide
     Boost::url
-    Boost::process
     Boost::iostreams
     Boost::filesystem
     Boost::program_options

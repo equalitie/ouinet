@@ -70,11 +70,23 @@ add_library(ouinet_i2p OBJECT
     "./util/create_i2p_session.cpp"
 )
 
+set(ouinet_i2p_libs
+    ouinet_asio
+)
+
+set(ouinet_i2p_defs
+    OUINET_API_I2P_EXPORT
+    OUINET_API_COMMON_LOCAL
+)
+
+if (WITH_I2PD)
+    list(APPEND ouinet_i2p_libs Boost::process)
+    list(APPEND ouinet_i2p_defs OUINET_WITH_I2PD)
+endif()
+
 ouinet_setup(TARGET ouinet_i2p
-    LINK ouinet_asio
-    DEFS
-        OUINET_API_I2P_EXPORT
-        OUINET_API_COMMON_LOCAL
+    LINK ${ouinet_i2p_libs}
+    DEFS ${ouinet_i2p_defs}
 )
 
 if (WITH_I2PD)
