@@ -280,7 +280,7 @@ BOOST_DATA_TEST_CASE(
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 2, yield);
+        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 8, yield);
 
         const std::string injector_credentials = "username:password";
 
@@ -467,13 +467,23 @@ BOOST_DATA_TEST_CASE(
     auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 2, yield);
+        // NOTE: there is probably a bug somewhere which cause injector announcements to sometimes
+        // have no effect even though the announce call completes successfully from the injector's
+        // point of view. The subsequent lookups by the client don't find anything and the request
+        // timeouts.
+        //
+        // Increasing the number of DHT nodes seems to help (probably because it increases the
+        // chance that at least some of the nodes handle the announcement) but it's just a quic and
+        // dirty workaround. We should ideally fix the bug, but we are also planning to replace the
+        // DHT implementation with the one from Ouisync so the effort is better spent there.
+        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 8, yield);
 
         const std::string injector_credentials = "username:password";
 
     	Injector injector(
 	        make_config<InjectorConfig>({
                 "./no_injector_exec"s,
+                "--log-level=DEBUG",
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
                 "--allow-private-targets",
