@@ -108,7 +108,7 @@ UtpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     }
 
     sys::error_code ec;
-    asio_utp::socket socket;
+    asio_utp::socket socket(yield.get_executor());
 
     static const chrono::seconds retry_timeout[] = { 4s , 8s , 16s };
 
