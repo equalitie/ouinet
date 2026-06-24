@@ -254,6 +254,10 @@ public:
             _bt_dht->stop();
             _bt_dht = nullptr;
         }
+        if (_udp_multiplexer) {
+            _udp_multiplexer.reset();
+        }
+        _origin_pools = {};
     }
 
     Client::RunningState get_state() const noexcept {
@@ -359,8 +363,7 @@ public:
 
         asio_utp::udp_multiplexer m(_ctx);
 
-        m.bind(mpl, ec);
-        if (ec) return or_throw(yield, ec, _bt_dht);
+        m.bind(mpl);
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
@@ -3281,8 +3284,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         client = maybe_wrap_tls(move(tcp_client));
     } else if (injector_ep->type == Endpoint::UtpEndpoint) {
         asio_utp::udp_multiplexer m(_ctx);
-        m.bind(common_udp_multiplexer(), ec);
-        assert(!ec);
+        m.bind(common_udp_multiplexer());
 
         auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
             (_ctx.get_executor(), move(m), injector_ep->endpoint_string);
