@@ -1,59 +1,65 @@
+include:
+  - .gitlab-ci/jobs/common/prepare-macos-image.yml
+
 variables:
   IOS_BUILD_PATH: 'build.darwin/build-os64/Debug-iphoneos'
   SIM_BUILD_PATH: 'build.darwin/build-simulatorarm64/Debug-iphonesimulator'
+  HOMEBREW_NO_AUTO_UPDATE: 1
 
 iphoneos / build:
   stage: build
-  tags:
-    - macos-shell
+  extends:
+    - .prepare-macos-image
   needs:
     - job: 'macos / build'
   artifacts:
     paths:
       - $IOS_BUILD_PATH/ouinet.framework
+      - $IOS_BUILD_PATH/ouinet.framework.dSYM
       - $IOS_BUILD_PATH/injector.app
       - $IOS_BUILD_PATH/lib*.a
+      - build.darwin/xcodebuild-ios.log
     expire_in: 6h
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=OS64 ../scripts/build-darwin.sh
-  when: manual
+    - PLATFORM=OS64 ../scripts/build-darwin.sh | tee xcodebuild-ios.log
   allow_failure: true
 
 iphonesimulator / build:
   stage: build
-  tags:
-    - macos-shell
+  extends:
+    - .prepare-macos-image
   needs:
     - job: 'macos / build'
   artifacts:
     paths:
       - $SIM_BUILD_PATH/ouinet.framework
+      - $SIM_BUILD_PATH/ouinet.framework.dSYM
       - $SIM_BUILD_PATH/injector.app
       - $SIM_BUILD_PATH/lib*.a
+      - build.darwin/xcodebuild-iossim.log
     expire_in: 6h
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=SIMULATORARM64 ../scripts/build-darwin.sh
-  when: manual
+    - PLATFORM=SIMULATORARM64 ../scripts/build-darwin.sh | tee xcodebuild-iossim.log
   allow_failure: true
 
 combined / build:
   stage: build
-  tags:
-    - macos-shell
+  extends:
+    - .prepare-macos-image
   needs:
     - job: 'iphoneos / build'
     - job: 'iphonesimulator / build'
   artifacts:
     paths:
       - build.darwin/build-combined/ouinet.xcframework
+      - build.darwin/xcodebuild-combined.log
     expire_in: 6h
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=COMBINED ../scripts/build-darwin.sh
-  when: manual
+    - PLATFORM=COMBINED ../scripts/build-darwin.sh | tee xcodebuild-combined.log
   allow_failure: true

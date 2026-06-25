@@ -1,0 +1,12 @@
+.prepare-macos-image:
+  tags:
+    - saas-macos-large-m2pro
+  image: macos-26-xcode-26
+  before_script:
+    - curl -sL "https://github.com/Kitware/CMake/releases/download/v3.31.12/cmake-3.31.12-macos-universal.tar.gz" -o ~/cmake-macos.tar.gz
+    - tar -xf ~/cmake-macos.tar.gz -C ~/.
+    - cp -R ~/cmake-3.31.12-macos-universal/CMake.app /Applications/
+    - sudo "/Applications/CMake.app/Contents/bin/cmake-gui" --install=/usr/local/bin
+    - brew install ruby
+    - gem install xcpretty
+    - rustup target add --toolchain 1.93.0-aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios

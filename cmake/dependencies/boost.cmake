@@ -101,20 +101,11 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     endif()
 
     link_libraries(ws2_32 mswsock)
-elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    # Unary function is deprecated in clang 16, this definition avoids using it
-    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
-    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
-    set(BOOST_ARCH_CONFIGURATION
-            cxxflags=${BOOST_CXXFLAGS}
-    )
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     # iOS libraries must to be built as static libs that are linked into a single dynamic lib
     set(BOOST_BUILD_SHARED OFF)
     set(OUINET_BOOST_CONFIGURE_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
-    # Unary function is deprecated in clang 16, this definition avoids using it
-    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
-    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
+    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++23")
     string(TOLOWER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
     set(BOOST_ENVIRONMENT )
     if (${PLATFORM} STREQUAL "OS64")

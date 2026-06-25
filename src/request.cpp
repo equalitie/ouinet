@@ -9,7 +9,7 @@ namespace ouinet {
 static boost::optional<std::string> extract_dht_group(http::request_header<>& hdr) {
     boost::optional<std::string> dht_group;
 
-#if defined(__MACH__)
+#if defined(__APPLE__) && PLATFORM != MAC_ARM64
     std::string from_url(const std::string& url) {
         auto dhtgroup = std::move(url);
 
