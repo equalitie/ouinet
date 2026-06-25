@@ -339,7 +339,7 @@ public:
                 return;
             }
 
-            State::setup_upnp(yield.get_executor(), ext_ep->get().port(), local_ep, upnps);
+            State::setup_upnp(yield.get_executor(), ext_ep->port(), local_ep, upnps);
         }));
 
         _bt_dht = std::move(bt_dht);
@@ -557,7 +557,7 @@ private:
             LOG_ERROR("Failed to create I2pSession: broken promise");
             return nullptr;
         }
-        auto& create_result = future_result->get();
+        auto& create_result = future_result.value();
         if (!create_result.has_value()) {
             LOG_ERROR("Failed to create I2pSession: ", create_result.error());
             return nullptr;
@@ -3085,7 +3085,7 @@ void Client::State::setup_injector(asio::yield_context yield)
                 if (!future_result.has_value()) {
                     return std::unexpected(asio::error::fault);
                 }
-                auto& create_result = future_result->get();
+                auto& create_result = future_result.value();
                 if (!create_result.has_value()) {
                     return std::unexpected(asio::error::fault);
                 }

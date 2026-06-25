@@ -977,7 +977,7 @@ Injector::Injector(
                 if (!future_result.has_value()) {
                     return std::unexpected(asio::error::fault);
                 }
-                auto& create_result = future_result->get();
+                auto& create_result = future_result.value();
                 if (!create_result.has_value()) {
                     return std::unexpected(asio::error::fault);
                 }
@@ -1049,7 +1049,7 @@ std::optional<I2pAddress> Injector::i2p_address(Async yield) {
     if (!future_result.has_value()) {
         return {};
     }
-    auto& create_result = future_result->get();
+    auto& create_result = future_result.value();
     if (!create_result.has_value()) {
         return {};
     }

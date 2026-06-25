@@ -26,7 +26,7 @@ public:
 
     class Future {
     public:
-        std::expected<std::reference_wrapper<Value>, BrokenPromise> wait(Async yield) {
+        std::expected<Value, BrokenPromise> wait(Async yield) {
             _state->wc.wait(yield);
             if (!_state->value) return std::unexpected(BrokenPromise());
             return *_state->value;
