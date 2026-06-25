@@ -8,6 +8,7 @@
 #include <util/wait_condition.h>
 
 #include "util/async_test.h"
+#include "util/unwrap.h"
 
 using namespace ouinet;
 using namespace std::chrono_literals;
@@ -78,14 +79,12 @@ BOOST_AUTO_TEST_CASE(return_values) {
         });
 
     async_test([] (Async yield) {
-            auto r = action(yield, sys::error_code{}, 1);
-            BOOST_REQUIRE_MESSAGE(r.has_value(), r.error());
-            BOOST_REQUIRE_EQUAL(*r, 1);
+            auto r = unwrap(action(yield, sys::error_code{}, 1));
+            BOOST_REQUIRE_EQUAL(r, 1);
         });
 
     async_test([] (Async yield) {
-            auto r = action(yield, sys::error_code{}, NoCopy());
-            BOOST_REQUIRE_MESSAGE(r.has_value(), r.error());
+            unwrap(action(yield, sys::error_code{}, NoCopy()));
         });
 
     async_test([] (Async yield) {
