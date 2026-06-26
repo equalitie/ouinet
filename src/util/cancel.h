@@ -29,7 +29,8 @@ public:
             return *this;
         }
 
-        operator bool() const { return !(bool) _slot; }
+        // Returns `true` when `Cancel::operator()` was called.
+        operator bool() const { return !_slot; }
 
     private:
         friend class Cancel;
@@ -37,6 +38,16 @@ public:
         void on_signal() {
             if (_slot) {
                 auto slot = std::move(_slot);
+                // NOTE: On macOS with clan 21.0.0.21000101 moving out of
+                // std::function (ditto with std::optional) will keep the
+                // source intact. That is, this fails:
+                //
+                //   std::function<void()> foo = []{};
+                //   auto bar = std::move(foo);
+                //   assert(!foo);
+                //
+                // So we need to reset _slot manually.
+                _slot = {};
                 slot();
             }
         }
