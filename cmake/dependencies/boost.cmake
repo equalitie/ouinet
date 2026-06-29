@@ -20,12 +20,16 @@ set(BOOST_COMPONENTS
     iostreams
     nowide
     program_options
-    process
     regex
     system
     unit_test_framework
     url
 )
+
+if (NOT IOS)
+    # IOS doesn't allow spawning processes
+    list(APPEND BOOST_COMPONENTS process)
+endif()
 
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
