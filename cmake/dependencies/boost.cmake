@@ -187,6 +187,8 @@ execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE N
 externalproject_add(built_boost
     URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=${BOOST_VERSION_HASH}
+    # Download here so that deleting `${CMAKE_BINARY_DIR}/boost` doesn't require re-download.
+    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}
     PREFIX ${OUINET_BOOST_PREFIX}
     BUILD_IN_SOURCE 1
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
