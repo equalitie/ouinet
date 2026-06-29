@@ -231,9 +231,7 @@ Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
             return Reader::read_signed_head(head_file, cancel, yield);
         }));
 
-        unwrap(yield.call_deprecated([&] (auto, auto, auto yield) {
-            head_file.close(yield);
-        }));
+        unwrap(head_file.close(yield));
 
         std::optional<FileStream> sigs_file, body_file;
 
