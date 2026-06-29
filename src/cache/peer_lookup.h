@@ -45,6 +45,8 @@ public:
         , _infohash(util::sha1_digest(_swarm_name))
     { }
 
+    virtual ~PeerLookup() {}
+
     std::expected<Ret, sys::error_code> get(Async yield) {
         // * Start a new job if one isn't already running
         // * Use previously returned result if it's not older than 5mins

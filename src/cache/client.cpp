@@ -404,7 +404,7 @@ struct Client::Impl {
 
         if (!lookup) {
             lookup = _dht_peer_lookups.put( swarm_name
-                                      , make_shared<DhtLookup>(_dht, swarm_name));
+                                          , make_shared<DhtLookup>(_dht, swarm_name));
         }
 
         return *lookup;
