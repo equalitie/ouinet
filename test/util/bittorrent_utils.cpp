@@ -39,7 +39,7 @@ public:
 
         asio_utp::udp_multiplexer m(_ctx);
 
-        m.bind(mpl, ec);
+        m.bind(mpl);
         if (ec) return or_throw(yield, ec, _bt_dht);
 
         auto cc = _shutdown_signal.connect([&] { bt_dht.reset(); });
