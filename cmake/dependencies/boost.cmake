@@ -31,7 +31,7 @@ string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
 set(OUINET_BOOST_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost")
 set(OUINET_BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
-set(OUINET_BOOST_CXXFLAGS -std=c++23)
+set(OUINET_BOOST_CXXFLAGS -std=c++23 -DBOOST_ASIO_SEPARATE_COMPILATION)
 set(OUINET_BOOST_LINKFLAGS)
 
 set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
@@ -186,7 +186,6 @@ endforeach()
 execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
 
 string(REPLACE ";" " " OUINET_BOOST_CXXFLAGS_STR "${OUINET_BOOST_CXXFLAGS}")
-string(REPLACE ";" " " OUINET_BOOST_LINKFLAGS_STR "${OUINET_BOOST_LINKFLAGS}")
 
 externalproject_add(built_boost
     URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
@@ -213,7 +212,6 @@ externalproject_add(built_boost
             # Possibly others, but in partucular `boost_process` includes Asio
             # which then causes it to have different error categories
             cxxflags="\"${OUINET_BOOST_CXXFLAGS_STR}\""
-            linkflags="\"${OUINET_BOOST_LINKFLAGS_STR}\""
             stage
     BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
     INSTALL_COMMAND ""
