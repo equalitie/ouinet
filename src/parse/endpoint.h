@@ -5,6 +5,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/string_view.hpp>
+#include <optional>
 
 namespace ouinet {
 namespace parse {
@@ -50,17 +51,16 @@ inline typename Proto::endpoint endpoint(boost::string_view &&s,
 }
 
 template <class Proto /* one of asio::ip::{tcp,udp} */>
-inline boost::optional<typename Proto::endpoint>
-endpoint(boost::string_view &s) {
+inline std::optional<typename Proto::endpoint> endpoint(boost::string_view &s) {
   sys::error_code ec;
   auto retval = endpoint<Proto>(s, ec);
   if (ec)
-    return boost::none;
+    return std::nullopt;
   return retval;
 }
 
 template <class Proto /* one of asio::ip::{tcp,udp} */>
-inline boost::optional<typename Proto::endpoint>
+inline std::optional<typename Proto::endpoint>
 endpoint(boost::string_view &&s) {
   auto ss = s;
   return endpoint<Proto>(ss);
