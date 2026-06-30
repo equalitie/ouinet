@@ -3,6 +3,7 @@
 #include <boost/utility/string_view.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
+#include <optional>
 #include "number.h"
 #include "util.h"
 
@@ -53,18 +54,18 @@ endpoint(boost::string_view&& s, sys::error_code& ec)
 
 template<class Proto /* one of asio::ip::{tcp,udp} */>
 inline
-boost::optional<typename Proto::endpoint>
+std::optional<typename Proto::endpoint>
 endpoint(boost::string_view& s)
 {
     sys::error_code ec;
     auto retval = endpoint<Proto>(s, ec);
-    if (ec) return boost::none;
+    if (ec) return std::nullopt;
     return retval;
 }
 
 template<class Proto /* one of asio::ip::{tcp,udp} */>
 inline
-boost::optional<typename Proto::endpoint>
+std::optional<typename Proto::endpoint>
 endpoint(boost::string_view&& s)
 {
     auto ss = s;
