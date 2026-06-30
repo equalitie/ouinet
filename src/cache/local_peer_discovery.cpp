@@ -80,7 +80,7 @@ struct LocalPeerDiscovery::Impl {
         : _ex(ex)
         , _socket(ex)
         , _id(id)
-        , _advertised_eps(move(advertised_eps))
+        , _advertised_eps(std::move(advertised_eps))
     {
         sys::error_code ec;
 

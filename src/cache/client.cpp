@@ -57,8 +57,8 @@ struct GarbageCollector {
                     , util::LogPath log_path
                     , AsioExecutor ex)
         : http_store(http_store)
-        , keep(move(keep))
-        , _log_path(move(log_path))
+        , keep(std::move(keep))
+        , _log_path(std::move(log_path))
         , _executor(ex)
     {}
 
@@ -131,13 +131,13 @@ struct Client::Impl {
         , util::LogPath log_path)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(ex)
-        , _lan_my_endpoints(move(lan_my_eps))
+        , _lan_my_endpoints(std::move(lan_my_eps))
         , _uri_swarm_prefix(bep5::compute_uri_swarm_prefix
               (cache_pk, http_::protocol_version_current))
         , _cache_pk(cache_pk)
-        , _cache_dir(move(cache_dir))
+        , _cache_dir(std::move(cache_dir))
         , _static_cache_dir(std::move(static_cache_dir))
-        , _http_store(move(http_store_))
+        , _http_store(std::move(http_store_))
         , _max_cached_age(max_cached_age)
         , _gc(*_http_store, [&] (const auto& resource_id, auto rr, auto y) {
               return keep_cache_entry(resource_id, std::move(rr), y);
@@ -743,7 +743,7 @@ struct Client::Impl {
             if (!is_directory(groups_dir)) {
                 _ERROR("No groups of supported version under static cache, ignoring: ", *_static_cache_dir);
             } else {
-                static_groups = load_static_dht_groups(move(groups_dir), _ex, cancel, y[e]);
+                static_groups = load_static_dht_groups(std::move(groups_dir), _ex, cancel, y[e]);
                 if (e) _ERROR("Failed to load static groups, ignoring: ", *_static_cache_dir);
             }
         }
@@ -876,15 +876,15 @@ Client::build( AsioExecutor ex
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);
     impl->_gc.start();
-    return unique_ptr<Client>(new Client(move(impl)));
+    return unique_ptr<Client>(new Client(std::move(impl)));
 }
 
 Client::Client(unique_ptr<Impl> impl)
-    : _impl(move(impl))
+    : _impl(std::move(impl))
 {}
 
 bool Client::enable_dht(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements) {
-    return _impl->enable_dht(move(dht),
+    return _impl->enable_dht(std::move(dht),
                              simultaneous_announcements);
 }
 

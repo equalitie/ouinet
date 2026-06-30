@@ -128,7 +128,7 @@ HashList HashList::load(
 
     raw_head.result(*orig_status);
 
-    auto head_o = SignedHead::verify_and_create(move(raw_head), pk);
+    auto head_o = SignedHead::verify_and_create(std::move(raw_head), pk);
 
     if (!head_o) return or_throw<HashList>(y, bad_msg);
 
