@@ -141,6 +141,11 @@ void check_exception(std::exception_ptr e) {
 // The `injector` and `seeder` will create a "crawl" which will then be copied
 // to `seeder`s ouisync repo for the `leecher` to retrive it.
 BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
+    // Mounting may be useful for debugging, but requires that Ouisync is
+    // compiled with VFS (Virtual File System) enabled which is only supported
+    // on Linux and Windows.
+    const bool with_mount = false;
+
     asio::io_context ctx;
 
     TestDir root;
@@ -190,7 +195,9 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
         session.bind_network({"quic/0.0.0.0:0"}, yield);
         session.set_store_dirs({ouisync_service_dir.make_subdir("store").string()}, yield);
-        //session.set_mount_root(ouisync_service_dir.make_subdir("mount").string(), yield);
+        if (with_mount) {
+            session.set_mount_root(ouisync_service_dir.make_subdir("mount").string(), yield);
+        }
         session.set_local_discovery_enabled(true, yield);
 
         auto page_index = session.create_repository(
@@ -203,7 +210,9 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 false, // pex_enabled
                 yield);
 
-        //page_index.mount(yield);
+        if (with_mount) {
+            page_index.mount(yield);
+        }
 
         Client leecher(ctx, make_config<ClientConfig>({
                 "./no_client_exec"s,
@@ -249,7 +258,9 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 false, // pex_enabled
                 yield);
 
-        //page_repo.mount(yield);
+        if (with_mount) {
+            page_repo.mount(yield);
+        }
 
         session.copy(
             {},                                                             // `src_repo`
