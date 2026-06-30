@@ -161,7 +161,8 @@ sys::error_code Ouisync::start(Async yield) {
     }));
 
     auto session = unwrap(yield.call_deprecated([&](auto, auto, auto yield) {
-      return ouisync::Session::connect(_service_dir, yield);
+      return ouisync::Session::connect(yield.get_executor(), _service_dir,
+                                       yield);
     }));
 
     unwrap(session.bind_network({"quic/0.0.0.0:0"}, yield));
