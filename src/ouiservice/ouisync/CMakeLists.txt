@@ -40,8 +40,9 @@ if (WITH_OUISYNC)
         ouinet_ouisync
         EXCLUDE_FROM_ALL
         OBJECT
-        "./ouisync.cpp"
         "./error.cpp"
+        "./ouisync.cpp"
+        "./socket.cpp"
     )
     ouinet_setup(TARGET ouinet_ouisync
         LINK PUBLIC ouinet_rs cpp_ouisync_service cpp_ouisync_client

@@ -129,6 +129,7 @@ add_test(TARGET test_i2p_tracker)
 
 if (WITH_OUISYNC)
     add_test(TARGET test_ouisync)
+    add_test(TARGET test_ouisync_socket)
 endif()
 
 if(UNIX AND NOT APPLE AND NOT CYGWIN)
