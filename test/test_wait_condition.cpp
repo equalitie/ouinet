@@ -18,11 +18,6 @@ using namespace chrono;
 using Timer = boost::asio::steady_timer;
 using Clock = chrono::steady_clock;
 
-int millis_since(Clock::time_point start) {
-    auto end = Clock::now();
-    return duration_cast<milliseconds>(end - start).count();
-}
-
 constexpr milliseconds wait_limit = 20ms;
 
 BOOST_AUTO_TEST_CASE(one) {

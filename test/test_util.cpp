@@ -17,7 +17,7 @@ using namespace chrono_literals;
 using Timer = boost::asio::steady_timer;
 using Clock = chrono::steady_clock;
 
-int millis_since(Clock::time_point start) {
+auto millis_since(Clock::time_point start) {
     auto end = Clock::now();
     return duration_cast<milliseconds>(end - start).count();
 }

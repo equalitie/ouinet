@@ -182,7 +182,7 @@ HashList HashList::load(
                     if (signature) {
                         progress = true;
 
-                        blocks.push_back({*digest, *signature});
+                        blocks.push_back({*digest, { *signature }});
 
                         digest    = boost::none;
                         signature = boost::none;

@@ -338,11 +338,11 @@ private:
             , "Public key for HTTP signatures in the BEP5/HTTP cache "
               "(hex-encoded or Base32-encoded)")
            ("max-cached-age"
-            , po::value<int>()->default_value(_max_cached_age.total_seconds())
+            , po::value<long>()->default_value(_max_cached_age.total_seconds())
             , "Discard cached content older than this many seconds "
               "(0: discard all; -1: discard none)")
            ("max-simultaneous-announcements"
-            , po::value<int>()->default_value(_max_simultaneous_announcements)
+            , po::value<size_t>()->default_value(_max_simultaneous_announcements)
             , "Defines the number of simultaneous BEP5 announcements "
               "performed by the announcer loop to the DHT.")
           ("cache-private"
