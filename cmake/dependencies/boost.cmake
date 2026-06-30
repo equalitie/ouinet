@@ -141,7 +141,6 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
     set(BOOST_ARCH_CONFIGURATION
         ${BOOST_ARCH_CONFIGURATION}
-        --stagedir=iphone-build/stage
         binary-format=mach-o
         define=_LITTLE_ENDIAN
         target-os=iphone
