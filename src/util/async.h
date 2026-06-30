@@ -6,6 +6,8 @@
 #include "yield.h"
 #include "../task.h"
 
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/async_result.hpp>
 
@@ -159,6 +161,11 @@ private:
     util::LogPath _log_path;
     Cancel _cancel;
 };
+
+static_assert(std::is_same_v<
+    asio::associated_executor_t<Async>,
+    asio::any_io_executor
+>);
 
 } // ouinet namespace
 
