@@ -798,7 +798,6 @@ void listen( InjectorConfig& config
 
         if (!connection.has_value()) {
             async_sleep(std::chrono::milliseconds(100), yield);
-            ec = {};
             continue;
         }
 

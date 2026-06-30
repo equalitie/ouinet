@@ -59,11 +59,11 @@ class OUINET_COMMON_API UtpOuiServiceClient : public OuiServiceImplementationCli
         return _udp_multiplexer.local_endpoint();
     }
 
-    bool verify_remote_endpoint() const { return bool(_remote_endpoint); }
+    bool verify_remote_endpoint() const { return true; }
 
     private:
     asio::any_io_executor _ex;
-    boost::optional<asio::ip::udp::endpoint> _remote_endpoint;
+    asio::ip::udp::endpoint _remote_endpoint;
     asio_utp::udp_multiplexer _udp_multiplexer;
 };
 

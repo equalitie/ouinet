@@ -103,10 +103,6 @@ UtpOuiServiceClient::connect(Async yield)
 {
     using namespace chrono_literals;
 
-    if (!_remote_endpoint) {
-        return std::unexpected(asio::error::invalid_argument);
-    }
-
     sys::error_code ec;
     asio_utp::socket socket(_ex);
 
@@ -121,7 +117,7 @@ UtpOuiServiceClient::connect(Async yield)
 
         auto result = timeout(
             retry_timeout[i],
-            [&](auto yield) { return socket.async_connect(*_remote_endpoint, yield); },
+            [&](auto yield) { return socket.async_connect(_remote_endpoint, yield); },
             yield
         );
 
