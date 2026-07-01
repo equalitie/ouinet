@@ -1,44 +1,30 @@
 #pragma once
 
-#include <boost/program_options/value_semantic.hpp>
 #include <set>
 #include <sstream>
 #include <vector>
 
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/local/stream_protocol.hpp>
-#include <boost/algorithm/string/case_conv.hpp>
-#include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
 #include "namespaces.h"
 #include "cache_control.h"
 #include "util.h"
 #include "api.h"
-#include "util/bytes.h"
-#include "parse/endpoint.h"
 #include "util/sign.h"
-#ifndef __WIN32
-#include "increase_open_file_limit.h"
-#endif
 #include "endpoint.h"
-#include "logger.h"
 #include "constants.h"
-#include "bep5_swarms.h"
-#include "util.h"
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
 #include "ouiservice/i2p/address.h"
 
-#include "cxx/dns.h"
+namespace boost::program_options {
+    class variables_map;
+    class options_description;
+} // namespace
 
 namespace ouinet {
-
-#define _LOG_FILE_NAME "log.txt"
-static const fs::path log_file_name{_LOG_FILE_NAME};
-
-#define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
-static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
 
 //TODO: move this to somewhere where both client and injector config has access to
 #define _MAX_I2P_HOPS 8
@@ -142,11 +128,7 @@ public:
         return _cache_static_content_path;
     }
 
-    boost::optional<std::string> bep5_bridge_swarm_name() {
-        if (!_cache_http_pubkey) return boost::none;
-        return bep5::compute_bridge_swarm_name( *_cache_http_pubkey
-                                              , http_::protocol_version_current);
-    }
+    boost::optional<std::string> bep5_bridge_swarm_name() const;
 
     bool is_bridge_announcement_enabled() const {
         return !_disable_bridge_announcement;
@@ -196,9 +178,7 @@ public:
 
     bool is_help() const { return _is_help; }
 
-    auto description() {
-        return description_full();
-    }
+    void describe(std::ostream& os);
 
     // Is `nullptr` if metrics is disabled
     const MetricsConfig* metrics() const {
@@ -220,273 +200,13 @@ public:
     }
 
 private:
-    boost::program_options::options_description description_full()
-    {
-        using namespace std;
-        namespace po = boost::program_options;
-
-        po::options_description general("General options");
-        general.add_options()
-           ("help", "Produce this help message")
-           ("repo", po::value<string>(), "Path to the repository root")
-           ("drop-saved-opts", po::bool_switch()->default_value(false)
-            , "Drop saved persistent options right before start "
-              "(only use command line arguments and configuration file)")
-           ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
-            , "Set log level: silly, debug, verbose, info, warn, error, abort. "
-              "This option is persistent.")
-           ("enable-log-file", po::bool_switch()->default_value(false)
-            , "Enable writing log messages to "
-              "log file \"" _LOG_FILE_NAME "\" under the repository root. "
-              "This option is persistent.")
-           ("bt-bootstrap-extra", po::value<vector<string>>()->composing()
-            , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
-              "to start the DHT (can be used several times). "
-              "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
-              "This option is persistent.")
-           ("bt-bootstrap-no-default", po::bool_switch()->default_value(false)
-            , "Don't use default BitTorrent bootstrap servers."
-              "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used."
-              "This option is persistent.")
-           ("bt-allow-martians", po::bool_switch()->default_value(false)
-            , "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful mostly for testing.")
-#ifndef __WIN32
-           ("open-file-limit"
-            , po::value<unsigned int>()
-            , "To increase the maximum number of open files")
-#endif
-           ;
-
-        po::options_description services("Service options");
-        services.add_options()
-           ("listen-on-tcp"
-            , po::value<string>()->default_value("127.0.0.1:8077")
-            , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
-           ("udp-mux-port"
-           , po::value<uint16_t>()
-           , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
-           ("udp-mux-rx-limit"
-           , po::value<uint32_t>()
-           , "Max rate limit that's allowed for incoming packets to the "
-             "UDP multiplexer. The value is expressed in Kbps. To leave it "
-             "unlimited, set it to zero.")
-           ("client-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the client")
-           ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir)
-            , "Path to the CA certificate store directory")
-           ("tls-ca-cert-store-file", po::value<vector<string>>(&_tls_ca_cert_store_files)
-            , "Add CA certificate store file")
-           ("front-end-ep"
-            , po::value<string>()->default_value("127.0.0.1:8078")
-            , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
-            ("front-end-unix-socket-ep"
-            , po::value<string>()
-            , "Path to the front-end Unix socket. Absolute or relative to repo root.")
-           ("front-end-access-token"
-            , po::value<string>()
-            , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
-              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
-           ("proxy-access-token"
-            , po::value<string>()
-            , "Token to access the http proxy, use agents will need to include the X-Ouinet-Proxy-Token "
-              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
-           ("disable-bridge-announcement"
-            , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
-            , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
-              "Previous announcements could take up to an hour to expire.")
-           ("request-body-limit"
-            , po::value<uint64_t>()->default_value(_max_req_body_size)
-            , "Set the max size of body requests in KiB. This could be "
-              "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
-              "uploads, etc. To leave it unlimited, set it to zero.")
-           ("add-request-field"
-            , po::value<std::vector<std::string>>()->composing()
-            , "A <FIELD>:<VALUE> pair representing a HTTP header field and "
-              "value to add to every request coming from the User Agent before "
-              "Ouinet processes it. Useful for testing when using e.g. Firefox "
-              "as the UA.")
-           ;
-
-        po::options_description injector("Injector options");
-        injector.add_options()
-           ("injector-ep"
-            , po::value<string>()
-            , "Injector's endpoint as <TYPE>:<EP>, "
-              "where <TYPE> can be \"tcp\", \"utp\",  "
-              "and <EP> depends on the type of endpoint: "
-              "<IP>:<PORT> for TCP and uTP"
-              ", <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
-              "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P"
-           )
-           ("injector-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the injector")
-           ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
-            , "Path to the injector's TLS certificate; enable TLS for TCP and uTP")
-          ("i2p-hops-per-tunnel", po::value<size_t>()
-            , "number intermediary hops to be used for I2P garlic routing.")
-          ("i2p-bep3-tracker", po::value<string>()
-            , "I2P address of the BEP3 tracker "
-              "(<B32_PUBKEY>.b32.i2p or <B64_PUBKEY>)")
-           ;
-
-        po::options_description cache("Cache options");
-        cache.add_options()
-           ("cache-type", po::value<string>()->default_value("none")
-            , "Type of d-cache {none, bep5-http, ouisync}")
-           ("cache-http-public-key"
-            , po::value<string>()
-            , "Public key for HTTP signatures in the BEP5/HTTP cache "
-              "(hex-encoded or Base32-encoded)")
-           ("max-cached-age"
-            , po::value<decltype(_max_cached_age.total_seconds())>()->default_value(_max_cached_age.total_seconds())
-            , "Discard cached content older than this many seconds "
-              "(0: discard all; -1: discard none)")
-           ("max-simultaneous-announcements"
-            , po::value<decltype(_max_simultaneous_announcements)>()->default_value(_max_simultaneous_announcements)
-            , "Defines the number of simultaneous BEP5 announcements "
-              "performed by the announcer loop to the DHT.")
-          ("cache-private"
-           , po::bool_switch(&_cache_private)->default_value(false)
-           , "Store responses regardless of being private or "
-             "the result of an authorized request "
-             "(in spite of Section 3 of RFC 7234), "
-             "unless tagged as private to the Ouinet client. "
-             "Sensitive headers are still removed from Injector requests. "
-             "May need special injector configuration. "
-             "USE WITH CAUTION.")
-          ("cache-static-repo"
-           , po::value<string>()
-           , "Repository for internal files of the static cache "
-             "(to use as read-only fallback for the local cache); "
-             "if this is not given but a static cache content root is, "
-             "\"" _DEFAULT_STATIC_CACHE_SUBDIR "\" under that directory is assumed.")
-          ("cache-static-root"
-           , po::value<string>()
-           , "Root directory for content files of the static cache. "
-             "The static cache always requires this (even if empty).")
-          ("ouisync-page-index", po::value<string>(),
-           "A Ouisync repository read token. The repository contains files with names "
-           "corresponding to domains and each one contains another read token to a "
-           "repository with a scrape of that domain")
-          ;
-
-        po::options_description requests("Request options");
-        requests.add_options()
-           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
-            , "Disable direct access to the origin (forces use of injector and the cache). "
-              "This option is persistent.")
-           ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
-            , "Disable access to the injector. "
-              "This option is persistent.")
-           ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false)
-            , "Disable access to cached content. "
-              "This option is persistent.")
-           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
-            , "Disable proxied access to the origin (via the injector). "
-              "This option is persistent.")
-           ("local-domain"
-            , po::value<string>()->default_value("local")
-            , "Always use origin access and never use cache for this TLD")
-            ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
-            , "Allows using non-origin channels, like injectors, dist-cache, etc, "
-              "to fetch targets using private addresses. "
-              "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
-            ;
-
-        po::options_description dns("DNS options");
-        dns.add_options()
-           ("dns-protocol", po::value<vector<string>>()
-                                ->composing()
-                                ->default_value(dns_default_protocols,
-                                                util::join(dns_default_protocols, ","))
-            ,"DNS protocols used by the resolver. This option can be set to: plain or https. "
-              "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
-              "the nameservers. The option can be used multiple times to select more than one protocol.")
-           ;
-
-        po::options_description metrics("Metrics options");
-        metrics.add_options()
-           ("metrics-enable-on-start", po::bool_switch()->default_value(false)
-            , "Enable metrics at startup. Must be used with --metrics-server-url")
-           ("metrics-server-url", po::value<string>()
-            , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
-           ("metrics-server-token", po::value<string>()
-            , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
-           ("metrics-server-cacert", po::value<string>()
-            , "Tls CA certificate for the metrics server")
-           ("metrics-server-cacert-file", po::value<string>()
-            , "File containing the CA certificate for the metrics server")
-           ("metrics-encryption-key", po::value<string>()
-            , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
-              "the following. \n"
-              "   First generate the private key:\n"
-              "     `openssl genpkey -algorithm x25519 -out private_key.pem`\n"
-              "   Then get the public encryption key:\n"
-              "     `openssl pkey -in private_key.pem -pubout -out public_key.pem`"
-              )
-           ("metrics-delete-after"
-            , po::value<uint64_t>()->default_value(metrics::default_delete_after_seconds)
-            , "Metrics records older than this duration will be deleted. "
-              "The value is expressed in seconds.")
-           ;
-
-        po::options_description desc;
-        desc
-            .add(general)
-            .add(services)
-            .add(injector)
-            .add(cache)
-            .add(requests)
-            .add(dns)
-            .add(metrics);
-        return desc;
-    }
+    boost::program_options::options_description description_full();
 
     // A restricted version of the above, only accepting persistent configuration options,
     // with no defaults nor descriptions.
-    boost::program_options::options_description description_saved()
-    {
-        namespace po = boost::program_options;
+    boost::program_options::options_description description_saved();
 
-        po::options_description desc;
-        desc.add_options()
-            ("log-level", po::value<std::string>())
-            ("enable-log-file", po::bool_switch())
-            ("bt-bootstrap-extra", po::value<std::vector<std::string>>()->composing())
-            ("bt-bootstrap-no-default", po::bool_switch(&_bt_bootstrap_no_default))
-            ("disable-origin-access", po::bool_switch(&_disable_origin_access))
-            ("disable-injector-access", po::bool_switch(&_disable_injector_access))
-            ("disable-cache-access", po::bool_switch(&_disable_cache_access))
-            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access))
-            ;
-        return desc;
-    }
-
-    void save_persistent() {
-        using namespace std;
-        ostringstream ss;
-
-        ss << "log-level = " << log_level() << endl;
-        ss << "enable-log-file = " << is_log_file_enabled() << endl;
-
-        for (const auto& btbs_addr : _bt_bootstrap_extras) {
-            ss << "bt-bootstrap-extra = " << btbs_addr << endl;
-        }
-        ss << "bt-bootstrap-no-default" << _bt_bootstrap_no_default << endl;
-
-        ss << "disable-origin-access = " << _disable_origin_access << endl;
-        ss << "disable-injector-access = " << _disable_injector_access << endl;
-        ss << "disable-cache-access = " << _disable_cache_access << endl;
-        ss << "disable-proxy-access = " << _disable_proxy_access << endl;
-
-        try {
-            fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
-            LOG_DEBUG("Saving persistent options");
-            ofstream(ouinet_save_path.string(), fstream::out | fstream::trunc) << ss.str();
-        } catch (const exception& e) {
-            LOG_ERROR("Failed to save persistent options: ", e.what());
-        }
-    }
+    void save_persistent();
 
 public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
@@ -547,26 +267,11 @@ public:
 #undef CHANGE_AND_SAVE
 
 private:
-    inline bool _is_log_file_enabled() const {
+    bool _is_log_file_enabled() const {
         return get_logger().get_log_file() != nullptr;
     }
 
-    inline void _is_log_file_enabled(bool v) {
-        if (!v) {
-            get_logger().log_to_file("");
-            return;
-        }
-
-        if (_is_log_file_enabled()) return;
-
-        auto current_log_path = get_logger().current_log_file();
-        auto ouinet_log_path = current_log_path.empty()
-            ? (_repo_root / log_file_name).string()
-            : current_log_path;
-
-        get_logger().log_to_file(ouinet_log_path);
-        LOG_INFO("Log file set to: ", ouinet_log_path);
-    }
+    void _is_log_file_enabled(bool v);
 
 private:
     bool _is_help = false;
@@ -624,6 +329,4 @@ private:
     std::optional<OuisyncCacheConfig> _ouisync;
 };
 
-#undef _LOG_FILE_NAME
-#undef _DEFAULT_STATIC_CACHE_SUBDIR
 } // ouinet namespace
