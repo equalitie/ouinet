@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.6.8](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.8) - 2026-06-30
+
+### Fixed
+
+- Fix client stop. !193
+- Fixes and improvements in `asio-utp` submodule. !193
+
+### Changed
+
+- Build `asio_utp` as shared library. !193
 
 ## [v1.7.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.0) - 2026-05-08
 
