@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.7.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.0) - 2026-05-08
+
+### Added
+
+- Encrypt messages between peers. !157
+- Utility script `docker/linux.sh`. !157
+
+### Fixed
+
+- Fix use-after-free bug in `injector.cpp`. !157
+- Throwing exceptions inside coroutines no longer confuses ASan. !157
+
+### Changed
+
+- Update signed HTTP storage version from v3 to v4. !157
+- Update Ouinet protocol to v7. !157
+- Bump Android openssl version from 1.1.1g to 3.6.0. !157
+- Bump CMake min version from 3.5 to 3.10. !157
+- Update `asio-utp` submodule. !157
+- Use raw strings for regex of integration tests. !185
+
+
 ## [v1.6.7](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.7) - 2026-04-20
 
 ### Removed
