@@ -34,6 +34,12 @@ template<class V> V unwrap(std::expected<V, sys::error_code> exp) {
     return std::move(*exp);
 }
 
+void unwrap(std::expected<void, sys::error_code> exp) {
+    if (!exp.has_value()) {
+        throw sys::system_error(exp.error());
+    }
+}
+
 void unwrap(sys::error_code ec) {
     if (ec) throw sys::system_error(ec);
 }
