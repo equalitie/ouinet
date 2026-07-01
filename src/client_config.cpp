@@ -115,11 +115,11 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     }
 #endif
 
-    if (auto opt = as_optional<int>(vm, "max-cached-age")) {
+    if (auto opt = as_optional<decltype(_max_cached_age.total_seconds())>(vm, "max-cached-age")) {
         _max_cached_age = boost::posix_time::seconds(*opt);
     }
 
-    if (auto opt = as_optional<int>(vm, "max-simultaneous-announcements")) {
+    if (auto opt = as_optional<decltype(_max_simultaneous_announcements)>(vm, "max-simultaneous-announcements")) {
         _max_simultaneous_announcements = *opt;
     }
 
