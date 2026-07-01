@@ -42,10 +42,10 @@ void async_sleep(asio::steady_timer::duration duration, Async yield)
         timer.cancel();
     });
 
-    sys::error_code ec = timer.async_wait(yield);
+    auto r = timer.async_wait(yield);
 
-    if (ec) {
-        assert(ec == asio::error::operation_aborted);
+    if (!r) {
+        assert(r.error() == asio::error::operation_aborted);
         throw Async::Cancelled();
     }
 }

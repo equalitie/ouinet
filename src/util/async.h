@@ -173,7 +173,7 @@ namespace boost::asio {
 
         template<typename Sig>    struct ReturnType;
         template<>                struct ReturnType<void()>     { using type = void; };
-        template<IsEc E>          struct ReturnType<void(E)>    { using type = boost::system::error_code; };
+        template<IsEc E>          struct ReturnType<void(E)>    { using type = std::expected<void, boost::system::error_code>; };
         template<IsEc E, class T> struct ReturnType<void(E, T)> { using type = std::expected<T, boost::system::error_code>; };
 
         // Note: in the non `void()` cases we still call the asio handler with
@@ -181,7 +181,7 @@ namespace boost::asio {
         // throw on error.
         template<typename Sig>       struct ChangeSig;
         template<>                   struct ChangeSig<void()>     { using type = void(); };
-        template<IsEc E>             struct ChangeSig<void(E)>    { using type = void(boost::system::error_code, boost::system::error_code); };
+        template<IsEc E>             struct ChangeSig<void(E)>    { using type = void(boost::system::error_code, std::expected<void, boost::system::error_code>); };
         template<IsEc E, typename T> struct ChangeSig<void(E, T)> { using type = void(boost::system::error_code, std::expected<T, boost::system::error_code>); };
 
         template<typename Handler, typename Sig> struct Wrap;
@@ -198,7 +198,12 @@ namespace boost::asio {
             Handler handler;
 
             void operator() (boost::system::error_code ec) {
-                handler(boost::system::error_code{}, ec);
+                if (!ec) {
+                    handler(boost::system::error_code{},
+                            std::expected<void, boost::system::error_code>());
+                } else {
+                    handler(boost::system::error_code{}, std::unexpected(ec));
+                }
             }
         };
 

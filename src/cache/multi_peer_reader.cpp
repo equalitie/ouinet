@@ -107,9 +107,9 @@ connect( udp::endpoint ep
     if (ec) return std::unexpected(ec);
 
     auto cancelled = yield.cancel_slot([&] { s.close(); });
-    ec = s.async_connect(ep, yield);
-    if (ec) {
-        return std::unexpected(ec);
+    auto r = s.async_connect(ep, yield);
+    if (!r) {
+        return std::unexpected(r.error());
     }
 
     return GenericStream(std::move(s));

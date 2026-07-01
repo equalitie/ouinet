@@ -66,7 +66,7 @@ public:
 
     template<class Token> auto wait(Cancel, Token);
     void wait(boost::asio::yield_context yield);
-    sys::error_code wait(Async yield);
+    std::expected<void, sys::error_code> wait(Async yield);
 
 private:
     AsioExecutor _exec;
@@ -145,7 +145,7 @@ void ConditionVariable::wait(boost::asio::yield_context yield)
 }
 
 inline
-sys::error_code ConditionVariable::wait(Async yield)
+std::expected<void, sys::error_code> ConditionVariable::wait(Async yield)
 {
     return wait(yield.get_cancel(), yield);
 }

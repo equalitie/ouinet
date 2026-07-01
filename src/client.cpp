@@ -470,8 +470,8 @@ private:
                 return std::unexpected(_injector_start_ec);
             }
 
-            if (auto ec = _injector_starting->wait(yield)) {
-                return std::unexpected(ec);
+            if (auto r = _injector_starting->wait(yield); !r) {
+                return std::unexpected(r.error());
             }
         }
     }
@@ -487,8 +487,8 @@ private:
                 return std::unexpected(_cache_start_ec);
             }
 
-            if (auto ec = _cache_starting->wait(yield)) {
-                return std::unexpected(ec);
+            if (auto r = _cache_starting->wait(yield); !r) {
+                return std::unexpected(r.error());
             }
         }
     }
