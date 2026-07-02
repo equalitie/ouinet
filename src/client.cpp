@@ -1,4 +1,6 @@
 #include <boost/asio/connect.hpp>
+#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/address_v6.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
@@ -138,8 +140,13 @@ public:
     }
 
     if (auto config = _config.ouisync_cache_config()) {
+      auto port = _config.udp_mux_port().value_or(0);
+      std::vector<asio::ip::udp::endpoint> bind{
+          asio::ip::udp::endpoint(asio::ip::address_v4::any(), port),
+          asio::ip::udp::endpoint(asio::ip::address_v6::any(), port)};
+
       _ouisync.emplace(_config.repo_root() / "ouisync",
-                       config->page_index_token);
+                       config->page_index_token, std::move(bind));
     }
   }
 

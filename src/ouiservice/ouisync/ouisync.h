@@ -3,6 +3,7 @@
 #include "api.h"
 #include "request.h"
 #include "session.h"
+#include <boost/asio/ip/address_v4.hpp>
 #include <expected>
 
 namespace ouinet {
@@ -20,7 +21,10 @@ namespace ouisync_service {
 
 class OUINET_OUISYNC_API Ouisync {
 public:
-  Ouisync(boost::filesystem::path, std::string page_index_token);
+  Ouisync(boost::filesystem::path, std::string page_index_token,
+          std::vector<boost::asio::ip::udp::endpoint> bind = {
+              boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(),
+                                             0)});
   Ouisync(const Ouisync &) = delete;
   Ouisync(Ouisync &&) = default;
   Ouisync operator=(const Ouisync &) = delete;
@@ -39,6 +43,7 @@ private:
   boost::filesystem::path _service_dir;
   boost::filesystem::path _store_dir;
   boost::filesystem::path _mount_dir;
+  std::vector<boost::asio::ip::udp::endpoint> _bind;
   struct Impl;
   std::shared_ptr<Impl> _impl;
   std::string _page_index_token;

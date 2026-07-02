@@ -9,6 +9,7 @@
 #include "util/url.h"
 #include <boost/beast/http/vector_body.hpp>
 #include <boost/filesystem/path.hpp>
+#include <iterator>
 #include <ouisync.hpp>
 #include <ouisync/file_stream.hpp>
 #include <ouisync/service.hpp>
@@ -144,9 +145,10 @@ struct Ouisync::Impl {
   }
 };
 
-Ouisync::Ouisync(fs::path service_dir, std::string page_index_token)
+Ouisync::Ouisync(fs::path service_dir, std::string page_index_token,
+                 std::vector<asio::ip::udp::endpoint> bind)
     : _service_dir(std::move(service_dir)), _store_dir(_service_dir / "store"),
-      _mount_dir(_service_dir / "mount"),
+      _mount_dir(_service_dir / "mount"), _bind(std::move(bind)),
       _page_index_token(std::move(page_index_token)) {
   fs::create_directories(_store_dir);
   fs::create_directories(_mount_dir);
@@ -165,7 +167,11 @@ sys::error_code Ouisync::start(Async yield) {
                                        yield);
     }));
 
-    unwrap(session.bind_network({"quic/0.0.0.0:0"}, yield));
+    std::vector<std::string> bind_strs;
+    std::transform(_bind.begin(), _bind.end(), std::back_inserter(bind_strs),
+                   [](auto ep) { return util::str("quic/", ep); });
+    unwrap(session.bind_network(bind_strs, yield));
+
     unwrap(session.set_store_dirs({_store_dir.string()}, yield));
 
     auto mount_r = session.set_mount_root(_mount_dir.string(), yield);
