@@ -1,8 +1,7 @@
-#include "util/wait_condition.h"
-#include <boost/asio/async_result.hpp>
-#include <boost/system/detail/error_code.hpp>
 #define BOOST_TEST_MODULE test_ouisync_socket
 #include <boost/test/unit_test.hpp>
+#include <boost/test/data/test_case.hpp>
+#include <boost/test/data/monomorphic.hpp>
 
 #include <boost/asio/ip/address_v4.hpp>
 #include <ouisync.hpp>
@@ -10,6 +9,7 @@
 
 #include "logger.h"
 #include "ouiservice/ouisync/socket.h"
+#include "util/wait_condition.h"
 
 #include "util/async_test.h"
 #include "util/test_dir.h"
@@ -25,14 +25,13 @@ BOOST_AUTO_TEST_CASE(test_ping) {
 
     async_test([](Async yield) {
         TestDir root;
-        auto ouisync_dir = root.make_subdir("ouisync");
 
         ouisync::init_log();
 
         ouisync::Service service(yield.get_executor());
-        unwrap(service.start(ouisync_dir.string(), nullptr, yield));
+        unwrap(service.start(root.string(), nullptr, yield));
 
-        auto session = unwrap(ouisync::Session::connect(ouisync_dir.path(), yield));
+        auto session = unwrap(ouisync::Session::connect(root.path(), yield));
         unwrap(session.bind_network({"quic/127.0.0.1:0"}, yield));
 
         auto alice_socket = unwrap(ouisync_service::OuisyncSocket::open(
@@ -116,5 +115,93 @@ BOOST_AUTO_TEST_CASE(test_ping) {
             BOOST_REQUIRE_EQUAL(recv_size, 4);
             BOOST_REQUIRE_EQUAL(buffer_data.substr(0, recv_size), pong);
         }
+    });
+}
+
+enum class CancellationScope {
+    object,
+    operation
+};
+
+inline std::ostream& operator << (std::ostream& os, CancellationScope scope) {
+    switch (scope) {
+        case CancellationScope::object: return os << "object";
+        case CancellationScope::operation: return os << "operation";
+        default: throw std::invalid_argument("invalid cancellation scope");
+    }
+}
+
+const auto cancellation_scopes = boost::unit_test::data::make({
+    CancellationScope::object,
+    CancellationScope::operation
+});
+
+BOOST_DATA_TEST_CASE(test_cancellation, cancellation_scopes, scope) {
+    get_logger().set_threshold(DEBUG);
+
+    async_test([=](Async yield) {
+        TestDir root;
+
+        ouisync::init_log();
+
+        ouisync::Service service(yield.get_executor());
+        unwrap(service.start(root.string(), nullptr, yield));
+
+        auto session = unwrap(ouisync::Session::connect(root.path(), yield));
+        unwrap(session.bind_network({"quic/127.0.0.1:0"}, yield));
+
+        auto socket = unwrap(ouisync_service::OuisyncSocket::open(
+            session,
+            udp::v4(),
+            yield
+        ));
+
+        std::vector<uint8_t> buffer_data;
+        auto buffer = asio::buffer(buffer_data);
+        udp::endpoint endpoint;
+
+        WaitCondition wc(yield.get_executor());
+        error_code op_ec;
+
+        switch (scope) {
+        case CancellationScope::object: {
+            socket.async_receive_from(
+                std::span(&buffer, 1),
+                endpoint,
+                [&op_ec, lock = wc.lock()] (error_code ec, size_t size) {
+                    op_ec = ec;
+                }
+            );
+
+            error_code cancel_ec;
+            socket.cancel(cancel_ec);
+            BOOST_REQUIRE(!cancel_ec);
+
+            break;
+        }
+        case CancellationScope::operation: {
+            asio::cancellation_signal signal;
+
+            socket.async_receive_from(
+                std::span(&buffer, 1),
+                endpoint,
+                asio::bind_cancellation_slot(
+                    signal.slot(),
+                    [&op_ec, lock = wc.lock()] (error_code ec, size_t size) {
+                        op_ec = ec;
+                    }
+                )
+            );
+
+            signal.emit(asio::cancellation_type::total);
+
+            break;
+        }
+        default:
+            BOOST_FAIL("Invalid cancellation scope");
+        }
+
+        unwrap(wc.wait(yield));
+        BOOST_REQUIRE_EQUAL(op_ec, asio::error::operation_aborted);
     });
 }
