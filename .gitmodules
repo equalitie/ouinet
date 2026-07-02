@@ -5,7 +5,7 @@
 [submodule "modules/asio-utp"]
 	path = modules/asio-utp
 	url = https://gitlab.com/equalitie/asio-utp.git
-	branch = abstract-udp-socket
+	branch = main
 [submodule "modules/cpp-upnp"]
 	path = modules/cpp-upnp
 	url = https://gitlab.com/equalitie/cpp-upnp.git
