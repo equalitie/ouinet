@@ -1,6 +1,11 @@
 #include "socket.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
 
 #include "parse/endpoint.h"
 
@@ -214,12 +219,18 @@ void OuisyncSocket::async_receive_from(
     return;
   }
 
-  // TODO: cancellation
-  _state->incoming.async_receive(
+  auto cancellation_slot = asio::get_associated_cancellation_slot(handler);
+
+  _state->incoming.async_receive(asio::bind_cancellation_slot(
+      std::move(cancellation_slot),
       [this, &buffers, &sender, handler = std::move(handler)](
           error_code ec,
           std::tuple<endpoint_type, std::vector<uint8_t>> payload) mutable {
         auto [payload_ep, payload_data] = std::move(payload);
+
+        if (ec == asio::experimental::error::channel_cancelled) {
+          ec = asio::error::operation_aborted;
+        }
 
         if (ec) {
           handler(ec, 0);
@@ -229,7 +240,7 @@ void OuisyncSocket::async_receive_from(
           _state->available -= payload_data.size();
           handler(ec, payload_data.size());
         }
-      });
+      }));
 }
 void OuisyncSocket::async_send_to(
     const std::span<const asio::const_buffer> &buffers,
@@ -243,16 +254,23 @@ void OuisyncSocket::async_send_to(
   std::vector<uint8_t> data(size);
   asio::buffer_copy(asio::buffer(data), buffers);
 
-  // TODO: cancellation
+  auto cancellation_slot = asio::get_associated_cancellation_slot(handler);
+
   _state->outgoing.async_send(
       error_code(), std::make_tuple(receiver, std::move(data)),
-      [size, handler = std::move(handler)](error_code ec) mutable {
-        if (ec) {
-          handler(ec, 0);
-        } else {
-          handler(ec, size);
-        }
-      });
+      asio::bind_cancellation_slot(
+          std::move(cancellation_slot),
+          [size, handler = std::move(handler)](error_code ec) mutable {
+            if (ec == asio::experimental::error::channel_cancelled) {
+              ec = asio::error::operation_aborted;
+            }
+
+            if (ec) {
+              handler(ec, 0);
+            } else {
+              handler(ec, size);
+            }
+          }));
 }
 
 std::size_t OuisyncSocket::immediate_send_to(
