@@ -8,6 +8,7 @@
 #include <boost/asio/experimental/channel_error.hpp>
 
 #include "parse/endpoint.h"
+#include "util/str.h"
 
 namespace asio = boost::asio;
 namespace ip = boost::asio::ip;
