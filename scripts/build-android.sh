@@ -8,6 +8,20 @@ SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-omni}
 
+# We will use a custom ANDROID_HOME instead
+# Having them both produces an error
+unset ANDROID_SDK_ROOT
+
+# These envs need to be the same as jvm options in gradle.properties
+# Otherwise the process will need to be forked after spawning
+# to get a JVM with different options enabled
+# So, if they are not the same then --no-daemon will be ignored
+# https://docs.gradle.org/8.14.3/userguide/gradle_daemon.html#sec:disabling_the_daemon
+# HOWEVER if they are the same the --no-daemon can STILL be ignored somehow
+# It is ridiculous tbh
+export GRADLE_OPTS="-Xmx4096m -Dfile.encoding=UTF-8"
+export JAVA_OPTS=${GRADLE_OPTS}
+
 CMAKEARG_WITH_ASAN=${WITH_ASAN}
 
 RELEASE_BUILD=0
@@ -230,6 +244,7 @@ function maybe_install_gradle {
 ######################################################################
 # Build the Ouinet AAR
 function build_ouinet_aar {
+    echo making aar. If there is daemon started here, it is an error
     GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
     OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
@@ -245,7 +260,8 @@ function build_ouinet_aar {
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
         --console plain \
-        --no-daemon
+        --no-daemon \
+        --info
     )
 }
 
@@ -266,7 +282,8 @@ function publish_ouinet_aar {
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
         --console plain \
-        --no-daemon
+        --no-daemon \
+        --info
     )
 }
 
