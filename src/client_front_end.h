@@ -116,7 +116,7 @@ public:
         return task;
     }
 
-    ClientFrontEnd(const ClientConfig&);
+    explicit ClientFrontEnd(const ClientConfig&);
     ~ClientFrontEnd();
 
 private:
@@ -125,29 +125,31 @@ private:
     boost::optional<log_level_t> _log_level_no_file;
 
     std::unique_ptr<Input<log_level_t>> _log_level_input;
+    std::string _csrf_token;
 
     boost::intrusive::list
         < Task
         , boost::intrusive::constant_time_size<false>
         > _pending_tasks;
 
-    void handle_ca_pem( const Request&, Response&, std::ostringstream&
-                      , const CACertificate& );
+    static void handle_ca_pem(Response&, std::ostringstream&, const CACertificate&);
 
-    void handle_group_list( const Request&
+    static void handle_group_list( const Request&
                           , Response&
                           , std::ostringstream&
                           , cache::Client*);
 
-    void handle_pinned_list( const Request&
+    static void handle_pinned_list( const Request&
                            , Response&
                            , std::ostringstream&
                            , cache::Client*);
 
-    void handle_api_groups( std::string_view
+    static void handle_api_groups( std::string_view
                           , const Request&
                           , Response&
                           , std::ostringstream&
+                          , const std::unordered_map<std::string_view, std::string_view>& request_arguments
+                          , bool is_frontend_post_requirement_enabled
                           , cache::Client*);
 
     void handle_portal( ClientConfig&
@@ -175,13 +177,15 @@ private:
                       , std::shared_ptr<ouiservice::Bep5Client> client
                       , ClientFrontEndMetricsController& metrics
                       , Cancel cancel
-                      , YieldContext);
+                      , YieldContext) const;
 
-    void handle_api_metrics( std::string_view sub_path
+    static void handle_api_metrics( std::string_view sub_path
                            , const Request&
                            , Response&
                            , std::ostringstream&
                            , ClientFrontEndMetricsController& metrics
+                           , const std::unordered_map<std::string_view, std::string_view>& request_arguments
+                           , bool is_frontend_post_requirement_enabled
                            , Cancel cancel
                            , YieldContext);
 

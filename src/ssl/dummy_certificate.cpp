@@ -1,4 +1,7 @@
 #include "dummy_certificate.h"
+
+#include <boost/asio/ip/address.hpp>
+
 #include "ca_certificate.h"
 #include "util.h"
 
@@ -26,8 +29,14 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
 #endif
 
     X509_set_pubkey(_x, ca_cert.get_private_key());
-    
-    string wc_cn("*." + cn);
+
+    sys::error_code addr_ec;
+    asio::ip::make_address(cn, addr_ec);
+    const bool is_ip = !addr_ec;
+
+    // CN: no wildcard for IPs
+    const string wc_cn = is_ip ? cn : ("*." + cn);
+
     X509_NAME* name = X509_get_subject_name(_x); 
 
     if (!X509_NAME_add_entry_by_txt( name, "CN"
@@ -39,7 +48,9 @@ DummyCertificate::DummyCertificate( CACertificate& ca_cert
     if (!X509_set_issuer_name(_x, ca_cert.get_subject_name()))
         throw runtime_error("Failed in X509_set_issuer_name");
 
-    string alt_name("DNS.1:*." + cn + ",DNS.2:" + cn);
+    // SAN: IP type for IPs, DNS type for hostnames
+    const string alt_name = is_ip ? "IP:" + cn : "DNS.1:*." + cn + ",DNS.2:" + cn;
+
     // Add various standard extensions
     ssl::util::x509_add_ext(_x, NID_subject_alt_name, alt_name.c_str());
 #if defined(__MACH__)

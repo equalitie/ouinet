@@ -2843,7 +2843,25 @@ void Client::State::start()
                 auto y = yield.tag(util::str('C', connection_id));
 
                 LOG_DEBUG(y, " Accepted connection from UA");
+                if (_config.is_https_proxy_enabled()) {
+                    sys::error_code ec;
+                    const auto& proxy_host = _proxy_endpoint.address().to_string();
+                    const string* crt_chain = _ssl_certificate_cache.get(proxy_host);
+                    if (!crt_chain) {
+                        DummyCertificate proxy_crt(*_ca_certificate, proxy_host);
+                        crt_chain = _ssl_certificate_cache.put(proxy_host, proxy_crt.pem_certificate() + _ca_certificate->pem_certificate());
+                    }
 
+                    auto ssl_context = ssl::util::get_server_context(*crt_chain, _ca_certificate->pem_private_key(), _ca_certificate->pem_dh_param());
+                    auto ssl_sock = SslStream<GenericStream>(move(c), ssl_context);
+
+                    ssl_sock->async_handshake(asio::ssl::stream_base::server, y[ec].native());
+                    if (ec) {
+                        LOG_WARN(y, " Proxy TLS handshake failed; ec=", ec);
+                        return;
+                    }
+                    c = move(ssl_sock);
+                }
                 serve_request(move(c), y);
             });
     }));
@@ -2857,14 +2875,33 @@ void Client::State::start()
             if (was_stopped()) return;
 
             LOG_INFO("Serving front end on ", acceptor.local_endpoint());
+            const string& front_end_host = acceptor.local_endpoint().address().to_string();
 
             sys::error_code ec;
             listen_tcp( yield[ec]
                       , move(acceptor)
-                      , [this, self]
+                      , [this, self, front_end_host]
                         (GenericStream c, YieldContext yield_) {
                   YieldContext yield = yield_.tag("frontend");
                   sys::error_code ec;
+
+                if (_config.is_https_frontend_enabled()) {
+                    const string* crt_chain = _ssl_certificate_cache.get(front_end_host);
+                    if (!crt_chain) {
+                        DummyCertificate fe_crt(*_ca_certificate, front_end_host);
+                        crt_chain = _ssl_certificate_cache.put(front_end_host, fe_crt.pem_certificate() + _ca_certificate->pem_certificate());
+                    }
+
+                    auto ssl_context = ssl::util::get_server_context(*crt_chain, _ca_certificate->pem_private_key(), _ca_certificate->pem_dh_param());
+                    auto ssl_sock = SslStream<GenericStream>(move(c), ssl_context);
+                    ssl_sock->async_handshake(asio::ssl::stream_base::server, yield[ec].native());
+                    if (ec) {
+                        LOG_WARN(yield, " Front-end TLS handshake failed; ec=", ec);
+                        return;
+                    }
+                    c = move(ssl_sock);
+                }
+
                   beast::flat_buffer c_rbuf;
                   Request rq;
                   yield[ec].tag("read_req").run([&] (auto y) {

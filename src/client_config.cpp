@@ -122,6 +122,9 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
         _local_ep = *opt_local_ep;
     }
+    if (!_https_proxy) {
+        LOG_WARN("HTTP proxy is deprecated. Migrate to --https-proxy");
+    }
 
     if (auto opt = as_optional<uint16_t>(vm, "udp-mux-port")) {
         _udp_mux_port = *opt;
@@ -153,6 +156,9 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
         _front_end_endpoint = *opt_fe_ep;
     }
+    if (!_https_frontend) {
+        LOG_WARN("HTTP frontend is deprecated. Migrate to --https-frontend");
+    }
 
     if (auto opt = as_optional<string>(vm, "front-end-unix-socket-ep")) {
         if (opt->empty()) {
@@ -170,6 +176,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw error("--front-end-access-token must not be an empty string");
         }
         _front_end_access_token = *opt;
+        LOG_WARN("front-end-access-token is deprecated. Migrate to --frontend-credentials and www-auth");
     }
 
     if (auto opt = as_optional<string>(vm, "proxy-access-token")) {
@@ -177,6 +184,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw error("--proxy-access-token must not be an empty string");
         }
         _proxy_access_token = *opt;
+        LOG_WARN("proxy-access-token is deprecated. Migrate to --client-credentials and proxy-auth");
     }
 
     if (auto opt = as_optional<bool>(vm, "disable-bridge-announcement")) {
@@ -199,17 +207,27 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
     }
 
-    if (auto opt = as_optional<string>(vm, "client-credentials")) {
-        auto cred = *opt;
-
-        if (!cred.empty() && cred.find(':') == string::npos) {
-            throw error(
-                "The '--client-credentials' argument expects a string "
-                "in the format <username>:<password>, but the provided "
-                "string is missing a colon: ", cred);
-        }
-
-        _client_credentials = move(cred);
+    if (const char *env_var = std::getenv("CLIENT_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
+        _client_credentials = env_var;
+    } else if (auto opt = as_optional<string>(vm, "client-credentials"); !opt->empty()) {
+        _client_credentials = std::move(*opt);
+    }
+    if (_client_credentials.find(':') == string::npos) {
+        throw error(
+            "The '--client-credentials' argument or CLIENT_CREDENTIALS env variable expects a string "
+            "in the format <username>:<password>, but the provided "
+            "string is missing a colon: ", _client_credentials);
+    }
+    if (const char *env_var = std::getenv("FRONTEND_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
+        _frontend_credentials = env_var;
+    } else if (auto opt = as_optional<string>(vm, "frontend-credentials"); !opt->empty()) {
+        _frontend_credentials = std::move(*opt);
+    }
+    if (_frontend_credentials.find(':') == string::npos) {
+        throw error(
+            "The '--frontend-credentials' argument or FRONTEND_CREDENTIALS env variable expects a string "
+            "in the format <username>:<password>, but the provided "
+            "string is missing a colon: ", _frontend_credentials);
     }
 
     auto maybe_set_pk = [&] (const string& opt_name, auto& pk) {

@@ -160,6 +160,7 @@ public:
     }
 
     const std::string& client_credentials() const { return _client_credentials; }
+    std::string_view frontend_credentials() const { return _frontend_credentials; }
 
     std::string local_domain() const { return _local_domain; }
 
@@ -236,6 +237,9 @@ private:
            ("listen-on-tcp"
             , po::value<string>()->default_value("127.0.0.1:8077")
             , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+           ("https-proxy"
+            , po::bool_switch(&_https_proxy)->default_value(false)
+            , "Create a HTTPS proxy instead of HTTP")
            ("udp-mux-port"
            , po::value<uint16_t>()
            , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
@@ -245,12 +249,22 @@ private:
              "UDP multiplexer. The value is expressed in Kbps. To leave it "
              "unlimited, set it to zero.")
            ("client-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the client")
+            , "<username>:<password> authentication pair for proxy-auth."
+             "Environment variable CLIENT_CREDENTIALS overrides this arguments")
+           ("frontend-credentials", po::value<string>()
+            , "<username>:<password> authentication pair for frontend's www-auth."
+             "Environment variable FRONTEND_CREDENTIALS overrides this arguments")
            ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
             , "Path to the CA certificate store file")
            ("front-end-ep"
             , po::value<string>()->default_value("127.0.0.1:8078")
             , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+           ("https-frontend"
+            , po::bool_switch(&_https_frontend)->default_value(false)
+            , "Serve Frontend on HTTPS instead of HTTP")
+           ("require-post"
+            , po::bool_switch(&_frontend_post)->default_value(false)
+            , "Accept only POST requests for frontend methods which modify state.")
             ("front-end-unix-socket-ep"
             , po::value<string>()
             , "Path to the front-end Unix socket. Absolute or relative to repo root.")
@@ -496,6 +510,15 @@ public:
 
     bool is_private_target_allowed() const { return _allow_private_targets; }
 
+    bool is_https_proxy_enabled() const { return _https_proxy; }
+    void is_https_proxy_enabled(const bool v) { _https_proxy = v; }
+
+    bool is_https_frontend_enabled() const { return _https_frontend; }
+    void is_https_frontend_enabled(const bool v) { _https_frontend = v; }
+
+    bool is_frontend_post_requirement_enabled() const { return _frontend_post; }
+    void is_frontend_post_requirement_enabled(const bool v) { _frontend_post = v; }
+
 #undef CHANGE_AND_SAVE_OPS
 #undef CHANGE_AND_SAVE
 
@@ -527,6 +550,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
+    bool _https_proxy = false;
     boost::optional<uint16_t> _udp_mux_port;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     boost::optional<Endpoint> _injector_ep;
@@ -538,6 +562,8 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    bool _https_frontend = false;
+    bool _frontend_post = false;
     asio::local::stream_protocol::endpoint _front_end_unix_socket_endpoint;
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
@@ -551,6 +577,7 @@ private:
     bool _cache_private = false;
 
     std::string _client_credentials;
+    std::string _frontend_credentials;
     std::map<Endpoint, std::string> _injector_credentials;
 
     fs::path _cache_static_path;
