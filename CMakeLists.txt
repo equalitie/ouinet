@@ -107,7 +107,15 @@ option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
 option(UTP_DEBUG_LOGGING               "" OFF)
 
-add_subdirectory(./modules/asio-utp)
+if (ASIO_UTP_SRC_DIR)
+    # Use this to debug with local asio-utp sources
+    add_subdirectory(
+        ${ASIO_UTP_SRC_DIR}
+        "${CMAKE_BINARY_DIR}/modules/asio-utp"
+    )
+else()
+    add_subdirectory(./modules/asio-utp)
+endif()
 
 target_link_libraries(asio_utp PUBLIC ouinet_asio)
 
@@ -322,7 +330,7 @@ if (NOT ANDROID AND NOT IOS)
         "./src/ouiservice/bep5/server.cpp"
         "./src/http_logger.cpp"
     )
-    
+
     add_library(ouinet_injector SHARED ${injector_sources})
     ouinet_setup(TARGET ouinet_injector
         LINK
