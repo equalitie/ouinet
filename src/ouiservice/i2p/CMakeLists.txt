@@ -32,6 +32,7 @@ if (WITH_I2PD)
             endif()
         endif()
     
+        message(STATUS "  adding i2pd subdir")
         add_subdirectory(./i2pd/build)
     endblock()
     
@@ -52,6 +53,7 @@ if (WITH_I2PD)
         add_dependencies(libi2pd built_boost)
         add_dependencies(libi2pdclient built_boost)
         add_dependencies(libi2pdlang built_boost)
+        message(STATUS " added boost deps to libi2pd")
     endif()
     if (TARGET built_openssl)
         add_dependencies(libi2pd built_openssl)
@@ -145,6 +147,7 @@ ouinet_setup(TARGET ouinet_i2p
 )
 
 if (WITH_I2PD_EXE)
+    message(STATUS "  adding dependency i2pd to ouinet_i2p")
     add_dependencies(ouinet_i2p i2pd)
 endif()
 
@@ -156,6 +159,9 @@ set_target_properties(ouinet_i2p PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
+message(STATUS "setting the ouinet_i2p build dir to : ${CMAKE_BINARY_DIR}")
+
+message(STATUS "  mewmewbinarydir                : ${CMAKE_BINARY_DIR}")
 
 if (WITH_I2PD_EXE)
     set_target_properties(i2pd PROPERTIES
@@ -163,6 +169,7 @@ if (WITH_I2PD_EXE)
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
+    message(STATUS "setting the i2pd build dir to : ${CMAKE_BINARY_DIR}")
 endif()
 
 ################################################################################
