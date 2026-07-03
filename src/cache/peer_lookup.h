@@ -99,7 +99,7 @@ private:
     std::unique_ptr<Job> make_job(AsioExecutor exec, util::LogPath log_path) {
         auto job = std::make_unique<Job>(exec);
 
-        job->start(compat(
+        job->start(
             [this, log_path = std::move(log_path)]
             (Async yield_) mutable -> std::expected<void, sys::error_code> {
                 auto yield = yield_.with_log_path(std::move(log_path));
@@ -125,7 +125,7 @@ private:
 
                 return {};
             }
-        ));
+        );
 
         return job;
     }

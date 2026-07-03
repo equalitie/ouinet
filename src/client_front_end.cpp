@@ -7,7 +7,7 @@
 #include "version.h"
 #include "upnp_updater.h"
 #include "split_string.h"
-#include "or_throw.h"
+#include "util/async.h"
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
@@ -449,16 +449,16 @@ std::optional<bool> parse_enable(std::string& str) {
     }
 }
 
-void ClientFrontEnd::handle_portal( ClientConfig& config
-                                  , Client::RunningState cstate
-                                  , boost::optional<UdpEndpoint> local_ep
-                                  , const std::shared_ptr<UPnPs>& upnps_ptr
-                                  , const bittorrent::DhtBase* dht
-                                  , const Request& req, Response& res, ostringstream& ss
-                                  , cache::Client* cache_client
-                                  , ClientFrontEndMetricsController& metrics
-                                  , Cancel cancel
-                                  , YieldContext yield)
+std::expected<void, sys::error_code>
+ClientFrontEnd::handle_portal( ClientConfig& config
+                             , Client::RunningState cstate
+                             , boost::optional<UdpEndpoint> local_ep
+                             , const std::shared_ptr<UPnPs>& upnps_ptr
+                             , const bittorrent::DhtBase* dht
+                             , const Request& req, Response& res, ostringstream& ss
+                             , cache::Client* cache_client
+                             , ClientFrontEndMetricsController& metrics
+                             , Async yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -490,7 +490,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             if (!enable.has_value()) {
                 res.result(http::status::bad_request);
                 ss << it->first << " accepts {enable,disable}, given \"" << it->second << "\"";
-                return;
+                return {};
             }
             handler(*enable);
             query_handled = true;
@@ -498,10 +498,9 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
-        sys::error_code ec;
-        cache_client->local_purge(cancel, yield[ec]);
-        if (!ec && cancel) ec = asio::error::operation_aborted;
-        if ((ec = asio::error::operation_aborted)) return or_throw(yield, ec);
+        std::ignore = yield.call_deprecated([&] (auto log_path, auto cancel, auto yield) {
+            cache_client->local_purge(cancel, YieldContext(yield, log_path));
+        });
         query_handled = true;
     }
 
@@ -519,7 +518,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
                "    </head>\n"
                "</html>\n";
-        return;
+        return {};
     }
 
     ss << "<!DOCTYPE html>\n"
@@ -659,14 +658,13 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                               " (i.e. not older than %s).<br>\n")
               % max_age.total_seconds() % past_as_string(max_age));
 
-        sys::error_code ec;
-        auto local_size = cache_client->local_size(cancel, yield[ec]);
-        if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
+        auto local_size = yield.call_deprecated([&] (auto log_path, auto cancel, auto yield) {
+            return cache_client->local_size(cancel, yield);
+        });
 
         ss << "Approximate size of content cached locally: ";
-        if (ec) ss << "(unknown)";
-        else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
+        if (!local_size) ss << "(unknown)";
+        else ss << (boost::format("%.02f MiB") % (*local_size / 1048576.));
         ss << "<br>\n";
 
         ss << "<form method=\"get\">\n"
@@ -712,6 +710,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "    </body>\n"
           "</html>\n";
+
+    return {};
 }
 
 size_t ClientFrontEnd::injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept{
@@ -721,17 +721,17 @@ size_t ClientFrontEnd::injector_candidates_n(std::shared_ptr<ouiservice::Bep5Cli
     return client -> injector_candidates_n();
 }
 
-void ClientFrontEnd::handle_api_status( ClientConfig& config
-                                      , Client::RunningState cstate
-                                      , boost::optional<UdpEndpoint> local_ep
-                                      , const std::shared_ptr<UPnPs>& upnps_ptr
-                                      , const bittorrent::DhtBase* dht
-                                      , const Request& req, Response& res, ostringstream& ss
-                                      , cache::Client* cache_client
-                                      , std::shared_ptr<ouiservice::Bep5Client> client
-                                      , ClientFrontEndMetricsController& metrics
-                                      , Cancel cancel
-                                      , YieldContext yield)
+std::expected<void, sys::error_code>
+ClientFrontEnd::handle_api_status( ClientConfig& config
+                                 , Client::RunningState cstate
+                                 , boost::optional<UdpEndpoint> local_ep
+                                 , const std::shared_ptr<UPnPs>& upnps_ptr
+                                 , const bittorrent::DhtBase* dht
+                                 , const Request& req, Response& res, ostringstream& ss
+                                 , cache::Client* cache_client
+                                 , std::shared_ptr<ouiservice::Bep5Client> client
+                                 , ClientFrontEndMetricsController& metrics
+                                 , Async yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -779,18 +779,19 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
     }
 
     if (cache_client) {
-        sys::error_code ec;
-        auto sz = cache_client->local_size(cancel, yield[ec]);
-        if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
-        if (ec) {
-            LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
+        auto sz = yield.call_deprecated([&] (auto log_path, auto cancel, auto yield) {
+            return cache_client->local_size(cancel, yield);
+        });
+        if (!sz) {
+            LOG_ERROR("Front-end: Failed to get local cache size; ec=", sz.error());
         } else {
-            response["local_cache_size"] = sz;
+            response["local_cache_size"] = *sz;
         }
     }
 
     ss << response;
+
+    return {};
 }
 
 void ClientFrontEnd::handle_api_groups(std::string_view sub_path
@@ -876,9 +877,7 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
 
 void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
                                        , const Request& req, Response& res, ostringstream& ss
-                                       , ClientFrontEndMetricsController& metrics
-                                       , Cancel cancel
-                                       , YieldContext yield)
+                                       , ClientFrontEndMetricsController& metrics)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -937,21 +936,21 @@ void ClientFrontEnd::handle_api_endpoints(const std::string_view proxy_endpoint
     ss << response;
 }
 
-Response ClientFrontEnd::serve( ClientConfig& config
-                              , const Request& req
-                              , Client::RunningState client_state
-                              , cache::Client* cache_client
-                              , std::shared_ptr<ouiservice::Bep5Client> client
-                              , const CACertificate& ca
-                              , boost::optional<UdpEndpoint> local_ep
-                              , const std::shared_ptr<UPnPs>& upnps_ptr
-                              , const bittorrent::DhtBase* dht
-                              , ClientFrontEndMetricsController& metrics
-                              , const std::string_view proxy_endpoint
-                              , const std::string_view frontend_endpoint
-                              , const std::string_view frontend_unix_socket_endpoint
-                              , Cancel cancel
-                              , YieldContext yield)
+std::expected<Response, sys::error_code>
+ClientFrontEnd::serve( ClientConfig& config
+                     , const Request& req
+                     , Client::RunningState client_state
+                     , cache::Client* cache_client
+                     , std::shared_ptr<ouiservice::Bep5Client> client
+                     , const CACertificate& ca
+                     , boost::optional<UdpEndpoint> local_ep
+                     , const std::shared_ptr<UPnPs>& upnps_ptr
+                     , const bittorrent::DhtBase* dht
+                     , ClientFrontEndMetricsController& metrics
+                     , const std::string_view proxy_endpoint
+                     , const std::string_view frontend_endpoint
+                     , const std::string_view frontend_unix_socket_endpoint
+                     , Async yield)
 {
     if (auto& token = config.front_end_access_token()) {
         std::string_view header_key = "X-Ouinet-Front-End-Token";
@@ -999,24 +998,21 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (path == pinned_list_apath) {
         handle_pinned_list(req, res, ss, cache_client);
     } else if (path == status_api_path) {
-        sys::error_code e;
         handle_api_status( config, client_state, local_ep, upnps_ptr, dht
-                         , req, res, ss, cache_client, client, metrics, cancel
-                         , yield[e]);
+                         , req, res, ss, cache_client, client, metrics
+                         , yield);
     } else if (path.starts_with(groups_api_path)) {
         path.remove_prefix(groups_api_path.size());
         handle_api_groups(path, req, res, ss, cache_client);
     } else if (path.starts_with(metrics_api_path)) {
         path.remove_prefix(metrics_api_path.size());
-        sys::error_code e;
-        handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
+        handle_api_metrics(path, req, res, ss, metrics);
     } else if (path.starts_with(endpoints_api_path)) {
         handle_api_endpoints(proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
     } else {
-        sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps_ptr, dht
-                     , req, res, ss, cache_client, metrics, cancel
-                     , yield[e]);
+                     , req, res, ss, cache_client, metrics
+                     , yield);
     }
 
     Response::body_type::reader reader(res, res.body());

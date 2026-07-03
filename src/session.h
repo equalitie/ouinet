@@ -73,13 +73,28 @@ public:
             asio::yield_context,
             PartModifier part_modifier = PartModifier::DoNothing);
 
+    template<class SinkStream>
+    std::expected<void, sys::error_code>
+    flush_response(SinkStream&, Async, PartModifier part_modifier = PartModifier::DoNothing);
+
     template<class Handler>
     void flush_response(Cancel, asio::yield_context, Handler&& h);
+
+    template<class Handler>
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    flush_response(Async, Handler&& h);
+
     // The timeout will get reset with each successful send/recv operation,
     // so that the exchange does not get stuck for too long.
     template<class Handler, class TimeoutDuration>
     void flush_response( Cancel&, asio::yield_context
                        , Handler&& h, TimeoutDuration);
+
+    template<class Handler, class TimeoutDuration>
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    flush_response(Async, Handler&& h, TimeoutDuration);
 
 
     bool is_done() const override {
@@ -195,6 +210,18 @@ std::expected<Session, sys::error_code> Session::create(
 
 template<class Handler>
 inline
+std::expected<void, sys::error_code>
+Session::flush_response(Async yield, Handler&& h)
+{
+    sys::error_code ec = yield.call_deprecated([&] (util::LogPath, Cancel cancel, asio::yield_context yield) {
+        flush_response(cancel, yield, std::move(h));
+    });
+    if (ec) return std::unexpected(ec);
+    return {};
+}
+
+template<class Handler>
+inline
 void
 Session::flush_response(Cancel cancel,
                         asio::yield_context yield,
@@ -271,6 +298,34 @@ Session::flush_response(Cancel& cancel,
     fail_on_error_or_timeout(yield, cancel, ec, op_wd);
 }
 
+template<class Handler, class TimeoutDuration>
+inline
+std::expected<void, sys::error_code>
+Session::flush_response(Async yield, Handler&& h, TimeoutDuration timeout)
+{
+    Async timeout_yield = yield;
+
+    try {
+        auto op_wd = watch_dog( get_executor(), timeout
+                              , [&timeout_yield] { timeout_yield.cancel(); });
+
+        auto r = flush_response(timeout_yield, [&h, &op_wd, timeout] (auto&& part, auto c, auto y) {
+            sys::error_code e;
+            h(std::move(part), c, y[e]);
+            return_or_throw_on_error(y, c, e);
+            op_wd.expires_after(timeout);  // the part was successfully forwarded
+        });
+
+        if (!r) return std::unexpected(r.error());
+    }
+    catch (Async::Cancelled const&) {
+        if (yield.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
+    }
+
+    return {};
+}
+
 template<class SinkStream>
 inline
 void
@@ -294,6 +349,18 @@ Session::flush_response(SinkStream& sink,
                 break;
         }
     });
+}
+
+template<class SinkStream>
+inline
+std::expected<void, sys::error_code>
+Session::flush_response(SinkStream& sink, Async yield, PartModifier part_modifier)
+{
+    sys::error_code ec = yield.call_deprecated([&] (util::LogPath log_path, Cancel cancel, asio::yield_context yield) {
+        flush_response(sink, cancel, yield, part_modifier);
+    });
+    if (ec) return std::unexpected(ec);
+    return {};
 }
 
 } // namespace

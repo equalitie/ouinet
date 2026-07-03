@@ -245,7 +245,7 @@ void handle_connect_request( GenericStream client_c
         yield.log("END; ec=", ec, " fwd_bytes_c2o=", fwd_bytes_c2o, " fwd_bytes_o2c=", fwd_bytes_o2c);
     });
 
-    auto origin_c = connect_to_host( lookup, exec, default_timeout::tcp_connect()
+    auto origin_c = connect_to_host( lookup, default_timeout::tcp_connect()
                                    , cancel, yield[ec].tag("connect"));
 
     if (ec) {
@@ -320,7 +320,6 @@ class InjectorCacheControl {
             if (ec) return or_throw<GenericStream>(yield, ec);
 
             auto socket = connect_to_host( lookup
-                                         , executor
                                          , cancel
                                          , yield[ec]);
 
@@ -618,11 +617,13 @@ void serve( InjectorConfig& config
             continue;
         }
 
-        bool auth = authenticate(req, con, config.credentials(), yield[ec].tag("auth"));
+        compat([&] (Async yield) {
+                return authenticate(req, con, config.credentials(), yield.tag("auth"));
+            })(cancel, yield[ec]);
 
-        if (!auth) {
+        if (ec) {
             yield.log("Proxy authentication failed");
-            if (ec || !req_keep_alive) break;
+            if (!req_keep_alive) break;
             continue;
         }
         assert(!ec); ec = {};
