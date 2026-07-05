@@ -506,9 +506,8 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         query_handled = true;
     }
 
-    if (auto it = query.find("bt_extra_bootstrap"); it != query.end() && cache_client) {
-        auto eqpos = target.rfind('=');
-        set_bt_extra_bootstraps(target.substr(eqpos + 1), config);
+    if (auto it = query.find("bt_extra_bootstraps"); it != query.end() && cache_client) {
+        set_bt_extra_bootstraps(it->second, config);
         query_handled = true;
     }
 
