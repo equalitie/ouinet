@@ -392,8 +392,6 @@ private:
                           , Cancel& cancel
                           , YieldContext yield);
 
-    template<class Rq>
-    Session fetch_via_self(Rq, Cancel&, YieldContext);
 
     [[nodiscard]]
     std::expected<Response, sys::error_code>
@@ -901,62 +899,6 @@ Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
 }
 
 //------------------------------------------------------------------------------
-template<class Rq>
-Session
-Client::State::fetch_via_self( Rq request
-                             , Cancel& cancel, YieldContext yield)
-{
-    sys::error_code ec;
-
-    // Connect to the client proxy port.
-    // TODO: Maybe refactor with `fetch_fresh_through_simple_proxy`.
-    ConnectionPool<bool>::Connection con;
-    if (_self_connections.empty()) {
-        _YDEBUG(yield, "Connecting to self");
-
-        // TODO: Keep lookup object or allow connecting to endpoint.
-        auto epl = TcpLookup::create(_config.local_endpoint(), "dummy", "dummy");
-        auto c = connect_to_host(epl, cancel, yield[ec]);
-
-        assert(!cancel || ec == asio::error::operation_aborted);
-
-        if (ec) {
-            if (ec != asio::error::operation_aborted) {
-                _YERROR(yield, "Failed to connect to self; ec=", ec);
-            }
-            return or_throw<Session>(yield, ec);
-        }
-
-        con = _self_connections.wrap(std::move(c));
-    } else {
-        _YDEBUG(yield, "Reusing existing self connection");
-
-        con = _self_connections.pop_front();
-    }
-
-    auto cancel_slot = cancel.connect([&] {
-        con.close();
-    });
-
-    // Build the actual request to send to self.
-    if (!_config.client_credentials().empty())
-        authorize(request, _config.client_credentials());
-    request.keep_alive(true);
-
-    _YDEBUG(yield, "Sending a request to self");
-
-    // Send request
-    request.prepare_payload();
-    http::async_write(con, request, yield[ec].tag("write_self_req"));
-
-    if ((ec = compute_error_code(ec, cancel))) {
-        _YERROR(yield, "Failed to send request to self; ec=", ec);
-        return or_throw<Session>(yield, ec);
-    }
-
-    return Session::create( std::move(con), request.method() == http::verb::head
-                          , cancel, yield.tag("read_hdr"));
-}
 
 std::expected<GenericStream, sys::error_code>
 Client::State::connect_to_origin( const http::request_header<>& rq
@@ -972,17 +914,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     auto [host, port] = std::move(*host_port);
 
 
-    auto lookup = yield.tag("resolve").call_deprecated([&] (util::LogPath log_path, Cancel cancel, asio::yield_context yield) {
-        sys::error_code ec;
-        auto lookup = _dns_resolver->resolve(
-            host,
-            port,
-            cancel,
-            YieldContext(yield, log_path)[ec]
-        );
-        if (cancel) ec = asio::error::operation_aborted;
-        return or_throw(yield, ec, std::move(lookup));
-    });
+    auto lookup = _dns_resolver->resolve(host, port, yield);
 
     if (!lookup) {
         LOG_DEBUG(yield,  "DNS name resolution with protocols: [",
@@ -1213,9 +1145,9 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
             // (to later perform the SSL handshake and send the request).
             connreq.prepare_payload();
 
-            auto req_e = compat([&](Cancel cancel, asio::yield_context yield) {
-                util::http_request(inj.connection, connreq, cancel, yield);
-            })(yield.tag("connreq"));
+
+            auto req_e = util::http_request(inj.connection, connreq, yield.tag("connreq"));
+
             if (!req_e) {
                 if (metrics) metrics->finish(req_e.error());
                 return std::unexpected(req_e.error());
@@ -1450,7 +1382,9 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     // and ignore the rest of the response so the connection can potentially be
     // reused.
     auto ignore_rest = [](Session& session, Async yield) {
-        std::ignore = session.flush_response(yield, [](auto part, auto cancel, auto yield) {}, 60s);
+        std::ignore = session.flush_response(yield, [](auto part, auto yield) {
+                return std::expected<void, sys::error_code>();
+            }, 60s);
     };
 
     if (direct_session) {
@@ -1828,7 +1762,7 @@ public:
         });
 
         auto r = session->flush_response(yield.tag("flush"),
-            [&] (Part&& part, Cancel, asio::yield_context yield)
+            [&] (Part&& part, Async yield) -> std::expected<void, sys::error_code>
             {
                 // If the user agent closed its connection, stop getting data from the injector too.
                 // Otherwise, besides continuing to transfer data to the local cache,
@@ -1840,10 +1774,11 @@ public:
                 // if the client tries to download the same resource again.
                 // Another fix would be to have the local cache participate in multi-peer downloads.
                 if (!tnx.is_open()) {
-                    return or_throw(yield, asio::error::broken_pipe);
+                    return std::unexpected(asio::error::broken_pipe);
                 }
                 if (do_cache) qst.push_back(part);
                 qag.push_back(std::move(part));
+                return {};
             },
             default_timeout::activity());
 

@@ -42,6 +42,8 @@ public:
         virtual ~Cancelled() noexcept {}
     };
 
+    using executor_type = asio::any_io_executor;
+
 private:
     template<class F> using DeprecatedApiResult
         = std::invoke_result_t<F, util::LogPath, Cancel, asio::yield_context>;

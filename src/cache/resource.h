@@ -12,6 +12,7 @@
 #include "http_sign.h"
 #include "signed_head.h"
 #include "logger.h"
+#include <boost/format.hpp>
 
 #define CACHE_RESOURCE_LOGPFX "Cache resource: "
 #define CACHE_RESOURCE_DEBUG(...) LOG_DEBUG(CACHE_RESOURCE_LOGPFX, __VA_ARGS__)

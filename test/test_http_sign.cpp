@@ -28,6 +28,7 @@
 #include <constants.h>
 #include <namespaces.h>
 #include "connected_pair.h"
+#include "util/unwrap.h"
 
 using first_last = std::pair<unsigned, unsigned>;
 // <https://stackoverflow.com/a/33965517>
@@ -439,8 +440,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
                 return Session::create(std::move(origin_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
-            origin_rs.flush_response(signed_w, cancel, y[e]);
-            BOOST_REQUIRE(!e);
+            unwrap(origin_rs.flush_response(signed_w, Async(y)));
             signed_w.close();
         });
 
@@ -473,8 +473,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_signed, boost::unit_test::data::make(true_f
                         }
                     }
                 }
-                opt_part->async_write(tested_w, cancel, y[e]);
-                BOOST_REQUIRE(!e);
+                unwrap(opt_part->async_write(tested_w, Async(y)));
             }
             if (empty)
                 BOOST_CHECK_EQUAL(xidx, rs_block_sig_cx_empty.size());
@@ -543,8 +542,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
                 return Session::create(std::move(origin_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
-            origin_rs.flush_response(signed_w, cancel, y[e]);
-            BOOST_REQUIRE(!e);
+            unwrap(origin_rs.flush_response(signed_w, Async(y)));
             signed_w.close();
         });
 
@@ -560,8 +558,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
                 return Session::create(std::move(signed_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
-            signed_rs.flush_response(hashed_w, cancel, y[e]);
-            BOOST_REQUIRE(!e);
+            unwrap(signed_rs.flush_response(hashed_w, Async(y)));
             hashed_w.close();
         });
 
@@ -587,8 +584,7 @@ BOOST_DATA_TEST_CASE(test_http_flush_verified, boost::unit_test::data::make(true
                         }
                     }
                 }
-                opt_part->async_write(tested_w, cancel, y[e]);
-                BOOST_REQUIRE(!e);
+                unwrap(opt_part->async_write(tested_w, Async(y)));
             }
             if (empty)
                 BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx_empty.size());
@@ -657,8 +653,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
             })(cancel, y[e]);
 
             BOOST_REQUIRE(!e);
-            origin_rs.flush_response(signed_w, cancel, y[e]);
-            BOOST_REQUIRE(!e);
+            unwrap(origin_rs.flush_response(signed_w, Async(y)));
             signed_w.close();
         });
 
@@ -700,8 +695,9 @@ BOOST_AUTO_TEST_CASE(test_http_flush_forged) {
                 return Session::create(std::move(forged_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
-            forged_rs.flush_response(tested_w, cancel, y[e]);
-            BOOST_CHECK_EQUAL(e.value(), sys::errc::bad_message);
+            auto r = forged_rs.flush_response(tested_w, Async(y));
+            BOOST_REQUIRE(!r);
+            BOOST_REQUIRE_EQUAL(r.error().value(), sys::errc::bad_message);
             tested_w.close();
         });
 
@@ -754,16 +750,16 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
             for (bi = 0; bi < rs_block_data.size(); ++bi) {
                 auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
                 auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
-                ch.async_write(signed_w, y);
+                unwrap(ch.async_write(signed_w, Async(y)));
                 auto cb = http_response::ChunkBody(std::move(cbd), 0);
-                cb.async_write(signed_w, y);
+                unwrap(cb.async_write(signed_w, Async(y)));
             }
 
             // Last chunk and trailer (raw).
             auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
-            chZ.async_write(signed_w, y);
+            unwrap(chZ.async_write(signed_w, Async(y)));
             http_response::Trailer tr;  // empty, everything was in head
-            tr.async_write(signed_w, y);
+            unwrap(tr.async_write(signed_w, Async(y)));
 
             signed_w.close();
         });
@@ -780,8 +776,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
                 return Session::create(std::move(signed_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE(!e);
-            signed_rs.flush_response(hashed_w, cancel, y[e]);
-            BOOST_REQUIRE(!e);
+            unwrap(signed_rs.flush_response(hashed_w, Async(y)));
             hashed_w.close();
         });
 
@@ -802,8 +797,7 @@ BOOST_AUTO_TEST_CASE(test_http_flush_verified_no_trailer) {
                         BOOST_CHECK(ch->exts.find(rs_block_hash_cx[xidx++]) != string::npos);
                     }
                 }
-                opt_part->async_write(tested_w, cancel, y[e]);
-                BOOST_REQUIRE(!e);
+                unwrap(opt_part->async_write(tested_w, Async(y)));
             }
             BOOST_CHECK_EQUAL(xidx, rs_block_hash_cx.size());
             tested_w.close();
@@ -901,16 +895,16 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
                 auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
                 auto ch = http_response::ChunkHdr( cbd.size()
                                                  , first_chunk ? "" : rs_chunk_ext_partial[bi]);
-                ch.async_write(signed_w, y);
+                unwrap(ch.async_write(signed_w, Async(y)));
                 auto cb = http_response::ChunkBody(std::move(cbd), 0);
-                cb.async_write(signed_w, y);
+                unwrap(cb.async_write(signed_w, Async(y)));
             }
 
             // Last chunk and empty trailer.
             auto chZ = http_response::ChunkHdr(0, rs_chunk_ext_partial[bi]);
-            chZ.async_write(signed_w, y);
+            unwrap(chZ.async_write(signed_w, Async(y)));
             auto tr = http_response::Trailer();
-            tr.async_write(signed_w, y);
+            unwrap(tr.async_write(signed_w, Async(y)));
 
             signed_w.close();
         });
@@ -928,8 +922,7 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
                 return Session::create(std::move(signed_rvr), false, yield);
             })(cancel, y[e]);
             BOOST_REQUIRE_EQUAL(e.value(), sys::errc::success);
-            signed_rs.flush_response(tested_w, cancel, y[e]);
-            BOOST_REQUIRE_EQUAL(e.value(), sys::errc::success);
+            unwrap(signed_rs.flush_response(tested_w, Async(y)));
             tested_w.close();
         });
 

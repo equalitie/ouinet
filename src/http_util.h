@@ -102,25 +102,33 @@ boost::string_view http_injection_ts(const http::response_header<>& rsh)
 // trigger an error on timeout or cancellation,
 // closing `in`.
 template<class StreamIn, class Request>
+[[nodiscard]]
 inline
-void
-http_request( StreamIn& in
-            , const Request& rq
-            , Cancel& cancel
-            , asio::yield_context yield)
+std::expected<void, sys::error_code>
+http_request(StreamIn& in, const Request& rq, Async yield_)
 {
-    auto cancelled = cancel.connect([&] { in.close(); });
+    Async yield = yield_;
+    auto cancelled = yield.cancel_slot([&] { in.close(); });
     sys::error_code ec;
 
     auto wdog = watch_dog( in.get_executor(), default_timeout::http_send_simple()
-                         , [&] { in.close(); });
-    http::async_write(in, rq, yield[ec]);
+                         , [&] { yield.cancel(); });
 
-    // Ignore `end_of_stream` error, there may still be data in
-    // the receive buffer we can read.
-    if (ec == http::error::end_of_stream)
-        ec = sys::error_code();
-    fail_on_error_or_timeout(yield, cancel, ec, wdog);
+    try {
+        if (auto r = http::async_write(in, rq, yield); !r) {
+            // Ignore `end_of_stream` error, there may still be data in
+            // the receive buffer we can read.
+            if (r.error() != http::error::end_of_stream) {
+                return std::unexpected(r.error());
+            }
+        }
+    }
+    catch (Async::Cancelled const&) {
+        if (yield_.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
+    }
+
+    return {};
 }
 
 // Send the HTTP response `rs` over `out`,

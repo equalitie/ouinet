@@ -246,7 +246,10 @@ void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
             5s + 100ms * blocks.size(),
             [&] { con.close(); });
 
-    h.async_write(con, c, y[ec]);
+    compat([&] (Async yield) {
+        return h.async_write(con, yield);
+    })(c, y[ec]);
+
     fail_on_error_or_timeout(y, c, ec, wd);
 
     asio::async_write(con, bufs, y[ec]);

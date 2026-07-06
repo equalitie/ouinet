@@ -315,15 +315,18 @@ struct Client::Impl {
 
         auto crypto_sink = make_crypto_sink(key);
 
-        s.flush_response(cancel, yield.tag("flush")[ec], [&crypto_sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
-            sys::error_code ee;
-            part.async_write(crypto_sink, cc, yy[ee]);
-            return_or_throw_on_error(yy, cc, ee);
-            if (auto b = part.as_body())
-                fwd_bytes += b->size();
-            else if (auto cb = part.as_chunk_body())
-                fwd_bytes += cb->size();
-        }, default_timeout::activity());
+        compat([&] (Async yield) {
+            return s.flush_response(yield.tag("flush"),
+                    [&crypto_sink, &fwd_bytes] (auto&& part, auto yy) -> std::expected<void, sys::error_code> {
+                auto r = part.async_write(crypto_sink, yy);
+                if (!r) return std::unexpected(r.error());
+                if (auto b = part.as_body())
+                    fwd_bytes += b->size();
+                else if (auto cb = part.as_chunk_body())
+                    fwd_bytes += cb->size();
+                return {};
+            }, default_timeout::activity());
+        })(cancel, yield[ec]);
 
         return or_throw(yield, ec, keep_alive);
     }

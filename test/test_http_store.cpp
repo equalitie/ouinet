@@ -21,6 +21,7 @@
 #include <util/bytes.h>
 #include <util/file_io.h>
 #include <util/str.h>
+#include "util/unwrap.h"
 
 #include <namespaces.h>
 #include "connected_pair.h"
@@ -216,9 +217,9 @@ void store_response( const fs::path& tmpdir, bool complete
         for (bi = 0; bi < rs_block_data.size(); ++bi) {
             auto cbd = util::bytes::to_vector<uint8_t>(rs_block_data[bi]);
             auto ch = http_response::ChunkHdr(cbd.size(), rs_chunk_ext[bi]);
-            ch.async_write(signed_w, y);
+            unwrap(ch.async_write(signed_w, Async(y)));
             auto cb = http_response::ChunkBody(std::move(cbd), 0);
-            cb.async_write(signed_w, y);
+            unwrap(cb.async_write(signed_w, Async(y)));
         }
 
         if (!complete) {  // no last chunk nor trailer
@@ -231,7 +232,7 @@ void store_response( const fs::path& tmpdir, bool complete
 
         // Last chunk and trailer (raw).
         auto chZ = http_response::ChunkHdr(0, rs_chunk_ext[bi]);
-        chZ.async_write(signed_w, y);
+        unwrap(chZ.async_write(signed_w, Async(y)));
         asio::async_write( signed_w
                          , asio::const_buffer(rs_trailer.data(), rs_trailer.size())
                          , y);
@@ -304,7 +305,7 @@ void store_empty_response( const fs::path& tmpdir
                          , y);
         // Last chunk and trailer (raw).
         auto chZ = http_response::ChunkHdr(0, ers_last_chunk_ext);
-        chZ.async_write(signed_w, y);
+        unwrap(chZ.async_write(signed_w, Async(y)));
         asio::async_write( signed_w
                          , asio::const_buffer(ers_trailer.data(), ers_trailer.size())
                          , y);
@@ -521,8 +522,14 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
                 return Session::create(std::move(store_rr), false, yield);
             })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
-            store_s.flush_response(loaded_w, c, y[e]);
-            BOOST_CHECK_EQUAL(e.value(), complete ? sys::errc::success : connection_aborted);
+            auto r = store_s.flush_response(loaded_w, Async(y));
+            if (complete) {
+                BOOST_REQUIRE(r);
+            }
+            else {
+                BOOST_REQUIRE(!r);
+                BOOST_REQUIRE_EQUAL(r.error().value(), connection_aborted);
+            }
             loaded_w.close();
         });
 
@@ -638,8 +645,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
                 return Session::create(std::move(store_rr), false, yield);
             })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
-            store_s.flush_response(loaded_w, c, y[e]);
-            BOOST_CHECK(!e);
+            unwrap(store_s.flush_response(loaded_w, Async(y)));
             loaded_w.close();
         });
 
@@ -746,8 +752,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
                 return Session::create(std::move(store_rr), false, yield);
             })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
-            store_s.flush_response(loaded_w, c, y[e]);
-            BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
+            unwrap(store_s.flush_response(loaded_w, Async(y)));
             loaded_w.close();
         });
 
@@ -866,8 +871,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
                 return Session::create(std::move(store_rr), false, yield);
             })(c, y[e]);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
-            store_s.flush_response(loaded_w, c, y[e]);
-            BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
+            unwrap(store_s.flush_response(loaded_w, Async(y)));
             loaded_w.close();
         });
 

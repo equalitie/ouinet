@@ -154,7 +154,9 @@ public:
         auto hf = create_file(head_fname, cancel, ec);
         return_or_throw_on_error(yield, cancel, ec);
         headf = std::move(hf);
-        head.async_write(*headf, cancel, yield);
+        compat([&] (Async yield) {
+            return head.async_write(*headf, yield);
+        })(cancel, yield);
     }
 
     void
@@ -231,7 +233,11 @@ public:
         sys::error_code ec;
         util::file_io::fseek(*headf, 0, ec);
         if (!ec) util::file_io::truncate(*headf, 0, ec);
-        if (!ec) head.async_write(*headf, cancel, yield[ec]);
+        if (!ec) {
+            compat([&] (Async yield) {
+                return head.async_write(*headf, yield);
+            })(cancel, yield[ec]);
+        }
         return_or_throw_on_error(yield, cancel, ec);
     }
 };

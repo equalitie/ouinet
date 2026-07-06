@@ -1,5 +1,5 @@
 #include <boost/test/tools/old/interface.hpp>
-#define BOOST_TEST_MODULE dht
+#define BOOST_TEST_MODULE test_dht
 #include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
 
@@ -20,8 +20,6 @@
 #include "util/async_test.h"
 #include "util/dht.h"
 #include "util/unwrap.h"
-
-BOOST_AUTO_TEST_SUITE(dht)
 
 using namespace std;
 using namespace chrono;
@@ -61,7 +59,7 @@ void init_without_bootstrapping(asio::any_io_executor exec, DhtNode& dht_node) {
     });
 }
 
-void bootstrap(asio::any_io_executor exec, DhtNode& dht_node) {
+void do_bootstrap(asio::any_io_executor exec, DhtNode& dht_node) {
     task::spawn_detached(exec, [&](auto yield) {
         size_t success{0};
 
@@ -128,7 +126,7 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
     );
 
     init_without_bootstrapping(exec, dht_node);
-    bootstrap(exec, dht_node);
+    do_bootstrap(exec, dht_node);
     ctx.run();
 }
 
@@ -158,5 +156,3 @@ BOOST_AUTO_TEST_CASE(test_local)
         }
     });
 }
-
-BOOST_AUTO_TEST_SUITE_END()

@@ -15,43 +15,17 @@ using tcp = asio::ip::tcp;
 
 using TcpLookup = asio::ip::tcp::resolver::results_type;
 
-tcp::socket
+std::expected<tcp::socket, sys::error_code>
 connect_to_host( const string& host
                , const uint16_t port
                , std::shared_ptr<dns::Resolver> dns_resolver
-               , Cancel& cancel
-               , asio::yield_context yield)
+               , Async yield)
 {
-    sys::error_code ec;
+    auto const lookup = dns_resolver->resolve(host, port, yield);
 
-    auto const lookup = dns_resolver->resolve( host, port
-                                             , cancel
-                                             , YieldContext(yield[ec]));
-    return_or_throw_on_error(yield, cancel, ec, tcp::socket(yield.get_executor()));
+    if (!lookup) return std::unexpected(lookup.error());
 
-    return connect_to_host(lookup, cancel, yield);
-}
-
-tcp::socket
-connect_to_host( const TcpLookup& lookup
-               , Cancel& cancel
-               , asio::yield_context yield)
-{
-    auto ex = yield.get_executor();
-    sys::error_code ec;
-    tcp::socket socket(ex);
-
-    auto disconnect_slot = cancel.connect([&socket] {
-        sys::error_code ec;
-        socket.shutdown(tcp::socket::shutdown_both, ec);
-        socket.close(ec);
-    });
-
-    // Make the connection on the IP address we get from a lookup
-    asio::async_connect(socket, lookup, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, tcp::socket(ex));
-
-    return socket;
+    return connect_to_host(std::move(*lookup), yield);
 }
 
 std::expected<tcp::socket, sys::error_code>
@@ -73,22 +47,21 @@ connect_to_host(const TcpLookup& lookup, Async yield)
     return socket;
 }
 
-tcp::socket
+std::expected<tcp::socket, sys::error_code>
 connect_to_host( const TcpLookup& lookup
                , std::chrono::steady_clock::duration timeout
-               , Cancel& cancel
-               , asio::yield_context yield)
+               , Async yield)
 {
-    auto ex = yield.get_executor();
+    auto y = yield;
+    auto wd = watch_dog(y.get_executor(), timeout, [&] { y.cancel(); });
 
-    return util::with_timeout
-        ( ex
-        , cancel
-        , timeout
-        , [&] (auto& cancel, auto yield) {
-              return connect_to_host(lookup, cancel, yield);
-          }
-        , yield);
+    try {
+        return connect_to_host(lookup, y);
+    }
+    catch (Async::Cancelled const&) {
+        if (yield.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
+    }
 }
 
 } // namespace

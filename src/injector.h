@@ -22,13 +22,12 @@ namespace ouinet {
 using TcpLookup = asio::ip::tcp::resolver::results_type;
 
 OUINET_INJECTOR_API
-TcpLookup
-resolve_target(const http::request_header<>& req
+[[nodiscard]]
+std::expected<TcpLookup, sys::error_code>
+resolve_target( const http::request_header<>& req
               , bool allow_private_targets
               , std::shared_ptr<dns::Resolver> dns_resolver
-              , AsioExecutor exec
-              , Cancel& cancel
-              , YieldContext yield);
+              , Async);
 
 // This class needs to outlive the `asio::io_context`. Mainly because of the
 // `ssl::context` which is passed to `ssl::stream`s by reference.

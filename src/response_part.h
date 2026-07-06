@@ -9,37 +9,48 @@
 #include <boost/beast/http/message.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/variant.hpp>
-#include <boost/format.hpp>
 
-#include "util/cancel.h"
 #include "util/variant.h"
 #include "util/watch_dog.h"
 #include "namespaces.h"
-#include "or_throw.h"
+#include "util/async.h"
 #include "api.h"
 
 namespace ouinet::http_response {
 
 namespace detail {
-    template<class P, class S>
-    void async_write_c(const P* p, S& s, Cancel& c, asio::yield_context y)
+    template<class S, class D>
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(S& s, const D& data, Async yield)
     {
-        assert(!c);
-        if (c) return or_throw(y, asio::error::operation_aborted);
-        auto cancelled = c.connect([&] { s.close(); });
-        sys::error_code ec;
-        p->async_write(s, y[ec]);
-        return_or_throw_on_error(y, c, ec);
+        if (yield.is_cancelled()) return std::unexpected(asio::error::operation_aborted);
+        auto cancelled = yield.cancel_slot([&] { if (s.is_open()) s.close(); });
+        auto r = asio::async_write(s, data, yield);
+        if (!r) return std::unexpected(r.error());
+        return {};
     }
 
     template<class P, class S, class Duration>
-    void async_write_c(const P* p, S& s, Duration d, Cancel& c, asio::yield_context y)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(P* p, S& s, Duration d, Async yield)
     {
-        Cancel tc(c);
-        auto wd = watch_dog(s.get_executor(), d, [&] { tc(); });
-        sys::error_code ec;
-        async_write_c(p, s, tc, y[ec]);
-        fail_on_error_or_timeout(y, c, ec, wd);
+        auto y = yield;
+        auto wd = watch_dog(y.get_executor(), d, [&] {
+            if (s.is_open()) s.close();
+            y.cancel();
+        });
+
+        try {
+            auto r = p->async_write(s, y);
+            if (!r) return std::unexpected(r.error());
+            return {};
+        }
+        catch (Async::Cancelled const&) {
+            if (yield.is_cancelled()) throw;
+            return std::unexpected(asio::error::timed_out);
+        }
     }
 }
 
@@ -73,19 +84,17 @@ struct OUINET_COMMON_API Head : public http::response_header<> {
     bool operator==(const Head& other) const;
 
     template<class S>
-    void async_write(S& s, asio::yield_context yield) const
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Async yield) const
     {
         Head::writer headw(*this, Base::version(), Base::result_int());
-        asio::async_write(s, headw.get(), yield);
+        return detail::async_write(s, headw.get(), yield);
     }
 
-    template<class S>
-    void async_write(S& s, Cancel& c, asio::yield_context y) const
-    { return detail::async_write_c(this, s, c, y); }
-
     template<class S, class Duration>
-    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
-    { return detail::async_write_c(this, s, d, c, y); }
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Duration d, Async yield) const
+    { return detail::async_write(this, s, d, yield); }
 };
 
 struct Body : public std::vector<uint8_t> {
@@ -98,18 +107,17 @@ struct Body : public std::vector<uint8_t> {
     Body& operator=(const Body&) = default;
 
     template<class S>
-    void async_write(S& s, asio::yield_context yield) const
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Async yield) const
     {
-        asio::async_write(s, asio::buffer(*this), yield);
+        return detail::async_write(s, asio::buffer(*this), yield);
     }
 
-    template<class S>
-    void async_write(S& s, Cancel& c, asio::yield_context y) const
-    { return detail::async_write_c(this, s, c, y); }
-
     template<class S, class Duration>
-    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
-    { return detail::async_write_c(this, s, d, c, y); }
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(S& s, Duration d, Async yield) const
+    { return detail::async_write(this, s, d, yield); }
 };
 
 struct ChunkHdr {
@@ -131,10 +139,11 @@ struct ChunkHdr {
     }
 
     template<class S>
-    void async_write(S& s, asio::yield_context yield) const
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Async yield) const
     {
         if (size > 0) {
-            asio::async_write(s, http::chunk_header{size, exts}, yield);
+            return detail::async_write(s, http::chunk_header{size, exts}, yield);
         }
         else {  // `http::chunk_last` carries a trailer itself, do not use
             // NOTE: asio::buffer("0") creates a buffer of size 2, so we need
@@ -146,17 +155,16 @@ struct ChunkHdr {
                 asio::buffer("\r\n", 2) };
 
             assert(bufs[1].size() == exts.size());
-            asio::async_write(s, bufs, yield);
+            auto r = asio::async_write(s, bufs, yield);
+            if (!r) return std::unexpected(r.error());
+            return {};
         }
     }
 
-    template<class S>
-    void async_write(S& s, Cancel& c, asio::yield_context y) const
-    { return detail::async_write_c(this, s, c, y); }
-
     template<class S, class Duration>
-    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
-    { return detail::async_write_c(this, s, d, c, y); }
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Duration d, Async yield) const
+    { return detail::async_write(this, s, d, yield); }
 };
 
 struct ChunkBody : public std::vector<uint8_t> {
@@ -173,25 +181,24 @@ struct ChunkBody : public std::vector<uint8_t> {
     ChunkBody& operator=(const ChunkBody&) = default;
 
     template<class S>
-    void async_write(S& s, asio::yield_context yield) const
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Async yield) const
     {
-        sys::error_code ec;
-        asio::async_write(s, asio::buffer(*this), yield[ec]);
+        auto r = asio::async_write(s, asio::buffer(*this), yield);
 
-        if (ec) return or_throw(yield, ec);
+        if (!r) return std::unexpected(r.error());
 
         if (remain == 0) {
-            asio::async_write(s, http::chunk_crlf{}, yield[ec]);
+            return detail::async_write(s, http::chunk_crlf{}, yield);
         }
+
+        return {};
     }
 
-    template<class S>
-    void async_write(S& s, Cancel& c, asio::yield_context y) const
-    { return detail::async_write_c(this, s, c, y); }
-
     template<class S, class Duration>
-    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
-    { return detail::async_write_c(this, s, d, c, y); }
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Duration d, Async yield) const
+    { return detail::async_write(this, s, d, yield); }
 };
 
 struct OUINET_COMMON_API Trailer : public http::fields {
@@ -206,19 +213,18 @@ struct OUINET_COMMON_API Trailer : public http::fields {
     bool operator==(const Trailer& other) const;
 
     template<class S>
-    void async_write(S& s, asio::yield_context yield) const
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Async yield) const
     {
         Trailer::writer trailerw(*this);
-        asio::async_write(s, trailerw.get(), yield);
+        return detail::async_write(s, trailerw.get(), yield);
     }
 
-    template<class S>
-    void async_write(S& s, Cancel& c, asio::yield_context y) const
-    { return detail::async_write_c(this, s, c, y); }
-
     template<class S, class Duration>
-    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
-    { return detail::async_write_c(this, s, d, c, y); }
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(S& s, Duration d, Async yield) const
+    { return detail::async_write(this, s, d, yield); }
 };
 
 namespace detail {
@@ -273,18 +279,18 @@ struct Part : public detail::PartVariant
     }
 
     template<class S>
-    void async_write(S& s, asio::yield_context y) const
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Async yield) const
     {
-        util::apply(*this, [&](const auto& p) { p.async_write(s, y); });
+        return util::apply(*this, [&](const auto& p) { return p.async_write(s, yield); });
     }
 
-    template<class S>
-    void async_write(S& s, Cancel& c, asio::yield_context y) const
-    { return detail::async_write_c(this, s, c, y); }
-
     template<class S, class Duration>
-    void async_write(S& s, Cancel& c, Duration d, asio::yield_context y) const
-    { return detail::async_write_c(this, s, d, c, y); }
+    [[nodiscard]]
+    std::expected<void, sys::error_code> async_write(S& s, Duration d, Async yield) const
+    {
+        return util::apply(*this, [&](const auto& p) { return p.async_write(s, d, yield); });
+    }
 };
 
 OUINET_COMMON_API std::ostream& operator<<(std::ostream& os, ouinet::http_response::Part::Type);

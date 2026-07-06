@@ -1613,36 +1613,29 @@ std::expected<void, sys::error_code> DhtNode::handle_query(udp::endpoint sender,
     }
 }
 
-asio::ip::udp::endpoint resolve(
-    const AsioExecutor& exec,
+std::expected<asio::ip::udp::endpoint, sys::error_code>
+resolve(
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
     const std::shared_ptr<dns::Resolver>& dns_resolver,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
-
     using UdpLookup = udp::resolver::results_type;
     using UdpEndpoint = typename UdpLookup::endpoint_type;
     using Answers = std::vector<asio::ip::address>;
     UdpLookup results;
 
-    auto answers = dns_resolver->resolve(addr, yield[ec]);
-    if (!ec) {
-        string_view port_strv = port;
-        auto port_int = parse::number<uint16_t>(port_strv).value();
-        util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
-        results = UdpLookup::create(eps.begin(), eps.end(),
-                                    addr, port);
+    auto answers = dns_resolver->resolve(addr, yield);
+
+    if (!answers) {
+        return std::unexpected(answers.error());
     }
 
-    if (cancel_signal) ec = asio::error::operation_aborted;
-
-    if (ec) {
-        return or_throw<udp::endpoint>(yield, ec);
-    }
+    string_view port_strv = port;
+    auto port_int = parse::number<uint16_t>(port_strv).value();
+    util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{std::move(*answers), port_int};
+    results = UdpLookup::create(eps.begin(), eps.end(), addr, port);
 
     for (const auto& result : results) {
         auto ep = result.endpoint();
@@ -1654,7 +1647,7 @@ asio::ip::udp::endpoint resolve(
         }
     }
 
-    return or_throw<udp::endpoint>(yield, asio::error::not_found);
+    return std::unexpected(sys::error_code(asio::error::not_found));
 }
 
 std::expected<DhtNode::BootstrapResult, sys::error_code>
@@ -1673,24 +1666,20 @@ DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
             [&] (const std::string& addr) {
                 string_view hp(addr), host, port;
                 std::tie(host, port) = util::split_ep(hp);
-                auto ep = compat([&](Cancel cancel, asio::yield_context yield) {
-                    return resolve(
-                        _exec,
+                auto ep = resolve(
                         _multiplexer->is_v4() ? udp::v4() : udp::v6(),
                         std::string(host),
                         port.empty() ? util::str(bootstrap::default_port) : std::string(port),
                         _dns_resolver,
-                        cancel,
                         yield
                     );
-                })(yield);
 
                 if (!ep) {
                     LOG_DEBUG(yield, "Unable to resolve bootstrap server, giving up: "
                                    , addr, "; error=", ep.error());
                 }
 
-                return ep;
+                return *ep;
             }
         );
 

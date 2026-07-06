@@ -2,6 +2,7 @@
 #include "dns.h"
 #include "util/address.h"
 #include "parse/number.h"
+#include "util/async.h"
 
 namespace ouinet::dns {
 
@@ -125,10 +126,11 @@ std::string Resolver::protos_to_str(rust::Vec<bridge::Protocol> protos) {
     return proto_str;
 }
 
-Resolver::Output Resolver::resolve(const std::string& name, yield_context yield) {
-    auto cancellation_slot = yield.get_cancellation_slot();
+std::expected<Resolver::Output, sys::error_code>
+Resolver::resolve(const std::string& name, Async yield) {
+    auto cancellation_slot = yield.asio_yield().get_cancellation_slot();
 
-    return async_initiate<yield_context, void(error_code, Output)> (
+    return async_initiate<Async, void(error_code, Output)> (
         [
             this,
             &name,
@@ -155,10 +157,8 @@ Resolver::Output Resolver::resolve(const std::string& name, yield_context yield)
 }
 
 
-TcpLookup Resolver::resolve( const std::string& host
-                           , const uint16_t port
-                           , const Cancel& cancel
-                           , YieldContext yield)
+std::expected<TcpLookup, sys::error_code>
+Resolver::resolve(const std::string& host, const uint16_t port, Async yield)
 {
     using TcpEndpoint = TcpLookup::endpoint_type;
 
@@ -171,13 +171,11 @@ TcpLookup Resolver::resolve( const std::string& host
                                         , std::to_string(port));
     }
 
-    sys::error_code ec;
-    const auto answers46 = resolve(host, yield[ec]);
+    const auto answers46 = resolve(host, yield);
 
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<TcpLookup>(yield, ec);
+    if (!answers46) return std::unexpected(answers46.error());
 
-    const util::AddrsAsEndpoints<util::Answers, TcpEndpoint> eps{answers46, port};
+    const util::AddrsAsEndpoints<util::Answers, TcpEndpoint> eps{std::move(*answers46), port};
     return TcpLookup::create( eps.begin()
                             , eps.end()
                             , host
