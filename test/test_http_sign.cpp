@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(test_chain_hasher) {
 void read_until_end(asio::ip::tcp::socket& socket, Async yield) {
     char d[2048];
     asio::mutable_buffer b(d, sizeof(d));
-    
+
     while (true) {
         if (auto r = asio::async_read(socket, b, yield); !r) {
             BOOST_REQUIRE(r.error() == asio::error::eof);
