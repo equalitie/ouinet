@@ -31,25 +31,6 @@ template<class F> void test_run(F f) {
     ctx.run();
 }
 
-void defer(Async yield) {
-    // TODO: We get crashes when `yield` is used directly, see the commented
-    // out test below.
-    asio::defer(yield.asio_yield());
-}
-
-//// TODO: Occasional crash here, run multiple times to reproduce.
-//BOOST_AUTO_TEST_CASE(wc) {
-//    test_run([] (auto yield) {
-//        WaitCondition wc(yield.get_executor());
-//
-//        test_spawn(yield.get_executor(), [lock = wc.lock()] (auto yield) mutable {
-//            asio::defer(yield);
-//        });
-//
-//        wc.wait(yield);
-//    });
-//}
-
 BOOST_AUTO_TEST_CASE(sanity) {
     test_run([] (auto yield) {
         Promise<bool> p(yield.get_executor());
@@ -65,7 +46,7 @@ BOOST_AUTO_TEST_CASE(sanity) {
         auto f = p.get_future();
 
         test_spawn(yield.get_executor(), [p = std::move(p)] (auto yield) mutable {
-            defer(yield);
+            asio::defer(yield);
             p.set_value(true);
         });
 
