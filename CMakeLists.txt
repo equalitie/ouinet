@@ -158,13 +158,16 @@ function(ouinet_setup)
         list(APPEND ARG_DEFS WITH_OUISYNC)
     endif()
 
+    get_target_property(ASIO_UTP_INCLUDE_DIRECTORIES asio_utp INCLUDE_DIRECTORIES)
+    get_target_property(CPP_UPNP_INCLUDE_DIRECTORIES cpp_upnp INCLUDE_DIRECTORIES)
+
     target_compile_definitions(${ARG_TARGET} PRIVATE ${ARG_DEFS})
     target_compile_options(${ARG_TARGET} PRIVATE -std=c++23)
     target_include_directories(${ARG_TARGET} PUBLIC
         ${OUINET_ROOT_DIR}/src
         ${OUINET_ROOT_DIR}/rust
-        ${OUINET_ROOT_DIR}/modules/asio-utp/include
-        ${OUINET_ROOT_DIR}/modules/cpp-upnp/include
+        ${ASIO_UTP_INCLUDE_DIRECTORIES}
+        ${CPP_UPNP_INCLUDE_DIRECTORIES}
         ${BUILT_BOOST_INCLUDE_DIR}
         ${OPENSSL_INCLUDE_DIR})
     target_link_libraries(${ARG_TARGET} ${ARG_LINK})
