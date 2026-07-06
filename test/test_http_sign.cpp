@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(test_chain_hasher) {
 void read_until_end(asio::ip::tcp::socket& socket, Async yield) {
     char d[2048];
     asio::mutable_buffer b(d, sizeof(d));
-    
+
     while (true) {
         if (auto r = asio::async_read(socket, b, yield); !r) {
             BOOST_REQUIRE(r.error() == asio::error::eof);
@@ -852,7 +852,6 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         yield.spawn([ signed_r = std::move(signed_r), &tested_w
                     , lock = wc.lock()] (auto y) mutable {
             Cancel cancel;
-            sys::error_code e;
             auto pk = get_public_key();
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
                 ( std::move(signed_r), pk

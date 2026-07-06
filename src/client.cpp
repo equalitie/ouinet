@@ -319,7 +319,7 @@ public:
         //
         // But, for the majority of cases, this may still be a reasonable bet.
 
-        asio_utp::udp_multiplexer m = common_udp_multiplexer();
+        auto m = common_udp_multiplexer();
 
         auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
@@ -329,12 +329,13 @@ public:
 
         yield.spawn([
             bt_dht,
-            local_ep,
             m = std::move(m),
             upnps = _upnps_ptr
         ] (auto y) mutable {
             auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(y);
             if (!ext_ep) return;
+
+            auto local_ep = m.local_endpoint();
 
             State::setup_upnp(y.get_executor(), ext_ep->port(), local_ep, upnps);
         });
