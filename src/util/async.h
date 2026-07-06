@@ -194,14 +194,22 @@ namespace boost::asio {
         template<typename Handler, typename Sig> struct Wrap;
 
         template<typename Handler> struct Wrap<Handler, void()> {
+            using executor_type = asio::associated_executor_t<Handler>;
+
             Handler handler;
 
             void operator() () {
                 handler();
             }
+
+            executor_type get_executor() const {
+                return handler.get_executor();
+            }
         };
 
         template<typename Handler, IsEc E> struct Wrap<Handler, void(E)> {
+            using executor_type = asio::associated_executor_t<Handler>;
+
             Handler handler;
 
             void operator() (boost::system::error_code ec) {
@@ -212,9 +220,15 @@ namespace boost::asio {
                     handler(boost::system::error_code{}, std::unexpected(ec));
                 }
             }
+
+            executor_type get_executor() const {
+                return handler.get_executor();
+            }
         };
 
         template<typename Handler, IsEc E, typename T> struct Wrap<Handler, void(E, T)> {
+            using executor_type = asio::associated_executor_t<Handler>;
+
             Handler handler;
 
             void operator() (boost::system::error_code ec, T arg) {
@@ -224,6 +238,10 @@ namespace boost::asio {
                 } else {
                     handler(boost::system::error_code{}, std::unexpected(ec));
                 }
+            }
+
+            executor_type get_executor() const {
+                return handler.get_executor();
             }
         };
     } // namespace
