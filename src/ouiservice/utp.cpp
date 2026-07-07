@@ -5,6 +5,7 @@
 #include "../util/async.h"
 #include "../util/select.h"
 #include "../util/str.h"
+#include "asio_utp/udp_multiplexer.hpp"
 
 namespace ouinet {
 namespace ouiservice {
@@ -12,14 +13,10 @@ namespace ouiservice {
 using udp = asio::ip::udp;
 using namespace std;
 
-UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
-                                        , asio_utp::udp_multiplexer multiplexer
-                                        , Trace trace):
-    _ex(std::move(ex)),
-    _udp_multiplexer(new asio_utp::udp_multiplexer(std::move(multiplexer))),
-    _accept_queue(_ex)
+UtpOuiServiceServer::UtpOuiServiceServer(asio_utp::udp_multiplexer mux):
+    _udp_multiplexer(std::make_unique<asio_utp::udp_multiplexer>(std::move(mux))),
+    _accept_queue(_udp_multiplexer->get_executor())
 {
-
     assert(_udp_multiplexer->is_open());
 }
 
@@ -29,9 +26,11 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
 
     assert(_udp_multiplexer->is_open());
     yield.spawn(_cancel, [this] (Async yield) {
+        auto exec = _udp_multiplexer->get_executor();
+
         while (true) {
             sys::error_code ec;
-            asio_utp::socket s(_ex);
+            asio_utp::socket s(exec);
 
             auto cancel_con = yield.cancel_slot([&] { s.close(); });
 
@@ -42,7 +41,7 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
 
             if (!r) {
                 LOG_ERROR(yield, " UtpOuiServiceServer: failed to accept, will retry in 5s;"
-                         , " lep=", _udp_multiplexer->local_endpoint(), " ec=", r.error());
+                               , " lep=", s.local_endpoint(), " ec=", r.error());
                 async_sleep(5s, yield);
                 continue;
             }

@@ -13,6 +13,7 @@
 #include "resource_id.h"
 #include "dht_groups.h"
 #include "peer_message.h"
+#include "udp_sockets.h"
 #include "util/crypto_stream_key.h"
 #include "ouiservice/i2p/fwd.h"
 #include "ouiservice/i2p/address.h"
@@ -36,7 +37,7 @@ private:
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::vector<asio_utp::udp_multiplexer>
+    build( UdpSockets udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -51,14 +52,14 @@ public:
 public:
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::vector<asio_utp::udp_multiplexer> multiplexers
+    build( UdpSockets udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , bool local_peer_discovery_enabled
          , Async yield)
     {
-        return build( std::move(multiplexers), std::move(cache_pk)
+        return build( std::move(udp_sockets), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , local_peer_discovery_enabled
                     , boost::none, boost::none
@@ -67,7 +68,7 @@ public:
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::vector<asio_utp::udp_multiplexer> multiplexers
+    build( UdpSockets udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -78,7 +79,7 @@ public:
     {
         assert(!static_cache_dir.empty());
         assert(!static_cache_content_dir.empty());
-        return build( std::move(multiplexers), std::move(cache_pk)
+        return build( std::move(udp_sockets), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , local_peer_discovery_enabled
                     , opt_path{std::move(static_cache_dir)}

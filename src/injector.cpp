@@ -11,6 +11,7 @@
 #include <ctime>
 #include <fstream>
 #include <string>
+#include <asio_utp/udp_multiplexer.hpp>
 
 
 #include "namespaces.h"
@@ -959,48 +960,49 @@ Injector::Injector(
         proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
     }
 
-    auto create_multiplexer = [exec = _exec, trace] (asio::ip::udp::endpoint ep) {
-        asio_utp::udp_multiplexer m(exec);
-        sys::error_code ec;
-        m.bind(ep, ec);
-        if (ec) {
-            LOG_ABORT(trace, " Failed to bind multiplexer to ", ep, " (", ec.message(), ")");
-        }
-        return m;
-    };
-
-    asio_utp::udp_multiplexer utp_plain_mux(_exec);
-    asio_utp::udp_multiplexer utp_tls_mux(_exec);
+    asio_utp::udp_multiplexer socket(_exec);
+    asio_utp::udp_multiplexer socket_tls(_exec);
 
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
         LOG_INFO(trace, " uTP address: ", endpoint);
 
-        util::create_state_file( _config.repo_root()/"endpoint-utp"
-                               , util::str(endpoint));
+        sys::error_code ec;
+        socket.bind(endpoint, ec);
 
-        utp_plain_mux = create_multiplexer(endpoint);
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, utp_plain_mux, trace);
-        proxy_server->add(std::move(srv));
+        if (ec) {
+            LOG_WARN(trace, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
+        } else {
+            LOG_INFO(trace, " uTP address: ", endpoint);
+
+            util::create_state_file( _config.repo_root() / "endpoint-utp"
+                                   , util::str(endpoint));
+
+            auto srv = make_unique<ouiservice::UtpOuiServiceServer>(socket);
+            proxy_server->add(std::move(srv));
+        }
     }
 
     if (_config.utp_tls_endpoint()) {
-
         udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
-        utp_tls_mux = create_multiplexer(endpoint);
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, utp_tls_mux, trace);
+        sys::error_code ec;
+        socket_tls.bind(endpoint, ec);
 
-        auto local_ep = base->local_endpoint();
-
-        if (local_ep) {
-            LOG_INFO(trace, " uTP/TLS address: ", *local_ep);
-            util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
-                                   , util::str(*local_ep));
-            proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
-
+        if (ec) {
+            LOG_WARN(trace, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
         } else {
-            LOG_ERROR(trace, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
+            auto base = make_unique<ouiservice::UtpOuiServiceServer>(socket_tls);
+            auto local_ep = base->local_endpoint();
+
+            if (local_ep) {
+                LOG_INFO(trace, " uTP/TLS address: ", *local_ep);
+                util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
+                                       , util::str(*local_ep));
+                proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
+            } else {
+                LOG_ERROR(trace, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
+            }
         }
     }
 
@@ -1026,20 +1028,14 @@ Injector::Injector(
         _dht = std::move(dht);
     }
 
-    {
-        std::vector<asio_utp::udp_multiplexer> dht_muxs;
+    if (socket.is_open()) {
+        LOG_INFO(trace, " BtDHT bound to udp/", socket.local_endpoint(), " (plain)");
+        std::ignore = _dht->add_endpoint(std::move(socket));
+    }
 
-        if (utp_plain_mux.is_open()) {
-            dht_muxs.push_back(utp_plain_mux);
-            LOG_INFO(trace, " BtDHT bound to udp/", utp_plain_mux.local_endpoint(), " (plain)");
-        }
-
-        if (utp_tls_mux.is_open()) {
-            dht_muxs.push_back(utp_tls_mux);
-            LOG_INFO(trace, " BtDHT bound to udp/", utp_tls_mux.local_endpoint(), " (tls)");
-        }
-
-        _dht->set_endpoints(std::move(dht_muxs));
+    if (socket_tls.is_open()) {
+        LOG_INFO(trace, " BtDHT bound to udp/", socket_tls.local_endpoint(), " (tls)");
+        std::ignore = _dht->add_endpoint(std::move(socket_tls));
     }
 
     {

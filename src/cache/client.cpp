@@ -1,5 +1,6 @@
 #include "client.h"
 #include "announcer.h"
+#include "asio_utp/udp_multiplexer.hpp"
 #include "dht_lookup.h"
 #include "local_peer_discovery.h"
 #include "http_sign.h"
@@ -25,6 +26,7 @@
 #include "../bep5_swarms.h"
 #include "multi_peer_reader.h"
 #include <map>
+#include <ranges>
 #include <string>
 
 #define _LOGPFX "cache/client: "
@@ -92,7 +94,7 @@ struct Client::Impl {
     std::shared_ptr<unsigned> _newest_proto_seen;
 
     AsioExecutor _ex;
-    std::vector<asio_utp::udp_multiplexer> _udp_multiplexers;
+    UdpSockets _udp_sockets;
     shared_ptr<bt::DhtBase> _dht;
     string _uri_swarm_prefix;
     sign::PublicKey _cache_pk;
@@ -114,7 +116,7 @@ struct Client::Impl {
     Trace _trace;
 
     Impl( AsioExecutor ex
-        , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
+        , UdpSockets udp_sockets
         , sign::PublicKey& cache_pk
         , fs::path cache_dir
         , Client::opt_path static_cache_dir
@@ -124,7 +126,7 @@ struct Client::Impl {
         , Trace trace)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(ex)
-        , _udp_multiplexers(std::move(udp_multiplexers))
+        , _udp_sockets(std::move(udp_sockets))
         , _uri_swarm_prefix(bep5::compute_uri_swarm_prefix
               (cache_pk, http_::protocol_version_current))
         , _cache_pk(cache_pk)
@@ -140,8 +142,10 @@ struct Client::Impl {
         , _trace(std::move(trace))
     {
         if (local_peer_discovery_enabled)
-            _local_peer_discovery
-                = make_unique<LocalPeerDiscovery>(_ex, _udp_multiplexers);
+            _local_peer_discovery = std::make_unique<LocalPeerDiscovery>(
+                _ex,
+                std::vector<asio_utp::udp_multiplexer>(_udp_sockets.begin(), _udp_sockets.end())
+            );
     }
 
     std::string compute_swarm_name(boost::string_view group) const {
@@ -512,7 +516,7 @@ struct Client::Impl {
                             , resource_key
                             , _cache_pk
                             , std::move(local_peers)
-                            , _udp_multiplexers
+                            , _udp_sockets
                             , _newest_proto_seen
                             , trace);
                     }
@@ -829,7 +833,7 @@ struct Client::Impl {
 
 /* static */
 std::expected<std::shared_ptr<Client>, sys::error_code>
-Client::build( std::vector<asio_utp::udp_multiplexer> udp_multiplexers
+Client::build( UdpSockets udp_sockets
              , sign::PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
@@ -894,10 +898,17 @@ Client::build( std::vector<asio_utp::udp_multiplexer> udp_multiplexers
         ? make_backed_http_store(std::move(store_dir), std::move(static_http_store), ex)
         : make_http_store(std::move(store_dir), ex);
 
-    unique_ptr<Impl> impl(new Impl( ex, std::move(udp_multiplexers)
-                                  , cache_pk, std::move(cache_dir), std::move(static_cache_dir)
-                                  , std::move(http_store), max_cached_age
-                                  , local_peer_discovery_enabled, yield.trace()));
+    auto impl = std::make_unique<Impl>(
+        ex,
+        std::move(udp_sockets),
+        cache_pk,
+        std::move(cache_dir),
+        std::move(static_cache_dir),
+        std::move(http_store),
+        max_cached_age,
+        local_peer_discovery_enabled,
+        yield.trace()
+    );
 
     if (auto r = impl->load_stored_groups(yield); !r) {
         return std::unexpected(r.error());

@@ -1,6 +1,7 @@
 #include <bittorrent/mainline_dht.h>
 #include <bittorrent/routing_table.h>
 
+#include <boost/test/tools/old/interface.hpp>
 #include <iostream>
 
 #include <sys/types.h>
@@ -13,6 +14,7 @@
 #include "../src/parse/number.h"
 #include "../src/async_sleep.h"
 #include "../src/util/compat.h"
+#include "asio_utp/udp_multiplexer.hpp"
 #include "progress.h"
 
 using namespace ouinet;

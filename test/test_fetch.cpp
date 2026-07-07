@@ -283,7 +283,7 @@ BOOST_DATA_TEST_CASE(
             sys::error_code ec;
             mux.bind(asio::ip::udp::endpoint(asio::ip::address_v4::any(), 0), ec);
             BOOST_REQUIRE(!ec);
-            dht.set_endpoints({mux});
+            dht.add_endpoint(mux);
         }
     };
 
@@ -297,7 +297,7 @@ BOOST_DATA_TEST_CASE(
         auto mock_dht_swarms = std::make_shared<MockDht::Swarms>();
 
         std::optional<Mallory> mallory;
-        
+
         if (with_mallory) {
             mallory.emplace(yield.get_executor(), mock_dht_swarms);
         }
@@ -573,6 +573,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--bt-bootstrap-no-default",
             "--trace-root=injector",
             "--listen-on-utp-tls=127.0.0.1:0",
+            "--log-level=DEBUG"
         }),
         ctx);
 

@@ -1,4 +1,5 @@
 #include "dht.h"
+#include "udp_sockets.h"
 
 namespace ouinet::bittorrent {
 
@@ -6,9 +7,8 @@ DhtBase::DhtBase() {}
 DhtBase::~DhtBase() {}
 
 std::set<DhtBase::UdpEndpoint> DhtBase::local_endpoints() const {
-    auto ms = udp_multiplexers();
     std::set<UdpEndpoint> ret;
-    for (auto& m : ms) {
+    for (auto& m : sockets()) {
         ret.insert(m.local_endpoint());
     }
     return ret;
