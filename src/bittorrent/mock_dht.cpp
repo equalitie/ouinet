@@ -1,4 +1,5 @@
 #include "mock_dht.h"
+#include "udp_sockets.h"
 #include "util/cancel.h"
 #include "util/debug.h"
 
@@ -28,27 +29,17 @@ MockDht::MockDht(std::string name, Executor exec, std::shared_ptr<Swarms> swarms
 MockDht::~MockDht() {
 }
 
-void MockDht::set_endpoints(const std::vector<asio_utp::udp_multiplexer>& ms) {
-    std::vector<asio::ip::udp::endpoint> eps;
-    for (auto& m : ms) {
-        assert(m.is_open());
-        eps.push_back(m.local_endpoint());
-    }
-    std::cout << _name << ": set_endpoints to " << debug(eps) << "\n";
-    _udp_multiplexers = ms;
-}
-
 Promise<UdpEndpoint>::Future MockDht::add_endpoint(asio_utp::udp_multiplexer m) {
     auto ep = m.local_endpoint();
-    _udp_multiplexers.push_back(std::move(m));
     std::cout << _name << ": add_endpoint to " << ep << "\n";
+
+    _sockets.push_back(std::move(m));
 
     Promise<UdpEndpoint> promise(_exec);
     promise.set_value(ep);
 
     return promise.get_future();
 }
-
 
 std::set<UdpEndpoint> MockDht::wan_endpoints() const {
     return {};
@@ -74,8 +65,9 @@ std::expected<std::set<UdpEndpoint>, sys::error_code> MockDht::tracker_announce(
 ) {
     std::set<UdpEndpoint> my_endpoints;
 
-    for (auto& m : _udp_multiplexers) {
-        auto ep = m.local_endpoint();
+    for (const auto& socket : _sockets) {
+        auto ep = socket.local_endpoint();
+
         if (port) {
             ep.port(*port);
         }
