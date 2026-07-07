@@ -396,7 +396,7 @@ for target_os in ${target_oss[@]}; do
     ### Download artifacts
 
     if [ -n "$artifact_dir" ]; then
-        artifacts=$(list_artifacts_for_target_os $target_os)
+        artifacts=($(list_artifacts_for_target_os $target_os))
 
         dst_dir=$artifact_dir/$target_os
         mkdir -p $dst_dir
