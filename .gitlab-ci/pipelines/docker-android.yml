@@ -1,0 +1,17 @@
+android / build:
+  stage: build
+  variables:
+    BUILD_PATH: 'build'
+    TARGET_OS: 'android'
+  tags:
+    - shell+docker
+  script:
+    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH
+  needs:
+    - job: 'linux / build'
+      optional: true
+#  artifacts:
+#    paths:
+#      - build.android/build-android-*/ouinet/outputs/aar/*.aar
+#      - build.android/build-android-*/ouinet/outputs/apk/*.apk
+#    expire_in: 6h
