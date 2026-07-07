@@ -168,7 +168,10 @@ boost::program_options::options_description ClientConfig::description_full() {
       "A <FIELD>:<VALUE> pair representing a HTTP header field and "
       "value to add to every request coming from the User Agent before "
       "Ouinet processes it. Useful for testing when using e.g. Firefox "
-      "as the UA.");
+      "as the UA.")("ouisync-udp-ep",
+                    po::value<std::vector<std::string>>()->composing(),
+                    "(Experimental) UDP endpoint(s) to bind Ouisync to (in "
+                    "<IP>:<PORT> format).");
 
   add_i2p_service_options(services);
 
@@ -587,6 +590,20 @@ ClientConfig::ClientConfig(int argc, const char *argv[]) {
     }
   }
 
+  if (auto ouisync_eps =
+          as_optional<std::vector<std::string>>(vm, "ouisync-udp-ep");
+      ouisync_eps && !ouisync_eps->empty()) {
+    if (!_ouisync) {
+      _ouisync = OuisyncConfig{};
+    }
+
+    for (auto s : *ouisync_eps) {
+      if (auto ep = parse::endpoint<asio::ip::udp>(s)) {
+        _ouisync->udp_endpoints.push_back(*ep);
+      }
+    }
+  }
+
   if (const char *env_var = std::getenv("CLIENT_CREDENTIALS");
       env_var != nullptr && env_var[0] != '\0') {
     _client_credentials = env_var;
@@ -687,7 +704,10 @@ ClientConfig::ClientConfig(int argc, const char *argv[]) {
 
               if (auto token_opt =
                       as_optional<string>(vm, "ouisync-page-index")) {
-                _ouisync = OuisyncCacheConfig{*token_opt};
+                if (!_ouisync) {
+                  _ouisync = OuisyncConfig{};
+                }
+                _ouisync->page_index_token = *token_opt;
               } else {
                 throw error(
                     "Argument --cache-type=ouisync requires "

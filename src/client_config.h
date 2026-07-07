@@ -71,10 +71,13 @@ struct MetricsConfig {
   parse(const boost::program_options::variables_map &);
 };
 
-struct OuisyncCacheConfig {
+struct OuisyncConfig {
   // Read token for the page index repository which contains directories one per
   // host name and inside them crawls of corresponding websites.
   std::string page_index_token;
+  // Endpoints to bind Ouisync networking to. Should typically contain one IPv4
+  // and one IPv6 endpoint.
+  std::vector<asio::ip::udp::endpoint> udp_endpoints;
 };
 
 // ----
@@ -262,7 +265,7 @@ public:
     return _add_request_fields;
   }
 
-  const std::optional<OuisyncCacheConfig> &ouisync_cache_config() const {
+  const std::optional<OuisyncConfig> &ouisync_config() const {
     return _ouisync;
   }
 
@@ -420,7 +423,7 @@ private:
   size_t _i2p_hops_per_tunnel = 3;
   boost::optional<I2pAddress> _i2p_bep3_tracker;
 
-  std::optional<OuisyncCacheConfig> _ouisync;
+  std::optional<OuisyncConfig> _ouisync;
   std::optional<I2pService::Config> _i2p_service_config;
 
   Trace _trace_root;

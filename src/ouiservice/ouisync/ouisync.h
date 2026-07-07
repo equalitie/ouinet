@@ -22,9 +22,7 @@ namespace ouisync_service {
 class OUINET_OUISYNC_API Ouisync {
 public:
   Ouisync(boost::filesystem::path, std::string page_index_token,
-          std::vector<boost::asio::ip::udp::endpoint> bind = {
-              boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(),
-                                             0)});
+          std::vector<boost::asio::ip::udp::endpoint> bind);
   Ouisync(const Ouisync &) = delete;
   Ouisync(Ouisync &&) = default;
   Ouisync operator=(const Ouisync &) = delete;

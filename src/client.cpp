@@ -140,14 +140,9 @@ public:
       enable_metrics();
     }
 
-    if (auto config = _config.ouisync_cache_config()) {
-      auto port = _config.udp_mux_port().value_or(0);
-      std::vector<asio::ip::udp::endpoint> bind{
-          asio::ip::udp::endpoint(asio::ip::address_v4::any(), port),
-          asio::ip::udp::endpoint(asio::ip::address_v6::any(), port)};
-
+    if (auto config = _config.ouisync_config()) {
       _ouisync.emplace(_config.repo_root() / "ouisync",
-                       config->page_index_token, std::move(bind));
+                       config->page_index_token, config->udp_endpoints);
     }
   }
 
