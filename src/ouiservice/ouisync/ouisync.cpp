@@ -158,6 +158,12 @@ Ouisync::Ouisync(
     _bind(std::move(bind)),
     _page_index_token(std::move(page_index_token))
 {
+    if (_bind.empty()) {
+        _bind.reserve(2);
+        _bind.push_back({ asio::ip::address_v4::any(), 0 });
+        _bind.push_back({ asio::ip::address_v6::any(), 0 });
+    }
+
     fs::create_directories(_store_dir);
     fs::create_directories(_mount_dir);
 }
@@ -166,14 +172,9 @@ sys::error_code Ouisync::start(Async yield)
 {
     try {
         ouisync::Service service(yield.get_executor());
+        unwrap(service.start(_service_dir, "ouisync", yield));
 
-        unwrap(yield.call_deprecated([&] (auto, auto, auto yield) {
-            service.start(_service_dir, "ouisync", yield);
-        }));
-
-        auto session = unwrap(yield.call_deprecated([&] (auto, auto, auto yield) {
-            return ouisync::Session::connect(yield.get_executor(),_service_dir, yield);
-        }));
+        auto session = unwrap(ouisync::Session::connect(yield.get_executor(), _service_dir, yield));
 
         std::vector<std::string> bind_strs;
         std::transform(
