@@ -10,8 +10,7 @@ android / build:
   needs:
     - job: 'linux / build'
       optional: true
-#  artifacts:
-#    paths:
-#      - build.android/build-android-*/ouinet/outputs/aar/*.aar
-#      - build.android/build-android-*/ouinet/outputs/apk/*.apk
-#    expire_in: 6h
+  artifacts:
+    paths:
+      - $BUILD_PATH/$TARGET_OS/*.aar
+    expire_in: 6h
