@@ -1,8 +1,11 @@
 #pragma once
 
+#include "ouiservice/ouisync/socket.h"
 #include "request.h"
 #include "session.h"
 #include "api.h"
+#include "util/condition_variable.h"
+#include "util/executor.h"
 #include <boost/asio/ip/address_v4.hpp>
 #include <expected>
 
@@ -18,6 +21,7 @@ namespace ouisync_service {
 class OUINET_OUISYNC_API Ouisync {
 public:
     Ouisync(
+        const util::AsioExecutor& exec,
         boost::filesystem::path,
         std::string page_index_token,
         std::vector<boost::asio::ip::udp::endpoint> bind
@@ -35,14 +39,19 @@ public:
     [[nodiscard]]
     std::expected<Session, sys::error_code> load(const CacheOuisyncRetrieveRequest&, Async);
 
+    [[nodiscard]]
+    std::expected<std::vector<OuisyncSocket>, sys::error_code> open_network_sockets(Async);
+
 private:
     boost::filesystem::path _service_dir;
     boost::filesystem::path _store_dir;
     boost::filesystem::path _mount_dir;
     std::vector<boost::asio::ip::udp::endpoint> _bind;
+    std::string _page_index_token;
+
     struct Impl;
     std::shared_ptr<Impl> _impl;
-    std::string _page_index_token;
+    ConditionVariable _impl_cv; // notified when `_impl` has been set.
 };
 
 } // namespace ouisync_service
