@@ -3,13 +3,12 @@
 #include <set>
 #include <chrono>
 #include <boost/asio/ip/udp.hpp>
-#include "../response_reader.h"
-#include "../namespaces.h"
 #include "dht_lookup.h"
 #include "hash_list.h"
 #include "../util/trace.h"
 #include "../session.h"
 #include "resource_id.h"
+#include "udp_sockets.h"
 #include "util/crypto_stream_key.h"
 #include "ouiservice/i2p/fwd.h"
 
@@ -33,7 +32,7 @@ public:
                    , CryptoStreamKey
                    , sign::PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
-                   , std::set<asio::ip::udp::endpoint> lan_my_endpoints
+                   , UdpSockets sockets
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , Trace);
 

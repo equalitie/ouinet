@@ -1,4 +1,4 @@
-#include <boost/test/tools/old/interface.hpp>
+#include "asio_utp/udp_multiplexer.hpp"
 #define BOOST_TEST_MODULE test_dht
 #include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
@@ -11,8 +11,9 @@
 #include <util/hash.h>
 
 #define private public
-#include <bittorrent/dht_storage.h>
 #include <bittorrent/dht_node.h>
+#undef private
+#include <bittorrent/dht_storage.h>
 #include <bittorrent/mainline_dht.h>
 #include <bittorrent/node_id.h>
 #include <bittorrent/udp_multiplexer.h>
@@ -41,12 +42,6 @@ vector<bootstrap::Address> bootstraps {
 
 void init_without_bootstrapping(asio::any_io_executor exec, DhtNode& dht_node) {
     task::spawn_detached(exec, [&](auto yield) {
-        sys::error_code ec;
-        auto local_ep = udp::endpoint{asio::ip::make_address("0.0.0.0"), 0};
-        auto m = asio_utp::udp_multiplexer(exec);
-        m.bind(local_ep, ec);
-
-        dht_node._multiplexer = make_unique<UdpMultiplexer>(std::move(m));
         dht_node._tracker = make_unique<Tracker>(exec);
         dht_node._data_store = make_unique<DataStore>(exec);
 
@@ -115,8 +110,12 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
     auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
+    asio_utp::udp_multiplexer socket(exec);
+    sys::error_code ec;
+    socket.bind({asio::ip::address_v4::any(), 0}, ec);
+
     DhtNode dht_node(
-        exec,
+        std::move(socket),
         metrics_dht.dht_node_ipv4(),
         dns_resolver,
         rx_limit,

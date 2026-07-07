@@ -1,8 +1,10 @@
 #pragma once
 
 #include <map>
+#include "asio_utp/udp_multiplexer.hpp"
 #include "dht.h"
 #include "api.h"
+#include "udp_sockets.h"
 
 namespace ouinet::bittorrent {
 
@@ -25,13 +27,15 @@ public:
     MockDht(std::string name, Executor exec, std::shared_ptr<Swarms>);
     ~MockDht();
 
-    void set_endpoints(const std::set<UdpEndpoint>&) override;
-
     Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
     std::set<UdpEndpoint> local_endpoints() const override;
 
     std::set<UdpEndpoint> wan_endpoints() const override;
+
+    UdpSockets sockets() const override {
+        return UdpSockets(_sockets);
+    }
 
     std::expected<std::set<UdpEndpoint>, sys::error_code>
     tracker_announce(NodeID infohash, std::optional<int> port, Async) override;
@@ -59,7 +63,7 @@ private:
     std::string _name;
     Executor _exec;
     std::shared_ptr<Swarms> _swarms;
-    std::set<UdpEndpoint> _local_endpoints;
+    std::vector<asio_utp::udp_multiplexer> _sockets;
     // This peer won't find other peers with names in this filter
     std::set<std::string> _no_see_filter;
 };
