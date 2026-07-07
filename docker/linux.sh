@@ -199,7 +199,7 @@ function list_artifacts_for_target_os (
             artifacts=(
                 $build_dir/client$exe_suffix
                 $build_dir/injector$exe_suffix
-                $build_dir/libasio_utp$lib_suffix
+                $build_dir/libouinet_asio$lib_suffix
                 $build_dir/libouinet_asio$lib_suffix
                 $build_dir/libouinet_common$lib_suffix
                 $build_dir/libouinet_client$lib_suffix
