@@ -37,6 +37,18 @@ linux / test:
   needs:
     - job: 'linux / build'
       artifacts: false
+
+linux / python-tests:
+  stage: test
+  tags:
+    - shell+docker
+  script:
+    - ./docker/linux.sh --target-os linux --run-python-tests
+  needs:
+    - job: 'linux / test'
+      artifacts: false
+
+#
 #
 #linux / rust-tests:
 #  variables:
