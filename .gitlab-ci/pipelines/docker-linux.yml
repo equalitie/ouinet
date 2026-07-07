@@ -14,17 +14,19 @@
 
 linux / build:
   stage: build
+  variables:
+    BUILD_PATH: 'build/linux'
   tags:
     - shell+docker
   script:
-    - ./docker/linux.sh --target-os linux --artifact-dir ouinet.build
+    - ./docker/linux.sh --target-os linux --artifact-dir $BUILD_PATH
   artifacts:
     paths:
-      - ouinet.build/client
-      - ouinet.build/injector
-      - ouinet.build/lib*.so
-      - ouinet.build/lib*.so.*
-      - ouinet.build/test/test_*
+      - $BUILD_PATH/client
+      - $BUILD_PATH/injector
+      - $BUILD_PATH/lib*.so
+      - $BUILD_PATH/lib*.so.*
+      - $BUILD_PATH/test/test_*
     expire_in: 6h
 
 #linux / cpp-tests:
