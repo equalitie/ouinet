@@ -1,4 +1,5 @@
 #include <boost/asio/connect.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/ip/address_v4.hpp>
 #include <boost/asio/ip/address_v6.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -22,7 +23,6 @@
 #include "client_front_end.h"
 #include "connect_to_host.h"
 #include "constants.h"
-#include "create_udp_multiplexer.h"
 #include "cxx/dns.h"
 #include "default_timeout.h"
 #include "defer.h"
@@ -41,6 +41,7 @@
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
 #include "swarm_calculator.h"
+#include "udp_sockets.h"
 #include "util.h"
 #include "util/storing_reader.h"
 
@@ -191,9 +192,7 @@ public:
       _ouisync.reset();
     }
 
-    if (_udp_multiplexer) {
-      _udp_multiplexer.reset();
-    }
+    _udp_sockets = UdpSockets();
 
     _origin_pools = {};
   }
@@ -243,17 +242,6 @@ public:
 
   [[nodiscard]]
   std::expected<void, sys::error_code> setup_cache(Async);
-
-  const asio_utp::udp_multiplexer &common_udp_multiplexer() {
-    if (_udp_multiplexer)
-      return *_udp_multiplexer;
-
-    _udp_multiplexer =
-        create_udp_multiplexer(_ctx, _config.repo_root() / "last_used_udp_port",
-                               _config.udp_mux_port());
-
-    return *_udp_multiplexer;
-  }
 
   [[nodiscard]]
   std::expected<std::shared_ptr<bt::DhtBase>, sys::error_code>
@@ -312,27 +300,25 @@ public:
     //
     // But, for the majority of cases, this may still be a reasonable bet.
 
-    auto m = common_udp_multiplexer();
-
     auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
     _upnps_ptr = std::make_shared<
         std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
 
-    auto local_ep = m.local_endpoint();
+    for (auto socket : _udp_sockets) {
+      yield.spawn([bt_dht, upnps = _upnps_ptr,
+                   socket = std::move(socket)](auto yield) mutable {
+        auto local_ep = socket.local_endpoint();
+        auto ext_ep = bt_dht->add_endpoint(std::move(socket)).wait(yield);
 
-    yield.spawn([bt_dht, m = std::move(m), upnps = _upnps_ptr,
-                 upnp_enabled = _config.is_upnp_enabled()](auto y) mutable {
-      auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(y);
-      if (!ext_ep)
-        return;
-      if (!upnp_enabled)
-        return;
+        if (!ext_ep) {
+          return;
+        }
 
-      auto local_ep = m.local_endpoint();
-
-      State::setup_upnp(y.get_executor(), ext_ep->port(), local_ep, upnps);
-    });
+        State::setup_upnp(yield.get_executor(), ext_ep->port(), local_ep,
+                          upnps);
+      });
+    }
 
     _bt_dht = std::move(bt_dht);
     return _bt_dht;
@@ -595,9 +581,7 @@ private:
     auto lock = _multi_utp_server_wc.lock();
 
     _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
-        _ctx.get_executor(),
-        std::vector<asio_utp::udp_multiplexer>{common_udp_multiplexer()},
-        nullptr, _trace);
+        _ctx.get_executor(), _udp_sockets, nullptr, _trace);
 
     yield.tag("accept_utp").spawn([&](Async yield) mutable {
       auto slot =
@@ -708,8 +692,7 @@ private:
 
   asio::ssl::context inj_ctx;
 
-  boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
-  boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
+  UdpSockets _udp_sockets;
 
   Trace _trace;
   std::optional<Client::MockDhtBuilder> _bt_dht_builder;
@@ -1010,10 +993,9 @@ std::expected<ClientFrontEnd::Response, sys::error_code>
 Client::State::fetch_fresh_from_front_end(const Request &rq, Async yield) {
   auto slot = _shutdown_signal.connect([&] { yield.cancel(); });
 
-  boost::optional<ClientFrontEnd::UdpEndpoint> local_ep;
-
-  if (_udp_multiplexer) {
-    local_ep = _udp_multiplexer->local_endpoint();
+  std::vector<ClientFrontEnd::UdpEndpoint> local_eps;
+  for (const auto &socket : _udp_sockets) {
+    local_eps.push_back(socket.local_endpoint());
   }
 
   class MetricsController : public ClientFrontEndMetricsController {
@@ -1053,7 +1035,7 @@ Client::State::fetch_fresh_from_front_end(const Request &rq, Async yield) {
 
   auto res = _front_end.serve(
       _config, rq, get_state(), _cache.get(), bep5_client, *_ca_certificate,
-      local_ep, _upnps_ptr, _bt_dht.get(), metrics_controller,
+      local_eps, _upnps_ptr, _bt_dht.get(), metrics_controller,
       _proxy_endpoint_address, _frontend_endpoint,
       _frontend_unix_socket_endpoint, yield.tag("serve_frontend"));
 
@@ -2168,9 +2150,7 @@ std::expected<void, sys::error_code> Client::State::setup_cache(Async yield) {
   if (auto r =
           _config.cache_static_content_path().empty()
               ? cache::Client::build(
-                    std::vector<asio_utp::udp_multiplexer>{
-                        common_udp_multiplexer()},
-                    *_config.cache_http_pub_key(),
+                    _udp_sockets, *_config.cache_http_pub_key(),
                     _config.repo_root() /
                         "bep5_http" // TODO gives this a more inclusive name
                                     // covering bothe bep5 and bep3 caches
@@ -2178,9 +2158,7 @@ std::expected<void, sys::error_code> Client::State::setup_cache(Async yield) {
                     _config.max_cached_age(),
                     _config.is_local_peer_discovery_enabled(), yield)
               : cache::Client::build(
-                    std::vector<asio_utp::udp_multiplexer>{
-                        common_udp_multiplexer()},
-                    *_config.cache_http_pub_key(),
+                    _udp_sockets, *_config.cache_http_pub_key(),
                     _config.repo_root() / "bep5_http", _config.max_cached_age(),
                     _config.is_local_peer_discovery_enabled(),
                     _config.cache_static_path(),
@@ -2523,6 +2501,11 @@ void Client::State::start_ouinet() {
                    });
   }
 
+  // TODO: optionally use ouisync
+  _udp_sockets = UdpSockets::create(_ctx.get_executor(),
+                                    _config.repo_root() / "last_used_udp_port",
+                                    _config.udp_mux_port());
+
   task::spawn_detached(_ctx, [this, self = shared_from_this(),
                               acceptor = std::move(proxy_acceptor)](
                                  asio::yield_context yield) mutable {
@@ -2748,10 +2731,13 @@ void Client::State::setup_injectors() {
                 return maybe_wrap_tls(std::move(tcp_client));
               },
               [&](const Endpoint::Utp &ep) -> R {
-                asio_utp::udp_multiplexer m = common_udp_multiplexer();
+                if (_udp_sockets.empty()) {
+                  return std::unexpected(asio::error::network_down);
+                }
 
+                // TODO: use all sockets?
                 auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>(
-                    _ctx.get_executor(), std::move(m), ep.value);
+                    _ctx.get_executor(), *_udp_sockets.begin(), ep.value);
 
                 if (!utp_client->verify_remote_endpoint()) {
                   return std::unexpected(asio::error::invalid_argument);

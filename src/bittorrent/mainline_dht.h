@@ -1,13 +1,10 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
-#include <boost/asio/spawn.hpp>
 #include <boost/filesystem/path.hpp>
 
 #include <map>
 #include <set>
-
-#include <asio_utp/udp_multiplexer.hpp>
 
 #include "api.h"
 #include "bootstrap.h"
@@ -25,7 +22,8 @@
 
 namespace ouinet {
 class Cancel;
-}
+class UdpSockets;
+} // namespace ouinet
 
 namespace ouinet::bittorrent {
 
@@ -54,18 +52,13 @@ public:
 
   ~MainlineDht();
 
-  // This removes existing endpoints not in the given set.
-  // Since adding some endpoints may fail (e.g. because of port busy),
-  // you may want to check `udp_multiplexers()` after this operation.
-  void set_endpoints(const std::vector<asio_utp::udp_multiplexer> &) override;
-
   [[nodiscard]]
   Promise<udp::endpoint>::Future
       add_endpoint(asio_utp::udp_multiplexer) override;
 
-  std::vector<asio_utp::udp_multiplexer> udp_multiplexers() const override;
-
   std::set<udp::endpoint> wan_endpoints() const override;
+
+  UdpSockets sockets() const override;
 
   std::expected<std::set<udp::endpoint>, sys::error_code>
   tracker_announce(NodeID infohash, std::optional<int> port, Async) override;

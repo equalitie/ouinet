@@ -10,9 +10,8 @@
 #include <type_traits>
 #include <vector>
 
-#include <asio_utp/udp_multiplexer.hpp>
-
 #include "api.h"
+#include "asio_utp/udp_multiplexer.hpp"
 #include "bencoding.h"
 #include "bootstrap.h"
 #include "contact.h"
@@ -31,9 +30,13 @@
 #include "../util/cancel.h"
 #include "../util/sign.h"
 #include "../util/wait_condition.h"
-#include "../util/watch_dog.h"
+#include "util/executor.h"
 
-namespace ouinet::bittorrent {
+namespace ouinet {
+
+class WatchDog;
+
+namespace bittorrent {
 
 class UdpMultiplexer;
 
@@ -70,7 +73,7 @@ public:
   const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 
 public:
-  DhtNode(asio_utp::udp_multiplexer, metrics::DhtNode,
+  DhtNode(asio_utp::udp_multiplexer socket, metrics::DhtNode,
           std::shared_ptr<dns::Resolver>, uint32_t mux_rx_limit,
           boost::filesystem::path storage_dir, bootstrap::Config bs, Trace);
 
@@ -168,10 +171,10 @@ public:
   bool is_v4() const { return local_endpoint().address().is_v4(); }
   bool is_v6() const { return local_endpoint().address().is_v6(); }
 
-  udp::endpoint local_endpoint() const {
-    return udp_multiplexer().local_endpoint();
-  }
+  udp::endpoint local_endpoint() const { return socket().local_endpoint(); }
   udp::endpoint wan_endpoint() const { return _wan_endpoint; }
+
+  const asio_utp::udp_multiplexer &socket() const;
 
   ~DhtNode();
 
@@ -180,8 +183,6 @@ public:
   NodeID node_id() const { return _node_id; }
 
   void set_peer_filter(PeerFilter filter) { _peer_filter = filter; }
-
-  asio_utp::udp_multiplexer udp_multiplexer() const;
 
 private:
   void receive_loop(Async);
@@ -297,4 +298,5 @@ private:
   Trace _trace;
 };
 
-} // namespace ouinet::bittorrent
+} // namespace bittorrent
+} // namespace ouinet

@@ -6,6 +6,7 @@
 #include <string>
 #include <util/async_job.h>
 #include <util/hash.h>
+#include <util/watch_dog.h>
 
 namespace ouinet {
 namespace cache {

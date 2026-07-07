@@ -14,6 +14,7 @@
 #include "../util/lru_cache.h"
 #include "../util/set_io.h"
 #include "announcer.h"
+#include "asio_utp/udp_multiplexer.hpp"
 #include "dht_lookup.h"
 #include "http_sign.h"
 #include "http_store.h"
@@ -25,6 +26,7 @@
 #include "request.h"
 #include "resource_key.h"
 #include <map>
+#include <ranges>
 #include <string>
 
 #define _LOGPFX "cache/client: "
@@ -99,7 +101,7 @@ struct Client::Impl {
   std::shared_ptr<unsigned> _newest_proto_seen;
 
   AsioExecutor _ex;
-  std::vector<asio_utp::udp_multiplexer> _udp_multiplexers;
+  UdpSockets _udp_sockets;
   shared_ptr<bt::DhtBase> _dht;
   string _uri_swarm_prefix;
   sign::PublicKey _cache_pk;
@@ -120,15 +122,14 @@ struct Client::Impl {
   std::unique_ptr<DhtGroups> _groups;
   Trace _trace;
 
-  Impl(AsioExecutor ex, std::vector<asio_utp::udp_multiplexer> udp_multiplexers,
-       sign::PublicKey &cache_pk, fs::path cache_dir,
-       Client::opt_path static_cache_dir,
+  Impl(AsioExecutor ex, UdpSockets udp_sockets, sign::PublicKey &cache_pk,
+       fs::path cache_dir, Client::opt_path static_cache_dir,
        unique_ptr<cache::HttpStore> http_store_,
        boost::posix_time::time_duration max_cached_age,
        bool local_peer_discovery_enabled, Trace trace)
       : _newest_proto_seen(
             std::make_shared<unsigned>(http_::protocol_version_current)),
-        _ex(ex), _udp_multiplexers(std::move(udp_multiplexers)),
+        _ex(ex), _udp_sockets(std::move(udp_sockets)),
         _uri_swarm_prefix(bep5::compute_uri_swarm_prefix(
             cache_pk, http_::protocol_version_current)),
         _cache_pk(cache_pk), _cache_dir(std::move(cache_dir)),
@@ -143,8 +144,9 @@ struct Client::Impl {
         _dht_peer_lookups(256), _i2p_peer_lookups(256),
         _trace(std::move(trace)) {
     if (local_peer_discovery_enabled)
-      _local_peer_discovery =
-          make_unique<LocalPeerDiscovery>(_ex, _udp_multiplexers);
+      _local_peer_discovery = std::make_unique<LocalPeerDiscovery>(
+          _ex, std::vector<asio_utp::udp_multiplexer>(_udp_sockets.begin(),
+                                                      _udp_sockets.end()));
   }
 
   std::string compute_swarm_name(boost::string_view group) const {
@@ -498,7 +500,7 @@ struct Client::Impl {
 
             return std::make_unique<MultiPeerReader>(
                 _ex, resource_id, resource_key, _cache_pk,
-                std::move(local_peers), _udp_multiplexers, _newest_proto_seen,
+                std::move(local_peers), _udp_sockets, _newest_proto_seen,
                 trace);
           }
         },
@@ -808,13 +810,11 @@ struct Client::Impl {
 };
 
 /* static */
-std::expected<std::shared_ptr<Client>, sys::error_code>
-Client::build(std::vector<asio_utp::udp_multiplexer> udp_multiplexers,
-              sign::PublicKey cache_pk, fs::path cache_dir,
-              boost::posix_time::time_duration max_cached_age,
-              bool local_peer_discovery_enabled,
-              Client::opt_path static_cache_dir,
-              Client::opt_path static_cache_content_dir, Async yield) {
+std::expected<std::shared_ptr<Client>, sys::error_code> Client::build(
+    UdpSockets udp_sockets, sign::PublicKey cache_pk, fs::path cache_dir,
+    boost::posix_time::time_duration max_cached_age,
+    bool local_peer_discovery_enabled, Client::opt_path static_cache_dir,
+    Client::opt_path static_cache_content_dir, Async yield) {
   auto ex = yield.get_executor();
 
   static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2",
@@ -880,10 +880,10 @@ Client::build(std::vector<asio_utp::udp_multiplexer> udp_multiplexers,
                                    std::move(static_http_store), ex)
           : make_http_store(std::move(store_dir), ex);
 
-  unique_ptr<Impl> impl(
-      new Impl(ex, std::move(udp_multiplexers), cache_pk, std::move(cache_dir),
-               std::move(static_cache_dir), std::move(http_store),
-               max_cached_age, local_peer_discovery_enabled, yield.trace()));
+  auto impl = std::make_unique<Impl>(
+      ex, std::move(udp_sockets), cache_pk, std::move(cache_dir),
+      std::move(static_cache_dir), std::move(http_store), max_cached_age,
+      local_peer_discovery_enabled, yield.trace());
 
   if (auto r = impl->load_stored_groups(yield); !r) {
     return std::unexpected(r.error());

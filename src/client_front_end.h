@@ -94,7 +94,7 @@ public:
   std::expected<Response, sys::error_code>
   serve(ClientConfig &, const http::request<http::string_body> &,
         Client::RunningState, cache::Client *, ouiservice::Bep5Client *,
-        const CACertificate &, boost::optional<UdpEndpoint> local_ep,
+        const CACertificate &, const std::vector<UdpEndpoint> local_eps,
         const std::shared_ptr<UPnPs> &, const bittorrent::DhtBase *dht,
         ClientFrontEndMetricsController &, std::string_view proxy_endpoint,
         std::string_view frontend_endpoint,
@@ -151,7 +151,7 @@ private:
 
   std::expected<void, sys::error_code>
   handle_portal(ClientConfig &, Client::RunningState,
-                boost::optional<UdpEndpoint> local_ep,
+                const std::vector<UdpEndpoint> local_eps,
                 const std::shared_ptr<UPnPs> &upnps_ptr,
                 const bittorrent::DhtBase *, const Request &, Response &,
                 std::ostringstream &, cache::Client *,
@@ -159,7 +159,7 @@ private:
 
   std::expected<void, sys::error_code>
   handle_api_status(ClientConfig &, Client::RunningState,
-                    boost::optional<UdpEndpoint> local_ep,
+                    const std::vector<UdpEndpoint> &local_eps,
                     const std::shared_ptr<UPnPs> &, const bittorrent::DhtBase *,
                     const Request &, Response &, std::ostringstream &,
                     cache::Client *, ouiservice::Bep5Client *,

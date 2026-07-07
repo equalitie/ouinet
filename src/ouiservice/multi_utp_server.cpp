@@ -1,6 +1,7 @@
 #include "multi_utp_server.h"
-#include "task.h"
+#include "udp_sockets.h"
 #include "util/async.h"
+#include <asio_utp/udp_multiplexer.hpp>
 #include <async_sleep.h>
 #include <logger.h>
 #include <ouiservice/tls.h>
@@ -55,22 +56,24 @@ struct MultiUtpServer::State {
   std::unique_ptr<AbstractServer> server;
 };
 
-MultiUtpServer::MultiUtpServer(
-    asio::any_io_executor ex,
-    std::vector<asio_utp::udp_multiplexer> multiplexers,
-    boost::asio::ssl::context *ssl_context, Trace trace)
+MultiUtpServer::MultiUtpServer(asio::any_io_executor ex, UdpSockets sockets,
+                               boost::asio::ssl::context *ssl_context,
+                               Trace trace)
     : _accept_queue(ex) {
-  if (multiplexers.empty()) {
-    LOG_ERROR(trace, " MultiUtpServer: endpoint set is empty!");
+  if (sockets.empty()) {
+    LOG_ERROR(trace, " MultiUtpServer: socket set is empty!");
   }
 
-  for (auto &m : multiplexers) {
-    auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, m, trace);
+  for (auto &socket : sockets) {
+    auto ep = socket.local_endpoint();
+    auto base = make_unique<ouiservice::UtpOuiServiceServer>(std::move(socket));
     if (ssl_context) {
+      LOG_INFO(trace, " Bep5: uTP/TLS Address: ", ep);
       auto tls = make_unique<ouiservice::TlsOuiServiceServer>(
           ex, std::move(base), *ssl_context);
       _states.emplace_back(new State(ex, std::move(tls)));
     } else {
+      LOG_INFO(trace, " Bep5: uTP Address: ", ep);
       _states.emplace_back(new State(ex, std::move(base)));
     }
   }

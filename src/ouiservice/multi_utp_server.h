@@ -1,6 +1,7 @@
 #pragma once
 
 #include "api.h"
+#include "udp_sockets.h"
 #include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ssl.hpp>
@@ -11,14 +12,15 @@ namespace asio_utp {
 class udp_multiplexer;
 }
 
-namespace ouinet::ouiservice {
+namespace ouinet {
+namespace ouiservice {
 
 class OUINET_COMMON_API MultiUtpServer : public OuiServiceImplementationServer {
 private:
   struct State;
 
 public:
-  MultiUtpServer(AsioExecutor, std::vector<asio_utp::udp_multiplexer>,
+  MultiUtpServer(AsioExecutor, UdpSockets,
                  boost::asio::ssl::context *ssl_context, Trace);
 
   [[nodiscard]]
@@ -37,4 +39,5 @@ private:
   Cancel _cancel;
 };
 
-} // namespace ouinet::ouiservice
+} // namespace ouiservice
+} // namespace ouinet

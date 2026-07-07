@@ -287,7 +287,7 @@ BOOST_DATA_TEST_CASE(test_client_fetch_error_from_dcache,
       sys::error_code ec;
       mux.bind(asio::ip::udp::endpoint(asio::ip::address_v4::any(), 0), ec);
       BOOST_REQUIRE(!ec);
-      dht.set_endpoints({mux});
+      dht.add_endpoint(mux);
     }
   };
 
@@ -565,19 +565,15 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
   tcp::endpoint injector_ep{asio::ip::address_v4::loopback(), 4567};
 
   Injector injector(
-      make_config<InjectorConfig>({
-          "./no_injector_exec"s,
-          "--repo"s,
-          root.make_subdir("injector").string(),
-          // TODO: Listen on a random port
-          "--listen-on-tcp"s,
-          util::str(injector_ep),
-          "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-          "--allow-private-targets",
-          "--bt-bootstrap-no-default",
-          "--trace-root=injector",
-          "--listen-on-utp-tls=127.0.0.1:0",
-      }),
+      make_config<InjectorConfig>(
+          {"./no_injector_exec"s, "--repo"s,
+           root.make_subdir("injector").string(),
+           // TODO: Listen on a random port
+           "--listen-on-tcp"s, util::str(injector_ep),
+           "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+           "--allow-private-targets", "--bt-bootstrap-no-default",
+           "--trace-root=injector", "--listen-on-utp-tls=127.0.0.1:0",
+           "--log-level=DEBUG"}),
       ctx);
 
   run(ctx, [&, server = std::move(server)](Async yield) {

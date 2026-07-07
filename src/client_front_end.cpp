@@ -326,17 +326,15 @@ static boost::optional<EndPoint> local_endpoint(const EndPoint &local_ep) {
 }
 
 static std::vector<std::string>
-local_udp_endpoints(const ClientFrontEnd::UdpEndpoint &local_ep) {
-  // This used to return both IPv4 and IPv6 endpoints,
-  // but now we only return the actual endpoint
-  // (still as a vector for backwards compatibility.
-  auto ep = local_endpoint(local_ep);
-
+local_udp_endpoints(const std::vector<ClientFrontEnd::UdpEndpoint> &local_eps) {
   std::vector<std::string> eps;
-  eps.reserve(1);
+  eps.reserve(local_eps.size());
 
-  if (ep)
-    eps.push_back(util::str(*ep));
+  for (auto local_ep : local_eps) {
+    auto ep = local_endpoint(local_ep);
+    if (ep)
+      eps.push_back(util::str(*ep));
+  }
 
   return eps;
 }
@@ -468,7 +466,7 @@ void ClientFrontEnd::handle_pinned_list(const Request &, Response &res,
 
 std::expected<void, sys::error_code> ClientFrontEnd::handle_portal(
     ClientConfig &config, Client::RunningState cstate,
-    boost::optional<UdpEndpoint> local_ep,
+    const std::vector<UdpEndpoint> local_eps,
     const std::shared_ptr<UPnPs> &upnps_ptr, const bittorrent::DhtBase *dht,
     const Request &req, Response &res, ostringstream &ss,
     cache::Client *cache_client, ClientFrontEndMetricsController &metrics,
@@ -537,10 +535,10 @@ std::expected<void, sys::error_code> ClientFrontEnd::handle_portal(
 
   ss << "<h2>Network</h2>\n";
 
-  if (local_ep) {
+  if (!local_eps.empty()) {
     ss << "Local UDP endpoints:<br>\n";
     ss << "<ul>\n";
-    for (auto &ep : local_udp_endpoints(*local_ep))
+    for (auto &ep : local_udp_endpoints(local_eps))
       ss << "<li>" << as_safe_html(ep) << "</li>\n";
     ss << "</ul>\n";
   }
@@ -710,7 +708,7 @@ inline size_t injector_candidates_n(ouiservice::Bep5Client *client) noexcept {
 
 std::expected<void, sys::error_code> ClientFrontEnd::handle_api_status(
     ClientConfig &config, Client::RunningState cstate,
-    boost::optional<UdpEndpoint> local_ep,
+    const std::vector<UdpEndpoint> &local_eps,
     const std::shared_ptr<UPnPs> &upnps_ptr, const bittorrent::DhtBase *dht,
     const Request &req, Response &res, ostringstream &ss,
     cache::Client *cache_client, ouiservice::Bep5Client *client,
@@ -741,8 +739,9 @@ std::expected<void, sys::error_code> ClientFrontEnd::handle_api_status(
       {"csrf", _csrf_token},
   };
 
-  if (local_ep)
-    response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
+  if (!local_eps.empty()) {
+    response["local_udp_endpoints"] = local_udp_endpoints(local_eps);
+  }
 
   if (upnps_ptr) {
     const auto &upnps = *upnps_ptr;
@@ -962,7 +961,7 @@ ClientFrontEnd::check_frontend_token(const ClientConfig &config,
 std::expected<Response, sys::error_code> ClientFrontEnd::serve(
     ClientConfig &config, const Request &req, Client::RunningState client_state,
     cache::Client *cache_client, ouiservice::Bep5Client *client,
-    const CACertificate &ca, boost::optional<UdpEndpoint> local_ep,
+    const CACertificate &ca, const std::vector<UdpEndpoint> local_eps,
     const std::shared_ptr<UPnPs> &upnps_ptr, const bittorrent::DhtBase *dht,
     ClientFrontEndMetricsController &metrics,
     const std::string_view proxy_endpoint,
@@ -1055,7 +1054,7 @@ std::expected<Response, sys::error_code> ClientFrontEnd::serve(
   } else if (path == pinned_list_apath) {
     handle_pinned_list(req, res, ss, cache_client);
   } else if (path == "/api/status"sv) {
-    handle_api_status(config, client_state, local_ep, upnps_ptr, dht, req, res,
+    handle_api_status(config, client_state, local_eps, upnps_ptr, dht, req, res,
                       ss, cache_client, client, metrics, yield);
   } else if (path == "/api/endpoints"sv) {
     handle_api_endpoints(proxy_endpoint, frontend_endpoint,
@@ -1134,7 +1133,7 @@ std::expected<Response, sys::error_code> ClientFrontEnd::serve(
   }
 
   if (should_show_portal) {
-    handle_portal(config, client_state, local_ep, upnps_ptr, dht, req, res, ss,
+    handle_portal(config, client_state, local_eps, upnps_ptr, dht, req, res, ss,
                   cache_client, metrics, yield);
   }
 
