@@ -15,6 +15,7 @@
 #include "cache/client.h"
 
 #include "client_config.h"
+#include "create_udp_multiplexer.h"
 #include "namespaces.h"
 #include "origin_pools.h"
 #include "cxx/dns.h"
@@ -22,7 +23,6 @@
 #include "client_front_end.h"
 #include "connect_to_host.h"
 #include "generic_stream.h"
-#include "udp_sockets.h"
 #include "util.h"
 #include "async_sleep.h"
 #include "route.h"
@@ -188,7 +188,7 @@ public:
             _ouisync.reset();
         }
 
-        _udp_sockets = UdpSockets();
+        _udp_sockets.clear();
 
         _origin_pools = {};
     }
@@ -695,7 +695,7 @@ private:
 
     asio::ssl::context inj_ctx;
 
-    UdpSockets _udp_sockets;
+    std::vector<asio_utp::udp_multiplexer> _udp_sockets;
 
     Trace _trace;
     std::optional<Client::MockDhtBuilder> _bt_dht_builder;
@@ -2465,10 +2465,12 @@ void Client::State::start_ouinet()
     }
 
     // TODO: optionally use ouisync
-    _udp_sockets = UdpSockets::create(
-        _ctx.get_executor(),
-        _config.repo_root() / "last_used_udp_port",
-        _config.udp_mux_port()
+    _udp_sockets.push_back(
+        create_udp_multiplexer(
+            _ctx.get_executor(),
+            _config.repo_root() / "last_used_udp_port",
+            _config.udp_mux_port()
+        )
     );
 
     task::spawn_detached(_ctx, [
