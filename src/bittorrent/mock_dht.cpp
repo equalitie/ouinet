@@ -1,5 +1,4 @@
 #include "mock_dht.h"
-#include "udp_sockets.h"
 #include "util/cancel.h"
 #include "util/debug.h"
 
