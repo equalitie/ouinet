@@ -50,6 +50,25 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
+// How to use Ouisync as network transport layer.
+enum class OuisyncTransport {
+    // Do not use Ouisync.
+    disabled,
+    // Use Ouisync in addition to the default transport layer.
+    enabled,
+    // Use only Ouisync.
+    exclusive
+};
+
+inline std::ostream& operator << (std::ostream& os, OuisyncTransport value) {
+    switch (value) {
+        case OuisyncTransport::disabled: return os << "disabled";
+        case OuisyncTransport::enabled: return os << "enabled";
+        case OuisyncTransport::exclusive: return os << "exclusive";
+        default: return os << "unknown";
+    }
+}
+
 struct OuisyncConfig {
     // Read token for the page index repository which contains directories one per host name
     // and inside them crawls of corresponding websites.
@@ -57,6 +76,8 @@ struct OuisyncConfig {
     // Endpoints to bind Ouisync networking to. Should typically contain one IPv4 and one IPv6
     // endpoint.
     std::vector<asio::ip::udp::endpoint> udp_endpoints;
+    // Use Ouisync also as network transport.
+    OuisyncTransport transport = OuisyncTransport::disabled;
 };
 
 // ----

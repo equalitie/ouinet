@@ -1,5 +1,6 @@
 #include <boost/optional/optional_io.hpp>
 #include <boost/program_options.hpp>
+#include <boost/program_options/value_semantic.hpp>
 #include "client_config.h"
 #include "ssl/util.h"
 #include "logger.h"
@@ -69,6 +70,29 @@ bool ClientConfig::EnabledCaches::is_injecting_cache_enabled() const {
 
 asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom);
 asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, const char* for_whom);
+
+static void validate(
+    boost::any& v,
+    const std::vector<std::string>& values,
+    OuisyncTransport* target_type,
+    int
+)
+{
+    namespace po =  boost::program_options;
+
+    po::validators::check_first_occurrence(v);
+    auto value = boost::to_lower_copy(po::validators::get_single_string(values));
+
+    if (value == "enabled") {
+        v = OuisyncTransport::enabled;
+    } else if (value == "disabled") {
+        v = OuisyncTransport::disabled;
+    } else if (value == "exclusive") {
+        v = OuisyncTransport::exclusive;
+    } else {
+        throw po::validation_error(po::validation_error::invalid_option_value);
+    }
+}
 
 boost::program_options::options_description ClientConfig::description_full()
 {
@@ -157,7 +181,10 @@ boost::program_options::options_description ClientConfig::description_full()
           "as the UA.")
        ("ouisync-udp-ep"
         , po::value<std::vector<std::string>>()->composing()
-        , "(Experimental) UDP endpoint(s) to bind Ouisync to (in <IP>:<PORT> format).")
+        , "UDP endpoint(s) to bind Ouisync to (in <IP>:<PORT> format).")
+       ("ouisync-transport"
+        , po::value<OuisyncTransport>()->default_value(OuisyncTransport::disabled)
+        , "(Experimental) Whether to use Ouisync as network transport layer.")
        ;
 
     po::options_description injector("Injector options");
