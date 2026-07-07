@@ -9,6 +9,7 @@
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
 #include "../async_sleep.h"
+#include "asio_utp/udp_multiplexer.hpp"
 #include "rate_counter.h"
 #include "../task.h"
 
@@ -60,7 +61,7 @@ public:
     bool is_v4() const { return _socket.local_endpoint().address().is_v4(); }
     bool is_v6() const { return _socket.local_endpoint().address().is_v6(); }
 
-    asio_utp::udp_multiplexer inner_udp_multiplexer() const {
+    const asio_utp::udp_multiplexer& socket() const {
         return _socket;
     }
 
@@ -96,6 +97,8 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
     _rx_limit(rx_limit)
 {
     assert(_socket.is_open());
+
+    LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {

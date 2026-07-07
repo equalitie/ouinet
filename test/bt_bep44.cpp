@@ -1,4 +1,3 @@
-#include <bittorrent/mainline_dht.h>
 
 #include <iostream>
 #include <chrono>
@@ -6,10 +5,12 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
+#include <asio_utp/udp_multiplexer.hpp>
 #include <boost/asio.hpp>
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tokenizer.hpp>
+#include "../src/bittorrent/mainline_dht.h"
 #include "../src/constants.h"
 #include "../src/util/sign.h"
 #include "../src/util/wait_condition.h"
@@ -196,8 +197,6 @@ int main(int argc, const char** argv)
         assert(!ec);
         multiplexers.push_back(std::move(m));
     }
-
-    dht->set_endpoints(multiplexers);
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         using namespace std::chrono;

@@ -1,3 +1,6 @@
+#include "asio_utp/udp_multiplexer.hpp"
+#include <boost/asio/ip/address_v4.hpp>
+#include <boost/test/tools/old/interface.hpp>
 #define BOOST_TEST_MODULE bittorrent
 #include <boost/test/unit_test.hpp>
 #include <boost/optional.hpp>
