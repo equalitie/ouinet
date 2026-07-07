@@ -1,3 +1,4 @@
+#include <boost/asio/error.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/beast/http/vector_body.hpp>
 #include <expected>
@@ -126,17 +127,19 @@ struct Ouisync::Impl {
 
     ouisync::Service service;
     ouisync::Session session;
-    ouisync::Repository page_index;
+    std::optional<ouisync::Repository> page_index;
     Sites sites;
     bool can_mount; // Whether Ouisync was compiled with mount support
 
     std::shared_ptr<Repository> resolve(std::string repo_name, Async yield) {
+        assert(page_index);
+
         auto repo_i = sites.find(repo_name);
         if (repo_i != sites.end()) {
             return repo_i->second;
         }
 
-        auto file = open_file(page_index, std::string("/") + repo_name, yield.tag("open_file"));
+        auto file = open_file(page_index.value(), std::string("/") + repo_name, yield.tag("open_file"));
         auto len = unwrap(file.get_length(yield));
         auto token_vec = unwrap(file.read(0, len, yield));
         auto token = ShareToken{std::string(token_vec.begin(), token_vec.end())};
@@ -179,7 +182,11 @@ sys::error_code Ouisync::start(Async yield)
         ouisync::Service service(yield.get_executor());
         unwrap(service.start(_service_dir, "ouisync", yield));
 
-        auto session = unwrap(ouisync::Session::connect(yield.get_executor(), _service_dir, yield));
+        auto session = unwrap(ouisync::Session::connect(
+            yield.get_executor(),
+            _service_dir,
+            yield
+        ));
 
         std::vector<std::string> bind_strs;
         std::transform(
@@ -196,9 +203,16 @@ sys::error_code Ouisync::start(Async yield)
 
         unwrap(session.set_local_discovery_enabled(true, yield));
 
-        auto page_index = open_or_create_repo(session, "page_index", ShareToken{_page_index_token}, yield);
-
-        set_repo_defaults(page_index, mount_r.has_value(), yield);
+        std::optional<ouisync::Repository> page_index;
+        if (!_page_index_token.empty()) {
+            page_index = open_or_create_repo(
+                session,
+                "page_index",
+                ShareToken{_page_index_token},
+                yield
+            );
+            set_repo_defaults(page_index.value(), mount_r.has_value(), yield);
+        }
 
         _impl = std::make_shared<Impl>(Impl {
             std::move(service),
@@ -241,6 +255,12 @@ std::expected<ouinet::Session, sys::error_code>
 Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
     try {
         if (!_impl) {
+            LOG_DEBUG(yield, " Ouisync not initialized");
+            throw_error(asio::error::not_connected);
+        }
+
+        if (!_impl->page_index) {
+            LOG_DEBUG(yield, " Ouisync page index repository not configured");
             throw_error(asio::error::not_connected);
         }
 
@@ -298,7 +318,10 @@ Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
 std::expected<std::vector<OuisyncSocket>, sys::error_code>
 Ouisync::open_network_sockets(Async yield) {
     while (!_impl) {
-        _impl_cv.wait(yield);
+        auto result = _impl_cv.wait(yield);
+        if (!result) {
+            return std::unexpected(result.error());
+        }
     }
 
     std::vector<OuisyncSocket> sockets;
