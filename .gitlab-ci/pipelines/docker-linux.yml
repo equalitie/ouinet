@@ -25,9 +25,7 @@ linux / build:
     paths:
       - $BUILD_PATH/$TARGET_OS/client
       - $BUILD_PATH/$TARGET_OS/injector
-      - $BUILD_PATH/$TARGET_OS/lib*.so
-      - $BUILD_PATH/$TARGET_OS/lib*.so.*
-      - $BUILD_PATH/$TARGET_OS/test/test_*
+      - $BUILD_PATH/$TARGET_OS/lib*.so*
     expire_in: 6h
 
 #linux / cpp-tests:
