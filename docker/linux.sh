@@ -204,9 +204,14 @@ function list_artifacts_for_target_os (
                 $build_dir/libouinet_common$lib_suffix
                 $build_dir/libouinet_client$lib_suffix
                 $build_dir/libouinet_injector$lib_suffix
-                $build_dir/libcpp_ouisync_client$lib_suffix
-                $build_dir/libcpp_ouisync_service$lib_suffix
             )
+
+            if [[ "$with_ouisync" == y ]]; then
+                artifacts+=(
+                  $build_dir/libcpp_ouisync_client$lib_suffix
+                  $build_dir/libcpp_ouisync_service$lib_suffix
+                )
+            fi
             ;;
         android)
             artifacts=(
