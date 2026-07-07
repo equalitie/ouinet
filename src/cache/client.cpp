@@ -1,3 +1,8 @@
+#include <asio_utp/udp_multiplexer.hpp>
+#include <map>
+#include <ranges>
+#include <string>
+
 #include "client.h"
 #include "announcer.h"
 #include "dht_lookup.h"
@@ -24,9 +29,6 @@
 #include "../session.h"
 #include "../bep5_swarms.h"
 #include "multi_peer_reader.h"
-#include <map>
-#include <ranges>
-#include <string>
 
 #define _LOGPFX "cache/client: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
@@ -45,6 +47,16 @@ using cache::ResourceId;
 
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
+
+static std::set<udp::endpoint> local_endpoints(const std::vector<asio_utp::udp_multiplexer>& sockets) {
+    std::set<udp::endpoint> eps;
+
+    for (auto& socket : sockets) {
+        eps.insert(socket.local_endpoint());
+    }
+
+    return eps;
+}
 
 struct GarbageCollector {
     cache::HttpStore& http_store;  // for looping over entries
@@ -93,7 +105,7 @@ struct Client::Impl {
     std::shared_ptr<unsigned> _newest_proto_seen;
 
     AsioExecutor _ex;
-    UdpSockets _udp_sockets;
+    std::vector<asio_utp::udp_multiplexer> _udp_sockets;
     shared_ptr<bt::DhtBase> _dht;
     string _uri_swarm_prefix;
     sign::PublicKey _cache_pk;
@@ -114,7 +126,7 @@ struct Client::Impl {
     util::LogPath _log_path;
 
     Impl( AsioExecutor ex
-        , UdpSockets udp_sockets
+        , std::vector<asio_utp::udp_multiplexer> udp_sockets
         , sign::PublicKey& cache_pk
         , fs::path cache_dir
         , Client::opt_path static_cache_dir
@@ -136,7 +148,7 @@ struct Client::Impl {
           }, log_path, _ex)
         , _dht_peer_lookups(256)
         , _i2p_peer_lookups(256)
-        , _local_peer_discovery(_ex, _udp_sockets.local_endpoints())
+        , _local_peer_discovery(_ex, local_endpoints(_udp_sockets))
         , _log_path(std::move(log_path))
     {}
 
@@ -821,7 +833,7 @@ struct Client::Impl {
 
 /* static */
 std::expected<std::shared_ptr<Client>, sys::error_code>
-Client::build( UdpSockets udp_sockets
+Client::build( std::vector<asio_utp::udp_multiplexer> udp_sockets
              , sign::PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age

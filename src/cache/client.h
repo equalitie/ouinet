@@ -13,7 +13,6 @@
 #include "resource_id.h"
 #include "dht_groups.h"
 #include "peer_message.h"
-#include "udp_sockets.h"
 #include "util/crypto_stream_key.h"
 #include "ouiservice/i2p/fwd.h"
 #include "ouiservice/i2p/address.h"
@@ -37,7 +36,7 @@ private:
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( UdpSockets udp_sockets
+    build( std::vector<asio_utp::udp_multiplexer> udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -51,7 +50,7 @@ public:
 public:
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( UdpSockets udp_sockets
+    build( std::vector<asio_utp::udp_multiplexer> udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -65,7 +64,7 @@ public:
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( UdpSockets udp_sockets
+    build( std::vector<asio_utp::udp_multiplexer> udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age

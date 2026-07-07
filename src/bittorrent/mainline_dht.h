@@ -22,12 +22,10 @@
 
 namespace ouinet {
     class Cancel;
-    class UdpSockets;
 }
 
 namespace ouinet::bittorrent {
 
-class UdpMultiplexer;
 class DhtNode;
 
 namespace ip = asio::ip;
@@ -69,7 +67,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
 
     std::set<udp::endpoint> wan_endpoints() const override;
 
-    UdpSockets sockets() const override;
+    std::vector<asio_utp::udp_multiplexer> sockets() const override;
 
     std::expected<std::set<udp::endpoint>, sys::error_code>
     tracker_announce(NodeID infohash, std::optional<int> port, Async) override;

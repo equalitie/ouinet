@@ -211,7 +211,6 @@ file(GLOB ouinet_common_sources
     "./src/error.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"
-    "./src/udp_sockets.cpp"
 )
 
 # TODO: Some low level openssl functions we use are deprecated.

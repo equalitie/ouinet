@@ -1,10 +1,13 @@
 #include <asio_utp.hpp>
+#include <boost/asio/spawn.hpp>
+#include <chrono>
+#include <optional>
+#include <random>
 
 #include "multi_peer_reader.h"
 
 #include "ouiservice/i2p/session.h"
 #include "ouiservice/i2p/tracker_lookup.h"
-
 #include "multi_peer_reader_error.h"
 #include "http_sign.h"
 #include "../http_util.h"
@@ -22,14 +25,6 @@
 #include "../constants.h"
 #include "../peer_message.h"
 #include "signed_head.h"
-#include "udp_sockets.h"
-
-#include <boost/asio/error.hpp>
-#include <boost/asio/spawn.hpp>
-#include <chrono>
-#include <expected>
-#include <optional>
-#include <random>
 
 using namespace std;
 using namespace ouinet;
@@ -65,7 +60,7 @@ std::optional<asio_utp::udp_multiplexer>
 choose_multiplexer_for(
     AsioExecutor exec,
     const udp::endpoint& ep,
-    const UdpSockets& sockets)
+    const std::vector<asio_utp::udp_multiplexer>& sockets)
 {
     for (const auto& socket : sockets) {
         if (same_ipv(ep, socket.local_endpoint())) {
@@ -81,7 +76,7 @@ choose_multiplexer_for(
 static
 std::expected<GenericStream, sys::error_code>
 connect( udp::endpoint ep
-       , const UdpSockets& sockets
+       , const std::vector<asio_utp::udp_multiplexer>& sockets
        , Async yield)
 {
     sys::error_code ec;
@@ -419,8 +414,8 @@ struct MultiPeerReader::PreFetch {
 
 class MultiPeerReader::Peers {
 public:
-    Peers(AsioExecutor exec
-         , UdpSockets sockets
+    Peers( AsioExecutor exec
+         , std::vector<asio_utp::udp_multiplexer> sockets
          , set<udp::endpoint> wan_my_eps
          , set<udp::endpoint> lan_peer_eps
          , sign::PublicKey cache_pk
@@ -503,7 +498,7 @@ public:
     }
 
     Peers(AsioExecutor exec
-         , UdpSockets sockets
+         , std::vector<asio_utp::udp_multiplexer> sockets
          , set<udp::endpoint> lan_peer_eps
          , sign::PublicKey cache_pk
          , const ResourceId& resource_id
@@ -792,7 +787,7 @@ private:
 
     sign::PublicKey _cache_pk;
     std::set<asio::ip::udp::endpoint> _lan_peer_eps;
-    UdpSockets _udp_sockets;
+    std::vector<asio_utp::udp_multiplexer> _udp_sockets;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
     ResourceId _resource_id;
     CryptoStreamKey _resource_key;
@@ -813,7 +808,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , CryptoStreamKey resource_key
                                 , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
-                                , UdpSockets sockets
+                                , std::vector<asio_utp::udp_multiplexer> sockets
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , util::LogPath log_path)
     : _executor(ex)

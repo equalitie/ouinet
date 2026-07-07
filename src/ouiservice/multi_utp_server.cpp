@@ -4,7 +4,6 @@
 #include <async_sleep.h>
 #include <logger.h>
 #include "multi_utp_server.h"
-#include "udp_sockets.h"
 #include "util/async.h"
 
 namespace ouinet {
@@ -58,7 +57,7 @@ struct MultiUtpServer::State
 };
 
 MultiUtpServer::MultiUtpServer( asio::any_io_executor ex
-                              , UdpSockets sockets
+                              , std::vector<asio_utp::udp_multiplexer> sockets
                               , boost::asio::ssl::context* ssl_context
                               , util::LogPath log_path)
     : _accept_queue(ex)

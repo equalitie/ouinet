@@ -3,10 +3,11 @@
 #include <ouiservice.h>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/experimental/channel.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <set>
 #include "api.h"
-#include "udp_sockets.h"
+
+namespace asio_utp {
+    class udp_multiplexer;
+}
 
 namespace ouinet {
 namespace ouiservice {
@@ -18,7 +19,7 @@ private:
 
 public:
     MultiUtpServer( AsioExecutor
-                  , UdpSockets
+                  , std::vector<asio_utp::udp_multiplexer>
                   , boost::asio::ssl::context* ssl_context
                   , util::LogPath);
 
