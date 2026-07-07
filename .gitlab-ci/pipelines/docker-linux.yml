@@ -31,6 +31,6 @@ linux / python-tests:
   script:
     - ./docker/linux.sh --target-os linux --run-python-tests
   needs:
-    - job: 'linux / test'
+    - job: 'linux / cpp-rust-tests'
       artifacts: false
 
