@@ -28,7 +28,7 @@ linux / build:
       - $BUILD_PATH/$TARGET_OS/lib*.so*
     expire_in: 6h
 
-linux / test:
+linux / cpp-rust-tests:
   stage: test
   tags:
     - shell+docker
