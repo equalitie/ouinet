@@ -1,5 +1,4 @@
 #include "dht.h"
-#include "udp_sockets.h"
 
 namespace ouinet::bittorrent {
 

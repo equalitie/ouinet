@@ -1,5 +1,4 @@
 #include "multi_utp_server.h"
-#include "udp_sockets.h"
 #include "util/async.h"
 #include <asio_utp/udp_multiplexer.hpp>
 #include <async_sleep.h>
@@ -56,7 +55,8 @@ struct MultiUtpServer::State {
   std::unique_ptr<AbstractServer> server;
 };
 
-MultiUtpServer::MultiUtpServer(asio::any_io_executor ex, UdpSockets sockets,
+MultiUtpServer::MultiUtpServer(asio::any_io_executor ex,
+                               std::vector<asio_utp::udp_multiplexer> sockets,
                                boost::asio::ssl::context *ssl_context,
                                Trace trace)
     : _accept_queue(ex) {

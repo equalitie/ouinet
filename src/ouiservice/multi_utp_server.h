@@ -1,12 +1,13 @@
 #pragma once
 
 #include "api.h"
-#include "udp_sockets.h"
 #include <boost/asio/experimental/channel.hpp>
-#include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ssl.hpp>
 #include <ouiservice.h>
-#include <set>
+
+namespace asio_utp {
+class udp_multiplexer;
+}
 
 namespace asio_utp {
 class udp_multiplexer;
@@ -20,7 +21,7 @@ private:
   struct State;
 
 public:
-  MultiUtpServer(AsioExecutor, UdpSockets,
+  MultiUtpServer(AsioExecutor, std::vector<asio_utp::udp_multiplexer>,
                  boost::asio::ssl::context *ssl_context, Trace);
 
   [[nodiscard]]

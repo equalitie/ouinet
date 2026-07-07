@@ -3,7 +3,6 @@
 #include "api.h"
 #include "asio_utp/udp_multiplexer.hpp"
 #include "dht.h"
-#include "udp_sockets.h"
 #include <map>
 
 namespace ouinet::bittorrent {
@@ -31,7 +30,9 @@ public:
 
   std::set<UdpEndpoint> wan_endpoints() const override;
 
-  UdpSockets sockets() const override { return UdpSockets(_sockets); }
+  std::vector<asio_utp::udp_multiplexer> sockets() const override {
+    return _sockets;
+  }
 
   std::expected<std::set<UdpEndpoint>, sys::error_code>
   tracker_announce(NodeID infohash, std::optional<int> port, Async) override;

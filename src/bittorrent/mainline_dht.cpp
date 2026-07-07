@@ -38,7 +38,6 @@
 #include "../logger.h"
 #include "../or_throw.h"
 #include "../parse/endpoint.h"
-#include "../udp_sockets.h"
 #include "../util.h"
 #include "../util/address.h"
 #include "../util/atomic_file.h"
@@ -2325,7 +2324,7 @@ std::set<udp::endpoint> MainlineDht::wan_endpoints() const {
   return ret;
 }
 
-UdpSockets MainlineDht::sockets() const {
+std::vector<asio_utp::udp_multiplexer> MainlineDht::sockets() const {
   std::vector<asio_utp::udp_multiplexer> sockets;
   sockets.reserve(_nodes.size());
 
@@ -2333,7 +2332,7 @@ UdpSockets MainlineDht::sockets() const {
     sockets.push_back(p.second->socket());
   }
 
-  return UdpSockets(std::move(sockets));
+  return sockets;
 }
 
 bool MainlineDht::all_ready() const {

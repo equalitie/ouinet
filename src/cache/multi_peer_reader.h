@@ -6,7 +6,6 @@
 #include "hash_list.h"
 #include "ouiservice/i2p/fwd.h"
 #include "resource_id.h"
-#include "udp_sockets.h"
 #include "util/crypto_stream_key.h"
 #include <boost/asio/ip/udp.hpp>
 #include <chrono>
@@ -30,7 +29,7 @@ public:
   MultiPeerReader(AsioExecutor ex, ResourceId, CryptoStreamKey,
                   sign::PublicKey cache_pk,
                   std::set<asio::ip::udp::endpoint> lan_peers,
-                  UdpSockets sockets,
+                  std::vector<asio_utp::udp_multiplexer> sockets,
                   std::shared_ptr<unsigned> newest_proto_seen, Trace);
 
   // Use this to include peers on the Internet.
