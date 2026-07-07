@@ -43,7 +43,7 @@
 #include "ssl/util.h"
 #include "swarm_calculator.h"
 #include "util.h"
-#include "util/storing_reader.h"
+#include "util/condition_variable.h"
 
 #include "ouiservice.h"
 #include "ouiservice/bep5/client.h"
@@ -68,6 +68,7 @@
 
 #include "logger.h"
 #include "task.h"
+#include "util/storing_reader.h"
 #include "util/wait_condition.h"
 
 using namespace std;
@@ -110,7 +111,8 @@ public:
         ,
         _ssl_certificate_cache(1000), _cache_starting{get_executor()},
         _front_end(_config), _origin_pools(OriginPools()),
-        inj_ctx{asio::ssl::context::tls_client}, _trace(_config.trace_root()),
+        inj_ctx{asio::ssl::context::tls_client},
+        _udp_sockets_cv(ctx.get_executor()), _trace(_config.trace_root()),
         _bt_dht_builder(std::move(dht_builder)), _bt_dht_wc(_ctx),
         _multi_utp_server_wc(_ctx),
         _metrics(
@@ -141,7 +143,7 @@ public:
     }
 
     if (auto config = _config.ouisync_config()) {
-      _ouisync.emplace(_config.repo_root() / "ouisync",
+      _ouisync.emplace(ctx.get_executor(), _config.repo_root() / "ouisync",
                        config->page_index_token, config->udp_endpoints);
     }
   }
@@ -187,7 +189,7 @@ public:
       _ouisync.reset();
     }
 
-    _udp_sockets.clear();
+    _udp_sockets.reset();
 
     _origin_pools = {};
   }
@@ -300,7 +302,7 @@ public:
     _upnps_ptr = std::make_shared<
         std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
 
-    for (auto socket : _udp_sockets) {
+    for (auto socket : get_udp_sockets(yield)) {
       yield.spawn([bt_dht, upnps = _upnps_ptr,
                    socket = std::move(socket)](auto yield) mutable {
         auto local_ep = socket.local_endpoint();
@@ -576,7 +578,7 @@ private:
     auto lock = _multi_utp_server_wc.lock();
 
     _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
-        _ctx.get_executor(), _udp_sockets, nullptr, _trace);
+        _ctx.get_executor(), get_udp_sockets(yield), nullptr, _trace);
 
     yield.tag("accept_utp").spawn([&](Async yield) mutable {
       auto slot =
@@ -655,6 +657,46 @@ private:
     return injector->get();
   }
 
+  const std::vector<asio_utp::udp_multiplexer> &get_udp_sockets(Async yield) {
+    while (!_udp_sockets) {
+      _udp_sockets_cv.wait(yield).value();
+    }
+
+    return _udp_sockets.value();
+  }
+
+  void create_udp_sockets(Async yield) {
+    std::vector<asio_utp::udp_multiplexer> sockets;
+
+    if (!_config.ouisync_config() ||
+        _config.ouisync_config()->transport != OuisyncTransport::exclusive) {
+      sockets.push_back(create_udp_multiplexer(
+          _ctx.get_executor(), _config.repo_root() / "last_used_udp_port",
+          _config.udp_mux_port()));
+    }
+
+    if (_config.ouisync_config() &&
+        _config.ouisync_config()->transport != OuisyncTransport::disabled) {
+      assert(_ouisync);
+
+      auto ouisync_sockets = _ouisync->open_network_sockets(yield);
+      if (ouisync_sockets) {
+        for (auto &ouisync_socket : *ouisync_sockets) {
+          asio_utp::udp_multiplexer socket(yield.get_executor());
+          socket.bind(std::make_unique<ouisync_service::OuisyncSocket>(
+              std::move(ouisync_socket)));
+          sockets.push_back(std::move(socket));
+        }
+      } else {
+        LOG_ERROR(yield,
+                  " Failed to open Ouisync sockets: ", ouisync_sockets.error());
+      }
+    }
+
+    _udp_sockets = std::move(sockets);
+    _udp_sockets_cv.notify();
+  }
+
 private:
   // The newest protocol version number seen in a trusted exchange
   // (i.e. from an injector exchange or injector-signed cached content).
@@ -687,7 +729,8 @@ private:
 
   asio::ssl::context inj_ctx;
 
-  std::vector<asio_utp::udp_multiplexer> _udp_sockets;
+  std::optional<std::vector<asio_utp::udp_multiplexer>> _udp_sockets;
+  ConditionVariable _udp_sockets_cv;
 
   Trace _trace;
   std::optional<Client::MockDhtBuilder> _bt_dht_builder;
@@ -989,7 +1032,7 @@ Client::State::fetch_fresh_from_front_end(const Request &rq, Async yield) {
   auto slot = _shutdown_signal.connect([&] { yield.cancel(); });
 
   std::vector<ClientFrontEnd::UdpEndpoint> local_eps;
-  for (const auto &socket : _udp_sockets) {
+  for (const auto &socket : get_udp_sockets(yield)) {
     local_eps.push_back(socket.local_endpoint());
   }
 
@@ -2145,7 +2188,7 @@ std::expected<void, sys::error_code> Client::State::setup_cache(Async yield) {
   if (auto r =
           _config.cache_static_content_path().empty()
               ? cache::Client::build(
-                    _udp_sockets, *_config.cache_http_pub_key(),
+                    get_udp_sockets(yield), *_config.cache_http_pub_key(),
                     _config.repo_root() /
                         "bep5_http" // TODO gives this a more inclusive name
                                     // covering bothe bep5 and bep3 caches
@@ -2153,7 +2196,7 @@ std::expected<void, sys::error_code> Client::State::setup_cache(Async yield) {
                     _config.max_cached_age(),
                     _config.is_local_peer_discovery_enabled(), yield)
               : cache::Client::build(
-                    _udp_sockets, *_config.cache_http_pub_key(),
+                    get_udp_sockets(yield), *_config.cache_http_pub_key(),
                     _config.repo_root() / "bep5_http", _config.max_cached_age(),
                     _config.is_local_peer_discovery_enabled(),
                     _config.cache_static_path(),
@@ -2496,10 +2539,9 @@ void Client::State::start_ouinet() {
                    });
   }
 
-  // TODO: optionally use ouisync
-  _udp_sockets.push_back(create_udp_multiplexer(
-      _ctx.get_executor(), _config.repo_root() / "last_used_udp_port",
-      _config.udp_mux_port()));
+  task::spawn_detached(_ctx, [this](asio::yield_context y) {
+    create_udp_sockets(Async(y, _shutdown_signal, _trace));
+  });
 
   task::spawn_detached(_ctx, [this, self = shared_from_this(),
                               acceptor = std::move(proxy_acceptor)](
@@ -2726,13 +2768,14 @@ void Client::State::setup_injectors() {
                 return maybe_wrap_tls(std::move(tcp_client));
               },
               [&](const Endpoint::Utp &ep) -> R {
-                if (_udp_sockets.empty()) {
+                auto udp_sockets = get_udp_sockets(yield);
+                if (udp_sockets.empty()) {
                   return std::unexpected(asio::error::network_down);
                 }
 
                 // TODO: use all sockets?
                 auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>(
-                    _ctx.get_executor(), *_udp_sockets.begin(), ep.value);
+                    _ctx.get_executor(), *udp_sockets.begin(), ep.value);
 
                 if (!utp_client->verify_remote_endpoint()) {
                   return std::unexpected(asio::error::invalid_argument);

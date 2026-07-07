@@ -13,6 +13,7 @@
 #include "util/str.h"
 #include <boost/optional/optional_io.hpp>
 #include <boost/program_options.hpp>
+#include <boost/program_options/value_semantic.hpp>
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -59,6 +60,24 @@ asio::ssl::context load_tls_client_ctx_from_file(const std::string &path,
                                                  const std::string &for_whom);
 asio::ssl::context load_tls_client_ctx_from_string(const std::string &ctx_str,
                                                    const std::string &for_whom);
+
+static void validate(boost::any &v, const std::vector<std::string> &values,
+                     OuisyncTransport *target_type, int) {
+  namespace po = boost::program_options;
+
+  po::validators::check_first_occurrence(v);
+  auto value = boost::to_lower_copy(po::validators::get_single_string(values));
+
+  if (value == "enabled") {
+    v = OuisyncTransport::enabled;
+  } else if (value == "disabled") {
+    v = OuisyncTransport::disabled;
+  } else if (value == "exclusive") {
+    v = OuisyncTransport::exclusive;
+  } else {
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+}
 
 boost::program_options::options_description ClientConfig::description_full() {
   using namespace std;
@@ -168,10 +187,12 @@ boost::program_options::options_description ClientConfig::description_full() {
       "A <FIELD>:<VALUE> pair representing a HTTP header field and "
       "value to add to every request coming from the User Agent before "
       "Ouinet processes it. Useful for testing when using e.g. Firefox "
-      "as the UA.")("ouisync-udp-ep",
-                    po::value<std::vector<std::string>>()->composing(),
-                    "(Experimental) UDP endpoint(s) to bind Ouisync to (in "
-                    "<IP>:<PORT> format).");
+      "as the UA.")(
+      "ouisync-udp-ep", po::value<std::vector<std::string>>()->composing(),
+      "UDP endpoint(s) to bind Ouisync to (in <IP>:<PORT> format).")(
+      "ouisync-transport",
+      po::value<OuisyncTransport>()->default_value(OuisyncTransport::disabled),
+      "(Experimental) Whether to use Ouisync as network transport layer.");
 
   add_i2p_service_options(services);
 

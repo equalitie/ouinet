@@ -4,11 +4,14 @@
 #include "error.h"
 #include "generic_stream.h"
 #include "http_util.h"
+#include "ouiservice/ouisync/socket.h"
 #include "util/async.h"
+#include "util/executor.h"
 #include "util/keep_alive.h"
 #include "util/url.h"
 #include <boost/beast/http/vector_body.hpp>
 #include <boost/filesystem/path.hpp>
+#include <expected>
 #include <iterator>
 #include <ouisync.hpp>
 #include <ouisync/file_stream.hpp>
@@ -145,11 +148,12 @@ struct Ouisync::Impl {
   }
 };
 
-Ouisync::Ouisync(fs::path service_dir, std::string page_index_token,
+Ouisync::Ouisync(const util::AsioExecutor &exec, fs::path service_dir,
+                 std::string page_index_token,
                  std::vector<asio::ip::udp::endpoint> bind)
     : _service_dir(std::move(service_dir)), _store_dir(_service_dir / "store"),
       _mount_dir(_service_dir / "mount"), _bind(std::move(bind)),
-      _page_index_token(std::move(page_index_token)) {
+      _page_index_token(std::move(page_index_token)), _impl_cv(exec) {
   if (_bind.empty()) {
     _bind.reserve(2);
     _bind.push_back({asio::ip::address_v4::any(), 0});
@@ -189,6 +193,7 @@ sys::error_code Ouisync::start(Async yield) {
                                         std::move(page_index),
                                         {},
                                         mount_r.has_value()});
+    _impl_cv.notify();
 
     return sys::error_code();
   } catch (sys::system_error const &e) {
@@ -270,6 +275,32 @@ Ouisync::load(const CacheOuisyncRetrieveRequest &rq, Async yield) {
     LOG_WARN(yield, " Ouisync::serve exception: ", e.what());
     return std::unexpected(e.code());
   }
+}
+
+std::expected<std::vector<OuisyncSocket>, sys::error_code>
+Ouisync::open_network_sockets(Async yield) {
+  while (!_impl) {
+    _impl_cv.wait(yield);
+  }
+
+  std::vector<OuisyncSocket> sockets;
+  sockets.reserve(2);
+
+  auto v4 = OuisyncSocket::open(_impl->session, asio::ip::udp::v4(), yield);
+  if (!v4) {
+    return std::unexpected(v4.error());
+  }
+
+  sockets.push_back(std::move(*v4));
+
+  auto v6 = OuisyncSocket::open(_impl->session, asio::ip::udp::v6(), yield);
+  if (!v6) {
+    return std::unexpected(v6.error());
+  }
+
+  sockets.push_back(std::move(*v6));
+
+  return sockets;
 }
 
 bool Ouisync::is_running() const { return _impl != nullptr; }
