@@ -10,7 +10,6 @@
 namespace ouinet {
 
 class Cancel;
-class UdpSockets;
 
 namespace bittorrent {
 
@@ -31,7 +30,7 @@ public:
 
     virtual std::set<UdpEndpoint> wan_endpoints() const = 0;
 
-    virtual UdpSockets sockets() const = 0;
+    virtual std::vector<asio_utp::udp_multiplexer> sockets() const = 0;
 
     virtual std::expected<std::set<UdpEndpoint>, sys::error_code>
     tracker_announce(NodeID infohash, std::optional<int> port, Async) = 0;

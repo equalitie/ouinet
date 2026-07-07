@@ -15,7 +15,6 @@
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
 #include "../../task.h"
-#include "../../udp_sockets.h"
 #include "../../util/wait_condition.h"
 #include "../../util/watch_dog.h"
 #include "../../util/select.h"
