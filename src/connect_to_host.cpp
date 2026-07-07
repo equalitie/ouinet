@@ -2,7 +2,6 @@
 
 #include "http_util.h"
 #include "or_throw.h"
-#include "util/timeout.h"
 #include "util/async.h"
 
 #include <boost/asio/connect.hpp>
