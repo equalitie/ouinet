@@ -17,10 +17,6 @@
 #include "../namespaces.h"
 #include "../api.h"
 
-namespace ouinet {
-    class Cancel;
-}
-
 namespace ouinet::cache {
 
 // File names for response components.
@@ -84,8 +80,9 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 // and without a final new line.
 // Such responses need to be stored using external tools.
 OUINET_CLIENT_API
-void http_store( http_response::AbstractReader&, const fs::path&
-               , const AsioExecutor&, Cancel, asio::yield_context);
+[[nodiscard]]
+std::expected<void, sys::error_code>
+http_store(http_response::AbstractReader&, const fs::path&, Async);
 // TODO: This format is both inefficient for multi-peer downloads (Base64 decoding needed)
 // and inadequate for partial responses (`ouipsig` is in previous `sigs` file line, maybe missing).
 // A format with binary records or just SIG/DHASH/CHASH of the *current* block might be more convenient
@@ -105,8 +102,9 @@ void http_store( http_response::AbstractReader&, const fs::path&
 // when no more body data is available.
 // To detect such cases beforehand, use `http_store_body_size`.
 OUINET_CLIENT_API
-reader_uptr
-http_store_reader(const fs::path& dirp, Cancel&, YieldContext);
+[[nodiscard]]
+std::expected<reader_uptr, sys::error_code>
+http_store_reader(const fs::path& dirp, Async);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -118,9 +116,9 @@ http_store_reader(const fs::path& dirp, Cancel&, YieldContext);
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 OUINET_CLIENT_API
-reader_uptr
-http_store_reader( const fs::path& dirp, const fs::path& cdirp
-                 , Cancel&, YieldContext);
+[[nodiscard]]
+std::expected<reader_uptr, sys::error_code>
+http_store_reader(const fs::path& dirp, const fs::path& cdirp, Async);
 
 // Same as above, but allow specifying a contiguous range of data to read
 // instead of the whole response.
@@ -138,10 +136,11 @@ http_store_reader( const fs::path& dirp, const fs::path& cdirp
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
 OUINET_CLIENT_API
-reader_uptr
+[[nodiscard]]
+std::expected<reader_uptr, sys::error_code>
 http_store_range_reader( const fs::path& dirp
                        , std::size_t first, std::size_t last
-                       , Cancel&, YieldContext);
+                       , Async);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -152,10 +151,11 @@ http_store_range_reader( const fs::path& dirp
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
-reader_uptr
+[[nodiscard]]
+std::expected<reader_uptr, sys::error_code>
 http_store_range_reader( const fs::path& dirp, const fs::path& cdirp
                        , std::size_t first, std::size_t last
-                       , Cancel&, YieldContext);
+                       , Async);
 
 // Return the size of body data currently stored for a response under the given directory `dirp`.
 //
@@ -166,9 +166,9 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp
 // If the response exists, but it is missing body data,
 // an `asio::error::no_data` error is reported.
 OUINET_CLIENT_API
-std::size_t
-http_store_body_size( const fs::path& dirp, AsioExecutor
-                    , sys::error_code&);
+[[nodiscard]]
+std::expected<std::size_t, sys::error_code>
+http_store_body_size(const fs::path& dirp, AsioExecutor);
 
 // Same as above, but get body data from files stored in the given content directory `cdirp`.
 //
@@ -180,13 +180,14 @@ http_store_body_size( const fs::path& dirp, AsioExecutor
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
 OUINET_CLIENT_API
-std::size_t
-http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor
-                    , sys::error_code&);
+[[nodiscard]]
+std::expected<std::size_t, sys::error_code>
+http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor);
 
 OUINET_CLIENT_API
-HashList
-http_store_load_hash_list(const fs::path&, AsioExecutor, Cancel&, asio::yield_context);
+[[nodiscard]]
+std::expected<HashList, sys::error_code>
+http_store_load_hash_list(const fs::path&, Async);
 
 fs::path
 path_from_resource_id(fs::path dir, const ResourceId& resource_id);
@@ -211,26 +212,32 @@ public:
     // Otherwise no error is reported,
     // so this is also convenient for reading just the response head if present
     // (i.e. for a `HEAD` request).
-    virtual reader_uptr
-    reader(const ResourceId&, Cancel&, YieldContext) = 0;
+    [[nodiscard]]
+    virtual std::expected<reader_uptr, sys::error_code>
+    reader(const ResourceId&, Async) = 0;
 
     // This is similar to `reader` above,
     // but it also returns the size of stored body data.
     // Also, an `asio::error::no_data` error is reported if the body is missing.
-    virtual ReaderAndSize
-    reader_and_size(const ResourceId&, Cancel&, YieldContext) = 0;
+    [[nodiscard]]
+    virtual std::expected<ReaderAndSize, sys::error_code>
+    reader_and_size(const ResourceId&, Async) = 0;
 
-    virtual reader_uptr
-    range_reader(const ResourceId&, size_t first, size_t last, Cancel&, YieldContext) = 0;
+    [[nodiscard]]
+    virtual std::expected<reader_uptr, sys::error_code>
+    range_reader(const ResourceId&, size_t first, size_t last, Async) = 0;
 
-    virtual std::size_t
-    body_size(const ResourceId&, sys::error_code&) const = 0;
+    [[nodiscard]]
+    virtual std::expected<std::size_t, sys::error_code>
+    body_size(const ResourceId&) const = 0;
 
-    virtual std::size_t
-    size(Cancel, asio::yield_context) const = 0;
+    [[nodiscard]]
+    virtual std::expected<std::size_t, sys::error_code>
+    size(Async) const = 0;
 
-    virtual HashList
-    load_hash_list(const ResourceId&, Cancel, asio::yield_context) const = 0;
+    [[nodiscard]]
+    virtual std::expected<HashList, sys::error_code>
+    load_hash_list(const ResourceId&, Async) const = 0;
 };
 
 // As static HTTP stores may come from untrusted sources,
@@ -252,17 +259,19 @@ make_static_http_store( fs::path path, fs::path content_path
 class HttpStore : public BaseHttpStore {
 public:
     using keep_func = std::function<
-        bool(ResourceId const&, reader_uptr, asio::yield_context)>;
+        std::expected<bool, sys::error_code>(ResourceId const&, reader_uptr, Async)>;
 
 public:
     virtual ~HttpStore() = default;
 
-    virtual void
-    for_each(keep_func, Cancel, YieldContext) = 0;
+    [[nodiscard]]
+    virtual std::expected<void, sys::error_code>
+    for_each(keep_func, Async) = 0;
 
-    virtual void
-    store( const ResourceId&, http_response::AbstractReader&
-         , Cancel, asio::yield_context) = 0;
+    [[nodiscard]]
+    virtual
+    std::expected<void, sys::error_code>
+    store(const ResourceId&, http_response::AbstractReader&, Async) = 0;
 };
 
 std::unique_ptr<HttpStore>

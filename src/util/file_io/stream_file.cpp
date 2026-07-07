@@ -1,8 +1,8 @@
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
+#include "util/async.h"
 
-
-namespace ouinet { namespace util { namespace file_io {
+namespace ouinet::util::file_io {
 
 namespace errc = boost::system::errc;
 
@@ -109,28 +109,22 @@ check_or_create_directory(const fs::path& dir, sys::error_code& ec)
     }
 }
 
-void
-read( async_file_handle& f
-    , asio::mutable_buffer b
-    , Cancel& cancel
-    , asio::yield_context yield)
+std::expected<void, sys::error_code>
+read(async_file_handle& f, asio::mutable_buffer b, Async yield)
 {
-    auto cancel_slot = cancel.connect([&] { f.close(); });
-    sys::error_code ec;
-    asio::async_read(f, b, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec);
+    auto cancel_slot = yield.cancel_slot([&] { f.close(); });
+    auto r = asio::async_read(f, b, yield);
+    if (!r) return std::unexpected(r.error());
+    return {};
 }
 
-void
-write( async_file_handle& f
-     , asio::const_buffer b
-     , Cancel& cancel
-     , asio::yield_context yield)
+std::expected<void, sys::error_code>
+write(async_file_handle& f, asio::const_buffer b, Async yield)
 {
-    auto cancel_slot = cancel.connect([&] { f.close(); });
-    sys::error_code ec;
-    asio::async_write(f, b, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec)
+    auto cancel_slot = yield.cancel_slot([&] { f.close(); });
+    auto r = asio::async_write(f, b, yield);
+    if (!r) return std::unexpected(r.error());
+    return {};
 }
 
 void
@@ -152,4 +146,4 @@ remove_file(const fs::path& p, sys::error_code& ec)
     fs::remove(p, ec);
 }
 
-}}} // namespaces
+} // namespace

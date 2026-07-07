@@ -18,9 +18,7 @@ using boost::string_view;
 #   endif
 #endif
 
-namespace ouinet {
-namespace util {
-namespace persisten_lru_cache_detail {
+namespace ouinet::util::persisten_lru_cache_detail {
 
 uint64_t ms_since_epoch()
 {
@@ -44,4 +42,4 @@ bool is_cache_entry(const struct dirent* entry, boost::filesystem::path& dir) {
             && strstr(entry->d_name, temp_file_prefix) != entry->d_name);
 }
 
-}}} // namespaces
+} // namespace

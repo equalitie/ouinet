@@ -281,25 +281,20 @@ read_stored_contacts(const fs::path& path, Async yield)
 {
     std::set<NodeContact> ret;
 
-    auto file = compat([&](sys::error_code& ec) {
-        return util::file_io::open_readonly(yield.get_executor(), path, ec);
-    })();
+    auto file = util::file_io::open_readonly(yield.get_executor(), path);
     if (!file) {
         return std::unexpected(file.error());
     }
 
-    auto filesize = compat([&](sys::error_code& ec) {
-        return util::file_io::file_size(*file, ec);
-    })();
+    auto filesize = util::file_io::file_size(*file);
     if (!filesize) {
         return std::unexpected(filesize.error());
     }
 
     std::string data(*filesize, '\0');
 
-    auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-        util::file_io::read(*file, asio::buffer(data), cancel, yield);
-    })(yield);
+    auto result = util::file_io::read(*file, asio::buffer(data), yield);
+
     if (!result) {
         return std::unexpected(result.error());
     }
@@ -342,22 +337,17 @@ write_stored_contacts( std::set<NodeContact> contacts
         return std::unexpected(old_contacts.error());
     }
 
-    auto result0 = compat([&](sys::error_code& ec) {
-        util::file_io::check_or_create_directory(path.parent_path(), ec);
-    })();
+    auto result0 = util::file_io::check_or_create_directory(path.parent_path());
     if (!result0) {
         LOG_ERROR(yield, " Failed to store contacts: ", result0.error());
         return std::unexpected(result0.error());
     }
 
-    auto atomic_file = compat([&](sys::error_code& ec) {
-        return util::atomic_file::make(yield.get_executor(), path, ec);
-    })();
+    auto atomic_file = util::atomic_file::make(yield.get_executor(), path);
     if (!atomic_file) {
         LOG_ERROR(yield, " Failed to store contacts: ", atomic_file.error());
         return std::unexpected(atomic_file.error());
     }
-    assert(*atomic_file);
 
     string data;
 
@@ -380,21 +370,19 @@ write_stored_contacts( std::set<NodeContact> contacts
         data += util::str(c.id, ",", c.endpoint);
     }
 
-    auto result1 = compat([&](Cancel cancel, asio::yield_context yield) {
-        return util::file_io::write(
-            (**atomic_file).lowest_layer(),
+    auto result1 = util::file_io::write(
+            atomic_file->lowest_layer(),
             asio::buffer(data),
-            cancel,
             yield
         );
-    })(yield);
+
     if (!result1) {
         LOG_ERROR(yield, " Failed to store contacts: ", result1.error());
         return std::unexpected(result1.error());
     }
 
     auto result2 = compat([&](sys::error_code& ec) {
-        (**atomic_file).commit(ec);
+        atomic_file->commit(ec);
     })();
     if (!result2) {
         LOG_ERROR(yield, " Failed to store contacts: ", result2.error());

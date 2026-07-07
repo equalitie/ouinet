@@ -10,21 +10,21 @@ void temp_file::close() {
     // then unset "keep on close" then close again and the file is removed.
     _file.close();
     if (!_keep_on_close)
-        file_io::remove_file(_path);
+        std::ignore = file_io::remove_file(_path);
 }
 
-boost::optional<temp_file>
+std::expected<temp_file, sys::error_code>
 temp_file::make( const AsioExecutor& ex
-               , const fs::path& dir, const fs::path& model
-               , sys::error_code& ec)
+               , const fs::path& dir, const fs::path& model)
 {
+    sys::error_code ec;
     auto path = dir / fs::unique_path(model, ec);
-    if (ec) return boost::none;
+    if (ec) return std::unexpected(ec);
 
-    auto file = file_io::open_or_create(ex, path, ec);
-    if (ec) return boost::none;
+    auto file = file_io::open_or_create(ex, path);
+    if (!file) return std::unexpected(file.error());
 
-    return temp_file(std::move(file), std::move(path));
+    return temp_file(std::move(*file), std::move(path));
 }
 
 }} // namespaces

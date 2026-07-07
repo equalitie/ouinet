@@ -233,9 +233,7 @@ Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
 
         auto head_file = open_stream(*repo, (path / cache::head_fname).string(), yield);
 
-        auto head = unwrap(yield.call_deprecated([&] (auto, auto cancel, auto yield) {
-            return Reader::read_signed_head(head_file, cancel, yield);
-        }));
+        auto head = unwrap(Reader::read_signed_head(head_file, yield));
 
         unwrap(head_file.close(yield));
 
@@ -289,11 +287,14 @@ void Ouisync::stop() {
 } // namespace ouinet::ouisync_service
 
 namespace ouinet::util::file_io {
-    size_t file_size(ouisync::FileStream& file, sys::error_code& ec) {
+    std::expected<size_t, sys::error_code>
+    file_size(ouisync::FileStream& file) {
         return file.size();
     }
 
-    void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec) {
+    std::expected<void, sys::error_code>
+    fseek(ouisync::FileStream& file, size_t pos) {
         file.seek(pos);
+        return {};
     }
 } // namespace util::file_io

@@ -42,8 +42,8 @@ private:
 } // namespace ouisync_service
 
 namespace util::file_io {
-    size_t file_size(ouisync::FileStream& file, sys::error_code& ec);
-    void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec);
+    [[nodiscard]] std::expected<size_t, sys::error_code> file_size(ouisync::FileStream& file);
+    [[nodiscard]] std::expected<void, sys::error_code> fseek(ouisync::FileStream& file, size_t pos);
 } // namespace util::file_io
 
 } // namespace ouinet

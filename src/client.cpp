@@ -246,7 +246,8 @@ public:
         return Client::RunningState::Started;
     }
 
-    void setup_cache(YieldContext);
+    [[nodiscard]]
+    std::expected<void, sys::error_code> setup_cache(Async);
 
     const asio_utp::udp_multiplexer& common_udp_multiplexer()
     {
@@ -260,14 +261,17 @@ public:
         return *_udp_multiplexer;
     }
 
-    std::shared_ptr<bt::DhtBase> bittorrent_dht(asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<std::shared_ptr<bt::DhtBase>, sys::error_code>
+    bittorrent_dht(Async yield)
     {
         if (_bt_dht) return _bt_dht;
 
         // Ensure that only one coroutine is modifying the instance at a time.
-        sys::error_code ec;
-        _bt_dht_wc.wait(_shutdown_signal, yield[ec]);
-        return_or_throw_on_error(yield, _shutdown_signal, ec, _bt_dht);
+        if (auto r = _bt_dht_wc.wait(yield); !r) {
+            return std::unexpected(r.error());
+        }
+
         if (_bt_dht) return _bt_dht;
         auto lock = _bt_dht_wc.lock();
 
@@ -325,22 +329,18 @@ public:
         auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
-        task::spawn_detached(_ctx.get_executor(), ([
+
+        yield.spawn([
             bt_dht,
             local_ep = mpl.local_endpoint(),
             m = std::move(m),
-            shutdown_signal = _shutdown_signal,
             upnps = _upnps_ptr
         ] (auto y) mutable {
-            Async yield(y, shutdown_signal);
+            auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(y);
+            if (!ext_ep) return;
 
-            auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(yield);
-            if (!ext_ep) {
-                return;
-            }
-
-            State::setup_upnp(yield.get_executor(), ext_ep->port(), local_ep, upnps);
-        }));
+            State::setup_upnp(y.get_executor(), ext_ep->port(), local_ep, upnps);
+        });
 
         _bt_dht = std::move(bt_dht);
         return _bt_dht;
@@ -387,10 +387,9 @@ private:
     // All `fetch_*` functions below take care of keeping or dropping
     // Ouinet-specific internal HTTP headers as expected by upper layers.
 
-    CacheEntry
-    fetch_stored_in_dcache( const CacheRetrieveRequest& request
-                          , Cancel& cancel
-                          , YieldContext yield);
+    [[nodiscard]]
+    std::expected<CacheEntry, sys::error_code>
+    fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async);
 
 
     [[nodiscard]]
@@ -453,7 +452,7 @@ private:
                           , asio::local::stream_protocol::acceptor
                           , function<void(GenericStream, Async)>);
 
-    void setup_injector(asio::yield_context);
+    std::expected<void, sys::error_code> setup_injector(Async);
 
     bool was_stopped() const {
         return (bool) _shutdown_signal;
@@ -567,47 +566,52 @@ private:
         return *create_result;
     }
 
-    void idempotent_start_accepting_on_utp(asio::yield_context yield) {
-        if (_multi_utp_server) return;
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    idempotent_start_accepting_on_utp(Async yield) {
+        if (_multi_utp_server) return {};
 
         // Ensure that only one coroutine is modifying the instance at a time.
-        sys::error_code ec;
-        _multi_utp_server_wc.wait(_shutdown_signal, yield[ec]);
-        return_or_throw_on_error(yield, _shutdown_signal, ec);
-        if (_multi_utp_server) return;
+        if (auto r = _multi_utp_server_wc.wait(yield); !r) {
+            return std::unexpected(r.error());
+        }
+
+        if (_multi_utp_server) return {};
+
         auto lock = _multi_utp_server_wc.lock();
 
         _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
             _ctx.get_executor()
             , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr, _log_path);
 
-        task::spawn_detached(_ctx, [&, c = _shutdown_signal] (asio::yield_context yield_) mutable {
-            auto yield = Async(yield_, c, _log_path.tag("accept_utp"));
+        yield.tag("accept_utp").spawn([&] (Async yield) mutable {
             auto slot = yield.cancel_slot([&] () mutable { _multi_utp_server = nullptr; });
 
             sys::error_code ec = _multi_utp_server->start_listen(yield);
 
             if (ec) {
                 LOG_ERROR("Failed to start accepting on multi uTP service; ec=", ec);
-                return;
+                return std::unexpected(ec);
             }
 
             while (true) {
                 auto con = _multi_utp_server->accept(yield);
-                if (!con.has_value()) {
+                if (!con) {
                     LOG_WARN("Bep5Http: Failure to accept; ec=", con.error());
                     async_sleep(200ms, yield);
                     continue;
                 }
-                yield.spawn([this, con = std::move(*con)] (Async yield) mutable {
+                yield.tag("serve").spawn([this, con = std::move(*con)] (Async yield) mutable {
                     // Do not log other users' addresses unless debugging.
                     if (get_logger().get_threshold() <= DEBUG) {
                         yield = yield.tag(con.remote_endpoint());
                     }
-                    serve_peer_request(std::move(con), yield.tag("serve"));
+                    serve_peer_request(std::move(con), yield);
                 });
             }
         });
+
+        return {};
     }
 
     void start_accepting_i2p(Async yield) {
@@ -760,15 +764,14 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
                 continue;
             }
 
-            auto keep_alive = _cache->serve_local(
+            if(_cache->serve_local(
                         *cache_req,
                         con,
                         _metrics,
-                        yield.tag("serve_local"));
-
-            if (keep_alive) {
-                continue;  // possible error is recoverable
+                        yield.tag("serve_local"))) {
+                continue;
             }
+
             return;
         }
 
@@ -830,71 +833,71 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
 }
 
 //------------------------------------------------------------------------------
-CacheEntry
-Client::State::fetch_stored_in_dcache( const CacheRetrieveRequest& request
-                                     , Cancel& cancel
-                                     , YieldContext yield)
+std::expected<CacheEntry, sys::error_code>
+Client::State::fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async yield)
 {
-    Cancel timeout_cancel(cancel);
-    auto watch_dog = ouinet::watch_dog( _ctx
-                                      , default_timeout::fetch_http()
-                                      , [&]{ timeout_cancel(); });
+    try {
+        Async timeout_yield = yield;
+        auto watch_dog = ouinet::watch_dog( _ctx
+                                          , default_timeout::fetch_http()
+                                          , [&]{ timeout_yield.cancel(); });
 
-    sys::error_code ec;
-
-    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-        compat([&](Async yield) { return wait_for_cache(yield); })(timeout_cancel, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
-    }
-
-    auto c = get_cache();
-
-    auto get_date = [](auto& hdr) {
-        auto tsh = util::http_injection_ts(hdr);
-        auto ts = parse::number<time_t>(tsh);
-        return ts ? boost::posix_time::from_time_t(*ts)
-                  : boost::posix_time::not_a_date_time;
-    };
-
-    if (c && (_config.cache_type() == ClientConfig::CacheType::Bep5Http
-           || _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P)) {
-        auto rq = request.to_peer_request();
-        auto key = rq.resource_id();
-
-        auto s = c->load( request.resource_id()
-                        , request.resource_key()
-                        , rq.dht_group()
-                        , rq.method() == http::verb::head
-                        , _metrics
-                        , timeout_cancel, yield[ec].tag("load"));
-
-        fail_on_error_or_timeout(yield, cancel, ec, watch_dog, CacheEntry{});
-
-        auto& hdr = s.response_header();
-
-        if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
-            // The cached resource cannot be used, treat it like
-            // not being found.
-            return or_throw<CacheEntry>(yield, asio::error::not_found);
-
-        maybe_add_proto_version_warning(hdr);
-        assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
-        auto date = get_date(hdr);
-        return CacheEntry{date, std::move(s)};
-    }
-    else if(_ouisync && _ouisync->is_running() && _config.cache_type() == ClientConfig::CacheType::Ouisync) {
-        auto rq = request.to_ouisync_request();
-        auto session = _ouisync->load(rq, Async(yield, _shutdown_signal));
-        if (!session.has_value()) {
-            return or_throw<CacheEntry>(yield, session.error());
+        if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+            if (auto r = wait_for_cache(timeout_yield); !r) {
+                return std::unexpected(r.error());
+            }
         }
-        auto date = get_date(session->response_header());
-        return CacheEntry{date, std::move(*session)};
+
+        auto c = get_cache();
+
+        auto get_date = [](auto& hdr) {
+            auto tsh = util::http_injection_ts(hdr);
+            auto ts = parse::number<time_t>(tsh);
+            return ts ? boost::posix_time::from_time_t(*ts)
+                      : boost::posix_time::not_a_date_time;
+        };
+
+        if (c && (_config.cache_type() == ClientConfig::CacheType::Bep5Http
+               || _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P)) {
+            auto rq = request.to_peer_request();
+            auto key = rq.resource_id();
+
+            auto s = c->load( request.resource_id()
+                            , request.resource_key()
+                            , rq.dht_group()
+                            , rq.method() == http::verb::head
+                            , _metrics
+                            , timeout_yield.tag("load"));
+
+            if (!s) return std::unexpected(s.error());
+
+            auto& hdr = s->response_header();
+
+            if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
+                // The cached resource cannot be used, treat it like
+                // not being found.
+                return std::unexpected(asio::error::not_found);
+
+            maybe_add_proto_version_warning(hdr);
+            assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
+            auto date = get_date(hdr);
+            return CacheEntry{date, std::move(*s)};
+        }
+        else if(_ouisync && _ouisync->is_running() && _config.cache_type() == ClientConfig::CacheType::Ouisync) {
+            auto rq = request.to_ouisync_request();
+            auto session = _ouisync->load(rq, yield);
+            if (!session) return std::unexpected(session.error());
+            auto date = get_date(session->response_header());
+            return CacheEntry{date, std::move(*session)};
+        }
+        else {
+            LOG_DEBUG(yield, " Cache is disabled");
+            return std::unexpected(asio::error::operation_not_supported);
+        }
     }
-    else {
-        _YDEBUG(yield, "Cache is disabled");
-        return or_throw<CacheEntry>( yield
-                                   , asio::error::operation_not_supported);
+    catch (Async::Cancelled const&) {
+        if (yield.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
     }
 }
 
@@ -1572,15 +1575,7 @@ public:
 
             LOG_DEBUG(yield, " Start");
 
-            auto entry = compat(
-                [&, log_path = yield.log_path()](Cancel cancel, asio::yield_context yield) {
-                    return client_state.fetch_stored_in_dcache(
-                        rq,
-                        cancel,
-                        YieldContext(yield, std::move(log_path))
-                    );
-                }
-            )(yield);
+            auto entry = client_state.fetch_stored_in_dcache(rq, yield);
 
             if (!entry) {
                 LOG_DEBUG(yield, " Finish with error: ", entry.error());
@@ -1738,11 +1733,8 @@ public:
             yield.spawn([ &, cache = std::move(cache), lock = wc.lock() ] (Async yield) {
                 auto key = rq->resource_id();
                 AsyncQueueReader rr(qst);
-                sys::error_code ec = yield.call_deprecated([&] (util::LogPath log_path, Cancel cancel, asio::yield_context yield) {
-                    cache->store(key, rq->dht_group(), rr, cancel, YieldContext(yield, log_path));
-                });
-                if (ec && ec != asio::error::operation_aborted)
-                    LOG_ERROR(yield, " Failed to write response to cache; ec=", ec);
+                auto r = cache->store(key, rq->dht_group(), rr, yield);
+                if (!r) LOG_ERROR(yield, " Failed to write response to cache; ec=", r.error());
             });
         } else {
             LOG_DEBUG( yield, " Not ok to cache response: "
@@ -2486,7 +2478,8 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
 }
 
 //------------------------------------------------------------------------------
-void Client::State::setup_cache(YieldContext yield)
+std::expected<void, sys::error_code>
+Client::State::setup_cache(Async yield)
 {
     // Remember to always set before return in case of error,
     // or the notification may not pass the right error code to listeners.
@@ -2502,61 +2495,61 @@ void Client::State::setup_cache(YieldContext yield)
         do_notify_ready();
     });
 
-    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http
-        || _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P
-        ) {
-      LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
+    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http
+        && _config.cache_type() != ClientConfig::CacheType::Bep3HTTPOverI2P)
+    {
+        //unsupported cache type
+        return std::unexpected(asio::error::operation_not_supported);
+    }
 
-#define fail_on_error(__msg) { \
-    if (_shutdown_signal) ec = asio::error::operation_aborted; \
-    if (ec && ec != asio::error::operation_aborted) \
-        LOG_ERROR(__msg "; ec=", ec); \
-    return_or_throw_on_error(yield, _shutdown_signal, ec); \
-}
+    LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
-    _cache = _config.cache_static_content_path().empty()
-        ? cache::Client::build( _ctx.get_executor()
-                              , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
+    if (auto r = _config.cache_static_content_path().empty()
+        ? cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                                 , _config.repo_root()/"bep5_http" //TODO gives this a more inclusive name covering bothe bep5 and bep3 caches
                               , _config.max_cached_age()
-                              , yield[ec])
-        : cache::Client::build( _ctx.get_executor()
-                              , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
+                              , yield)
+        : cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
                               , _config.cache_static_path()
                               , _config.cache_static_content_path()
-                              , yield[ec]);
-    fail_on_error("Failed to initialize cache::Client");
+                              , yield)) {
+        _cache = std::move(*r);
+    }
+    else {
+        LOG_ERROR(yield, " Failed to initialize cache::Client");
+        return std::unexpected(r.error());
+    }
 
-    idempotent_start_accepting_on_utp(yield[ec]);
-    fail_on_error("Failed to start accepting on uTP for cache::Client");
+    if (auto r = idempotent_start_accepting_on_utp(yield); !r) {
+        LOG_ERROR(yield, " Failed to start accepting on uTP for cache::Client");
+        return std::unexpected(r.error());
+    }
 
     // Subsequent calls below will not alter cache start result,
     // but they will still report and error code to the caller.
     do_notify_ready();
 
     if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-      auto dht = bittorrent_dht(yield[ec]);
-      fail_on_error("Failed to initialize BT DHT for cache::Client");
+        auto dht = bittorrent_dht(yield);
+        if (!dht) {
+            LOG_ERROR(yield, " Failed to initialize BT DHT for cache::Client");
+            return std::unexpected(dht.error());
+        }
 
-      if (!_cache->enable_dht(dht, _config.max_simultaneous_announcements())) ec = asio::error::invalid_argument;
-      fail_on_error("Failed to enable BT DHT in cache::Client");
+        if (!_cache->enable_dht(*dht, _config.max_simultaneous_announcements())) {
+            LOG_ERROR(yield, " Failed to enable BT DHT in cache::Client");
+            return std::unexpected(asio::error::invalid_argument);
+        }
     }
     else if (_config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P) {
-        start_accepting_i2p(Async(yield, _shutdown_signal, _log_path.tag("accept")));
+        start_accepting_i2p(yield);
     }
 
-#undef fail_on_error
-    }
-    //unsupported cache type
-    else {
-        ec = asio::error::operation_not_supported;
-        return;
-    }
-
+    return {};
 }
 
 #ifdef _WIN32
@@ -2942,22 +2935,29 @@ void Client::State::start_ouinet()
         if (was_stopped()) return;
 
         sys::error_code ec;
-        setup_injector(yield[ec]);
+
+        try {
+            auto r = setup_injector(Async(yield, _shutdown_signal, _log_path.tag("setup_injector")));
+            if (!r) ec = r.error();
+        }
+        catch (Async::Cancelled const&) {
+            ec = asio::error::operation_aborted;
+        }
 
         if (ec && ec != asio::error::operation_aborted)
             LOG_ERROR("Failed to setup injector; ec=", ec);
+
+        if (_injector_starting) {
+            _injector_start_ec = ec;
+            _injector_starting->notify(ec);
+            _injector_starting.reset();
+        }
     });
 
-    task::spawn_detached(_ctx, [
-        this
-    ] (asio::yield_context yield) {
+    task::spawn_detached(_ctx, [this] (asio::yield_context yield) {
         if (was_stopped()) return;
-
-        sys::error_code ec;
-        setup_cache(YieldContext(yield, _log_path.tag("setup_cache"))[ec]);
-
-        if (ec && ec != asio::error::operation_aborted)
-            LOG_ERROR("Failed to setup cache; ec=", ec);
+        auto r = setup_cache(Async(yield, _shutdown_signal, _log_path.tag("setup_cache")));
+        if (!r) LOG_ERROR("Failed to setup cache; ec=", r.error());
     });
 }
 
@@ -2975,22 +2975,13 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient> client)
     return make_unique<ouiservice::TlsOuiServiceClient>(std::move(client), inj_ctx);
 }
 
-void Client::State::setup_injector(asio::yield_context yield)
+std::expected<void, sys::error_code> Client::State::setup_injector(Async yield)
 {
     // Remember to always set before return in case of error,
     // or the notification may not pass the right error code to listeners.
-    sys::error_code ec;
-    auto notify_ready = defer([&] {
-        if (!_injector_starting) return;
-        _injector_start_ec = ec;
-        _injector_starting->notify(ec);
-        _injector_starting.reset();
-    });
-
     auto injector_ep = _config.injector_endpoint();
     if (!injector_ep) {
-        ec = asio::error::operation_not_supported;
-        return;
+        return std::unexpected(asio::error::operation_not_supported);
     }
 
     LOG_INFO("Setting up injector: ", *injector_ep);
@@ -3044,7 +3035,7 @@ void Client::State::setup_injector(asio::yield_context yield)
         auto tcp_client = make_unique<ouiservice::TcpOuiServiceClient>(_ctx.get_executor(), *ep);
 
         if (!tcp_client->verify_endpoint()) {
-            return or_throw(yield, ec = asio::error::invalid_argument);
+            return std::unexpected(asio::error::invalid_argument);
         }
         client = maybe_wrap_tls(std::move(tcp_client));
     } else if (auto ep = injector_ep->get_if<Endpoint::Utp>()) {
@@ -3055,28 +3046,26 @@ void Client::State::setup_injector(asio::yield_context yield)
             (_ctx.get_executor(), std::move(m), ep->value);
 
         if (!utp_client->verify_remote_endpoint()) {
-            return or_throw(yield, ec = asio::error::invalid_argument);
+            return std::unexpected(asio::error::invalid_argument);
         }
 
         client = maybe_wrap_tls(std::move(utp_client));
     } else if (auto ep = injector_ep->get_if<Endpoint::Bep5>()) {
-        auto dht = bittorrent_dht(yield[ec]);
-        if (ec) {
-            if (ec != asio::error::operation_aborted) {
-                LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", ec);
-            }
-            return or_throw(yield, ec);
+        auto dht = bittorrent_dht(yield);
+        if (!dht) {
+            LOG_ERROR("Failed to set up Bep5Client at setting up BT DHT; ec=", dht.error());
+            return std::unexpected(dht.error());
         }
 
         boost::optional<string> bridge_swarm_name = _config.bep5_bridge_swarm_name();
 
         if (!bridge_swarm_name) {
             LOG_ERROR("Bridge swarm name has not been computed");
-            return or_throw(yield, ec = asio::error::operation_not_supported);
+            return std::unexpected(asio::error::operation_not_supported);
         }
 
         _bep5_client = make_shared<ouiservice::Bep5Client>(
-            dht,
+            *dht,
             ep->value,
             *bridge_swarm_name,
             _config.is_bridge_announcement_enabled(),
@@ -3087,25 +3076,19 @@ void Client::State::setup_injector(asio::yield_context yield)
 
         client = make_unique<ouiservice::WeakOuiServiceClient>(_bep5_client);
 
-        idempotent_start_accepting_on_utp(yield[ec]);
-
-        if (ec) {
-            LOG_ERROR("Failed to start accepting on uTP; ec=", ec);
-            ec = {};
+        if (auto r = idempotent_start_accepting_on_utp(yield); !r) {
+            LOG_ERROR("Failed to start accepting on uTP; ec=", r.error());
         }
     }
 
     _injector = std::make_unique<OuiServiceClient>(_ctx.get_executor());
     _injector->add(*injector_ep, std::move(client));
 
-    try {
-        ec = _injector->start(Async(yield, _shutdown_signal, _log_path));
-    }
-    catch (Async::Cancelled const&) {
-        return or_throw(yield, asio::error::operation_aborted);
+    if (sys::error_code ec = _injector->start(yield)) {
+        return std::unexpected(ec);
     }
 
-    return or_throw(yield, ec);
+    return {};
 }
 
 //------------------------------------------------------------------------------

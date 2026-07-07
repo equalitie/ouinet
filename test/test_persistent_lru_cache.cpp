@@ -8,6 +8,7 @@
 #include <iostream>
 #include <util/file_io.h>
 #include <task.h>
+#include "util/unwrap.h"
 
 namespace utf = boost::unit_test;
 
@@ -33,36 +34,55 @@ struct StringEntry : public std::string {
 
     using std::string::string;
 
-    void write(File& f, Cancel& cancel, asio::yield_context yield) const
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    write(File& f, Async yield) const
     {
-        sys::error_code ec;
-
-        file_io::write_number<uint64_t>(f, size(), cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-
-        file_io::write(f, asio::buffer(*this), cancel, yield[ec]);
+        if (auto r = file_io::write_number<uint64_t>(f, size(), yield); !r) {
+            return std::unexpected(r.error());
+        }
+        if (auto r = file_io::write(f, asio::buffer(*this), yield); !r) {
+            return std::unexpected(r.error());
+        }
+        return {};
     }
 
-    void read(File& f, Cancel& cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    read(File& f, Async yield)
     {
-        sys::error_code ec;
-
-        auto s = file_io::read_number<uint64_t>(f, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-
-        resize(s);
-        file_io::read(f, asio::buffer(*this), cancel, yield[ec]);
+        if (auto r = file_io::read_number<uint64_t>(f, yield); !r) {
+            return std::unexpected(r.error());
+        }
+        else {
+            resize(*r);
+        }
+        if (auto r = file_io::read(f, asio::buffer(*this), yield); !r) {
+            return std::unexpected(r.error());
+        }
+        return {};
     }
 };
 
 using Lru = PersistentLruCache<StringEntry>;
 
+static void run_spawned(std::function<void(Async)> f) {
+    asio::io_context ctx;
+
+    task::spawn_detached(ctx.get_executor(), [f = std::move(f)] (auto yield) {
+            try {
+                f(Async(yield));
+            }
+            catch (const std::exception& e) {
+                BOOST_ERROR(string("Test ended with exception: ") + e.what());
+            }
+        });
+
+    ctx.run();
+}
+
 BOOST_AUTO_TEST_CASE(test_initialize)
 {
-    asio::io_context ctx;
-    auto exec = ctx.get_executor();
-    Cancel cancel;
-
     auto dir = fs::temp_directory_path()
              / fs::unique_path("ouinet-persistent-lru-cache-test-%%%%-%%%%");
 
@@ -81,16 +101,13 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
     const unsigned max_cache_size = 2;
 
-    task::spawn_detached(exec, [&] (auto yield) {
+    run_spawned([&] (Async yield) {
         sys::error_code ec;
 
         {
-            auto lru = Lru::load(exec, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = unwrap(Lru::load(dir, max_cache_size, yield));
 
-            BOOST_REQUIRE(!ec);
-
-            lru->insert("hello1", "world1", cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            unwrap(lru->insert("hello1", "world1", yield));
 
             BOOST_REQUIRE(lru->find("not-there") == lru->end());
 
@@ -99,13 +116,11 @@ BOOST_AUTO_TEST_CASE(test_initialize)
                 BOOST_REQUIRE(i != lru->end());
             }
 
-            lru->insert("hello2", "world2", cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            unwrap(lru->insert("hello2", "world2", yield));
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            lru->insert("hello3", "world3", cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            unwrap(lru->insert("hello3", "world3", yield));
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
@@ -130,7 +145,7 @@ BOOST_AUTO_TEST_CASE(test_initialize)
         {
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = Lru::load(exec, dir, max_cache_size, cancel, yield[ec]);
+            auto lru = unwrap(Lru::load(dir, max_cache_size, yield));
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
@@ -144,38 +159,39 @@ BOOST_AUTO_TEST_CASE(test_initialize)
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), max_cache_size);
 
-            auto lru = Lru::load(exec, dir, new_max_cache_size, cancel, yield[ec]);
+            auto lru = unwrap(Lru::load(dir, new_max_cache_size, yield));
 
             BOOST_REQUIRE_EQUAL(count_files_in_dir(dir), new_max_cache_size);
             BOOST_REQUIRE_EQUAL(lru->size(), count_files_in_dir(dir));
         }
     });
-
-    ctx.run();
 }
 
 struct DataEntry {
     const std::string* data = nullptr;  // only set and used until writing
 
-    void write(File& f, Cancel& cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    write(File& f, Async yield)
     {
-        sys::error_code ec;
-        file_io::write(f, asio::buffer(*data), cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        if (auto r = file_io::write(f, asio::buffer(*data), yield); !r) {
+            return std::unexpected(r.error());
+        }
         data = nullptr;
+        return {};
     }
 
-    void read(File&, Cancel&, asio::yield_context) {}
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    read(File&, Async) {
+        return {};
+    }
 };
 
 using DataLru = PersistentLruCache<DataEntry>;
 
 BOOST_AUTO_TEST_CASE(test_open_value)
 {
-    asio::io_context ctx;
-    auto exec = ctx.get_executor();
-    Cancel cancel;
-
     auto dir = fs::temp_directory_path()
              / fs::unique_path("ouinet-persistent-lru-cache-test-%%%%-%%%%");
 
@@ -189,32 +205,24 @@ BOOST_AUTO_TEST_CASE(test_open_value)
     const std::string key("test");
     const std::string data(4200, 'x');  // bigger than usual cache block
 
-    task::spawn_detached(exec, [&] (auto yield) {
-        sys::error_code ec;
-
+    run_spawned([&] (auto yield) {
         // Create cache and insert element
         {
-            auto lru = DataLru::load(exec, dir, max_cache_size, cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
-
-            lru->insert(key, DataEntry{&data}, cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            auto lru = unwrap(DataLru::load(dir, max_cache_size, yield));
+            unwrap(lru->insert(key, DataEntry{&data}, yield));
         }
 
         // Reload cache and open element data
         {
-            auto lru = DataLru::load(exec, dir, max_cache_size, cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            auto lru = unwrap(DataLru::load(dir, max_cache_size, yield));
 
             auto i = lru->find(key);
             BOOST_REQUIRE(i != lru->end());
 
-            auto f = i.open(ec);
-            BOOST_REQUIRE(!ec);
+            auto f = unwrap(i.open());
 
             std::string data_in(data.size(), '\0');
-            file_io::read(f, asio::buffer(data_in), cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            unwrap(file_io::read(f, asio::buffer(data_in), yield));
             BOOST_REQUIRE_EQUAL(data_in, data);
         }
 
@@ -222,37 +230,29 @@ BOOST_AUTO_TEST_CASE(test_open_value)
         {
             std::string data_in;
 
-            auto lru = DataLru::load(exec, dir, max_cache_size, cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            auto lru = unwrap(DataLru::load(dir, max_cache_size, yield));
 
             auto i = lru->find(key);
             BOOST_REQUIRE(i != lru->end());
 
-            auto f_old = i.open(ec);
-            BOOST_REQUIRE(!ec);
+            auto f_old = unwrap(i.open());
 
             const std::string data_new(data.size(), 'y');
-            lru->insert(key, DataEntry({&data_new}), cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            unwrap(lru->insert(key, DataEntry({&data_new}), yield));
 
-            auto f_new = i.open(ec);
-            BOOST_REQUIRE(!ec);
+            auto f_new = unwrap(i.open());
 
             // This should yield the new data
             data_in.resize(data_new.size(), '\0');
-            file_io::read(f_new, asio::buffer(data_in), cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            unwrap(file_io::read(f_new, asio::buffer(data_in), yield));
             BOOST_REQUIRE_EQUAL(data_in, data_new);
 
             // This should yield the old data, not the new one
             data_in.resize(data.size(), '\0');
-            file_io::read(f_old, asio::buffer(data_in), cancel, yield[ec]);
-            BOOST_REQUIRE(!ec);
+            unwrap(file_io::read(f_old, asio::buffer(data_in), yield));
             BOOST_REQUIRE_EQUAL(data_in, data);
         }
     });
-
-    ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -498,9 +498,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
-        std::ignore = yield.call_deprecated([&] (auto log_path, auto cancel, auto yield) {
-            cache_client->local_purge(cancel, YieldContext(yield, log_path));
-        });
+        std::ignore = cache_client->local_purge(yield);
         query_handled = true;
     }
 
@@ -658,9 +656,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
                               " (i.e. not older than %s).<br>\n")
               % max_age.total_seconds() % past_as_string(max_age));
 
-        auto local_size = yield.call_deprecated([&] (auto log_path, auto cancel, auto yield) {
-            return cache_client->local_size(cancel, yield);
-        });
+        auto local_size = cache_client->local_size(yield);
 
         ss << "Approximate size of content cached locally: ";
         if (!local_size) ss << "(unknown)";
@@ -779,9 +775,7 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
     }
 
     if (cache_client) {
-        auto sz = yield.call_deprecated([&] (auto log_path, auto cancel, auto yield) {
-            return cache_client->local_size(cancel, yield);
-        });
+        auto sz = cache_client->local_size(yield);
         if (!sz) {
             LOG_ERROR("Front-end: Failed to get local cache size; ec=", sz.error());
         } else {
