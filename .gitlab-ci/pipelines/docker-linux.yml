@@ -35,7 +35,8 @@ linux / test:
   script:
     - ./docker/linux.sh --target-os linux --run-all-tests
   needs:
-    ['linux / build']
+    - job: 'linux / build'
+      artifacts: false
 #
 #linux / rust-tests:
 #  variables:

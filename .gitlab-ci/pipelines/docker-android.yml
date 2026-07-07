@@ -10,6 +10,7 @@ android / build:
   needs:
     - job: 'linux / build'
       optional: true
+      artifacts: false
   artifacts:
     paths:
       - $BUILD_PATH/$TARGET_OS/*.aar
