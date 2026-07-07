@@ -10,6 +10,7 @@
 #include <ctime>
 #include <fstream>
 #include <string>
+#include <asio_utp/udp_multiplexer.hpp>
 
 
 #include "namespaces.h"
@@ -953,33 +954,49 @@ Injector::Injector(
         proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
     }
 
+    asio_utp::udp_multiplexer socket(_exec);
+    asio_utp::udp_multiplexer socket_tls(_exec);
+
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
         LOG_INFO(trace, " uTP address: ", endpoint);
 
-        util::create_state_file( _config.repo_root()/"endpoint-utp"
-                               , util::str(endpoint));
+        sys::error_code ec;
+        socket.bind(endpoint, ec);
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
-        proxy_server->add(std::move(srv));
+        if (ec) {
+            LOG_WARN(trace, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
+        } else {
+            LOG_INFO(trace, " uTP address: ", endpoint);
+
+            util::create_state_file( _config.repo_root() / "endpoint-utp"
+                                   , util::str(endpoint));
+
+            auto srv = make_unique<ouiservice::UtpOuiServiceServer>(socket);
+            proxy_server->add(std::move(srv));
+        }
     }
 
     if (_config.utp_tls_endpoint()) {
-
         udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
+        sys::error_code ec;
+        socket_tls.bind(endpoint, ec);
 
-        auto local_ep = base->local_endpoint();
-
-        if (local_ep) {
-            LOG_INFO(trace, " uTP/TLS address: ", *local_ep);
-            util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
-                                   , util::str(*local_ep));
-            proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
-
+        if (ec) {
+            LOG_WARN(trace, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
         } else {
-            LOG_ERROR(trace, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
+            auto base = make_unique<ouiservice::UtpOuiServiceServer>(socket_tls);
+            auto local_ep = base->local_endpoint();
+
+            if (local_ep) {
+                LOG_INFO(trace, " uTP/TLS address: ", *local_ep);
+                util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
+                                       , util::str(*local_ep));
+                proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
+            } else {
+                LOG_ERROR(trace, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
+            }
         }
     }
 
@@ -1005,12 +1022,36 @@ Injector::Injector(
         _dht = std::move(dht);
     }
 
-    _dht->set_endpoints({_config.bittorrent_endpoint()});
+    if (_config.utp_endpoint()) {
+        std::ignore = _dht->add_endpoint(std::move(socket));
+    }
+
+    if (_config.utp_tls_endpoint()) {
+        std::ignore = _dht->add_endpoint(std::move(socket_tls));
+    }
+
+    if (!_config.utp_endpoint() && !_config.utp_tls_endpoint()) {
+        sys::error_code ec;
+        socket.bind(_config.bittorrent_endpoint(), ec);
+
+        if (ec) {
+            LOG_WARN(
+                trace,
+                "Failed to bind UDP socket to address ",
+                _config.bittorrent_endpoint(),
+                ": ",
+                ec.what()
+            );
+        }
+
+        std::ignore = _dht->add_endpoint(std::move(socket));
+    }
 
     assert(!_dht->local_endpoints().empty());
 
-    if (_dht->local_endpoints().empty())
+    if (_dht->local_endpoints().empty()) {
         LOG_ERROR(trace, " Failed to bind the BitTorrent DHT to any local endpoint");
+    }
 
     proxy_server->add(make_unique<ouiservice::Bep5Server>(
         _dht,

@@ -344,7 +344,8 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
             "--allow-private-targets",
             "--bt-bootstrap-no-default",
-            "--trace-root=injector"
+            "--trace-root=injector",
+            "--log-level=DEBUG"
         }),
         ctx);
 
