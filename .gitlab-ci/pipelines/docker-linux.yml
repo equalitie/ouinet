@@ -15,18 +15,19 @@
 linux / build:
   stage: build
   variables:
-    BUILD_PATH: 'build/linux'
+    BUILD_PATH: 'build'
+    TARGET_OS: 'linux'
   tags:
     - shell+docker
   script:
-    - ./docker/linux.sh --target-os linux --artifact-dir $BUILD_PATH
+    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH
   artifacts:
     paths:
-      - $BUILD_PATH/client
-      - $BUILD_PATH/injector
-      - $BUILD_PATH/lib*.so
-      - $BUILD_PATH/lib*.so.*
-      - $BUILD_PATH/test/test_*
+      - $BUILD_PATH/$TARGET_OS/client
+      - $BUILD_PATH/$TARGET_OS/injector
+      - $BUILD_PATH/$TARGET_OS/lib*.so
+      - $BUILD_PATH/$TARGET_OS/lib*.so.*
+      - $BUILD_PATH/$TARGET_OS/test/test_*
     expire_in: 6h
 
 #linux / cpp-tests:
