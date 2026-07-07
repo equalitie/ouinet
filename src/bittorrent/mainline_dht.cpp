@@ -5,9 +5,11 @@
 #include <cstddef>
 #include <expected>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <set>
 
+#include <asio_utp/udp_multiplexer.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/buffer.hpp>
@@ -20,6 +22,7 @@
 #include <boost/accumulators/statistics/rolling_mean.hpp>
 #include <boost/accumulators/statistics/rolling_variance.hpp>
 #include <boost/accumulators/statistics/rolling_count.hpp>
+
 
 #include "bencoding.h"
 #include "code.h"
@@ -36,6 +39,7 @@
 #include "../defer.h"
 #include "../parse/endpoint.h"
 #include "../or_throw.h"
+#include "../udp_sockets.h"
 #include "../util.h"
 #include "../util/address.h"
 #include "../util/atomic_file.h"
@@ -201,7 +205,7 @@ static bool read_nodes( bool is_v4
     return sink.async_push_many(nodes, yield).has_value();
 }
 
-DhtNode::DhtNode( asio_utp::udp_multiplexer multiplexer
+DhtNode::DhtNode( asio_utp::udp_multiplexer socket
                 , metrics::DhtNode metrics
                 , std::shared_ptr<dns::Resolver> dns_resolver
                 , const uint32_t mux_rx_limit
@@ -209,8 +213,8 @@ DhtNode::DhtNode( asio_utp::udp_multiplexer multiplexer
                 , bootstrap::Config bs
                 , Trace trace
 ):
-    _exec(multiplexer.get_executor()),
-    _multiplexer(std::make_unique<UdpMultiplexer>(std::move(multiplexer), mux_rx_limit)),
+    _exec(socket.get_executor()),
+    _multiplexer(std::make_unique<UdpMultiplexer>(std::move(socket))),
     _ready(false),
     _stats(new Stats()),
     _dns_resolver(std::move(dns_resolver)),
@@ -223,10 +227,8 @@ DhtNode::DhtNode( asio_utp::udp_multiplexer multiplexer
 {
 }
 
-
 std::expected<void, sys::error_code> DhtNode::start(Async yield)
 {
-
     _tracker = std::make_unique<Tracker>(_exec);
     _data_store = std::make_unique<DataStore>(_exec);
 
@@ -2478,6 +2480,11 @@ std::expected<void, sys::error_code> DhtNode::tracker_do_search_peers(
     return result;
 }
 
+const asio_utp::udp_multiplexer& DhtNode::socket() const {
+    return _multiplexer->socket();
+}
+
+
 std::ostream& operator << (std::ostream& os, const DhtNode::BootstrapResult& result) {
     return os << "{ my_ep=" << result.my_ep << ", node_ep=" << result.node_ep << " }";
 }
@@ -2507,39 +2514,6 @@ MainlineDht::~MainlineDht()
     _cancel();
 }
 
-void MainlineDht::set_endpoints(const std::vector<asio_utp::udp_multiplexer>& ms)
-{
-    auto exists = [](const auto& ms, const asio::ip::udp::endpoint& ep) -> bool {
-        for (auto& m : ms) if (m.local_endpoint() == ep) return true;
-        return false;
-    };
-
-    // Remove nodes whose address is not listed in `eps`
-    for (auto it = _nodes.begin(); it != _nodes.end(); ) {
-        if (exists(ms, it->first)) {
-            ++it;
-        } else {
-            it = _nodes.erase(it);
-        }
-    }
-
-    // Ensure that there are nodes for each address in `eps` (create if needed)
-    for (auto& m : ms) {
-        if (_nodes.count(m.local_endpoint())) continue;
-        (void) add_endpoint(m);
-    }
-}
-
-std::vector<asio_utp::udp_multiplexer> MainlineDht::udp_multiplexers() const {
-    std::vector<asio_utp::udp_multiplexer> ret;
-
-    for (auto it = _nodes.begin(); it != _nodes.end();++it) {
-        ret.push_back(it->second->udp_multiplexer());
-    }
-
-    return ret;
-}
-
 metrics::DhtNode metrics_dht_node_for(metrics::MainlineDht& metrics, const asio::ip::address& addr) {
     if (addr.is_v4()) {
         return metrics.dht_node_ipv4();
@@ -2553,6 +2527,17 @@ std::set<udp::endpoint> MainlineDht::wan_endpoints() const {
     std::set<udp::endpoint> ret;
     for (auto& p : _nodes) { ret.insert(p.second->wan_endpoint()); }
     return ret;
+}
+
+UdpSockets MainlineDht::sockets() const {
+    std::vector<asio_utp::udp_multiplexer> sockets;
+    sockets.reserve(_nodes.size());
+
+    for (auto& p : _nodes) {
+        sockets.push_back(p.second->socket());
+    }
+
+    return UdpSockets(std::move(sockets));
 }
 
 bool MainlineDht::all_ready() const {
@@ -2591,7 +2576,6 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         [
             this,
             trace = _trace,
-            m = std::move(m),
             promise = std::move(promise),
             local_ep
         ](auto y) mutable {

@@ -22,6 +22,7 @@
 #include "../constants.h"
 #include "../peer_message.h"
 #include "signed_head.h"
+#include "udp_sockets.h"
 
 #include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
@@ -61,12 +62,14 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 
 static
 std::optional<asio_utp::udp_multiplexer>
-choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
-                      , const std::vector<asio_utp::udp_multiplexer>& udp_multiplexers)
+choose_multiplexer_for(
+    AsioExecutor exec,
+    const udp::endpoint& ep,
+    const UdpSockets& sockets)
 {
-    for (auto& m : udp_multiplexers) {
-        if (same_ipv(ep, m.local_endpoint())) {
-            return m;
+    for (const auto& socket : sockets) {
+        if (same_ipv(ep, socket.local_endpoint())) {
+            return socket;
         }
     }
 
@@ -78,13 +81,13 @@ choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
 static
 std::expected<GenericStream, sys::error_code>
 connect( udp::endpoint ep
-       , const std::vector<asio_utp::udp_multiplexer>& udp_multiplexers
+       , const UdpSockets& sockets
        , Async yield)
 {
     sys::error_code ec;
     auto exec = yield.get_executor();
 
-    auto opt_m = choose_multiplexer_for(exec, ep, udp_multiplexers);
+    auto opt_m = choose_multiplexer_for(exec, ep, sockets);
 
 #ifdef __APPLE__
     if (!opt_m) {
@@ -417,7 +420,7 @@ struct MultiPeerReader::PreFetch {
 class MultiPeerReader::Peers {
 public:
     Peers(AsioExecutor exec
-         , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
+         , UdpSockets sockets
          , set<udp::endpoint> wan_my_eps
          , set<udp::endpoint> lan_peer_eps
          , sign::PublicKey cache_pk
@@ -430,7 +433,7 @@ public:
         , _cv(_exec)
         , _cache_pk(std::move(cache_pk))
         , _lan_peer_eps(std::move(lan_peer_eps))
-        , _udp_multiplexers(std::move(udp_multiplexers))
+        , _udp_sockets(std::move(sockets))
         , _wan_my_eps(std::move(wan_my_eps))
         , _resource_id(std::move(resource_id))
         , _resource_key(resource_key)
@@ -501,14 +504,14 @@ public:
     }
 
     Peers(AsioExecutor exec
-         , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
+         , UdpSockets sockets
          , set<udp::endpoint> lan_peer_eps
          , sign::PublicKey cache_pk
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
          , Trace trace)
-        : Peers( exec, std::move(udp_multiplexers), {}, std::move(lan_peer_eps)
+        : Peers( exec, std::move(sockets), {}, std::move(lan_peer_eps)
                , std::move(cache_pk), resource_id, resource_key, nullptr
                , std::move(newest_proto_seen), std::move(trace))
     {}
@@ -642,7 +645,6 @@ public:
                 this,
                 ep,
                 peer,
-                udp_multiplexers = _udp_multiplexers,
                 newest_proto_seen = _newest_proto_seen
             ] (Async yield) mutable {
                 LOG_DEBUG(yield, " Fetching hash list");
@@ -650,7 +652,7 @@ public:
                 auto result = timeout(
                     MultiPeerReader::BEP5_HASH_LIST_TIMEOUT,
                     [&](Async yield) -> std::expected<void, sys::error_code> {
-                        auto con = connect(ep, udp_multiplexers, yield);
+                        auto con = connect(ep, _udp_sockets, yield);
 
                         if (!con) {
                             return std::unexpected(con.error());
@@ -786,7 +788,7 @@ private:
 
     sign::PublicKey _cache_pk;
     std::set<asio::ip::udp::endpoint> _lan_peer_eps;
-    std::vector<asio_utp::udp_multiplexer> _udp_multiplexers;
+    UdpSockets _udp_sockets;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
     ResourceId _resource_id;
     CryptoStreamKey _resource_key;
@@ -807,14 +809,14 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , CryptoStreamKey resource_key
                                 , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
-                                , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
+                                , UdpSockets sockets
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , Trace trace)
     : _executor(ex)
     , _trace(std::move(trace))
 {
     _peers = make_unique<Peers>(ex
-                               , std::move(udp_multiplexers)
+                               , std::move(sockets)
                                , std::move(lan_peer_eps)
                                , std::move(cache_pk)
                                , std::move(resource_id)
@@ -835,7 +837,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _trace(std::move(trace))
 {
     _peers = make_unique<Peers>(ex
-                               , peer_lookup->get_dht_lock()->udp_multiplexers()
+                               , peer_lookup->get_dht_lock()->sockets()
                                , std::set<udp::endpoint>{}
                                , std::move(lan_peer_eps)
                                , std::move(cache_pk)
