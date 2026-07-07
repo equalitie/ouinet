@@ -29,7 +29,10 @@ linux / build:
     expire_in: 6h
 
 linux / test:
-  extends:
+  stage: test
+  tags:
+    - shell+docker
+  script:
     - ./docker/linux.sh --target-os linux --run-all-tests
   needs:
     ['linux / build']
