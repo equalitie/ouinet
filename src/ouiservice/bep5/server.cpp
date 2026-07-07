@@ -21,9 +21,8 @@ Bep5Server::Bep5Server( shared_ptr<bt::DhtBase> dht
 
     auto ex = dht->get_executor();
 
-    auto endpoints = dht->local_endpoints();
-
-    _multi_utp_server = make_unique<MultiUtpServer>(ex, endpoints, ssl_context, log_path);
+    auto sockets = dht->sockets();
+    _multi_utp_server = make_unique<MultiUtpServer>(ex, std::move(sockets), ssl_context, log_path);
 
     bt::NodeID infohash = util::sha1_digest(swarm_name);
     LOG_INFO(log_path, " Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());

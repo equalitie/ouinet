@@ -1,7 +1,6 @@
 #pragma once
 
 #include <asio_utp/udp_multiplexer.hpp>
-#include <boost/asio/spawn.hpp>
 #include <set>
 #include "node_id.h"
 #include "namespaces.h"
@@ -10,6 +9,7 @@
 namespace ouinet {
 
 class Cancel;
+class UdpSockets;
 
 namespace bittorrent {
 
@@ -24,13 +24,13 @@ public:
 
     virtual ~DhtBase();
 
-    virtual void set_endpoints(const std::set<UdpEndpoint>&) = 0;
-
     virtual Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) = 0;
 
     virtual std::set<UdpEndpoint> local_endpoints() const = 0;
 
     virtual std::set<UdpEndpoint> wan_endpoints() const = 0;
+
+    virtual UdpSockets sockets() const = 0;
 
     virtual std::expected<std::set<UdpEndpoint>, sys::error_code>
     tracker_announce(NodeID infohash, std::optional<int> port, Async) = 0;

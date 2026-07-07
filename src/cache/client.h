@@ -13,6 +13,7 @@
 #include "resource_id.h"
 #include "dht_groups.h"
 #include "peer_message.h"
+#include "udp_sockets.h"
 #include "util/crypto_stream_key.h"
 #include "ouiservice/i2p/fwd.h"
 #include "ouiservice/i2p/address.h"
@@ -36,7 +37,7 @@ private:
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+    build( UdpSockets udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -50,13 +51,13 @@ public:
 public:
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+    build( UdpSockets udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , Async yield)
     {
-        return build( std::move(lan_my_endpoints), std::move(cache_pk)
+        return build( std::move(udp_sockets), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , boost::none, boost::none
                     , yield);
@@ -64,7 +65,7 @@ public:
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+    build( UdpSockets udp_sockets
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
@@ -74,7 +75,7 @@ public:
     {
         assert(!static_cache_dir.empty());
         assert(!static_cache_content_dir.empty());
-        return build( std::move(lan_my_endpoints), std::move(cache_pk)
+        return build( std::move(udp_sockets), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , opt_path{std::move(static_cache_dir)}
                     , opt_path{std::move(static_cache_content_dir)}

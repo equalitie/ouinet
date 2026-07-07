@@ -4,9 +4,9 @@
 #include <fstream>
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
-#include "namespaces.h"
-#include "logger.h"
 #include "constants.h"
+#include "logger.h"
+#include "util/executor.h"
 
 namespace ouinet {
 
@@ -72,14 +72,14 @@ namespace detail_create_udp_multiplexer {
 
 static
 asio_utp::udp_multiplexer
-create_udp_multiplexer( asio::io_context& ctx
+create_udp_multiplexer( const util::AsioExecutor& exec
                       , const fs::path& last_used_port_path
-                      , const boost::optional<uint16_t>& settings_port = boost::none)
+                      , const std::optional<uint16_t>& settings_port = std::nullopt)
 {
     using namespace std;
     namespace detail = ouinet::detail_create_udp_multiplexer;
 
-    asio_utp::udp_multiplexer ret(ctx);
+    asio_utp::udp_multiplexer ret(exec);
     list<detail::PortBinding> port_binding_attempts;
 
     // 1. Use the port defined in `udp-mux-port` via ouinet.conf or CLI options

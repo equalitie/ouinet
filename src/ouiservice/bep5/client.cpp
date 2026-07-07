@@ -1,4 +1,7 @@
+#include <boost/asio/experimental/channel.hpp>
 #include <boost/functional/hash.hpp>
+#include <optional>
+#include <ranges>
 
 #include "client.h"
 #include "../utp.h"
@@ -12,11 +15,11 @@
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
 #include "../../task.h"
+#include "../../udp_sockets.h"
 #include "../../util/wait_condition.h"
 #include "../../util/watch_dog.h"
 #include "../../util/select.h"
 #include "../../util/semaphore.h"
-#include <boost/asio/experimental/channel.hpp>
 
 // It is ok to have many of these as a resort if injectors are not reachable,
 // as long as they are fresh in the DHT.
@@ -49,23 +52,16 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 }
 
 static
-boost::optional<asio_utp::udp_multiplexer>
-choose_multiplexer_for(bt::DhtBase& dht, const udp::endpoint& ep)
+std::optional<asio_utp::udp_multiplexer>
+choose_multiplexer_for(const bt::DhtBase& dht, const udp::endpoint& ep)
 {
-    auto eps = dht.local_endpoints();
-
-    for (auto& e : eps) {
-        if (!same_ipv(ep, e)) continue;
-
-        asio_utp::udp_multiplexer m(dht.get_executor());
-        sys::error_code ec;
-        m.bind(e, ec);
-        assert(!ec);
-
-        return m;
+    for (auto& socket : dht.sockets()) {
+        if (same_ipv(ep, socket.local_endpoint())) {
+            return std::move(socket);
+        }
     }
 
-    return boost::none;
+    return std::nullopt;
 }
 
 constexpr std::chrono::duration ERROR_WAIT_DURATION = 1s;

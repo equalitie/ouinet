@@ -142,7 +142,7 @@ public:
         return _local_ep;
     }
 
-    boost::optional<uint16_t> udp_mux_port() const {
+    std::optional<uint16_t> udp_mux_port() const {
         return _udp_mux_port;
     }
 
@@ -326,7 +326,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
-    boost::optional<uint16_t> _udp_mux_port;
+    std::optional<uint16_t> _udp_mux_port;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     InjectorEndpoints _injector_endpoints;
     std::string _tls_injector_cert_path;

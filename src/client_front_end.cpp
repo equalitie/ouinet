@@ -254,16 +254,14 @@ local_endpoint(const EndPoint& local_ep) {
 
 static
 std::vector<std::string>
-local_udp_endpoints(const ClientFrontEnd::UdpEndpoint& local_ep) {
-    // This used to return both IPv4 and IPv6 endpoints,
-    // but now we only return the actual endpoint
-    // (still as a vector for backwards compatibility.
-    auto ep = local_endpoint(local_ep);
-
+local_udp_endpoints(const std::vector<ClientFrontEnd::UdpEndpoint>& local_eps) {
     std::vector<std::string> eps;
-    eps.reserve(1);
+    eps.reserve(local_eps.size());
 
-    if (ep) eps.push_back(util::str(*ep));
+    for (auto local_ep : local_eps) {
+        auto ep = local_endpoint(local_ep);
+        if (ep) eps.push_back(util::str(*ep));
+    }
 
     return eps;
 }
@@ -454,7 +452,7 @@ std::optional<bool> parse_enable(std::string& str) {
 std::expected<void, sys::error_code>
 ClientFrontEnd::handle_portal( ClientConfig& config
                              , Client::RunningState cstate
-                             , boost::optional<UdpEndpoint> local_ep
+                             , const std::vector<UdpEndpoint> local_eps
                              , const std::shared_ptr<UPnPs>& upnps_ptr
                              , const bittorrent::DhtBase* dht
                              , const Request& req, Response& res, ostringstream& ss
@@ -568,10 +566,10 @@ ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "<h2>Network</h2>\n";
 
-    if (local_ep) {
+    if (!local_eps.empty()) {
         ss << "Local UDP endpoints:<br>\n";
         ss << "<ul>\n";
-        for (auto& ep : local_udp_endpoints(*local_ep))
+        for (auto& ep : local_udp_endpoints(local_eps))
             ss << "<li>" << as_safe_html(ep) << "</li>\n";
         ss << "</ul>\n";
     }
@@ -722,7 +720,7 @@ size_t injector_candidates_n(ouiservice::Bep5Client* client) noexcept {
 std::expected<void, sys::error_code>
 ClientFrontEnd::handle_api_status( ClientConfig& config
                                  , Client::RunningState cstate
-                                 , boost::optional<UdpEndpoint> local_ep
+                                 , const std::vector<UdpEndpoint>& local_eps
                                  , const std::shared_ptr<UPnPs>& upnps_ptr
                                  , const bittorrent::DhtBase* dht
                                  , const Request& req, Response& res, ostringstream& ss
@@ -753,7 +751,9 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
 
-    if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
+    if (!local_eps.empty()) {
+        response["local_udp_endpoints"] = local_udp_endpoints(local_eps);
+    }
 
     if (upnps_ptr)
     {
@@ -939,7 +939,7 @@ ClientFrontEnd::serve( ClientConfig& config
                      , cache::Client* cache_client
                      , ouiservice::Bep5Client* client
                      , const CACertificate& ca
-                     , boost::optional<UdpEndpoint> local_ep
+                     , const std::vector<UdpEndpoint> local_eps
                      , const std::shared_ptr<UPnPs>& upnps_ptr
                      , const bittorrent::DhtBase* dht
                      , ClientFrontEndMetricsController& metrics
@@ -994,7 +994,7 @@ ClientFrontEnd::serve( ClientConfig& config
     } else if (path == pinned_list_apath) {
         handle_pinned_list(req, res, ss, cache_client);
     } else if (path == status_api_path) {
-        handle_api_status( config, client_state, local_ep, upnps_ptr, dht
+        handle_api_status( config, client_state, local_eps, upnps_ptr, dht
                          , req, res, ss, cache_client, client, metrics
                          , yield);
     } else if (path.starts_with(groups_api_path)) {
@@ -1006,7 +1006,7 @@ ClientFrontEnd::serve( ClientConfig& config
     } else if (path.starts_with(endpoints_api_path)) {
         handle_api_endpoints(proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
     } else {
-        handle_portal( config, client_state, local_ep, upnps_ptr, dht
+        handle_portal( config, client_state, local_eps, upnps_ptr, dht
                      , req, res, ss, cache_client, metrics
                      , yield);
     }

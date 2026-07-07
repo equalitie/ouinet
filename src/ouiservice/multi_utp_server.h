@@ -6,8 +6,10 @@
 #include <boost/asio/ip/udp.hpp>
 #include <set>
 #include "api.h"
+#include "udp_sockets.h"
 
-namespace ouinet::ouiservice {
+namespace ouinet {
+namespace ouiservice {
 
 class OUINET_COMMON_API MultiUtpServer : public OuiServiceImplementationServer
 {
@@ -16,7 +18,7 @@ private:
 
 public:
     MultiUtpServer( AsioExecutor
-                  , std::set<asio::ip::udp::endpoint>
+                  , UdpSockets
                   , boost::asio::ssl::context* ssl_context
                   , util::LogPath);
 
@@ -35,4 +37,5 @@ private:
     Cancel _cancel;
 };
 
-} // namespaces
+} // namespace ouiservice
+} // namespace ouinet

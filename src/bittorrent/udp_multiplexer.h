@@ -9,6 +9,7 @@
 #include "../or_throw.h"
 #include "../util/condition_variable.h"
 #include "../async_sleep.h"
+#include "asio_utp/udp_multiplexer.hpp"
 #include "rate_counter.h"
 #include "../task.h"
 
@@ -59,6 +60,10 @@ public:
 
     bool is_v4() const { return _socket.local_endpoint().address().is_v4(); }
     bool is_v6() const { return _socket.local_endpoint().address().is_v6(); }
+
+    const asio_utp::udp_multiplexer& socket() const {
+        return _socket;
+    }
 
 private:
     void maintain_max_rate_bytes_per_sec( float current_rate

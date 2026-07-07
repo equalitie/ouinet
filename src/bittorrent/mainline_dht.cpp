@@ -5,9 +5,11 @@
 #include <cstddef>
 #include <expected>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <set>
 
+#include <asio_utp/udp_multiplexer.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/buffer.hpp>
@@ -20,6 +22,7 @@
 #include <boost/accumulators/statistics/rolling_mean.hpp>
 #include <boost/accumulators/statistics/rolling_variance.hpp>
 #include <boost/accumulators/statistics/rolling_count.hpp>
+
 
 #include "bencoding.h"
 #include "code.h"
@@ -36,6 +39,7 @@
 #include "../defer.h"
 #include "../parse/endpoint.h"
 #include "../or_throw.h"
+#include "../udp_sockets.h"
 #include "../util.h"
 #include "../util/address.h"
 #include "../util/atomic_file.h"
@@ -201,7 +205,7 @@ static bool read_nodes( bool is_v4
     return sink.async_push_many(nodes, yield).has_value();
 }
 
-DhtNode::DhtNode( const AsioExecutor& exec
+DhtNode::DhtNode( asio_utp::udp_multiplexer socket
                 , metrics::DhtNode metrics
                 , std::shared_ptr<dns::Resolver> dns_resolver
                 , const uint32_t mux_rx_limit
@@ -209,7 +213,8 @@ DhtNode::DhtNode( const AsioExecutor& exec
                 , bootstrap::Config bs
                 , util::LogPath log_path
 ):
-    _exec(exec),
+    _exec(socket.get_executor()),
+    _multiplexer(std::make_unique<UdpMultiplexer>(std::move(socket))),
     _ready(false),
     _stats(new Stats()),
     _dns_resolver(std::move(dns_resolver)),
@@ -221,29 +226,8 @@ DhtNode::DhtNode( const AsioExecutor& exec
 {
 }
 
-std::expected<void, sys::error_code> DhtNode::start(udp::endpoint local_ep, Async yield)
+std::expected<void, sys::error_code> DhtNode::start(Async yield)
 {
-    if (local_ep.address().is_loopback()) {
-        LOG_WARN(yield, " Node shall be bound to the loopback address and "
-                      , "thus won't be able to communicate with the world");
-    }
-
-    auto m = asio_utp::udp_multiplexer(_exec);
-
-    sys::error_code ec;
-    m.bind(local_ep, ec);
-
-    if (ec) {
-        return std::unexpected(ec);
-    }
-
-    return start(std::move(m), yield);
-}
-
-std::expected<void, sys::error_code> DhtNode::start(asio_utp::udp_multiplexer m, Async yield)
-{
-    _multiplexer = std::make_unique<UdpMultiplexer>(std::move(m), _mux_rx_limit);
-
     _tracker = std::make_unique<Tracker>(_exec);
     _data_store = std::make_unique<DataStore>(_exec);
 
@@ -269,7 +253,7 @@ std::expected<void, sys::error_code> DhtNode::start(asio_utp::udp_multiplexer m,
 fs::path DhtNode::stored_contacts_path() const
 {
     if (_storage_dir == fs::path()) return fs::path();
-    string ipv = _local_endpoint.address().is_v4() ? "ipv4" : "ipv6";
+    string ipv = local_endpoint().address().is_v4() ? "ipv4" : "ipv6";
     return _storage_dir / util::str("stored_peers-", ipv, ".txt");
 }
 
@@ -2500,6 +2484,11 @@ std::expected<void, sys::error_code> DhtNode::tracker_do_search_peers(
     return result;
 }
 
+const asio_utp::udp_multiplexer& DhtNode::socket() const {
+    return _multiplexer->socket();
+}
+
+
 std::ostream& operator << (std::ostream& os, const DhtNode::BootstrapResult& result) {
     return os << "{ my_ep=" << result.my_ep << ", node_ep=" << result.node_ep << " }";
 }
@@ -2529,31 +2518,6 @@ MainlineDht::~MainlineDht()
     _cancel();
 }
 
-void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
-{
-    // Remove nodes whose address is not listed in `eps`
-    for (auto it = _nodes.begin(); it != _nodes.end(); ) {
-        if (eps.count(it->first)) {
-            ++it;
-        } else {
-            it = _nodes.erase(it);
-        }
-    }
-
-    // Ensure that there are nodes for each address in `eps` (create if needed)
-    for (auto ep : eps) {
-        if (_nodes.count(ep)) continue;
-
-        asio_utp::udp_multiplexer m(_exec);
-        sys::error_code ec;
-        m.bind(ep, ec);
-        assert(!ec);
-        if (ec) continue;
-
-        (void) add_endpoint(std::move(m));
-    }
-}
-
 metrics::DhtNode metrics_dht_node_for(metrics::MainlineDht& metrics, const asio::ip::address& addr) {
     if (addr.is_v4()) {
         return metrics.dht_node_ipv4();
@@ -2567,6 +2531,17 @@ std::set<udp::endpoint> MainlineDht::wan_endpoints() const {
     std::set<udp::endpoint> ret;
     for (auto& p : _nodes) { ret.insert(p.second->wan_endpoint()); }
     return ret;
+}
+
+UdpSockets MainlineDht::sockets() const {
+    std::vector<asio_utp::udp_multiplexer> sockets;
+    sockets.reserve(_nodes.size());
+
+    for (auto& p : _nodes) {
+        sockets.push_back(p.second->socket());
+    }
+
+    return UdpSockets(std::move(sockets));
 }
 
 bool MainlineDht::all_ready() const {
@@ -2587,7 +2562,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
     auto local_ep = m.local_endpoint();
 
     auto& node = _nodes[local_ep] = make_unique<DhtNode>(
-        _exec,
+        std::move(m),
         metrics_dht_node_for(_metrics, local_ep.address()),
         _dns_resolver,
         _mux_rx_limit,
@@ -2605,7 +2580,6 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         [
             this,
             log_path = _log_path,
-            m = std::move(m),
             promise = std::move(promise),
             local_ep
         ](auto y) mutable {
@@ -2618,7 +2592,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
             });
 
             auto& node = _nodes[local_ep];
-            auto result = node->start(std::move(m), yield);
+            auto result = node->start(yield);
 
             if (result) {
                 promise.set_value(node->wan_endpoint());

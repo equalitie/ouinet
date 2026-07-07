@@ -15,7 +15,7 @@ namespace ouiservice {
 class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    UtpOuiServiceServer(asio::any_io_executor, asio::ip::udp::endpoint endpoint, util::LogPath);
+    UtpOuiServiceServer(asio_utp::udp_multiplexer mux, util::LogPath);
 
     [[nodiscard]]
     sys::error_code start_listen(Async) override;
@@ -33,7 +33,6 @@ class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationSer
     }
 
     private:
-    asio::any_io_executor _ex;
     asio::ip::udp::endpoint _endpoint;
     Cancel _cancel;
     std::unique_ptr<asio_utp::udp_multiplexer> _udp_multiplexer;

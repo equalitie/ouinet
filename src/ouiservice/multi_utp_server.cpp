@@ -1,9 +1,10 @@
-#include "multi_utp_server.h"
+#include <asio_utp/udp_multiplexer.hpp>
 #include <ouiservice/utp.h>
 #include <ouiservice/tls.h>
 #include <async_sleep.h>
 #include <logger.h>
-#include "task.h"
+#include "multi_utp_server.h"
+#include "udp_sockets.h"
 #include "util/async.h"
 
 namespace ouinet {
@@ -57,17 +58,18 @@ struct MultiUtpServer::State
 };
 
 MultiUtpServer::MultiUtpServer( asio::any_io_executor ex
-                              , std::set<asio::ip::udp::endpoint> endpoints
+                              , UdpSockets sockets
                               , boost::asio::ssl::context* ssl_context
                               , util::LogPath log_path)
     : _accept_queue(ex)
 {
-    if (endpoints.empty()) {
-        LOG_ERROR(log_path, " MultiUtpServer: endpoint set is empty!");
+    if (sockets.empty()) {
+        LOG_ERROR(log_path, " MultiUtpServer: socket set is empty!");
     }
 
-    for (auto ep : endpoints) {
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep, log_path);
+    for (auto& socket : sockets) {
+        auto ep = socket.local_endpoint();
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(std::move(socket), log_path);
         if (ssl_context) {
             LOG_INFO(log_path, " Bep5: uTP/TLS Address: ", ep);
             auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, std::move(base), *ssl_context);

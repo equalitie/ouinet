@@ -447,7 +447,8 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--listen-on-tcp"s, util::str(injector_ep),
             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
             "--allow-private-targets",
-            "--bt-bootstrap-no-default"
+            "--bt-bootstrap-no-default",
+            "--log-level=DEBUG"s
         }),
         ctx,
         util::LogPath("injector"));

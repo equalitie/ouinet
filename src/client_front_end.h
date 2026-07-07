@@ -100,7 +100,7 @@ public:
          , cache::Client*
          , ouiservice::Bep5Client*
          , const CACertificate&
-         , boost::optional<UdpEndpoint> local_ep
+         , const std::vector<UdpEndpoint> local_eps
          , const std::shared_ptr<UPnPs>&
          , const bittorrent::DhtBase* dht
          , ClientFrontEndMetricsController&
@@ -153,7 +153,7 @@ private:
     std::expected<void, sys::error_code>
     handle_portal( ClientConfig&
                  , Client::RunningState
-                 , boost::optional<UdpEndpoint> local_ep
+                 , const std::vector<UdpEndpoint> local_eps
                  , const std::shared_ptr<UPnPs>& upnps_ptr
                  , const bittorrent::DhtBase*
                  , const Request&
@@ -166,7 +166,7 @@ private:
     std::expected<void, sys::error_code>
     handle_api_status( ClientConfig&
                  , Client::RunningState
-                 , boost::optional<UdpEndpoint> local_ep
+                 , const std::vector<UdpEndpoint>& local_eps
                  , const std::shared_ptr<UPnPs>&
                  , const bittorrent::DhtBase*
                  , const Request&
