@@ -28,14 +28,11 @@ linux / build:
       - $BUILD_PATH/$TARGET_OS/lib*.so*
     expire_in: 6h
 
-#linux / cpp-tests:
-#  variables:
-#    TARGET_PLATFORM: 'linux'
-#    BUILD_PATH: 'build/$TARGET_PLATFORM'
-#  extends:
-#    .linux-cpp-tests
-#  needs:
-#    ['linux / build']
+linux / test:
+  extends:
+    - ./docker/linux.sh --target-os linux --run-all-tests
+  needs:
+    ['linux / build']
 #
 #linux / rust-tests:
 #  variables:
