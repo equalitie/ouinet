@@ -15,4 +15,5 @@ include:
 #  - .gitlab-ci/pipelines/ios.yml
   - .gitlab-ci/pipelines/docker-android.yml
   - .gitlab-ci/pipelines/docker-linux.yml
+  - .gitlab-ci/pipelines/docker-windows.yml
 
