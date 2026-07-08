@@ -9,6 +9,7 @@
 #include "ouisync.h"
 #include "error.h"
 #include "ouiservice/ouisync/socket.h"
+#include "util/debug.h"
 #include "util/executor.h"
 #include "util/url.h"
 #include "http_util.h"
@@ -166,6 +167,11 @@ Ouisync::Ouisync(
     _page_index_token(std::move(page_index_token)),
     _impl_cv(exec)
 {
+    if (_bind.empty()) {
+        _bind.push_back({ boost::asio::ip::address_v4::any(), 0 });
+        _bind.push_back({ boost::asio::ip::address_v6::any(), 0 });
+    }
+
     fs::create_directories(_store_dir);
     fs::create_directories(_mount_dir);
 }
@@ -174,7 +180,7 @@ sys::error_code Ouisync::start(Async yield)
 {
     try {
         ouisync::Service service(yield.get_executor());
-        unwrap(service.start(_service_dir, "ouisync", yield));
+        unwrap(service.start(_service_dir, util::str(yield.log_path()).c_str(), yield));
 
         auto session = unwrap(ouisync::Session::connect(
             yield.get_executor(),
