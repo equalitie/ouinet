@@ -94,6 +94,14 @@ include(OuinetDependencies)
 include(BuildVersion)
 
 ###########################################################
+
+if(POLICY CMP0079)
+    # Allows adding dependencies to libraries from outside of the cmake where
+    # the library is defined.
+    # https://stackoverflow.com/a/75246115/273348
+    cmake_policy(SET CMP0079 NEW)
+endif()
+
 option(ASIO_UTP_WITH_TESTS             "" OFF)
 option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
