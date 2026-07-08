@@ -9,6 +9,7 @@
 #include "ouisync.h"
 #include "error.h"
 #include "ouiservice/ouisync/socket.h"
+#include "ouisync/error.hpp"
 #include "util/debug.h"
 #include "util/executor.h"
 #include "util/url.h"
@@ -326,18 +327,18 @@ Ouisync::open_network_sockets(Async yield) {
     sockets.reserve(2);
 
     auto v4 = OuisyncSocket::open(_impl->session, asio::ip::udp::v4(), yield);
-    if (!v4) {
+    if (v4) {
+        sockets.push_back(std::move(*v4));
+    } else if (v4.error() != asio::error::no_protocol_option) {
         return std::unexpected(v4.error());
     }
 
-    sockets.push_back(std::move(*v4));
-
     auto v6 = OuisyncSocket::open(_impl->session, asio::ip::udp::v6(), yield);
-    if (!v6) {
+    if (v6) {
+        sockets.push_back(std::move(*v6));
+    } else if (v6.error() != asio::error::no_protocol_option) {
         return std::unexpected(v6.error());
     }
-
-    sockets.push_back(std::move(*v6));
 
     return sockets;
 }
