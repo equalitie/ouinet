@@ -49,16 +49,6 @@ using cache::ResourceId;
 namespace fs = boost::filesystem;
 namespace bt = bittorrent;
 
-static std::set<udp::endpoint> local_endpoints(const std::vector<asio_utp::udp_multiplexer>& sockets) {
-    std::set<udp::endpoint> eps;
-
-    for (auto& socket : sockets) {
-        eps.insert(socket.local_endpoint());
-    }
-
-    return eps;
-}
-
 struct GarbageCollector {
     cache::HttpStore& http_store;  // for looping over entries
     cache::HttpStore::keep_func keep;  // caller-provided checks
