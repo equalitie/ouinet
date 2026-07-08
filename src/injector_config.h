@@ -4,6 +4,8 @@
 #include <set>
 
 #include <boost/program_options.hpp>
+#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/address_v6.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/context.hpp>
@@ -32,6 +34,16 @@ std::runtime_error error(Args&&... args) {
 
 #define _HTTP_LOG_FILE_NAME "access.log"
 static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
+
+struct OuisyncInjectorConfig {
+    // Use Ouisync as network transport layer.
+    bool transport = false;
+    // Endpoints to bind Ouisync networking to.
+    std::vector<asio::ip::udp::endpoint> udp_endpoints = {
+        { asio::ip::address_v4::any(), 0 },
+        { asio::ip::address_v6::any(), 0 }
+    };
+};
 
 class OUINET_INJECTOR_API InjectorConfig {
 public:
@@ -136,6 +148,10 @@ public:
     void store_i2p_destination_keypair(const I2pDestinationKeypair&) const;
     std::optional<I2pDestinationKeypair> load_i2p_destination_keypair() const;
 
+    const OuisyncInjectorConfig& ouisync_config() const {
+        return _ouisync;
+    }
+
     const Trace& trace_root() const {
         return _trace_root;
     }
@@ -176,6 +192,7 @@ private:
 
     dns::Config _dns_config;
     std::optional<I2pService::Config> _i2p_service_config;
+    OuisyncInjectorConfig _ouisync;
     Trace _trace_root;
 };
 
