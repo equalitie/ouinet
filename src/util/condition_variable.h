@@ -40,6 +40,9 @@ class ConditionVariable {
 public:
   ConditionVariable(const AsioExecutor &);
 
+  ConditionVariable(ConditionVariable &&) = default;
+  ConditionVariable &operator=(ConditionVariable &&) = default;
+
   ConditionVariable(const ConditionVariable &) = delete;
   ConditionVariable &operator=(const ConditionVariable &) = delete;
 
