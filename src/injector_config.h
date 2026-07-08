@@ -36,10 +36,7 @@ struct OuisyncInjectorConfig {
     // Use Ouisync as network transport layer.
     bool transport = false;
     // Endpoints to bind Ouisync networking to.
-    std::vector<asio::ip::udp::endpoint> udp_endpoints = {
-        { asio::ip::address_v4::any(), 0 },
-        { asio::ip::address_v6::any(), 0 }
-    };
+    std::vector<asio::ip::udp::endpoint> udp_endpoints;
 };
 
 class OUINET_INJECTOR_API InjectorConfig {

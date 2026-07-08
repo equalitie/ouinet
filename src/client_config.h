@@ -59,10 +59,7 @@ struct OuisyncClientConfig {
     bool transport = false;
     // Endpoints to bind Ouisync networking to. Should typically contain one IPv4 and one IPv6
     // endpoint.
-    std::vector<boost::asio::ip::udp::endpoint> udp_endpoints = {
-        { boost::asio::ip::address_v4::any(), 0 },
-        { boost::asio::ip::address_v6::any(), 0 }
-    };
+    std::vector<boost::asio::ip::udp::endpoint> udp_endpoints;
 };
 
 // ----
