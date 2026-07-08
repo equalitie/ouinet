@@ -8,15 +8,29 @@
 @implementation OuinetConfig
 {
   NSString* ouinetDirectory;
+  NSArray<NSString*>* btBootstrapExtras;
   NSString* cacheHttpPubKey;
   NSString* injectorCredentials;
   NSString* injectorTlsCert;
   NSString* injectorTlsCertPath;
   NSString* tlsCaCertStorePath;
+  NSString* clientCredentials;
   NSString* cacheType;
+  BOOL cachePrivate;
+  NSString* cacheStaticPath;
+  NSString* cacheStaticContentPath;
+  NSString* maxCachedAge;
   NSString* listenOnTcp;
+  NSString* udpMuxPort;
+  NSString* udpMuxRxLimit;
   NSString* frontEndEp;
   NSString* frontEndAccessToken;
+  NSString* proxyAccessToken;
+  NSString* requestBodyLimit;
+  NSString* localDomain;
+  NSArray<NSString*>* dnsProtocols;
+  BOOL disableCacheAccess;
+  BOOL enableLogFile;
   BOOL metricsEnableOnStart;
   NSString* metricsServerUrl;
   NSString* metricsServerToken;
@@ -95,6 +109,96 @@
 - (OuinetConfig*)setFrontEndAccessToken:(NSString*)token
 {
   frontEndAccessToken = token;
+  return self;
+}
+
+- (OuinetConfig*)setBtBootstrapExtras:(NSArray<NSString*>*)extras
+{
+  btBootstrapExtras = extras;
+  return self;
+}
+
+- (OuinetConfig*)setTlsCaCertStorePath:(NSString*)path
+{
+  tlsCaCertStorePath = path;
+  return self;
+}
+
+- (OuinetConfig*)setClientCredentials:(NSString*)credentials
+{
+  clientCredentials = credentials;
+  return self;
+}
+
+- (OuinetConfig*)setCachePrivate:(BOOL)value
+{
+  cachePrivate = value;
+  return self;
+}
+
+- (OuinetConfig*)setCacheStaticPath:(NSString*)path
+{
+  cacheStaticPath = path;
+  return self;
+}
+
+- (OuinetConfig*)setCacheStaticContentPath:(NSString*)path
+{
+  cacheStaticContentPath = path;
+  return self;
+}
+
+- (OuinetConfig*)setMaxCachedAge:(NSString*)maxCachedAgeValue
+{
+  maxCachedAge = maxCachedAgeValue;
+  return self;
+}
+
+- (OuinetConfig*)setUdpMuxPort:(NSString*)port
+{
+  udpMuxPort = port;
+  return self;
+}
+
+- (OuinetConfig*)setUdpMuxRxLimit:(NSString*)limit
+{
+  udpMuxRxLimit = limit;
+  return self;
+}
+
+- (OuinetConfig*)setProxyAccessToken:(NSString*)token
+{
+  proxyAccessToken = token;
+  return self;
+}
+
+- (OuinetConfig*)setRequestBodyLimit:(NSString*)limit
+{
+  requestBodyLimit = limit;
+  return self;
+}
+
+- (OuinetConfig*)setLocalDomain:(NSString*)domain
+{
+  localDomain = domain;
+  return self;
+}
+
+- (OuinetConfig*)setDnsProtocols:(NSArray<NSString*>*)protocols
+{
+  dnsProtocols = protocols;
+  return self;
+}
+
+- (OuinetConfig*)setDisableCacheAccess:(BOOL)value
+{
+  disableCacheAccess = value;
+  return self;
+}
+
+- (OuinetConfig*)setEnableLogFile:(BOOL)value
+{
+  enableLogFile = value;
   return self;
 }
 
@@ -193,7 +297,20 @@
 
 - (NSString*)getTlsCaCertStorePath;
 {
+  if (tlsCaCertStorePath != nil && ![tlsCaCertStorePath isEqualToString:@""]) {
+    return tlsCaCertStorePath;
+  }
   return [NSString stringWithFormat: @"%@/cacert.pem", ouinetDirectory];
+}
+
+- (NSArray<NSString*>*)getBtBootstrapExtras
+{
+  return btBootstrapExtras;
+}
+
+- (NSString*)getClientCredentials
+{
+  return clientCredentials;
 }
 
 - (NSString*)getCacheType
@@ -201,9 +318,39 @@
   return cacheType;
 }
 
+- (BOOL)getCachePrivate
+{
+  return cachePrivate;
+}
+
+- (NSString*)getCacheStaticPath
+{
+  return cacheStaticPath;
+}
+
+- (NSString*)getCacheStaticContentPath
+{
+  return cacheStaticContentPath;
+}
+
+- (NSString*)getMaxCachedAge
+{
+  return maxCachedAge;
+}
+
 - (NSString*)getListenOnTcp
 {
   return listenOnTcp;
+}
+
+- (NSString*)getUdpMuxPort
+{
+  return udpMuxPort;
+}
+
+- (NSString*)getUdpMuxRxLimit
+{
+  return udpMuxRxLimit;
 }
 
 - (NSString*)getFrontEndEp
@@ -214,6 +361,36 @@
 - (NSString*)getFrontEndAccessToken
 {
   return frontEndAccessToken;
+}
+
+- (NSString*)getProxyAccessToken
+{
+  return proxyAccessToken;
+}
+
+- (NSString*)getRequestBodyLimit
+{
+  return requestBodyLimit;
+}
+
+- (NSString*)getLocalDomain
+{
+  return localDomain;
+}
+
+- (NSArray<NSString*>*)getDnsProtocols
+{
+  return dnsProtocols;
+}
+
+- (BOOL)getDisableCacheAccess
+{
+  return disableCacheAccess;
+}
+
+- (BOOL)getEnableLogFile
+{
+  return enableLogFile;
 }
 
 - (BOOL)getMetricsEnableOnStart

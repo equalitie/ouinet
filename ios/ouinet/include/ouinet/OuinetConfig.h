@@ -4,19 +4,49 @@
 
 - (OuinetConfig*)init;
 
+- (OuinetConfig*)setBtBootstrapExtras:(NSArray<NSString*>*)extras;
+
 - (OuinetConfig*)setCacheHttpPubKey:(NSString*)key;
 
 - (OuinetConfig*)setInjectorCredentials:(NSString*)credentials;
 
 - (OuinetConfig*)setInjectorTlsCert:(NSString*)cert;
 
+- (OuinetConfig*)setTlsCaCertStorePath:(NSString*)path;
+
+- (OuinetConfig*)setClientCredentials:(NSString*)credentials;
+
 - (OuinetConfig*)setCacheType:(NSString*)type;
 
+- (OuinetConfig*)setCachePrivate:(BOOL)value;
+
+- (OuinetConfig*)setCacheStaticPath:(NSString*)path;
+
+- (OuinetConfig*)setCacheStaticContentPath:(NSString*)path;
+
+- (OuinetConfig*)setMaxCachedAge:(NSString*)maxCachedAge;
+
 - (OuinetConfig*)setListenOnTcp:(NSString*)address;
+
+- (OuinetConfig*)setUdpMuxPort:(NSString*)port;
+
+- (OuinetConfig*)setUdpMuxRxLimit:(NSString*)limit;
 
 - (OuinetConfig*)setFrontEndEp:(NSString*)address;
 
 - (OuinetConfig*)setFrontEndAccessToken:(NSString*)token;
+
+- (OuinetConfig*)setProxyAccessToken:(NSString*)token;
+
+- (OuinetConfig*)setRequestBodyLimit:(NSString*)limit;
+
+- (OuinetConfig*)setLocalDomain:(NSString*)domain;
+
+- (OuinetConfig*)setDnsProtocols:(NSArray<NSString*>*)protocols;
+
+- (OuinetConfig*)setDisableCacheAccess:(BOOL)value;
+
+- (OuinetConfig*)setEnableLogFile:(BOOL)value;
 
 - (OuinetConfig*)setMetricsEnableOnStart:(BOOL)value;
 
@@ -44,6 +74,8 @@
 
 - (NSString*)getOuinetDirectory;
 
+- (NSArray<NSString*>*)getBtBootstrapExtras;
+
 - (NSString*)getCacheHttpPubKey;
 
 - (NSString*)getInjectorCredentials;
@@ -52,13 +84,39 @@
 
 - (NSString*)getTlsCaCertStorePath;
 
+- (NSString*)getClientCredentials;
+
 - (NSString*)getCacheType;
 
+- (BOOL)getCachePrivate;
+
+- (NSString*)getCacheStaticPath;
+
+- (NSString*)getCacheStaticContentPath;
+
+- (NSString*)getMaxCachedAge;
+
 - (NSString*)getListenOnTcp;
+
+- (NSString*)getUdpMuxPort;
+
+- (NSString*)getUdpMuxRxLimit;
 
 - (NSString*)getFrontEndEp;
 
 - (NSString*)getFrontEndAccessToken;
+
+- (NSString*)getProxyAccessToken;
+
+- (NSString*)getRequestBodyLimit;
+
+- (NSString*)getLocalDomain;
+
+- (NSArray<NSString*>*)getDnsProtocols;
+
+- (BOOL)getDisableCacheAccess;
+
+- (BOOL)getEnableLogFile;
 
 - (BOOL)getMetricsEnableOnStart;
 
