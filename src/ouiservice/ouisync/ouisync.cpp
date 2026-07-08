@@ -174,20 +174,20 @@ sys::error_code Ouisync::start(Async yield)
         unwrap(session.bind_network({"quic/0.0.0.0:0"}, yield));
         unwrap(session.set_store_dirs({_store_dir.string()}, yield));
 
-        auto mount_ec = session.set_mount_root(_mount_dir.string(), yield);
+        auto mount_r = session.set_mount_root(_mount_dir.string(), yield);
 
         unwrap(session.set_local_discovery_enabled(true, yield));
 
         auto page_index = open_or_create_repo(session, "page_index", ShareToken{_page_index_token}, yield);
 
-        set_repo_defaults(page_index, !mount_ec, yield);
+        set_repo_defaults(page_index, mount_r.has_value(), yield);
 
         _impl = std::make_shared<Impl>(Impl {
             std::move(service),
             std::move(session),
             std::move(page_index),
             {},
-            !mount_ec
+            mount_r.has_value()
         });
 
         return sys::error_code();
