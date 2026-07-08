@@ -14,6 +14,8 @@ artifact_dir=
 with_ouisync=n
 host_ouisync_dir=
 with_asan=n
+container_name=
+image_name=
 
 source $(dirname $0)/util.sh linux
 
@@ -67,6 +69,12 @@ while [[ "$#" -gt 0 ]]; do
             artifact_dir=$2; shift;
             mkdir -p $artifact_dir
             ;;
+        --container-name)
+            container_name=($2); shift
+            ;;
+        --image-name)
+            image_name=($2); shift
+            ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
     esac
@@ -94,8 +102,8 @@ function docker_choose_platform {(
 
 docker_platform=$(docker_choose_platform)
 name_suffix=$([ "$docker_platform" = "$docker_default_platform" ] && echo "" || echo ".$docker_platform")
-image_name=$(choose_docker_image_name)$name_suffix
-container_name=$(choose_docker_container_name)$name_suffix
+image_name=$(choose_docker_image_name $image_name)$name_suffix
+container_name=$(choose_docker_container_name $container_name)$name_suffix
 
 work_dir=/opt
 ouinet_dir=$work_dir/ouinet

@@ -1,12 +1,17 @@
-linux / build:
-  stage: build
+default:
   variables:
     BUILD_PATH: 'build'
     TARGET_OS: 'linux'
+  before_script:
+    - CI_JOB_SLUG="${CI_PROJECT_PATH_SLUG}.${CI_COMMIT_REF_SLUG}.${CI_COMMIT_SHORT_SHA}.${TARGET_OS}"
+    - CONTAINER_ARGS="--container_name ${CI_JOB_SLUG} --image_name ${CI_JOB_SLUG}"
+
+linux / build:
+  stage: build
   tags:
     - shell+docker
   script:
-    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH
+    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH $CONTAINER_ARGS
   artifacts:
     paths:
       - $BUILD_PATH/$TARGET_OS/client
