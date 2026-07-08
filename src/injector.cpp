@@ -14,6 +14,7 @@
 
 
 #include "namespaces.h"
+#include "task.h"
 #include "util.h"
 #include "connect_to_host.h"
 #include "default_timeout.h"
@@ -21,6 +22,8 @@
 #include "split_string.h"
 #include "async_sleep.h"
 #include "bittorrent/mainline_dht.h"
+#include "util/condition_variable.h"
+#include "util/wait_condition.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -38,6 +41,7 @@
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
 #include "ouiservice/bep5/server.h"
+#include "ouiservice/ouisync/ouisync.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 
@@ -73,7 +77,8 @@ static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 struct Injector::Inner {
-    std::optional<CreateI2pSessionPromise::Future> _i2p_session_future;
+    std::optional<CreateI2pSessionPromise::Future> i2p_session_future;
+    std::optional<ouisync_service::Ouisync> ouisync;
 };
 
 // TODO: Get rid of this
@@ -889,172 +894,224 @@ Injector::Injector(
         proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
     }
 
-    asio_utp::udp_multiplexer socket(_exec);
-    asio_utp::udp_multiplexer socket_tls(_exec);
-
-    if (_config.utp_endpoint()) {
-        udp::endpoint endpoint = *_config.utp_endpoint();
-
-        sys::error_code ec;
-        socket.bind(endpoint, ec);
-
-        if (ec) {
-            LOG_WARN(log_path, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
-        } else {
-            LOG_INFO(log_path, " uTP address: ", endpoint);
-
-            util::create_state_file( _config.repo_root() / "endpoint-utp"
-                                   , util::str(endpoint));
-
-            auto srv = make_unique<ouiservice::UtpOuiServiceServer>(socket, log_path);
-            proxy_server->add(std::move(srv));
-        }
-    }
-
-    if (_config.utp_tls_endpoint()) {
-        udp::endpoint endpoint = *_config.utp_tls_endpoint();
-
-        sys::error_code ec;
-        socket_tls.bind(endpoint, ec);
-
-        if (ec) {
-            LOG_WARN(log_path, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
-        } else {
-            auto base = make_unique<ouiservice::UtpOuiServiceServer>(socket_tls, log_path);
-            auto local_ep = base->local_endpoint();
-
-            if (local_ep) {
-                LOG_INFO(log_path, " uTP/TLS address: ", *local_ep);
-                util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
-                                       , util::str(*local_ep));
-                proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
-            } else {
-                LOG_ERROR(log_path, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
-            }
-        }
-    }
-
-    if (mock_dht) {
-        _dht = mock_dht;
-    } else {
-        auto dht = std::make_shared<bt::MainlineDht>(
+    if (_config.ouisync_config().transport) {
+        _inner->ouisync.emplace(
             _exec,
-            metrics::Client::noop().mainline_dht(),
-            _dns_resolver,
-            config.udp_mux_rx_limit_in_bytes(),
-            fs::path{},  // default storage dir
-            bt::bootstrap::Config()
-                .with_default(!_config.bt_bootstrap_no_default())
-                .with_extras(_config.bt_bootstrap_extras()),
-            log_path.tag("dht")
+            _config.repo_root() / "ouisync",
+            std::string(), // injector doesn't use page index
+            _config.ouisync_config().udp_endpoints
         );
-
-        if (_config.bt_allow_martians()) {
-            dht->set_peer_filter(bt::PeerFilter::none);
-        }
-
-        _dht = std::move(dht);
     }
 
-    if (_config.utp_endpoint()) {
-        std::ignore = _dht->add_endpoint(std::move(socket));
-    }
+    task::spawn_detached(
+        _exec,
+        [&, proxy_server = std::move(proxy_server), log_path = std::move(log_path)]
+        (asio::yield_context y) mutable {
+            Async yield(y, _cancel, log_path);
 
-    if (_config.utp_tls_endpoint()) {
-        std::ignore = _dht->add_endpoint(std::move(socket_tls));
-    }
+            // -------------------------------------------------------------------------------------
+            // Setup UDP sockets
+            std::vector<asio_utp::udp_multiplexer> plain_sockets;
+            std::vector<asio_utp::udp_multiplexer> tls_sockets;
 
-    if (!_config.utp_endpoint() && !_config.utp_tls_endpoint()) {
-        sys::error_code ec;
-        socket.bind(_config.bittorrent_endpoint(), ec);
+            if (_config.ouisync_config().transport) {
+                assert(_inner->ouisync);
 
-        if (ec) {
-            LOG_WARN(
-                log_path,
-                "Failed to bind UDP socket to address ",
-                _config.bittorrent_endpoint(),
-                ": ",
-                ec.what()
-            );
-        }
+                auto ouisync_sockets = _inner->ouisync->open_network_sockets(yield);
+                if (!ouisync_sockets) {
+                    LOG_WARN(yield, " Failed to open Ouisync network sockets: ", ouisync_sockets.error());
+                    return;
+                }
 
-        std::ignore = _dht->add_endpoint(std::move(socket));
-    }
+                for (auto& ouisync_socket : *ouisync_sockets) {
+                    asio_utp::udp_multiplexer socket(_exec);
+                    socket.bind(
+                        std::make_unique<ouisync_service::OuisyncSocket>(std::move(ouisync_socket))
+                    );
+                    tls_sockets.push_back(std::move(socket));
+                }
+            } else {
+                if (_config.utp_endpoint()) {
+                    udp::endpoint endpoint = *_config.utp_endpoint();
+                    asio_utp::udp_multiplexer socket(_exec);
 
-    assert(!_dht->local_endpoints().empty());
+                    sys::error_code ec;
+                    socket.bind(endpoint, ec);
 
-    if (_dht->local_endpoints().empty()) {
-        LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
-    }
+                    if (ec) {
+                        LOG_WARN(log_path, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
+                    } else {
+                        LOG_INFO(log_path, " uTP address: ", endpoint);
 
-    proxy_server->add(make_unique<ouiservice::Bep5Server>(
-        _dht,
-        _ssl_context.get(),
-        _config.bep5_injector_swarm_name(),
-        log_path
-    ));
+                        util::create_state_file(
+                            _config.repo_root() / "endpoint-utp",
+                            util::str(socket.local_endpoint())
+                        );
 
-    if (_config.listen_on_i2p()) {
-        struct Server : public OuiServiceImplementationServer {
-            sys::error_code start_listen(Async) override {
-                return sys::error_code();
+                        plain_sockets.push_back(std::move(socket));
+                    }
+                }
+
+                if (_config.utp_tls_endpoint()) {
+                    udp::endpoint endpoint = *_config.utp_tls_endpoint();
+                    asio_utp::udp_multiplexer socket(_exec);
+
+                    sys::error_code ec;
+                    socket.bind(endpoint, ec);
+
+                    if (ec) {
+                        LOG_WARN(log_path, " Failed to bind UDP socket to address ", endpoint, ": ", ec.what());
+                    } else {
+                        LOG_INFO(log_path, " uTP/TLS address: ", endpoint);
+
+                        util::create_state_file(
+                            _config.repo_root() / "endpoint-utp-tls",
+                            util::str(socket.local_endpoint())
+                        );
+
+                        tls_sockets.push_back(std::move(socket));
+                    }
+                }
             }
 
-            void stop_listen() override { _cancel(); }
-
-            std::expected<GenericStream, sys::error_code> accept(Async yield) override {
-                auto future_result = _session_future.wait(yield);
-
-                if (!future_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
-                }
-                auto& create_result = future_result.value();
-                if (!create_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
-                }
-
-                auto session = *create_result;
-
-                auto result = session->accept(yield);
-
-                if (!result.has_value()) {
-                    LOG_WARN("Failed to accept I2P connection");
-                    return std::unexpected(result.error().code());
-                }
-
-                return std::move(*result);
+            // -------------------------------------------------------------------------------------
+            // Setup uTP servers
+            for (auto& socket : plain_sockets) {
+                auto srv = make_unique<ouiservice::UtpOuiServiceServer>(socket, log_path);
+                proxy_server->add(std::move(srv));
             }
 
-            Server(CreateI2pSessionPromise::Future  session_future, Cancel cancel, util::LogPath log_path):
-                _session_future(std::move(session_future)),
-                _cancel(std::move(cancel)),
-                _log_path(std::move(log_path))
-            {}
+            for (auto& socket : tls_sockets) {
+                auto base = make_unique<ouiservice::UtpOuiServiceServer>(socket, log_path);
+                proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(
+                    _exec,
+                    std::move(base),
+                    *_ssl_context
+                ));
+            }
 
-            CreateI2pSessionPromise::Future _session_future;
-            Cancel _cancel;
-            util::LogPath _log_path;
-        };
+            // -------------------------------------------------------------------------------------
+            // Setup DHT
+            if (mock_dht) {
+                _dht = mock_dht;
+            } else {
+                auto dht = std::make_shared<bt::MainlineDht>(
+                    _exec,
+                    metrics::Client::noop().mainline_dht(),
+                    _dns_resolver,
+                    config.udp_mux_rx_limit_in_bytes(),
+                    fs::path{},  // default storage dir
+                    bt::bootstrap::Config()
+                        .with_default(!_config.bt_bootstrap_no_default())
+                        .with_extras(_config.bt_bootstrap_extras()),
+                    log_path.tag("dht")
+                );
 
-        _inner->_i2p_session_future = create_i2p_session(_cancel, log_path, _exec);
+                if (_config.bt_allow_martians()) {
+                    dht->set_peer_filter(bt::PeerFilter::none);
+                }
 
-        proxy_server->add(std::make_unique<Server>(
-            *_inner->_i2p_session_future,
-            _cancel,
-            log_path
-        ));
-    }
+                _dht = std::move(dht);
+            }
 
-    LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
+            for (auto& socket : plain_sockets) {
+                std::ignore = _dht->add_endpoint(std::move(socket));
+            }
 
-    task::spawn_detached(_exec, [
-        this,
-        proxy_server = std::move(proxy_server),
-        cancel = _cancel,
-        log_path
-    ] (asio::yield_context yield) mutable {
-        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, log_path));
-    });
+            for (auto& socket : tls_sockets) {
+                std::ignore = _dht->add_endpoint(std::move(socket));
+            }
+
+            // Fallback DHT endpoint
+            if (_dht->local_endpoints().empty()) {
+                sys::error_code ec;
+                asio_utp::udp_multiplexer socket(_exec);
+                socket.bind(_config.bittorrent_endpoint(), ec);
+
+                if (ec) {
+                    LOG_WARN(
+                        log_path,
+                        "Failed to bind UDP socket to address ",
+                        _config.bittorrent_endpoint(),
+                        ": ",
+                        ec.what()
+                    );
+                } else {
+                    std::ignore = _dht->add_endpoint(std::move(socket));
+                }
+            }
+
+            if (_dht->local_endpoints().empty()) {
+                LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
+            }
+
+            proxy_server->add(make_unique<ouiservice::Bep5Server>(
+                _dht,
+                _ssl_context.get(),
+                _config.bep5_injector_swarm_name(),
+                log_path
+            ));
+
+            // -------------------------------------------------------------------------------------
+            // Setup I2P
+            if (_config.listen_on_i2p()) {
+                struct Server : public OuiServiceImplementationServer {
+                    sys::error_code start_listen(Async) override {
+                        return sys::error_code();
+                    }
+
+                    void stop_listen() override { _cancel(); }
+
+                    std::expected<GenericStream, sys::error_code> accept(Async yield) override {
+                        auto future_result = _session_future.wait(yield);
+
+                        if (!future_result.has_value()) {
+                            return std::unexpected(asio::error::fault);
+                        }
+                        auto& create_result = future_result.value();
+                        if (!create_result.has_value()) {
+                            return std::unexpected(asio::error::fault);
+                        }
+
+                        auto session = *create_result;
+
+                        auto result = session->accept(yield);
+
+                        if (!result.has_value()) {
+                            LOG_WARN("Failed to accept I2P connection");
+                            return std::unexpected(result.error().code());
+                        }
+
+                        return std::move(*result);
+                    }
+
+                    Server(CreateI2pSessionPromise::Future  session_future, Cancel cancel, util::LogPath log_path):
+                        _session_future(std::move(session_future)),
+                        _cancel(std::move(cancel)),
+                        _log_path(std::move(log_path))
+                    {}
+
+                    CreateI2pSessionPromise::Future _session_future;
+                    Cancel _cancel;
+                    util::LogPath _log_path;
+                };
+
+                _inner->i2p_session_future = create_i2p_session(_cancel, log_path, _exec);
+
+                proxy_server->add(std::make_unique<Server>(
+                    *_inner->i2p_session_future,
+                    _cancel,
+                    log_path
+                ));
+            }
+
+            LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
+
+            // -------------------------------------------------------------------------------------
+            // Start listening
+            listen(_config, _dns_resolver, *proxy_server, yield);
+        }
+    );
 }
 
 void Injector::stop() {
@@ -1071,11 +1128,11 @@ Injector::~Injector() {
 }
 
 std::expected<I2pAddress, sys::error_code> Injector::i2p_address(Async yield) {
-    if (!_inner->_i2p_session_future) {
+    if (!_inner->i2p_session_future) {
         return std::unexpected(asio::error::service_not_found);
     }
 
-    auto future_result = _inner->_i2p_session_future->wait(yield);
+    auto future_result = _inner->i2p_session_future->wait(yield);
 
     if (!future_result.has_value()) {
         return std::unexpected(future_result.error());

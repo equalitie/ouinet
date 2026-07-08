@@ -538,9 +538,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
     }
 
-    if (auto ouisync_eps = as_optional<std::vector<std::string>>(vm, "ouisync-udp-ep");
-        ouisync_eps && !ouisync_eps->empty()) {
-
+    if (auto ouisync_eps = as_optional<std::vector<std::string>>(vm, "ouisync-udp-ep")) {
         for (auto s : *ouisync_eps) {
             if (auto ep = parse::endpoint<asio::ip::udp>(s)) {
                 _ouisync.udp_endpoints.push_back(*ep);

@@ -27,11 +27,6 @@ class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationSer
 
     ~UtpOuiServiceServer();
 
-    boost::optional<asio::ip::udp::endpoint> local_endpoint() const {
-        if (!_udp_multiplexer) return boost::none;
-        return _udp_multiplexer->local_endpoint();
-    }
-
     private:
     asio::ip::udp::endpoint _endpoint;
     Cancel _cancel;

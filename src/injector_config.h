@@ -4,6 +4,8 @@
 #include <set>
 
 #include <boost/program_options.hpp>
+#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/address_v6.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/context.hpp>
@@ -29,6 +31,16 @@ std::runtime_error error(Args&&... args) {
 
 #define _HTTP_LOG_FILE_NAME "access.log"
 static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
+
+struct OuisyncInjectorConfig {
+    // Use Ouisync as network transport layer.
+    bool transport = false;
+    // Endpoints to bind Ouisync networking to.
+    std::vector<asio::ip::udp::endpoint> udp_endpoints = {
+        { asio::ip::address_v4::any(), 0 },
+        { asio::ip::address_v6::any(), 0 }
+    };
+};
 
 class OUINET_INJECTOR_API InjectorConfig {
 public:
@@ -126,6 +138,10 @@ public:
         return _origin_ssl_ctx;
     }
 
+    const OuisyncInjectorConfig& ouisync_config() const {
+        return _ouisync;
+    }
+
 private:
     void setup_ed25519_private_key(const std::string& hex);
 
@@ -161,6 +177,8 @@ private:
     sign::SecretKey _ed25519_private_key;
 
     dns::Config _dns_config;
+
+    OuisyncInjectorConfig _ouisync;
 };
 
 } // ouinet namespace

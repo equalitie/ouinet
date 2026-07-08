@@ -194,7 +194,9 @@ file(GLOB ouinet_common_sources
     "./src/util/temp_file.cpp"
     "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
+    "./src/cache/hash_list.cpp"
     "./src/cache/http_sign.cpp"
+    "./src/cache/http_store.cpp"
     "./src/cache/signed_head.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/ssl/util.cpp"
@@ -205,7 +207,9 @@ file(GLOB ouinet_common_sources
     "./src/ouiservice/utp.cpp"
     "./src/ouiservice/tls.cpp"
     "./src/ouiservice/multi_utp_server.cpp"
+    "./src/util/atomic_dir.cpp"
     "./src/util/persistent_lru_cache.cpp"
+    "./src/util/temp_dir.cpp"
     "./src/endpoint.cpp"
     "./src/session.cpp"
     "./src/error.cpp"
@@ -256,15 +260,11 @@ file(GLOB client_sources
     "./src/cache/announcer.cpp"
     "./src/cache/client.cpp"
     "./src/cache/dht_groups.cpp"
-    "./src/cache/hash_list.cpp"
-    "./src/cache/http_store.cpp"
     "./src/cache/local_peer_discovery.cpp"
     "./src/util/storing_reader.cpp"
     "./src/cache/multi_peer_reader.cpp"
     "./src/cache/multi_peer_reader_error.cpp"
     "./src/cache/resource_key.cpp"
-    "./src/util/atomic_dir.cpp"
-    "./src/util/temp_dir.cpp"
     "./src/request.cpp"
     "./src/peer_message.cpp"
     ${VERSION_CPP}
@@ -339,6 +339,7 @@ if (NOT ANDROID AND NOT IOS)
         LINK
             ouinet_rs
             ouinet_common
+            ouinet_ouisync
             ouinet_i2p
             ouinet_asio
             asio_utp
@@ -352,6 +353,7 @@ if (NOT ANDROID AND NOT IOS)
         DEFS
             OUINET_API_INJECTOR_EXPORT
             OUINET_API_I2P_LOCAL
+            OUINET_API_OUISYNC_LOCAL
     )
 
     add_executable(injector "./src/injector_main.cpp")

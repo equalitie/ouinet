@@ -83,6 +83,13 @@ boost::program_options::options_description InjectorConfig::options_description(
          , "Path to the CA certificate store directory")
         ("tls-ca-cert-store-file", po::value<std::vector<string>>(&_tls_ca_cert_store_files)
          , "Path to the CA certificate store file")
+        ("ouisync-udp-ep"
+         , po::value<std::vector<std::string>>()->composing()
+         , "UDP endpoint(s) to bind Ouisync to (in <IP>:<PORT> format).")
+        ("ouisync-transport"
+         , po::bool_switch(&_ouisync.transport)->default_value(false)
+         , "(Experimental) Use Ouisync as network transport layer.")
+
         // Cache options
         ("ed25519-private-key", po::value<string>()
          , "Ed25519 private key for cache-related signatures (hex-encoded)")
@@ -319,6 +326,15 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
             sys::error_code ec;
             _origin_ssl_ctx.load_verify_file(verify_file, ec);
             if (ec) throw error("Failed to load origin CA certificate from \"", verify_file, "\"");
+        }
+    }
+
+    if (vm.count("ouisync-udp-ep")) {
+        auto ouisync_eps = vm["ouisync-udp-ep"].as<std::vector<std::string>>();
+        for (auto s : ouisync_eps) {
+            if (auto ep = parse::endpoint<asio::ip::udp>(s)) {
+                _ouisync.udp_endpoints.push_back(*ep);
+            }
         }
     }
 }

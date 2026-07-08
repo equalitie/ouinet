@@ -50,7 +50,7 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
-struct OuisyncConfig {
+struct OuisyncClientConfig {
     // Read token for the page index repository which contains directories one per host name
     // and inside them crawls of corresponding websites.
     // If empty, using ouisync as cache is disabled.
@@ -254,7 +254,7 @@ public:
         return _add_request_fields;
     }
 
-    const OuisyncConfig& ouisync_config() const {
+    const OuisyncClientConfig& ouisync_config() const {
         return _ouisync;
     }
 
@@ -381,7 +381,7 @@ private:
     size_t _i2p_hops_per_tunnel = 3;
     boost::optional<I2pAddress> _i2p_bep3_tracker;
 
-    OuisyncConfig _ouisync;
+    OuisyncClientConfig _ouisync;
 };
 
 } // ouinet namespace
