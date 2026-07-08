@@ -946,6 +946,8 @@ Injector::Injector(InjectorConfig config, asio::io_context &ctx,
         _exec, std::move(base), *_ssl_context));
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Setup Ouisync
   if (_config.ouisync_config().transport) {
     _inner->_ouisync.emplace(_exec, _config.repo_root() / "ouisync",
                              std::string(), // injector doesn't use page index
@@ -956,6 +958,15 @@ Injector::Injector(InjectorConfig config, asio::io_context &ctx,
                                trace = std::move(trace)](
                                   asio::yield_context y) mutable {
     Async yield(y, _cancel, trace);
+
+    // -------------------------------------------------------------------------------------
+    // Start Ouisync
+    if (_inner->ouisync) {
+      auto ec = _inner->ouisync->start(yield);
+      if (ec) {
+        LOG_WARN(yield, " Failed to start Ouisync: ", ec);
+      }
+    }
 
     // -------------------------------------------------------------------------------------
     // Setup UDP sockets
