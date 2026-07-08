@@ -19,6 +19,7 @@
 #include "client.h"
 #include "util/str.h"
 #include "ssl/util.h"
+#include "util/unwrap.h"
 
 using namespace std;
 using namespace ouinet;
@@ -66,15 +67,15 @@ Request build_origin_request() {
     return req;
 }
 
-Response fetch_through_client(const Client& client, Request req, asio::yield_context yield) {
+Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
-    stream.async_connect(client.get_proxy_endpoint(), yield);
+    unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
 
-    http::async_write(stream, req, yield);
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield);
+    unwrap(http::async_read(stream, b, res, yield));
     return res;
 }
 
@@ -90,14 +91,14 @@ asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket,
     return stream;
 }
 
-Response fetch_from_origin(util::Url url, asio::yield_context yield) {
+Response fetch_from_origin(util::Url url, Async yield) {
     if (url.port.empty()) url.port = "443";
     if (url.path.empty()) url.path = "/";
 
     auto exec = yield.get_executor();
 
     tcp::resolver resolver(exec);
-    auto const results = resolver.async_resolve(url.host, url.port, yield);
+    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
 
     asio::ssl::context ctx{asio::ssl::context::tlsv12_client};
     ouinet::ssl::util::load_tls_ca_certificates(ctx);
@@ -107,16 +108,16 @@ Response fetch_from_origin(util::Url url, asio::yield_context yield) {
     std::string host = req[http::field::host];
 
     tcp::socket socket(exec);
-    asio::async_connect(socket, results, yield);
+    unwrap(asio::async_connect(socket, results, yield));
 
     auto stream = setup_tls_stream(std::move(socket), ctx, host);
-    stream.async_handshake(asio::ssl::stream_base::client, yield);
+    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
 
-    http::async_write(stream, req, yield);
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield);
+    unwrap(http::async_read(stream, b, res, yield));
 
     sys::error_code ignored_ec;
     stream.shutdown(ignored_ec);
@@ -155,7 +156,9 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
     auto group = "test_group";
     auto swarms = std::make_shared<MockDht::Swarms>();
 
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
+    asio::spawn(ctx, [&] (asio::yield_context yield_) {
+        auto yield = Async(yield_, util::LogPath());
+
         Injector injector(make_config<InjectorConfig>({
                 "./no_injector_exec"s,
                 "--repo"s, root.make_subdir("injector").string(),
@@ -189,18 +192,18 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
         auto ouisync_service_dir = root.make_subdir("ouisync");
         ouisync::Service service(yield.get_executor());
-        service.start(ouisync_service_dir.string().c_str(), "ouisync-service", yield);
+        service.start(ouisync_service_dir.string().c_str(), "ouisync-service", yield.asio_yield());
 
-        auto session = ouisync::Session::connect(ouisync_service_dir.path(), yield);
+        auto session = ouisync::Session::connect(ouisync_service_dir.path(), yield.asio_yield());
 
         session.bind_network({"quic/0.0.0.0:0"}, yield);
-        session.set_store_dirs({ouisync_service_dir.make_subdir("store").string()}, yield);
+        unwrap(session.set_store_dirs({ouisync_service_dir.make_subdir("store").string()}, yield));
         if (with_mount) {
-            session.set_mount_root(ouisync_service_dir.make_subdir("mount").string(), yield);
+            unwrap(session.set_mount_root(ouisync_service_dir.make_subdir("mount").string(), yield));
         }
-        session.set_local_discovery_enabled(true, yield);
+        unwrap(session.set_local_discovery_enabled(true, yield));
 
-        auto page_index = session.create_repository(
+        auto page_index = unwrap(session.create_repository(
                 "page_index",
                 {},    // read secret
                 {},    // write secret
@@ -208,10 +211,10 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 true,  // sync enabled
                 false, // dht enabled
                 false, // pex_enabled
-                yield);
+                yield));
 
         if (with_mount) {
-            page_index.mount(yield);
+            unwrap(page_index.mount(yield));
         }
 
         Client leecher(ctx, make_config<ClientConfig>({
@@ -219,7 +222,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 "--log-level=DEBUG"s,
                 "--repo"s, root.make_subdir("leecher").string(),
                 "--cache-type=ouisync"s,
-                "--ouisync-page-index"s, page_index.share(ouisync::AccessMode::read, {}, yield).value,
+                "--ouisync-page-index"s, unwrap(page_index.share(ouisync::AccessMode::read, {}, yield)).value,
                 "--disable-origin-access"s,
                 // Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
@@ -248,7 +251,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
         BOOST_CHECK_EQUAL(rs1.body(), control_body);
 
         // Create a repo and copy the fetched content into it
-        auto page_repo = session.create_repository(
+        auto page_repo = unwrap(session.create_repository(
                 group,
                 {},    // read secret
                 {},    // write secret
@@ -256,31 +259,31 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 true,  // sync enabled
                 false, // dht enabled
                 false, // pex_enabled
-                yield);
+                yield));
 
         if (with_mount) {
-            page_repo.mount(yield);
+            unwrap(page_repo.mount(yield));
         }
 
-        session.copy(
+        unwrap(session.copy(
             {},                                                             // `src_repo`
             (seeder_dir.path() / "bep5_http" / cache::root_fname).string(), // `src_path`
             group,                                                          // `dst_repo`
             "/",                                                            // `dst_path`
-            yield);
+            yield));
 
         // Create an entry in the `page_index` repo with the new repo
-        auto page_token = page_repo.share(ouisync::AccessMode::read, {}, yield).value;
-        auto file = page_index.create_file("/"s + group, yield);
-        file.write(0, {page_token.begin(), page_token.end()}, yield);
-        file.close(yield);
+        auto page_token = unwrap(page_repo.share(ouisync::AccessMode::read, {}, yield)).value;
+        auto file = unwrap(page_index.create_file("/"s + group, yield));
+        unwrap(file.write(0, {page_token.begin(), page_token.end()}, yield));
+        unwrap(file.close(yield));
 
         // The "leecher" client fetches the content from the Ouisync `session`
         auto rs2 = fetch_through_client(leecher, rq, yield);
 
-        BOOST_CHECK_EQUAL(rs2.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_ouisync);
-        BOOST_CHECK_EQUAL(rs2.body(), control_body);
+        BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);
+        BOOST_REQUIRE_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_ouisync);
+        BOOST_REQUIRE_EQUAL(rs2.body(), control_body);
 
         injector.stop();
         seeder.stop();
