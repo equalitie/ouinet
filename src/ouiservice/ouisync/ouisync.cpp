@@ -166,12 +166,6 @@ Ouisync::Ouisync(
     _page_index_token(std::move(page_index_token)),
     _impl_cv(exec)
 {
-    if (_bind.empty()) {
-        _bind.reserve(2);
-        _bind.push_back({ asio::ip::address_v4::any(), 0 });
-        _bind.push_back({ asio::ip::address_v6::any(), 0 });
-    }
-
     fs::create_directories(_store_dir);
     fs::create_directories(_mount_dir);
 }
@@ -196,12 +190,10 @@ sys::error_code Ouisync::start(Async yield)
             [] (auto ep) { return util::str("quic/", ep); }
         );
         unwrap(session.bind_network(bind_strs, yield));
+        unwrap(session.set_local_discovery_enabled(true, yield));
 
         unwrap(session.set_store_dirs({_store_dir.string()}, yield));
-
         auto mount_r = session.set_mount_root(_mount_dir.string(), yield);
-
-        unwrap(session.set_local_discovery_enabled(true, yield));
 
         std::optional<ouisync::Repository> page_index;
         if (!_page_index_token.empty()) {
