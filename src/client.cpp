@@ -149,12 +149,13 @@ public:
             enable_metrics();
         }
 
-        if (auto config = _config.ouisync_config()) {
+        // Only setup ouisync if it's being used as cache and/or as network transport.
+        if (!_config.ouisync_config().page_index_token.empty() || _config.ouisync_config().transport) {
             _ouisync.emplace(
                 ctx.get_executor(),
                 _config.repo_root() / "ouisync",
-                config->page_index_token,
-                config->udp_endpoints
+                _config.ouisync_config().page_index_token,
+                _config.ouisync_config().udp_endpoints
             );
         }
     }
@@ -658,21 +659,7 @@ private:
     void create_udp_sockets(Async yield) {
         std::vector<asio_utp::udp_multiplexer> sockets;
 
-        if (!_config.ouisync_config() ||
-            _config.ouisync_config()->transport != OuisyncTransport::exclusive)
-        {
-            sockets.push_back(
-                create_udp_multiplexer(
-                    _ctx.get_executor(),
-                    _config.repo_root() / "last_used_udp_port",
-                    _config.udp_mux_port()
-                )
-            );
-        }
-
-        if (_config.ouisync_config() &&
-            _config.ouisync_config()->transport != OuisyncTransport::disabled)
-        {
+        if (_config.ouisync_config().transport) {
             assert(_ouisync);
 
             auto ouisync_sockets = _ouisync->open_network_sockets(yield);
@@ -689,6 +676,14 @@ private:
             } else {
                 LOG_ERROR(yield, " Failed to open Ouisync sockets: ", ouisync_sockets.error());
             }
+        } else {
+            sockets.push_back(
+                create_udp_multiplexer(
+                    _ctx.get_executor(),
+                    _config.repo_root() / "last_used_udp_port",
+                    _config.udp_mux_port()
+                )
+            );
         }
 
         _udp_sockets = std::move(sockets);

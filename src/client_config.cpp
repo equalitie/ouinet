@@ -71,29 +71,6 @@ bool ClientConfig::EnabledCaches::is_injecting_cache_enabled() const {
 asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom);
 asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, const char* for_whom);
 
-static void validate(
-    boost::any& v,
-    const std::vector<std::string>& values,
-    OuisyncTransport* target_type,
-    int
-)
-{
-    namespace po =  boost::program_options;
-
-    po::validators::check_first_occurrence(v);
-    auto value = boost::to_lower_copy(po::validators::get_single_string(values));
-
-    if (value == "enabled") {
-        v = OuisyncTransport::enabled;
-    } else if (value == "disabled") {
-        v = OuisyncTransport::disabled;
-    } else if (value == "exclusive") {
-        v = OuisyncTransport::exclusive;
-    } else {
-        throw po::validation_error(po::validation_error::invalid_option_value);
-    }
-}
-
 boost::program_options::options_description ClientConfig::description_full()
 {
     using namespace std;
@@ -183,8 +160,8 @@ boost::program_options::options_description ClientConfig::description_full()
         , po::value<std::vector<std::string>>()->composing()
         , "UDP endpoint(s) to bind Ouisync to (in <IP>:<PORT> format).")
        ("ouisync-transport"
-        , po::value<OuisyncTransport>()->default_value(OuisyncTransport::disabled)
-        , "(Experimental) Whether to use Ouisync as network transport layer.")
+        , po::bool_switch(&_ouisync.transport)->default_value(false)
+        , "(Experimental) Use Ouisync as network transport layer.")
        ;
 
     po::options_description injector("Injector options");
@@ -563,13 +540,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
     if (auto ouisync_eps = as_optional<std::vector<std::string>>(vm, "ouisync-udp-ep");
         ouisync_eps && !ouisync_eps->empty()) {
-        if (!_ouisync) {
-            _ouisync = OuisyncConfig{};
-        }
 
         for (auto s : *ouisync_eps) {
             if (auto ep = parse::endpoint<asio::ip::udp>(s)) {
-                _ouisync->udp_endpoints.push_back(*ep);
+                _ouisync.udp_endpoints.push_back(*ep);
             }
         }
     }
@@ -660,10 +634,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                     _enabled_caches.set(type, true);
 
                     if (auto token_opt = as_optional<string>(vm, "ouisync-page-index")) {
-                        if (!_ouisync) {
-                            _ouisync = OuisyncConfig{};
-                        }
-                        _ouisync->page_index_token = *token_opt;
+                        _ouisync.page_index_token = *token_opt;
                     } else {
                         throw error("Argument --cache-type=ouisync requires --ouisync-page-index=<page_index_repo_read_token>");
                     }
