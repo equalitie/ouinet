@@ -978,8 +978,8 @@ Injector::Injector(
 
             // -------------------------------------------------------------------------------------
             // Start Ouisync
-            if (_inner->ouisync) {
-                auto ec = _inner->ouisync->start(yield);
+            if (_inner->_ouisync) {
+                auto ec = _inner->_ouisync->start(yield);
                 if (ec) {
                     LOG_WARN(yield, " Failed to start Ouisync: ", ec);
                 }
