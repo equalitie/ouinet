@@ -9,7 +9,7 @@ fn main() {
         .file("cxx/metrics.cpp")
         .file("cxx/record_processor.cpp")
         .file("cxx/dns.cpp")
-        .std("c++20")
+        .std("c++23")
         .compile("rust-bridge");
 
     // Use `export LIBRARY_PATH="./build"` to tell the linker where to find libboost_asio.so

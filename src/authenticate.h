@@ -41,15 +41,17 @@ namespace authenticate_detail {
 //
 // This times out if an authentication error message fails to be sent.
 template<class Request>
+[[nodiscard]]
 inline
-bool authenticate( Request& req
-                 , GenericStream& con
-                 , beast::string_view credentials /* e.g.: "test:123" */
-                 , asio::yield_context yield)
+std::expected<void, sys::error_code>
+authenticate( Request& req
+            , GenericStream& con
+            , beast::string_view credentials /* e.g.: "test:123" */
+            , Async yield)
 {
     using namespace authenticate_detail;
 
-    if (credentials.empty()) return true;
+    if (credentials.empty()) return {};
 
     auto auth_i = req.find(http::field::proxy_authorization);
 
@@ -67,7 +69,7 @@ bool authenticate( Request& req
         // Make sure we don't pass the credentials further.
         req.erase(http::field::proxy_authorization);
 
-        if (!invalid) return true;
+        if (!invalid) return {};
     }
 
     http::response<http::string_body>
@@ -80,10 +82,10 @@ bool authenticate( Request& req
 
     res.prepare_payload();
 
-    sys::error_code ec;
-    util::http_reply(con, res, yield[ec]);
+    sys::error_code ec = util::http_reply(con, res, yield);
+    if (ec) return std::unexpected(ec);
 
-    return or_throw(yield, ec, false);
+    return std::unexpected(asio::error::connection_refused);
 }
 
 template<class Request>

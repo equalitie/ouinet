@@ -12,6 +12,7 @@
 #include "http_sign.h"
 #include "signed_head.h"
 #include "logger.h"
+#include <boost/format.hpp>
 
 #define CACHE_RESOURCE_LOGPFX "Cache resource: "
 #define CACHE_RESOURCE_DEBUG(...) LOG_DEBUG(CACHE_RESOURCE_LOGPFX, __VA_ARGS__)
@@ -63,21 +64,24 @@ struct SigEntry {
     }
 
     template<class Stream>
+    [[nodiscard]]
     static
-    boost::optional<SigEntry>
-    parse(Stream& in, parse_buffer& buf, Cancel cancel, asio::yield_context yield)
+    std::expected<boost::optional<SigEntry>, sys::error_code>
+    parse(Stream& in, parse_buffer& buf, Async yield)
     {
+        // Note: using asio_yield here because I'm not sure whether the `eof` error code may
+        // happen while still receiving data.
         sys::error_code ec;
-        auto line_len = asio::async_read_until(in, asio::dynamic_buffer(buf), '\n', yield[ec]);
-        ec = compute_error_code(ec, cancel);
+        auto line_len = asio::async_read_until(in, asio::dynamic_buffer(buf), '\n', yield.asio_yield()[ec]);
+        if (yield.is_cancelled()) throw Async::Cancelled();
         if (ec == asio::error::eof) ec = {};
-        if (ec) return or_throw(yield, ec, boost::none);
+        if (ec) return std::unexpected(ec);
 
         if (line_len == 0) return boost::none;
         assert(line_len <= buf.size());
         if (buf[line_len - 1] != '\n') {
             CACHE_RESOURCE_ERROR("Truncated signature line");
-            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            return std::unexpected(sys::errc::make_error_code(sys::errc::bad_message));
         }
         boost::string_view line(buf);
         line.remove_suffix(buf.size() - line_len + 1);  // leave newline out
@@ -91,7 +95,7 @@ struct SigEntry {
         boost::cmatch m;
         if (!boost::regex_match(line.begin(), line.end(), m, line_regex)) {
             CACHE_RESOURCE_ERROR("Malformed signature line");
-            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), boost::none);
+            return std::unexpected(sys::errc::make_error_code(sys::errc::bad_message));
         }
         auto offset = parse_data_block_offset(m[1].str());
         SigEntry entry{ offset, m[2].str(), m[3].str()
@@ -122,41 +126,43 @@ private:
 
 public:
     template<class IStream>
+    [[nodiscard]]
     static
-    SignedHead read_signed_head(IStream& is, Cancel& cancel, asio::yield_context yield) {
+    std::expected<SignedHead, sys::error_code> read_signed_head(IStream& is, Async yield) {
         assert(is.is_open());
 
-        auto on_cancel = cancel.connect([&] { is.close(); });
+        auto on_cancel = yield.cancel_slot([&] { is.close(); });
 
         // Put in heap to avoid exceeding coroutine stack limit.
         auto buffer = std::make_unique<beast::static_buffer<http_forward_block>>();
         auto parser = std::make_unique<http::response_parser<http::empty_body>>();
 
-        sys::error_code ec;
-        http::async_read_header(is, *buffer, *parser, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, SignedHead{});
+        if (auto r = http::async_read_header(is, *buffer, *parser, yield); !r) {
+            return std::unexpected(r.error());
+        }
 
         if (!parser->is_header_done()) {
-            return or_throw<SignedHead>(yield, sys::errc::make_error_code(sys::errc::no_message));
+            return std::unexpected(sys::errc::make_error_code(sys::errc::no_message));
         }
 
         auto head_o = SignedHead::create_from_trusted_source(parser->release().base());
 
         if (!head_o) {
-            return or_throw<SignedHead>(yield, sys::errc::make_error_code(sys::errc::no_message));
+            return std::unexpected(sys::errc::make_error_code(sys::errc::no_message));
         }
 
         return std::move(*head_o);
     }
 
 private:
-    http_response::Head prepare_head(sys::error_code& ec)
+    [[nodiscard]]
+    std::expected<http_response::Head, sys::error_code>
+    prepare_head()
     {
         uri = std::string(head[http_::response_uri_hdr]);
         if (uri.empty()) {
             CACHE_RESOURCE_ERROR("Missing URI in stored head");
-            ec = asio::error::bad_descriptor;
-            return {};
+            return std::unexpected(asio::error::bad_descriptor);
         }
 
         block_size = head.block_size();
@@ -182,10 +188,18 @@ private:
                        ? bs * ((range->end - 1) / bs + 1)
                        : 0;
             // Clip range end to actual file size.
-            size_t ds = 0;
-            if (bodyf.is_open()) ds = util::file_io::file_size(bodyf, ec);
-            if (ec) return {};
-            if (range->end > ds) range->end = ds;
+            if (bodyf.is_open()) {
+                auto ds = util::file_io::file_size(bodyf);
+                if (!ds) return std::unexpected(ds.error());
+                if (range->end > *ds) range->end = *ds;
+            }
+            else {
+                range->end = 0;
+            }
+            //size_t ds = 0;
+            //if (bodyf.is_open()) ds = util::file_io::file_size(bodyf, ec);
+            //if (ec) return {};
+            //if (range->end > ds) range->end = ds;
 
             // Report resulting range.
             std::stringstream content_range_ss;
@@ -208,42 +222,47 @@ private:
         return std::move(head);
     }
 
-    void
-    seek_to_range_begin(Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    seek_to_range_begin(Async yield)
     {
         assert(_is_head_done);
-        if (!range) return;
-        if (range->end == 0) return;
+        if (!range) return {};
+        if (range->end == 0) return {};
         assert(bodyf.is_open());
         assert(block_size);
 
-        sys::error_code ec;
-
         // Move body file pointer to start of range.
         block_offset = range->begin;
-        util::file_io::fseek(bodyf, block_offset, ec);
-        if (ec) return or_throw(yield, ec);
+        if (auto r = util::file_io::fseek(bodyf, block_offset); !r) {
+            return std::unexpected(r.error());
+        }
 
         // Consume signatures before the first block.
         for (unsigned b = 0; b < (block_offset / *block_size); ++b) {
-            get_sig_entry(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec);
+            if (auto r = get_sig_entry(yield); !r) {
+                return std::unexpected(r.error());
+            }
         }
+
+        return {};
     }
 
 protected:
-    boost::optional<SigEntry>
-    get_sig_entry(Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<boost::optional<SigEntry>, sys::error_code>
+    get_sig_entry(Async yield)
     {
         assert(_is_head_done);
         if (!sigsf.is_open()) return boost::none;
 
-        return SigEntry::parse(sigsf, sigs_buffer, cancel, yield);
+        return SigEntry::parse(sigsf, sigs_buffer, yield);
     }
 
 private:
-    http_response::ChunkBody
-    get_chunk_body(Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<http_response::ChunkBody, sys::error_code>
+    get_chunk_body(Async yield)
     {
         assert(_is_head_done);
         http_response::ChunkBody empty_cb{{}, 0};
@@ -256,17 +275,18 @@ private:
         }
 
         sys::error_code ec;
-        auto len = asio::async_read(bodyf, asio::buffer(body_buffer), yield[ec]);
-        ec = compute_error_code(ec, cancel);
+        auto len = asio::async_read(bodyf, asio::buffer(body_buffer), yield.asio_yield()[ec]);
+        if (yield.is_cancelled()) throw Async::Cancelled();
         if (ec == asio::error::eof) ec = {};
-        if (ec) return or_throw(yield, ec, empty_cb);
+        if (ec) return std::unexpected(ec);
 
         assert(len <= body_buffer.size());
-        return {std::vector<uint8_t>(body_buffer.cbegin(), body_buffer.cbegin() + len), 0};
+        return http_response::ChunkBody{std::vector<uint8_t>(body_buffer.cbegin(), body_buffer.cbegin() + len), 0};
     }
 
-    std::optional<http_response::Part>
-    get_chunk_part(Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<std::optional<http_response::Part>, sys::error_code>
+    get_chunk_part(Async yield)
     {
         if (next_chunk_body) {
             // We just sent a chunk header, body comes next.
@@ -275,29 +295,30 @@ private:
             return part;
         }
 
-        sys::error_code ec;
-
         // Get block signature and previous hash,
         // and then its data (which may be empty).
-        auto sig_entry = get_sig_entry(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+        auto sig_entry_r = get_sig_entry(yield);
+        if (!sig_entry_r) return std::unexpected(sig_entry_r.error());
+        auto sig_entry = std::move(*sig_entry_r);
+
         // Even if there is no new signature entry,
         // if the signature of the previous block was read
         // it may still be worth sending it in this chunk header
         // (to allow the receiving end to process it).
         // Otherwise it is not worth sending anything.
         if (!sig_entry && next_chunk_exts.empty()) {
-            if (!data_size) ec = asio::error::connection_aborted;  // incomplete
-            return or_throw(yield, ec, std::nullopt);
+            if (!data_size) return std::unexpected(asio::error::connection_aborted);  // incomplete
+            return std::nullopt;
         }
-        auto chunk_body = get_chunk_body(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, std::nullopt);
+        auto chunk_body = get_chunk_body(yield);
+        if (!chunk_body) return std::unexpected(chunk_body.error());
+
         // Validate block offset and size.
         if (sig_entry && sig_entry->offset != block_offset) {
             CACHE_RESOURCE_ERROR("Data block offset mismatch: ", sig_entry->offset, " != ", block_offset);
-            return or_throw(yield, sys::errc::make_error_code(sys::errc::bad_message), std::nullopt);
+            return std::unexpected(make_error_code(sys::errc::bad_message));
         }
-        block_offset += chunk_body.size();
+        block_offset += chunk_body->size();
 
         if (range && block_offset >= range->end) {
             // Hit range end, stop getting more blocks:
@@ -307,14 +328,14 @@ private:
             bodyf.close();
         }
 
-        if (chunk_body.size() == 0 && next_chunk_exts.empty() && sig_entry)
+        if (chunk_body->size() == 0 && next_chunk_exts.empty() && sig_entry)
             // Empty body, generate last chunk header with the signature we just read.
             return http_response::Part(http_response::ChunkHdr(0, sig_entry->chunk_exts()));
 
-        http_response::ChunkHdr ch(chunk_body.size(), next_chunk_exts);
+        http_response::ChunkHdr ch(chunk_body->size(), next_chunk_exts);
         next_chunk_exts = sig_entry ? sig_entry->chunk_exts() : "";
-        if (sig_entry && chunk_body.size() > 0)
-            next_chunk_body = std::move(chunk_body);
+        if (sig_entry && chunk_body->size() > 0)
+            next_chunk_body = std::move(*chunk_body);
         return http_response::Part(std::move(ch));
     }
 
@@ -331,33 +352,29 @@ public:
 
     ~GenericResourceReader() override {};
 
+    [[nodiscard]]
     std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
     async_read_part(Async yield) override
     {
         if (!_is_open || _is_done) return std::nullopt;
 
         if (!_is_head_done) {
-            auto head = compat([&](sys::error_code& ec) { return prepare_head(ec); })();
+            auto head = prepare_head();
             if (!head) {
                 return std::unexpected(head.error());
             }
 
             _is_head_done = true;
 
-            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-                return seek_to_range_begin(cancel, yield);
-            })(yield);
-            if (!result) {
-                return std::unexpected(result.error());
+            if (auto r = seek_to_range_begin(yield); !r) {
+                return std::unexpected(r.error());
             }
 
             return http_response::Part(std::move(*head));
         }
 
         if (!_is_body_done) {
-            auto chunk_part = compat([&](Cancel cancel, asio::yield_context yield) {
-                return get_chunk_part(cancel, yield);
-            })(yield);
+            auto chunk_part = get_chunk_part(yield);
             if (!chunk_part) {
                 return std::unexpected(chunk_part.error());
             }

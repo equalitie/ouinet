@@ -13,6 +13,7 @@
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
 #include "util/sign.h"
+#include "util/str.h"
 
 #include "cxx/dns.h"
 

@@ -5,7 +5,6 @@
 #include <boost/beast/http.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <stdexcept>
-#include "util/yield.h"
 #include "cache/cache_entry.h"
 #include "request.h"
 #include "namespaces.h"

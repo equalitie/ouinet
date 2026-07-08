@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../defer.h"
+#include "async.h"
 #include "condition_variable.h"
 #include <optional>
 
@@ -8,11 +9,11 @@ namespace ouinet {
 
 template<class Retval> class AsyncJob {
 public:
-    using Job = std::function<Retval(Cancel&, asio::yield_context)>;
+    using Result = std::expected<Retval, sys::error_code>;
+    using Job = std::function<Result(Async)>;
     using OnFinish = std::function<void()>;
     using Connection = typename Cancel::Connection;
 
-    using Result = std::expected<Retval, sys::error_code>;
 
 public:
     AsyncJob(const AsioExecutor& ex)
@@ -61,10 +62,12 @@ public:
             self->_self = &self;
             self->_cancel_signal = &cancel;
 
-            Result result = compat([&](sys::error_code& ec) {
-                return job(cancel, yield[ec]);
-            })();
-            if (cancel) {
+            std::optional<Result> result;
+
+            try {
+                result = job(Async(yield, cancel));
+            }
+            catch (Async::Cancelled const&) {
                 result = std::unexpected(asio::error::operation_aborted);
             }
 
@@ -73,7 +76,7 @@ public:
             self->_self = nullptr;
             self->_cancel_signal = nullptr;
 
-            self->_result = std::move(result);
+            self->_result = std::move(*result);
 
             auto on_finish_sig = std::move(self->_on_finish_sig);
             on_finish_sig();
@@ -110,6 +113,14 @@ public:
     bool is_running() const { return _self; }
 
     void stop(asio::yield_context yield) {
+        if (!is_running()) return;
+        cancel();
+        ConditionVariable cv(_ex);
+        auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
+        cv.wait(yield);
+    }
+
+    void stop(Async yield) {
         if (!is_running()) return;
         cancel();
         ConditionVariable cv(_ex);

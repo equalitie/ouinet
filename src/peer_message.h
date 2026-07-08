@@ -2,8 +2,6 @@
 
 #include <boost/beast/http/message.hpp>
 #include "generic_stream.h"
-#include "util/yield.h"
-#include "util/yield.h"
 #include "cache/resource_id.h"
 #include "http_util.h"
 
@@ -78,7 +76,9 @@ enum class BlobType {
     cypher_text,
 };
 
-void async_write_blob_type(BlobType, GenericStream&, asio::yield_context);
+[[nodiscard]]
+std::expected<void, sys::error_code>
+async_write_blob_type(BlobType, GenericStream&, Async);
 BlobType async_read_blob_type(GenericStream&, asio::yield_context);
 
 enum PeerRequestError {

@@ -211,15 +211,12 @@ HashList HashList::load(
     return hs;
 }
 
-void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
+std::expected<void, sys::error_code>
+HashList::write(GenericStream& con, Async y) const
 {
     using namespace chrono_literals;
 
     assert(verify());
-    assert(!c);
-    if (c) return or_throw(y, asio::error::operation_aborted);
-
-    sys::error_code ec;
 
     auto h = signed_head;
 
@@ -246,9 +243,15 @@ void HashList::write(GenericStream& con, Cancel& c, asio::yield_context y) const
             5s + 100ms * blocks.size(),
             [&] { con.close(); });
 
-    h.async_write(con, c, y[ec]);
-    fail_on_error_or_timeout(y, c, ec, wd);
+    if (auto r = h.async_write(con, y); !r) {
+        if (!wd.is_running()) return std::unexpected(asio::error::timed_out);
+        return std::unexpected(r.error());
+    }
 
-    asio::async_write(con, bufs, y[ec]);
-    fail_on_error_or_timeout(y, c, ec, wd);
+    if (auto r = asio::async_write(con, bufs, y); !r) {
+        if (!wd.is_running()) return std::unexpected(asio::error::timed_out);
+        return std::unexpected(r.error());
+    }
+
+    return {};
 }

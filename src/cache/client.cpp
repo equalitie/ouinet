@@ -32,8 +32,8 @@
 #define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
 #define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
-#define _YDEBUG(y, ...) do { if (get_logger().get_threshold() <= DEBUG) y.log(DEBUG, __VA_ARGS__); } while (false)
-#define _YERROR(y, ...) do { if (get_logger().get_threshold() <= ERROR) y.log(ERROR, __VA_ARGS__); } while (false)
+#define _YDEBUG(y, ...) do { if (get_logger().get_threshold() <= DEBUG) LOG_DEBUG(y, " ", __VA_ARGS__); } while (false)
+#define _YERROR(y, ...) do { if (get_logger().get_threshold() <= ERROR) LOG_ERROR(y, " ", __VA_ARGS__); } while (false)
 
 using namespace std;
 using namespace ouinet;
@@ -67,27 +67,19 @@ struct GarbageCollector {
     void start()
     {
         task::spawn_detached(_executor, [&] (asio::yield_context y) {
-            YieldContext yield(y, _log_path);
-            Cancel cancel(_cancel);
+            Async yield(y, _cancel, _log_path);
 
             _DEBUG("Garbage collector started");
-            while (!cancel) {
-                sys::error_code ec;
-                async_sleep(chrono::minutes(7), cancel, yield[ec]);
-                if (cancel || ec) break;
+            while (true) {
+                async_sleep(chrono::minutes(7), yield);
 
                 _DEBUG("Collecting garbage...");
-                http_store.for_each([&] (cache::ResourceId const& resource_id, auto rr, auto y) {
-                    sys::error_code e;
-                    auto k = keep(resource_id, std::move(rr), y[e]);
-                    ec = compute_error_code(ec, cancel);
-                    return or_throw(y, e, k);
-                }, cancel, yield[ec]);
-                if (ec) _WARN("Collecting garbage: failed;"
-                              " ec=", ec);
-                _DEBUG("Collecting garbage: done");
+                auto r = http_store.for_each([&] (cache::ResourceId const& resource_id, auto rr, Async y) {
+                    return keep(resource_id, std::move(rr), y);
+                }, yield);
+                if (!r) _WARN("Collecting garbage: failed; ec=", r.error());
+                else _DEBUG("Collecting garbage: done");
             }
-            _DEBUG("Garbage collector stopped");
         });
     }
 };
@@ -190,11 +182,12 @@ struct Client::Impl {
         return true;
     }
 
-    bool serve_local( const PeerCacheRequest& req
-                    , GenericStream& sink
-                    , metrics::Client& metrics_client
-                    , Cancel& cancel
-                    , YieldContext yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    serve_local( const PeerCacheRequest& req
+               , GenericStream& sink
+               , metrics::Client& metrics_client
+               , Async yield)
     {
         sys::error_code ec;
 
@@ -218,61 +211,53 @@ struct Client::Impl {
 
         if (req.method() == http::verb::propfind) {
             _YDEBUG(yield, "Serving propfind for ", req.resource_id());
-            auto hl = _http_store->load_hash_list
-                (req.resource_id(), cancel, yield[ec]);
+            auto hl = _http_store->load_hash_list(req.resource_id(), yield);
 
             CryptoStreamKey key;
 
-            if (!ec) {
-                auto opt_key = resource_key::from_cached_header(hl.signed_head);
+            if (hl) {
+                auto opt_key = resource_key::from_cached_header(hl->signed_head);
                 if (!opt_key) {
-                    ec = asio::error::not_found;
+                    hl = std::unexpected(asio::error::not_found);
                 } else {
                     key = *opt_key;
                 }
             }
 
-            _YDEBUG(yield, "Load; ec=", ec);
-            if (ec) {
-                sys::error_code hnf_ec;
-                handle_not_found(sink, req.keep_alive(), yield[hnf_ec]);
-                return or_throw(yield, hnf_ec, bool(!hnf_ec));
+            if (!hl) {
+                return handle_not_found(sink, req.keep_alive(), yield);
             }
-            return_or_throw_on_error(yield, cancel, ec, false);
 
-
-            async_write_blob_type(BlobType::cypher_text, sink, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, false);
+            if (auto r = async_write_blob_type(BlobType::cypher_text, sink, yield); !r) {
+                return std::unexpected(r.error());
+            }
 
             auto crypto_sink = make_crypto_sink(key);
-            hl.write(crypto_sink, cancel, yield.tag("write_propfind")[ec]);
+            if (auto r = hl->write(crypto_sink, yield.tag("write_propfind")); !r) {
+                return std::unexpected(r.error());
+            }
 
-            _YDEBUG(yield, "Write; ec=", ec);
-            return or_throw(yield, ec, bool(!ec));
+            return {};
         }
 
         cache::reader_uptr rr;
 
         if (auto range = req.range()) {
-            rr = _http_store->range_reader(req.resource_id(), range->first, range->last, cancel, yield[ec]);
-        } else {
-            rr = _http_store->reader(req.resource_id(), cancel, yield[ec]);
-            // We may also, depending on whether the request is `HEAD`:
-            // (tru) the operation above (which may work for an entry missing a body),
-            // or (false) `_http_store->reader_and_size` instead so as to choose
-            // between the entries in the internal and static caches
-            // the one which does have a body.
-            // Using `_http_store->reader` exclusively just tends to use
-            // the version in the internal cache, which may be more recent.
-        }
-
-        if (ec) {
-            if (!cancel) {
-                _YDEBUG(yield, "Not serving: ", req.resource_id(), "; ec=", ec);
+            if (auto r = _http_store->range_reader(req.resource_id(), range->first, range->last, yield)) {
+                rr = std::move(*r);
             }
-            sys::error_code hnf_ec;
-            handle_not_found(sink, req.keep_alive(), yield[hnf_ec]);
-            return or_throw(yield, hnf_ec, req.keep_alive());
+            else {
+                _YDEBUG(yield, "Not serving: ", req.resource_id(), "; ec=", r.error());
+                return handle_not_found(sink, req.keep_alive(), yield);
+            }
+        } else {
+            if (auto r = _http_store->reader(req.resource_id(), yield)) {
+                rr = std::move(*r);
+            }
+            else {
+                _YDEBUG(yield, "Not serving: ", req.resource_id(), "; ec=", r.error());
+                return handle_not_found(sink, req.keep_alive(), yield);
+            }
         }
 
         _YDEBUG(yield, "BEGIN");
@@ -286,67 +271,68 @@ struct Client::Impl {
 
         _YDEBUG(yield, "Serving: ", req.resource_id());
 
-        auto s = compat([&](Async yield) {
-            return Session::create(
+        auto s = Session::create(
                 std::move(rr),
                 req.method() == http::verb::head,
                 metrics_client.new_cache_out_request(),
                 yield.tag("read_hdr")
             );
-        })(cancel, yield[ec]);
 
         CryptoStreamKey key;
 
-        if (!ec) {
-            auto opt_key = resource_key::from_cached_header(s.response_header());
+        if (s) {
+            auto opt_key = resource_key::from_cached_header(s->response_header());
             if (!opt_key) {
-                ec = asio::error::not_found;
+                s = std::unexpected(asio::error::not_found);
             } else {
                 key = *opt_key;
             }
         }
 
-        if (ec) return or_throw(yield, ec, false);
+        if (!s) return std::unexpected(s.error());
 
-        bool keep_alive = req.keep_alive() && s.response_header().keep_alive();
+        //bool keep_alive = req.keep_alive() && s->response_header().keep_alive();
 
-        async_write_blob_type(BlobType::cypher_text, sink, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, false);
+        if (auto r = async_write_blob_type(BlobType::cypher_text, sink, yield); !r) {
+            return std::unexpected(r.error());
+        }
 
         auto crypto_sink = make_crypto_sink(key);
 
-        s.flush_response(cancel, yield.tag("flush")[ec], [&crypto_sink, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
-            sys::error_code ee;
-            part.async_write(crypto_sink, cc, yy[ee]);
-            return_or_throw_on_error(yy, cc, ee);
-            if (auto b = part.as_body())
-                fwd_bytes += b->size();
-            else if (auto cb = part.as_chunk_body())
-                fwd_bytes += cb->size();
-        }, default_timeout::activity());
+        auto r = s->flush_response(yield.tag("flush"),
+                    [&crypto_sink, &fwd_bytes] (auto&& part, auto yy) -> std::expected<void, sys::error_code> {
+                auto r = part.async_write(crypto_sink, yy);
+                if (!r) return std::unexpected(r.error());
+                if (auto b = part.as_body())
+                    fwd_bytes += b->size();
+                else if (auto cb = part.as_chunk_body())
+                    fwd_bytes += cb->size();
+                return {};
+            }, default_timeout::activity());
 
-        return or_throw(yield, ec, keep_alive);
+        if (!r) return std::unexpected(r.error());
+        return {};
     }
 
-    std::size_t local_size( Cancel cancel
-                          , asio::yield_context yield) const
+    [[nodiscard]]
+    std::expected<std::size_t, sys::error_code>
+    local_size(Async yield) const
     {
-        return _http_store->size(cancel, yield);
+        return _http_store->size(yield);
     }
 
-    void local_purge(Cancel cancel, YieldContext yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code> local_purge(Async yield)
     {
         // TODO: avoid overlapping with garbage collector
         _DEBUG("Purging local cache...");
 
-        sys::error_code ec;
-        _http_store->for_each([&] (auto& resource_id, auto rr, auto y) {
+        auto r = _http_store->for_each([&] (auto& resource_id, auto rr, auto y) {
             // TODO: Implement specific purge operations
             // for DHT groups and announcer
             // to avoid having to parse all stored heads.
-            sys::error_code e;
-            auto hdr = read_response_header(*rr, y[e]);
-            if (e) return false;
+            auto hdr = read_response_header(*rr, y);
+            if (!hdr) return false;
 
             /*
              * `group_pinned` is passed by reference to `unpublished_cache_entry`
@@ -359,13 +345,15 @@ struct Client::Impl {
             if (group_pinned) return true; // keep entries of pinned groups
 
             return false;  // remove entries that are not pinned
-        }, cancel, yield[ec]);
-        if (ec) {
-            _ERROR("Purging local cache: failed; ec=", ec);
-            return or_throw(yield, ec);
+        }, yield);
+
+        if (!r) {
+            _ERROR("Purging local cache: failed; ec=", r.error());
+            return std::unexpected(r.error());
         }
 
         _DEBUG("Purging local cache: done");
+        return {};
     }
 
     bool pin_group(const GroupName& group_name, sys::error_code& ec)
@@ -383,22 +371,27 @@ struct Client::Impl {
         return _groups->is_pinned(group_name, ec);
     }
 
-    void handle_http_error( GenericStream& con
-                          , bool keep_alive
-                          , http::status status
-                          , const string& proto_error
-                          , YieldContext yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    handle_http_error( GenericStream& con
+                     , bool keep_alive
+                     , http::status status
+                     , const string& proto_error
+                     , Async yield)
     {
-        sys::error_code ec;
-        async_write_blob_type(BlobType::plain_text, con, yield[ec]);
-        if (ec) return or_throw(yield, ec);
+        if (auto r = async_write_blob_type(BlobType::plain_text, con, yield); !r) {
+            return std::unexpected(r.error());
+        }
         auto res = util::http_error(keep_alive, status, OUINET_CLIENT_SERVER_STRING, proto_error);
-        util::http_reply(con, res, yield);
+        if (sys::error_code ec = util::http_reply(con, res, yield)) {
+            return std::unexpected(ec);
+        }
+        return {};
     }
 
-    void handle_not_found( GenericStream& con
-                         , bool keep_alive
-                         , YieldContext yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    handle_not_found(GenericStream& con, bool keep_alive, Async yield)
     {
         return handle_http_error( con, keep_alive, http::status::not_found
                                 , http_::response_error_hdr_retrieval_failed, yield);
@@ -433,42 +426,38 @@ struct Client::Impl {
         return *lookup;
     }
 
-    Session load( const ResourceId& resource_id
-                , const CryptoStreamKey& resource_key
-                , const GroupName& group
-                , bool is_head_request
-                , metrics::Client& metrics_client
-                , Cancel cancel
-                , YieldContext yield)
+    [[nodiscard]]
+    std::expected<Session, sys::error_code>
+    load( const ResourceId& resource_id
+        , const CryptoStreamKey& resource_key
+        , const GroupName& group
+        , bool is_head_request
+        , metrics::Client& metrics_client
+        , Async yield)
     {
         namespace err = asio::error;
 
-        sys::error_code ec;
-
         LOG_DEBUG(yield, " Requesting from the cache: ", resource_id);
 
-        bool rs_available = false;
         std::size_t rs_sz = 0;
-        auto rs = load_from_local(resource_id, is_head_request, rs_sz, cancel, yield[ec]);
-        LOG_DEBUG(yield, " Looking up local cache; ec=", ec);
-        if (ec == err::operation_aborted) return or_throw<Session>(yield, ec);
-        if (!ec) {
+        auto rs = load_from_local(resource_id, is_head_request, rs_sz, yield);
+        LOG_DEBUG(yield, " Looking up local cache; ec=", rs ? sys::error_code() : rs.error());
+
+        if (rs) {
             // TODO: Check its age, store it if it's too old but keep trying
             // other peers.
             if (is_head_request) {
-                return rs;  // do not care about body size
+                return std::move(*rs);  // do not care about body size
             }
 
-            auto data_size_sv = rs.response_header()[http_::response_data_size_hdr];
+            auto data_size_sv = rs->response_header()[http_::response_data_size_hdr];
             auto data_size_o = parse::number<std::size_t>(data_size_sv);
             if (data_size_o && rs_sz == *data_size_o) {
-                return rs;  // local copy available and complete, use it
+                return std::move(*rs);  // local copy available and complete, use it
             }
-            rs_available = true;  // available but incomplete
             // TODO: Ideally, an incomplete or stale local cache entry
             // could be reused in the multi-peer download below.
         }
-        ec = {};  // try distributed cache
 
         util::LogPath log_path = yield.log_path().tag("multi_peer_reader");
 
@@ -551,73 +540,80 @@ struct Client::Impl {
                 , log_path);
         }
 
-        auto s = compat([&](Async yield) {
-            return Session::create(
+        auto s =  Session::create(
                 std::move(reader),
                 is_head_request,
                 std::move(metrics),
-                yield.tag("read_hdr")
-            );
-        })(cancel, yield[ec]);
+                yield.tag("read_hdr"));
 
-        if (!ec) {
-            s.response_header().set( http_::response_source_hdr  // for agent
-                                   , http_::response_source_hdr_dist_cache);
-        } else if (ec != err::operation_aborted && rs_available) {
+        if (s) {
+            s->response_header().set( http_::response_source_hdr  // for agent
+                                    , http_::response_source_hdr_dist_cache);
+            return std::move(*s);
+        }
+        else if (rs) {
             _YDEBUG(yield, "Multi-peer session creation failed, falling back to incomplete local copy;"
-                    " ec=", ec);
+                    " ec=", s.error());
             // Do not use `.set` as several warnings may co-exist
             // (RFC7234#5.5).
-            rs.response_header().insert( http::field::warning
-                                       , "119 Ouinet \"Using incomplete response body from local cache\"");
-            return rs;
+            rs->response_header().insert( http::field::warning
+                                        , "119 Ouinet \"Using incomplete response body from local cache\"");
+            return std::move(*rs);
+        }
+        else {
+            return std::unexpected(s.error());
+        }
+    }
+
+    [[nodiscard]]
+    std::expected<Session, sys::error_code>
+    load_from_local( const ResourceId& resource_id
+                   , bool is_head_request
+                   , std::size_t& body_size
+                   , Async yield)
+    {
+        cache::reader_uptr rr;
+
+        if (is_head_request) {
+            if (auto r = _http_store->reader(resource_id, yield)) {
+                std::tie(rr, body_size) = std::pair(std::move(*r), 0);
+            }
+            else {
+                return std::unexpected(r.error());
+            }
+        }
+        else {
+            if (auto r = _http_store->reader_and_size(resource_id, yield)) {
+                std::tie(rr, body_size) = std::move(*r);
+            }
+            else {
+                return std::unexpected(r.error());
+            }
         }
 
-        return or_throw<Session>(yield, ec, std::move(s));
+        auto rs = Session::create(std::move(rr), is_head_request, yield.tag("read_hdr"));
+        if (!rs) return std::unexpected(rs.error());
+
+        rs->response_header().set( http_::response_source_hdr  // for agent
+                                 , http_::response_source_hdr_local_cache);
+        return std::move(*rs);
     }
 
-    Session load_from_local( const ResourceId& resource_id
-                           , bool is_head_request
-                           , std::size_t& body_size
-                           , Cancel cancel
-                           , YieldContext yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    store( const ResourceId& resource_id
+         , const GroupName& group
+         , http_response::AbstractReader& r
+         , Async yield)
     {
-        sys::error_code ec;
-        cache::reader_uptr rr;
-        if (is_head_request)
-            rr = _http_store->reader(resource_id, cancel, yield[ec]);
-        else
-            std::tie(rr, body_size) = _http_store->reader_and_size(resource_id, cancel, yield[ec]);
-        if (ec) return or_throw<Session>(yield, ec);
-
-        auto rs = compat([&](Async yield) {
-            return Session::create(
-                std::move(rr),
-                is_head_request,
-                yield.tag("read_hdr")
-            );
-        })(cancel, yield[ec]);
-
-        return_or_throw_on_error(yield, cancel, ec, std::move(rs));
-
-        rs.response_header().set( http_::response_source_hdr  // for agent
-                                , http_::response_source_hdr_local_cache);
-        return rs;
-    }
-
-    void store( const ResourceId& resource_id
-              , const GroupName& group
-              , http_response::AbstractReader& r
-              , Cancel cancel
-              , YieldContext yield)
-    {
-        sys::error_code ec;
         cache::KeepSignedReader fr(r);
-        _http_store->store(resource_id, fr, cancel, yield[ec]);
-        if (ec) return or_throw(yield, ec);
+        if (auto r = _http_store->store(resource_id, fr, yield); !r) {
+            return std::unexpected(r.error());
+        }
 
-        _groups->add(group, resource_id, cancel, yield[ec]);
-        if (ec) return or_throw(yield, ec);
+        if (auto r = _groups->add(group, resource_id, yield); !r) {
+            return std::unexpected(r.error());
+        }
 
         if (_bep5_announcer) {
             if (_bep5_announcer->add(compute_swarm_name(group)))
@@ -628,22 +624,27 @@ struct Client::Impl {
             if (_i2p_announcer->add(util::sha1_digest(compute_swarm_name(group))))
                 _VERBOSE("Start BEP3 announcing group: ", group);
         }
+
+        return {};
     }
 
-    http::response_header<>
-    read_response_header( http_response::AbstractReader& reader
-                        , asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<http::response_header<>, sys::error_code>
+    read_response_header(http_response::AbstractReader& reader, Async yield)
     {
-        Cancel lc(_lifetime_cancel);
+        auto slot = _lifetime_cancel.connect([&] { yield.cancel(); });
 
-        sys::error_code ec;
-        auto part = compat([&](Async yield) {
-            return reader.async_read_part(yield);
-        })(lc, yield[ec]);
-        if (!ec && !part)
-            ec = sys::errc::make_error_code(sys::errc::no_message);
-        return_or_throw_on_error(yield, lc, ec, http::response_header<>());
-        auto head = part->as_head(); assert(head);
+        auto part = reader.async_read_part(yield);
+
+        if (!part) {
+            return std::unexpected(part.error());
+        }
+
+        if (!*part) {
+            return std::unexpected(sys::errc::make_error_code(sys::errc::no_message));
+        }
+
+        auto head = (*part)->as_head(); assert(head);
         return *head;
     }
 
@@ -690,25 +691,25 @@ struct Client::Impl {
     }
 
     // Return whether the entry should be kept in storage.
-    bool keep_cache_entry(const cache::ResourceId& resource_id, cache::reader_uptr rr, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<bool, sys::error_code>
+    keep_cache_entry(const cache::ResourceId& resource_id, cache::reader_uptr rr, Async yield)
     {
         // This should be available to
         // allow removing resource_ids of entries to be evicted.
         assert(_groups);
 
-        sys::error_code ec;
+        auto hdr = read_response_header(*rr, yield);
+        if (!hdr) return std::unexpected(hdr.error());
 
-        auto hdr = read_response_header(*rr, yield[ec]);
-        if (ec) return or_throw<bool>(yield, ec);
-
-        if (hdr[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
+        if ((*hdr)[http_::protocol_version_hdr] != http_::protocol_version_hdr_current) {
             _WARN( "Cached response contains an invalid "
                  , http_::protocol_version_hdr
                  , " header field; removing");
             return false;
         }
 
-        auto age = cache_entry_age(hdr);
+        auto age = cache_entry_age(*hdr);
         if (age > _max_cached_age) {
             _DEBUG( "Cached response is too old; removing: "
                   , age, " > ", _max_cached_age
@@ -726,15 +727,13 @@ struct Client::Impl {
         return true;
     }
 
-    void load_stored_groups(YieldContext yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    load_stored_groups(Async yield)
     {
         static const auto groups_curver_subdir = "dht_groups";
 
-        Cancel cancel(_lifetime_cancel);
-
-        sys::error_code e;
-
-        auto y = yield;
+        auto slot = _lifetime_cancel.connect([&] { yield.cancel(); });
 
         // Use static groups if its directory is provided.
         std::unique_ptr<BaseGroups> static_groups;
@@ -743,21 +742,30 @@ struct Client::Impl {
             if (!is_directory(groups_dir)) {
                 _ERROR("No groups of supported version under static cache, ignoring: ", *_static_cache_dir);
             } else {
-                static_groups = load_static_dht_groups(std::move(groups_dir), _ex, cancel, y[e]);
-                if (e) _ERROR("Failed to load static groups, ignoring: ", *_static_cache_dir);
+                if (auto r = load_static_dht_groups(std::move(groups_dir), yield)) {
+                    static_groups = std::move(*r);
+                }
+                else {
+                    _ERROR("Failed to load static groups, ignoring: ", *_static_cache_dir);
+                }
             }
         }
 
         auto groups_dir = _cache_dir / groups_curver_subdir;
-        _groups = static_groups
-            ? load_backed_dht_groups(groups_dir, std::move(static_groups), _ex, cancel, y[e])
-            : load_dht_groups(groups_dir, _ex, cancel, y[e]);
-        return_or_throw_on_error(y, cancel, e);
+            
+        if (auto r = static_groups
+                ? load_backed_dht_groups(groups_dir, std::move(static_groups), yield)
+                : load_dht_groups(groups_dir, yield)) {
+            _groups = std::move(*r);
+        }
+        else {
+            return std::unexpected(r.error());
+        }
 
-        _http_store->for_each([&] (const auto& resource_id, auto rr, auto yield) {
+        auto r = _http_store->for_each([&] (const auto& resource_id, auto rr, auto yield) {
             return keep_cache_entry(resource_id, std::move(rr), yield);
-        }, cancel, yield[e]);
-        return_or_throw_on_error(y, cancel, e);
+        }, yield);
+        if (!r) return std::unexpected(r.error());
 
         // These checks are not bullet-proof, but they should catch some inconsistencies
         // between resource groups and the HTTP store.
@@ -767,8 +775,7 @@ struct Client::Impl {
             unsigned good_items = 0;
             for (auto& group_item : _groups->items(group_name)) {
                 // TODO: This implies opening all cache items (again for local cache), make lighter.
-                sys::error_code ec;
-                if (_http_store->reader(group_item, cancel, yield[ec]) != nullptr)
+                if (auto r = _http_store->reader(group_item, yield); r && *r)
                     good_items++;
                 else {
                     _WARN("Group resource missing from HTTP store: ", group_item, " (", group_name, ")");
@@ -780,10 +787,14 @@ struct Client::Impl {
                 bad_groups.insert(group_name);
             }
         }
+
         for (auto& group_name : bad_groups)
             _groups->remove_group(group_name);
+
         for (auto& item_name : bad_items)
             _groups->remove(item_name);
+
+        return {};
     }
 
     void stop() {
@@ -805,17 +816,17 @@ struct Client::Impl {
 };
 
 /* static */
-std::unique_ptr<Client>
-Client::build( AsioExecutor ex
-             , std::set<udp::endpoint> lan_my_eps
+std::expected<std::unique_ptr<Client>, sys::error_code>
+Client::build( std::set<udp::endpoint> lan_my_eps
              , sign::PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
              , Client::opt_path static_cache_dir
              , Client::opt_path static_cache_content_dir
-             , YieldContext yield)
+             , Async yield)
 {
-    using ClientPtr = unique_ptr<Client>;
+    auto ex = yield.get_executor();
+
     static const auto store_oldver_subdirs = {"data", "data-v1", "data-v2", "data-v3"};
     static const auto store_curver_subdir = cache::root_fname;
 
@@ -864,7 +875,8 @@ Client::build( AsioExecutor ex
 
     auto store_dir = cache_dir / store_curver_subdir;
     fs::create_directories(store_dir, ec);
-    if (ec) return or_throw<ClientPtr>(yield, ec);
+    if (ec) return std::unexpected(ec);
+
     auto http_store = static_http_store
         ? make_backed_http_store(std::move(store_dir), std::move(static_http_store), ex)
         : make_http_store(std::move(store_dir), ex);
@@ -873,8 +885,9 @@ Client::build( AsioExecutor ex
                                   , cache_pk, std::move(cache_dir), std::move(static_cache_dir)
                                   , std::move(http_store), max_cached_age, yield.log_path()));
 
-    impl->load_stored_groups(yield[ec]);
-    if (ec) return or_throw<ClientPtr>(yield, ec);
+    if (auto r = impl->load_stored_groups(yield); !r) {
+        return std::unexpected(r.error());
+    }
     impl->_gc.start();
     return unique_ptr<Client>(new Client(std::move(impl)));
 }
@@ -893,50 +906,45 @@ bool Client::enable_i2p( std::shared_ptr<I2pSession> i2p_session
     return _impl->enable_i2p(i2p_session, std::move(tracker_id));
 }
 
-Session Client::load( const cache::ResourceId& resource_id
-                    , const CryptoStreamKey& resource_key
-                    , const GroupName& group
-                    , bool is_head_request
-                    , metrics::Client& metrics
-                    , Cancel cancel, YieldContext yield)
+std::expected<Session, sys::error_code>
+Client::load( const cache::ResourceId& resource_id
+            , const CryptoStreamKey& resource_key
+            , const GroupName& group
+            , bool is_head_request
+            , metrics::Client& metrics
+            , Async yield)
 {
-    return _impl->load(resource_id, resource_key, group, is_head_request, metrics, cancel, yield);
+    return _impl->load(resource_id, resource_key, group, is_head_request, metrics, yield);
 }
 
-void Client::store( const cache::ResourceId& key
-                  , const GroupName& group
-                  , http_response::AbstractReader& r
-                  , Cancel cancel
-                  , YieldContext yield)
+std::expected<void, sys::error_code>
+Client::store( const cache::ResourceId& key
+             , const GroupName& group
+             , http_response::AbstractReader& r
+             , Async yield)
 {
-    _impl->store(key, group, r, cancel, yield);
+    return _impl->store(key, group, r, yield);
 }
 
-std::expected<bool, sys::error_code>
+std::expected<void, sys::error_code>
 Client::serve_local( const PeerCacheRequest& req
                    , GenericStream& sink
                    , metrics::Client& metrics
                    , Async yield)
 {
-    Cancel cancel = yield.get_cancel();
-    YieldContext ouinet_yield(yield.asio_yield(), yield.log_path());
-    sys::error_code ec;
-    bool keep_alive = _impl->serve_local(req, sink, metrics, cancel, ouinet_yield[ec]);
-    if (cancel || ec == asio::error::operation_aborted)
-        throw Async::Cancelled();
-    if (ec) return std::unexpected(ec);
-    return keep_alive;
+    return _impl->serve_local(req, sink, metrics, yield);
 }
 
-std::size_t Client::local_size( Cancel cancel
-                              , asio::yield_context yield) const
+std::expected<std::size_t, sys::error_code>
+Client::local_size(Async yield) const
 {
-    return _impl->local_size(cancel, yield);
+    return _impl->local_size(yield);
 }
 
-void Client::local_purge(Cancel cancel, YieldContext yield)
+std::expected<void, sys::error_code>
+Client::local_purge(Async yield)
 {
-    _impl->local_purge(cancel, yield);
+    return _impl->local_purge(yield);
 }
 
 bool Client::pin_group(const GroupName& group_name, sys::error_code& ec)

@@ -131,28 +131,26 @@ int main(int argc, const char** argv)
     parse_args(args, &ifaddrs, &ping_cmd, &announce_cmd, &get_peers_cmd);
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        sys::error_code ec;
-
         wait_for_ready(dht, { asio::ip::address_v4::any(), 0 }, yield);
 
         cerr << "Our WAN endpoint: " << dht.wan_endpoint() << "\n";
 
         Cancel cancel;
 
-        auto ep = resolve( ctx.get_executor()
-                         , udp::v4()
+        auto ep = resolve( udp::v4()
                          , "router.bittorrent.com"
                          , "6881"
                          , dns_resolver
-                         , cancel
-                         , yield[ec]);
+                         , Async(yield));
 
-        if (ec) {
-            cerr << "Error resolve " << ec.message() << endl;
+        if (!ep) {
+            cerr << "Error resolve " << ep.error().message() << endl;
             return;
         }
 
-        NodeID my_id = NodeID::generate(ep.address());
+        sys::error_code ec;
+
+        NodeID my_id = NodeID::generate(ep->address());
 
         if (ping_cmd) {
             NodeContact nc;
@@ -163,7 +161,7 @@ int main(int argc, const char** argv)
                 nc = NodeContact{peer_id, peer_ep};
             }
             else {
-                nc = NodeContact{my_id, ep};
+                nc = NodeContact{my_id, *ep};
             }
 
             BencodedMap initial_ping_reply = compat([&](Async yield) {

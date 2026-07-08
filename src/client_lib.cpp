@@ -4,6 +4,8 @@
 #include "client_lib.h"
 #include "client.h"
 
+#include <boost/format.hpp>
+
 using namespace ouinet;
 
 // One writer, one reader.

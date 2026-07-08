@@ -1,6 +1,8 @@
 #pragma once
 
+#include <boost/asio/ip/tcp.hpp>
 #include <iterator>
+#include "namespaces.h"
 
 namespace ouinet::util
 {

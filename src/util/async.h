@@ -3,9 +3,10 @@
 #include "../namespaces.h"
 #include "../util/log_path.h"
 #include "cancel.h"
-#include "yield.h"
 #include "../task.h"
 
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/async_result.hpp>
 
@@ -13,12 +14,9 @@
 
 namespace ouinet {
 
-// This class is a successor of `YieldContext` (which is a wrapper over
-// `asio::yield_context`).  Both `Async` and `YieldContext` contain the
-// `util::LogPath` for simplified debugging.
-//
-// Further, `Async` also contains the `Cancel` signal so we no longer need
-// to pass both to every function. But more importantly, `Async` is "cancel
+// This class is a successor of `asio::yield_context`. It contains
+// `util::LogPath` for debugging, and `Cancel` signal so we no longer need to
+// pass both to every function. But more importantly, `Async` is "cancel
 // aware", meaning that we no longer need to check whether the operation has
 // been cancelled explicitly.
 //
@@ -40,6 +38,8 @@ public:
         virtual ~Cancelled() noexcept {}
     };
 
+    using executor_type = asio::any_io_executor;
+
 private:
     template<class F> using DeprecatedApiResult
         = std::invoke_result_t<F, util::LogPath, Cancel, asio::yield_context>;
@@ -48,12 +48,6 @@ public:
     explicit Async(asio::yield_context asio_yield, util::LogPath log_path = {})
         : _asio_yield(asio_yield)
         , _log_path(std::move(log_path))
-    {}
-
-    explicit Async(YieldContext ouinet_yield, Cancel cancel)
-        : _asio_yield(ouinet_yield)
-        , _log_path(ouinet_yield.log_path())
-        , _cancel(std::move(cancel))
     {}
 
     explicit Async(asio::yield_context asio_yield, Cancel cancel, util::LogPath log_path = {})
@@ -160,6 +154,11 @@ private:
     Cancel _cancel;
 };
 
+static_assert(std::is_same_v<
+    asio::associated_executor_t<Async>,
+    asio::any_io_executor
+>);
+
 } // ouinet namespace
 
 // This code allows `Async` to be passed to functions expecting a
@@ -187,14 +186,22 @@ namespace boost::asio {
         template<typename Handler, typename Sig> struct Wrap;
 
         template<typename Handler> struct Wrap<Handler, void()> {
+            using executor_type = asio::associated_executor_t<Handler>;
+
             Handler handler;
 
             void operator() () {
                 handler();
             }
+
+            executor_type get_executor() const {
+                return handler.get_executor();
+            }
         };
 
         template<typename Handler, IsEc E> struct Wrap<Handler, void(E)> {
+            using executor_type = asio::associated_executor_t<Handler>;
+
             Handler handler;
 
             void operator() (boost::system::error_code ec) {
@@ -205,9 +212,15 @@ namespace boost::asio {
                     handler(boost::system::error_code{}, std::unexpected(ec));
                 }
             }
+
+            executor_type get_executor() const {
+                return handler.get_executor();
+            }
         };
 
         template<typename Handler, IsEc E, typename T> struct Wrap<Handler, void(E, T)> {
+            using executor_type = asio::associated_executor_t<Handler>;
+
             Handler handler;
 
             void operator() (boost::system::error_code ec, T arg) {
@@ -217,6 +230,10 @@ namespace boost::asio {
                 } else {
                     handler(boost::system::error_code{}, std::unexpected(ec));
                 }
+            }
+
+            executor_type get_executor() const {
+                return handler.get_executor();
             }
         };
     } // namespace

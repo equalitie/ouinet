@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include "../../src/bittorrent/mainline_dht.h"
 #include "../../src/bittorrent/mock_dht.h"
+#include "../../src/util/str.h"
 
 namespace ouinet::bittorrent {
 

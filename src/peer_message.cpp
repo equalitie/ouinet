@@ -79,9 +79,12 @@ PeerRequest::async_read(GenericStream& con, Async yield) {
     };
 }
 
-void async_write_blob_type(BlobType blob_type, GenericStream& con, asio::yield_context yield) {
+std::expected<void, sys::error_code>
+async_write_blob_type(BlobType blob_type, GenericStream& con, Async yield) {
     uint8_t is_cyphertext = blob_type == BlobType::cypher_text ? 1 : 0;
-    asio::async_write(con, asio::buffer(&is_cyphertext, 1), yield);
+    auto r = asio::async_write(con, asio::buffer(&is_cyphertext, 1), yield);
+    if (!r) return std::unexpected(r.error());
+    return {};
 }
 
 BlobType async_read_blob_type(GenericStream& con, asio::yield_context yield) {

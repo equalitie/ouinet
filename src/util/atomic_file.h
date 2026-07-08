@@ -18,17 +18,16 @@ public:
     // Use its `lowest_layer()` to perform I/O.
     // If no commit is done or it fails,
     // the temporary file is automatically removed.
+    [[nodiscard]]
     static
-    boost::optional<atomic_file> make( const AsioExecutor&
-                                     , fs::path
-                                     , const fs::path& temp_model
-                                     , sys::error_code&);
+    std::expected<atomic_file, sys::error_code>
+    make(const AsioExecutor&, fs::path, const fs::path& temp_model);
 
+    [[nodiscard]]
     static
-    boost::optional<atomic_file> make( const AsioExecutor& ex
-                                     , fs::path path
-                                     , sys::error_code& ec) {
-        return make(ex, std::move(path), default_temp_model, ec);
+    std::expected<atomic_file, sys::error_code>
+    make(const AsioExecutor& ex, fs::path path) {
+        return make(ex, std::move(path), default_temp_model);
     }
 
 public:

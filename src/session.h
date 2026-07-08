@@ -67,19 +67,20 @@ public:
     async_read_part(Async) override;
 
     template<class SinkStream>
-    void flush_response(
-            SinkStream&,
-            Cancel&,
-            asio::yield_context,
-            PartModifier part_modifier = PartModifier::DoNothing);
+    std::expected<void, sys::error_code>
+    flush_response(SinkStream&, Async, PartModifier part_modifier = PartModifier::DoNothing);
 
     template<class Handler>
-    void flush_response(Cancel, asio::yield_context, Handler&& h);
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    flush_response(Async, Handler&& h);
+
     // The timeout will get reset with each successful send/recv operation,
     // so that the exchange does not get stuck for too long.
     template<class Handler, class TimeoutDuration>
-    void flush_response( Cancel&, asio::yield_context
-                       , Handler&& h, TimeoutDuration);
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    flush_response(Async, Handler&& h, TimeoutDuration);
 
 
     bool is_done() const override {
@@ -195,15 +196,13 @@ std::expected<Session, sys::error_code> Session::create(
 
 template<class Handler>
 inline
-void
-Session::flush_response(Cancel cancel,
-                        asio::yield_context yield,
-                        Handler&& h)
+std::expected<void, sys::error_code>
+Session::flush_response(Async yield, Handler&& h)
 {
-    auto destroyed = _destroyed.connect([&cancel] { cancel(); });
+    auto destroyed = _destroyed.connect([&yield] { yield.cancel(); });
 
     if (!_reader)
-        return or_throw(yield, asio::error::not_connected);
+        return std::unexpected(asio::error::not_connected);
 
     assert(!_head_was_read);
 
@@ -211,25 +210,25 @@ Session::flush_response(Cancel cancel,
 
     _head_was_read = true;
 
-    h(http_response::Part{_head}, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec);
+    if (auto r = h(http_response::Part{_head}, yield); !r) {
+        return std::unexpected(r.error());
+    }
 
-    if (_is_head_response) return;
+    if (_is_head_response) return {};
 
     while (true) {
         if (!_reader)
-            return or_throw(yield, asio::error::not_connected);
+            return std::unexpected(asio::error::not_connected);
 
-        auto opt_part = compat([&](Async yield) {
-            return _reader->async_read_part(yield);
-        })(cancel, yield[ec]);
-        assert(ec != http::error::end_of_stream);
-        ec = compute_error_code(ec, cancel);
+        auto opt_part_r = _reader->async_read_part(yield);
 
-        if (ec) {
+        if (!opt_part_r) {
+            auto ec = opt_part_r.error();
             finish_metering(_metrics, ec);
-            return or_throw(yield, ec);
+            return std::unexpected(ec);
         }
+
+        auto opt_part = std::move(*opt_part_r);
 
         if (!opt_part) {
             finish_metering(_metrics, ec);
@@ -242,56 +241,61 @@ Session::flush_response(Cancel cancel,
             }
         }
 
-        h(std::move(*opt_part), cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        if (auto r = h(std::move(*opt_part), yield); !r) {
+            return std::unexpected(r.error());
+        }
     }
+
+    return {};
 }
 
 template<class Handler, class TimeoutDuration>
 inline
-void
-Session::flush_response(Cancel& cancel,
-                        asio::yield_context yield,
-                        Handler&& h,
-                        TimeoutDuration timeout)
+std::expected<void, sys::error_code>
+Session::flush_response(Async yield, Handler&& h, TimeoutDuration timeout)
 {
-    Cancel timeout_cancel(cancel);
-    auto op_wd = watch_dog( get_executor(), timeout
-                          , [&timeout_cancel] { timeout_cancel(); });
+    Async timeout_yield = yield;
 
-    sys::error_code ec;
-    flush_response( timeout_cancel, yield[ec]
-                  , [&h, &op_wd, timeout] (auto&& part, auto& c, auto y) {
-        sys::error_code e;
-        h(std::move(part), c, y[e]);
-        return_or_throw_on_error(y, c, e);
-        op_wd.expires_after(timeout);  // the part was successfully forwarded
-    });
+    try {
+        auto op_wd = watch_dog( get_executor(), timeout
+                              , [&timeout_yield] { timeout_yield.cancel(); });
 
-    fail_on_error_or_timeout(yield, cancel, ec, op_wd);
+        auto r = flush_response(timeout_yield, [&h, &op_wd, timeout] (auto&& part, auto y) -> std::expected<void, sys::error_code> {
+            std::expected<void, sys::error_code> r = h(std::move(part), y);
+            if (!r) return std::unexpected(r.error());
+            op_wd.expires_after(timeout);  // the part was successfully forwarded
+            return {};
+        });
+
+        if (!r) return std::unexpected(r.error());
+    }
+    catch (Async::Cancelled const&) {
+        if (yield.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
+    }
+
+    return {};
 }
 
 template<class SinkStream>
 inline
-void
-Session::flush_response(SinkStream& sink,
-                        Cancel& cancel,
-                        asio::yield_context yield,
-                        PartModifier part_modifier)
+std::expected<void, sys::error_code>
+Session::flush_response(SinkStream& sink, Async yield, PartModifier part_modifier)
 {
-    return flush_response(cancel, yield, [&sink, part_modifier] (auto&& part, auto& c, auto y) {
+    return flush_response(yield, [&sink, part_modifier] (auto&& part, auto y) {
         switch (part_modifier) {
             case PartModifier::DoNothing:
-                part.async_write(sink, c, y);
-                break;
+                return part.async_write(sink, y);
             case PartModifier::RemoveChunkHeaderExtension:
                 if (auto chunk_hdr = part.as_chunk_hdr()) {
                     chunk_hdr->exts.clear();
-                    http_response::Part(std::move(*chunk_hdr)).async_write(sink, c, y);
+                    return http_response::Part(std::move(*chunk_hdr)).async_write(sink, y);
                 } else {
-                    part.async_write(sink, c, y);
+                    return part.async_write(sink, y);
                 }
-                break;
+            default:
+                assert(false && "unreachable");
+                std::terminate();
         }
     });
 }

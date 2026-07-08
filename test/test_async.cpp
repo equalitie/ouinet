@@ -23,10 +23,16 @@ template<
 >
 auto action(Token token, Args&&... args)
 {
-    auto exec = token.get_executor();
+    using ExecType = decltype(token.get_executor());
+
     return asio::async_initiate<Token, void(Args...)>(
-        [ exec, ...args = std::forward<Args>(args)  ] (auto handler) mutable {
-            asio::post(exec,
+        [ ...args = std::forward<Args>(args)  ] (auto handler) mutable {
+            static_assert(std::is_same_v<
+                asio::associated_executor_t<decltype(handler)>,
+                ExecType
+            >);
+
+            asio::post(asio::get_associated_executor(handler),
                 [ handler = std::move(handler),
                   ...args = std::forward<Args>(args) ] () mutable
                 {

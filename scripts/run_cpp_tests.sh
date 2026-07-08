@@ -101,7 +101,7 @@ function run_linux_test {(
     # TODO: Enable detection of odr violation once the tests don't violate it
     export ASAN_OPTIONS=halt_on_error=0:detect_odr_violation=0
 
-    if [ "$WITH_GDB" == n || ! $(which gdb) ] || is_in $test ${no_gdb_tests[@]}; then
+    if [ "$WITH_GDB" == n ] || [ ! $(which gdb) ] || is_in $test ${no_gdb_tests[@]} ; then
         $test "$@"
     else
         run_test_in_gdb $test "$@"

@@ -18,6 +18,7 @@
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
 #include "ouiservice/i2p/address.h"
+#include "logger.h"
 
 namespace boost::program_options {
     class variables_map;

@@ -4,6 +4,7 @@
 #include "../split_string.h"
 #include "../parse/number.h"
 #include "../util/bytes.h"
+#include <boost/format.hpp>
 
 namespace ouinet::cache {
 
