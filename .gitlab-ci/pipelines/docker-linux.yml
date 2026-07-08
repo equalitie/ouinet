@@ -1,7 +1,7 @@
 default:
   before_script:
     - CI_JOB_SLUG="${CI_PROJECT_PATH_SLUG}.${CI_COMMIT_REF_SLUG}.${CI_COMMIT_SHORT_SHA}"
-    - CONTAINER_ARGS="--container_name ${CI_JOB_SLUG} --image_name ${CI_JOB_SLUG}"
+    - CONTAINER_ARGS="--container-name ${CI_JOB_SLUG} --image-name ${CI_JOB_SLUG}"
 
 linux / build:
   stage: build
