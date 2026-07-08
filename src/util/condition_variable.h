@@ -48,7 +48,7 @@ public:
 
   ~ConditionVariable();
 
-  AsioExecutor get_executor() { return _exec; }
+  const AsioExecutor &get_executor() { return _exec; }
 
   void
   notify(const boost::system::error_code &ec = boost::system::error_code());

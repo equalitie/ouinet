@@ -171,8 +171,8 @@ Ouisync::Ouisync(const util::AsioExecutor &exec, fs::path service_dir,
 sys::error_code Ouisync::start(Async yield) {
   try {
     ouisync::Service service(yield.get_executor());
-    unwrap(service.start(_service_dir, util::str(yield.log_path()).c_str(),
-                         yield));
+    unwrap(
+        service.start(_service_dir, util::str(yield.trace()).c_str(), yield));
 
     auto session = unwrap(
         ouisync::Session::connect(yield.get_executor(), _service_dir, yield));

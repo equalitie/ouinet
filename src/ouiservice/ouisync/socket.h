@@ -5,6 +5,7 @@
 #include <ouisync.hpp>
 
 #include "util/async.h"
+#include "util/trace.h"
 
 namespace ouinet::ouisync_service {
 
@@ -28,6 +29,12 @@ public:
 
   endpoint_type local_endpoint(boost::system::error_code &) const override;
 
+  // DEBUG
+  endpoint_type local_endpoint() const {
+    boost::system::error_code ec;
+    return local_endpoint(ec);
+  }
+
   bool is_open() const override;
 
   void cancel(boost::system::error_code &) override;
@@ -42,10 +49,10 @@ public:
   void async_send_to(const std::span<const boost::asio::const_buffer> &,
                      const endpoint_type &, handler) override;
 
-  // Send a datagram immediatelly without blocking. If it can't be done (e.g.,
-  // the underlying send buffer is full), it must return immediatelly and set
-  // the `boost::asio::error::would_block` error code. Returns the number of
-  // bytes sent.
+  // Send a datagram immediately without blocking. If it can't be done (e.g.,
+  // the underlying send buffer is full), it must return immediately and set the
+  // `boost::asio::error::would_block` error code.
+  // Returns the number of bytes sent.
   std::size_t
   immediate_send_to(const std::span<const boost::asio::const_buffer> &,
                     const endpoint_type &,
@@ -56,7 +63,7 @@ private:
   struct State;
   std::shared_ptr<State> _state;
 
-  OuisyncSocket(std::shared_ptr<State>);
+  OuisyncSocket(std::shared_ptr<State>, Trace);
 };
 
 } // namespace ouinet::ouisync_service

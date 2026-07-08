@@ -1,9 +1,11 @@
 #include "logger.h"
 #include "util/wait_condition.h"
 #define BOOST_TEST_MODULE test_fetch
+#include <boost/asio/ssl.hpp>
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/unit_test.hpp>
+#include <ouisync/service.hpp>
 
 #include "client.h"
 #include "injector.h"
@@ -17,6 +19,7 @@
 #include "util/select.h"
 #include "util/test_dir.h"
 #include "util/unwrap.h"
+#include <boost/beast/version.hpp>
 
 namespace data = boost::unit_test::data;
 using namespace std;
@@ -25,6 +28,7 @@ using namespace ouinet::bittorrent;
 using namespace std::chrono_literals;
 using namespace boost::asio::ip;
 using tcp = asio::ip::tcp;
+namespace data = boost::unit_test::data;
 
 template <class Config>
 static Config make_config(const std::vector<std::string> &args) {
@@ -388,11 +392,14 @@ BOOST_DATA_TEST_CASE(test_client_fetch_error_from_dcache,
 // number of seeders and leechers.
 BOOST_DATA_TEST_CASE(test_storing_into_and_fetching_from_the_cache,
                      data::make({DhtImpl::mock, DhtImpl::real}) *
+                         data::make({"", "--ouisync-transport"}) *
                          data::make({1, 2})   // TODO: use more seeders
                          * data::make({1, 2}) // TODO: use more leechers
                          * data::make({1, 8}),
-                     dht_impl, seeder_count, leecher_count, resource_count) {
+                     dht_impl, ouisync_transport_flag, seeder_count,
+                     leecher_count, resource_count) {
   get_logger().set_threshold(INFO);
+  ouisync::init_log();
 
   LOG_INFO("dht_impl=", dht_impl, " seeder_count=", seeder_count,
            " leecher_count=", leecher_count,
@@ -419,21 +426,16 @@ BOOST_DATA_TEST_CASE(test_storing_into_and_fetching_from_the_cache,
     const std::string injector_credentials = "username:password";
 
     Injector injector(
-        make_config<InjectorConfig>({
-            "./no_injector_exec"s,
-            "--repo"s,
-            root.make_subdir("injector").string(),
-            "--credentials"s,
-            injector_credentials,
-            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-            "--allow-private-targets",
-            "--bt-bootstrap-no-default",
-            "--bt-bootstrap-extra",
-            util::str(dht_endpoint),
-            "--bt-allow-martians",
-            "--trace-root=injector",
-            "--listen-on-utp-tls=127.0.0.1:0",
-        }),
+        make_config<InjectorConfig>(
+            {"./no_injector_exec"s, "--repo"s,
+             root.make_subdir("injector").string(), "--credentials"s,
+             injector_credentials,
+             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+             "--allow-private-targets", "--bt-bootstrap-no-default",
+             "--bt-bootstrap-extra", util::str(dht_endpoint),
+             "--bt-allow-martians", "--trace-root=injector",
+             "--listen-on-utp-tls=127.0.0.1:0", "--ouisync-udp-ep=127.0.0.1:0",
+             ouisync_transport_flag}),
         ctx, mock_dht("injector", yield.get_executor(), mock_dht_swarms));
 
     std::vector<Client> seeders;
@@ -454,7 +456,8 @@ BOOST_DATA_TEST_CASE(test_storing_into_and_fetching_from_the_cache,
                "--bt-bootstrap-extra", util::str(dht_endpoint),
                "--bt-allow-martians", "--trace-root", name,
                // TODO: Add test supporting local discovery
-               "--disable-local-peer-discovery"s}),
+               "--disable-local-peer-discovery"s,
+               "--ouisync-udp-ep=127.0.0.1:0", ouisync_transport_flag}),
           mock_dht_builder(name, yield.get_executor(), mock_dht_swarms));
     }
 
@@ -477,7 +480,8 @@ BOOST_DATA_TEST_CASE(test_storing_into_and_fetching_from_the_cache,
                "--bt-bootstrap-extra", util::str(dht_endpoint),
                "--bt-allow-martians", "--trace-root"s, name,
                // TODO: Add test supporting local discovery
-               "--disable-local-peer-discovery"s}),
+               "--disable-local-peer-discovery"s,
+               "--ouisync-udp-ep=127.0.0.1:0", ouisync_transport_flag}),
           mock_dht_builder(name, yield.get_executor(), mock_dht_swarms));
     }
 
@@ -624,7 +628,9 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 }
 
 BOOST_DATA_TEST_CASE(test_fetching_private_route_many_times,
-                     data::make({DhtImpl::mock, DhtImpl::real}), dht_impl) {
+                     data::make({DhtImpl::mock, DhtImpl::real}) *
+                         data::make({"", "--ouisync-transport"}),
+                     dht_impl, ouisync_transport_flag) {
   get_logger().set_threshold(INFO);
 
   asio::io_context ctx;
@@ -641,20 +647,14 @@ BOOST_DATA_TEST_CASE(test_fetching_private_route_many_times,
     const std::string injector_credentials = "username:password";
 
     Injector injector(
-        make_config<InjectorConfig>({
-            "./no_injector_exec"s,
-            "--repo"s,
-            root.make_subdir("injector").string(),
-            "--credentials"s,
-            injector_credentials,
-            "--allow-private-targets",
-            "--bt-bootstrap-no-default",
-            "--bt-bootstrap-extra",
-            util::str(dht_endpoint),
-            "--bt-allow-martians",
-            "--trace-root=injector",
-            "--listen-on-utp-tls=127.0.0.1:0",
-        }),
+        make_config<InjectorConfig>(
+            {"./no_injector_exec"s, "--repo"s,
+             root.make_subdir("injector").string(), "--credentials"s,
+             injector_credentials, "--allow-private-targets",
+             "--bt-bootstrap-no-default", "--bt-bootstrap-extra",
+             util::str(dht_endpoint), "--bt-allow-martians",
+             "--trace-root=injector", "--listen-on-utp-tls=127.0.0.1:0",
+             "--ouisync-udp-ep=127.0.0.1:0", ouisync_transport_flag}),
         ctx, mock_dht("injector", yield.get_executor(), mock_dht_swarms));
 
     Client client(
@@ -671,7 +671,8 @@ BOOST_DATA_TEST_CASE(test_fetching_private_route_many_times,
              "--tls-ca-cert-store-file="s + server.certificate_path().string(),
              "--allow-private-targets", "--bt-bootstrap-no-default",
              "--bt-bootstrap-extra", util::str(dht_endpoint),
-             "--bt-allow-martians", "--trace-root=client"}),
+             "--bt-allow-martians", "--trace-root=client",
+             "--ouisync-udp-ep=127.0.0.1:0", ouisync_transport_flag}),
         mock_dht_builder("client", yield.get_executor(), mock_dht_swarms));
 
     // Clients are started explicitly

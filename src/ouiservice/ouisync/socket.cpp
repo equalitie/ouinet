@@ -3,12 +3,13 @@
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
-#include <boost/asio/detached.hpp>
+#include <boost/asio/buffer.hpp>
 #include <boost/asio/error.hpp>
-#include <boost/asio/experimental/channel_error.hpp>
 
 #include "parse/endpoint.h"
+#include "queue.h"
 #include "util/str.h"
+#include "util/trace.h"
 
 namespace asio = boost::asio;
 namespace ip = boost::asio::ip;
@@ -42,21 +43,17 @@ parse_quic_endpoint(const std::string &s) {
 // coroutines can safely access it even when the socket itself has been moved.
 struct OuisyncSocket::State {
   ouisync::NetworkSocket inner;
-  boost::asio::ip::udp::endpoint local_endpoint;
+  asio::ip::udp::endpoint local_endpoint;
 
-  using queue_sig = void(boost::system::error_code,
-                         std::tuple<endpoint_type, std::vector<uint8_t>>);
+  detail::Queue outgoing;
+  detail::Queue incoming;
 
-  boost::asio::experimental::channel<queue_sig> outgoing;
-  boost::asio::experimental::channel<queue_sig> incoming;
-
-  size_t available; // total number of bytes in _incoming
+  bool open = true;
 
   State(const asio::any_io_executor &exec, ouisync::NetworkSocket inner,
         endpoint_type local_endpoint)
       : inner(std::move(inner)), local_endpoint(std::move(local_endpoint)),
-        outgoing(exec, outgoing_capacity), incoming(exec, incoming_capacity),
-        available(0) {}
+        outgoing(exec, outgoing_capacity), incoming(exec, incoming_capacity) {}
 
   const asio::any_io_executor &get_executor() {
     return outgoing.get_executor();
@@ -65,10 +62,10 @@ struct OuisyncSocket::State {
   void recv_loop(Async yield) {
     constexpr size_t max_datagram_size = 4096;
 
-    while (true) {
+    while (open) {
       auto recv = inner.recv_from(max_datagram_size, yield);
       if (!recv) {
-        std::ignore = incoming.async_send(recv.error(), {}, yield);
+        std::ignore = incoming.async_push(recv.error(), {}, yield);
         break;
       }
 
@@ -77,21 +74,17 @@ struct OuisyncSocket::State {
         break;
       }
 
-      auto size = recv->data.size();
-
-      auto send = incoming.async_send(
-          error_code(), std::make_tuple(*ep, std::move(recv->data)), yield);
+      auto send = incoming.async_push(error_code(),
+                                      {*ep, std::move(recv->data)}, yield);
       if (!send) {
         break;
       }
-
-      available += size;
     }
   }
 
   void send_loop(Async yield) {
-    while (true) {
-      auto recv = outgoing.async_receive(yield);
+    while (open) {
+      auto recv = outgoing.async_pop(yield);
       if (!recv) {
         break;
       }
@@ -103,17 +96,47 @@ struct OuisyncSocket::State {
       }
     }
   }
+
+  void close(Async yield) {
+    open = false;
+    incoming.cancel();
+    outgoing.cancel();
+
+    // Flush outgoing messages
+    while (true) {
+      auto recv = outgoing.try_pop();
+      if (!recv) {
+        break;
+      }
+
+      auto [ec, ep, data] = std::move(*recv);
+      if (ec) {
+        // this should not happen in practice because we don't push errors to
+        // the outgoing queue.
+        break;
+      }
+
+      auto send = inner.send_to(data, util::str(ep), yield);
+      if (!send) {
+        break;
+      }
+    }
+
+    std::ignore = inner.close(yield);
+  }
 };
 
-OuisyncSocket::OuisyncSocket(std::shared_ptr<State> state)
+OuisyncSocket::OuisyncSocket(std::shared_ptr<State> state, Trace trace)
     : _state(std::move(state)) {
-  task::spawn_detached(
-      _state->get_executor(),
-      [state = _state](asio::yield_context y) { state->send_loop(Async(y)); });
+  task::spawn_detached(_state->get_executor(),
+                       [state = _state, trace](asio::yield_context y) {
+                         state->send_loop(Async(y, trace));
+                       });
 
-  task::spawn_detached(
-      _state->get_executor(),
-      [state = _state](asio::yield_context y) { state->recv_loop(Async(y)); });
+  task::spawn_detached(_state->get_executor(),
+                       [state = _state, trace](asio::yield_context y) {
+                         state->recv_loop(Async(y, trace));
+                       });
 }
 
 OuisyncSocket::~OuisyncSocket() {
@@ -121,16 +144,11 @@ OuisyncSocket::~OuisyncSocket() {
     return;
   }
 
-  _state->incoming.close();
-  _state->outgoing.close();
-
-  // Close the inner socket but ignore any errors
-  asio::spawn(
-      get_executor(),
-      [inner = std::move(_state->inner)](asio::yield_context yield) mutable {
-        inner.close(yield);
-      },
-      asio::detached);
+  // Close in the background, ignoring errors
+  task::spawn_detached(get_executor(), [state = std::move(_state)](
+                                           asio::yield_context yield) mutable {
+    state->close(Async(yield));
+  });
 }
 
 std::expected<OuisyncSocket, boost::system::error_code>
@@ -168,7 +186,8 @@ OuisyncSocket::open(ouisync::Session &session, ip::udp proto, Async yield) {
   auto exec = inner.get_executor();
 
   return OuisyncSocket(
-      std::make_shared<State>(exec, std::move(inner), *local_endpoint));
+      std::make_shared<State>(exec, std::move(inner), *local_endpoint),
+      yield.trace());
 }
 
 const OuisyncSocket::executor_type &OuisyncSocket::get_executor() {
@@ -209,7 +228,7 @@ std::size_t OuisyncSocket::available(error_code &ec) const {
     return 0;
   }
 
-  return _state->available;
+  return _state->incoming.bytes();
 }
 
 void OuisyncSocket::async_receive_from(
@@ -222,27 +241,23 @@ void OuisyncSocket::async_receive_from(
 
   auto cancellation_slot = asio::get_associated_cancellation_slot(handler);
 
-  _state->incoming.async_receive(asio::bind_cancellation_slot(
+  _state->incoming.async_pop(asio::bind_cancellation_slot(
       std::move(cancellation_slot),
-      [this, &buffers, &sender, handler = std::move(handler)](
+      [buffers, &sender, handler = std::move(handler)](
           error_code ec,
           std::tuple<endpoint_type, std::vector<uint8_t>> payload) mutable {
         auto [payload_ep, payload_data] = std::move(payload);
-
-        if (ec == asio::experimental::error::channel_cancelled) {
-          ec = asio::error::operation_aborted;
-        }
 
         if (ec) {
           handler(ec, 0);
         } else {
           asio::buffer_copy(buffers, asio::buffer(payload_data));
           sender = payload_ep;
-          _state->available -= payload_data.size();
           handler(ec, payload_data.size());
         }
       }));
 }
+
 void OuisyncSocket::async_send_to(
     const std::span<const asio::const_buffer> &buffers,
     const endpoint_type &receiver, handler handler) {
@@ -257,15 +272,11 @@ void OuisyncSocket::async_send_to(
 
   auto cancellation_slot = asio::get_associated_cancellation_slot(handler);
 
-  _state->outgoing.async_send(
-      error_code(), std::make_tuple(receiver, std::move(data)),
+  _state->outgoing.async_push(
+      error_code(), {receiver, std::move(data)},
       asio::bind_cancellation_slot(
           std::move(cancellation_slot),
           [size, handler = std::move(handler)](error_code ec) mutable {
-            if (ec == asio::experimental::error::channel_cancelled) {
-              ec = asio::error::operation_aborted;
-            }
-
             if (ec) {
               handler(ec, 0);
             } else {
@@ -285,21 +296,22 @@ std::size_t OuisyncSocket::immediate_send_to(
     return 0;
   }
 
-  // TODO: is there a way to check if the send queue is not full before copying
-  // the buffers?
+  if (_state->outgoing.full()) {
+    ec = asio::error::would_block;
+    return 0;
+  }
 
   auto size = asio::buffer_size(buffers);
   std::vector<uint8_t> data(size);
   asio::buffer_copy(asio::buffer(data), buffers);
 
-  if (_state->outgoing.try_send(error_code(),
-                                std::make_tuple(receiver, std::move(data)))) {
-    ec = error_code();
-    return size;
-  } else {
-    ec = asio::error::would_block;
-    return 0;
-  }
+  bool pushed =
+      _state->outgoing.try_push(error_code(), {receiver, std::move(data)});
+  assert(pushed);
+
+  ec = error_code();
+
+  return size;
 }
 
 } // namespace ouinet::ouisync_service
