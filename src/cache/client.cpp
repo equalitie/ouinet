@@ -331,7 +331,6 @@ struct Client::Impl {
             // TODO: Implement specific purge operations
             // for DHT groups and announcer
             // to avoid having to parse all stored heads.
-            sys::error_code e;
             auto hdr = read_response_header(*rr, y);
             if (!hdr) return false;
 
@@ -607,7 +606,6 @@ struct Client::Impl {
          , http_response::AbstractReader& r
          , Async yield)
     {
-        sys::error_code ec;
         cache::KeepSignedReader fr(r);
         if (auto r = _http_store->store(resource_id, fr, yield); !r) {
             return std::unexpected(r.error());
@@ -700,8 +698,6 @@ struct Client::Impl {
         // This should be available to
         // allow removing resource_ids of entries to be evicted.
         assert(_groups);
-
-        sys::error_code ec;
 
         auto hdr = read_response_header(*rr, yield);
         if (!hdr) return std::unexpected(hdr.error());

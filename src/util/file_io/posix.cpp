@@ -53,7 +53,6 @@ file_size(async_file_handle& f)
     auto end = current_position(f);
     if (!end) return std::unexpected(end.error());
 
-    sys::error_code ec;
     auto r = fseek(f, *start_pos);
     if (!r) return std::unexpected(r.error());
 

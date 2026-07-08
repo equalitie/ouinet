@@ -1048,7 +1048,6 @@ public:
     std::expected<std::size_t, sys::error_code>
     size(Async yield) const override
     {
-        sys::error_code ec;
         auto sz1 = FullHttpStore::size(yield);
         if (!sz1) return std::unexpected(sz1.error());
         auto sz2 = fallback_store->size(yield);

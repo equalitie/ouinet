@@ -89,6 +89,8 @@ public:
         return _swarm_name;
     }
 
+    virtual ~PeerLookup() = default;
+
 protected:
     // Children implement this to perform the actual peer lookup.
     virtual std::expected<Ret, sys::error_code> do_lookup(Async) = 0;
