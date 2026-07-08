@@ -9,7 +9,6 @@
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
 #include "util/async.h"
-#include "util/yield.h"
 
 namespace ouinet {
 

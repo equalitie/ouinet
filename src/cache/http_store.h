@@ -12,7 +12,6 @@
 #include "../constants.h"
 #include "../response_reader.h"
 #include "../util/sign.h"
-#include "../util/yield.h"
 
 #include "../namespaces.h"
 #include "../api.h"

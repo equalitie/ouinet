@@ -3,7 +3,6 @@
 #include "../namespaces.h"
 #include "../util/log_path.h"
 #include "cancel.h"
-#include "yield.h"
 #include "../task.h"
 
 #include <boost/asio/any_io_executor.hpp>
@@ -15,12 +14,9 @@
 
 namespace ouinet {
 
-// This class is a successor of `YieldContext` (which is a wrapper over
-// `asio::yield_context`).  Both `Async` and `YieldContext` contain the
-// `util::LogPath` for simplified debugging.
-//
-// Further, `Async` also contains the `Cancel` signal so we no longer need
-// to pass both to every function. But more importantly, `Async` is "cancel
+// This class is a successor of `asio::yield_context`. It contains
+// `util::LogPath` for debugging, and `Cancel` signal so we no longer need to
+// pass both to every function. But more importantly, `Async` is "cancel
 // aware", meaning that we no longer need to check whether the operation has
 // been cancelled explicitly.
 //
@@ -52,12 +48,6 @@ public:
     explicit Async(asio::yield_context asio_yield, util::LogPath log_path = {})
         : _asio_yield(asio_yield)
         , _log_path(std::move(log_path))
-    {}
-
-    explicit Async(YieldContext ouinet_yield, Cancel cancel)
-        : _asio_yield(ouinet_yield)
-        , _log_path(ouinet_yield.log_path())
-        , _cancel(std::move(cancel))
     {}
 
     explicit Async(asio::yield_context asio_yield, Cancel cancel, util::LogPath log_path = {})

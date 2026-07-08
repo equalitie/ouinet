@@ -43,7 +43,6 @@
 #include "util/atomic_file.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
-#include "util/yield.h"
 
 #include "logger.h"
 #include "defer.h"

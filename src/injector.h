@@ -9,7 +9,6 @@
 #include "http_util.h"
 #include "http_logger.h"
 #include "util/executor.h"
-#include "util/yield.h"
 #include "util/log_path.h"
 #include "util/promise.h"
 #include "injector_config.h"

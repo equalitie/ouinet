@@ -18,7 +18,6 @@
 #include <util.h>
 #include <util/bytes.h>
 #include <util/wait_condition.h>
-#include <util/yield.h>
 #include <cache/http_sign.h>
 #include <cache/chain_hasher.h>
 #include <cache/signed_head.h>
@@ -29,6 +28,7 @@
 #include <namespaces.h>
 #include "connected_pair.h"
 #include "util/unwrap.h"
+#include "util/str.h"
 
 using first_last = std::pair<unsigned, unsigned>;
 // <https://stackoverflow.com/a/33965517>

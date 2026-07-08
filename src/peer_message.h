@@ -2,8 +2,6 @@
 
 #include <boost/beast/http/message.hpp>
 #include "generic_stream.h"
-#include "util/yield.h"
-#include "util/yield.h"
 #include "cache/resource_id.h"
 #include "http_util.h"
 

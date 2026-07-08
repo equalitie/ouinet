@@ -1,5 +1,7 @@
 #pragma once
 
+#include "logger.h"
+
 #include <set>
 #include <string>
 #include <util/async_job.h>
