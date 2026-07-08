@@ -192,7 +192,6 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
         while (true) {
             sys::error_code ec;
 
-
             size_t size = _socket.async_receive_from(asio::buffer(buf), from, yield[ec]);
             if (terminated) return;
 
