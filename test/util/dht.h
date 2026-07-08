@@ -6,42 +6,31 @@
 #include "../../src/bittorrent/mainline_dht.h"
 #include "../../src/bittorrent/mock_dht.h"
 #include "../../src/util/str.h"
+#include "asio_utp/udp_multiplexer.hpp"
 
 namespace ouinet::bittorrent {
 
-// Spawn `count` DHT nodes listening on localhost and connected to each other. Wait for them to
+// Spawn nodes listening on the specified sockets and connect them to each other. Wait for them to
 // bootstrap and return them.
-std::vector<std::unique_ptr<MainlineDht>> spawn_dht_nodes(size_t count, Async yield) {
-    using boost::asio::ip::address_v4;
-
-    auto exec = yield.get_executor();
-
-    std::vector<asio_utp::udp_multiplexer> sockets;
-    sockets.reserve(count);
-
-    for (size_t i = 0; i < count; ++i) {
-        auto& socket = sockets.emplace_back(exec);
-
-        sys::error_code ec;
-        socket.bind(udp::endpoint(address_v4({127, 0, 0, 1}), 0), ec);
-        BOOST_REQUIRE(!ec);
-    }
-
+std::vector<std::unique_ptr<MainlineDht>> spawn_dht_nodes(
+    std::vector<asio_utp::udp_multiplexer> sockets,
+    Async yield
+) {
     auto dns_resolver = std::make_shared<dns::Resolver>();
 
     std::vector<std::unique_ptr<MainlineDht>> dhts;
-    dhts.reserve(count);
+    dhts.reserve(sockets.size());
 
-    for (size_t i = 0; i < count; ++i) {
+    for (size_t i = 0; i < sockets.size(); ++i) {
         std::set<bootstrap::Address> bootstrap_addrs;
-        for (size_t j = 0; j < count; ++j) {
+        for (size_t j = 0; j < sockets.size(); ++j) {
             if (i != j) {
                 bootstrap_addrs.insert(sockets[j].local_endpoint());
             }
         }
 
         dhts.push_back(std::make_unique<MainlineDht>(
-            exec,
+            yield.get_executor(),
             metrics::Client::noop().mainline_dht(),
             dns_resolver,
             (uint32_t) 0, // no mux_rx limit
@@ -53,16 +42,35 @@ std::vector<std::unique_ptr<MainlineDht>> spawn_dht_nodes(size_t count, Async yi
         ));
     }
 
-    for (size_t i = 0; i < count; ++i) {
+    for (size_t i = 0; i < sockets.size(); ++i) {
         dhts[i]->set_peer_filter(PeerFilter::none);
         std::ignore = dhts[i]->add_endpoint(std::move(sockets[i]));
     }
 
-    for (size_t i = 0; i < count; ++i) {
-        dhts[i]->wait_all_ready(yield);
+    for (auto& dht : dhts) {
+        dht->wait_all_ready(yield);
     }
 
     return dhts;
+}
+
+// Spawn `count` DHT nodes listening on localhost and connected to each other. Wait for them to
+// bootstrap and return them.
+std::vector<std::unique_ptr<MainlineDht>> spawn_dht_nodes(size_t count, Async yield) {
+    using boost::asio::ip::address_v4;
+
+    std::vector<asio_utp::udp_multiplexer> sockets;
+    sockets.reserve(count);
+
+    for (size_t i = 0; i < count; ++i) {
+        auto& socket = sockets.emplace_back(yield.get_executor());
+
+        sys::error_code ec;
+        socket.bind(udp::endpoint(address_v4({127, 0, 0, 1}), 0), ec);
+        BOOST_REQUIRE(!ec);
+    }
+
+    return spawn_dht_nodes(std::move(sockets), yield);
 }
 
 // Which DHT implementation to use
