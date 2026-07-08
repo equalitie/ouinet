@@ -1450,8 +1450,6 @@ public:
             return std::unexpected(err::already_started);
         }
 
-        sys::error_code ec;
-
         _ua_was_written_to = true;
 
         // Using PartModifier::RemoveChunkHeaderExtension because the WebKit on
@@ -1745,7 +1743,6 @@ public:
         }
 
         yield.spawn([&, lock = wc.lock() ] (Async yield) {
-            sys::error_code ec;
             auto rr = std::make_unique<AsyncQueueReader>(qag);
             auto sag = Session::create(std::move(rr), tnx.request().method() == http::verb::head, yield);
             if (!sag) return;
@@ -2913,7 +2910,6 @@ void Client::State::start_ouinet()
                       , [this, self]
                         (GenericStream c, Async yield_) {
                   auto yield = yield_.tag("frontend_u_s");
-                  sys::error_code ec;
                   beast::flat_buffer c_rbuf;
                   Request rq;
                   if (auto r = http::async_read(c, c_rbuf, rq, yield.tag("read_req_u_s")); !r) {

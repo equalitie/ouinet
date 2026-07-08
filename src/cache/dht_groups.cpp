@@ -118,7 +118,6 @@ read_file(fs::path p, Async y)
         return std::unexpected(make_error_code(sys::errc::invalid_argument));
     }
 
-    sys::error_code ec;
     auto f = file_io::open_readonly(y.get_executor(), p);
     if (!f) return std::unexpected(f.error());
 
@@ -253,8 +252,6 @@ DhtGroupsImpl::load( fs::path root_dir
     }
 
     for (auto f : fs::directory_iterator(root_dir)) {
-        sys::error_code ec;
-
         if (!fs::is_directory(f)) {
             _ERROR("Non directory found in '", root_dir, "': '", f, "'");
             continue;

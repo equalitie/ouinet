@@ -109,7 +109,6 @@ http_request(StreamIn& in, const Request& rq, Async yield_)
 {
     Async yield = yield_;
     auto cancelled = yield.cancel_slot([&] { in.close(); });
-    sys::error_code ec;
 
     auto wdog = watch_dog( in.get_executor(), default_timeout::http_send_simple()
                          , [&] { yield.cancel(); });

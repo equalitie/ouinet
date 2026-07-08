@@ -106,7 +106,7 @@ private:
     const fs::path& dirp;
     const AsioExecutor& ex;
 
-    std::string uri;  // for warnings, should use `YieldContext::log` instead
+    std::string uri;  // for warnings
     http_response::Head head;  // for merging in the trailer later on
     boost::optional<async_file_handle> headf, bodyf, sigsf;
 
@@ -256,8 +256,6 @@ http_store(http_response::AbstractReader& reader, const fs::path& dirp, Async yi
     SplittedWriter writer(dirp, yield.get_executor());
 
     while (true) {
-        sys::error_code ec;
-
         auto r = reader.async_read_part(yield);
         if (!r) return std::unexpected(r.error());
 
@@ -655,7 +653,6 @@ public:
     reader_and_size(const ResourceId& resource_id, Async yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        sys::error_code ec;
         auto rr = http_store_reader(kpath, yield);
         if (!rr) return std::unexpected(rr.error());
         auto bs = http_store_body_size(kpath, executor);
@@ -717,7 +714,6 @@ public:
         // Always verifying the response not only
         // protects the agent against malicions content in the static cache, it also
         // acts as a good citizen and avoids spreading such content to others.
-        sys::error_code ec;
         auto rr = http_store_reader(kpath, content_path, yield);
         if (!rr) return std::unexpected(rr.error());
         return std::make_unique<VerifyingReader>(std::move(*rr), verif_pubk);
@@ -727,7 +723,6 @@ public:
     std::expected<ReaderAndSize, sys::error_code>
     reader_and_size(const ResourceId& resource_id, Async yield) override
     {
-        sys::error_code ec;
         auto kpath = path_from_resource_id(path, resource_id);
         auto r = http_store_reader(kpath, content_path, yield);
         if (!r) return std::unexpected(r.error());
@@ -935,8 +930,6 @@ FullHttpStore::for_each(keep_func keep, Async yield)
                 _WARN("Item directory is not a valid ResourceId: ", p.path());
                 continue;
             }
-
-            sys::error_code ec;
 
             auto rr = http_store_reader(p, yield);
             if (!rr) {
