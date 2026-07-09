@@ -2,7 +2,6 @@ windows / build:
   stage: build
   tags:
     - shell+docker
-  timeout: 30 minutes
   variables:
     BUILD_PATH: 'build'
     TARGET_OS: 'windows'
@@ -19,6 +18,7 @@ windows / cpp-rust-tests:
   stage: test
   tags:
     - shell+docker
+  timeout: 30 minutes
   script:
     - ./docker/linux.sh --target-os windows --run-all-tests
   needs:
