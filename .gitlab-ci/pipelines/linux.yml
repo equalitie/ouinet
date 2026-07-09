@@ -1,121 +1,43 @@
-include:
-  - .gitlab-ci/jobs/common/prepare-builder-image.yml
-  - .gitlab-ci/jobs/linux.yml
-
-variables:
-  TARGET_PLATFORM: 'linux'
-  BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
-
-linux / prepare-builder-image:
-  variables:
-    TARGET_PLATFORM: 'linux'
-  extends:
-    .prepare-builder-image
+default:
+  before_script:
+    - CI_JOB_SLUG="${CI_PROJECT_PATH_SLUG}.${CI_COMMIT_REF_SLUG}.${CI_COMMIT_SHORT_SHA}"
+    - CONTAINER_ARGS="--container-name ${CI_JOB_SLUG} --image-name ${CI_JOB_SLUG}"
 
 linux / build:
+  stage: build
+  tags:
+    - shell+docker
   variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
-    BOOST_VERSION: "1.88.0"
-    CMAKE_VERSION: "3.31.7-linux-x86_64"
-    WITH_ASAN: "OFF"
-  extends:
-    .linux-build
-  needs:
-    - job: 'linux / prepare-builder-image'
-      optional: true
+    BUILD_PATH: 'build'
+    TARGET_OS: 'linux'
+  script:
+    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH $CONTAINER_ARGS
+  artifacts:
+    paths:
+      - $BUILD_PATH/$TARGET_OS/client
+      - $BUILD_PATH/$TARGET_OS/injector
+      - $BUILD_PATH/$TARGET_OS/lib*.so*
+    expire_in: 6h
 
-linux / cpp-tests:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
-  extends:
-    .linux-cpp-tests
+linux / cpp-rust-tests:
+  stage: test
+  tags:
+    - shell+docker
+  timeout: 30 minutes
+  script:
+    - ./docker/linux.sh --target-os linux --run-all-tests
   needs:
-    ['linux / build']
-
-linux / rust-tests:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
-  extends:
-    .linux-rust-tests
-  needs:
-    ['linux / build']
+    - job: 'linux / build'
+      artifacts: false
 
 linux / python-tests:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
-  extends:
-    .linux-python-tests
-  needs:
-    ['linux / rust-tests', 'linux / cpp-tests', 'linux / build']
-  before_script:
-    - ln -s /usr/bin/python3 /usr/bin/python
-
-linux / build-asan:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
-    BOOST_VERSION: "1.88.0"
-    CMAKE_VERSION: "3.31.7-linux-x86_64"
-    WITH_ASAN: "ON"
-  extends:
-    .linux-build
-  needs:
-    - job: 'linux / build'
-      optional: true
-  when: manual
-  allow_failure: true
-
-linux / cpp-asan-tests:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-asan'
-  extends:
-    .linux-cpp-tests
-  needs:
-    ['linux / build-asan']
-  allow_failure: true
-
-linux / build-release:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
-    BUILD_TYPE: "Release"
-    BOOST_VERSION: "1.88.0"
-    CMAKE_VERSION: "3.31.7-linux-x86_64"
-    WITH_ASAN: "OFF"
-  extends:
-    .linux-build
-  needs:
-    - job: 'linux / build'
-      optional: true
-  when: manual
-  allow_failure: true
-
-linux / cpp-release-tests:
-  variables:
-    TARGET_PLATFORM: 'linux'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
-  extends:
-    .linux-cpp-tests
-  needs:
-    ['linux / build-release']
-  allow_failure: true
-
-linux / build-prod-image:
-  stage: release
+  stage: test
+  timeout: 30 minutes
   tags:
-    - shell
-  needs: ['linux / python-tests']
+    - shell+docker
   script:
-    - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
-    - docker build --pull --target base -t $CI_REGISTRY_IMAGE:latest - < Dockerfile
-    - docker push $CI_REGISTRY_IMAGE:latest
-    - docker logout $CI_REGISTRY
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      allow_failure: true
+    - ./docker/linux.sh --target-os linux --run-python-tests
+  needs:
+    - job: 'linux / cpp-rust-tests'
+      artifacts: false
+
