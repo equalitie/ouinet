@@ -6,7 +6,7 @@ android / build:
   tags:
     - shell+docker
   script:
-    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH
+    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH $CONTAINER_ARGS
   needs:
     - job: 'linux / build'
       optional: true

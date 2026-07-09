@@ -6,6 +6,12 @@ stages:
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
 
+default:
+  before_script:
+    # Share containers and images per branch
+    - CI_JOB_SLUG="${CI_PROJECT_PATH_SLUG}.${CI_COMMIT_REF_SLUG}"
+    - CONTAINER_ARGS="--container-name ${CI_JOB_SLUG} --image-name ${CI_JOB_SLUG}"
+
 include:
   - .gitlab-ci/pipelines/android.yml
   - .gitlab-ci/pipelines/linux.yml

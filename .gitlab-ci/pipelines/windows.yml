@@ -6,7 +6,7 @@ windows / build:
     BUILD_PATH: 'build'
     TARGET_OS: 'windows'
   script:
-    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH
+    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH $CONTAINER_ARGS
   artifacts:
     paths:
       - $BUILD_PATH/$TARGET_OS/client.exe
