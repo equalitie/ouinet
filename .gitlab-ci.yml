@@ -3,6 +3,7 @@ stages:
   - build
   - test
   - release
+  - cleanup
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
@@ -16,4 +17,5 @@ include:
   - .gitlab-ci/pipelines/docker-android.yml
   - .gitlab-ci/pipelines/docker-linux.yml
   - .gitlab-ci/pipelines/docker-windows.yml
+  - .gitlab-ci/pipelines/docker-cleanup.yml
 

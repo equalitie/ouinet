@@ -1,0 +1,14 @@
+cleanup:
+  stage: cleanup
+  tags:
+    - shell+docker
+  script:
+    - CI_JOB_SLUG="${CI_PROJECT_PATH_SLUG}.${CI_COMMIT_REF_SLUG}.${CI_COMMIT_SHORT_SHA}"
+    - docker stop ${CI_JOB_SLUG}
+    - docker rmi ${CI_JOB_SLUG}
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: on_success
+    # allow to manually run it when the pipeline fails
+    - when: manual
+
