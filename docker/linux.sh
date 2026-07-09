@@ -186,7 +186,7 @@ function enter (
 )
 
 function is_container_running (
-    [ -n "$(dock ps -a -q -f name=$container_name 2>/dev/null)" ]
+    [ -n "$(dock ps -a -q -f name=^$container_name$ 2>/dev/null)" ]
 )
 
 function list_artifacts_for_target_os (
