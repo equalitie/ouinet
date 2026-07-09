@@ -1,10 +1,11 @@
 windows / build:
   stage: build
+  tags:
+    - shell+docker
+  timeout: 30 minutes
   variables:
     BUILD_PATH: 'build'
     TARGET_OS: 'windows'
-  tags:
-    - shell+docker
   script:
     - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH
   artifacts:

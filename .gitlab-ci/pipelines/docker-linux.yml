@@ -23,6 +23,7 @@ linux / cpp-rust-tests:
   stage: test
   tags:
     - shell+docker
+  timeout: 30 minutes
   script:
     - ./docker/linux.sh --target-os linux --run-all-tests
   needs:
@@ -31,6 +32,7 @@ linux / cpp-rust-tests:
 
 linux / python-tests:
   stage: test
+  timeout: 30 minutes
   tags:
     - shell+docker
   script:
