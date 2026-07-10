@@ -18,6 +18,7 @@ container_name=
 image_name=
 container_duration=1d
 cmake_build_type=Debug
+android_abi=arm64-v8a
 
 source $(dirname $0)/util.sh linux
 
@@ -231,7 +232,7 @@ function list_artifacts_for_target_os (
             ;;
         android)
             artifacts=(
-                $ouinet_dir/build-android-omni-${cmake_build_type,,}/ouinet/outputs/aar/ouinet-${cmake_build_type,,}.aar
+                $ouinet_dir/build-android-$android_abi-${cmake_build_type,,}/ouinet/outputs/aar/ouinet-${cmake_build_type,,}.aar
             )
             ;;
         *) error "Invalid target_os ($target_os) in 'list_artifacts_for_target_os'"
@@ -349,6 +350,9 @@ for target_os in ${target_oss[@]}; do
             exe -w $ouinet_dir git clean -dfX
         fi
 
+        env=(
+          ABI="$android_abi"
+        )
         exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh $([ "$cmake_build_type" = "Release" ] && echo " -r")
     fi
 
