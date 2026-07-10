@@ -16,6 +16,7 @@ host_ouisync_dir=
 with_asan=n
 container_name=
 image_name=
+container_duration=1d
 
 source $(dirname $0)/util.sh linux
 
@@ -74,6 +75,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --image-name)
             image_name=($2); shift
+            ;;
+        --container-duration)
+            container_duration=($2); shift
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -256,7 +260,7 @@ function check_artifacts_exist_for_target_os (
 build_image
 
 if ! is_container_running; then
-    dock run --platform linux/$docker_platform -d --rm --name $container_name $image_name sleep 1d
+    dock run --platform linux/$docker_platform -d --rm --name $container_name $image_name sleep $container_duration
 fi
 
 if [ "$enter_on_exit" = y ]; then
