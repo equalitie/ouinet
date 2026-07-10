@@ -17,6 +17,7 @@ with_asan=n
 container_name=
 image_name=
 container_duration=1d
+cmake_build_type=Debug
 
 source $(dirname $0)/util.sh linux
 
@@ -78,6 +79,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --container-duration)
             container_duration=($2); shift
+            ;;
+        --cmake-build-type)
+            cmake_build_type=($2); shift
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -321,7 +325,7 @@ for target_os in ${target_oss[@]}; do
         exe bash -c "mkdir -p $build_dir"
 
         cmake_configure_options=(
-            -DCMAKE_BUILD_TYPE=Debug
+            -DCMAKE_BUILD_TYPE=$cmake_build_type
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)

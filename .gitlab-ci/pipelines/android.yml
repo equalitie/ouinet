@@ -1,17 +1,23 @@
 android / build:
   stage: build
+  tags:
+    - shell+docker
   variables:
     BUILD_PATH: 'build'
     TARGET_OS: 'android'
-  tags:
-    - shell+docker
+    CMAKE_BUILD_TYPE: 'Release'
   script:
-    - ./docker/linux.sh --target-os $TARGET_OS --artifact-dir $BUILD_PATH $CONTAINER_ARGS
-  needs:
-    - job: 'linux / build'
-      optional: true
-      artifacts: false
+    - >
+      ./docker/linux.sh
+      --target-os $TARGET_OS
+      --artifact-dir $BUILD_PATH
+      --cmake-build-type $CMAKE_BUILD_TYPE
+      $CONTAINER_ARGS
   artifacts:
     paths:
       - $BUILD_PATH/$TARGET_OS/*.aar
     expire_in: 6h
+  needs:
+    - job: 'linux / build'
+      optional: true
+      artifacts: false
