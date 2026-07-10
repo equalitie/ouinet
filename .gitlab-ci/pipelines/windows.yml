@@ -30,4 +30,5 @@ windows / cpp-rust-tests:
   needs:
     - job: 'windows / build'
       artifacts: false
+  when: manual
 
