@@ -231,7 +231,7 @@ function list_artifacts_for_target_os (
             ;;
         android)
             artifacts=(
-                $ouinet_dir/build-android-omni-debug/ouinet/outputs/aar/ouinet-debug.aar
+                $ouinet_dir/build-android-omni-${cmake_build_type,,}/ouinet/outputs/aar/ouinet-${cmake_build_type,,}.aar
             )
             ;;
         *) error "Invalid target_os ($target_os) in 'list_artifacts_for_target_os'"
@@ -349,7 +349,7 @@ for target_os in ${target_oss[@]}; do
             exe -w $ouinet_dir git clean -dfX
         fi
 
-        exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh
+        exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh $([ "$cmake_build_type" = "Release" ] && echo " -r")
     fi
 
     if [ -n "$artifact_dir" ]; then
