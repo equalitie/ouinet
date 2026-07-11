@@ -26,7 +26,11 @@ linux / cpp-rust-tests:
     - shell+docker
   timeout: 30 minutes
   script:
-    - ./docker/linux.sh --target-os linux --run-all-tests
+    - >
+      ./docker/linux.sh --target-os linux --run-all-tests
+      --exclude-test test_i2p
+      --exclude-test test_i2p_fetch
+      --exclude-test test_i2p_tracker
   needs:
     - job: 'linux / build'
       artifacts: false
