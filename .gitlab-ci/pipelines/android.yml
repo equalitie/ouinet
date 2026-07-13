@@ -21,3 +21,4 @@ android / build:
     - job: 'linux / build'
       optional: true
       artifacts: false
+  when: manual

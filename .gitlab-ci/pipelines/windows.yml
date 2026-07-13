@@ -19,6 +19,7 @@ windows / build:
       - $BUILD_PATH/$TARGET_OS/injector.exe
       - $BUILD_PATH/$TARGET_OS/lib*.dll*
     expire_in: 6h
+  when: manual
 
 windows / cpp-rust-tests:
   stage: test
