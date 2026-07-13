@@ -953,7 +953,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
 std::expected<Response, sys::error_code>
 Client::State::fetch_fresh_from_front_end(const Request& rq, Async yield)
 {
-    Cancel cancel = _shutdown_signal;
+    auto slot = _shutdown_signal.connect([&] { yield.cancel(); });
 
     boost::optional<ClientFrontEnd::UdpEndpoint> local_ep;
 
