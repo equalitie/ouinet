@@ -4,7 +4,6 @@
 #include <set>
 #include "api.h"
 #include "node_id.h"
-#include "namespaces.h"
 #include "../util/promise.h"
 
 namespace ouinet {
@@ -15,7 +14,7 @@ namespace bittorrent {
 
 class OUINET_COMMON_API DhtBase {
 public:
-    using UdpEndpoint = asio::ip::udp::endpoint;
+    using UdpEndpoint = boost::asio::ip::udp::endpoint;
     using Executor = boost::asio::any_io_executor;
 
     DhtBase();
