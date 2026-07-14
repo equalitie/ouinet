@@ -7,6 +7,7 @@ clean=
 target_oss=()
 run_all_tests=
 run_cpp_tests=()
+run_cpp_rust_tests=()
 run_python_tests=
 enter_on_exit=
 excluded_test_targets=()
@@ -46,6 +47,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --run-cpp-test)
             run_cpp_tests+=($2); shift
+            ;;
+        --run-cpp-rust-tests)
+            run_cpp_rust_tests=y
             ;;
         --run-python-tests)
             run_python_tests=y
@@ -362,7 +366,7 @@ for target_os in ${target_oss[@]}; do
     
     ### Rust Tests
 
-    if [ "$run_all_tests" == y ]; then
+    if [ "$run_all_tests" == y -o "$run_cpp_rust_tests" == y ]; then
         # Only on Linux because `cargo` would look for libouinet_asio.so which is not
         # built for Windows (only dll).
         if [ "$target_os" == linux ]; then
@@ -379,7 +383,7 @@ for target_os in ${target_oss[@]}; do
 
     ### C++ Tests
 
-    if [ "$run_all_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
+    if [ "$run_all_tests" == y -o "$run_cpp_rust_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
         if [ "$target_os" != android ]; then
             args=(
                 --build-dir $build_dir
