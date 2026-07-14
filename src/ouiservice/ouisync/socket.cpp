@@ -44,6 +44,24 @@ struct OuisyncSocket::State {
     ouisync::NetworkSocket inner;
     asio::ip::udp::endpoint local_endpoint;
 
+    // We are using these intermediate buffers for the following reasons:
+    //
+    // - The `outgoing` buffer is used to support the `immediate_send_to` operation which must be
+    // non-async and non-blocking. The operation pushed the data into this buffer if it's not full
+    // or returns `would_block` if it is. This is needed because `ouisync::NetworkSocket` doesn't
+    // have any non-async send operation. A possible alternative would be to invoke
+    // `ouisync::NetworkSocket` with `detached` completion token. To make it more robust, some sort
+    // of concurrency limit should be implemented too.
+    //
+    // - The `incoming` buffer is needed to implement the `available` method which is done by
+    // counting the total number of bytes across all the messages in the `incoming` buffer. A
+    // possible alternative to this would be to always return 0 from the method but it would need to
+    // be tested to make sure it doesn't affect performance too badly.
+    //
+    // - Both buffers are also useful to implement the `cancel` method as `ouisync::NetworkSocket`
+    // doesn't support per-object cancellation. An alternative would be to keep a collection of
+    // cancellation tokens for every ongoing async operation and trigger them when `cancel` is
+    // called.
     detail::Queue outgoing;
     detail::Queue incoming;
 
