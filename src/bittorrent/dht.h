@@ -2,7 +2,6 @@
 
 #include "../util/promise.h"
 #include "api.h"
-#include "namespaces.h"
 #include "node_id.h"
 #include <asio_utp/udp_multiplexer.hpp>
 #include <set>
@@ -15,7 +14,7 @@ namespace bittorrent {
 
 class OUINET_COMMON_API DhtBase {
 public:
-  using UdpEndpoint = asio::ip::udp::endpoint;
+  using UdpEndpoint = boost::asio::ip::udp::endpoint;
   using Executor = boost::asio::any_io_executor;
 
   DhtBase();

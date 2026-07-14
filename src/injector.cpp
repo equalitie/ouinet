@@ -954,8 +954,9 @@ Injector::Injector(InjectorConfig config, asio::io_context &ctx,
                              _config.ouisync_config().udp_endpoints);
   }
 
-  task::spawn_detached(_exec, [&, proxy_server = std::move(proxy_server),
-                               trace = std::move(trace)](
+  task::spawn_detached(_exec, [this, proxy_server = std::move(proxy_server),
+                               trace = std::move(trace),
+                               mock_dht = std::move(mock_dht)](
                                   asio::yield_context y) mutable {
     Async yield(y, _cancel, trace);
 
@@ -1051,7 +1052,8 @@ Injector::Injector(InjectorConfig config, asio::io_context &ctx,
     } else {
       auto dht = std::make_shared<bt::MainlineDht>(
           _exec, metrics::Client::noop().mainline_dht(), _dns_resolver,
-          config.udp_mux_rx_limit_in_bytes(), fs::path{}, // default storage dir
+          _config.udp_mux_rx_limit_in_bytes(),
+          fs::path{}, // default storage dir
           bt::bootstrap::Config()
               .with_default(!_config.bt_bootstrap_no_default())
               .with_extras(_config.bt_bootstrap_extras()),
