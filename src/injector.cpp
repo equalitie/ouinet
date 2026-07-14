@@ -972,7 +972,12 @@ Injector::Injector(
 
     task::spawn_detached(
         _exec,
-        [&, proxy_server = std::move(proxy_server), trace = std::move(trace)]
+        [
+            this,
+            proxy_server = std::move(proxy_server),
+            trace = std::move(trace),
+            mock_dht = std::move(mock_dht)
+        ]
         (asio::yield_context y) mutable {
             Async yield(y, _cancel, trace);
 
@@ -1075,7 +1080,7 @@ Injector::Injector(
                     _exec,
                     metrics::Client::noop().mainline_dht(),
                     _dns_resolver,
-                    config.udp_mux_rx_limit_in_bytes(),
+                    _config.udp_mux_rx_limit_in_bytes(),
                     fs::path{},  // default storage dir
                     bt::bootstrap::Config()
                         .with_default(!_config.bt_bootstrap_no_default())
