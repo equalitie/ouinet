@@ -26,8 +26,9 @@ macos / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh | tee xcodebuild.log
-  allow_failure: true
-  when: manual
+  rules:
+     - !reference [.optional_job, rules]
+
 
 macos / unit-test:
   stage: test
@@ -45,6 +46,7 @@ macos / unit-test:
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
     - for test in ./$TESTS_PATH/test*.app/Contents/MacOS/test*; do "$test" --log_level=test_suite; done
-  allow_failure: true
   needs:
     ['macos / build']
+  rules:
+     - !reference [.optional_job, rules]

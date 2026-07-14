@@ -19,7 +19,8 @@ windows / build:
       - $BUILD_PATH/$TARGET_OS/injector.exe
       - $BUILD_PATH/$TARGET_OS/lib*.dll*
     expire_in: 6h
-  when: manual
+  rules:
+     - !reference [.optional_job, rules]
 
 windows / cpp-rust-tests:
   stage: test
@@ -38,5 +39,6 @@ windows / cpp-rust-tests:
   needs:
     - job: 'windows / build'
       artifacts: false
-  when: manual
+  rules:
+     - !reference [.optional_job, rules]
 

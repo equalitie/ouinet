@@ -13,6 +13,23 @@ default:
     - CONTAINER_DURATION=6h
     - CONTAINER_ARGS="--container-name ${CI_JOB_SLUG} --image-name ${CI_JOB_SLUG} --container-duration ${CONTAINER_DURATION}"
 
+# These rules should be added to every single required job to make sure that
+# are included in merge request pipelines.
+.required_job:
+  rules:
+    - when: always
+
+# These set of rules for optional jobs make them manual for regular pipelines
+# and required for merge request ones.
+.optional_job:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: manual
+      allow_failure: true
+
 include:
   - .gitlab-ci/pipelines/android.yml
   - .gitlab-ci/pipelines/linux.yml

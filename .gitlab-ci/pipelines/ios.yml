@@ -24,7 +24,8 @@ iphoneos / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=OS64 ../scripts/build-darwin.sh | tee xcodebuild-ios.log
-  allow_failure: true
+  rules:
+     - !reference [.optional_job, rules]
 
 iphonesimulator / build:
   stage: build
@@ -44,7 +45,8 @@ iphonesimulator / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=SIMULATORARM64 ../scripts/build-darwin.sh | tee xcodebuild-iossim.log
-  allow_failure: true
+  rules:
+     - !reference [.optional_job, rules]
 
 combined / build:
   stage: build
@@ -62,4 +64,5 @@ combined / build:
     - mkdir -p build.darwin
     - cd build.darwin
     - PLATFORM=COMBINED ../scripts/build-darwin.sh | tee xcodebuild-combined.log
-  allow_failure: true
+  rules:
+     - !reference [.optional_job, rules]

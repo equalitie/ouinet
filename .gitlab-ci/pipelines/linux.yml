@@ -19,6 +19,8 @@ linux / build:
       - $BUILD_PATH/$TARGET_OS/injector
       - $BUILD_PATH/$TARGET_OS/lib*.so*
     expire_in: 6h
+  rules:
+     - !reference [.required_job, rules]
 
 linux / cpp-rust-tests:
   stage: test
@@ -38,6 +40,8 @@ linux / cpp-rust-tests:
   needs:
     - job: 'linux / build'
       artifacts: false
+  rules:
+    - !reference [.required_job, rules]
 
 linux / python-tests:
   stage: test
@@ -53,4 +57,5 @@ linux / python-tests:
   needs:
     - job: 'linux / cpp-rust-tests'
       artifacts: false
-
+  rules:
+     - !reference [.required_job, rules]
