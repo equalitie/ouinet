@@ -816,7 +816,7 @@ struct Client::Impl {
 };
 
 /* static */
-std::expected<std::unique_ptr<Client>, sys::error_code>
+std::expected<std::shared_ptr<Client>, sys::error_code>
 Client::build( std::set<udp::endpoint> lan_my_eps
              , sign::PublicKey cache_pk
              , fs::path cache_dir
@@ -889,7 +889,8 @@ Client::build( std::set<udp::endpoint> lan_my_eps
         return std::unexpected(r.error());
     }
     impl->_gc.start();
-    return unique_ptr<Client>(new Client(std::move(impl)));
+
+    return shared_ptr<Client>(new Client(std::move(impl)));
 }
 
 Client::Client(unique_ptr<Impl> impl)

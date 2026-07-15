@@ -35,7 +35,7 @@ private:
     using opt_path = boost::optional<fs::path>;
 
     [[nodiscard]]
-    static std::expected<std::unique_ptr<Client>, sys::error_code>
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
     build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , sign::PublicKey cache_pk
          , fs::path cache_dir
@@ -49,7 +49,7 @@ public:
 
 public:
     [[nodiscard]]
-    static std::expected<std::unique_ptr<Client>, sys::error_code>
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
     build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , sign::PublicKey cache_pk
          , fs::path cache_dir
@@ -63,7 +63,7 @@ public:
     }
 
     [[nodiscard]]
-    static std::expected<std::unique_ptr<Client>, sys::error_code>
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
     build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , sign::PublicKey cache_pk
          , fs::path cache_dir

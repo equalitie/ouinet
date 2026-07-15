@@ -184,6 +184,7 @@ public:
         if (_cache_starting) _cache_starting->notify(asio::error::shut_down);
 
         _cache = nullptr;
+
         if (_upnps_ptr) _upnps_ptr->clear();
         _shutdown_signal();
         if (_injector) _injector->stop();
@@ -514,7 +515,7 @@ private:
     unique_ptr<OuiServiceImplementationClient>
     maybe_wrap_tls(unique_ptr<OuiServiceImplementationClient>);
 
-    cache::Client* get_cache() const { return _cache.get(); }
+    std::shared_ptr<cache::Client> get_cache() const { return _cache; }
 
     void serve_peer_request(GenericStream, Async);
 
@@ -649,7 +650,7 @@ private:
     std::unique_ptr<CACertificate> _ca_certificate;
     util::LruCache<string, string> _ssl_certificate_cache;
     std::unique_ptr<OuiServiceClient> _injector;
-    std::unique_ptr<cache::Client> _cache;
+    std::shared_ptr<cache::Client> _cache;
     boost::optional<ConditionVariable> _injector_starting, _cache_starting;
     sys::error_code _injector_start_ec, _cache_start_ec;
 
