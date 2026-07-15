@@ -633,6 +633,10 @@ BOOST_DATA_TEST_CASE(test_fetching_private_route_many_times,
                      dht_impl, ouisync_transport_flag) {
   get_logger().set_threshold(INFO);
 
+  if (!std::string_view(ouisync_transport_flag).empty()) {
+    ouisync::init_log();
+  }
+
   asio::io_context ctx;
 
   TestDir root;
