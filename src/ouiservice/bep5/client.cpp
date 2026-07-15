@@ -159,10 +159,11 @@ private:
 
             add_peers(std::move(*endpoints));
 
-            // If no peers were added then we're still not ready
-            if (_peers.empty()) continue;
+            // Only mark this as success if valid peers were found.
+            if (!_peers.empty()) {
+                _last_success_time = std::chrono::steady_clock::now();
+            }
 
-            _last_success_time = std::chrono::steady_clock::now();
             _wait_condition_locks.clear();
 
             async_sleep(SUCCESS_WAIT_DURATION, yield);
