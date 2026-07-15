@@ -116,6 +116,7 @@ I2pTrackerClient::announce(NodeID infohash, Async yield)
 {
     auto r = send_request(announce_target(infohash, _session->local_addr()), yield);
     if (!r) return std::unexpected<Error::Announce>(std::move(r.error()));
+    LOG_DEBUG("BEP3 tracker: announce successful for ", infohash);
     return std::expected<void, Error::Announce>();
 }
 
@@ -180,6 +181,7 @@ I2pTrackerClient::get_peers(NodeID infohash, Async yield)
             if (!ip || ip->empty()) continue;
             auto addr = I2pAddress::parse(*ip);
             if (!addr) continue;
+            LOG_DEBUG("BEP3 tracker: found peer dest: ", *addr);
             peers.insert(std::move(*addr));
         }
     } else if (peers_it->second.is_string()) {
@@ -190,6 +192,7 @@ I2pTrackerClient::get_peers(NodeID infohash, Async yield)
         for (size_t i = 0; i + SIZE <= data.size() ; i += SIZE) {
             // Note: This "unwrap" is OK because `from_binary` only fails if SIZE != B32::BYTE_SIZE
             auto dest = *I2pAddress::B32::from_binary(std::span((unsigned char*)data.data() + i, SIZE));
+            LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
             peers.insert(std::move(dest));
         }
     }

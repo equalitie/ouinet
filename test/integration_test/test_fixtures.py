@@ -20,7 +20,8 @@ class TestFixtures:
     BEP5_CACHE_TIMEOUT = 900
     BEP3_CACHE_TIMEOUT = I2P_TRANSPORT_TIMEOUT + BEP5_CACHE_TIMEOUT
 
-    BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p"
+    # BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
+    BEP3_TRACKER_ID = "2qqoqlnajwd7qbtdfdn7enadnwktiqnn5ysear3ammt4dq6m65iq.b32.i2p"  #opentracker-i2p
 
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
@@ -79,7 +80,9 @@ class TestFixtures:
     TCP_INJECTOR_NAME = "tcp_injector"
     TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     # TCP_INJECTOR_PORT_READY_REGEX = "TCP address"
-    TCP_INJECTOR_PORT = 7070
+    # Avoid 7070: it's i2pd's default web-console port and collides with a
+    # system-wide i2pd that a developer may be running during the test.
+    TCP_INJECTOR_PORT = 7090
 
     CACHE_INJECTOR_NAME = "cache_injector"
 
@@ -101,7 +104,31 @@ class TestFixtures:
     CACHE_CLIENT_PEER_FOUND = (
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
+    # Logged by the I2P cache server once a peer's request has finished being
+    # served over the I2P stream. Analogous to CACHE_CLIENT_UTP_REQUEST_SERVED
+    # but for the BEP3-over-I2P path; the uTP tag never fires when serving to
+    # I2P peers.
+    CACHE_CLIENT_I2P_REQUEST_SERVED = r"[\s\S]*serve_i2p_req/serve_local END[\s\S]*"
     BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*I2P announcer successfully initiated[\s\S]*"
+    # Logged once the announcer has actually pushed the cached entry to the
+    # BEP3 tracker over I2P. Client1 uses this as the "OK to let client2 look
+    # you up" signal; without it, client2 may query before client1 is
+    # registered as a peer for the infohash.
+    BEP3_ANNOUNCE_SUCCESS_REGEX = (
+        r"[\s\S]*BEP3 tracker: announce successful[\s\S]*"
+    )
+    # The tracker handshake round-trips through the tracker; it only logs
+    # success once the I2P path to the tracker actually works. Waiting on this
+    # is more reliable than a fixed sleep for lease-set propagation.
+    BEP3_HANDSHAKE_DONE_REGEX = (
+        r"[\s\S]*BEP3 tracker: tracker handshake successful[\s\S]*"
+    )
+    # Logged once by the tracker client on handshake start; the captured group
+    # is the 52-char base32 of our serving destination's IdentHash — i.e. the
+    # b32 other clients should see as a peer for our infohash.
+    BEP3_SERVING_IDENTITY_REGEX = (
+        r"[\s\S]*BEP3 tracker: serving identity b32=([a-z2-7]{52})\.b32\.i2p[\s\S]*"
+    )
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
 

@@ -24,6 +24,7 @@ class OuinetProcessProtocol(object):
         self.benchmarks: dict[str, re.Match[str] |  None] = {}
         self._proc_config = proc_config
         self.app_name = proc_config.app_name
+        self.bep3_serving_b32 = ""
 
         for regex in self.regexes:
             self.benchmarks[regex] = None
@@ -35,18 +36,36 @@ class OuinetProcessProtocol(object):
         Listen to the process output to react to fatal errors and track status
         """
         report = self.app_name + ": " + data
-        logging.debug(report)
-        self._logger.handlers[0].flush()
+        # Non-UTF-8 bytes decoded with errors="replace" can still trip up
+        # logger handlers or a closed pipe under load; swallow those so we
+        # don't lose the rest of the output stream.
+        try:
+            logging.debug(report)
+            if self._logger.handlers:
+                self._logger.handlers[0].flush()
+        except (ValueError, IndexError, OSError) as e:
+            print(
+                f"[PYTHON TEST SCRIPT ERROR] ouinet_process_protocol.py "
+                f"errReceived(): logging handler flush failed "
+                f"({type(e).__name__}: {e})."
+            )
         print(report)
 
         if re.match(TestFixtures.FATAL_ERROR_INDICATOR_REGEX, data):
             raise Exception("Fatal error")
+
+        self.look_for_serving_b32(data)
 
         for regex in self.benchmarks.keys():
             match = re.match(regex, data)
             if match:
                 if not self.benchmarks[regex]:
                     self.benchmarks[regex] = match
+
+    def look_for_serving_b32(self, data):
+        m = re.match(TestFixtures.BEP3_SERVING_IDENTITY_REGEX, data)
+        if m:
+            self.bep3_serving_b32 = m.group(1)
 
     # maybe have a different class for that?
     # def check_i2p_error_received(self, data):
