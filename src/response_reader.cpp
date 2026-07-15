@@ -1,4 +1,6 @@
 #include "response_reader.h"
+#include "util/async.h"
+#include <boost/beast/http/read.hpp>
 
 namespace ouinet::http_response {
 

@@ -2,6 +2,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
+#include <boost/beast/version.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <namespaces.h>
