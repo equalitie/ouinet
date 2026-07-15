@@ -14,6 +14,7 @@
 #include "util/unwrap.h"
 #include "util/test_dir.h"
 #include "util/i2p.h"
+#include "util/str.h"
 
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>

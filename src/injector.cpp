@@ -40,11 +40,9 @@
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 
-#include "util/timeout.h"
 #include "util/atomic_file.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
-#include "util/yield.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -82,44 +80,50 @@ static bool g_allow_private_targets = false;
 
 //------------------------------------------------------------------------------
 template<class Res>
+[[nodiscard]]
 static
-void send_response( GenericStream& con
-                  , const Res& res
-                  , YieldContext yield)
+std::expected<void, sys::error_code>
+send_response(GenericStream& con, const Res& res, Async yield)
 {
-    yield.log("=== Sending back response ===");
-    yield.log(res);
+    LOG_DEBUG(yield, " === Sending back response ===");
+    LOG_DEBUG(yield, " ", res);
 
-    util::http_reply(con, res, yield);
+    sys::error_code ec = util::http_reply(con, res, yield);
+    if (ec) return std::unexpected(ec);
+    return {};
 }
 
+[[nodiscard]]
 static
-void handle_error( GenericStream& con
-                 , const Request& req
-                 , http::status status
-                 , const string& proto_error
-                 , const string& message
-                 , YieldContext yield)
+std::expected<void, sys::error_code>
+handle_error( GenericStream& con
+            , const Request& req
+            , http::status status
+            , const string& proto_error
+            , const string& message
+            , Async yield)
 {
     auto res = util::http_error( req.keep_alive(), status
                                , OUINET_INJECTOR_SERVER_STRING, proto_error, message);
-    send_response(con, res, yield);
+    return send_response(con, res, yield);
 }
 
+[[nodiscard]]
 static
-void handle_error( GenericStream& con
-                 , const Request& req
-                 , http::status status
-                 , const string& message
-                 , YieldContext yield)
+std::expected<void, sys::error_code>
+handle_error( GenericStream& con
+            , const Request& req
+            , http::status status
+            , const string& message
+            , Async yield)
 {
     return handle_error(con, req, status, "", message, yield);
 }
 
+[[nodiscard]]
 static
-void handle_no_proxy( GenericStream& con
-                    , const Request& req
-                    , YieldContext yield)
+std::expected<void, sys::error_code>
+handle_no_proxy(GenericStream& con, const Request& req, Async yield)
 {
     return handle_error( con, req, http::status::forbidden
                        , http_::response_error_hdr_proxy_disabled, "Proxy disabled"
@@ -132,20 +136,18 @@ void handle_no_proxy( GenericStream& con
 // and return lookup results.
 // If not valid, set error code
 // (the returned lookup may not be usable then).
-TcpLookup
-resolve_target(const http::request_header<>& req
+[[nodiscard]]
+std::expected<TcpLookup, sys::error_code>
+resolve_target( const http::request_header<>& req
               , bool allow_private_targets
               , std::shared_ptr<dns::Resolver> dns_resolver
-              , AsioExecutor exec
-              , Cancel& cancel
-              , YieldContext yield)
+              , Async yield)
 {
     TcpLookup lookup;
-    sys::error_code ec;
 
     auto host_port = util::get_host_port(req);
     if (!host_port) {
-        return or_throw<TcpLookup>(yield, asio::error::invalid_argument);
+        return std::unexpected(asio::error::invalid_argument);
     }
     auto [host, port] = std::move(*host_port);
 
@@ -156,12 +158,15 @@ resolve_target(const http::request_header<>& req
     // Resolve address and also use result for more sophisticaded checking.
     if ((!local && !priv) || allow_private_targets)
     {
-        lookup = dns_resolver->resolve( host, port
-                                      , cancel
-                                      , yield[ec]);
-    }
+        auto r = dns_resolver->resolve(host, port, yield);
 
-    if (ec) return or_throw<TcpLookup>(yield, ec);
+        if (r) {
+            lookup = std::move(*r);
+        }
+        else {
+            return std::unexpected(r.error());
+        }
+    }
 
     // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
     for (auto r : lookup)
@@ -177,11 +182,10 @@ resolve_target(const http::request_header<>& req
 
     if ((local || priv) && !allow_private_targets)
     {
-        ec = asio::error::invalid_argument;
-        return or_throw<TcpLookup>(yield, ec);
+        return std::unexpected(asio::error::invalid_argument);
     }
 
-    return or_throw(yield, ec, std::move(lookup));
+    return lookup;
 }
 
 //------------------------------------------------------------------------------
@@ -192,154 +196,143 @@ resolve_target(const http::request_header<>& req
 // `client_c_rbuf` contains data already read from `client_c`
 // but not yet processed.
 static
-void handle_connect_request( GenericStream client_c
-                           , beast::flat_buffer client_c_rbuf
-                           , const Request& req
-                           , std::shared_ptr<dns::Resolver> dns_resolver
-                           , Cancel& cancel
-                           , YieldContext yield)
+std::expected<void, sys::error_code>
+handle_connect_request( GenericStream client_c
+                      , beast::flat_buffer client_c_rbuf
+                      , const Request& req
+                      , std::shared_ptr<dns::Resolver> dns_resolver
+                      , Async yield)
 {
-    sys::error_code ec;
+    AsioExecutor exec = yield.get_executor();
 
-    AsioExecutor exec = client_c.get_executor();
-
-    auto disconnect_client_slot = cancel.connect([&client_c] {
+    auto disconnect_client_slot = yield.cancel_slot([&client_c] {
         client_c.close();
     });
 
-    TcpLookup lookup = resolve_target( req
-                                     , g_allow_private_targets
-                                     , std::move(dns_resolver)
-                                     , exec
-                                     , cancel, yield[ec].tag("resolve"));
+    auto lookup = resolve_target( req
+                                , g_allow_private_targets
+                                , std::move(dns_resolver)
+                                , yield.tag("resolve"));
 
-    if (ec) {
-        sys::error_code he_ec;
+    if (!lookup) {
+        sys::error_code ec = lookup.error();
         string host;
         auto host_port = util::get_host_port(req);
         if (host_port) {
             host = std::move(host_port->first);
         }
 
-        if (ec == asio::error::invalid_argument)
-            return handle_error( client_c, req, http::status::bad_request
-                               , "Illegal target host: " + host
-                               , yield[he_ec].tag("handle_no_host_error"));
+        if (ec == asio::error::invalid_argument) {
+            std::ignore = handle_error( client_c, req, http::status::bad_request
+                                      , "Illegal target host: " + host
+                                      , yield.tag("handle_no_host_error"));
+        } else {
+            std::ignore = handle_error( client_c, req, http::status::bad_gateway
+                                      , http_::response_error_hdr_retrieval_failed
+                                      , (ec == asio::error::netdb_errors::host_not_found)
+                                        ? ("Could not resolve host: " + host)
+                                        : ("Unknown resolver error: " + ec.message())
+                                      , yield.tag("handle_resolve_error"));
+        }
 
-        return handle_error( client_c, req, http::status::bad_gateway
-                           , http_::response_error_hdr_retrieval_failed
-                           , (ec == asio::error::netdb_errors::host_not_found)
-                             ? ("Could not resolve host: " + host)
-                             : ("Unknown resolver error: " + ec.message())
-                           , yield[he_ec].tag("handle_resolve_error"));
+        return std::unexpected(ec);
     }
 
-    assert(!lookup.empty());
+    assert(!lookup->empty());
 
-    yield.log("BEGIN");
+    LOG_DEBUG(yield, " BEGIN");
 
     // Remember to always set `ec` before return in case of error,
     // or the wrong error code will be reported.
     size_t fwd_bytes_c2o = 0, fwd_bytes_o2c = 0;
     auto log_result = defer([&] {
-        yield.log("END; ec=", ec, " fwd_bytes_c2o=", fwd_bytes_c2o, " fwd_bytes_o2c=", fwd_bytes_o2c);
+        LOG_DEBUG(yield, " END; fwd_bytes_c2o=", fwd_bytes_c2o, " fwd_bytes_o2c=", fwd_bytes_o2c);
     });
 
-    auto origin_c = connect_to_host( lookup, exec, default_timeout::tcp_connect()
-                                   , cancel, yield[ec].tag("connect"));
+    auto origin_c = connect_to_host(*lookup, default_timeout::tcp_connect(), yield.tag("connect"));
 
-    if (ec) {
-        sys::error_code he_ec;
-        return handle_error( client_c, req
+    if (!origin_c) {
+        std::ignore = handle_error( client_c, req
                            , http::status::bad_gateway
                            , http_::response_error_hdr_retrieval_failed
-                           , "Failed to connect to origin: " + ec.message()
-                           , yield[he_ec].tag("handle_connect_error"));
-    }
+                           , "Failed to connect to origin: " + origin_c.error().message()
+                           , yield.tag("handle_connect_error"));
 
-    auto disconnect_origin_slot = cancel.connect([&origin_c] {
-        origin_c.close();
-    });
+        return std::unexpected(origin_c.error());
+    }
 
     // Send the client an OK message indicating that the tunnel
     // has been established.
     http::response<http::empty_body> res{http::status::ok, req.version()};
     res.prepare_payload();
 
-    send_response(client_c, res, yield[ec].tag("write_res"));
-
-    if (ec) {
-        yield.log("Failed sending CONNECT response; ec=", ec);
-        return;
+    if (auto r = send_response(client_c, res, yield.tag("write_res")); !r) {
+        LOG_DEBUG(yield, " Failed sending CONNECT response; ec=", r.error().message());
+        return std::unexpected(r.error());
     }
 
     // First queue unused but already read data back into the client connnection.
-    if (client_c_rbuf.size() > 0) client_c.put_back(client_c_rbuf.data(), ec);
-    assert(!ec);
+    {
+        sys::error_code ec;
+        if (client_c_rbuf.size() > 0) client_c.put_back(client_c_rbuf.data(), ec);
+        assert(!ec);
+    }
 
     // Forward the rest of data in both directions.
-    full_duplex(
+    auto ec = full_duplex(
             std::move(client_c),
-            std::move(origin_c),
+            std::move(*origin_c),
             [&] (size_t byte_count) { fwd_bytes_c2o += byte_count; },
             [&] (size_t byte_count) { fwd_bytes_o2c += byte_count; },
-            cancel,
-            yield[ec].tag("full_duplex"));
+            yield.tag("full_duplex"));
 
-    return or_throw(yield, ec);
+    if (ec) return std::unexpected(ec);
+    return {};
 }
 
 //------------------------------------------------------------------------------
 class InjectorCacheControl {
     using Connection = OriginPools::Connection;
 
-    GenericStream connect( const Request& rq
-                         , std::shared_ptr<dns::Resolver> dns_resolver
-                         , Cancel& cancel
-                         , YieldContext yield)
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code>
+    connect(const Request& rq, std::shared_ptr<dns::Resolver> dns_resolver, Async yield)
     {
         try {
             // Parse the URL to tell HTTP/HTTPS, host, port.
             auto url = util::Url::from(rq.target());
 
             if (!url) {
-                yield.log("Unsupported target URL");
-                return or_throw<GenericStream>( yield
-                                              , asio::error::operation_not_supported);
+                LOG_DEBUG(yield, " Unsupported target URL");
+                return std::unexpected(asio::error::operation_not_supported);
             }
 
-            sys::error_code ec;
-
             // Resolve target endpoint and check its validity.
-            TcpLookup lookup = resolve_target( rq
-                                             , g_allow_private_targets
-                                             , std::move(dns_resolver)
-                                             , executor
-                                             , cancel, yield[ec]);
+            auto lookup = resolve_target( rq
+                                        , g_allow_private_targets
+                                        , std::move(dns_resolver)
+                                        , yield);
 
-            if (ec) return or_throw<GenericStream>(yield, ec);
+            if (!lookup) return std::unexpected(lookup.error());
 
-            auto socket = connect_to_host( lookup
-                                         , executor
-                                         , cancel
-                                         , yield[ec]);
+            auto socket = connect_to_host(*lookup, yield);
 
-            if (ec) return or_throw<GenericStream>(yield, ec);
+            if (!socket) return std::unexpected(socket.error());
 
             if (url->scheme == "https") {
-                auto c = ssl::util::client_handshake( std::move(socket)
+                auto c = ssl::util::client_handshake( std::move(*socket)
                                                     , ssl_ctx
                                                     , url->host
-                                                    , Async(yield, cancel));
+                                                    , yield);
 
-                if (!c.has_value()) return or_throw<GenericStream>(yield, c.error());
+                if (!c) return std::unexpected(c.error());
                 return std::move(*c);
             } else {
-                return GenericStream(std::move(socket));
+                return GenericStream(std::move(*socket));
             }
         }
         catch (Async::Cancelled const&) {
-            return or_throw<GenericStream>(yield, asio::error::operation_aborted);
+            return std::unexpected(asio::error::operation_aborted);
         }
     }
 
@@ -360,43 +353,42 @@ public:
     }
 
 private:
-    void inject_fresh( GenericStream& con
-                     , const Request& cache_rq
-                     , bool rq_keep_alive
-                     , shared_ptr<dns::Resolver> dns_resolver
-                     , Cancel& cancel
-                     , YieldContext yield)
+    std::expected<void, sys::error_code>
+    inject_fresh( GenericStream& con
+                , const Request& cache_rq
+                , bool rq_keep_alive
+                , shared_ptr<dns::Resolver> dns_resolver
+                , Async yield)
     {
-        yield.log("BEGIN");
+        LOG_DEBUG(yield, " BEGIN");
 
         // Remember to always set before return in case of error,
         // or the wrong error code will be reported.
-        sys::error_code ec;
         size_t fwd_bytes = 0;
         auto log_result = defer([&] {
-            yield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
+            LOG_DEBUG(yield, " END; fwd_bytes=", fwd_bytes);
         });
 
         Session orig_sess;
-        {
-            Cancel timeout_cancel(cancel);
+        try {
+            Async timeout_yield = yield;
 
             // Start a short timeout for initial fetch.
-            auto fetch_wd = watch_dog(executor, default_timeout::fetch_http(), [&] { timeout_cancel(); });
+            auto fetch_wd = watch_dog(executor, default_timeout::fetch_http(), [&] { timeout_yield.cancel(); });
 
-            auto orig_con = get_connection(cache_rq, dns_resolver, timeout_cancel, yield.tag("connect")[ec]);
-            if ((ec = compute_error_code(ec, cancel, fetch_wd))) {
-                yield.log("Failed to get connection; ec=", ec);
-                return or_throw(yield, ec);
+            auto orig_con = get_connection(cache_rq, dns_resolver, timeout_yield.tag("connect"));
+
+            if (!orig_con) {
+                LOG_DEBUG(yield, " Failed to get connection; ec=", orig_con.error());
+                return std::unexpected(orig_con.error());
             }
 
             // Send HTTP request to origin.
             auto orig_rq = util::to_origin_request(cache_rq);
             orig_rq.keep_alive(true);  // regardless of what client wants
-            util::http_request(orig_con, orig_rq, timeout_cancel, yield[ec].tag("request"));
-            if ((ec = compute_error_code(ec, cancel, fetch_wd))) {
-                yield.log("Failed to send request; ec=", ec);
-                return or_throw(yield, ec);
+            if (auto r = util::http_request(*orig_con, orig_rq, timeout_yield.tag("request")); !r) {
+                LOG_DEBUG(yield, " Failed to send request; ec=", r.error());
+                return std::unexpected(r.error());
             }
 
             Session::reader_uptr sig_reader;
@@ -405,25 +397,28 @@ private:
                 auto insert_id = to_string(genuuid());
                 auto insert_ts = chrono::seconds(time(nullptr)).count();
                 sig_reader = make_unique<cache::SigningReader>
-                    (std::move(orig_con), cache_rq, std::move(insert_id), insert_ts, config.cache_private_key());
+                    (std::move(*orig_con), cache_rq, std::move(insert_id), insert_ts, config.cache_private_key());
             } else {
                 // Responses of unsafe or uncacheable requests should not be cached.
-                yield.log("Not signing response: not a GET or HEAD request");
-                sig_reader = make_unique<http_response::Reader>(std::move(orig_con));
+                LOG_DEBUG(yield, " Not signing response: not a GET or HEAD request");
+                sig_reader = make_unique<http_response::Reader>(std::move(*orig_con));
             }
 
-            orig_sess = compat([&](Async yield) {
-                return Session::create(
+            auto orig_sess_r = Session::create(
                     std::move(sig_reader),
                     cache_rq_method == http::verb::head,
-                    yield.tag("read_hdr")
-                );
-            })(timeout_cancel, yield[ec]);
+                    timeout_yield.tag("read_hdr"));
 
-            if ((ec = compute_error_code(ec, cancel, fetch_wd))) {
-                yield.log("Failed to process response head; ec=", ec);
-                return or_throw(yield, ec);
+            if (!orig_sess_r) {
+                LOG_DEBUG(yield, " Failed to process response head; ec=", orig_sess_r.error());
+                return std::unexpected(orig_sess_r.error());
             }
+
+            orig_sess = std::move(*orig_sess_r);
+        }
+        catch (Async::Cancelled const&) {
+            if (yield.is_cancelled()) throw;
+            return std::unexpected(asio::error::timed_out);
         }
 
         // Start a longer timeout for the main forwarding between origin and user,
@@ -437,38 +432,40 @@ private:
         // Keep client connection if the client wants to.
         orig_sess.response_header().keep_alive(rq_keep_alive);
 
-        yield.log("=== Sending back injector response ===");
-        yield.log(orig_sess.response_header());
+        LOG_DEBUG(yield, " === Sending back injector response ===");
+        LOG_DEBUG(yield, " ", orig_sess.response_header());
 
-        orig_sess.flush_response(cancel
-                                , yield[ec].tag("flush")
-                                , [&con, &fwd_bytes] (auto&& part, auto& cc, auto yy) {
-                sys::error_code ee;
-                part.async_write(con, cc, yy[ee]);
-                return_or_throw_on_error(yy, cc, ee);
+        auto r = orig_sess.flush_response( yield.tag("flush")
+                                         , [&con, &fwd_bytes] (auto&& part, auto y) -> std::expected<void, sys::error_code> {
+                auto r = part.async_write(con, y);
+                if (!r) return std::unexpected(r.error());
                 if (auto b = part.as_body())
                     fwd_bytes += b->size();
                 else if (auto cb = part.as_chunk_body())
                     fwd_bytes += cb->size();
+                return {};
             }
             , default_timeout::activity());
 
-        if ((ec = compute_error_code(ec, cancel, overlong_wd))) {
-            yield.log("Failed to process response; ec=", ec);
-            return or_throw(yield, ec);
+        if (!r) {
+            LOG_DEBUG(yield, " Failed to process response; ec=", r.error());
+            return std::unexpected(r.error());
         } else {
             http_logger.log(druid, cache_rq, orig_sess, fwd_bytes);
         }
 
         keep_connection_if(std::move(orig_sess), rs_keep_alive);
+
+        return {};
     }
 
 public:
-    void fetch( GenericStream& con
-              , Request rq
-              , std::shared_ptr<dns::Resolver> dns_resolver
-              , Cancel cancel
-              , YieldContext yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    fetch( GenericStream& con
+         , Request rq
+         , std::shared_ptr<dns::Resolver> dns_resolver
+         , Async yield)
     {
         sys::error_code ec;
         bool rq_keep_alive = rq.keep_alive();
@@ -481,17 +478,17 @@ public:
         // Sanitize and pop out Ouinet internal HTTP headers.
         auto crq = util::to_cache_request(std::move(rq));
         if (!crq) {
-            yield.log("Invalid request");
-            ec = asio::error::invalid_argument;
+            LOG_DEBUG(yield, " Invalid request");
+            return std::unexpected(asio::error::invalid_argument);
         }
 
         // Cache requests do not contain keep-alive information, hence the explicit argument.
-        if (!ec) inject_fresh(con, *crq, rq_keep_alive, dns_resolver, cancel, yield[ec]);
-        return or_throw(yield, ec);
+        return inject_fresh(con, *crq, rq_keep_alive, dns_resolver, yield);
     }
 
-    Connection get_connection( const Request& rq_, const std::shared_ptr<dns::Resolver>& dns_resolver
-                             , Cancel& cancel, YieldContext yield) {
+    [[nodiscard]]
+    std::expected<Connection, sys::error_code>
+    get_connection(const Request& rq_, const std::shared_ptr<dns::Resolver>& dns_resolver, Async yield) {
         Connection connection;
         sys::error_code ec;
 
@@ -499,11 +496,11 @@ public:
         if (maybe_connection) {
             connection = std::move(*maybe_connection);
         } else {
-            auto stream = connect(rq_, dns_resolver, cancel, yield[ec].tag("connect"));
+            auto stream = connect(rq_, dns_resolver, yield.tag("connect"));
 
-            if (ec) return or_throw<Connection>(yield, ec);
+            if (!stream) return std::unexpected(stream.error());
 
-            connection = origin_pools.wrap(rq_, std::move(stream));
+            connection = origin_pools.wrap(rq_, std::move(*stream));
         }
         return connection;
     }
@@ -537,7 +534,8 @@ bool is_request_to_this(const Request& rq) {
 }
 
 //------------------------------------------------------------------------------
-void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
+std::expected<void, sys::error_code>
+handle_request_to_this(Request& rq, GenericStream& con, Async yield)
 {
     if (rq.target() == "/api/ok") {
         http::response<http::empty_body> rs{http::status::ok, rq.version()};
@@ -547,25 +545,24 @@ void handle_request_to_this(Request& rq, GenericStream& con, YieldContext yield)
         rs.keep_alive(rq.keep_alive());
         rs.prepare_payload();
 
-        util::http_reply(con, rs, yield.tag("write_res"));
-        return;
+        std::ignore = util::http_reply(con, rs, yield.tag("write_res"));
+        return {};
     }
 
-    handle_error( con, rq, http::status::not_found, "Unknown injector request"
-                , yield.tag("handle_req_error"));
+    std::ignore = handle_error( con, rq, http::status::not_found, "Unknown injector request"
+                              , yield.tag("handle_req_error"));
+    return {};
 }
 
 //------------------------------------------------------------------------------
-static
-void serve( InjectorConfig& config
-          , std::shared_ptr<dns::Resolver> dns_resolver
-          , GenericStream con
-          , OriginPools& origin_pools
-          , uuid_generator& genuuid
-          , Cancel cancel
-          , YieldContext yield_)
+static void serve( InjectorConfig& config
+                 , std::shared_ptr<dns::Resolver> dns_resolver
+                 , GenericStream con
+                 , OriginPools& origin_pools
+                 , uuid_generator& genuuid
+                 , Async yield_)
 {
-    auto close_connection_slot = cancel.connect([&con] {
+    auto close_connection_slot = yield_.cancel_slot([&con] {
         con.close();
     });
 
@@ -589,7 +586,7 @@ void serve( InjectorConfig& config
 
     for (;;) {
         sys::error_code ec;
-        YieldContext yield = yield_.tag(util::str('R', next_request_id++));
+        Async yield = yield_.tag(util::str('R', next_request_id++));
 
         Request req;
         {
@@ -601,43 +598,39 @@ void serve( InjectorConfig& config
 
             auto wd = watch_dog(con.get_executor(), rq_read_timeout, [&] { con.close(); });
 
-            http::async_read(con, con_rbuf, req, yield[ec].tag("read_req"));
-            ec = compute_error_code(ec, cancel, wd);
-            if (ec) break;
+            auto r = http::async_read(con, con_rbuf, req, yield.tag("read_req"));
+            if (!r) break;
         }
 
-        yield.log("=== New request ===");
-        yield.log(req.base());
-        auto on_exit = defer([&] { yield.log("Done; ec=", ec); });
+        LOG_DEBUG(yield, " === New request ===");
+        LOG_DEBUG(yield, " ", req.base());
+        auto on_exit = defer([&] { LOG_DEBUG(yield, " Done"); });
 
         bool req_keep_alive = req.keep_alive();
 
         if (is_request_to_this(req)) {
-            handle_request_to_this(req, con, yield[ec].tag("this"));
-            if (ec || !req_keep_alive) break;
+            auto r = handle_request_to_this(req, con, yield.tag("this"));
+            if (!r || !req_keep_alive) break;
             continue;
         }
 
-        bool auth = authenticate(req, con, config.credentials(), yield[ec].tag("auth"));
-
-        if (!auth) {
-            yield.log("Proxy authentication failed");
-            if (ec || !req_keep_alive) break;
+        if (auto r = authenticate(req, con, config.credentials(), yield.tag("auth")); !r) {
+            LOG_DEBUG(yield, " Proxy authentication failed");
+            if (!req_keep_alive) break;
             continue;
         }
-        assert(!ec); ec = {};
 
         if (req.method() == http::verb::connect) {
             if (!config.is_proxy_enabled()) {
-                handle_no_proxy(con, req, yield[ec].tag("proxy/connect/handle_no_proxy"));
-                if (ec || !req_keep_alive) break;
+                auto r = handle_no_proxy(con, req, yield.tag("proxy/connect/handle_no_proxy"));
+                if (!r || !req_keep_alive) break;
                 continue;
             }
-            return handle_connect_request( std::move(con), std::move(con_rbuf)
-                                         , req
-                                         , dns_resolver
-                                         , cancel  // do not propagate error
-                                         , yield[ec].tag("proxy/connect/handle_connect"));
+            std::ignore = handle_connect_request( std::move(con), std::move(con_rbuf)
+                                                , req
+                                                , dns_resolver
+                                                , yield.tag("proxy/connect/handle_connect"));
+            return;
         }
 
         auto version_hdr_i = req.find(http_::protocol_version_hdr);
@@ -647,12 +640,12 @@ void serve( InjectorConfig& config
         bool proxy = (version_hdr_i == req.end());
 
         if (proxy) {
-            auto pyield = yield.tag("proxy/plain");
+            Async pyield = yield.tag("proxy/plain");
 
             // No Ouinet header, behave like a (non-caching) proxy.
             if (!config.is_proxy_enabled()) {
-                handle_no_proxy(con, req, pyield[ec].tag("handle_no_proxy"));
-                if (ec || !req_keep_alive) break;
+                auto r = handle_no_proxy(con, req, pyield.tag("handle_no_proxy"));
+                if (!r || !req_keep_alive) break;
                 continue;
             }
 
@@ -660,67 +653,76 @@ void serve( InjectorConfig& config
             // we are perfectly able to handle them (and do verification locally),
             // but the client should be using a CONNECT request instead!
             if (!util::req_ensure_host(req)) {  // origin pools require host
-                handle_error( con, req
-                            , http::status::bad_request
-                            , "Invalid or missing host in request"
-                            , pyield[ec].tag("handle_no_host_error"));
-                if (ec || !req_keep_alive) break;
+                auto r = handle_error( con, req
+                                     , http::status::bad_request
+                                     , "Invalid or missing host in request"
+                                     , pyield.tag("handle_no_host_error"));
+                if (!r || !req_keep_alive) break;
                 continue;
             }
 
-            pyield.log("BEGIN");
+            LOG_DEBUG(pyield, " BEGIN");
 
             // Remember to always set `ec` before return in case of error,
             // or the wrong error code will be reported.
             size_t fwd_bytes = 0;
             auto log_result = defer([&] {
-                pyield.log("END; ec=", ec, " fwd_bytes=", fwd_bytes);
+                LOG_DEBUG(pyield, " END; fwd_bytes=", fwd_bytes);
             });
 
-            auto orig_con = cc.get_connection(req, dns_resolver, cancel, pyield[ec].tag("get_connection"));
+            sys::error_code ec;
+            auto orig_con = cc.get_connection(req, dns_resolver, pyield.tag("get_connection"));
+            if (!orig_con) ec = orig_con.error();
             if (!ec) {
                 auto orig_req = util::to_origin_request(req);
                 orig_req.keep_alive(true);  // regardless of what client wants
-                util::http_request(orig_con, orig_req, cancel, pyield[ec].tag("send_request"));
+                auto r = util::http_request(*orig_con, orig_req, pyield.tag("send_request"));
+                if (!r) ec = r.error();
             }
             bool res_keep_alive = false;
             bool client_was_written_to = false;
             if (!ec) {
                 using OrigReader = http_response::Reader;
-                Session::reader_uptr rrp = std::make_unique<OrigReader>(std::move(orig_con));
-                auto orig_sess = compat([&](Async yield) {
-                    return Session::create(
-                        std::move(rrp),
+                auto orig_sess = Session::create(
+                        std::make_unique<OrigReader>(std::move(*orig_con)),
                         req.method() == http::verb::head,
                         yield.tag("read_hdr")
                     );
-                })(cancel, pyield[ec]);
+
+                if (!orig_sess) ec = orig_sess.error();
+
+                Session::reader_uptr rrp;
+
                 if (!ec) {
-                    auto& inh = orig_sess.response_header();
+                    auto& inh = orig_sess->response_header();
                     // Keep proxy connection if the proxy wants to.
                     res_keep_alive = inh.keep_alive();
                     // Keep client connection if the client wants to.
                     inh.keep_alive(req_keep_alive);
                     // Prevent others from inserting ouinet specific header fields.
                     util::remove_ouinet_fields_ref(inh);
-                    pyield.log("=== Sending back proxy response ===");
-                    pyield.log(inh);
+                    LOG_DEBUG(pyield, " === Sending back proxy response ===");
+                    LOG_DEBUG(pyield, " ", inh);
 
-                    orig_sess.flush_response(cancel
-                                            , pyield[ec].tag("flush")
-                                            , [&] (auto&& part, auto& cc, auto yy) {
-                            sys::error_code ee;
-                            part.async_write(con, cc, yy[ee]);
+                    auto r = orig_sess->flush_response(pyield.tag("flush"),
+                                [&] (auto&& part, auto yy) -> std::expected<void, sys::error_code> {
+                            auto r = part.async_write(con, yy);
                             client_was_written_to = true;  // even with error (possible partial write)
-                            return_or_throw_on_error(yy, cc, ee);
+                            if (!r) return std::unexpected(r.error());
                             if (auto b = part.as_body())
                                 fwd_bytes += b->size();
                             else if (auto cb = part.as_chunk_body())
                                 fwd_bytes += cb->size();
+                            return {};
                         }
                         , default_timeout::activity());
+
+                    if (r) {
+                        rrp = orig_sess->release_reader();
+                    } else {
+                        ec = r.error();
+                    }
                 }
-                rrp = orig_sess.release_reader();
                 if (rrp)
                     orig_con = ((OrigReader*)(rrp.get()))->release_stream();  // may be reused with keep-alive
                 else
@@ -728,18 +730,17 @@ void serve( InjectorConfig& config
             }
             if (ec) {
                 if (!client_was_written_to) {
-                    sys::error_code he_ec;
-                    handle_error( con, req
+                    std::ignore = handle_error( con, req
                                 , http::status::bad_gateway
                                 , http_::response_error_hdr_retrieval_failed
                                 , "Failed to retrieve content from origin: " + ec.message()
-                                , pyield[he_ec].tag("handle_error"));
+                                , pyield.tag("handle_error"));
                 }
-                if (ec || !req_keep_alive) break;
+                if (!req_keep_alive) break;
                 continue;
             }
 
-            cc.keep_connection_if(std::move(orig_con), res_keep_alive);
+            cc.keep_connection_if(std::move(*orig_con), res_keep_alive);
         }
         else {
             // Ouinet header found, behave like a Ouinet injector.
@@ -747,18 +748,21 @@ void serve( InjectorConfig& config
                                                              , OUINET_INJECTOR_SERVER_STRING);
 
             if (opt_err_res) {
-                send_response( con, *opt_err_res
-                             , yield[ec].tag("inject/write_proto_version_error"));
+                auto r = send_response( con, *opt_err_res
+                             , yield.tag("inject/write_proto_version_error"));
+                if (!r) ec = r.error();
             } else if (is_restricted_target(req.target())) {
-                handle_error( con, req, http::status::forbidden
+                auto r = handle_error( con, req, http::status::forbidden
                             , http_::response_error_hdr_target_not_allowed
                             , "Target not allowed"
-                            , yield[ec].tag("inject/handle_restricted"));
+                            , yield.tag("inject/handle_restricted"));
+                if (!r) ec = r.error();
             }
             else {
-                cc.fetch( con, std::move(req)
+                auto r = cc.fetch( con, std::move(req)
                         , dns_resolver
-                        , cancel, yield[ec].tag("inject/fetch"));
+                        , yield.tag("inject/fetch"));
+                if (!r) ec = r.error();
             }
         }
 
@@ -798,7 +802,6 @@ void listen( InjectorConfig& config
 
         if (!connection.has_value()) {
             async_sleep(std::chrono::milliseconds(100), yield);
-            ec = {};
             continue;
         }
 
@@ -813,22 +816,12 @@ void listen( InjectorConfig& config
             connection_id,
             lock = shutdown_connections.lock()
         ] (Async yield) mutable {
-            // TODO: Make `serve` use `Async`.
-            sys::error_code leaked_ec;
-            auto y = YieldContext(yield.asio_yield(), yield.log_path().tag(util::str('C', connection_id)));
             serve( config
                  , dns_resolver
                  , std::move(connection)
                  , origin_pools
                  , genuuid
-                 , yield.get_cancel()
-                 , y);
-            if (leaked_ec) {
-                // The convention is that `serve` does not throw errors,
-                // so complain otherwise but avoid crashing in production.
-                LOG_ERROR(y, " Connection serve leaked an error; ec=", leaked_ec);
-                assert(0);
-            }
+                 , yield.tag(util::str('C', connection_id)));
         });
     }
 }

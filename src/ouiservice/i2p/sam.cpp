@@ -100,8 +100,8 @@ std::expected<Sam, Error::Connect> Sam::connect(asio::ip::tcp::endpoint ep, Asyn
 
     auto slot = yield.cancel_slot([&] { if (socket.is_open()) socket.close(); });
 
-    auto ec = socket.async_connect(ep, yield);
-    if (ec) return error(Error::IoConnect { ec });
+    auto cr = socket.async_connect(ep, yield);
+    if (!cr) return error(Error::IoConnect { cr.error() });
 
     Sam sam(std::move(socket));
 

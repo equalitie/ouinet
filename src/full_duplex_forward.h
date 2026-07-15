@@ -9,7 +9,6 @@
 #include "util/wait_condition.h"
 #include "util/watch_dog.h"
 #include "util/async.h"
-#include "util/yield.h"
 
 namespace ouinet {
 
@@ -104,23 +103,5 @@ full_duplex( Stream1 a
     return ec;
 }
 
-template<class Stream1, class Stream2, class OnA2B, class OnB2A>
-void
-full_duplex( Stream1 a
-           , Stream2 b
-           , OnA2B on_a2b
-           , OnB2A on_b2a
-           , Cancel cancel, YieldContext yield)
-{
-    auto ec =
-        full_duplex(
-            std::move(a),
-            std::move(b),
-            std::move(on_a2b),
-            std::move(on_b2a),
-            Async(yield, cancel));
-
-    return or_throw(yield, ec);
-}
 
 } // ouinet namespace

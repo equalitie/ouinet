@@ -39,14 +39,12 @@ using util::AsioExecutor;
 
 // TODO: This is exposed here in this header only because it's also used in tests.
 OUINET_COMMON_API
-asio::ip::udp::endpoint resolve(
-    const AsioExecutor& exec,
+std::expected<asio::ip::udp::endpoint, sys::error_code> resolve(
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
     const std::shared_ptr<dns::Resolver>& dns_resolver,
-    Cancel& cancel_signal,
-    asio::yield_context yield);
+    Async);
 
 class OUINET_COMMON_API MainlineDht : public DhtBase {
     public:

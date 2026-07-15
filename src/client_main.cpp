@@ -19,7 +19,8 @@ int main(int argc, const char* argv[])
 
     if (cfg.is_help()) {
         cout << "Usage: client [OPTION...]" << endl;
-        cout << cfg.description() << endl;
+        cfg.describe(cout);
+        cout << endl;
         return 0;
     }
 

@@ -6,9 +6,11 @@
 #include "resource_id.h"
 #include "../util/executor.h"
 #include "../namespaces.h"
+#include <expected>
 
 namespace ouinet {
 
+class Async;
 class Cancel;
 using ouinet::util::AsioExecutor;
 
@@ -26,14 +28,17 @@ public:
 };
 
 // This is considered read-only and unsafe (so extra checks are performed).
-std::unique_ptr<BaseDhtGroups>
-load_static_dht_groups(fs::path root_dir, AsioExecutor, Cancel&, asio::yield_context);
+[[nodiscard]]
+std::expected<std::unique_ptr<BaseDhtGroups>, sys::error_code>
+load_static_dht_groups(fs::path root_dir, Async);
 
 class DhtGroups : public BaseDhtGroups {
 public:
     virtual ~DhtGroups() = default;
 
-    virtual void add(const GroupName&, const cache::ResourceId&, Cancel&, asio::yield_context) = 0;
+    [[nodiscard]]
+    virtual std::expected<void, sys::error_code>
+    add(const GroupName&, const cache::ResourceId&, Async) = 0;
 
     // Remove item from every group it is in. Return groups that became empty
     // as a result.
@@ -52,15 +57,16 @@ public:
 };
 
 // This is considered read-write and safe.
-std::unique_ptr<DhtGroups>
-load_dht_groups(fs::path root_dir, AsioExecutor, Cancel&, asio::yield_context);
+[[nodiscard]]
+std::expected<std::unique_ptr<DhtGroups>, sys::error_code>
+load_dht_groups(fs::path root_dir, Async);
 
 // This is considered read-write and safe.
 // When iterating over groups, fallback groups are merged into read-write groups.
 // Read-write operations do not affect fallback groups.
 // Removal of items does not return groups which remain in fallback groups.
-std::unique_ptr<DhtGroups>
-load_backed_dht_groups( fs::path root_dir, std::unique_ptr<BaseDhtGroups> fallback_groups
-                      , AsioExecutor, Cancel&, asio::yield_context);
+[[nodiscard]]
+std::expected<std::unique_ptr<DhtGroups>, sys::error_code>
+load_backed_dht_groups(fs::path root_dir, std::unique_ptr<BaseDhtGroups> fallback_groups, Async);
 
 } // namespace ouinet

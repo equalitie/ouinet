@@ -20,17 +20,23 @@ set(BOOST_COMPONENTS
     iostreams
     nowide
     program_options
-    process
     regex
     system
     unit_test_framework
     url
 )
 
+if (NOT IOS)
+    # IOS doesn't allow spawning processes
+    list(APPEND BOOST_COMPONENTS process)
+endif()
+
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
 set(OUINET_BOOST_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost")
 set(OUINET_BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
+set(OUINET_BOOST_CXXFLAGS -std=c++23 -DBOOST_ASIO_SEPARATE_COMPILATION)
+set(OUINET_BOOST_LINKFLAGS)
 
 set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
 set(BOOST_BUILD_SHARED ON)
@@ -105,7 +111,6 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     # iOS libraries must to be built as static libs that are linked into a single dynamic lib
     set(BOOST_BUILD_SHARED OFF)
     set(OUINET_BOOST_CONFIGURE_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
-    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++23")
     string(TOLOWER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
     set(BOOST_ENVIRONMENT )
     if (${PLATFORM} STREQUAL "OS64")
@@ -136,8 +141,6 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
     set(BOOST_ARCH_CONFIGURATION
         ${BOOST_ARCH_CONFIGURATION}
-        --stagedir=iphone-build/stage
-        cxxflags=${BOOST_CXXFLAGS}
         binary-format=mach-o
         define=_LITTLE_ENDIAN
         target-os=iphone
@@ -149,7 +152,8 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
 else()
     set(BOOST_ENVIRONMENT )
-    set(BOOST_ARCH_CONFIGURATION "cxxflags=-fPIC -fvisibility=default")
+    list(APPEND OUINET_BOOST_CXXFLAGS -fPIC)
+    list(APPEND OUINET_BOOST_CXXFLAGS -fvisibility=default)
 endif()
 
 set(BUILT_BOOST_VERSION ${BOOST_VERSION})
@@ -184,9 +188,13 @@ endforeach()
 
 execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
 
+string(REPLACE ";" " " OUINET_BOOST_CXXFLAGS_STR "${OUINET_BOOST_CXXFLAGS}")
+
 externalproject_add(built_boost
     URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=${BOOST_VERSION_HASH}
+    # Download here so that deleting `${CMAKE_BINARY_DIR}/boost` doesn't require re-download.
+    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}
     PREFIX ${OUINET_BOOST_PREFIX}
     BUILD_IN_SOURCE 1
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
@@ -206,7 +214,7 @@ externalproject_add(built_boost
             ${BOOST_ARCH_CONFIGURATION}
             # Possibly others, but in partucular `boost_process` includes Asio
             # which then causes it to have different error categories
-            cxxflags="-DBOOST_ASIO_SEPARATE_COMPILATION"
+            cxxflags="\"${OUINET_BOOST_CXXFLAGS_STR}\""
             stage
     BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
     INSTALL_COMMAND ""

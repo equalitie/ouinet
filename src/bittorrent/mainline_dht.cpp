@@ -281,25 +281,20 @@ read_stored_contacts(const fs::path& path, Async yield)
 {
     std::set<NodeContact> ret;
 
-    auto file = compat([&](sys::error_code& ec) {
-        return util::file_io::open_readonly(yield.get_executor(), path, ec);
-    })();
+    auto file = util::file_io::open_readonly(yield.get_executor(), path);
     if (!file) {
         return std::unexpected(file.error());
     }
 
-    auto filesize = compat([&](sys::error_code& ec) {
-        return util::file_io::file_size(*file, ec);
-    })();
+    auto filesize = util::file_io::file_size(*file);
     if (!filesize) {
         return std::unexpected(filesize.error());
     }
 
     std::string data(*filesize, '\0');
 
-    auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-        util::file_io::read(*file, asio::buffer(data), cancel, yield);
-    })(yield);
+    auto result = util::file_io::read(*file, asio::buffer(data), yield);
+
     if (!result) {
         return std::unexpected(result.error());
     }
@@ -342,22 +337,17 @@ write_stored_contacts( std::set<NodeContact> contacts
         return std::unexpected(old_contacts.error());
     }
 
-    auto result0 = compat([&](sys::error_code& ec) {
-        util::file_io::check_or_create_directory(path.parent_path(), ec);
-    })();
+    auto result0 = util::file_io::check_or_create_directory(path.parent_path());
     if (!result0) {
         LOG_ERROR(yield, " Failed to store contacts: ", result0.error());
         return std::unexpected(result0.error());
     }
 
-    auto atomic_file = compat([&](sys::error_code& ec) {
-        return util::atomic_file::make(yield.get_executor(), path, ec);
-    })();
+    auto atomic_file = util::atomic_file::make(yield.get_executor(), path);
     if (!atomic_file) {
         LOG_ERROR(yield, " Failed to store contacts: ", atomic_file.error());
         return std::unexpected(atomic_file.error());
     }
-    assert(*atomic_file);
 
     string data;
 
@@ -380,21 +370,19 @@ write_stored_contacts( std::set<NodeContact> contacts
         data += util::str(c.id, ",", c.endpoint);
     }
 
-    auto result1 = compat([&](Cancel cancel, asio::yield_context yield) {
-        return util::file_io::write(
-            (**atomic_file).lowest_layer(),
+    auto result1 = util::file_io::write(
+            atomic_file->lowest_layer(),
             asio::buffer(data),
-            cancel,
             yield
         );
-    })(yield);
+
     if (!result1) {
         LOG_ERROR(yield, " Failed to store contacts: ", result1.error());
         return std::unexpected(result1.error());
     }
 
     auto result2 = compat([&](sys::error_code& ec) {
-        (**atomic_file).commit(ec);
+        atomic_file->commit(ec);
     })();
     if (!result2) {
         LOG_ERROR(yield, " Failed to store contacts: ", result2.error());
@@ -1613,36 +1601,29 @@ std::expected<void, sys::error_code> DhtNode::handle_query(udp::endpoint sender,
     }
 }
 
-asio::ip::udp::endpoint resolve(
-    const AsioExecutor& exec,
+std::expected<asio::ip::udp::endpoint, sys::error_code>
+resolve(
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
     const std::shared_ptr<dns::Resolver>& dns_resolver,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
-
     using UdpLookup = udp::resolver::results_type;
     using UdpEndpoint = typename UdpLookup::endpoint_type;
     using Answers = std::vector<asio::ip::address>;
     UdpLookup results;
 
-    auto answers = dns_resolver->resolve(addr, yield[ec]);
-    if (!ec) {
-        string_view port_strv = port;
-        auto port_int = parse::number<uint16_t>(port_strv).value();
-        util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
-        results = UdpLookup::create(eps.begin(), eps.end(),
-                                    addr, port);
+    auto answers = dns_resolver->resolve(addr, yield);
+
+    if (!answers) {
+        return std::unexpected(answers.error());
     }
 
-    if (cancel_signal) ec = asio::error::operation_aborted;
-
-    if (ec) {
-        return or_throw<udp::endpoint>(yield, ec);
-    }
+    string_view port_strv = port;
+    auto port_int = parse::number<uint16_t>(port_strv).value();
+    util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{std::move(*answers), port_int};
+    results = UdpLookup::create(eps.begin(), eps.end(), addr, port);
 
     for (const auto& result : results) {
         auto ep = result.endpoint();
@@ -1654,7 +1635,7 @@ asio::ip::udp::endpoint resolve(
         }
     }
 
-    return or_throw<udp::endpoint>(yield, asio::error::not_found);
+    return std::unexpected(sys::error_code(asio::error::not_found));
 }
 
 std::expected<DhtNode::BootstrapResult, sys::error_code>
@@ -1673,24 +1654,20 @@ DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
             [&] (const std::string& addr) {
                 string_view hp(addr), host, port;
                 std::tie(host, port) = util::split_ep(hp);
-                auto ep = compat([&](Cancel cancel, asio::yield_context yield) {
-                    return resolve(
-                        _exec,
+                auto ep = resolve(
                         _multiplexer->is_v4() ? udp::v4() : udp::v6(),
                         std::string(host),
                         port.empty() ? util::str(bootstrap::default_port) : std::string(port),
                         _dns_resolver,
-                        cancel,
                         yield
                     );
-                })(yield);
 
                 if (!ep) {
                     LOG_DEBUG(yield, "Unable to resolve bootstrap server, giving up: "
                                    , addr, "; error=", ep.error());
                 }
 
-                return ep;
+                return *ep;
             }
         );
 

@@ -8,6 +8,8 @@
 #include "namespaces.h"
 #include "session.h"
 
+#include <fstream>
+
 namespace ouinet {
 
 namespace http = ouinet::http;

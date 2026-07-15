@@ -23,10 +23,16 @@ template<
 >
 auto action(Token token, Args&&... args)
 {
-    auto exec = token.get_executor();
+    using ExecType = decltype(token.get_executor());
+
     return asio::async_initiate<Token, void(Args...)>(
-        [ exec, ...args = std::forward<Args>(args)  ] (auto handler) mutable {
-            asio::post(exec,
+        [ ...args = std::forward<Args>(args)  ] (auto handler) mutable {
+            static_assert(std::is_same_v<
+                asio::associated_executor_t<decltype(handler)>,
+                ExecType
+            >);
+
+            asio::post(asio::get_associated_executor(handler),
                 [ handler = std::move(handler),
                   ...args = std::forward<Args>(args) ] () mutable
                 {
@@ -65,7 +71,7 @@ BOOST_AUTO_TEST_CASE(static_return_types) {
 
     // Static test expected return types from calling `action` with different arguments
     check_same<ActionResult<Async>, void>();
-    check_same<ActionResult<Async, sys::error_code>, sys::error_code>();
+    check_same<ActionResult<Async, sys::error_code>, std::expected<void, sys::error_code>>();
     check_same<ActionResult<Async, sys::error_code, int>, std::expected<int, sys::error_code>>();
 
     // Prevent warnings about test not running any checks
@@ -74,8 +80,7 @@ BOOST_AUTO_TEST_CASE(static_return_types) {
 
 BOOST_AUTO_TEST_CASE(return_values) {
     async_test([] (Async yield) {
-            sys::error_code ec = action(yield, sys::error_code{});
-            BOOST_REQUIRE_MESSAGE(!ec, ec.message());
+            unwrap(action(yield, sys::error_code{}));
         });
 
     async_test([] (Async yield) {
@@ -89,14 +94,16 @@ BOOST_AUTO_TEST_CASE(return_values) {
 
     async_test([] (Async yield) {
             auto exp_ec = asio::error::operation_aborted;
-            sys::error_code ec = action(yield, exp_ec);
-            BOOST_REQUIRE_MESSAGE(ec = exp_ec, ec.message());
+            std::expected<void, sys::error_code> ex = action(yield, exp_ec);
+            BOOST_REQUIRE(!ex.has_value());
+            BOOST_REQUIRE_MESSAGE(ex.error() == exp_ec, ex.error().message());
         });
 
     async_test([] (Async yield) {
             auto exp_ec = asio::error::operation_aborted;
-            sys::error_code ec = action(yield, exp_ec);
-            BOOST_REQUIRE_MESSAGE(ec = exp_ec, ec.message());
+            std::expected<void, sys::error_code> ex = action(yield, exp_ec);
+            BOOST_REQUIRE(!ex.has_value());
+            BOOST_REQUIRE_MESSAGE(ex.error() == exp_ec, ex.error().message());
         });
 }
 
@@ -104,8 +111,7 @@ BOOST_AUTO_TEST_CASE(asio_timer) {
     async_test([] (Async yield) {
             asio::steady_timer timer(yield.get_executor());
             timer.expires_after(10ms);
-            sys::error_code ec = timer.async_wait(yield);
-            BOOST_REQUIRE_MESSAGE(!ec, ec.message());
+            unwrap(timer.async_wait(yield));
         });
 }
 

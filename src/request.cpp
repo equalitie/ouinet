@@ -3,6 +3,7 @@
 #include "authenticate.h"
 #include "cache/cache_entry.h"
 #include "cache/resource_key.h"
+#include "logger.h"
 
 namespace ouinet {
 

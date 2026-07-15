@@ -5,7 +5,6 @@
 #include "async.h"
 #include "cancel.h"
 #include "intrusive_list.h"
-#include "yield.h"
 #include <boost/asio/any_completion_handler.hpp>
 #include <type_traits>
 

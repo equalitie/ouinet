@@ -2,71 +2,65 @@
 
 #include "http_util.h"
 #include "or_throw.h"
-#include "util/timeout.h"
+#include "util/async.h"
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/spawn.hpp>
 
+namespace ouinet {
+
 using namespace std;
-using namespace ouinet;
 using tcp = asio::ip::tcp;
 
 using TcpLookup = asio::ip::tcp::resolver::results_type;
 
-
-tcp::socket
-ouinet::connect_to_host( const AsioExecutor& ex
-                       , const string& host
-                       , const uint16_t port
-                       , std::shared_ptr<dns::Resolver> dns_resolver
-                       , Cancel& cancel_signal
-                       , asio::yield_context yield)
+std::expected<tcp::socket, sys::error_code>
+connect_to_host( const string& host
+               , const uint16_t port
+               , std::shared_ptr<dns::Resolver> dns_resolver
+               , Async yield)
 {
-    sys::error_code ec;
+    auto const lookup = dns_resolver->resolve(host, port, yield);
 
-    auto const lookup = dns_resolver->resolve( host, port
-                                             , cancel_signal
-                                             , YieldContext(yield[ec]));
-    return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
+    if (!lookup) return std::unexpected(lookup.error());
 
-    return connect_to_host(lookup, ex, cancel_signal, yield);
+    return connect_to_host(std::move(*lookup), yield);
 }
 
-tcp::socket
-ouinet::connect_to_host( const TcpLookup& lookup
-                       , const AsioExecutor& ex
-                       , Cancel& cancel_signal
-                       , asio::yield_context yield)
+std::expected<tcp::socket, sys::error_code>
+connect_to_host(const TcpLookup& lookup, Async yield)
 {
-    sys::error_code ec;
-    tcp::socket socket(ex);
+    tcp::socket socket(yield.get_executor());
 
-    auto disconnect_slot = cancel_signal.connect([&socket] {
+    auto disconnect_slot = yield.cancel_slot([&socket] {
         sys::error_code ec;
         socket.shutdown(tcp::socket::shutdown_both, ec);
         socket.close(ec);
     });
 
     // Make the connection on the IP address we get from a lookup
-    asio::async_connect(socket, lookup, yield[ec]);
-    return_or_throw_on_error(yield, cancel_signal, ec, tcp::socket(ex));
+    if (auto r = asio::async_connect(socket, lookup, yield); !r) {
+        return std::unexpected(r.error());
+    }
 
     return socket;
 }
 
-tcp::socket
-ouinet::connect_to_host( const TcpLookup& lookup
-                       , const AsioExecutor& ex
-                       , std::chrono::steady_clock::duration timeout
-                       , Cancel& cancel_signal
-                       , asio::yield_context yield)
+std::expected<tcp::socket, sys::error_code>
+connect_to_host( const TcpLookup& lookup
+               , std::chrono::steady_clock::duration timeout
+               , Async yield)
 {
-    return util::with_timeout
-        ( ex
-        , cancel_signal
-        , timeout
-        , [&] (auto& signal, auto yield) {
-              return connect_to_host(lookup, ex, signal, yield);
-          }
-        , yield);
+    auto y = yield;
+    auto wd = watch_dog(y.get_executor(), timeout, [&] { y.cancel(); });
+
+    try {
+        return connect_to_host(lookup, y);
+    }
+    catch (Async::Cancelled const&) {
+        if (yield.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
+    }
 }
+
+} // namespace

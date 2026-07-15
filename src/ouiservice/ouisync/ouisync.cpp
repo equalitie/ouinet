@@ -34,6 +34,12 @@ template<class V> V unwrap(std::expected<V, sys::error_code> exp) {
     return std::move(*exp);
 }
 
+void unwrap(std::expected<void, sys::error_code> exp) {
+    if (!exp.has_value()) {
+        throw sys::system_error(exp.error());
+    }
+}
+
 void unwrap(sys::error_code ec) {
     if (ec) throw sys::system_error(ec);
 }
@@ -168,20 +174,20 @@ sys::error_code Ouisync::start(Async yield)
         unwrap(session.bind_network({"quic/0.0.0.0:0"}, yield));
         unwrap(session.set_store_dirs({_store_dir.string()}, yield));
 
-        auto mount_ec = session.set_mount_root(_mount_dir.string(), yield);
+        auto mount_r = session.set_mount_root(_mount_dir.string(), yield);
 
         unwrap(session.set_local_discovery_enabled(true, yield));
 
         auto page_index = open_or_create_repo(session, "page_index", ShareToken{_page_index_token}, yield);
 
-        set_repo_defaults(page_index, !mount_ec, yield);
+        set_repo_defaults(page_index, mount_r.has_value(), yield);
 
         _impl = std::make_shared<Impl>(Impl {
             std::move(service),
             std::move(session),
             std::move(page_index),
             {},
-            !mount_ec
+            mount_r.has_value()
         });
 
         return sys::error_code();
@@ -227,13 +233,9 @@ Ouisync::load(const CacheOuisyncRetrieveRequest& rq, Async yield) {
 
         auto head_file = open_stream(*repo, (path / cache::head_fname).string(), yield);
 
-        auto head = unwrap(yield.call_deprecated([&] (auto, auto cancel, auto yield) {
-            return Reader::read_signed_head(head_file, cancel, yield);
-        }));
+        auto head = unwrap(Reader::read_signed_head(head_file, yield));
 
-        unwrap(yield.call_deprecated([&] (auto, auto, auto yield) {
-            head_file.close(yield);
-        }));
+        unwrap(head_file.close(yield));
 
         std::optional<FileStream> sigs_file, body_file;
 
@@ -285,11 +287,14 @@ void Ouisync::stop() {
 } // namespace ouinet::ouisync_service
 
 namespace ouinet::util::file_io {
-    size_t file_size(ouisync::FileStream& file, sys::error_code& ec) {
+    std::expected<size_t, sys::error_code>
+    file_size(ouisync::FileStream& file) {
         return file.size();
     }
 
-    void fseek(ouisync::FileStream& file, size_t pos, sys::error_code& ec) {
+    std::expected<void, sys::error_code>
+    fseek(ouisync::FileStream& file, size_t pos) {
         file.seek(pos);
+        return {};
     }
 } // namespace util::file_io

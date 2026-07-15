@@ -71,8 +71,8 @@ sys::error_code OuiServiceServer::start_listen(Async yield)
 
     lock.reset();
 
-    if (auto ec = wc.wait(yield); ec) {
-        return ec;
+    if (auto r = wc.wait(yield); !r) {
+        return r.error();
     }
 
     return success ? sys::error_code() : asio::error::network_down;
@@ -92,8 +92,8 @@ std::expected<GenericStream, sys::error_code>
 OuiServiceServer::accept(Async yield)
 {
     if (_connection_queue.empty()) {
-        if (auto ec = _connection_available.wait(yield); ec) {
-            return std::unexpected(ec);
+        if (auto r = _connection_available.wait(yield); !r) {
+            return std::unexpected(r.error());
         }
     }
 
@@ -185,8 +185,8 @@ OuiServiceClient::connect(Async yield)
     }
 
     if (!_started) {
-        if (auto ec = _started_condition.wait(yield); ec) {
-            return std::unexpected(ec);
+        if (auto r = _started_condition.wait(yield); !r) {
+            return std::unexpected(r.error());
         }
         if (!_started) {
             return std::unexpected(err::operation_aborted);

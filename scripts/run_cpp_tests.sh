@@ -6,6 +6,7 @@ BUILD_DIR=
 SRC_DIR=$(dirname $(dirname $0))
 TEST_SPECS=()
 EXCLUDED_TESTS=()
+WITH_GDB=y # TODO: Only works with Linux binaries at the moment
 
 function error {(
     echo "$@"
@@ -24,6 +25,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --exclude-test)
             EXCLUDED_TESTS+=($2); shift
+            ;;
+        --without-gdb)
+            # Useful e.g. when ASAN is enabled
+            WITH_GDB=n
             ;;
         *) error "Unknown option $1" ;;
     esac
@@ -92,7 +97,11 @@ function run_linux_test {(
         # it doesn't need to use SIGINT?
         test_cache_announcer
     )
-    if [ ! $(which gdb) ] || is_in $test ${no_gdb_tests[@]}; then
+
+    # TODO: Enable detection of odr violation once the tests don't violate it
+    export ASAN_OPTIONS=halt_on_error=0:detect_odr_violation=0
+
+    if [ "$WITH_GDB" == n ] || [ ! $(which gdb) ] || is_in $test ${no_gdb_tests[@]} ; then
         $test "$@"
     else
         run_test_in_gdb $test "$@"

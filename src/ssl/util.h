@@ -79,9 +79,9 @@ client_handshake( Stream&& con
     if (ec) return std::unexpected(ec);
 
     auto slot = yield.cancel_slot([&] { ssl_sock->next_layer().close(); });
-    ec = ssl_sock->async_handshake(ssl::stream_base::client, yield);
+    auto r = ssl_sock->async_handshake(ssl::stream_base::client, yield);
 
-    if (ec) return std::unexpected(ec);
+    if (!r) return std::unexpected(r.error());
 
     return GenericStream(std::move(ssl_sock));
 }

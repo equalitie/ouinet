@@ -94,6 +94,14 @@ include(OuinetDependencies)
 include(BuildVersion)
 
 ###########################################################
+
+if(POLICY CMP0079)
+    # Allows adding dependencies to libraries from outside of the cmake where
+    # the library is defined.
+    # https://stackoverflow.com/a/75246115/273348
+    cmake_policy(SET CMP0079 NEW)
+endif()
+
 option(ASIO_UTP_WITH_TESTS             "" OFF)
 option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
@@ -175,7 +183,6 @@ file(GLOB ouinet_common_sources
     "./src/util/temp_file.cpp"
     "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
-    "./src/util/yield.cpp"
     "./src/cache/http_sign.cpp"
     "./src/cache/signed_head.cpp"
     "./src/ssl/ca_certificate.cpp"
@@ -305,34 +312,34 @@ else()
 endif()
 
 ################################################################################
-file(GLOB injector_sources
-    "./src/injector.cpp"
-    "./src/injector_config.cpp"
-    "./src/ouiservice/bep5/server.cpp"
-    "./src/http_logger.cpp"
-)
-
-add_library(ouinet_injector SHARED ${injector_sources})
-ouinet_setup(TARGET ouinet_injector
-    LINK
-        ouinet_rs
-        ouinet_common
-        ouinet_i2p
-        ouinet_asio
-        asio_utp
-        lib_json
-        Boost::nowide
-        Boost::url
-        Boost::process
-        Boost::iostreams
-        Boost::program_options
-        Boost::filesystem
-    DEFS
-        OUINET_API_INJECTOR_EXPORT
-        OUINET_API_I2P_LOCAL
-)
-
 if (NOT ANDROID AND NOT IOS)
+    file(GLOB injector_sources
+        "./src/injector.cpp"
+        "./src/injector_config.cpp"
+        "./src/ouiservice/bep5/server.cpp"
+        "./src/http_logger.cpp"
+    )
+    
+    add_library(ouinet_injector SHARED ${injector_sources})
+    ouinet_setup(TARGET ouinet_injector
+        LINK
+            ouinet_rs
+            ouinet_common
+            ouinet_i2p
+            ouinet_asio
+            asio_utp
+            lib_json
+            Boost::nowide
+            Boost::url
+            Boost::process
+            Boost::iostreams
+            Boost::program_options
+            Boost::filesystem
+        DEFS
+            OUINET_API_INJECTOR_EXPORT
+            OUINET_API_I2P_LOCAL
+    )
+
     add_executable(injector "./src/injector_main.cpp")
     target_link_libraries(injector ouinet_injector)
 endif()
@@ -362,7 +369,7 @@ endif()
 
 ################################################################################
 # Tests
-if (NOT ANDROID AND WITH_TEST)
+if (NOT ANDROID AND NOT IOS AND WITH_TEST)
     add_subdirectory(test)
 endif()
 ################################################################################

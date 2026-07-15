@@ -48,12 +48,10 @@ void TcpOuiServiceServer::stop_listen()
 
 std::expected<GenericStream, sys::error_code> TcpOuiServiceServer::accept(Async yield)
 {
-    sys::error_code ec;
-
     asio::ip::tcp::socket socket(_ex);
-    ec = _acceptor.async_accept(socket, yield);
+    auto r = _acceptor.async_accept(socket, yield);
 
-    if (ec) return std::unexpected(ec);
+    if (!r) return std::unexpected(r.error());
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
         sys::error_code ec;
@@ -84,11 +82,9 @@ TcpOuiServiceClient::connect(Async yield)
         socket.close(ec);
     });
 
-    sys::error_code ec;
+    auto r = socket.async_connect(*_endpoint, yield);
 
-    ec = socket.async_connect(*_endpoint, yield);
-
-    if (ec) return std::unexpected(ec);
+    if (!r) return std::unexpected(r.error());
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
         sys::error_code ec;

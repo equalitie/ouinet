@@ -269,7 +269,11 @@ BOOST_AUTO_TEST_CASE(connection) {
     auto con = c.connect([&]() {
         cancelled = true;
     });
+    BOOST_REQUIRE_EQUAL(c, false);
     BOOST_REQUIRE_EQUAL(cancelled, false);
+    BOOST_REQUIRE_EQUAL(con, false);
     c();
+    BOOST_REQUIRE_EQUAL(c, true);
     BOOST_REQUIRE_EQUAL(cancelled, true);
+    BOOST_REQUIRE_EQUAL(con, true);
 }

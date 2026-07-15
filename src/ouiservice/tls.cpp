@@ -34,20 +34,19 @@ sys::error_code TlsOuiServiceServer::start_listen(Async yield) /* override */
                             , &q = _accept_queue
                             , ex = _ex
                             ] (Async yield) mutable {
-                    sys::error_code ec;
 
                     {
                         auto wd = watch_dog( ex, 10s
                                            , [&] { tls_con->next_layer().close(); });
 
-                        ec = tls_con->async_handshake( asio::ssl::stream_base::server, yield);
+                        auto r = tls_con->async_handshake( asio::ssl::stream_base::server, yield);
 
                         if (!wd.is_running()) return;
-                        if (ec) return; // do not propagate error
+                        if (!r) return; // do not propagate error
                     }
 
-                    ec = q.async_send({}, GenericStream(std::move(tls_con)), yield);
-                    if (ec) return; // do not propagate error
+                    auto r = q.async_send({}, GenericStream(std::move(tls_con)), yield);
+                    if (!r) return; // do not propagate error
                 });
             }
         });

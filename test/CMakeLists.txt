@@ -67,6 +67,7 @@ add_test(TARGET test_scheduler)
 add_test(TARGET test_timeout_stream)
 add_test(TARGET test_response_reader)
 add_test(TARGET test_response_writer)
+add_test(TARGET test_client_stop)
 
 if (NOT WIN32)
     add_test(TARGET test_persistent_lru_cache)

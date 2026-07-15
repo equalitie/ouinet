@@ -107,9 +107,9 @@ connect( udp::endpoint ep
     if (ec) return std::unexpected(ec);
 
     auto cancelled = yield.cancel_slot([&] { s.close(); });
-    ec = s.async_connect(ep, yield);
-    if (ec) {
-        return std::unexpected(ec);
+    auto r = s.async_connect(ep, yield);
+    if (!r) {
+        return std::unexpected(r.error());
     }
 
     return GenericStream(std::move(s));
@@ -863,11 +863,13 @@ struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
         : PreFetch(block_id, peer)
         , job(ex)
     {
-        job.start([=] (auto& cancel, auto yield) -> std::nullopt_t {
-            sys::error_code ec;
-            peer->send_block_request(block_id, cancel, yield[ec]);
-            ec = compute_error_code(ec, cancel);
-            return or_throw(yield, ec, std::nullopt);
+        job.start([=] (Async yield) -> std::expected<std::nullopt_t, sys::error_code> {
+            return yield.call_deprecated([&] (util::LogPath, Cancel cancel, asio::yield_context yield) {
+                sys::error_code ec;
+                peer->send_block_request(block_id, cancel, yield[ec]);
+                ec = compute_error_code(ec, cancel);
+                return or_throw(yield, ec, std::nullopt);
+            });
         });
     }
 
@@ -889,11 +891,13 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
         : PreFetch(block_id, peer)
         , job(ex)
     {
-        job.start([=] (auto& cancel, auto yield) -> OptBlock {
-            sys::error_code ec;
-            peer->send_block_request(block_id, cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, OptBlock{});
-            return peer->read_block(block_id, cancel, yield);
+        job.start([=] (Async yield) -> std::expected<OptBlock, sys::error_code> {
+            return yield.call_deprecated([&] (util::LogPath, Cancel cancel, asio::yield_context yield) {
+                sys::error_code ec;
+                peer->send_block_request(block_id, cancel, yield[ec]);
+                return_or_throw_on_error(yield, cancel, ec, OptBlock{});
+                return peer->read_block(block_id, cancel, yield);
+            });
         });
     }
 

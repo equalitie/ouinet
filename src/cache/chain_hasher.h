@@ -2,6 +2,7 @@
 
 #include "../util/sign.h"
 #include "../util/bytes.h"
+#include <boost/format.hpp>
 
 namespace ouinet { namespace cache {
 

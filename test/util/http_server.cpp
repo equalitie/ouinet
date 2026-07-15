@@ -208,12 +208,10 @@ struct HttpServer::Impl {
     void run_accept(Async yield) {
         auto slot = yield.cancel_slot([&] { if (acceptor.is_open()) acceptor.close(); });
 
-        sys::error_code ec;
-
         while (true) {
             tcp::socket socket(yield.get_executor());
-            ec = acceptor.async_accept(socket, yield);
-            if (ec) throw Exception("accept", ec);
+            auto r = acceptor.async_accept(socket, yield);
+            if (!r) throw Exception("accept", r.error());
 
             yield.spawn([&, socket = std::move(socket)] (Async yield) mutable {
                 asio::ssl::stream<beast::tcp_stream> stream(std::move(socket), ssl.ctx);
@@ -229,10 +227,8 @@ struct HttpServer::Impl {
     }
 
     void run_session(asio::ssl::stream<beast::tcp_stream>& stream, Async yield) {
-        sys::error_code ec;
-
-        ec = stream.async_handshake(asio::ssl::stream_base::server, yield);
-        if (ec) throw Exception("handshake", ec);
+        auto r = stream.async_handshake(asio::ssl::stream_base::server, yield);
+        if (!r) throw Exception("handshake", r.error());
 
         beast::flat_buffer buffer;
 
@@ -259,8 +255,8 @@ struct HttpServer::Impl {
             if(!keep_alive) break;
         }
 
-        ec = stream.async_shutdown(yield);
-        if(ec) throw Exception("shutdown", ec);
+        r = stream.async_shutdown(yield);
+        if(!r) throw Exception("shutdown", r.error());
     }
 
     http::message_generator handle_request(http::request<http::string_body> req) {

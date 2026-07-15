@@ -8,6 +8,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.7.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.1) - 2026-07-03
+
+### Fixed
+
+- Fix client stop. !192
+- Fixes and improvements in `asio-utp` submodule. !192
+
+### Changed
+
+- Build `asio_utp` as shared library. !192
+
+## [v1.6.8](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.8) - 2026-06-30
+
+### Fixed
+
+- Fix client stop. !193
+- Fixes and improvements in `asio-utp` submodule. !193
+
+### Changed
+
+- Build `asio_utp` as shared library. !193
+
+## [v1.7.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.0) - 2026-05-08
+
+### Added
+
+- Encrypt messages between peers. !157
+- Utility script `docker/linux.sh`. !157
+
+### Fixed
+
+- Fix use-after-free bug in `injector.cpp`. !157
+- Throwing exceptions inside coroutines no longer confuses ASan. !157
+
+### Changed
+
+- Update signed HTTP storage version from v3 to v4. !157
+- Update Ouinet protocol to v7. !157
+- Bump Android openssl version from 1.1.1g to 3.6.0. !157
+- Bump CMake min version from 3.5 to 3.10. !157
+- Update `asio-utp` submodule. !157
+- Use raw strings for regex of integration tests. !185
+
+
+## [v1.6.7](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.7) - 2026-04-20
+
+### Removed
+
+- Temporarily revert 8f8fd107; "Merge branch 'fix-wait-for-ready' into
+'main'". !183
+
 
 ## [v1.6.6](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.6) - 2026-04-07
 
@@ -22,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- iOS thread safety issues when stopping the client or getting runtime state. 158
+- iOS thread safety issues when stopping the client or getting runtime state. !158
 - Cleaned up redundant cancel handler in `local_peer_discovery`. !158
 - Fix `wait_for_ready` function to wait until there's a successful lookup to
 the DHT that happened in the past 5 minutes. !166

@@ -44,8 +44,8 @@ struct MultiUtpServer::State
                     continue;
                 }
 
-                sys::error_code ec = accept_queue.async_send(sys::error_code(), std::move(*con), yield);
-                if (ec) break;
+                auto r = accept_queue.async_send(sys::error_code(), std::move(*con), yield);
+                if (!r) break;
             }
         });
 

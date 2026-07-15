@@ -49,17 +49,17 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
 
             s.bind(local_ep, ec);
             assert(!ec);
-            ec = s.async_accept(yield);
-            if (ec) {
+            auto r = s.async_accept(yield);
+            if (!r) {
                 LOG_ERROR(yield, " UtpOuiServiceServer: failed to accept, will retry in 5s;"
-                         , " lep=", local_ep, " ec=", ec);
+                         , " lep=", local_ep, " ec=", r.error());
                 async_sleep(5s, yield);
                 continue;
             }
 
             auto ep = util::str("uTP/", s.remote_endpoint());
-            ec = _accept_queue.async_send(sys::error_code(), {std::move(s), std::move(ep)}, yield);
-            if (ec) break;
+            r = _accept_queue.async_send(sys::error_code(), {std::move(s), std::move(ep)}, yield);
+            if (!r) break;
         }
     });
 
@@ -103,12 +103,8 @@ UtpOuiServiceClient::connect(Async yield)
 {
     using namespace chrono_literals;
 
-    if (!_remote_endpoint) {
-        return std::unexpected(asio::error::invalid_argument);
-    }
-
     sys::error_code ec;
-    asio_utp::socket socket(_ex);
+    asio_utp::socket socket(yield.get_executor());
 
     static const chrono::seconds retry_timeout[] = { 4s , 8s , 16s };
 
@@ -121,7 +117,7 @@ UtpOuiServiceClient::connect(Async yield)
 
         auto result = timeout(
             retry_timeout[i],
-            [&](auto yield) { return socket.async_connect(*_remote_endpoint, yield); },
+            [&](auto yield) { return socket.async_connect(_remote_endpoint, yield); },
             yield
         );
 

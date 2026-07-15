@@ -55,13 +55,15 @@ static const boost::regex dir_name_rx("^[0-9a-f]{38}$");
 
 using Signature = sign::Signature::Bytes;
 
+[[nodiscard]]
 static
-std::size_t
-recursive_dir_size(const fs::path& path, sys::error_code& ec)
+std::expected<std::size_t, sys::error_code>
+recursive_dir_size(const fs::path& path)
 {
     // TODO: make asynchronous?
+    sys::error_code ec;
     fs::recursive_directory_iterator dit(path, ec);
-    if (ec) return 0;
+    if (ec) return std::unexpected(ec);
 
     // TODO: take directories themselves into account
     // TODO: take block sizes into account
@@ -69,10 +71,10 @@ recursive_dir_size(const fs::path& path, sys::error_code& ec)
     for (; dit != fs::recursive_directory_iterator(); ++dit) {
         auto p = dit->path();
         auto is_file = fs::is_regular_file(p, ec);
-        if (ec) return 0;
+        if (ec) return std::unexpected(ec);
         if (!is_file) continue;
         auto file_size = fs::file_size(p, ec);
-        if (ec) return 0;
+        if (ec) return std::unexpected(ec);
         total += file_size;
     }
     return total;
@@ -104,7 +106,7 @@ private:
     const fs::path& dirp;
     const AsioExecutor& ex;
 
-    std::string uri;  // for warnings, should use `YieldContext::log` instead
+    std::string uri;  // for warnings
     http_response::Head head;  // for merging in the trailer later on
     boost::optional<async_file_handle> headf, bodyf, sigsf;
 
@@ -114,18 +116,20 @@ private:
     util::SHA512 block_hash;
     ChainHasher chain_hasher;
 
+    [[nodiscard]]
     inline
-    async_file_handle
-    create_file(const fs::path& fname, Cancel cancel, sys::error_code& ec)
+    std::expected<async_file_handle, sys::error_code>
+    create_file(const fs::path& fname)
     {
-        auto f = util::file_io::open_or_create(ex, dirp / fname, ec);
-        ec = compute_error_code(ec, cancel);
-        return f;
+        auto f = util::file_io::open_or_create(ex, dirp / fname);
+        if (!f) return std::unexpected(f.error());
+        return std::move(*f);
     }
 
 public:
-    void
-    async_write_part(http_response::Head h, Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write_part(http_response::Head h, Async yield)
     {
         assert(!headf);
 
@@ -133,38 +137,38 @@ public:
         uri = std::string(h[http_::response_uri_hdr]);
         if (uri.empty()) {
             _ERROR("Missing URI in signed head");
-            return or_throw(yield, asio::error::invalid_argument);
+            return std::unexpected(asio::error::invalid_argument);
         }
         auto bsh = h[http_::response_block_signatures_hdr];
         if (bsh.empty()) {
             _ERROR("Missing parameters for data block signatures; uri=", uri);
-            return or_throw(yield, asio::error::invalid_argument);
+            return std::unexpected(asio::error::invalid_argument);
         }
         auto bs_params = cache::SignedHead::BlockSigs::parse(bsh);
         if (!bs_params) {
             _ERROR("Malformed parameters for data block signatures; uri=", uri);
-            return or_throw(yield, asio::error::invalid_argument);
+            return std::unexpected(asio::error::invalid_argument);
         }
         block_size = bs_params->size;
 
         // Dump the head without framing headers.
         head = http_injection_merge(std::move(h), {});
 
-        sys::error_code ec;
-        auto hf = create_file(head_fname, cancel, ec);
-        return_or_throw_on_error(yield, cancel, ec);
-        headf = std::move(hf);
-        head.async_write(*headf, cancel, yield);
+        auto hf = create_file(head_fname);
+        if (!hf) return std::unexpected(hf.error());
+        headf = std::move(*hf);
+
+        return head.async_write(*headf, yield);
     }
 
-    void
-    async_write_part(http_response::ChunkHdr ch, Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write_part(http_response::ChunkHdr ch, Async yield)
     {
         if (!sigsf) {
-            sys::error_code ec;
-            auto sf = create_file(sigs_fname, cancel, ec);
-            return_or_throw_on_error(yield, cancel, ec);
-            sigsf = std::move(sf);
+            auto sf = create_file(sigs_fname);
+            if (!sf) return std::unexpected(sf.error());
+            sigsf = std::move(*sf);
         }
 
         SigEntry e;
@@ -174,11 +178,11 @@ public:
         // them at the right chunk headers.
         e.signature = std::string(block_sig_from_exts(ch.exts));
 
-        if (e.signature.empty()) return;
+        if (e.signature.empty()) return {};
 
         auto sig = util::base64_decode<sign::Signature::Bytes>(e.signature);
 
-        if (!sig) return;
+        if (!sig) return {};
 
         // Check that signature is properly aligned with end of block
         // (except for the last block, which may be shorter).
@@ -186,7 +190,7 @@ public:
         block_count++;
         if (ch.size > 0 && byte_count != block_count * block_size) {
             _ERROR("Block signature is not aligned to block boundary; uri=", uri);
-            return or_throw(yield, asio::error::invalid_argument);
+            return std::unexpected(asio::error::invalid_argument);
         }
 
         auto block_digest = block_hash.close();
@@ -200,61 +204,69 @@ public:
         // Prepare hash for next data block: CHASH[i]=SHA2-512(CHASH[i-1] BLOCK[i])
         chain_hasher.calculate_block(ch.size, block_digest, sign::Signature(*sig));
 
-        util::file_io::write(*sigsf, asio::buffer(e.str()), cancel, yield);
+        auto r = util::file_io::write(*sigsf, asio::buffer(e.str()), yield);
+        if (!r) return std::unexpected(r.error());
+        return {};
     }
 
-    void
-    async_write_part(std::vector<uint8_t> b, Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write_part(std::vector<uint8_t> b, Async yield)
     {
         if (!bodyf) {
-            sys::error_code ec;
-            auto bf = create_file(body_fname, cancel, ec);
-            return_or_throw_on_error(yield, cancel, ec);
-            bodyf = std::move(bf);
+            auto bf = create_file(body_fname);
+            if (!bf) return std::unexpected(bf.error());
+            bodyf = std::move(*bf);
         }
 
         byte_count += b.size();
         block_hash.update(b);
-        util::file_io::write(*bodyf, asio::buffer(b), cancel, yield);
+        auto r = util::file_io::write(*bodyf, asio::buffer(b), yield);
+        if (!r) return std::unexpected(r.error());
+        return {};
     }
 
-    void
-    async_write_part(http_response::Trailer t, Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write_part(http_response::Trailer t, Async yield)
     {
         assert(headf);
 
-        if (t.cbegin() == t.cend()) return;
+        if (t.cbegin() == t.cend()) return {};
 
         // Extend the head with trailer headers and dump again.
         head = http_injection_merge(std::move(head), t);
 
-        sys::error_code ec;
-        util::file_io::fseek(*headf, 0, ec);
-        if (!ec) util::file_io::truncate(*headf, 0, ec);
-        if (!ec) head.async_write(*headf, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        if (auto r = util::file_io::fseek(*headf, 0); !r)
+            return std::unexpected(r.error());
+
+        if (auto r = util::file_io::truncate(*headf, 0); !r)
+            return std::unexpected(r.error());
+
+        if (auto r = head.async_write(*headf, yield); !r)
+            return std::unexpected(r.error());
+
+        return {};
     }
 };
 
-void
-http_store( http_response::AbstractReader& reader, const fs::path& dirp
-          , const AsioExecutor& ex, Cancel cancel, asio::yield_context yield)
+std::expected<void, sys::error_code>
+http_store(http_response::AbstractReader& reader, const fs::path& dirp, Async yield)
 {
-    SplittedWriter writer(dirp, ex);
+    SplittedWriter writer(dirp, yield.get_executor());
 
     while (true) {
-        sys::error_code ec;
+        auto r = reader.async_read_part(yield);
+        if (!r) return std::unexpected(r.error());
 
-        auto part = compat([&](Async yield) {
-            return reader.async_read_part(yield);
-        })(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-        if (!part) break;
+        auto part = std::move(*r);
+        if (!part) return {};
 
-        util::apply(std::move(*part), [&](auto&& p) {
-            writer.async_write_part(std::move(p), cancel, yield[ec]);
+        auto ra = util::apply(std::move(*part), [&](auto&& p) {
+            return writer.async_write_part(std::move(p), yield);
         });
-        return_or_throw_on_error(yield, cancel, ec);
+
+        if (!ra) return std::unexpected(ra.error());
     }
 }
 
@@ -319,51 +331,52 @@ canonical_from_content_relpath( const fs::path& body_path_p
 }
 
 static
-fs::path
+std::expected<fs::path, sys::error_code>
 body_path_external( const fs::path& dirp
-                  , const fs::path& cdirp
-                  , sys::error_code& ec)
+                  , const fs::path& cdirp)
 {
     fs::path body_path_p = dirp / body_path_fname;
     {
+        sys::error_code ec;
         auto body_path_s = fs::status(body_path_p, ec);
         if (!ec && !fs::is_regular_file(body_path_s))
             ec = asio::error::bad_descriptor;
-        if (ec) return {};
+        if (ec) return std::unexpected(ec);
     }
 
     auto body_cp_o = canonical_from_content_relpath(body_path_p, cdirp);
     if (!body_cp_o) {
-        ec = asio::error::bad_descriptor;
-        return {};
+        return std::unexpected(asio::error::bad_descriptor);
     }
 
-    return *body_cp_o;
+    return std::move(*body_cp_o);
 }
 
 static
-async_file_handle
+std::expected<async_file_handle, sys::error_code>
 open_body_external( const AsioExecutor& ex
                   , const fs::path& dirp
-                  , const fs::path& cdirp
-                  , sys::error_code& ec)
+                  , const fs::path& cdirp)
 {
-    auto body_cp = body_path_external(dirp, cdirp, ec);
-    if (ec) return async_file_handle(ex);
+    auto body_cp = body_path_external(dirp, cdirp);
+    if (!body_cp) return std::unexpected(body_cp.error());
 
-    return util::file_io::open_readonly(ex, body_cp, ec);
+    return util::file_io::open_readonly(ex, *body_cp);
 }
 
+[[nodiscard]]
 static
-std::size_t
+std::expected<std::size_t, sys::error_code>
 body_size_external( const fs::path& dirp
-                  , const fs::path& cdirp
-                  , sys::error_code& ec)
+                  , const fs::path& cdirp)
 {
-    auto body_cp = body_path_external(dirp, cdirp, ec);
-    if (ec) return 0;;
+    auto body_cp = body_path_external(dirp, cdirp);
+    if (!body_cp) return std::unexpected(body_cp.error());
 
-    return fs::file_size(body_cp, ec);
+    sys::error_code ec;
+    std::size_t size = fs::file_size(*body_cp, ec);
+    if (ec) return std::unexpected(ec);
+    return size;
 }
 
 // `dirp` points to the `/.../data-vX` directory.
@@ -373,13 +386,13 @@ body_size_external( const fs::path& dirp
 // TODO: It's not clear to me whether `cdirp` is actually being used in
 // practice. It also seems very limiting to only have one `body_path_fname`
 // reference. So find out whether that code path can be axed.
+[[nodiscard]]
 static
-reader_uptr
+std::expected<reader_uptr, sys::error_code>
 _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
                   , boost::optional<std::size_t> range_first
                   , boost::optional<std::size_t> range_last
-                  , Cancel& cancel
-                  , YieldContext yield)
+                  , Async yield)
 {
     sys::error_code ec;
     assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
@@ -390,29 +403,46 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
     // https://tools.ietf.org/html/rfc7233#section-2.1
     assert((!range_first && !range_last) || (range_first && range_last));
 
-    auto headf = util::file_io::open_readonly(ex, dirp / head_fname, ec);
-    if (ec) return or_throw<reader_uptr>(yield, ec);
+    auto headf = util::file_io::open_readonly(ex, dirp / head_fname);
+    if (!headf) return std::unexpected(headf.error());
 
-    auto head = ResourceReader::read_signed_head(headf, cancel, yield);
+    auto head = ResourceReader::read_signed_head(*headf, yield);
 
-    if (ec) {
-        if (ec != asio::error::operation_aborted) {
-            CACHE_RESOURCE_ERROR("Failed to parse stored response head");
+    if (!head) {
+        CACHE_RESOURCE_ERROR("Failed to parse stored response head");
+        return std::unexpected(head.error());
+    }
+
+    async_file_handle sigsf(yield.get_executor()), bodyf(yield.get_executor());
+
+    auto sigsf_r = util::file_io::open_readonly(ex, dirp / sigs_fname);
+
+    if (sigsf_r) {
+        sigsf = std::move(*sigsf_r);
+    }
+    else if (sigsf_r.error() != sys::errc::no_such_file_or_directory) {
+        return std::unexpected(sigsf_r.error());
+    }
+
+    //auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
+    //if (ec && ec != sys::errc::no_such_file_or_directory) return or_throw<reader_uptr>(yield, ec);
+    //ec = {};
+
+    auto bodyf_r = util::file_io::open_readonly(ex, dirp / body_fname);
+
+    if (bodyf_r) {
+        bodyf = std::move(*bodyf_r);
+    }
+    else if (bodyf_r.error() == sys::errc::no_such_file_or_directory) {
+        if (cdirp) {
+            bodyf_r = open_body_external(ex, dirp, *cdirp);
+            if (!bodyf_r) return std::unexpected(bodyf_r.error());
+            bodyf = std::move(*bodyf_r);
         }
-        return or_throw<reader_uptr>(yield, ec);
     }
-
-    auto sigsf = util::file_io::open_readonly(ex, dirp / sigs_fname, ec);
-    if (ec && ec != sys::errc::no_such_file_or_directory) return or_throw<reader_uptr>(yield, ec);
-    ec = {};
-
-    auto bodyf = util::file_io::open_readonly(ex, dirp / body_fname, ec);
-    if (ec == sys::errc::no_such_file_or_directory && cdirp) {
-        ec = {};
-        bodyf = open_body_external(ex, dirp, *cdirp, ec);
+    else {
+        return std::unexpected(bodyf_r.error());
     }
-    if (ec && ec != sys::errc::no_such_file_or_directory) return or_throw<reader_uptr>(yield, ec);
-    ec = {};
 
     std::optional<Range> range;
 
@@ -424,7 +454,7 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
         if (begin > end) {
             _WARN("Inverted range boundaries: ", *range_first, " > ", *range_last);
             ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-            return or_throw<reader_uptr>(yield, ec);
+            return std::unexpected(ec);
         }
         if (!bodyf.is_open()) {
             if (begin > 0) {
@@ -433,13 +463,13 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
             begin = 0;
             end = 0;
         } else {
-            auto body_size = util::file_io::file_size(bodyf, ec);
-            if (ec) return or_throw<reader_uptr>(yield, ec);
-            if (begin > 0 &&  begin >= body_size) {
+            auto body_size = util::file_io::file_size(bodyf);
+            if (!body_size) return std::unexpected(body_size.error());
+            if (begin > 0 &&  begin >= *body_size) {
                 _WARN( "Requested range 'first' goes beyond stored data: "
-                     , util::HttpResponseByteRange{*range_first, *range_last, body_size});
+                     , util::HttpResponseByteRange{*range_first, *range_last, *body_size});
                 ec = sys::errc::make_error_code(sys::errc::invalid_seek);
-                return or_throw<reader_uptr>(yield, ec);
+                return std::unexpected(ec);
             }
             // https://tools.ietf.org/html/rfc7233#section-2.1
             // Quote from the above link: If the last-byte-pos value is absent,
@@ -448,91 +478,100 @@ _http_store_reader( const fs::path& dirp, boost::optional<const fs::path&> cdirp
             // remainder of the representation (i.e., the server replaces the
             // value of last-byte-pos with a value that is one less than the
             // current length of the selected representation).
-            end = std::min(end, body_size);
+            end = std::min(end, *body_size);
         }
         range = Range{begin, end};
     }
 
     return std::make_unique<ResourceReader>
-        (std::move(head), std::move(sigsf), std::move(bodyf), range);
+        (std::move(*head), std::move(sigsf), std::move(bodyf), range);
 }
 
-reader_uptr
-http_store_reader( const fs::path& dirp, Cancel& cancel, YieldContext yield)
+std::expected<reader_uptr, sys::error_code>
+http_store_reader( const fs::path& dirp, Async yield)
 {
     return _http_store_reader
-        (dirp, boost::none, {}, {}, cancel, yield);
+        (dirp, boost::none, {}, {}, yield);
 }
 
-reader_uptr
-http_store_reader( const fs::path& dirp, const fs::path& cdirp, Cancel& cancel, YieldContext yield)
+std::expected<reader_uptr, sys::error_code>
+http_store_reader( const fs::path& dirp, const fs::path& cdirp, Async yield)
 {
     return _http_store_reader
-        (dirp, cdirp, {}, {}, cancel, yield);
+        (dirp, cdirp, {}, {}, yield);
 }
 
-reader_uptr
+std::expected<reader_uptr, sys::error_code>
 http_store_range_reader( const fs::path& dirp
                        , std::size_t first, std::size_t last
-                       , Cancel& cancel, YieldContext yield)
+                       , Async yield)
 {
     return _http_store_reader
-        (dirp, boost::none, first, last, cancel, yield);
+        (dirp, boost::none, first, last, yield);
 }
 
-reader_uptr
+std::expected<reader_uptr, sys::error_code>
 http_store_range_reader( const fs::path& dirp, const fs::path& cdirp
                        , std::size_t first, std::size_t last
-                       , Cancel& cancel, YieldContext yield)
+                       , Async yield)
 {
     return _http_store_reader
-        (dirp, cdirp, first, last, cancel, yield);
+        (dirp, cdirp, first, last, yield);
 }
 
-std::size_t
+std::expected<std::size_t, sys::error_code>
 _http_store_body_size( const fs::path& dirp, boost::optional<const fs::path&> cdirp
-                     , AsioExecutor ex
-                     , sys::error_code& ec)
+                     , AsioExecutor ex)
 {
     namespace errc = sys::errc;
+
+    sys::error_code ec;
+
     assert(!cdirp || (fs::canonical(*cdirp, ec) == *cdirp));
 
     // At least the head file should exist,
     // otherwise opening the body file may fail
     // because the entry does not exist in the cache at all.
     if (!fs::exists(dirp / head_fname, ec)) {
-        if (!ec) ec = errc::make_error_code(errc::no_such_file_or_directory);
-        return 0;
+        if (ec) return std::unexpected(ec);
+        return std::unexpected(errc::make_error_code(errc::no_such_file_or_directory));
     }
 
     auto bodysz = fs::file_size(dirp / body_fname, ec);
     if (!ec) return bodysz;
-    if (ec != errc::no_such_file_or_directory) return 0;
+    if (ec != errc::no_such_file_or_directory) return std::unexpected(ec);
 
-    ec = asio::error::no_data;
-    if (!cdirp) return 0;  // considered incomplete response
+    if (!cdirp) return std::unexpected(asio::error::no_data);  // considered incomplete response
 
-    ec = {};  // retry with content directory
-    bodysz = body_size_external(dirp, *cdirp, ec);
-    if (!ec) return bodysz;
-    if (ec != errc::no_such_file_or_directory) return 0;
+    if (auto r = body_size_external(dirp, *cdirp)) {
+        return *r;
+    }
+    else {
+        if (r.error() == errc::no_such_file_or_directory) {
+            return std::unexpected(asio::error::no_data);
+        }
+        return std::unexpected(r.error());
+    }
 
-    ec = asio::error::no_data;
-    return 0;  // also considered incomplete response
+    //ec = {};  // retry with content directory
+    //bodysz = body_size_external(dirp, *cdirp, ec);
+    //if (!ec) return bodysz;
+    //if (ec != errc::no_such_file_or_directory) return std::unexpected(ec);
+
+    //ec = asio::error::no_data;
+    //return std::unexpected(ec);  // also considered incomplete response
 }
 
-std::size_t
-http_store_body_size( const fs::path& dirp, AsioExecutor ex
-                    , sys::error_code& ec)
+std::expected<std::size_t, sys::error_code>
+http_store_body_size( const fs::path& dirp, AsioExecutor ex)
 {
-    return _http_store_body_size(dirp, boost::none, std::move(ex), ec);
+    return _http_store_body_size(dirp, boost::none, std::move(ex));
 }
 
-std::size_t
-http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor ex
-                    , sys::error_code& ec)
+std::expected<std::size_t, sys::error_code>
+http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor ex)
 {
-    return _http_store_body_size(dirp, cdirp, std::move(ex), ec);
+    return _http_store_body_size(dirp, cdirp, std::move(ex));
 }
 
 fs::path
@@ -544,47 +583,48 @@ path_from_resource_id(fs::path dir, const ResourceId& resource_id)
     return dir.append(hd0.begin(), hd0.end()).append(hd1.begin(), hd1.end());
 }
 
-HashList
-http_store_load_hash_list( const fs::path& dir
-                         , AsioExecutor exec
-                         , Cancel& cancel
-                         , asio::yield_context yield)
+std::expected<HashList, sys::error_code>
+http_store_load_hash_list(const fs::path& dir, Async yield)
 {
     using Sha = util::SHA512;
     using Digest = Sha::digest_type;
 
-    sys::error_code ec;
+    auto exec = yield.get_executor();
 
-    auto headf = util::file_io::open_readonly(exec, dir / head_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
+    auto headf = util::file_io::open_readonly(exec, dir / head_fname);
+    if (!headf) return std::unexpected(headf.error());
 
-    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname, ec);
-    if (ec) return or_throw<HashList>(yield, ec);
+    auto sigsf = util::file_io::open_readonly(exec, dir / sigs_fname);
+    if (!sigsf) return std::unexpected(sigsf.error());
 
     HashList hl;
 
-    hl.signed_head = ResourceReader::read_signed_head(headf, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, HashList{});
+    if (auto r = ResourceReader::read_signed_head(*headf, yield)) {
+        hl.signed_head = std::move(*r);
+    }
+    else {
+        return std::unexpected(r.error());
+    }
 
     std::string sig_buffer;
 
     while(true) {
-        auto opt_sig_entry = SigEntry::parse(sigsf, sig_buffer, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, HashList{});
+        auto opt_sig_entry = SigEntry::parse(*sigsf, sig_buffer, yield);
+        if (!opt_sig_entry) return std::unexpected(opt_sig_entry.error());
+        if (!*opt_sig_entry) break;
+        auto sig_entry = std::move(**opt_sig_entry);
 
-        if (!opt_sig_entry) break;
+        auto d = util::base64_decode<Digest>(sig_entry.block_digest);
+        if (!d) return std::unexpected(asio::error::bad_descriptor);
 
-        auto d = util::base64_decode<Digest>(opt_sig_entry->block_digest);
-        if (!d) return or_throw<HashList>(yield, asio::error::bad_descriptor);
-
-        auto sig = util::base64_decode<Signature>(opt_sig_entry->signature);
-        if (!sig) return or_throw<HashList>(yield, asio::error::bad_descriptor);
+        auto sig = util::base64_decode<Signature>(sig_entry.signature);
+        if (!sig) return std::unexpected(asio::error::bad_descriptor);
 
         hl.blocks.push_back({*d, { *sig }});
     }
 
     if (hl.blocks.empty()) {
-        return or_throw<HashList>(yield, asio::error::not_found);
+        return std::unexpected(asio::error::not_found);
     }
 
     assert(hl.verify()); // Only in debug mode
@@ -600,54 +640,56 @@ public:
 
     ~HttpReadStore() = default;
 
-    reader_uptr
-    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<reader_uptr, sys::error_code>
+    reader(const ResourceId& resource_id, Async yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        return http_store_reader(kpath, cancel, yield);
+        return http_store_reader(kpath, yield);
     }
 
-    ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<ReaderAndSize, sys::error_code>
+    reader_and_size(const ResourceId& resource_id, Async yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        sys::error_code ec;
-        auto rr = http_store_reader(kpath, cancel, yield[ec]);
-        if (ec) return or_throw<ReaderAndSize>(yield, ec);
-        auto bs = http_store_body_size(kpath, executor, ec);
-        if (ec) return or_throw<ReaderAndSize>(yield, ec);
-        return {std::move(rr), bs};
+        auto rr = http_store_reader(kpath, yield);
+        if (!rr) return std::unexpected(rr.error());
+        auto bs = http_store_body_size(kpath, executor);
+        if (!bs) return std::unexpected(bs.error());
+        return ReaderAndSize{std::move(*rr), *bs};
     }
 
-    reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<reader_uptr, sys::error_code>
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Async yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        return http_store_range_reader(kpath, first, last, cancel, yield);
+        return http_store_range_reader(kpath, first, last, yield);
     }
 
-    std::size_t
-    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
+    [[nodiscard]]
+    std::expected<std::size_t, sys::error_code>
+    body_size(const ResourceId& resource_id) const override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        return http_store_body_size(kpath, executor, ec);
+        return http_store_body_size(kpath, executor);
     }
 
-    std::size_t
-    size(Cancel cancel, asio::yield_context yield) const override
+    [[nodiscard]]
+    std::expected<std::size_t, sys::error_code>
+    size(Async yield) const override
     {
         // Do not use `for_each` since it can alter the store.
-        sys::error_code ec;
-        auto sz = recursive_dir_size(path, ec);
-        ec = compute_error_code(ec, cancel);
-        return or_throw(yield, ec, sz);
+        return recursive_dir_size(path);
     }
 
-    HashList
-    load_hash_list(const ResourceId& resource_id, Cancel cancel, asio::yield_context yield) const override
+    [[nodiscard]]
+    std::expected<HashList, sys::error_code>
+    load_hash_list(const ResourceId& resource_id, Async yield) const override
     {
         auto dir = path_from_resource_id(path, resource_id);
-        return http_store_load_hash_list(dir, executor, cancel, yield);
+        return http_store_load_hash_list(dir, yield);
     }
 
 protected:
@@ -664,34 +706,35 @@ public:
 
     ~StaticHttpStore() = default;
 
-    reader_uptr
-    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<reader_uptr, sys::error_code>
+    reader(const ResourceId& resource_id, Async yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
         // Always verifying the response not only
         // protects the agent against malicions content in the static cache, it also
         // acts as a good citizen and avoids spreading such content to others.
-        sys::error_code ec;
-        auto rr = http_store_reader(kpath, content_path, cancel, yield[ec]);
-        if (ec) return or_throw<reader_uptr>(yield, ec);
-        return std::make_unique<VerifyingReader>(std::move(rr), verif_pubk);
+        auto rr = http_store_reader(kpath, content_path, yield);
+        if (!rr) return std::unexpected(rr.error());
+        return std::make_unique<VerifyingReader>(std::move(*rr), verif_pubk);
     }
 
-    ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<ReaderAndSize, sys::error_code>
+    reader_and_size(const ResourceId& resource_id, Async yield) override
     {
-        sys::error_code ec;
         auto kpath = path_from_resource_id(path, resource_id);
-        auto rr = std::make_unique<VerifyingReader>
-            (http_store_reader(kpath, content_path, cancel, yield[ec]), verif_pubk);
-        if (ec) return or_throw<ReaderAndSize>(yield, ec);
-        auto bs = http_store_body_size(kpath, content_path, executor, ec);
-        if (ec) return or_throw<ReaderAndSize>(yield, ec);
-        return {std::move(rr), bs};
+        auto r = http_store_reader(kpath, content_path, yield);
+        if (!r) return std::unexpected(r.error());
+        auto rr = std::make_unique<VerifyingReader>(std::move(*r), verif_pubk);
+        auto bs = http_store_body_size(kpath, content_path, executor);
+        if (!bs) return std::unexpected(bs.error());
+        return ReaderAndSize{std::move(rr), *bs};
     }
 
-    reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<reader_uptr, sys::error_code>
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Async yield) override
     {
         auto kpath = path_from_resource_id(path, resource_id);
         // TODO: Signature verification should be implemented here too,
@@ -704,25 +747,28 @@ public:
         // with raw range requests, but this is not currently the case in Ouinet.
         // Also, the client does not currently issue partial reads to the local cache
         // to be served to the agent.
-        return http_store_range_reader(kpath, content_path, first, last, cancel, yield);
+        return http_store_range_reader(kpath, content_path, first, last, yield);
     }
 
-    std::size_t
-    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
+    [[nodiscard]]
+    std::expected<std::size_t, sys::error_code>
+    body_size(const ResourceId& resource_id) const override
     {
         auto kpath = path_from_resource_id(path, resource_id);
-        return http_store_body_size(kpath, content_path, executor, ec);
+        return http_store_body_size(kpath, content_path, executor);
     }
 
-    std::size_t
-    size(Cancel cancel, asio::yield_context yield) const override
+    [[nodiscard]]
+    std::expected<std::size_t, sys::error_code>
+    size(Async yield) const override
     {
-        sys::error_code ec;
-        auto sz = HttpReadStore::size(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, 0);
-        sz += recursive_dir_size(content_path, ec);
-        ec = compute_error_code(ec, cancel);
-        return or_throw(yield, ec, sz);
+        auto s0 = HttpReadStore::size(yield);
+        if (!s0) return std::unexpected(s0.error());
+
+        auto s1 = recursive_dir_size(content_path);
+        if (!s1) return std::unexpected(s1.error());
+
+        return *s0 + *s1;
     }
 
 private:
@@ -801,36 +847,38 @@ public:
 
     ~FullHttpStore() = default;
 
-    void
-    for_each(keep_func, Cancel, YieldContext) override;
+    std::expected<void, sys::error_code>
+    for_each(keep_func, Async) override;
 
-    void
-    store( const ResourceId& resource_id, http_response::AbstractReader&
-         , Cancel, asio::yield_context) override;
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    store( const ResourceId& resource_id, http_response::AbstractReader&, Async) override;
 
-    reader_uptr
-    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
-    { return read_store->reader(resource_id, cancel, yield); }
+    std::expected<reader_uptr, sys::error_code>
+    reader(const ResourceId& resource_id, Async yield) override
+    { return read_store->reader(resource_id, yield); }
 
-    ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
-    { return read_store->reader_and_size(resource_id, cancel, yield); }
+    [[nodiscard]]
+    std::expected<ReaderAndSize, sys::error_code>
+    reader_and_size(const ResourceId& resource_id, Async yield) override
+    { return read_store->reader_and_size(resource_id, yield); }
 
-    reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
-    { return read_store->range_reader(resource_id, first, last, cancel, yield); }
+    [[nodiscard]]
+    std::expected<reader_uptr, sys::error_code>
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Async yield) override
+    { return read_store->range_reader(resource_id, first, last, yield); }
 
-    std::size_t
-    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
-    { return read_store->body_size(resource_id, ec); }
+    std::expected<std::size_t, sys::error_code>
+    body_size(const ResourceId& resource_id) const override
+    { return read_store->body_size(resource_id); }
 
-    std::size_t
-    size(Cancel cancel, asio::yield_context ec) const override
-    { return read_store->size(cancel, ec); }
+    std::expected<std::size_t, sys::error_code>
+    size(Async yield) const override
+    { return read_store->size(yield); }
 
-    HashList
-    load_hash_list(const ResourceId& resource_id, Cancel cancel, asio::yield_context yield) const override
-    { return read_store->load_hash_list(resource_id, cancel, yield); }
+    std::expected<HashList, sys::error_code>
+    load_hash_list(const ResourceId& resource_id, Async yield) const override
+    { return read_store->load_hash_list(resource_id, yield); }
 
 protected:
     fs::path path;
@@ -838,9 +886,8 @@ protected:
     std::unique_ptr<BaseHttpStore> read_store;
 };
 
-void
-FullHttpStore::for_each( keep_func keep
-                       , Cancel cancel, YieldContext yield)
+std::expected<void, sys::error_code>
+FullHttpStore::for_each(keep_func keep, Async yield)
 {
     for (auto& pp : fs::directory_iterator(path)) {  // iterate over `DIGEST[:2]` dirs
         if (!fs::is_directory(pp)) {
@@ -884,32 +931,26 @@ FullHttpStore::for_each( keep_func keep
                 continue;
             }
 
-            sys::error_code ec;
-
-            auto rr = http_store_reader(p, cancel, yield[ec]);
-            if (ec) {
-               _WARN("Failed to open cached response: ", p, "; ec=", ec);
+            auto rr = http_store_reader(p, yield);
+            if (!rr) {
+               _WARN("Failed to open cached response: ", p, "; ec=", rr.error());
                try_remove(p); continue;
             }
-            assert(rr);
 
-            auto keep_entry = keep(*resource_id, std::move(rr), yield[ec]);
-            ec = compute_error_code(ec, cancel);
-            if (ec == asio::error::operation_aborted) return or_throw(yield, ec);
-            if (ec) {
-                _WARN("Failed to check cached response: ", p, "; ec=", ec);
+            auto keep_entry = keep(*resource_id, std::move(*rr), yield);
+            if (!keep_entry) {
+                _WARN("Failed to check cached response: ", p, "; ec=", keep_entry.error());
                 try_remove(p); continue;
             }
 
-            if (!keep_entry)
-                try_remove(p);
+            if (!*keep_entry) try_remove(p);
         }
     }
+    return {};
 }
 
-void
-FullHttpStore::store( const ResourceId& resource_id, http_response::AbstractReader& r
-                    , Cancel cancel, asio::yield_context yield)
+std::expected<void, sys::error_code>
+FullHttpStore::store(const ResourceId& resource_id, http_response::AbstractReader& reader, Async yield)
 {
     sys::error_code ec;
 
@@ -917,20 +958,33 @@ FullHttpStore::store( const ResourceId& resource_id, http_response::AbstractRead
 
     auto kpath_parent = kpath.parent_path();
     fs::create_directory(kpath_parent, ec);
-    if (ec) return or_throw(yield, ec);
+    if (ec) return std::unexpected(ec);
 
     // Replacing a directory is not an atomic operation,
     // so try to remove the existing entry before committing.
     auto dir = util::atomic_dir::make(kpath, ec);
-    if (!ec) http_store(r, dir->temp_path(), executor, cancel, yield[ec]);
-    if (!ec && fs::exists(kpath)) fs::remove_all(kpath, ec);
+    if (ec) return std::unexpected(ec);
+
+    if (auto r = http_store(reader, dir->temp_path(), yield); !r) {
+        return std::unexpected(r.error());
+    }
+
+    if (fs::exists(kpath)) fs::remove_all(kpath, ec);
+    if (ec) return std::unexpected(ec);
+
     // A new version of the response may still slip in here,
     // but it may be ok since it will probably be recent enough.
-    if (!ec) dir->commit(ec);
-    if (!ec) _DEBUG("Stored to directory; resource_id=", resource_id, " path=", kpath);
-    else _ERROR( "Failed to store response; resource_id=", resource_id, " path=", kpath
-               , " ec=", ec);
-    return or_throw(yield, ec);
+    dir->commit(ec);
+    if (ec) return std::unexpected(ec);
+
+    if (!ec) {
+        _DEBUG("Stored to directory; resource_id=", resource_id, " path=", kpath);
+        return {};
+    }
+    else {
+        _ERROR( "Failed to store response; resource_id=", resource_id, " path=", kpath, " ec=", ec);
+        return std::unexpected(ec);
+    }
 }
 
 std::unique_ptr<HttpStore>
@@ -951,65 +1005,64 @@ public:
 
     ~BackedHttpStore() = default;
 
-    reader_uptr
-    reader(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<reader_uptr, sys::error_code>
+    reader(const ResourceId& resource_id, Async yield) override
     {
-        sys::error_code ec;
-        auto ret = FullHttpStore::reader(resource_id, cancel, yield[ec]);
-        if (!ec) return ret;
+        auto ret = FullHttpStore::reader(resource_id, yield);
+        if (ret) return std::move(*ret);
         _DEBUG("Failed to create reader for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->reader(resource_id, cancel, yield);
+        return fallback_store->reader(resource_id, yield);
     }
 
-    ReaderAndSize
-    reader_and_size(const ResourceId& resource_id, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<ReaderAndSize, sys::error_code>
+    reader_and_size(const ResourceId& resource_id, Async yield) override
     {
-        sys::error_code ec;
-        auto ret = FullHttpStore::reader_and_size(resource_id, cancel, yield[ec]);
-        if (!ec) return ret;
+        auto ret = FullHttpStore::reader_and_size(resource_id, yield);
+        if (ret) return std::move(*ret);
         _DEBUG("Failed to create reader for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->reader_and_size(resource_id, cancel, yield);
+        return fallback_store->reader_and_size(resource_id, yield);
     }
 
-    reader_uptr
-    range_reader(const ResourceId& resource_id, size_t first, size_t last, Cancel& cancel, YieldContext yield) override
+    [[nodiscard]]
+    std::expected<reader_uptr, sys::error_code>
+    range_reader(const ResourceId& resource_id, size_t first, size_t last, Async yield) override
     {
-        sys::error_code ec;
-        auto ret = FullHttpStore::range_reader(resource_id, first, last, cancel, yield[ec]);
-        if (!ec) return ret;
+        auto ret = FullHttpStore::range_reader(resource_id, first, last, yield);
+        if (ret) return std::move(*ret);
         _DEBUG("Failed to create range reader for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->range_reader(resource_id, first, last, cancel, yield);
+        return fallback_store->range_reader(resource_id, first, last, yield);
     }
 
-    std::size_t
-    body_size(const ResourceId& resource_id, sys::error_code& ec) const override
+    std::expected<std::size_t, sys::error_code>
+    body_size(const ResourceId& resource_id) const override
     {
-        auto ret = FullHttpStore::body_size(resource_id, ec);
-        if (!ec) return ret;
+        auto ret = FullHttpStore::body_size(resource_id);
+        if (ret) return std::move(*ret);
         _DEBUG("Failed to get body size for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->body_size(resource_id, ec = {});
+        return fallback_store->body_size(resource_id);
     }
 
-    std::size_t
-    size(Cancel cancel, asio::yield_context yield) const override
+    [[nodiscard]]
+    std::expected<std::size_t, sys::error_code>
+    size(Async yield) const override
     {
-        sys::error_code ec;
-        auto sz1 = FullHttpStore::size(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, 0);
-        auto sz2 = fallback_store->size(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, 0);
-        return sz1 + sz2;
+        auto sz1 = FullHttpStore::size(yield);
+        if (!sz1) return std::unexpected(sz1.error());
+        auto sz2 = fallback_store->size(yield);
+        if (!sz2) return std::unexpected(sz2.error());
+        return *sz1 + *sz2;
     }
 
-    HashList
-    load_hash_list(const ResourceId& resource_id, Cancel cancel, asio::yield_context yield) const override
+    [[nodiscard]]
+    std::expected<HashList, sys::error_code>
+    load_hash_list(const ResourceId& resource_id, Async yield) const override
     {
-        sys::error_code ec;
-        auto ret = FullHttpStore::load_hash_list(resource_id, cancel, yield[ec]);
-        if (!ec) return ret;
-        if (cancel) return or_throw<HashList>(yield, asio::error::operation_aborted);
+        auto ret = FullHttpStore::load_hash_list(resource_id, yield);
+        if (ret) return std::move(*ret);
         _DEBUG("Failed to load hash list for resource_id, trying fallback store: ", resource_id);
-        return fallback_store->load_hash_list(resource_id, cancel, yield);
+        return fallback_store->load_hash_list(resource_id, yield);
     }
 
 private:

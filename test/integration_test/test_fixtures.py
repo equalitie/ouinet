@@ -102,6 +102,7 @@ class TestFixtures:
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
     CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve/serve_local END[\s\S]*"
+    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve_utp_req/serve_local END[\s\S]*"
     BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*BEP3 announcer successfully initiated[\s\S]*"
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"

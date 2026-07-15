@@ -4,6 +4,7 @@
 #include <expected>
 #include <map>
 #include <set>
+#include <optional>
 
 namespace ouinet {
 

@@ -133,6 +133,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
     });
 #endif
 
+    // Wait for messages from Ouinet DHT code, then send them over UDP to peers.
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
         Cancel cancel(_terminate_signal);
 
@@ -157,9 +158,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
 
             sys::error_code ec;
 
-            if (!ec) {
-                _socket.async_send_to(buffer(entry->message), entry->to, yield[ec]);
-            }
+            _socket.async_send_to(buffer(entry->message), entry->to, yield[ec]);
 
             if (terminated) break;
 
@@ -176,6 +175,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
         }
     });
 
+    // Receive UDP packets from peers, then send them to Ouinet DHT code.
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 

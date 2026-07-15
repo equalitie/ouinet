@@ -9,13 +9,12 @@
 #include "async.h"
 #include "expected.h"
 #include "../or_throw.h"
-#include "yield.h"
 
 // Compatibility layer between the "new style" and "old style" async function.
 //
 // New style is a function that takes `Async` as its (typically) last argument.
-// Old style is a function that takes `(..., boost::asio::yield_context)` or `(..., ouinet::YieldContext)` or
-// `(..., ouinet::Cancel, boost::asio::yield_context)` or `(..., ouinet::Cancel, ouinet::YieldContext)`.
+// Old style is a function that takes `(..., boost::asio::yield_context)` or
+// `(..., ouinet::Cancel, boost::asio::yield_context)`.
 //
 // Provides compatibility in both directions (new style to old style and vice versa).
 
