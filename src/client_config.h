@@ -30,6 +30,13 @@ namespace ouinet {
 //TODO: move this to somewhere where both client and injector config has access to
 #define _MAX_I2P_HOPS 8
 
+// Announcements are processed one at a time in Android to avoid increasing battery usage
+#ifdef __ANDROID__
+    const size_t default_max_simultaneous_announcements = 1;
+#else
+    const size_t default_max_simultaneous_announcements = 16;
+#endif
+
 struct MetricsConfig {
     bool enable_on_start = false;
     util::Url server_url;
