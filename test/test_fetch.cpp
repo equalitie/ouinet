@@ -518,6 +518,10 @@ BOOST_DATA_TEST_CASE(
     dht_impl,
     ouisync_transport_flag
 ) {
+    if (!std::string_view(ouisync_transport_flag).empty()) {
+        ouisync::init_log();
+    }
+
     asio::io_context ctx;
 
     TestDir root;
@@ -584,7 +588,6 @@ BOOST_DATA_TEST_CASE(
             mock_dht_builder("client", yield.get_executor(), mock_dht_swarms)
         );
 
-
         // Clients are started explicitly
         client.start();
 
@@ -594,6 +597,8 @@ BOOST_DATA_TEST_CASE(
         auto rq = build_private_request(url);
 
         for (uint16_t i = 0; i < 30; ++i) {
+            LOG_INFO("============ Request #", (i + 1), " ============");
+
             auto rs = fetch_through_client(client, rq, yield);
 
             BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
