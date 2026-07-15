@@ -20,7 +20,6 @@ class GenericStream;
 
 class OUINET_CLIENT_API CacheControl {
 public:
-    using Response = http::response<http::dynamic_body>;
 
     using FetchStored = std::function<
         std::expected<CacheEntry, sys::error_code>(const CacheRetrieveRequest&, Async)

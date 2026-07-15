@@ -25,7 +25,7 @@ namespace error = asio::error;
 namespace posix_time = boost::posix_time;
 using Entry    = CacheEntry;
 using Request  = http::request<http::string_body>;
-using Response = CacheControl::Response;
+using Response = http::response<http::dynamic_body>;
 using posix_time::seconds;
 using boost::optional;
 using beast::string_view;

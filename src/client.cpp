@@ -87,7 +87,6 @@ namespace bt = ouinet::bittorrent;
 
 using tcp      = asio::ip::tcp;
 using Request  = http::request<http::string_body>;
-using Response = http::response<http::dynamic_body>;
 using TcpLookup = tcp::resolver::results_type;
 using UdpEndpoints = std::set<asio::ip::udp::endpoint>;
 using ouinet::util::AsioExecutor;
@@ -393,7 +392,7 @@ private:
 
 
     [[nodiscard]]
-    std::expected<Response, sys::error_code>
+    std::expected<ClientFrontEnd::Response, sys::error_code>
     fetch_fresh_from_front_end(const Request&, Async);
 
     // Metrics is optional because we use this function also for sending
@@ -950,7 +949,7 @@ Client::State::connect_to_origin( const http::request_header<>& rq
     return stream;
 }
 //------------------------------------------------------------------------------
-std::expected<Response, sys::error_code>
+std::expected<ClientFrontEnd::Response, sys::error_code>
 Client::State::fetch_fresh_from_front_end(const Request& rq, Async yield)
 {
     auto slot = _shutdown_signal.connect([&] { yield.cancel(); });
@@ -2181,7 +2180,7 @@ Client::State::maybe_handle_websocket_upgrade( GenericStream& browser
     }
 
     beast::flat_buffer origin_rbuf;
-    Response rs;
+    http::response<http::dynamic_body> rs;
     if (auto r = http::async_read(*origin, origin_rbuf, rs, yield.tag("read_res")); !r) {
         return std::unexpected(r.error());
     }
