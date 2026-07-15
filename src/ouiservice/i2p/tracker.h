@@ -79,6 +79,15 @@ public:
     >
     get_peers(bittorrent::NodeID infohash, Async);
 
+    // Probe the I2P path to the tracker until a request round-trip succeeds.
+    // Forces lease-set exchange and tunnel build before the first real
+    // announce or lookup, so real requests do not fail simply because the
+    // tunnel is not yet established. Retries with exponential backoff until
+    // success or the yield is cancelled.
+    [[nodiscard]]
+    std::expected<void, Error::Announce>
+    handshake(Async);
+
     I2pTrackerClient(I2pTrackerClient const&) = delete;
     I2pTrackerClient(I2pTrackerClient &&) = delete;
 

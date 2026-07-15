@@ -50,6 +50,10 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(response_body)))
+        # max-age=3600 seconds = 1 hour (plenty for the test's runtime).
+        # Without Cache-Control, responses aren't considered cacheable and the
+        # BEP3-over-I2P cache test can't verify client2 gets a cached copy.
+        self.send_header("Cache-Control", "public, max-age=3600, immutable")
         self.end_headers()
         self.wfile.write(response_body)
 

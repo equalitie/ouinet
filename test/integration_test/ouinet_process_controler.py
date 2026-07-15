@@ -82,9 +82,14 @@ def output_yielder(handle: Popen) -> Generator[str, None, None]:
         try:
             if not handle.stdout:
                 raise IOError("no stdout on process")
-            for line in iter(handle.stdout.readline, ""):
+            # Sentinel must match readline()'s return type: with a binary
+            # pipe (bufsize=0), readline() returns bytes, so iter's sentinel
+            # must be b"" not "". Decode with errors="replace" so an
+            # occasional non-UTF-8 byte from a child process doesn't kill
+            # the whole reader loop.
+            for line in iter(handle.stdout.readline, b""):
                 if isinstance(line, bytes):
-                    line = line.decode("utf-8")
+                    line = line.decode("utf-8", errors="replace")
                 yield line
         except:
             pass

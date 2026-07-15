@@ -102,6 +102,11 @@ struct I2pAnnouncer::State {
     void loop(Async yield) {
         auto slot = yield.cancel_slot([&] { timer.cancel(); });
 
+        // Probe the I2P path to the tracker before entering the announce loop.
+        // Forces lease-set exchange / tunnel build so the first real announce
+        // doesn't fail simply because the tunnel isn't yet established.
+        tracker->handshake(yield);
+
         while (true) {
             timer.expires_at(sleep_until());
             timer.async_wait(yield);

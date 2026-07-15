@@ -12,6 +12,7 @@
 #include "../../bittorrent/bencoding.h"
 #include "../../bittorrent/node_id.h"
 #include "../../logger.h"
+#include "../../util/exponential_backoff.h"
 #include "util/async.h"
 #include "util/overloaded.h"
 #include "util.h"
@@ -63,6 +64,19 @@ static std::string announce_target(const NodeID& infohash, const I2pAddress& loc
     return s.str();
 }
 
+// Handshake probe: dummy all-zero infohash + event=stopped, so we don't
+// pollute the tracker while still forcing a full round-trip through I2P and
+// therefore lease-set exchange / tunnel build.
+static std::string handshake_target(const I2pAddress& local_server_addr) {
+    NodeID dummy_infohash{NodeID::Buffer{}};
+    std::stringstream s;
+    fill_common_target(s, dummy_infohash, local_server_addr);
+    s << "&compact=1"
+      << "&numwant=0"
+      << "&event=stopped";
+    return s.str();
+}
+
 static http::request<http::empty_body> make_request(const I2pAddress& tracker_addr, std::string target) {
     http::request<http::empty_body> rq{http::verb::get, std::move(target), 11};
     rq.set(http::field::host, tracker_addr.value);
@@ -102,7 +116,27 @@ I2pTrackerClient::announce(NodeID infohash, Async yield)
 {
     auto r = send_request(announce_target(infohash, _session->local_addr()), yield);
     if (!r) return std::unexpected<Error::Announce>(std::move(r.error()));
+    LOG_DEBUG("BEP3 tracker: announce successful for ", infohash);
     return std::expected<void, Error::Announce>();
+}
+
+std::expected<void, Error::Announce>
+I2pTrackerClient::handshake(Async yield)
+{
+    // Log our serving identity in the exact form the integration tests key on
+    // (b32=<52 chars>.b32.i2p): they use it to correlate this client's b32
+    // with the peers the tracker returns on another client's get_peers.
+    LOG_DEBUG("BEP3 tracker: serving identity b32=", _session->local_addr());
+
+    for (uint32_t i = 0;; ++i) {
+        auto r = send_request(handshake_target(_session->local_addr()), yield);
+        if (r) {
+            LOG_DEBUG("BEP3 tracker: tracker handshake successful");
+            return std::expected<void, Error::Announce>();
+        }
+        LOG_DEBUG("BEP3 tracker: handshake attempt failed; ", r.error());
+        util::exponential_backoff(i, yield);
+    }
 }
 
 std::expected<std::set<I2pAddress>, Error::GetPeers>
@@ -143,6 +177,7 @@ I2pTrackerClient::get_peers(NodeID infohash, Async yield)
             if (!ip || ip->empty()) continue;
             auto addr = I2pAddress::parse(*ip);
             if (!addr) continue;
+            LOG_DEBUG("BEP3 tracker: found peer dest: ", *addr);
             peers.insert(std::move(*addr));
         }
     } else if (peers_it->second.is_string()) {
@@ -152,6 +187,7 @@ I2pTrackerClient::get_peers(NodeID infohash, Async yield)
 
         for (size_t i = 0; i + SIZE <= data.size() ; i += SIZE) {
             auto dest = *I2pAddress::from_binary_b32(std::span((unsigned char*)data.data() + i, SIZE));
+            LOG_DEBUG("BEP3 tracker: found peer dest: ", dest);
             peers.insert(std::move(dest));
         }
     }

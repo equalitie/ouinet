@@ -18,6 +18,7 @@ from math import floor
 import tempfile
 from multiprocessing import Process
 import asyncio
+import re
 
 # Making random requests not to rely on cache
 import random
@@ -214,6 +215,7 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.TCP_CLIENT_DISCOVERY_START,
                 TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
                 TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED,
+                TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED,
                 TestFixtures.FRESH_SUCCESS_REGEX,
                 TestFixtures.DHT_INITIALIZED_REGEX,
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
@@ -221,6 +223,9 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.CACHE_CLIENT_PEER_FOUND,
                 TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
                 TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
+                TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX,
+                TestFixtures.BEP3_HANDSHAKE_DONE_REGEX,
+                TestFixtures.BEP3_SERVING_IDENTITY_REGEX,
             ],
         ),
     )
@@ -407,6 +412,11 @@ async def cleanup():
     # After processes quit so that they do not write anything
     repofolder = TestFixtures.REPO_FOLDER_NAME
     i2pfolder = "i2p"
+
+    import os
+    if os.environ.get("OUINET_KEEP_REPOS"):
+        print("OUINET_KEEP_REPOS set, skipping cleanup of", repofolder, "and", i2pfolder)
+        return
 
     print("cleaning up the folder", repofolder)
     for folder in [repofolder, i2pfolder]:
@@ -864,17 +874,9 @@ async def test_bep3_cache_over_i2p(http_server, log):
     await wait_for_benchmark(client, TestFixtures.I2P_TUNNEL_READY_REGEX)
     # Wait for BEP3 announcer to be fully ready (server tunnel + tracker)
     await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
-
-    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
-    print(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
-    )
-
-    # TODO: do not wait a fixed time, check for output
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-    print("done waiting")
+    # Wait for the announcer's BEP3 tracker handshake probe to succeed: this
+    # is the only signal that the I2P path to the tracker is actually usable.
+    await wait_for_benchmark(client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
     response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
@@ -887,6 +889,18 @@ async def test_bep3_cache_over_i2p(http_server, log):
 
     # Wait for client to cache the response
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX)
+
+    # Wait for client1 to actually announce the cached entry to the BEP3
+    # tracker over I2P. Without this, client2 may query the tracker before
+    # client1 is registered as a peer for this infohash.
+    await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX)
+
+    # Capture client1's serving b32 (the canonical address the tracker should
+    # hand to client2). The tracker client logs this on handshake start, so
+    # by the time the announce has succeeded it must be set.
+    client1_b32 = client._proc_protocol.bep3_serving_b32
+    assert client1_b32, "client1 did not log its serving b32 identity"
+    print(f"client1 serving b32: {client1_b32}.b32.i2p")
 
     # Client2: retrieves from BEP3 distributed cache (no injector)
     cache_client = run_tcp_client(
@@ -913,21 +927,39 @@ async def test_bep3_cache_over_i2p(http_server, log):
     await wait_for_benchmark(cache_client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
     await wait_for_benchmark(cache_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
     await wait_for_benchmark(cache_client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
+    # Wait for the BEP3 tracker handshake probe to actually succeed: it
+    # round-trips through the tracker and only logs success once that path
+    # actually works.
+    await wait_for_benchmark(cache_client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
-    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
-    print(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
+    # Register a dynamic benchmark on client2 that fires when the BEP3 parser
+    # emits a `found peer dest:` line carrying client1's exact b32. The
+    # process protocol re-reads its benchmarks dict on every line, so adding
+    # at runtime is safe.
+    b32_match_regex = (
+        r"[\s\S]*BEP3 tracker: found peer dest: "
+        + re.escape(client1_b32)
+        + r"\.b32\.i2p[\s\S]*"
     )
-
-    # TODO: do not wait a fixed time, check for output
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-    print("done waiting")
+    cache_client._proc_protocol.benchmarks[b32_match_regex] = False
 
     # Retrieve cached content
     await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
-    # Make sure client1 served it and client2 got it from cache
-    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
+    # By this point client2 has gone through one or more get_peers rounds; if
+    # the tracker is doing its job and our parser decoded it correctly, one
+    # of those `found peer dest:` lines must equal client1's b32. Stall here
+    # otherwise — a non-match means the tracker/parser path is broken even
+    # if the rest of the cache flow happens to work for unrelated reasons.
+    await wait_for_benchmark(cache_client, b32_match_regex)
+    banner = (
+        "\n" + "*" * 78
+        + f"\n*** BEP3 B32 MATCH: client2 parsed client1's b32 from tracker"
+        + f"\n*** client1.b32 = {client1_b32}.b32.i2p"
+        + "\n" + "*" * 78 + "\n"
+    )
+    print(banner)
+
+    # Make sure client1 served it (over I2P, not uTP) and client2 got it from cache
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED)
     await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
