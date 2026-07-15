@@ -1,7 +1,6 @@
 stages:
   - build
   - test
-  - cleanup
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
