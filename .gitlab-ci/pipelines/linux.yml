@@ -58,4 +58,4 @@ linux / python-tests:
     - job: 'linux / cpp-rust-tests'
       artifacts: false
   rules:
-     - !reference [.required_job, rules]
+     - !reference [.optional_job, rules]
