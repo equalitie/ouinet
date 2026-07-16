@@ -29,6 +29,11 @@ default:
     - when: manual
       allow_failure: true
 
+.manual_job:
+  rules:
+    - when: manual
+      allow_failure: true
+
 include:
   - .gitlab-ci/pipelines/android.yml
   - .gitlab-ci/pipelines/linux.yml

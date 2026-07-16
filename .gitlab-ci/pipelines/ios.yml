@@ -65,4 +65,4 @@ combined / build:
     - cd build.darwin
     - PLATFORM=COMBINED ../scripts/build-darwin.sh | tee xcodebuild-combined.log
   rules:
-     - !reference [.optional_job, rules]
+     - !reference [.manual_job, rules]
