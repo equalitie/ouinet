@@ -109,6 +109,8 @@ add_test(TARGET test_atomic_temp)
 #       )
 #endif()
 
+add_test(TARGET test_transport TARGET_SRC "performance_test/test_transport.cpp")
+
 add_test(TARGET test_bencoding)
 
 add_test(TARGET test_file_io)

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <vector>
 #include "api.h"
 
 namespace ouinet::util::random {
@@ -10,6 +12,7 @@ namespace ouinet::util::random {
 OUINET_COMMON_API void data(void*, size_t);
 OUINET_COMMON_API std::string string(size_t size);
 OUINET_COMMON_API std::string printable_ascii(size_t size);
+OUINET_COMMON_API std::vector<uint8_t> bytes(size_t size);
 
 template<typename N /* e.g. uint64_t */>
 inline N number()
