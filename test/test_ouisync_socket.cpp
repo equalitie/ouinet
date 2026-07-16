@@ -2,11 +2,8 @@
 
 #include <asio_utp/socket.hpp>
 #include <asio_utp/udp_multiplexer.hpp>
-#include <boost/asio/buffer.hpp>
-#include <boost/asio/write.hpp>
-#include <boost/asio/ip/address_v4.hpp>
-#include <boost/test/data/test_case.hpp>
 #include <boost/test/data/monomorphic.hpp>
+#include <boost/test/data/test_case.hpp>
 #include <boost/test/unit_test.hpp>
 #include <ouisync.hpp>
 #include <ouisync/service.hpp>
@@ -186,6 +183,8 @@ BOOST_DATA_TEST_CASE(test_cancellation, cancellation_scopes, scope) {
             socket.cancel(cancel_ec);
             BOOST_REQUIRE(!cancel_ec);
 
+            unwrap(wc.wait(yield));
+
             break;
         }
         case CancellationScope::operation: {
@@ -204,13 +203,14 @@ BOOST_DATA_TEST_CASE(test_cancellation, cancellation_scopes, scope) {
 
             signal.emit(asio::cancellation_type::total);
 
+            unwrap(wc.wait(yield));
+
             break;
         }
         default:
             BOOST_FAIL("Invalid cancellation scope");
         }
 
-        unwrap(wc.wait(yield));
         BOOST_REQUIRE_EQUAL(op_ec, asio::error::operation_aborted);
     });
 }
