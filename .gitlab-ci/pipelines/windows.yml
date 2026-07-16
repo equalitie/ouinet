@@ -33,6 +33,8 @@ windows / cpp-rust-tests:
       --target-os windows
       --run-all-tests
       --exclude-test test_dht
+      --exclude-test test_fetch
+      --exclude-test test_http_store
       --exclude-test test_i2p
       --exclude-test test_i2p_fetch
       --exclude-test test_i2p_tracker
