@@ -56,6 +56,12 @@ std::string from_set(size_t size, std::string_view set) {
     return ret;
 }
 
+std::vector<uint8_t> bytes(size_t size) {
+    std::vector<uint8_t> v(size, 0);
+    data(v.data(), v.size(), 0, 255);
+    return v;
+}
+
 template<typename N> N number(N min, N max) {
     std::uniform_int_distribution<N> dist(min, max);
     return dist(g_rng);
