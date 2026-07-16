@@ -14,13 +14,12 @@ public:
         : _queue(q)
     {}
 
+    [[nodiscard]]
     std::expected<std::optional<Part>, sys::error_code>
     async_read_part(Async yield) override {
         auto c = _cancel.connect([&] { yield.cancel(); });
 
-        auto part_e = compat([&](Cancel cancel, asio::yield_context yield) {
-            return _queue.async_pop(cancel, yield);
-        })(yield);
+        auto part_e = _queue.async_pop(yield);
 
         if (!part_e) {
             _cancel(); // Indicate we're done
@@ -28,6 +27,7 @@ public:
         }
 
         auto part = std::move(*part_e);
+
         if (!part) {
             _is_done = true;
             _cancel(); // Indicate we're done
@@ -65,4 +65,4 @@ private:
     bool _is_done = false;
 };
 
-}
+} // namespace

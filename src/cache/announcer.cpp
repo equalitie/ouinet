@@ -194,9 +194,8 @@ struct Announcer::Loop {
             if (entries.empty()) {
                 LOG_DEBUG(yield, " No entries to update, waiting...");
 
-                auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-                    return entries.async_wait_for_push(cancel, yield);
-                })(yield);
+                auto result = entries.async_wait_for_push(yield);
+
                 if (!result) {
                     return std::unexpected(result.error());
                 }
