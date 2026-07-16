@@ -4,6 +4,7 @@
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/buffer.hpp>
+#include <boost/asio/cancellation_type.hpp>
 #include <boost/asio/error.hpp>
 
 #include "parse/endpoint.h"
@@ -259,7 +260,7 @@ void OuisyncSocket::async_receive_from(
     return;
   }
 
-  auto cancellation_slot = asio::get_associated_cancellation_slot(handler);
+  auto cancellation_slot = handler.get_cancellation_slot();
 
   _state->incoming.async_pop(asio::bind_cancellation_slot(
       std::move(cancellation_slot),
@@ -290,7 +291,7 @@ void OuisyncSocket::async_send_to(
   std::vector<uint8_t> data(size);
   asio::buffer_copy(asio::buffer(data), buffers);
 
-  auto cancellation_slot = asio::get_associated_cancellation_slot(handler);
+  auto cancellation_slot = handler.get_cancellation_slot();
 
   _state->outgoing.async_push(
       error_code(), {receiver, std::move(data)},
