@@ -2,6 +2,12 @@
 
 #include <boost/asio/any_completion_handler.hpp>
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_state.hpp>
+#include <boost/asio/cancellation_type.hpp>
+#include <boost/asio/compose.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/system/error_code.hpp>
@@ -10,6 +16,7 @@
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <unordered_map>
 #include <utility>
 
 namespace ouinet {
@@ -19,6 +26,8 @@ namespace detail {
 // HACK: `ouinet::ConditionVariable` currently has a bug which causes it to not work with callbacks
 // as completion tokens. Using this class as a replacement until that bug is fixed.
 class ConditionVariable {
+    using Handler = boost::asio::any_completion_handler<void(boost::system::error_code)>;
+
 public:
     ConditionVariable(const boost::asio::any_io_executor& exec)
         : _exec(exec)
@@ -35,23 +44,60 @@ public:
             CompletionToken,
             void(boost::system::error_code)
         > (
-            [this] (auto handler) {
-                _waiters.push_back(std::move(handler));
+            [this] (auto handler) mutable {
+                auto cancellation_slot = boost::asio::get_associated_cancellation_slot(handler);
+                auto id = insert_handler(std::move(handler));
+
+                if (cancellation_slot.is_connected()) {
+                    cancellation_slot.assign(
+                        [this, id] (boost::asio::cancellation_type type) {
+                            invoke(take_handler(id), boost::asio::error::operation_aborted);
+                        }
+                    );
+                }
             },
             token
         );
     }
 
     void notify(boost::system::error_code ec = {}) {
-        auto waiters = std::move(_waiters);
-        for (auto& waiter : waiters) {
-            std::move(waiter)(ec);
+        for (auto& p : _handlers) {
+            invoke(std::move(p.second), ec);
+        }
+
+        _handlers.clear();
+    }
+
+private:
+    size_t insert_handler(Handler&& handler) {
+        auto id = _next_handler_id++;
+        _handlers.insert({ id, std::move(handler) });
+        return id;
+    }
+
+    Handler take_handler(size_t id) {
+        auto it = _handlers.find(id);
+        if (it != _handlers.end()) {
+            auto handler = std::move(it->second);
+            _handlers.erase(it);
+            return handler;
+        } else {
+            return Handler();
+        }
+    }
+
+    void invoke(Handler&& handler, boost::system::error_code ec) {
+        if (handler) {
+            boost::asio::post(_exec, [handler = std::move(handler), ec] mutable {
+               handler(ec);
+            });
         }
     }
 
 private:
     boost::asio::any_io_executor _exec;
-    std::vector<boost::asio::any_completion_handler<void(boost::system::error_code)>> _waiters;
+    size_t _next_handler_id = 0;
+    std::unordered_map<size_t, Handler> _handlers;
 };
 
 // Async queue that serves as intermediate buffer for sending and receiving UDP datagrams.
@@ -132,26 +178,34 @@ public:
             CompletionToken,
             void(boost::system::error_code, value_type)
         >(
-            [this] (auto handler) {
+            [this] (auto handler) mutable {
+                auto cancellation_slot = boost::asio::get_associated_cancellation_slot(handler);
+
                 wait(
                     _push_cv,
                     [this] { return !empty(); },
-                    [this, handler = std::move(handler)]
-                    (boost::system::error_code wait_ec) mutable {
-                        if (!wait_ec) {
-                            auto [ec, ep, data] = pop();
+                    boost::asio::bind_cancellation_slot(
+                        std::move(cancellation_slot),
+                        [this, handler = std::move(handler)]
+                        (boost::system::error_code wait_ec) mutable {
+                            if (!wait_ec) {
+                                auto [ec, ep, data] = pop();
 
-                            handler(
-                                ec,
-                                std::make_tuple(ep, std::move(data))
-                            );
-                        } else {
-                            handler(
-                                wait_ec,
-                                std::make_tuple(boost::asio::ip::udp::endpoint(), std::vector<uint8_t>())
-                            );
+                                handler(
+                                    ec,
+                                    std::make_tuple(ep, std::move(data))
+                                );
+                            } else {
+                                handler(
+                                    wait_ec,
+                                    std::make_tuple(
+                                        boost::asio::ip::udp::endpoint(),
+                                        std::vector<uint8_t>()
+                                    )
+                                );
+                            }
                         }
-                    }
+                    )
                 );
             },
             token
@@ -227,34 +281,32 @@ private:
     }
 
     // Wait on the condition variable until the predicate returns true.
-    template<typename Predicate, typename CompletionHandler>
+    template<typename Predicate, typename CompletionToken>
     requires
         std::predicate<Predicate> &&
-        std::invocable<CompletionHandler, boost::system::error_code>
-    static void wait(ConditionVariable& cv, Predicate predicate, CompletionHandler handler) {
-        if (predicate()) {
-            handler(boost::system::error_code());
-            return;
-        }
-
-        cv.wait(
+        boost::asio::completion_token_for<CompletionToken, void(boost::system::error_code)>
+    static auto wait(ConditionVariable& cv, Predicate predicate, CompletionToken token) {
+        return boost::asio::async_compose<CompletionToken, void(boost::system::error_code)>(
             [
                 &cv,
-                predicate = std::forward<Predicate>(predicate),
-                handler = std::forward<CompletionHandler>(handler)
+                predicate = std::forward<Predicate>(predicate)
             ]
-            (boost::system::error_code ec) mutable {
+            (auto& self, boost::system::error_code ec = {}) {
+                self.reset_cancellation_state(boost::asio::enable_total_cancellation());
+
                 if (ec) {
-                    handler(ec);
+                    self.complete(ec);
                     return;
                 }
 
-                wait(
-                    cv,
-                    std::forward<Predicate>(predicate),
-                    std::forward<CompletionHandler>(handler)
-                );
-            }
+                if (predicate()) {
+                    self.complete(boost::system::error_code());
+                    return;
+                }
+
+                cv.wait(std::move(self));
+            },
+            token
         );
     }
 
