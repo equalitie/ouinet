@@ -49,4 +49,4 @@ macos / unit-test:
   needs:
     ['macos / build']
   rules:
-     - !reference [.optional_job, rules]
+     - !reference [.manual_job, rules]
