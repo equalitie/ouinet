@@ -16,6 +16,7 @@
 #include "util/async_test.h"
 #include "util/unwrap.h"
 #include "util/str.h"
+#include "async_sleep.h"
 
 BOOST_AUTO_TEST_SUITE(ouinet_cache_control)
 

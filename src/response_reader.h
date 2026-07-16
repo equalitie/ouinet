@@ -6,7 +6,6 @@
 #include "response_part.h"
 #include "util/cancel.h"
 #include "namespaces.h"
-#include "util/select.h"
 #include "api.h"
 
 #include <boost/beast/core/static_buffer.hpp>
@@ -22,24 +21,27 @@ namespace ouinet::http_response {
 
 class AbstractReader {
 public:
-    virtual std::expected<std::optional<Part>, sys::error_code> async_read_part(Async) = 0;
+    [[nodiscard]]
+    virtual
+    std::expected<
+        std::optional<Part>,
+        sys::error_code
+    >
+    async_read_part(Async) = 0;
 
-    // Returns true when the last `Part` was read, all next calls to
-    // `async_read_part` will return `{std::nullopt}`.
+    // Returns true once `async_read_part` has returned `{std::nullopt}`.
     virtual bool is_done() const = 0;
 
-    virtual void close()   = 0;
+    virtual void close() = 0;
 
     virtual asio::any_io_executor get_executor() = 0;
 
     virtual ~AbstractReader() = default;
 
-    template<class Duration>
+    [[nodiscard]]
     std::expected<std::optional<Part>, sys::error_code>
-    timed_async_read_part(Duration d, Async yield)
-    {
-        return timeout(d, [&](Async yield) { return async_read_part(yield); }, yield);
-    }
+    timed_async_read_part(std::chrono::steady_clock::duration, Async);
+
 };
 
 class OUINET_COMMON_API Reader : public AbstractReader {
