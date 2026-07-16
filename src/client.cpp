@@ -42,7 +42,7 @@
 #include "defer.h"
 #include "default_timeout.h"
 #include "constants.h"
-#include "util/async_queue_reader.h"
+#include "util/storing_reader.h"
 #include "session.h"
 #include "create_udp_multiplexer.h"
 #include "ssl/ca_certificate.h"
@@ -1712,7 +1712,6 @@ public:
 
         using http_response::Part;
 
-        util::AsyncQueue<std::optional<Part>> qst(exec), qag(exec); // to storage, agent
 
         WaitCondition wc(exec);
 
@@ -1727,12 +1726,10 @@ public:
                                         , (get_logger().get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
 
         if (do_cache) {
-            yield.spawn([ &, cache = std::move(cache), lock = wc.lock() ] (Async yield) {
-                auto key = rq->resource_id();
-                AsyncQueueReader rr(qst);
-                auto r = cache->store(key, rq->dht_group(), rr, yield);
-                if (!r) LOG_ERROR(yield, " Failed to write response to cache; ec=", r.error());
-            });
+            session = Session::create(
+                    std::make_unique<StoringReader>(*rq, std::move(*session), cache),
+                    tnx.request().method() == http::verb::head,
+                    yield);
         } else {
             LOG_DEBUG( yield, " Not ok to cache response: "
                    , no_cache_reason
@@ -1741,41 +1738,8 @@ public:
                                    : "disabled for this request/response"));
         }
 
-        yield.spawn([&, lock = wc.lock() ] (Async yield) {
-            auto rr = std::make_unique<AsyncQueueReader>(qag);
-            auto sag = Session::create(std::move(rr), tnx.request().method() == http::verb::head, yield);
-            if (!sag) return;
-            auto r = tnx.write_to_user_agent(*sag, yield);
-            if (!r) LOG_ERROR(yield, " Failed to write response to user agent; ec=", r.error());
-        });
 
-        auto r = session->flush_response(yield.tag("flush"),
-            [&] (Part&& part, Async yield) -> std::expected<void, sys::error_code>
-            {
-                // If the user agent closed its connection, stop getting data from the injector too.
-                // Otherwise, besides continuing to transfer data to the local cache,
-                // it will also accumulate in memory (at the `qag` queue, which is no longer read),
-                // with both being especially problematic with big resources like videos.
-                //
-                // Please note that this will cause an incomplete response to be stored;
-                // hopefully the Injector mechanism may be faster to respond
-                // if the client tries to download the same resource again.
-                // Another fix would be to have the local cache participate in multi-peer downloads.
-                if (!tnx.is_open()) {
-                    return std::unexpected(asio::error::broken_pipe);
-                }
-                if (do_cache) qst.push_back(part);
-                qag.push_back(std::move(part));
-                return {};
-            },
-            default_timeout::activity());
-
-        if (do_cache) qst.push_back(std::nullopt);
-        qag.push_back(std::nullopt);
-
-        // Wait for the spawned tasks to finish
-        wc.wait(yield.tag("wait"));
-
+        auto r = tnx.write_to_user_agent(*session, yield);
         LOG_DEBUG(yield, " Finish; ec=", r ? sys::error_code() : r.error());
 
         if (!r) return std::unexpected(r.error());

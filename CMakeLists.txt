@@ -246,6 +246,7 @@ file(GLOB client_sources
     "./src/cache/hash_list.cpp"
     "./src/cache/http_store.cpp"
     "./src/cache/local_peer_discovery.cpp"
+    "./src/util/storing_reader.cpp"
     "./src/cache/multi_peer_reader.cpp"
     "./src/cache/multi_peer_reader_error.cpp"
     "./src/cache/resource_key.cpp"

@@ -24,6 +24,8 @@ class AbstractReader {
 public:
     virtual std::expected<std::optional<Part>, sys::error_code> async_read_part(Async) = 0;
 
+    // Returns true when the last `Part` was read, all next calls to
+    // `async_read_part` will return `{std::nullopt}`.
     virtual bool is_done() const = 0;
 
     virtual void close()   = 0;
