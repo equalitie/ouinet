@@ -295,6 +295,7 @@ function copy_local_sources (
         '/bindings/cpp/build'
         '/bindings/cpp/examples/build'
         '/bindings/kotlin/build'
+        '/cmake-build-*'
     )
 
     if ! is_in android ${target_oss[@]}; then
