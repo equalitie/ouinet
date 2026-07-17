@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.6.10](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.10) - 2026-07-17
+
+### Changed
+
+- Adds matcher to the request routing such that all requests for our telegram mirror
+website (tg.ceno.app) will be routed to the injector, d-cache, or proxy mechanisms. !200
+
+### Fixed
+
+- Backport of fix for bt_extra_bootstraps front-end query parameter mismatch. !200
+
+
 ## [v1.6.9](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.9) - 2026-07-08
 
 ### Fixed
