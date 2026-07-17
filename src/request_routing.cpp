@@ -338,6 +338,10 @@ route_choose_config(const http::request_header<>& req, const ClientConfig& confi
              , unrequested ),
         */
 
+        Match( reqexpr::from_regex(target_getter, "https?://tg.ceno.app/.*")
+             , {deque<fresh_channel>({ fresh_channel::injector_or_dcache
+                                     , fresh_channel::proxy})}),
+
         // Handle requests to <http://localhost/> internally.
         Match( reqexpr::from_regex(host_getter, localhost_exact_rx)
              , {deque<fresh_channel>({fresh_channel::_front_end})} ),
