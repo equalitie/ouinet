@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prevents clients from crashing on peer requests when cache is uninitialized. ddaf4c02
 
 
+## [v1.7.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.1) - 2026-07-03
+
+### Fixed
+
+- Fix client stop. !192
+- Fixes and improvements in `asio-utp` submodule. !192
+
+### Changed
+
+- Build `asio_utp` as shared library. !192
+
+
 ## [v1.6.8](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.8) - 2026-06-30
 
 ### Fixed
