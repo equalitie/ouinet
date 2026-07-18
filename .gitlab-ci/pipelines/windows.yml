@@ -32,7 +32,6 @@ windows / cpp-rust-tests:
       ./docker/linux.sh
       --target-os windows
       --run-all-tests
-      --exclude-test test_dht
       --exclude-test test_fetch
       --exclude-test test_http_store
       --exclude-test test_i2p
