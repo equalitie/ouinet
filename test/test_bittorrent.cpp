@@ -62,17 +62,18 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
     using namespace ouinet::bittorrent;
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor()
+    DhtNode dht(exec
         , metrics_dht.dht_node_ipv4()
         , std::make_shared<dns::Resolver>()
         , rx_limit);
 
-    task::spawn_detached(ctx, [&] (auto yield) {
+    task::spawn_detached(exec, [&] (auto yield) {
         sys::error_code ec;
         Signal<void()> cancel_signal;
 
@@ -108,12 +109,13 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     using namespace ouinet::bittorrent;
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor()
+    DhtNode dht(exec
         , metrics_dht.dht_node_ipv4()
         , std::make_shared<dns::Resolver>()
         , rx_limit);
@@ -143,16 +145,16 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     size_t push_get_count = 8;
     size_t success_count = 0;
 
-    task::spawn_detached(ctx, [&] (auto yield) {
+    task::spawn_detached(exec, [&] (auto yield) {
         dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
 
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE(dht.ready());
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         for (size_t i = 0; i < push_get_count; i++) {
-        task::spawn_detached(ctx, [&, lock = wc.lock(), i] (auto yield) {
+        task::spawn_detached(exec, [&, lock = wc.lock(), i] (auto yield) {
                 BOOST_REQUIRE(!ec);
 
                 stringstream salt;

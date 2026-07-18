@@ -184,7 +184,7 @@ static const array<string, 4> rs_chunk_ext{
 
 template<class F>
 static void run_spawned(asio::io_context& ctx, F&& f) {
-    task::spawn_detached(ctx, [f = forward<F>(f)] (auto yield) {
+    task::spawn_detached(ctx.get_executor(), [f = forward<F>(f)] (auto yield) {
             try {
                 f(yield);
             }
@@ -196,15 +196,15 @@ static void run_spawned(asio::io_context& ctx, F&& f) {
 }
 
 void store_response( const fs::path& tmpdir, bool complete
-                   , asio::io_context& ctx, asio::yield_context yield) {
+                   , asio::any_io_executor exec, asio::yield_context yield) {
     asio::ip::tcp::socket
-        signed_w(ctx), signed_r(ctx);
-    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        signed_w(exec), signed_r(exec);
+    tie(signed_w, signed_r) = util::connected_pair(exec, yield);
 
-    WaitCondition wc(ctx);
+    WaitCondition wc(exec);
 
     // Send signed response.
-    task::spawn_detached(ctx, [&signed_w, complete, lock = wc.lock()] (auto y) {
+    task::spawn_detached(exec, [&signed_w, complete, lock = wc.lock()] (auto y) {
         // Head (raw).
         asio::async_write( signed_w
                          , asio::const_buffer(rs_head.data(), rs_head.size())
@@ -239,12 +239,12 @@ void store_response( const fs::path& tmpdir, bool complete
     });
 
     // Store response.
-    task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tmpdir, complete
-                     , &ctx, lock = wc.lock()] (auto y) mutable {
+    task::spawn_detached(exec, [ signed_r = std::move(signed_r), &tmpdir, complete
+                     , lock = wc.lock()] (auto y) mutable {
         Cancel c;
         sys::error_code e;
         http_response::Reader signed_rr(std::move(signed_r));
-        cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+        cache::http_store(signed_rr, tmpdir, y.get_executor(), c, y[e]);
         BOOST_CHECK(!complete || !e);
     });
 
@@ -252,8 +252,8 @@ void store_response( const fs::path& tmpdir, bool complete
 }
 
 void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
-                            , asio::io_context& ctx, asio::yield_context yield) {
-    store_response(tmpdir, true, ctx, yield);
+                            , asio::any_io_executor exec, asio::yield_context yield) {
+    store_response(tmpdir, true, exec, yield);
 
     // Move body to external file, point `body-path` to it.
     auto crpath = fs::path("foo/bar/data.dat");
@@ -264,7 +264,7 @@ void store_response_external( const fs::path& tmpdir, const fs::path& tmpcdir
     }
     {
         sys::error_code ec;
-        auto body_path_f = util::file_io::open_or_create(ctx.get_executor(), tmpdir / "body-path", ec);
+        auto body_path_f = util::file_io::open_or_create(exec, tmpdir / "body-path", ec);
         if (ec) return or_throw(yield, ec);
         std::string crpath_str = crpath.string();
         auto crpath_b = asio::const_buffer(crpath_str.data(), crpath_str.size());
@@ -288,15 +288,15 @@ static const string ers_last_chunk_ext = // dummy value for test
   ";ouisig=\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"";
 
 void store_empty_response( const fs::path& tmpdir
-                         , asio::io_context& ctx, asio::yield_context yield) {
+                         , asio::any_io_executor exec, asio::yield_context yield) {
     asio::ip::tcp::socket
-        signed_w(ctx), signed_r(ctx);
-    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        signed_w(exec), signed_r(exec);
+    tie(signed_w, signed_r) = util::connected_pair(exec, yield);
 
-    WaitCondition wc(ctx);
+    WaitCondition wc(exec);
 
     // Send signed response.
-    task::spawn_detached(ctx, [&signed_w, lock = wc.lock()] (auto y) {
+    task::spawn_detached(exec, [&signed_w, lock = wc.lock()] (auto y) {
         // Head (raw).
         asio::async_write( signed_w
                          , asio::const_buffer(rs_head.data(), rs_head.size())
@@ -312,12 +312,12 @@ void store_empty_response( const fs::path& tmpdir
     });
 
     // Store response.
-    task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tmpdir
-                     , &ctx, lock = wc.lock()] (auto y) mutable {
+    task::spawn_detached(exec, [ signed_r = std::move(signed_r), &tmpdir
+                     , lock = wc.lock()] (auto y) mutable {
         Cancel c;
         sys::error_code e;
         http_response::Reader signed_rr(std::move(signed_r));
-        cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+        cache::http_store(signed_rr, tmpdir, y.get_executor(), c, y[e]);
         BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
     });
 
@@ -325,15 +325,15 @@ void store_empty_response( const fs::path& tmpdir
 }
 
 void store_response_head( const fs::path& tmpdir, const string& head_s
-                        , asio::io_context& ctx, asio::yield_context yield) {
+                        , asio::any_io_executor exec, asio::yield_context yield) {
     asio::ip::tcp::socket
-        signed_w(ctx), signed_r(ctx);
-    tie(signed_w, signed_r) = util::connected_pair(ctx, yield);
+        signed_w(exec), signed_r(exec);
+    tie(signed_w, signed_r) = util::connected_pair(exec, yield);
 
-    WaitCondition wc(ctx);
+    WaitCondition wc(exec);
 
     // Send signed response.
-    task::spawn_detached(ctx, [&signed_w, &head_s, lock = wc.lock()] (auto y) {
+    task::spawn_detached(exec, [&signed_w, &head_s, lock = wc.lock()] (auto y) {
         // Head (raw).
         asio::async_write( signed_w
                          , asio::const_buffer(head_s.data(), head_s.size())
@@ -342,12 +342,12 @@ void store_response_head( const fs::path& tmpdir, const string& head_s
     });
 
     // Store response.
-    task::spawn_detached(ctx, [ signed_r = std::move(signed_r), &tmpdir
-                     , &ctx, lock = wc.lock()] (auto y) mutable {
+    task::spawn_detached(exec, [ signed_r = std::move(signed_r), &tmpdir
+                     , lock = wc.lock()] (auto y) mutable {
         Cancel c;
         sys::error_code e;
         http_response::Reader signed_rr(std::move(signed_r));
-        cache::http_store(signed_rr, tmpdir, ctx.get_executor(), c, y[e]);
+        cache::http_store(signed_rr, tmpdir, y.get_executor(), c, y[e]);
     });
 
     wc.wait(yield);
@@ -398,19 +398,20 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
     fs::create_directory(tmpdir);
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        store_response(tmpdir, complete, ctx, yield);
+        store_response(tmpdir, complete, exec, yield);
 
         {
             sys::error_code e;
-            auto body_size = cache::http_store_body_size(tmpdir, ctx.get_executor(), e);
+            auto body_size = cache::http_store_body_size(tmpdir, exec, e);
             BOOST_CHECK(!e);
             BOOST_CHECK_EQUAL(body_size, 131076);
         }
 
         auto read_file = [&] (auto fname, auto c, auto y) -> string {
             sys::error_code e;
-            auto f = util::file_io::open_readonly(ctx.get_executor(), tmpdir / fname, e);
+            auto f = util::file_io::open_readonly(exec, tmpdir / fname, e);
             if (e) return or_throw(y, e, "");
 
             size_t fsz = util::file_io::file_size(f, e);
@@ -486,28 +487,29 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
     fs::create_directory(tmpdir);
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        store_response(tmpdir, complete, ctx, yield);
+        store_response(tmpdir, complete, exec, yield);
 
         {
             sys::error_code e;
-            auto body_size = cache::http_store_body_size(tmpdir, ctx.get_executor(), e);
+            auto body_size = cache::http_store_body_size(tmpdir, exec, e);
             BOOST_CHECK(!e);
             BOOST_CHECK_EQUAL(body_size, 131076);
         }
 
         asio::ip::tcp::socket
-            loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+            loaded_w(exec), loaded_r(exec);
+        tie(loaded_w, loaded_r) = util::connected_pair(exec, yield);
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         // Load response.
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir, complete
-                         , &ctx, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [ &loaded_w, &tmpdir, complete
+                         , &exec, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader(tmpdir, exec, e);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -518,7 +520,7 @@ BOOST_DATA_TEST_CASE(test_read_response, boost::unit_test::data::make(true_false
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r), complete
+        task::spawn_detached(exec, [ loaded_r = std::move(loaded_r), complete
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
@@ -600,28 +602,29 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
     tmpcdir = fs::canonical(tmpcdir);
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        store_response_external(tmpdir, tmpcdir, ctx, yield);
+        store_response_external(tmpdir, tmpcdir, exec, yield);
 
         {
             sys::error_code e;
-            auto body_size = cache::http_store_body_size(tmpdir, tmpcdir, ctx.get_executor(), e);
+            auto body_size = cache::http_store_body_size(tmpdir, tmpcdir, exec, e);
             BOOST_CHECK(!e);
             BOOST_CHECK_EQUAL(body_size, 131076);
         }
 
         asio::ip::tcp::socket
-            loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+            loaded_w(exec), loaded_r(exec);
+        tie(loaded_w, loaded_r) = util::connected_pair(exec, yield);
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         // Load response.
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir, &tmpcdir
-                         , &ctx, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [ &loaded_w, &tmpdir, &tmpcdir
+                         , &exec, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader(tmpdir, tmpcdir, exec, e);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -632,7 +635,7 @@ BOOST_AUTO_TEST_CASE(test_read_response_external) {
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
+        task::spawn_detached(exec, [ loaded_r = std::move(loaded_r)
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
@@ -712,21 +715,22 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
     fs::create_directory(tmpdir);
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        store_empty_response(tmpdir, ctx, yield);
+        store_empty_response(tmpdir, exec, yield);
 
         asio::ip::tcp::socket
-            loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+            loaded_w(exec), loaded_r(exec);
+        tie(loaded_w, loaded_r) = util::connected_pair(exec, yield);
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         // Load response.
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir
-                         , &ctx, lock = wc.lock()] (auto y) {
+        task::spawn_detached(exec, [ &loaded_w, &tmpdir
+                         , &exec, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
-            auto store_rr = cache::http_store_reader(tmpdir, ctx.get_executor(), e);
+            auto store_rr = cache::http_store_reader(tmpdir, exec, e);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -737,7 +741,7 @@ BOOST_AUTO_TEST_CASE(test_read_empty_response) {
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
+        task::spawn_detached(exec, [ loaded_r = std::move(loaded_r)
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
             sys::error_code e;
@@ -812,21 +816,22 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
     fs::create_directory(tmpdir);
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        store_response(tmpdir, true, ctx, yield);
+        store_response(tmpdir, true, exec, yield);
 
         {
             sys::error_code e;
-            auto body_size = cache::http_store_body_size(tmpdir, ctx.get_executor(), e);
+            auto body_size = cache::http_store_body_size(tmpdir, exec, e);
             BOOST_CHECK(!e);
             BOOST_CHECK_EQUAL(body_size, 131076);
         }
 
         asio::ip::tcp::socket
-            loaded_w(ctx), loaded_r(ctx);
-        tie(loaded_w, loaded_r) = util::connected_pair(ctx, yield);
+            loaded_w(exec), loaded_r(exec);
+        tie(loaded_w, loaded_r) = util::connected_pair(exec, yield);
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         // Load partial response:
         // request from middle first block to middle last block.
@@ -835,15 +840,15 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
         // when first and last blocks match.
         unsigned first_block, last_block;
         tie(first_block, last_block) = firstb_lastb;
-        task::spawn_detached(ctx, [ &loaded_w, &tmpdir
+        task::spawn_detached(exec, [ &loaded_w, &tmpdir
                          , first_block, last_block
-                         , &ctx, lock = wc.lock()] (auto y) {
+                         , &exec, lock = wc.lock()] (auto y) {
             Cancel c;
             sys::error_code e;
             size_t first = (first_block * http_::response_data_block) + rs_block_data[first_block].size() / 2;
             size_t last = (last_block * http_::response_data_block) + rs_block_data[last_block].size() / 2;
             auto store_rr = cache::http_store_range_reader
-                (tmpdir, ctx.get_executor(), first, last, e);
+                (tmpdir, exec, first, last, e);
             BOOST_CHECK_EQUAL(e.value(), sys::errc::success);
             BOOST_REQUIRE(store_rr);
             auto store_s = Session::create(std::move(store_rr), false, c, y[e]);
@@ -854,7 +859,7 @@ BOOST_DATA_TEST_CASE( test_read_response_partial
         });
 
         // Check parts of the loaded response.
-        task::spawn_detached(ctx, [ loaded_r = std::move(loaded_r)
+        task::spawn_detached(exec, [ loaded_r = std::move(loaded_r)
                          , first_block, last_block
                          , lock = wc.lock()] (auto y) mutable {
             Cancel c;
@@ -926,12 +931,13 @@ BOOST_AUTO_TEST_CASE(test_read_response_partial_off) {
     fs::create_directory(tmpdir);
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
     run_spawned(ctx, [&] (auto yield) {
-        store_response(tmpdir, true, ctx, yield);
+        store_response(tmpdir, true, exec, yield);
 
         sys::error_code e;
         auto store_rr = cache::http_store_range_reader
-            ( tmpdir, ctx.get_executor()
+            ( tmpdir, exec
             , 0, 42'000'000  // off limits
             , e);
         BOOST_CHECK(!e);
@@ -953,7 +959,7 @@ BOOST_DATA_TEST_CASE(test_hash_list, boost::unit_test::data::make(true_false), c
     Cancel cancel;
 
     run_spawned(ctx, [&] (auto yield) {
-        store_response(tmpdir, complete, ctx, yield);
+        store_response(tmpdir, complete, exec, yield);
         cache::HashList hl = cache::http_store_load_hash_list(tmpdir, exec, cancel, yield);
         BOOST_REQUIRE(hl.verify());
     });

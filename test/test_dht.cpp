@@ -32,28 +32,28 @@ vector<bootstrap::Address> bootstraps {
         , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
 };
 
-void init_without_bootstrapping(asio::io_context& ctx, DhtNode& dht_node) {
-    task::spawn_detached(ctx, [&](auto yield) {
+void init_without_bootstrapping(asio::any_io_executor exec, DhtNode& dht_node) {
+    task::spawn_detached(exec, [&](auto yield) {
         sys::error_code ec;
         auto local_ep = udp::endpoint{asio::ip::make_address("0.0.0.0"), 0};
-        auto m = asio_utp::udp_multiplexer(ctx);
+        auto m = asio_utp::udp_multiplexer(exec);
         m.bind(local_ep, ec);
 
         dht_node._multiplexer = make_unique<UdpMultiplexer>(move(m));
-        dht_node._tracker = make_unique<Tracker>(ctx.get_executor());
-        dht_node._data_store = make_unique<DataStore>(ctx.get_executor());
+        dht_node._tracker = make_unique<Tracker>(exec);
+        dht_node._data_store = make_unique<DataStore>(exec);
 
         dht_node._node_id = NodeID::zero();
         dht_node._next_transaction_id = 1;
     });
 
-    task::spawn_detached(ctx, [&](auto yield) {
+    task::spawn_detached(exec, [&](auto yield) {
         dht_node.receive_loop(yield);
     });
 }
 
-void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
-    task::spawn_detached(ctx, [&](auto yield) {
+void bootstrap(asio::any_io_executor exec, DhtNode& dht_node) {
+    task::spawn_detached(exec, [&](auto yield) {
         size_t success{0};
 
         cout << "server\t"
@@ -102,16 +102,17 @@ void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
 BOOST_AUTO_TEST_CASE(test_bootstrap)
 {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4(), dns_resolver, rx_limit);
+    DhtNode dht_node(exec, metrics_dht.dht_node_ipv4(), dns_resolver, rx_limit);
 
-    init_without_bootstrapping(ctx, dht_node);
-    bootstrap(ctx, dht_node);
+    init_without_bootstrapping(exec, dht_node);
+    bootstrap(exec, dht_node);
     ctx.run();
 }
 

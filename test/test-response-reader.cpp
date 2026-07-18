@@ -22,18 +22,18 @@ namespace HR = http_response;
 
 // TODO: There should be a more straight forward way to do this.
 tcp::socket
-stream(string response, asio::io_context& ctx, asio::yield_context yield)
+stream(string response, asio::any_io_executor exec, asio::yield_context yield)
 {
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor a(ctx, loopback_ep);
-    tcp::socket s1(ctx), s2(ctx);
+    tcp::acceptor a(exec, loopback_ep);
+    tcp::socket s1(exec), s2(exec);
 
     sys::error_code accept_ec;
     sys::error_code connect_ec;
 
-    WaitCondition wc(ctx);
+    WaitCondition wc(exec);
 
-    task::spawn_detached(ctx, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
+    task::spawn_detached(exec, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
             a.async_accept(s2, yield[accept_ec]);
         });
 
@@ -43,7 +43,7 @@ stream(string response, asio::io_context& ctx, asio::yield_context yield)
     if (accept_ec)  return or_throw(yield, accept_ec, move(s1));
     if (connect_ec) return or_throw(yield, connect_ec, move(s1));
 
-    task::spawn_detached(ctx, [rsp = move(response), s = move(s2)]
+    task::spawn_detached(exec, [rsp = move(response), s = move(s2)]
                      (asio::yield_context yield) mutable {
             asio::async_write(s, asio::buffer(rsp), yield);
         });
@@ -101,13 +101,14 @@ BOOST_AUTO_TEST_SUITE(ouinet_response_reader)
 
 BOOST_AUTO_TEST_CASE(test_http10_no_body) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.0 200 OK\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -127,14 +128,15 @@ BOOST_AUTO_TEST_CASE(test_http10_no_body) {
 
 BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.0 200 OK\r\n"
             "\r\n"
             "abcdef";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -160,8 +162,9 @@ BOOST_AUTO_TEST_CASE(test_http10_body_no_length) {
 
 BOOST_AUTO_TEST_CASE(test_http11_no_body) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -169,7 +172,7 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
             "Content-Length: 0\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -189,8 +192,9 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body) {
 
 BOOST_AUTO_TEST_CASE(test_http11_no_body_big_header) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -199,7 +203,7 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body_big_header) {
             "X-Long-Header: " + std::string(8 * 1024, 'x') + "\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -219,8 +223,9 @@ BOOST_AUTO_TEST_CASE(test_http11_no_body_big_header) {
 
 BOOST_AUTO_TEST_CASE(test_http11_body) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -229,7 +234,7 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
             "\r\n"
             "0123456789";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -253,8 +258,9 @@ BOOST_AUTO_TEST_CASE(test_http11_body) {
 
 BOOST_AUTO_TEST_CASE(test_http11_chunk) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -266,7 +272,7 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
             "0\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -306,8 +312,9 @@ BOOST_AUTO_TEST_CASE(test_http11_chunk) {
 
 BOOST_AUTO_TEST_CASE(test_http11_trailer) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -321,7 +328,7 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
             "Hash: hash_of_1234\r\n"
             "\r\n";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -361,8 +368,9 @@ BOOST_AUTO_TEST_CASE(test_http11_trailer) {
 
 BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -378,7 +386,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
             "\r\n"
             "abcde";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
@@ -419,8 +427,9 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_body_body) {
 
 BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
-    task::spawn_detached(ctx, [&] (auto y) {
+    task::spawn_detached(exec, [&] (auto y) {
         string rsp =
             "HTTP/1.1 200 OK\r\n"
             "Date: Mon, 27 Jul 2019 12:30:20 GMT\r\n"
@@ -439,7 +448,7 @@ BOOST_AUTO_TEST_CASE(test_http11_restart_chunks_body) {
             "\r\n"
             "abcde";
 
-        RR rr(stream(move(rsp), ctx, y));
+        RR rr(stream(move(rsp), exec, y));
 
         Cancel c;
         boost::optional<HR::Part> part;
