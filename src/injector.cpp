@@ -467,7 +467,6 @@ public:
          , std::shared_ptr<dns::Resolver> dns_resolver
          , Async yield)
     {
-        sys::error_code ec;
         bool rq_keep_alive = rq.keep_alive();
 
         // Get DRUID before the Ouinet headers are removed.
@@ -490,7 +489,6 @@ public:
     std::expected<Connection, sys::error_code>
     get_connection(const Request& rq_, const std::shared_ptr<dns::Resolver>& dns_resolver, Async yield) {
         Connection connection;
-        sys::error_code ec;
 
         auto maybe_connection = origin_pools.get_connection(rq_);
         if (maybe_connection) {
