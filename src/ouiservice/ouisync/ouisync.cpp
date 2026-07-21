@@ -10,7 +10,6 @@
 #include "generic_stream.h"
 #include "util/keep_alive.h"
 #include "util/async.h"
-#include "cache/cache_entry.h"
 #include "cache/resource.h"
 #include "cache/http_store.h"
 

@@ -6,7 +6,6 @@
 #include <variant>
 
 #include "cache_control.h"
-#include "cache/cache_entry.h"
 #include "generic_stream.h"
 #include "logger.h"
 #include "split_string.h"
@@ -396,14 +395,23 @@ CacheControl::do_fetch_fresh(const CacheRequest& rq, Async yield) {
     return fetch_fresh(rq.to_inject_request(), yield);
 }
 
-std::expected<CacheEntry, sys::error_code>
+std::expected<CacheControl::CacheEntry, sys::error_code>
 CacheControl::do_fetch_stored(const CacheRequest& rq, Async yield) {
     if (!fetch_stored) {
         LOG_DEBUG(yield, " No fetch stored_operation provided");
         return std::unexpected(asio::error::operation_not_supported);
     }
 
-    return fetch_stored(rq.to_retrieve_request(), yield);
+    auto session = fetch_stored(rq.to_retrieve_request(), yield);
+
+    if (!session) return std::unexpected(session.error());
+
+    auto tsh = util::http_injection_ts(session->response_header());
+    auto ts = parse::number<time_t>(tsh);
+    auto date = ts ? boost::posix_time::from_time_t(*ts)
+                   : boost::posix_time::not_a_date_time;
+
+    return CacheEntry { date, std::move(*session) };
 }
 
 //------------------------------------------------------------------------------

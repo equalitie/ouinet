@@ -1,30 +1,28 @@
 #define BOOST_TEST_MODULE cache_control
 #include <boost/test/unit_test.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/date_time/gregorian/gregorian.hpp>
 #include <boost/optional.hpp>
 #include <boost/asio/readable_pipe.hpp>
 #include <boost/asio/writable_pipe.hpp>
 #include <boost/asio/connect_pipe.hpp>
+#include <boost/format.hpp>
+#include <boost/beast/http.hpp>
 
 #include <cache_control.h>
 #include <http_util.h>
 #include <util.h>
-#include <or_throw.h>
 #include <session.h>
-#include <iostream>
 
 #include "util/async_test.h"
 #include "util/unwrap.h"
 #include "util/str.h"
 #include "async_sleep.h"
 
-BOOST_AUTO_TEST_SUITE(ouinet_cache_control)
-
 using namespace std;
 using namespace ouinet;
 namespace error = asio::error;
 namespace posix_time = boost::posix_time;
-using Entry    = CacheEntry;
 using Request  = http::request<http::string_body>;
 using Response = http::response<http::dynamic_body>;
 using posix_time::seconds;
@@ -89,9 +87,10 @@ Session make_session(Response rs, Async yield) {
     return unwrap(Session::create(std::move(pipe.source), false, yield));
 }
 
-Entry make_entry(posix_time::ptime created, Response rs, Async yield) {
-    Session s = make_session(std::move(rs), yield);
-    return Entry{ created , std::move(s) };
+void set_timestamp(Response& rs, posix_time::ptime time) {
+    posix_time::ptime epoch(boost::gregorian::date(1970,1,1));
+    rs.set(http_::response_injection_hdr
+          , str(boost::format("id=%s,ts=%d") % "00" % (time - epoch).total_seconds()));
 }
 
 BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
@@ -108,8 +107,9 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
 
         Response rs{http::status::ok, CacheRequest::HTTP_VERSION};
         rs.set("X-Test", "from-cache");
+        set_timestamp(rs, current_time());
 
-        return make_entry(current_time(), rs, yield);
+        return make_session(rs, yield);
     };
 
     cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -176,7 +176,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
             if (rq.resource_id() == old_resource_id) created -= seconds(5);
             else                                     created += seconds(5);
 
-            return make_entry(created, rs, yield);
+            set_timestamp(rs, created);
+            return make_session(rs, yield);
         };
 
         cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -255,7 +256,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
                 BOOST_CHECK(rq.resource_id() == new_resource_id);
             }
 
-            return make_entry(created, rs, yield);
+            set_timestamp(rs, created);
+            return make_session(rs, yield);
         };
 
         cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -338,7 +340,8 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
                       , format_time(current_time() + posix_time::seconds(10)));
             }
 
-            return make_entry(created, rs, yield);
+            set_timestamp(rs, created);
+            return make_session(rs, yield);
         };
 
         cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -389,7 +392,9 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
 
     cc.fetch_stored = [&](auto rq, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
-        return make_entry(current_time(), Response{}, y);
+        Response rs{};
+        set_timestamp(rs, current_time());
+        return make_session(rs, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -424,7 +429,9 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
 
     cc.fetch_stored = [&](auto rq, auto y) {
         BOOST_ERROR("Shouldn't go to cache");
-        return make_entry(current_time(), {}, y);
+        Response rs{};
+        set_timestamp(rs, current_time());
+        return make_session(rs, y);
     };
 
     cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -488,8 +495,9 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
         rs.set(http::field::cache_control, "max-age=10");
         rs.set(http::field::etag, "123");
         rs.set("X-Test", "from-cache");
+        set_timestamp(rs, current_time() - seconds(20));
 
-        return make_entry(current_time() - seconds(20), rs, yield);
+        return make_session(rs, yield);
     };
 
     cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -581,7 +589,8 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
         // Return a fresh cached version.
         rs.set(http::field::cache_control, "max-age=3600");
         rs.set("X-Test", "from-cache");
-        return make_entry(current_time(), rs, yield);
+        set_timestamp(rs, current_time());
+        return make_session(rs, yield);
     };
 
     cc.fetch_fresh = [&](auto rq, auto yield) {
@@ -640,5 +649,3 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
     // Origin is invoked in both cases, but only used in the "no-cache" case.
     BOOST_CHECK_EQUAL(origin_check, 2u);
 }
-
-BOOST_AUTO_TEST_SUITE_END()

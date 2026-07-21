@@ -6,7 +6,6 @@
 #include "ouiservice/i2p/tracker_lookup.h"
 
 #include "multi_peer_reader_error.h"
-#include "cache_entry.h"
 #include "http_sign.h"
 #include "../http_util.h"
 #include "../session.h"

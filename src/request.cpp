@@ -1,7 +1,6 @@
 #include "request.h"
 #include "http_util.h"
 #include "authenticate.h"
-#include "cache/cache_entry.h"
 #include "cache/resource_key.h"
 #include "logger.h"
 

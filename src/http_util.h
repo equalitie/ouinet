@@ -84,7 +84,7 @@ std::string format_date(boost::posix_time::ptime);
 // Return empty is missing or malformed.
 OUINET_COMMON_API
 boost::string_view http_injection_field( const http::response_header<>&
-                                       , const std::string&);
+                                       , std::string_view);
 
 inline
 boost::string_view http_injection_id(const http::response_header<>& rsh)

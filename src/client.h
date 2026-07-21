@@ -17,7 +17,7 @@ class ClientConfig;
 class OUINET_CLIENT_API Client {
 private:
     class State;
-    class ClientCacheControl;
+    class Dispatcher;
     using MockDhtBuilder = std::function<std::shared_ptr<bittorrent::MockDht> ()>;
 
 public:

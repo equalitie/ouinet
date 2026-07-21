@@ -10,7 +10,6 @@
 #include "../bittorrent/mainline_dht.h"
 #include "../response_reader.h"
 #include "../util/sign.h"
-#include "cache_entry.h"
 #include "resource_id.h"
 #include "dht_groups.h"
 #include "peer_message.h"
