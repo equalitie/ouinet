@@ -8,6 +8,7 @@
 #include "util/dht.h"
 #include "util/test_dir.h"
 #include "util/http_server.h"
+#include "util/unwrap.h"
 #include "injector.h"
 #include "client.h"
 #include "util/random.h"
@@ -79,13 +80,13 @@ Request build_private_request(const util::Url& url) {
 
 Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
-    stream.async_connect(client.get_proxy_endpoint(), yield).value();
+    unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
 
-    http::async_write(stream, req, yield).value();
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield).value();
+    unwrap(http::async_read(stream, b, res, yield));
     return res;
 }
 
@@ -108,24 +109,24 @@ Response fetch_from_origin(util::Url url, asio::ssl::context& ctx, Async yield) 
     auto exec = yield.get_executor();
 
     tcp::resolver resolver(exec);
-    auto const results = resolver.async_resolve(url.host, url.port, yield).value();
+    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
 
     auto req = build_origin_request(url);
     std::string host = req[http::field::host];
 
     tcp::socket socket(exec);
-    asio::async_connect(socket, results, yield).value();
+    unwrap(asio::async_connect(socket, results, yield));
 
     auto stream = setup_tls_stream(std::move(socket), ctx, url.host);
-    stream.async_handshake(asio::ssl::stream_base::client, yield).value();
+    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
 
-    http::async_write(stream, req, yield).value();
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield).value();
+    unwrap(http::async_read(stream, b, res, yield));
 
-    (void) stream.async_shutdown(yield);
+    unwrap(stream.async_shutdown(yield));
 
     BOOST_REQUIRE_EQUAL(res.result(), http::status::ok);
 
