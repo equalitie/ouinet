@@ -319,7 +319,7 @@ void ClientConfig::save_persistent() {
     for (const auto& btbs_addr : _bt_bootstrap_extras) {
         ss << "bt-bootstrap-extra = " << btbs_addr << endl;
     }
-    ss << "bt-bootstrap-no-default" << _bt_bootstrap_no_default << endl;
+    ss << "bt-bootstrap-no-default = " << _bt_bootstrap_no_default << endl;
 
     ss << "disable-origin-access = " << _disable_origin_access << endl;
     ss << "disable-injector-access = " << _disable_injector_access << endl;
