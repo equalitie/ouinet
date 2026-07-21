@@ -21,11 +21,19 @@ case "$util_container_os" in
 esac
 
 function choose_docker_container_name (
-    echo $USER.ouinet.build
+    if [ -n "${1-}" ]; then
+      echo "$1"
+    else
+      echo $USER.ouinet.build
+    fi
 )
 
 function choose_docker_image_name (
-    echo $USER.ouinet.build
+    if [ -n "${1-}" ]; then
+      echo "$1"
+    else
+      echo $USER.ouinet.build
+    fi
 )
 
 function dock (

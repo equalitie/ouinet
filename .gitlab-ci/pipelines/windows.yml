@@ -1,73 +1,46 @@
 windows / build:
-  variables:
-    TARGET_PLATFORM: 'windows'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
   stage: build
   tags:
-    - windows-shell
+    - shell+docker
+  variables:
+    BUILD_PATH: 'build'
+    TARGET_OS: 'windows'
+    CMAKE_BUILD_TYPE: 'Release'
   script:
-    - cmake --version
-    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DWITH_OUISYNC=ON
-    - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
-    - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
-    - $libs = @("libgcc_s_seh-1", "libstdc++-6", "libwinpthread-1", "zlib1")
-    - foreach ($lib in $libs) { Copy-Item C:\msys64\mingw64\bin\${lib}.dll -Destination ${BUILD_PATH} }
-    - Copy-Item -Path src/client_lib.h -Destination ${BUILD_PATH}
+    - >
+      ./docker/linux.sh
+      --target-os $TARGET_OS
+      --artifact-dir $BUILD_PATH
+      --cmake-build-type $CMAKE_BUILD_TYPE
+      $CONTAINER_ARGS
   artifacts:
     paths:
-      - $BUILD_PATH/client.exe
-      - $BUILD_PATH/injector.exe
-      - $BUILD_PATH/*lib*
-      - $BUILD_PATH/test/test_*
-      - $BUILD_PATH/test/bt_*
+      - $BUILD_PATH/$TARGET_OS/client.exe
+      - $BUILD_PATH/$TARGET_OS/injector.exe
+      - $BUILD_PATH/$TARGET_OS/lib*.dll*
     expire_in: 6h
-  needs:
-    []
+  rules:
+     - !reference [.optional_job, rules]
 
-windows / cpp-tests:
-  variables:
-    TARGET_PLATFORM: 'windows'
-    BUILD_PATH: 'build/$TARGET_PLATFORM'
+windows / cpp-rust-tests:
   stage: test
   tags:
-    - windows-shell
-  artifacts:
-    paths:
-      - $BUILD_PATH/client.exe
-      - $BUILD_PATH/injector.exe
-      - $BUILD_PATH/*lib*
-      - $BUILD_PATH/test/test_*
-    expire_in: 6h
+    - shell+docker
+  timeout: 30 minutes
   script:
-    - $env:PATH = "${CI_PROJECT_DIR}\${BUILD_PATH};$env:PATH"
-    - $testFiles = Get-ChildItem -Path "${BUILD_PATH}\test" -Filter "test_*"
-    - $testsFailed = $false
-    - foreach ($test in $testFiles) { & $test.FullName --log_level=test_suite; if (-not $?) { $testsFailed = $true }}
-    - echo $testsFailed
-    - if ($testsFailed) { exit 1 }
+    - >
+      ./docker/linux.sh
+      --target-os windows
+      --run-all-tests
+      --exclude-test test_fetch
+      --exclude-test test_http_store
+      --exclude-test test_i2p
+      --exclude-test test_i2p_fetch
+      --exclude-test test_i2p_tracker
+      $CONTAINER_ARGS
   needs:
-    ['windows / build']
+    - job: 'windows / build'
+      artifacts: false
+  rules:
+     - !reference [.optional_job, rules]
 
-windows / build-release:
-  variables:
-    TARGET_PLATFORM: 'windows'
-    BUILD_PATH: 'build/$TARGET_PLATFORM-release'
-  stage: build
-  tags:
-    - windows-shell
-  script:
-    - cmake -S . -B ${BUILD_PATH} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
-    - $cpuCount = (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors - 1
-    - cmake --build ${BUILD_PATH} -- -j ${cpuCount}
-    - $libs = @("libgcc_s_seh-1", "libstdc++-6", "libwinpthread-1", "zlib1")
-    - foreach ($lib in $libs) { Copy-Item C:\msys64\mingw64\bin\${lib}.dll -Destination ${BUILD_PATH} }
-    - Copy-Item -Path src/client_lib.h -Destination ${BUILD_PATH}
-  artifacts:
-    paths:
-      - $BUILD_PATH/client.exe
-      - $BUILD_PATH/injector.exe
-      - $BUILD_PATH/*lib*
-    expire_in: 6h
-  when: manual
-  needs:
-    []

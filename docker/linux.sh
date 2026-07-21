@@ -7,6 +7,7 @@ clean=
 target_oss=()
 run_all_tests=
 run_cpp_tests=()
+run_cpp_rust_tests=()
 run_python_tests=
 enter_on_exit=
 excluded_test_targets=()
@@ -14,6 +15,11 @@ artifact_dir=
 with_ouisync=n
 host_ouisync_dir=
 with_asan=n
+container_name=
+image_name=
+container_duration=1d
+cmake_build_type=Debug
+android_abi=arm64-v8a
 
 source $(dirname $0)/util.sh linux
 
@@ -42,6 +48,9 @@ while [[ "$#" -gt 0 ]]; do
         --run-cpp-test)
             run_cpp_tests+=($2); shift
             ;;
+        --run-cpp-rust-tests)
+            run_cpp_rust_tests=y
+            ;;
         --run-python-tests)
             run_python_tests=y
             ;;
@@ -66,6 +75,18 @@ while [[ "$#" -gt 0 ]]; do
         --artifact-dir)
             artifact_dir=$2; shift;
             mkdir -p $artifact_dir
+            ;;
+        --container-name)
+            container_name=($2); shift
+            ;;
+        --image-name)
+            image_name=($2); shift
+            ;;
+        --container-duration)
+            container_duration=($2); shift
+            ;;
+        --cmake-build-type)
+            cmake_build_type=($2); shift
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -94,8 +115,8 @@ function docker_choose_platform {(
 
 docker_platform=$(docker_choose_platform)
 name_suffix=$([ "$docker_platform" = "$docker_default_platform" ] && echo "" || echo ".$docker_platform")
-image_name=$(choose_docker_image_name)$name_suffix
-container_name=$(choose_docker_container_name)$name_suffix
+image_name=$(choose_docker_image_name $image_name)$name_suffix
+container_name=$(choose_docker_container_name $container_name)$name_suffix
 
 work_dir=/opt
 ouinet_dir=$work_dir/ouinet
@@ -178,7 +199,7 @@ function enter (
 )
 
 function is_container_running (
-    [ -n "$(dock ps -a -q -f name=$container_name 2>/dev/null)" ]
+    [ -n "$(dock ps -a -q -f name=^$container_name$ 2>/dev/null)" ]
 )
 
 function list_artifacts_for_target_os (
@@ -204,13 +225,18 @@ function list_artifacts_for_target_os (
                 $build_dir/libouinet_common$lib_suffix
                 $build_dir/libouinet_client$lib_suffix
                 $build_dir/libouinet_injector$lib_suffix
-                $build_dir/libcpp_ouisync_client$lib_suffix
-                $build_dir/libcpp_ouisync_service$lib_suffix
             )
+
+            if [[ "$with_ouisync" == y ]]; then
+                artifacts+=(
+                  $build_dir/libcpp_ouisync_client$lib_suffix
+                  $build_dir/libcpp_ouisync_service$lib_suffix
+                )
+            fi
             ;;
         android)
             artifacts=(
-                $ouinet_dir/build-android-omni-debug/ouinet/outputs/aar/ouinet-debug.aar
+                $ouinet_dir/build-android-$android_abi-${cmake_build_type,,}/ouinet/outputs/aar/ouinet-${cmake_build_type,,}.aar
             )
             ;;
         *) error "Invalid target_os ($target_os) in 'list_artifacts_for_target_os'"
@@ -243,7 +269,7 @@ function check_artifacts_exist_for_target_os (
 build_image
 
 if ! is_container_running; then
-    dock run --platform linux/$docker_platform -d --rm --name $container_name $image_name sleep 1d
+    dock run --platform linux/$docker_platform -d --rm --name $container_name $image_name sleep $container_duration
 fi
 
 if [ "$enter_on_exit" = y ]; then
@@ -269,6 +295,7 @@ function copy_local_sources (
         '/bindings/cpp/build'
         '/bindings/cpp/examples/build'
         '/bindings/kotlin/build'
+        '/cmake-build-*'
     )
 
     if ! is_in android ${target_oss[@]}; then
@@ -304,7 +331,7 @@ for target_os in ${target_oss[@]}; do
         exe bash -c "mkdir -p $build_dir"
 
         cmake_configure_options=(
-            -DCMAKE_BUILD_TYPE=Debug
+            -DCMAKE_BUILD_TYPE=$cmake_build_type
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
@@ -328,7 +355,10 @@ for target_os in ${target_oss[@]}; do
             exe -w $ouinet_dir git clean -dfX
         fi
 
-        exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh
+        env=(
+          ABI="$android_abi"
+        )
+        exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh $([ "$cmake_build_type" = "Release" ] && echo " -r")
     fi
 
     if [ -n "$artifact_dir" ]; then
@@ -337,7 +367,7 @@ for target_os in ${target_oss[@]}; do
     
     ### Rust Tests
 
-    if [ "$run_all_tests" == y ]; then
+    if [ "$run_all_tests" == y -o "$run_cpp_rust_tests" == y ]; then
         # Only on Linux because `cargo` would look for libouinet_asio.so which is not
         # built for Windows (only dll).
         if [ "$target_os" == linux ]; then
@@ -354,7 +384,7 @@ for target_os in ${target_oss[@]}; do
 
     ### C++ Tests
 
-    if [ "$run_all_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
+    if [ "$run_all_tests" == y -o "$run_cpp_rust_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
         if [ "$target_os" != android ]; then
             args=(
                 --build-dir $build_dir
@@ -391,7 +421,7 @@ for target_os in ${target_oss[@]}; do
     ### Download artifacts
 
     if [ -n "$artifact_dir" ]; then
-        artifacts=$(list_artifacts_for_target_os $target_os)
+        artifacts=($(list_artifacts_for_target_os $target_os))
 
         dst_dir=$artifact_dir/$target_os
         mkdir -p $dst_dir
