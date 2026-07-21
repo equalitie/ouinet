@@ -81,14 +81,15 @@ private:
     std::expected<std::optional<http_response::Part>, sys::error_code>
     async_read_part_impl(Async);
 
-    std::optional<Block> fetch_block(size_t block_id, Cancel&, asio::yield_context);
+    std::expected<std::optional<Block>, sys::error_code>
+    fetch_block(size_t block_id, Async);
 
     void unmark_as_good(Peer& peer);
 
     void mark_done();
 
-    std::unique_ptr<PreFetch>
-    new_fetch_job(size_t block_id, Peer* last_peer, Cancel&, asio::yield_context);
+    std::expected<std::unique_ptr<PreFetch>, sys::error_code>
+    new_fetch_job(size_t block_id, Peer* last_peer, Async);
 
     static constexpr std::chrono::seconds BEP5_HASH_LIST_TIMEOUT{10};
     static constexpr std::chrono::seconds BEP3_HASH_LIST_TIMEOUT{30};

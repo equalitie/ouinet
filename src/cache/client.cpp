@@ -757,7 +757,7 @@ struct Client::Impl {
         }
 
         auto groups_dir = _cache_dir / groups_curver_subdir;
-            
+
         if (auto r = static_groups
                 ? load_backed_dht_groups(groups_dir, std::move(static_groups), yield)
                 : load_dht_groups(groups_dir, yield)) {
