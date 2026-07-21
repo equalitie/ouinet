@@ -227,6 +227,14 @@ function list_artifacts_for_target_os (
                 $build_dir/libouinet_injector$lib_suffix
             )
 
+            if [[ "$target_os" == windows ]]; then
+                mingw_dir=/usr/lib/gcc/x86_64-w64-mingw32/14-win32
+                artifacts+=(
+                  $mingw_dir/libgcc_s_seh-1.dll
+                  $mingw_dir/libstdc++-6.dll
+                )
+            fi
+
             if [[ "$with_ouisync" == y ]]; then
                 artifacts+=(
                   $build_dir/libcpp_ouisync_client$lib_suffix
