@@ -39,11 +39,15 @@ namespace ouinet {
     const size_t default_max_simultaneous_announcements = 16;
 #endif
 
+struct MetricsServerConfig {
+    util::Url url;
+    std::optional<std::string> token;
+    std::optional<asio::ssl::context> cacert;
+};
+
 struct MetricsConfig {
     bool enable_on_start = false;
-    util::Url server_url;
-    boost::optional<std::string> server_token;
-    boost::optional<asio::ssl::context> server_cacert;
+    std::vector<MetricsServerConfig> servers;
     metrics::EncryptionKey encryption_key;
     uint64_t delete_after_seconds;
 
