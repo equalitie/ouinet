@@ -410,10 +410,9 @@ private:
                                      , std::optional<metrics::Request>
                                      , Async);
 
+    [[nodiscard]]
     std::expected<Session, sys::error_code>
-    fetch_fresh_through_simple_proxy( PublicInjectorRequest
-                                    , metrics::Request
-                                    , Async);
+    fetch_fresh_through_simple_proxy(PublicInjectorRequest, Async);
 
     void
     send_metrics_record( std::string_view record_name
@@ -849,7 +848,6 @@ Client::State::fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async
         if (c && (_config.cache_type() == ClientConfig::CacheType::Bep5Http
                || _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P)) {
             auto rq = request.to_peer_request();
-            auto key = rq.resource_id();
 
             auto s = c->load( request.resource_id()
                             , request.resource_key()
@@ -1221,10 +1219,10 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
 
 //------------------------------------------------------------------------------
 std::expected<Session, sys::error_code>
-Client::State::fetch_fresh_through_simple_proxy( PublicInjectorRequest request
-                                               , metrics::Request metrics
-                                               , Async yield)
+Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, Async yield)
 {
+    auto metrics = _metrics.new_public_injector_request();
+
     return timeout(
         default_timeout::fetch_http(),
         [&](Async yield) -> std::expected<Session, sys::error_code> {
@@ -1416,26 +1414,25 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
 
 //------------------------------------------------------------------------------
 // Response for the user agent (e.g. a browser)
-class UserAgentResponse {
+class DispatcherResponse {
 private:
     using Alternatives = std::variant<
         http::response<http::dynamic_body>,
-        http::response<http::string_body>,
         Session
     >;
 
 public:
     template<class Rs>
     requires(
-        !std::is_same_v<UserAgentResponse, Rs> &&
+        !std::is_same_v<DispatcherResponse, Rs> &&
         std::constructible_from<Alternatives, Rs>
     )
-    UserAgentResponse(Rs&& rs):
+    DispatcherResponse(Rs&& rs):
         response(std::forward<Rs>(rs))
     {}
 
-    UserAgentResponse(UserAgentResponse&& other) = default;
-    UserAgentResponse& operator=(UserAgentResponse&& other) = default;
+    DispatcherResponse(DispatcherResponse&& other) = default;
+    DispatcherResponse& operator=(DispatcherResponse&& other) = default;
 
     [[nodiscard]]
     std::expected<void, sys::error_code>
@@ -1490,12 +1487,17 @@ public:
         : client_state(client_state)
         , cache_control(client_state.get_executor(), OUINET_CLIENT_SERVER_STRING)
     {
+        // NOTE: We don't want to call `maybe_wrap_in_storing_session` in these because
+        // both of the responses may be suitable for writing into the cache and I don't
+        // think the cache is suited for parallel write of the same resouce.
+        // TODO: Make sure it is suited because parallel fetching of the same resource
+        // can be done by other means as well.
         cache_control.fetch_fresh = [&] (const CacheInjectRequest& rq, Async yield) {
-            return injector_job_func(rq, yield);
+            return client_state.fetch_fresh_through_simple_proxy(rq, yield);
         };
 
         cache_control.fetch_stored = [&] (const CacheRetrieveRequest& rq, Async yield) {
-            return dcache_job_func(rq, yield.tag("cache"));
+            return client_state.fetch_stored_in_dcache(rq, yield);
         };
 
         cache_control.max_cached_age(client_state._config.max_cached_age());
@@ -1503,55 +1505,36 @@ public:
 
     [[nodiscard]]
     std::expected<Session, sys::error_code>
-    injector_job_func(const CacheInjectRequest& rq, Async yield_) {
-#warning "This will not be stored in the local cache as is done in the injector_or_dcache_job_func"
-        auto yield = yield_.tag("injector");
-
-        LOG_DEBUG(yield, " Start");
-
-        auto metrics = client_state._metrics.new_public_injector_request();
-
-        auto session = client_state.fetch_fresh_through_simple_proxy(
-            rq,
-            std::move(metrics),
-            yield
-        );
-
-        if (!session) {
-            LOG_DEBUG(yield, " Finish with error: ", session.error());
-        } else {
-            LOG_DEBUG(yield, " Finish successfully; status="
-                           , session->response_header().result());
+    injector_job_func(const Request& request, Async yield) {
+        const auto cache_rq = CacheRequest::from(request);
+        if (!cache_rq) {
+            LOG_ERROR(yield, " Invalid request");
+            return std::unexpected(asio::error::invalid_argument);
         }
-
-        return session;
+        auto r = client_state.fetch_fresh_through_simple_proxy(cache_rq->to_inject_request(), yield);
+        return maybe_wrap_in_storing_session(*cache_rq, std::move(r), yield);
     }
 
     [[nodiscard]]
     std::expected<Session, sys::error_code>
-    dcache_job_func(const CacheRetrieveRequest& rq, Async yield) {
-#warning "This will not be stored in the local cache as is done in the injector_or_dcache_job_func"
-        LOG_DEBUG(yield, " Start");
-
-        auto session = client_state.fetch_stored_in_dcache(rq, yield);
-
-        if (!session) {
-            LOG_DEBUG(yield, " Finish with error: ", session.error());
-        } else {
-            LOG_DEBUG(yield, " Finish successfully");
+    dcache_job_func(const Request& request, Async yield) {
+        const auto cache_rq = CacheRequest::from(request);
+        if (!cache_rq) {
+            LOG_ERROR(yield, " Invalid request");
+            return std::unexpected(asio::error::invalid_argument);
         }
-
-        return session;
+        auto r = client_state.fetch_stored_in_dcache(cache_rq->to_retrieve_request(), yield);
+        return maybe_wrap_in_storing_session(*cache_rq, std::move(r), yield);
     }
 
     [[nodiscard]]
-    std::expected<UserAgentResponse, sys::error_code>
+    std::expected<ClientFrontEnd::Response, sys::error_code>
     front_end_job_func(const Request& rq, Async yield) {
        return client_state.fetch_fresh_from_front_end(rq, yield);
     }
 
     [[nodiscard]]
-    std::expected<UserAgentResponse, sys::error_code>
+    std::expected<Session, sys::error_code>
     origin_job_func(Request rq, Async yield) {
         LOG_DEBUG(yield, " Start");
 
@@ -1568,7 +1551,7 @@ public:
     }
 
     [[nodiscard]]
-    std::expected<UserAgentResponse, sys::error_code>
+    std::expected<Session, sys::error_code>
     proxy_job_func(Request rq, Async yield) {
         LOG_DEBUG(yield, "Start");
 
@@ -1587,8 +1570,6 @@ public:
             );
         }
         else {
-            auto metrics = client_state._metrics.new_public_injector_request();
-
             auto insecure_rq = InsecureRequest::from(std::move(rq));
 
             if (!insecure_rq) {
@@ -1597,7 +1578,6 @@ public:
 
             session = client_state.fetch_fresh_through_simple_proxy(
                 std::move(*insecure_rq),
-                std::move(metrics),
                 yield.tag("simple")
             );
         }
@@ -1608,63 +1588,36 @@ public:
     }
 
     [[nodiscard]]
-    std::expected<UserAgentResponse, sys::error_code>
+    std::expected<Session, sys::error_code>
     injector_or_dcache_job_func(Request const& rq_, Async yield) {
         LOG_DEBUG(yield, " Start");
 
         const auto rq = CacheRequest::from(rq_);
+
         if (!rq) {
             LOG_ERROR(yield, " Invalid request");
             return std::unexpected(asio::error::invalid_argument);
         }
 
         auto session = cache_control.fetch(*rq, yield.tag("cc_fetch"));
-        LOG_DEBUG(yield.tag("cc_fetch"), " Done; ec=", session ? sys::error_code{} : session.error());
 
-        if (!session) return std::unexpected(session.error());
-
-        auto& rsh = session->response_header();
-
-        auto injector_error = rsh[http_::response_error_hdr];
-        if (!injector_error.empty()) {
-            LOG_ERROR(yield, " Error from injector: ", injector_error);
-            return {std::move(*session)};
-        }
-
-        auto cache = client_state.get_cache();
-
-        const char* no_cache_reason = nullptr;
-
-        bool do_cache =
-            ( cache
-            && rq->header().method() == http::verb::get  // TODO: storing HEAD response not yet supported
-            && rsh[http_::response_source_hdr] != http_::response_source_hdr_local_cache
-            && CacheControl::ok_to_cache( rq->header(), rsh, client_state._config.do_cache_private()
-                                        , (get_logger().get_threshold() <= DEBUG ? &no_cache_reason : nullptr)));
-
-        if (do_cache) {
-            session = Session::create(
-                    std::make_unique<StoringReader>(*rq, std::move(*session), cache),
-                    rq->header().method() == http::verb::head,
-                    yield);
-        } else {
-            LOG_DEBUG( yield, " Not ok to cache response: "
-                   , no_cache_reason
-                         ? no_cache_reason
-                         : (!cache ? "cache not available"
-                                   : "disabled for this request/response"));
-        }
-
-        return {std::move(*session)};
+        return maybe_wrap_in_storing_session(*rq, std::move(session), yield);
     }
 
+    template<class PrimaryJob, class SecondaryJob>
     [[nodiscard]]
-    std::expected<UserAgentResponse, sys::error_code>
-    primary_or_secondary_job_func(auto primary, auto secondary, auto secondary_delay, Async main_yield) {
-        using R = std::expected<UserAgentResponse, sys::error_code>;
+    std::expected<DispatcherResponse, sys::error_code>
+    primary_or_secondary_job_func(
+            PrimaryJob primary,
+            SecondaryJob secondary,
+            auto secondary_delay,
+            Async main_yield)
+    {
+        using R1 = std::invoke_result_t<PrimaryJob, Async>;
+        using R2 = std::invoke_result_t<SecondaryJob, Async>;
 
-        std::optional<R> primary_r;
-        std::optional<R> secondary_r;
+        std::optional<R1> primary_r;
+        std::optional<R2> secondary_r;
 
         auto exec = main_yield.get_executor();
         WaitCondition wc(exec);
@@ -1700,25 +1653,25 @@ public:
         if (*primary_r) return std::move(*primary_r);
         if (*secondary_r) return std::move(*secondary_r);
 
-        return std::unexpected(asio::error::no_protocol_option);
+        return std::unexpected(primary_r->error());
     }
 
     [[nodiscard]]
-    std::expected<UserAgentResponse, sys::error_code>
+    std::expected<DispatcherResponse, sys::error_code>
     dispatch(const Request& request, const Route& route, Async yield) {
-        using R = std::expected<UserAgentResponse, sys::error_code>;
+        using R = std::expected<DispatcherResponse, sys::error_code>;
 
         return std::visit(overloaded {
                 [&] (Route::FrontEnd const&) -> R {
                     return front_end_job_func(request, yield);
                 },
-                [&] (Route::Origin const&) {
+                [&] (Route::Origin const&) -> R {
                     return origin_job_func(request, yield);
                 },
-                [&] (Route::BlindInjector const&) {
+                [&] (Route::BlindInjector const&) -> R {
                     return proxy_job_func(request, yield);
                 },
-                [&] (Route::OriginOrBlindInjector const&) {
+                [&] (Route::OriginOrBlindInjector const&) -> R {
                     return primary_or_secondary_job_func(
                             [&] (Async yield) {
                                 return origin_job_func(request, yield);
@@ -1730,60 +1683,40 @@ public:
                             yield);
                 },
                 [&] (Route::PublicInjector const&) -> R {
-                    const auto rq = CacheRequest::from(request);
-                    if (!rq) {
-                        LOG_ERROR(yield, " Invalid request");
-                        return std::unexpected(asio::error::invalid_argument);
-                    }
-                    return injector_job_func(rq->to_inject_request(), yield);
+                    return injector_job_func(request, yield);
                 },
                 [&] (Route::DCache const&) -> R {
-                    const auto rq = CacheRequest::from(request);
-                    if (!rq) {
-                        LOG_ERROR(yield, " Invalid request");
-                        return std::unexpected(asio::error::invalid_argument);
-                    }
-                    return dcache_job_func(rq->to_retrieve_request(), yield);
+                    return dcache_job_func(request, yield);
                 },
-                [&] (Route::OriginOrPublicInjectorOrDCache const&) {
+                [&] (Route::OriginOrPublicInjectorOrDCache const&) -> R {
                     return primary_or_secondary_job_func(
                             [&] (Async yield) {
                                 return origin_job_func(request, yield);
                             },
-                            [&, request] (Async yield) {
+                            [&] (Async yield) {
                                 return injector_or_dcache_job_func(request, yield);
                             },
                             client_state._injector_starting ? 1s : 3s,
                             yield);
                 },
-                [&] (Route::OriginOrDCache const&) {
+                [&] (Route::OriginOrDCache const&) -> R {
                     return primary_or_secondary_job_func(
                             [&] (Async yield) -> R {
                                 return origin_job_func(request, yield);
                             },
-                            [&, request] (Async yield) -> R {
-                                const auto rq = CacheRequest::from(request);
-                                if (!rq) {
-                                    LOG_ERROR(yield, " Invalid request");
-                                    return std::unexpected(asio::error::invalid_argument);
-                                }
-                                return dcache_job_func(rq->to_retrieve_request(), yield);
+                            [&] (Async yield) -> R {
+                                return dcache_job_func(request, yield);
                             },
                             client_state._injector_starting ? 1s : 3s,
                             yield);
                 },
-                [&] (Route::OriginOrPublicInjector const&) {
+                [&] (Route::OriginOrPublicInjector const&) -> R {
                     return primary_or_secondary_job_func(
                             [&] (Async yield) -> R {
                                 return origin_job_func(request, yield);
                             },
-                            [&, request] (Async yield) -> R {
-                                const auto rq = CacheRequest::from(request);
-                                if (!rq) {
-                                    LOG_ERROR(yield, " Invalid request");
-                                    return std::unexpected(asio::error::invalid_argument);
-                                }
-                                return injector_job_func(rq->to_inject_request(), yield);
+                            [&] (Async yield) -> R {
+                                return injector_job_func(request, yield);
                             },
                             client_state._injector_starting ? 1s : 3s,
                             yield);
@@ -1793,6 +1726,62 @@ public:
                 },
             },
             route.value);
+    }
+
+    // If preconditions are met, wrap the `response` session in another session
+    // which automatically stores the read HTTP parts into `client::Cache`.
+    [[nodiscard]]
+    std::expected<Session, sys::error_code>
+    maybe_wrap_in_storing_session(const CacheRequest& rq, Session response, Async yield) {
+        auto cache = client_state.get_cache();
+
+        if (!cache) {
+            LOG_DEBUG(yield, " Not storing response because cache is not available");
+            return response;
+        }
+
+        if (rq.header().method() != http::verb::get) {
+            // TODO: Should we store HEAD requests?
+            LOG_DEBUG(yield, " Not storing response because request is not GET");
+            return response;
+        }
+
+        auto& response_hdr = response.response_header();
+        auto source = response_hdr[http_::response_source_hdr];
+
+        if (source != http_::response_source_hdr_dist_cache &&
+            source != http_::response_source_hdr_injector) {
+            LOG_DEBUG(yield, " Not storing response from source \"", source,"\"");
+            return response;
+        }
+
+        auto injector_error = response_hdr[http_::response_error_hdr];
+
+        if (!injector_error.empty()) {
+            LOG_ERROR(yield, " Not storing response because of injector error: ", injector_error);
+            return response;
+        }
+
+        const char* no_cache_reason = nullptr;
+
+        if (!CacheControl::ok_to_cache( rq.header(), response_hdr, client_state._config.do_cache_private()
+                                      , (get_logger().get_threshold() <= DEBUG ? &no_cache_reason : nullptr))) {
+            LOG_DEBUG(yield, " Not storing response because: ", no_cache_reason);
+            return response;
+        }
+
+        return Session::create(
+                std::make_unique<StoringReader>(rq, std::move(response), cache),
+                rq.header().method() == http::verb::head,
+                yield);
+    }
+
+    // Helper
+    [[nodiscard]]
+    std::expected<Session, sys::error_code>
+    maybe_wrap_in_storing_session(const CacheRequest& rq, std::expected<Session, sys::error_code> response, Async yield) {
+        if (response) return maybe_wrap_in_storing_session(rq, std::move(*response), yield);
+        return response;
     }
 
 private:
