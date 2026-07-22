@@ -237,6 +237,14 @@ function list_artifacts_for_target_os (
             if [[ "$target_os" == windows ]]; then
                 mingw_gcc_dir=/usr/lib/gcc/x86_64-w64-mingw32/14-win32
                 mingw_lib_dir=/usr/x86_64-w64-mingw32/lib/
+                # dll.a files
+                artifacts+=(
+                  $build_dir/libouinet_asio.dll.a
+                  $build_dir/libouinet_common.dll.a
+                  $build_dir/libouinet_client.dll.a
+                  $build_dir/libouinet_injector.dll.a
+                )
+                # third party dlls required
                 artifacts+=(
                   $mingw_gcc_dir/libgcc_s_seh-1.dll
                   $mingw_gcc_dir/libstdc++-6.dll
