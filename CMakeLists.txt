@@ -237,6 +237,7 @@ file(GLOB client_sources
     "./src/client_lib.cpp"
     "./src/cache_control.cpp"
     "./src/route.cpp"
+    "./src/dispatcher.cpp"
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/connect_proxy.cpp"
