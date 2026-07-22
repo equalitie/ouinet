@@ -237,6 +237,10 @@ function list_artifacts_for_target_os (
             if [[ "$target_os" == windows ]]; then
                 mingw_gcc_dir=/usr/lib/gcc/x86_64-w64-mingw32/14-win32
                 mingw_lib_dir=/usr/x86_64-w64-mingw32/lib/
+                # client header
+                artifacts+=(
+                  $ouinet_dir/src/client_lib.h
+                )
                 # dll.a files
                 artifacts+=(
                   $build_dir/libouinet_asio.dll.a
