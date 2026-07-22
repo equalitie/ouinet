@@ -1,3 +1,4 @@
+#include "defer.h"
 #define BOOST_TEST_MODULE select
 #include <boost/test/unit_test.hpp>
 
@@ -78,5 +79,37 @@ BOOST_AUTO_TEST_CASE(timeout_sanity_check) {
        }, yield);
 
        BOOST_REQUIRE_EQUAL(result.value(), 1);
+    });
+}
+
+// Some async function might still do some processing (even async) after being cancelled instead of
+// returning immediately. This test ensures that `select` waits for them to complete before itself
+// returning.
+BOOST_AUTO_TEST_CASE(delayed_cancel) {
+    async_test([] (Async yield) {
+        std::array<bool, 2> completed = { false, false };
+
+        select(
+            yield,
+            [&] (Async yield) {
+                auto cleanup = defer([&] {
+                    completed[0] = true;
+                });
+
+                asio::post(yield);
+            },
+            [&] (Async yield) {
+                auto cleanup = defer([&] {
+                    completed[1] = true;
+                });
+
+                asio::post(yield);
+                asio::post(yield);
+                asio::post(yield);
+            }
+        );
+
+        BOOST_REQUIRE(completed[0]);
+        BOOST_REQUIRE(completed[1]);
     });
 }

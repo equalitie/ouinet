@@ -995,7 +995,11 @@ void DhtNode::receive_loop(Async yield)
                     &concurrency
                 ] (Async yield) mutable {
                     auto cleanup = defer([&] {
-                        --concurrency;
+                        // Not sure why this `if` is needed, but we were sometimes getting memory
+                        // access errors without it.
+                        if (!yield.is_cancelled()) {
+                            --concurrency;
+                        }
                     });
 
                     auto result = handle_query(sender, message_map, yield);
