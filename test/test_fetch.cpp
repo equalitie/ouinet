@@ -191,11 +191,9 @@ asio::ssl::context client_ssl_context_for(const HttpServer& server) {
 }
 
 std::string generate_random_body() {
-    // TODO: Some tests fail with larger body sizes
-    //size_t min_size = 64;
-    //size_t max_size = 2 * 1024 * 1024;
-    //auto size = util::random::number<size_t>(min_size, max_size);
-    size_t size = 65536;
+    size_t min_size = 64;
+    size_t max_size = 2 * 1024 * 1024;
+    auto size = util::random::number<size_t>(min_size, max_size);
     return util::random::printable_ascii(size);
 }
 

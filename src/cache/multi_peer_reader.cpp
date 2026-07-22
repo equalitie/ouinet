@@ -188,8 +188,6 @@ public:
     std::expected<std::optional<Block>, sys::error_code>
     read_block(size_t block_id, Async yield)
     {
-        using OptBlock = std::optional<Block>;
-
         if (!_connection.is_open()) {
             return std::unexpected(asio::error::not_connected);
         }
@@ -896,32 +894,14 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
 }
 
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
-    AsyncJob<std::nullopt_t> job;
-
     PreFetchSequential(size_t block_id, Peer* peer, AsioExecutor ex)
         : PreFetch(block_id, peer)
-        , job(ex)
-    {
-        job.start([=] (Async yield) -> std::expected<std::nullopt_t, sys::error_code> {
-            auto e = peer->send_block_request(block_id, yield);
-            if (!e) {
-                return std::unexpected(e.error());
-            } else {
-                return std::nullopt;
-            }
-        });
-    }
+    {}
 
     std::expected<OptBlock, sys::error_code>
     get_block(Async yield) override {
-        auto e = compat([&](Cancel cancel, asio::yield_context yield) {
-            return job.wait_for_finish(cancel, yield);
-        })(yield);
-        if (!e) {
-            return std::unexpected(e.error());
-        }
-
-        return peer->read_block(block_id, yield);
+        return peer->send_block_request(block_id, yield)
+            .and_then([&] { return peer->read_block(block_id, yield); });
     }
 };
 
