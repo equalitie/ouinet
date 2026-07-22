@@ -25,11 +25,6 @@ env=()
 
 source $(dirname $0)/util.sh linux
 
-function print_help (
-    echo "Utility to build Ouinet in a Docker container"
-    echo
-)
-
 function parse_target_os (
     case $1 in
         win|windows) echo windows ;;
@@ -240,10 +235,13 @@ function list_artifacts_for_target_os (
             )
 
             if [[ "$target_os" == windows ]]; then
-                mingw_dir=/usr/lib/gcc/x86_64-w64-mingw32/14-win32
+                mingw_gcc_dir=/usr/lib/gcc/x86_64-w64-mingw32/14-win32
+                mingw_lib_dir=/usr/x86_64-w64-mingw32/lib/
                 artifacts+=(
-                  $mingw_dir/libgcc_s_seh-1.dll
-                  $mingw_dir/libstdc++-6.dll
+                  $mingw_gcc_dir/libgcc_s_seh-1.dll
+                  $mingw_gcc_dir/libstdc++-6.dll
+                  $mingw_lib_dir/libwinpthread-1.dll
+                  $mingw_lib_dir/zlib1.dll
                 )
             fi
 
