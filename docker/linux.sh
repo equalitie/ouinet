@@ -20,6 +20,8 @@ image_name=
 container_duration=1d
 cmake_build_type=Debug
 android_abi=arm64-v8a
+android_publish=n
+env=()
 
 source $(dirname $0)/util.sh linux
 
@@ -87,6 +89,16 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --cmake-build-type)
             cmake_build_type=($2); shift
+            ;;
+        --android-abi)
+            android_abi=($2); shift
+            ;;
+        --android-publish)
+            android_publish=y
+            cmake_build_type=Release
+            ;;
+        --env-var|-e)
+            env+=("$2"); shift
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -363,23 +375,31 @@ for target_os in ${target_oss[@]}; do
             exe -w $ouinet_dir git clean -dfX
         fi
 
-        env=(
+        env+=(
           ABI="$android_abi"
         )
-        exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh $([ "$cmake_build_type" = "Release" ] && echo " -r")
+
+        opt_env=()
+        for v in "${env[@]}"; do
+            opt_env+=(-e "$v")
+        done
+
+        exe "${opt_env[@]}" -w $ouinet_dir ./scripts/build-android.sh \
+            $([ "$cmake_build_type" = "Release" ] && echo " -r") \
+            $([ "$android_publish" = "y" ] && echo " bootstrap build publish")
     fi
 
     if [ -n "$artifact_dir" ]; then
         check_artifacts_exist_for_target_os $target_os
     fi
-    
+
     ### Rust Tests
 
     if [ "$run_all_tests" == y -o "$run_cpp_rust_tests" == y ]; then
         # Only on Linux because `cargo` would look for libouinet_asio.so which is not
         # built for Windows (only dll).
         if [ "$target_os" == linux ]; then
-            env=(
+            env+=(
                 CXXFLAGS="-I$build_dir/boost/src/built_boost"
                 LD_LIBRARY_PATH="$build_dir"
                 LIBRARY_PATH="$build_dir"
