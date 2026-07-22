@@ -1,23 +1,11 @@
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/spawn.hpp>
 #include <boost/asio/connect.hpp>
-#include <boost/asio/signal_set.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/format.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
-#include <boost/range/adaptor/indirected.hpp>
-#include <boost/range/adaptor/filtered.hpp>
-#include <boost/range/adaptor/transformed.hpp>
-#include <boost/range/adaptor/indexed.hpp>
-#include <boost/regex.hpp>
-#include <iterator>
 #include <iostream>
-#include <cstdlib>  // for atexit()
 #include <nlohmann/json.hpp>
 
 #include "cache/client.h"
@@ -31,7 +19,6 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "async_sleep.h"
-#include "or_throw.h"
 #include "route.h"
 #include "split_string.h"
 #include "request.h"
@@ -66,8 +53,6 @@
 #include "util/cancel.h"
 #include "util/select.h"
 #include "util/lru_cache.h"
-#include "util/scheduler.h"
-#include "util/async_job.h"
 #include "util/promise.h"
 #include "upnp_updater.h"
 #include "task.h"
@@ -79,7 +64,6 @@
 using namespace std;
 using namespace ouinet;
 
-namespace posix_time = boost::posix_time;
 namespace bt = ouinet::bittorrent;
 
 using tcp      = asio::ip::tcp;

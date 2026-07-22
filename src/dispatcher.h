@@ -4,9 +4,7 @@
 #include "route.h"
 #include "request.h"
 #include "namespaces.h"
-#include "client_front_end.h"
 
-#include <chrono>
 #include <variant>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/beast/http/message.hpp>
@@ -14,6 +12,8 @@
 #include <boost/beast/http/dynamic_body.hpp>
 
 namespace ouinet {
+
+class CacheControl;
 
 class Dispatcher {
 public:
@@ -65,7 +65,7 @@ public:
 
     struct Routes {
         [[nodiscard]]
-        virtual SysResult<ClientFrontEnd::Response>
+        virtual SysResult<decltype(Response::FrontEnd::value)>
         front_end(const Request&, Async) = 0;
     
         [[nodiscard]]
@@ -111,9 +111,7 @@ private:
 
 private:
     Routes& routes;
-    CacheControl cache_control;
+    std::unique_ptr<CacheControl> cache_control;
 };
-
-
 
 } // namespace

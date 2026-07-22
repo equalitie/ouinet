@@ -1,8 +1,9 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
-#include <boost/asio/spawn.hpp>
-#include <boost/beast.hpp>
+#include <boost/beast/http/message.hpp>
+#include <boost/beast/http/string_body.hpp>
+#include <boost/beast/http/dynamic_body.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
 #include <cstddef>
@@ -11,7 +12,6 @@
 #include "namespaces.h"
 #include "ouiservice/bep5/client.h"
 #include "ssl/ca_certificate.h"
-#include "logger.h"
 #include "cxx/metrics.h"
 
 namespace ouinet { namespace cache {

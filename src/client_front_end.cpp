@@ -13,6 +13,7 @@
 #include "cache/client.h"
 #include "ouiservice/bep5/client.h"
 
+#include <boost/beast/version.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/address.hpp>

@@ -1,5 +1,11 @@
+#include <chrono>
 #include "dispatcher.h"
+#include "cache_control.h"
+#include "constants.h"
 #include "util/select.h"
+#include "util/wait_condition.h"
+#include "util/overloaded.h"
+#include "logger.h"
 
 namespace ouinet {
 
@@ -9,17 +15,17 @@ template<class V> using SysResult = Dispatcher::SysResult<V>;
 
 Dispatcher::Dispatcher(asio::any_io_executor exec, Routes& routes)
     : routes(routes)
-    , cache_control(exec, OUINET_CLIENT_SERVER_STRING)
+    , cache_control(std::make_unique<CacheControl>(exec, OUINET_CLIENT_SERVER_STRING))
 {
-    cache_control.fetch_fresh = [&] (const CacheInjectRequest& rq, Async yield) {
+    cache_control->fetch_fresh = [&] (const CacheInjectRequest& rq, Async yield) {
         return routes.public_injector(rq, yield);
     };
 
-    cache_control.fetch_stored = [&] (const CacheRetrieveRequest& rq, Async yield) {
+    cache_control->fetch_stored = [&] (const CacheRetrieveRequest& rq, Async yield) {
         return routes.distributes_cache(rq, yield);
     };
 
-    cache_control.max_cached_age(routes.max_cached_age());
+    cache_control->max_cached_age(routes.max_cached_age());
 }
 
 
@@ -200,7 +206,7 @@ SysResult<Response> Dispatcher::fetch_from_cache_control(Request const& request,
         return std::unexpected(asio::error::invalid_argument);
     }
 
-    auto r = cache_control.fetch(*cache_rq, yield);
+    auto r = cache_control->fetch(*cache_rq, yield);
 
     if (!r) return std::unexpected(r.error());
 
