@@ -4,7 +4,6 @@
 #include <set>
 #include <bittorrent/mainline_dht.h>
 #include "peer_lookup.h"
-#include "../util/compat.h"
 
 namespace std {
     template<> struct hash<ouinet::bittorrent::NodeID> {

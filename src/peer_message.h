@@ -40,7 +40,7 @@ private:
             http::verb method,
             bool keep_alive,
             cache::ResourceId(resource_id),
-            std::optional<util::HttpRequestByteRange> range) : 
+            std::optional<util::HttpRequestByteRange> range) :
         _method(method),
         _keep_alive(keep_alive),
         _resource_id(std::move(resource_id)),
@@ -79,7 +79,10 @@ enum class BlobType {
 [[nodiscard]]
 std::expected<void, sys::error_code>
 async_write_blob_type(BlobType, GenericStream&, Async);
-BlobType async_read_blob_type(GenericStream&, asio::yield_context);
+
+[[nodiscard]]
+std::expected<BlobType, sys::error_code>
+async_read_blob_type(GenericStream&, Async);
 
 enum PeerRequestError {
     success = 0,

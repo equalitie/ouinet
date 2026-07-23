@@ -11,14 +11,12 @@
 #include "../session.h"
 #include "../util/async.h"
 #include "../util/async_job.h"
-#include "../util/compat.h"
 #include "../util/condition_variable.h"
 #include "../util/crypto_stream.h"
 #include "../util/debug.h"
 #include "../util/intrusive_list.h"
 #include "../util/sign.h"
 #include "../util/select.h"
-#include "../util/set_io.h"
 #include "../util/watch_dog.h"
 #include "../async_sleep.h"
 #include "../constants.h"
@@ -46,7 +44,6 @@ const Clock::duration READ_TRAILER_TIMEOUT = 10s;
 const Clock::duration WRITE_REQUEST_TIMEOUT = 10s;
 
 using udp = asio::ip::udp;
-namespace bt = bittorrent;
 using namespace ouinet::http_response;
 using Errc = MultiPeerReaderErrc;
 using OptPart = std::optional<Part>;
@@ -192,9 +189,7 @@ public:
             return std::unexpected(asio::error::not_connected);
         }
 
-        auto stream_e = compat([&](asio::yield_context yield) {
-            return determine_incoming_stream(_connection, yield);
-        })(yield);
+        auto stream_e = determine_incoming_stream(_connection, yield);
         if (!stream_e) {
             return std::unexpected(stream_e.error());
         }
@@ -355,37 +350,31 @@ public:
     {
         auto cancelled = yield.cancel_slot([&] { con.close(); });
 
-        auto result = compat([&](asio::yield_context yield) {
-            return http::async_write(con, request(http::verb::propfind, _resource_id), yield);
-        })(yield);
+        auto result = http::async_write(con, request(http::verb::propfind, _resource_id), yield);
         if (!result) {
             return std::unexpected(result.error());
         }
 
-        auto stream = compat([&](asio::yield_context yield) {
-            return determine_incoming_stream(con, yield);
-        })(yield);
+        auto stream = determine_incoming_stream(con, yield);
         if (!stream) {
             return std::unexpected(stream.error());
         }
 
         auto reader = http_response::Reader(std::move(*stream));
-        //auto reader = std::make_unique<http_response::Reader>(move(con));
 
-        auto hash_list = compat([&](Cancel cancel, asio::yield_context yield) {
-            return HashList::load(reader, _cache_pk, cancel, yield);
-        })(yield);
-        if (!hash_list) {
-            return std::unexpected(hash_list.error());
+        auto hash_list_e = HashList::load(reader, _cache_pk, yield);
+        if (!hash_list_e) {
+            return std::unexpected(hash_list_e.error());
         }
+        auto hash_list = std::move(*hash_list_e);
 
-        if (!util::http_proto_version_check_trusted(hash_list->signed_head, *newest_proto_seen)) {
+        if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen)) {
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
             return std::unexpected(asio::error::not_found);
         }
 
-        _hash_list = std::move(*hash_list);
+        _hash_list = std::move(hash_list);
         _connection = std::move(con);
 
         return {};
@@ -393,11 +382,13 @@ public:
 
     // Responses may be either plain-text or cypher-text, we read which type it is here
     // and return a generic stream that uses the input connection's reference.
-    GenericStream determine_incoming_stream(GenericStream& con, asio::yield_context yield) {
-        sys::error_code ec;
-        BlobType blob_type = async_read_blob_type(con, yield[ec]);
-
-        if (ec) return or_throw<GenericStream>(yield, ec);
+    std::expected<GenericStream, sys::error_code>
+    determine_incoming_stream(GenericStream& con, Async yield) {
+        auto blob_type_e = async_read_blob_type(con, yield);
+        if (!blob_type_e) {
+            return std::unexpected(blob_type_e.error());
+        }
+        auto blob_type = std::move(*blob_type_e);
 
         switch (blob_type) {
             case BlobType::plain_text:
@@ -407,9 +398,8 @@ public:
         }
 
         // Unreachable, but removes compilation warning
-        return or_throw<GenericStream>(yield, make_error_code(PeerRequestError::invalid_blob_type));
+        return std::unexpected(make_error_code(PeerRequestError::invalid_blob_type));
     }
-
 };
 
 struct MultiPeerReader::PreFetch {
@@ -924,13 +914,7 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
     }
 
     std::expected<OptBlock, sys::error_code> get_block(Async yield) override {
-        auto e = compat([&](Cancel cancel, asio::yield_context yield) {
-            return job.wait_for_finish(cancel, yield);
-        })(yield);
-        if (!e) {
-            return std::unexpected(e.error());
-        }
-
+        job.wait_for_finish(yield);
         return std::move(job.result());
     }
 };

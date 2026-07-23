@@ -387,7 +387,6 @@ BOOST_DATA_TEST_CASE(test_write_response, boost::unit_test::data::make(true_fals
         };
 
         Cancel cancel;
-        sys::error_code ec;
 
         auto head = unwrap(read_file("head", yield));
         BOOST_CHECK_EQUAL(head, complete ? rs_head_complete :  rs_head_incomplete);

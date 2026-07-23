@@ -87,17 +87,19 @@ async_write_blob_type(BlobType blob_type, GenericStream& con, Async yield) {
     return {};
 }
 
-BlobType async_read_blob_type(GenericStream& con, asio::yield_context yield) {
+std::expected<BlobType, sys::error_code>
+async_read_blob_type(GenericStream& con, Async yield) {
     uint8_t is_cyphertext = -1;
-    sys::error_code ec;
-    asio::async_read(con, asio::buffer(&is_cyphertext, 1), yield[ec]);
 
-    if (ec) return or_throw<BlobType>(yield, ec);
+    auto e = asio::async_read(con, asio::buffer(&is_cyphertext, 1), yield);
+    if (!e) {
+        return std::unexpected(e.error());
+    }
 
     switch (is_cyphertext) {
         case 0: return BlobType::plain_text;
         case 1: return BlobType::cypher_text;
-        default: return or_throw<BlobType>(yield, make_error_code(PeerRequestError::invalid_blob_type));
+        default: return std::unexpected(make_error_code(PeerRequestError::invalid_blob_type));
     }
 }
 

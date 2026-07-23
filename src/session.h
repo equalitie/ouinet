@@ -5,7 +5,6 @@
 #include "response_reader.h"
 #include "util/watch_dog.h"
 #include "util/async.h"
-#include "util/compat.h"
 #include <boost/asio/spawn.hpp>
 #include <cxx/metrics.h>
 #include "api.h"

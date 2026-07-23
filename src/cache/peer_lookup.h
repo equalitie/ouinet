@@ -2,10 +2,8 @@
 
 #include "logger.h"
 
-#include <set>
 #include <string>
 #include <util/async_job.h>
-#include <util/compat.h>
 #include <util/hash.h>
 #include <bittorrent/node_id.h>
 
@@ -70,9 +68,7 @@ public:
         );
 #endif
 
-        compat([&](Cancel cancel, asio::yield_context yield) {
-            _job->wait_for_finish(cancel, yield);
-        })(yield);
+        _job->wait_for_finish(yield);
 
         if (_last_result.ec) {
             return std::unexpected(_last_result.ec);
