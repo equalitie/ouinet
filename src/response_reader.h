@@ -19,7 +19,7 @@ namespace ouinet {
 
 namespace ouinet::http_response {
 
-class AbstractReader {
+class OUINET_COMMON_API AbstractReader {
 public:
     [[nodiscard]]
     virtual
