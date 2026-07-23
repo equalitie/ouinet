@@ -114,6 +114,12 @@ public:
         return _cancel;
     }
 
+    /// Returns a `Async` derived from `this` but which does not get cancelled when `this` gets
+    /// cancelled.
+    Async suppress_cancel() {
+        return Async(_asio_yield, _log_path);
+    }
+
     friend std::ostream& operator<<(std::ostream& os, const Async& y) {
         return os << y._log_path;
     }

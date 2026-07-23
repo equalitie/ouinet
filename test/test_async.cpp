@@ -3,9 +3,10 @@
 
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <namespaces.h>
-#include <util/async.h>
-#include <util/wait_condition.h>
+#include "defer.h"
+#include "namespaces.h"
+#include "util/async.h"
+#include "util/wait_condition.h"
 
 #include "util/async_test.h"
 #include "util/unwrap.h"
@@ -168,4 +169,35 @@ BOOST_AUTO_TEST_CASE(cancel_yield) {
             wc.wait(yield);
             BOOST_CHECK(true);
         });
+}
+
+BOOST_AUTO_TEST_CASE(supress_cancel) {
+    async_test([] (Async yield) {
+        Cancel cancel;
+        WaitCondition wc(yield.get_executor());
+
+        bool completed = false;
+        bool cancelled = false;
+
+        yield.spawn(cancel, [&, lock = wc.lock()] (Async yield) {
+            auto non_cancellable = yield.suppress_cancel();
+
+            auto cleanup = defer([&] {
+                cancelled = yield.is_cancelled();
+            });
+
+            for (int i = 0; i < 100; ++i) {
+                asio::post(non_cancellable);
+            }
+
+            completed = true;
+        });
+
+        cancel();
+
+        unwrap(wc.wait(yield));
+
+        BOOST_REQUIRE(completed);
+        BOOST_REQUIRE(cancelled);
+    });
 }
