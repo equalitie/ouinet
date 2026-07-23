@@ -21,6 +21,6 @@ inline N number()
 
 // If you get an undefined reference with this one, add
 // a template specialization to the cpp file.
-template<typename N> N number(N min, N max);
+template<typename N> OUINET_COMMON_API N number(N min, N max);
 
 } // namespace

@@ -5,7 +5,7 @@ namespace ouinet::util::random {
 
 std::random_device g_dev;
 std::mt19937 g_rng(g_dev());
- 
+
 inline void data(void* out, size_t size, uint8_t min, uint8_t max)
 {
     std::uniform_int_distribution<std::mt19937::result_type> dist(min, max);
