@@ -448,15 +448,11 @@ public:
             return;
         }
 
-        task::spawn_detached(
+        spawn_detached(
             _exec,
-            [
-                this,
-                log_path = _log_path,
-                cancel = _lifetime_cancel
-            ] (auto y) mutable {
-                Async yield(y, std::move(cancel), std::move(log_path));
-
+            _lifetime_cancel,
+            _log_path,
+            [this] (Async yield) mutable {
                 auto dht = _dht_lookup->get_dht_lock();
                 assert(dht);
 
@@ -542,15 +538,15 @@ public:
         , _log_path(std::move(log_path))
         , _random_generator(_random_device())
     {
-        task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
-            auto i2p_dests = _i2p_lookup->get(Async(y, c, log_path));
+        spawn_detached(_exec, _lifetime_cancel, _log_path,  [this] (Async yield) mutable {
+            auto i2p_dests = _i2p_lookup->get(yield);
 
             if (!i2p_dests.has_value()) {
-                LOG_DEBUG(log_path, " BEP3 tracker lookup result; error=", i2p_dests.error());
+                LOG_DEBUG(yield, " BEP3 tracker lookup result; error=", i2p_dests.error());
                 return;
             }
 
-            LOG_DEBUG(log_path, " BEP3 tracker lookup result; peers=", i2p_dests->size());
+            LOG_DEBUG(yield, " BEP3 tracker lookup result; peers=", i2p_dests->size());
 
             for (auto& dest : *i2p_dests) add_candidate(dest);
 
@@ -570,29 +566,27 @@ public:
 
         _candidate_peers.push_back(*peer);
 
-        task::spawn_detached(
+        spawn_detached(
             _exec,
+            _lifetime_cancel,
+            _log_path,
             [
                 this,
                 peer,
                 i2p_dest,
-                i2p_session = _i2p_session,
-                log_path = _log_path,
-                cancel = _lifetime_cancel
-            ] (auto y) mutable {
-                Async yield(y, cancel, log_path);
-
-                LOG_DEBUG(yield.log_path(), " Fetching hash list from I2P: ", i2p_dest);
+                i2p_session = _i2p_session
+            ] (Async yield) mutable {
+                LOG_DEBUG(yield, " Fetching hash list from I2P: ", i2p_dest);
 
                 std::expected<void, sys::error_code> result;
                 uint16_t retry = 10;
 
                 while (retry--) {
-                    LOG_DEBUG(yield.log_path(), " BEP3 downloading hash list ", retry, " ", i2p_dest);
+                    LOG_DEBUG(yield, " BEP3 downloading hash list ", retry, " ", i2p_dest);
 
                     result = timeout(
                         MultiPeerReader::BEP3_HASH_LIST_TIMEOUT,
-                        [&](auto yield) -> std::expected<void, sys::error_code> {
+                        [&](Async yield) -> std::expected<void, sys::error_code> {
                             auto con = i2p_session->connect(i2p_dest, yield);
                             if (!con) {
                                 return std::unexpected(con.error().code());
@@ -613,9 +607,9 @@ public:
                     break;
                 }
 
-                LOG_DEBUG(log_path, " Done fetching hash list; i2p_dest="
-                                  , i2p_dest
-                                  , " result=", debug(result));
+                LOG_DEBUG(yield, " Done fetching hash list; i2p_dest="
+                               , i2p_dest
+                               , " result=", debug(result));
 
                 peer->_candidate_hook.unlink();
 
@@ -643,24 +637,22 @@ public:
 
         _candidate_peers.push_back(*peer);
 
-        task::spawn_detached(
+        spawn_detached(
             _exec,
+            _lifetime_cancel,
+            peer_log_path,
             [
                 this,
                 ep,
                 peer,
                 lan_my_eps = _lan_my_eps,
-                log_path = peer_log_path,
-                newest_proto_seen = _newest_proto_seen,
-                cancel = _lifetime_cancel
-            ] (auto y) mutable {
-                Async yield(y, cancel, log_path);
-
-                LOG_DEBUG(yield.log_path(), " Fetching hash list");
+                newest_proto_seen = _newest_proto_seen
+            ] (Async yield) mutable {
+                LOG_DEBUG(yield, " Fetching hash list");
 
                 auto result = timeout(
                     MultiPeerReader::BEP5_HASH_LIST_TIMEOUT,
-                    [&](auto yield) -> std::expected<void, sys::error_code> {
+                    [&](Async yield) -> std::expected<void, sys::error_code> {
                         auto con = connect(ep, lan_my_eps, yield);
 
                         if (!con) {
@@ -672,10 +664,10 @@ public:
                     yield
                 );
 
-                LOG_DEBUG( yield.log_path(), " Done fetching hash list; result=", debug(result));
+                LOG_DEBUG(yield, " Done fetching hash list; result=", debug(result));
 
                 if (result == std::unexpected(asio::error::timed_out)) {
-                    LOG_DEBUG(yield.log_path(), " BEP5 hash list download timed out");
+                    LOG_DEBUG(yield, " BEP5 hash list download timed out");
                     return;
                 }
 

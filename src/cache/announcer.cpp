@@ -222,8 +222,8 @@ struct Announcer::Loop {
 
     void start()
     {
-        task::spawn_detached(ex, [this] (asio::yield_context y) {
-            loop(Async(y, _cancel, _log_path));
+        spawn_detached(ex, _cancel, _log_path, [this] (Async yield) {
+            loop(yield);
         });
     }
 
@@ -303,9 +303,7 @@ struct Bep5Loop : public Announcer::Loop {
 
     void start()
     {
-        task::spawn_detached(ex, [this] (asio::yield_context y) {
-            Async yield(y, _cancel, _log_path);
-
+        spawn_detached(ex, _cancel, _log_path, [this] (Async yield) {
             // Wait for DHT to be ready before starting the loop
             LOG_DEBUG(yield, " Waiting for DHT");
             dht->wait_all_ready(yield);
