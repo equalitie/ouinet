@@ -230,6 +230,7 @@ endif()
 ################################################################################
 
 file(GLOB client_sources
+    "./src/cache_type.cpp"
     "./src/client.cpp"
     "./src/client.cpp"
     "./src/client_config.cpp"
