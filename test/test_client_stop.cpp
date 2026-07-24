@@ -83,7 +83,6 @@ BOOST_AUTO_TEST_CASE(test_client_start_stop) {
             "--repo"s, root.make_subdir("client").string(),
             "--cache-type=bep5-http"s,
             "--cache-http-public-key=mhwc7k2qui4d3jbrqdbtrahh23auezoiz5sgkg35qmb3j6mvvn2q"s,
-            "--udp-mux-port=59846"s,
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,

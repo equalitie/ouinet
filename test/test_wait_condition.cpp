@@ -1,15 +1,20 @@
 #define BOOST_TEST_MODULE blocker
-#include <boost/test/unit_test.hpp>
 
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/detached.hpp>
-#include <namespaces.h>
-#include <util/wait_condition.h>
-#include <iostream>
-#include <optional>
+#include <boost/test/data/test_case.hpp>
+#include <boost/test/data/monomorphic.hpp>
+#include <boost/test/unit_test.hpp>
 #include <chrono>
+#include <optional>
+
+#include "defer.h"
+#include "namespaces.h"
+#include "util/condition_variable.h"
+#include "util/wait_condition.h"
 #include "task.h"
 
 using namespace std;
@@ -256,4 +261,55 @@ BOOST_AUTO_TEST_CASE(destroy_lock_before_wait_then_relock)
     });
 
     ctx.run();
+}
+
+// There used to be a race condition when wait condition was released and cancelled at the same time
+// which caused unhandled exception. This test covers that case.
+BOOST_DATA_TEST_CASE(
+    concurrent_release_and_cancel,
+    boost::unit_test::data::make({ 0, 1 }),
+    order
+)
+{
+    asio::io_context ctx;
+
+    task::spawn_detached(ctx.get_executor(), [=] (asio::yield_context y) {
+        Async yield(y);
+
+        bool done = false;
+        ConditionVariable done_cv(yield.get_executor());
+
+        WaitCondition wc(yield.get_executor());
+        auto lock = wc.lock();
+
+        Cancel cancel;
+
+        yield.spawn(cancel, [&] (Async yield) {
+            auto cleanup = defer([&] {
+                done = true;
+                done_cv.notify();
+            });
+
+            wc.wait(yield).value();
+        });
+
+        switch (order) {
+            case 0:
+                lock.release();
+                cancel();
+                break;
+            case 1:
+                cancel();
+                lock.release();
+                break;
+        }
+
+        while (!done) {
+            done_cv.wait(yield).value();
+        }
+    });
+
+    ctx.run();
+
+    BOOST_REQUIRE(true); // check we got here
 }
