@@ -54,6 +54,7 @@ public class Config implements Parcelable {
         private boolean cachePrivate = false;
         private String cacheStaticPath;
         private String cacheStaticContentPath;
+        private String i2pBep3Tracker;
         private String listenOnTcp;
         private String frontEndEp;
         private String frontEndAccessToken;
@@ -146,6 +147,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setCacheStaticContentPath(String cacheStaticContentPath){
             this.cacheStaticContentPath = cacheStaticContentPath;
+            return this;
+        }
+        public ConfigBuilder setI2pBep3Tracker(String i2pBep3Tracker){
+            this.i2pBep3Tracker = i2pBep3Tracker;
             return this;
         }
         public ConfigBuilder setListenOnTcp(String listenOnTcp){
@@ -431,6 +436,7 @@ public class Config implements Parcelable {
                     cachePrivate,
                     cacheStaticPath,
                     cacheStaticContentPath,
+                    i2pBep3Tracker,
                     listenOnTcp,
                     frontEndEp,
                     frontEndAccessToken,
@@ -472,6 +478,7 @@ public class Config implements Parcelable {
     private boolean cachePrivate;
     private String cacheStaticPath;
     private String cacheStaticContentPath;
+    private String i2pBep3Tracker;
     private String listenOnTcp;
     private String frontEndEp;
     private String frontEndAccessToken;
@@ -511,6 +518,7 @@ public class Config implements Parcelable {
                   boolean cachePrivate,
                   String cacheStaticPath,
                   String cacheStaticContentPath,
+                  String i2pBep3Tracker,
                   String listenOnTcp,
                   String frontEndEp,
                   String frontEndAccessToken,
@@ -549,6 +557,7 @@ public class Config implements Parcelable {
         this.cachePrivate = cachePrivate;
         this.cacheStaticPath = cacheStaticPath;
         this.cacheStaticContentPath = cacheStaticContentPath;
+        this.i2pBep3Tracker = i2pBep3Tracker;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
         this.frontEndAccessToken = frontEndAccessToken;
@@ -613,6 +622,9 @@ public class Config implements Parcelable {
     }
     public String getCacheStaticContentPath() {
         return cacheStaticContentPath;
+    }
+    public String getI2pBep3Tracker() {
+        return i2pBep3Tracker;
     }
     public String getListenOnTcp() {
         return listenOnTcp;
@@ -721,6 +733,7 @@ public class Config implements Parcelable {
         out.writeInt(cachePrivate ? 1 : 0);
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
+        out.writeString(i2pBep3Tracker);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
         out.writeString(frontEndAccessToken);
@@ -770,6 +783,7 @@ public class Config implements Parcelable {
         cachePrivate = in.readInt() != 0;
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
+        i2pBep3Tracker = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
         frontEndAccessToken = in.readString();
