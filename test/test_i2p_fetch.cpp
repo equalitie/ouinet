@@ -8,6 +8,7 @@
 #include <namespaces.h>
 #include <chrono>
 #include "util/test_dir.h"
+#include "util/unwrap.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "client.h"
@@ -61,15 +62,15 @@ Request build_origin_request() {
 }
 
 
-Response fetch_through_client(const Client& client, Request req, asio::yield_context yield) {
+Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
-    stream.async_connect(client.get_proxy_endpoint(), yield);
+    unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
 
-    http::async_write(stream, req, yield);
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield);
+    unwrap(http::async_read(stream, b, res, yield));
     return res;
 }
 
@@ -85,7 +86,7 @@ asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket,
     return stream;
 }
 
-Response fetch_from_origin(asio::yield_context yield) {
+Response fetch_from_origin(Async yield) {
     auto url = test_url;
 
     if (url.port.empty()) url.port = "443";
@@ -94,7 +95,7 @@ Response fetch_from_origin(asio::yield_context yield) {
     auto exec = yield.get_executor();
 
     tcp::resolver resolver(exec);
-    auto const results = resolver.async_resolve(url.host, url.port, yield);
+    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
 
     asio::ssl::context ctx{asio::ssl::context::tls_client};
     ouinet::ssl::util::load_tls_ca_certificates(ctx);
@@ -104,16 +105,16 @@ Response fetch_from_origin(asio::yield_context yield) {
     std::string host = req[http::field::host];
 
     tcp::socket socket(exec);
-    asio::async_connect(socket, results, yield);
+    unwrap(asio::async_connect(socket, results, yield));
 
     auto stream = setup_tls_stream(std::move(socket), ctx, host);
-    stream.async_handshake(asio::ssl::stream_base::client, yield);
+    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
 
-    http::async_write(stream, req, yield);
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield);
+    unwrap(http::async_read(stream, b, res, yield));
 
     sys::error_code ignored_ec;
     stream.shutdown(ignored_ec);
@@ -130,8 +131,6 @@ void check_exception(std::exception_ptr e) {
         }
     } catch (const std::exception& e) {
         BOOST_FAIL("Test failed with exception: " << e.what());
-    } catch (...) {
-        BOOST_FAIL("Test failed with unknown exception");
     }
 }
 
@@ -142,7 +141,7 @@ void run(asio::io_context& ctx, F&& async_test) {
     std::optional<steady_clock::time_point> spawn_end;
 
     asio::spawn(ctx, [&spawn_end, async_test = std::move(async_test)] (asio::yield_context yield) {
-            async_test(yield);
+            async_test(Async(yield));
             spawn_end = steady_clock::now();
         },
         check_exception);
@@ -178,7 +177,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
     auto swarms = std::make_shared<MockDht::Swarms>();
 
-    run(ctx, [&] (asio::yield_context yield) {
+    run(ctx, [&] (Async yield) {
         Injector injector(make_config<InjectorConfig>({
                 "./no_injector_exec"s,
                 "--repo"s, root.make_subdir("injector").string(),
@@ -196,7 +195,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--injector-credentials"s, injector_credentials,
                 "--cache-type=bep3-http-over-i2p"s,
                 "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-ep=i2p:" + injector.i2p_address(Async(yield, Cancel()))->value,
+                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).value,
                 "--i2p-bep3-tracker"s, bep3_tracker_id,
                 "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
                 "--disable-origin-access"s,
@@ -249,7 +248,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
         // Give "seeder" time to announce
         Cancel cancel;
-        async_sleep(20s, cancel, yield);
+        async_sleep(20s, yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
         auto rs2 = fetch_through_client(leecher, rq, yield);

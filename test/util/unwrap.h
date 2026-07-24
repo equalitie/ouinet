@@ -1,5 +1,8 @@
 #pragma once
 
+#include <expected>
+#include <optional>
+
 namespace ouinet {
 
 namespace detail {

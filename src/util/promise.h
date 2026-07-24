@@ -3,6 +3,7 @@
 #include "util/async.h"
 #include "util/wait_condition.h"
 #include "util/overloaded.h"
+#include "error.h"
 #include <variant>
 
 namespace ouinet {
@@ -10,7 +11,11 @@ namespace ouinet {
 template<class Value> class Promise {
 public:
     // Error for when promise was destroyed without calling `set_value`.
-    struct BrokenPromise {};
+    struct BrokenPromise {
+        operator sys::error_code() const {
+            return OuinetError::broken_promise;
+        }
+    };
 
 private:
     struct Shared {
