@@ -25,6 +25,7 @@ namespace bittorrent {
 
 class Session;
 class Async;
+class CachePeerRetrieveRequest;
 
 namespace cache {
 
@@ -91,10 +92,7 @@ public:
     // This may add a response source header.
     [[nodiscard]]
     std::expected<Session, sys::error_code>
-    load( const ResourceId&
-        , const CryptoStreamKey&
-        , const GroupName& group
-        , bool is_head_request
+    load( const CachePeerRetrieveRequest&
         , metrics::Client& metrics
         , Async);
 

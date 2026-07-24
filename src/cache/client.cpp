@@ -14,6 +14,7 @@
 #include "../util/keep_alive.h"
 #include "../util/crypto_stream.h"
 #include "../ouiservice/utp.h"
+#include "request.h"
 #include "ouiservice/i2p/tracker.h"
 #include "ouiservice/i2p/tracker_lookup.h"
 #include "ouiservice/i2p/announcer.h"
@@ -428,13 +429,15 @@ struct Client::Impl {
 
     [[nodiscard]]
     std::expected<Session, sys::error_code>
-    load( const ResourceId& resource_id
-        , const CryptoStreamKey& resource_key
-        , const GroupName& group
-        , bool is_head_request
+    load( const CachePeerRetrieveRequest& request
         , metrics::Client& metrics_client
         , Async yield)
     {
+        auto& resource_id = request.resource_id();
+        auto& resource_key = request.resource_key();
+        auto& group = request.dht_group();
+        bool is_head_request = request.method() == http::verb::head;
+
         namespace err = asio::error;
 
         LOG_DEBUG(yield, " Requesting from the cache: ", resource_id);
@@ -908,14 +911,11 @@ bool Client::enable_i2p( std::shared_ptr<I2pSession> i2p_session
 }
 
 std::expected<Session, sys::error_code>
-Client::load( const cache::ResourceId& resource_id
-            , const CryptoStreamKey& resource_key
-            , const GroupName& group
-            , bool is_head_request
+Client::load( const CachePeerRetrieveRequest& request
             , metrics::Client& metrics
             , Async yield)
 {
-    return _impl->load(resource_id, resource_key, group, is_head_request, metrics, yield);
+    return _impl->load(request, metrics, yield);
 }
 
 std::expected<void, sys::error_code>

@@ -479,7 +479,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
         { "origin_access",     [&](bool enable) { config.is_origin_access_enabled(enable);                           } },
         { "proxy_access",      [&](bool enable) { config.is_proxy_access_enabled(enable);                            } },
         { "injector_access",   [&](bool enable) { config.is_injector_access_enabled(enable);                         } },
-        { "distributed_cache", [&](bool enable) { config.is_cache_access_enabled(enable);                            } },
+        { "distributed_cache", [&](bool enable) { config.is_cache_enabled(CacheType::Bep5Http{});                    } },
         { "auto_refresh",      [&](bool enable) { _auto_refresh_enabled = enable;                                    } },
         { "logfile",           [&](bool enable) { enable ? enable_log_to_file(config) : disable_log_to_file(config); } },
         { "metrics",           [&](bool enable) { enable ? metrics.enable() : metrics.disable();                     } },
@@ -549,7 +549,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>O</u>rigin access",'o',      "origin_access", config.is_origin_access_enabled()};
     ss << ToggleInput{"<u>P</u>roxy access", 'p',      "proxy_access", config.is_proxy_access_enabled()};
     ss << ToggleInput{"<u>I</u>njector proxy", 'i',    "injector_access", config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{})};
 
     ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
@@ -739,7 +739,7 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
         {"injector_access", config.is_injector_access_enabled()},
         {"injector_peers_n", injector_candidates_n(client)},
         {"injector_ready", injector_candidates_n(client) > 1},
-        {"distributed_cache", config.is_cache_access_enabled()},
+        {"distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{})},
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},

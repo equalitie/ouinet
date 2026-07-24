@@ -104,10 +104,10 @@ private:
 
     SysResult<Response> fetch_from_front_end(Request const&, Async);
     SysResult<Response> fetch_from_origin(Request const&, Async);
-    SysResult<Response> fetch_from_dcache(Request const&, Async);
-    SysResult<Response> fetch_from_public_injector(Request const&, Async);
-    SysResult<Response> fetch_from_private_injector(Request const&, Async);
-    SysResult<Response> fetch_from_cache_control(Request const&, Async);
+    SysResult<Response> fetch_from_dcache(CacheType, Request const&, Async);
+    SysResult<Response> fetch_from_public_injector(CacheType, Request const&, Async);
+    SysResult<Response> fetch_from_private_injector(CacheType, Request const&, Async);
+    SysResult<Response> fetch_from_cache_control(CacheType, Request const&, Async);
 
 private:
     Routes& routes;

@@ -8,7 +8,9 @@
 #include "namespaces.h"
 #include "cache/resource_id.h"
 #include "util/crypto_stream_key.h"
+#include "cache_type.h"
 #include "api.h"
+#include <variant>
 
 namespace ouinet {
 
@@ -35,20 +37,26 @@ public:
         return _dht_group;
     }
 
-private:
-    friend class CacheRetrieveRequest;
+    InjectingCacheType cache_type() const {
+        return _cache_type;
+    }
 
-    CachePeerRetrieveRequest(http::verb method, cache::ResourceId resource_id, CryptoStreamKey resource_key, std::string dht_group) :
+private:
+    friend class CacheRequest; // can construct
+
+    CachePeerRetrieveRequest(http::verb method, InjectingCacheType cache_type, cache::ResourceId resource_id, CryptoStreamKey resource_key, std::string dht_group) :
         _method(method),
         _resource_id(std::move(resource_id)),
         _resource_key(std::move(resource_key)),
-        _dht_group(std::move(dht_group))
+        _dht_group(std::move(dht_group)),
+        _cache_type(cache_type)
     {}
 
     http::verb _method;
     cache::ResourceId _resource_id;
     CryptoStreamKey _resource_key;
     std::string _dht_group;
+    InjectingCacheType _cache_type;
 };
 
 //--------------------------------------------------------------------
@@ -70,8 +78,10 @@ public:
         return _dht_group;
     }
 
+    friend std::ostream& operator<<(std::ostream&, CacheOuisyncRetrieveRequest const&);
+
 private:
-    friend class CacheRetrieveRequest;
+    friend class CacheRequest; // can construct
 
     CacheOuisyncRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group) :
         _method(method),
@@ -88,40 +98,35 @@ private:
 
 class CacheRetrieveRequest {
 public:
+    using Alternatives = std::variant<
+        CachePeerRetrieveRequest,
+        CacheOuisyncRetrieveRequest
+    >;
+
     CacheRetrieveRequest(CacheRetrieveRequest const&) = default;
     CacheRetrieveRequest(CacheRetrieveRequest &&) = default;
 
-    cache::ResourceId const& resource_id() const {
-        return _resource_id;
+    CacheRetrieveRequest& operator=(CacheRetrieveRequest const&) = default;
+    CacheRetrieveRequest& operator=(CacheRetrieveRequest &&) = default;
+
+    template<class V>
+    requires(
+        !std::is_same_v<V, CacheRetrieveRequest> &&
+        std::constructible_from<Alternatives, V>
+    )
+    CacheRetrieveRequest(V&& v) : _value(std::forward<V>(v)) {}
+
+    template<class Visitor, class Self>
+    decltype(auto) visit(this Self&& self, Visitor&& visitor) {
+        return std::visit(std::forward<Visitor>(visitor), std::forward<Self>(self)._value);
     }
 
-    const CryptoStreamKey& resource_key() const {
-        return _resource_key;
-    }
-
-    CachePeerRetrieveRequest to_peer_request() const {
-        return CachePeerRetrieveRequest(_method, _resource_id, _resource_key, _dht_group);
-    }
-
-    CacheOuisyncRetrieveRequest to_ouisync_request() const {
-        return CacheOuisyncRetrieveRequest(_method, _resource_id, _dht_group);
+    const cache::ResourceId& resource_id() const {
+        return visit([] (auto& r) -> cache::ResourceId const& { return r.resource_id(); });
     }
 
 private:
-    friend class CacheRequest;
-
-    CacheRetrieveRequest(http::verb method, cache::ResourceId resource_id, CryptoStreamKey resource_key, std::string dht_group):
-        _method(method),
-        _resource_id(std::move(resource_id)),
-        _resource_key(std::move(resource_key)),
-        _dht_group(std::move(dht_group))
-    {}
-
-private:
-    http::verb _method;
-    cache::ResourceId _resource_id;
-    CryptoStreamKey _resource_key;
-    std::string _dht_group;
+    Alternatives _value;
 };
 
 //--------------------------------------------------------------------
@@ -186,7 +191,7 @@ public:
     // TODO: This is only used in tests now, use it also when constructing the message.
     static const uint8_t HTTP_VERSION = 11;
 
-    static boost::optional<CacheRequest> from(http::request_header<>);
+    static std::optional<CacheRequest> from(CacheType, http::request_header<>);
 
     const http::request_header<>& header() const {
         return _header;
@@ -205,17 +210,19 @@ public:
     }
 
 private:
-    CacheRequest(http::request_header<> header, cache::ResourceId resource_id, CryptoStreamKey const& resource_key, std::string dht_group) :
+    CacheRequest(http::request_header<> header, CacheType cache_type, cache::ResourceId resource_id, CryptoStreamKey const& resource_key, std::string dht_group) :
         _header(std::move(header)),
         _resource_id(std::move(resource_id)),
         _resource_key(resource_key),
-        _dht_group(std::move(dht_group))
+        _dht_group(std::move(dht_group)),
+        _cache_type(cache_type)
     {}
 
     http::request_header<> _header;
     cache::ResourceId _resource_id;
     CryptoStreamKey _resource_key;
     std::string _dht_group;
+    CacheType _cache_type;
 };
 
 //--------------------------------------------------------------------

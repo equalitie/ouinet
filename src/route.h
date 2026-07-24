@@ -1,6 +1,7 @@
 #pragma once
 
 #include "namespaces.h"
+#include "cache_type.h"
 
 #include <boost/beast/http/message.hpp>
 
@@ -12,16 +13,16 @@ namespace ouinet {
 class ClientConfig;
 
 struct Route {
-    struct FrontEnd {};
-    struct Origin {};
-    struct BlindInjector {};
-    struct OriginOrBlindInjector {};
-    struct PublicInjector {};
-    struct DCache {};
-    struct OriginOrDCache {};
-    struct OriginOrPublicInjector {};
-    struct PublicInjectorOrDCache {};
-    struct OriginOrPublicInjectorOrDCache {};
+    struct FrontEnd                       {};
+    struct Origin                         {};
+    struct BlindInjector                  { InjectingCacheType cache_type; };
+    struct OriginOrBlindInjector          { InjectingCacheType cache_type; };
+    struct PublicInjector                 { InjectingCacheType cache_type; };
+    struct DCache                         { CacheType          cache_type; };
+    struct OriginOrDCache                 { CacheType          cache_type; };
+    struct OriginOrPublicInjector         { InjectingCacheType cache_type; };
+    struct PublicInjectorOrDCache         { InjectingCacheType cache_type; };
+    struct OriginOrPublicInjectorOrDCache { InjectingCacheType cache_type; };
 
     using Alternatives = std::variant<
         FrontEnd,

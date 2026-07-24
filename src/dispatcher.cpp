@@ -103,61 +103,61 @@ Dispatcher::dispatch(const Request& request, const Route& route, Async yield) {
             [&] (Route::Origin const&) -> R {
                 return fetch_from_origin(request, yield);
             },
-            [&] (Route::BlindInjector const&) -> R {
-                return fetch_from_private_injector(request, yield);
+            [&] (Route::BlindInjector const& route) -> R {
+                return fetch_from_private_injector(route.cache_type, request, yield);
             },
-            [&] (Route::OriginOrBlindInjector const&) -> R {
+            [&] (Route::OriginOrBlindInjector const& route) -> R {
                 return primary_or_secondary(
                         [&] (Async yield) {
                             return fetch_from_origin(request, yield);
                         },
                         [&] (Async yield) {
-                            return fetch_from_private_injector(request, yield);
+                            return fetch_from_private_injector(route.cache_type, request, yield);
                         },
                         3s,
                         yield);
             },
-            [&] (Route::PublicInjector const&) -> R {
-                return fetch_from_public_injector(request, yield);
+            [&] (Route::PublicInjector const& route) -> R {
+                return fetch_from_public_injector(route.cache_type, request, yield);
             },
-            [&] (Route::DCache const&) -> R {
-                return fetch_from_dcache(request, yield);
+            [&] (Route::DCache const& route) -> R {
+                return fetch_from_dcache(route.cache_type, request, yield);
             },
-            [&] (Route::OriginOrPublicInjectorOrDCache const&) -> R {
+            [&] (Route::OriginOrPublicInjectorOrDCache const& route) -> R {
                 return primary_or_secondary(
                         [&] (Async yield) {
                             return fetch_from_origin(request, yield);
                         },
                         [&] (Async yield) {
-                            return fetch_from_cache_control(request, yield);
+                            return fetch_from_cache_control(route.cache_type, request, yield);
                         },
                         routes.is_injector_starting() ? 1s : 3s,
                         yield);
             },
-            [&] (Route::OriginOrDCache const&) -> R {
+            [&] (Route::OriginOrDCache const& route) -> R {
                 return primary_or_secondary(
                         [&] (Async yield) -> R {
                             return fetch_from_origin(request, yield);
                         },
                         [&] (Async yield) -> R {
-                            return fetch_from_dcache(request, yield);
+                            return fetch_from_dcache(route.cache_type, request, yield);
                         },
                         routes.is_injector_starting() ? 1s : 3s,
                         yield);
             },
-            [&] (Route::OriginOrPublicInjector const&) -> R {
+            [&] (Route::OriginOrPublicInjector const& route) -> R {
                 return primary_or_secondary(
                         [&] (Async yield) -> R {
                             return fetch_from_origin(request, yield);
                         },
                         [&] (Async yield) -> R {
-                            return fetch_from_public_injector(request, yield);
+                            return fetch_from_public_injector(route.cache_type, request, yield);
                         },
                         routes.is_injector_starting() ? 1s : 3s,
                         yield);
             },
-            [&] (Route::PublicInjectorOrDCache const&) -> R {
-                return fetch_from_cache_control(request, yield);
+            [&] (Route::PublicInjectorOrDCache const& route) -> R {
+                return fetch_from_cache_control(route.cache_type, request, yield);
             },
         },
         route.value);
@@ -174,8 +174,8 @@ SysResult<Response> Dispatcher::fetch_from_origin(Request const& request, Async 
     return wrap<Response::Origin>(std::move(r));
 }
 
-SysResult<Response> Dispatcher::fetch_from_dcache(Request const& request, Async yield) {
-    const auto cache_rq = CacheRequest::from(request);
+SysResult<Response> Dispatcher::fetch_from_dcache(CacheType cache_type, Request const& request, Async yield) {
+    const auto cache_rq = CacheRequest::from(cache_type, request);
     if (!cache_rq) {
         LOG_ERROR(yield, " Invalid request");
         return std::unexpected(asio::error::invalid_argument);
@@ -184,8 +184,8 @@ SysResult<Response> Dispatcher::fetch_from_dcache(Request const& request, Async 
     return wrap<Response::DCache>(std::move(*cache_rq), std::move(r));
 }
 
-SysResult<Response> Dispatcher::fetch_from_public_injector(Request const& request, Async yield) {
-    const auto cache_rq = CacheRequest::from(request);
+SysResult<Response> Dispatcher::fetch_from_public_injector(CacheType cache_type, Request const& request, Async yield) {
+    const auto cache_rq = CacheRequest::from(cache_type, request);
     if (!cache_rq) {
         LOG_ERROR(yield, " Invalid request");
         return std::unexpected(asio::error::invalid_argument);
@@ -194,13 +194,13 @@ SysResult<Response> Dispatcher::fetch_from_public_injector(Request const& reques
     return wrap<Response::PublicInjector>(std::move(*cache_rq), std::move(r));
 }
 
-SysResult<Response> Dispatcher::fetch_from_private_injector(Request const& request, Async yield) {
+SysResult<Response> Dispatcher::fetch_from_private_injector(CacheType, Request const& request, Async yield) {
     auto r = routes.private_injector(request, yield);
     return wrap<Response::PrivateInjector>(std::move(r));
 }
 
-SysResult<Response> Dispatcher::fetch_from_cache_control(Request const& request, Async yield) {
-    const auto cache_rq = CacheRequest::from(request);
+SysResult<Response> Dispatcher::fetch_from_cache_control(CacheType cache_type, Request const& request, Async yield) {
+    const auto cache_rq = CacheRequest::from(cache_type, request);
     if (!cache_rq) {
         LOG_ERROR(yield, " Invalid request");
         return std::unexpected(asio::error::invalid_argument);

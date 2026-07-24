@@ -19,6 +19,7 @@
 #include "cxx/dns.h"
 #include "ouiservice/i2p/address.h"
 #include "logger.h"
+#include "cache_type.h"
 
 namespace boost::program_options {
     class variables_map;
@@ -55,9 +56,18 @@ struct OuisyncCacheConfig {
 };
 
 class OUINET_CLIENT_API ClientConfig {
-public:
-    enum class CacheType { None, Bep5Http, Bep3HTTPOverI2P, Ouisync };
+    struct EnabledCaches {
+        bool Bep5Http = false;
+        bool Bep3HTTPOverI2P = false;
+        bool Ouisync = false;
 
+        bool get(CacheType) const;
+        void set(CacheType, bool);
+        bool is_any_cache_enabled() const;
+        bool is_injecting_cache_enabled() const;
+    };
+
+public:
     ClientConfig() = default;
 
     // Throws on error
@@ -112,9 +122,8 @@ public:
         return _udp_mux_rx_limit * 1000 / 8;
     }
 
-    bool is_cache_enabled() const { return _cache_type != CacheType::None; }
-    CacheType cache_type() const { return _cache_type; }
-    bool is_cache_bep5() const { return _cache_type == CacheType::Bep5Http; }
+    bool is_cache_enabled(CacheType type) const { return _enabled_caches.get(type); }
+    bool is_injecting_cache_enabled() const { return _enabled_caches.is_injecting_cache_enabled(); }
 
     boost::posix_time::time_duration max_cached_age() const {
         return _max_cached_age;
@@ -257,9 +266,6 @@ public:
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
     void is_log_file_enabled(bool v) { CHANGE_AND_SAVE_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
 
-    bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
-    void is_cache_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_cache_access, !v); }
-
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
     void is_origin_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_origin_access, !v); }
 
@@ -299,7 +305,6 @@ private:
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
     bool _bt_allow_martians = false;
-    bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
@@ -308,6 +313,7 @@ private:
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
+    EnabledCaches _enabled_caches;
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
@@ -322,7 +328,6 @@ private:
     fs::path _cache_static_path;
     fs::path _cache_static_content_path;
     boost::optional<sign::PublicKey> _cache_http_pubkey;
-    CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     bool _allow_private_targets = false;
     std::map<std::string, std::string> _add_request_fields;

@@ -213,8 +213,8 @@ public:
         // TODO: check proxy acceptor
         // TODO: check front-end acceptor
         bool use_injector(_config.injector_endpoint());
-        bool use_cache(_config.is_cache_enabled());
-        bool use_cache_bep5(use_cache && _config.is_cache_bep5());
+        bool use_cache(_config.is_injecting_cache_enabled());
+        bool use_cache_bep5(use_cache && _config.is_cache_enabled(CacheType::Bep5Http{}));
         if (use_injector && _injector_starting)
             return Client::RunningState::Starting;
         if (use_cache && _cache_starting)
@@ -826,54 +826,47 @@ Client::State::serve_peer_request(GenericStream con, Async yield)
 std::expected<Session, sys::error_code>
 Client::State::fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async yield)
 {
+    using R = SysResult<Session>;
+
     try {
         Async timeout_yield = yield;
         auto watch_dog = ouinet::watch_dog( _ctx
                                           , default_timeout::fetch_http()
                                           , [&]{ timeout_yield.cancel(); });
 
-        if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
-            if (auto r = wait_for_cache(timeout_yield); !r) {
-                return std::unexpected(r.error());
+        return request.visit(overloaded {
+            [&] (const CachePeerRetrieveRequest& rq) -> R {
+                // TODO: Should we not wait in case of the other cache type?
+                if (rq.cache_type().is<CacheType::Bep5Http>()) {
+                    if (auto r = wait_for_cache(timeout_yield); !r) {
+                        return std::unexpected(r.error());
+                    }
+                }
+
+                auto c = get_cache();
+
+                auto s = c->load(rq, _metrics, timeout_yield.tag("load"));
+
+                if (!s) return std::unexpected(s.error());
+
+                auto& hdr = s->response_header();
+
+                if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
+                    // The cached resource cannot be used, treat it like
+                    // not being found.
+                    return std::unexpected(asio::error::not_found);
+
+                maybe_add_proto_version_warning(hdr);
+                assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
+                return std::move(*s);
+            },
+            [&] (const CacheOuisyncRetrieveRequest& rq) -> R {
+                if (!_ouisync || !_ouisync->is_running()) {
+                    return std::unexpected(asio::error::operation_not_supported);
+                }
+                return _ouisync->load(rq, yield);
             }
-        }
-
-        auto c = get_cache();
-
-        if (c && (_config.cache_type() == ClientConfig::CacheType::Bep5Http
-               || _config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P)) {
-            auto rq = request.to_peer_request();
-
-            auto s = c->load( request.resource_id()
-                            , request.resource_key()
-                            , rq.dht_group()
-                            , rq.method() == http::verb::head
-                            , _metrics
-                            , timeout_yield.tag("load"));
-
-            if (!s) return std::unexpected(s.error());
-
-            auto& hdr = s->response_header();
-
-            if (!util::http_proto_version_check_trusted(hdr, newest_proto_seen))
-                // The cached resource cannot be used, treat it like
-                // not being found.
-                return std::unexpected(asio::error::not_found);
-
-            maybe_add_proto_version_warning(hdr);
-            assert(!hdr[http_::response_source_hdr].empty());  // for agent, set by cache
-            return std::move(*s);
-        }
-        else if(_ouisync && _ouisync->is_running() && _config.cache_type() == ClientConfig::CacheType::Ouisync) {
-            auto rq = request.to_ouisync_request();
-            auto session = _ouisync->load(rq, yield);
-            if (!session) return std::unexpected(session.error());
-            return std::move(*session);
-        }
-        else {
-            LOG_DEBUG(yield, " Cache is disabled");
-            return std::unexpected(asio::error::operation_not_supported);
-        }
+        });
     }
     catch (Async::Cancelled const&) {
         if (yield.is_cancelled()) throw;
@@ -1999,8 +1992,8 @@ Client::State::setup_cache(Async yield)
         do_notify_ready();
     });
 
-    if (_config.cache_type() != ClientConfig::CacheType::Bep5Http
-        && _config.cache_type() != ClientConfig::CacheType::Bep3HTTPOverI2P)
+    if (!_config.is_cache_enabled(CacheType::Bep5Http{})
+        && !_config.is_cache_enabled(CacheType::Bep3HTTPOverI2P{}))
     {
         //unsupported cache type
         return std::unexpected(asio::error::operation_not_supported);
@@ -2037,7 +2030,7 @@ Client::State::setup_cache(Async yield)
     // but they will still report and error code to the caller.
     do_notify_ready();
 
-    if (_config.cache_type() == ClientConfig::CacheType::Bep5Http) {
+    if (_config.is_cache_enabled(CacheType::Bep5Http{})) {
         auto dht = bittorrent_dht(yield);
         if (!dht) {
             LOG_ERROR(yield, " Failed to initialize BT DHT for cache::Client");
@@ -2049,7 +2042,8 @@ Client::State::setup_cache(Async yield)
             return std::unexpected(asio::error::invalid_argument);
         }
     }
-    else if (_config.cache_type() == ClientConfig::CacheType::Bep3HTTPOverI2P) {
+
+    if (_config.is_cache_enabled(CacheType::Bep3HTTPOverI2P{})) {
         start_accepting_i2p(yield);
     }
 

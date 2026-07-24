@@ -229,7 +229,6 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
             "./no_client_exec"s,
             "--log-level=DEBUG"s,
             "--repo"s, root.make_subdir("client").string(),
-            "--cache-type=none"s,
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,

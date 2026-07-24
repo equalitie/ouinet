@@ -35,7 +35,7 @@ template<typename E> void unwrap(std::expected<void, E> exp, std::source_locatio
     }
 }
 
-template<typename E> void unwrap(std::optional<E> opt, std::source_location loc = std::source_location::current()) {
+template<typename E> E unwrap(std::optional<E> opt, std::source_location loc = std::source_location::current()) {
     if (!opt) {
         BOOST_FAIL(loc.file_name() << ":" << loc.line() << " error: optional is `none`");
     } else {

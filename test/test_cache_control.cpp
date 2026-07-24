@@ -121,8 +121,8 @@ BOOST_AUTO_TEST_CASE(test_cache_origin_fail)
         Request normal_request{http::verb::get, "http://foo", 11};
         normal_request.set(http_::request_group_hdr, dht_group);
 
-        auto req = CacheRequest::from(normal_request).value();
-        auto s = cc.fetch(req, yield).value();
+        auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_request));
+        auto s = unwrap(cc.fetch(req, yield));
         auto& hdr = s.response_header();
         BOOST_REQUIRE_EQUAL(hdr.result(), http::status::ok);
         BOOST_REQUIRE_EQUAL(hdr["X-Test"], "from-cache");
@@ -204,8 +204,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
             Request normal_req{http::verb::get, "http://old", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req).value();
-            auto session = cc.fetch(req, yield).value();
+            auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+            auto session = unwrap(cc.fetch(req, yield));
             auto hdr = session.response_header();
             BOOST_REQUIRE_EQUAL(hdr["X-Test"], "from-origin");
         }
@@ -213,8 +213,8 @@ BOOST_AUTO_TEST_CASE(test_max_cached_age)
             Request normal_req{http::verb::get, "http://new", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req).value();
-            auto session = cc.fetch(req, yield).value();
+            auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+            auto session = unwrap(cc.fetch(req, yield));
             auto hdr = session.response_header();
             BOOST_REQUIRE_EQUAL(hdr["X-Test"], "from-cache");
         }
@@ -277,8 +277,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
             Request normal_req{http::verb::get, "http://old", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req).value();
-            auto session = cc.fetch(req, yield).value();
+            auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+            auto session = unwrap(cc.fetch(req, yield));
             auto hdr = session.response_header();
             BOOST_REQUIRE_EQUAL(hdr["X-Test"], "from-origin");
         }
@@ -286,8 +286,8 @@ BOOST_AUTO_TEST_CASE(test_maxage)
             Request normal_req{http::verb::get, "http://new", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req).value();
-            auto session = cc.fetch(req, yield).value();
+            auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+            auto session = unwrap(cc.fetch(req, yield));
             auto hdr = session.response_header();
             BOOST_REQUIRE_EQUAL(hdr["X-Test"], "from-cache");
         }
@@ -361,8 +361,8 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
             Request normal_req{http::verb::get, "http://old", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req).value();
-            auto session = cc.fetch(req, yield).value();
+            auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+            auto session = unwrap(cc.fetch(req, yield));
             auto hdr = session.response_header();
             BOOST_REQUIRE_EQUAL(hdr["X-Test"], "from-origin");
         }
@@ -370,8 +370,8 @@ BOOST_AUTO_TEST_CASE(test_http10_expires)
             Request normal_req{http::verb::get, "http://new", 11};
             normal_req.set(http_::request_group_hdr, dht_group);
 
-            auto req = CacheRequest::from(normal_req).value();
-            auto session = cc.fetch(req, yield).value();
+            auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+            auto session = unwrap(cc.fetch(req, yield));
             auto hdr = session.response_header();
             BOOST_REQUIRE_EQUAL(hdr["X-Test"], "from-cache");
         }
@@ -408,8 +408,8 @@ BOOST_AUTO_TEST_CASE(test_dont_load_cache_when_If_None_Match)
         Request normal_req{http::verb::get, "http://foo", 11};
         normal_req.set(http::field::if_none_match, "abc");
         normal_req.set(http_::request_group_hdr, dht_group);
-        auto req = CacheRequest::from(normal_req).value();
-        auto session = cc.fetch(req, yield).value();
+        auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+        auto session = unwrap(cc.fetch(req, yield));
         auto& hdr = session.response_header();
         BOOST_CHECK_EQUAL(hdr.result(), http::status::ok);
         BOOST_CHECK_EQUAL(hdr["X-Test"], "from-origin");
@@ -450,8 +450,8 @@ BOOST_AUTO_TEST_CASE(test_no_etag_override)
         normal_rq.set(http::field::if_none_match, "origin-etag");
         normal_rq.set(http_::request_group_hdr, dht_group);
 
-        auto rq = CacheRequest::from(normal_rq).value();
-        cc.fetch(rq, yield).value();
+        auto rq = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_rq));
+        unwrap(cc.fetch(rq, yield));
     });
     ctx.run();
 
@@ -534,9 +534,9 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
             {
                 Request normal_rq{http::verb::get, "http://mypage", 11};
                 normal_rq.set(http_::request_group_hdr, dht_group);
-                auto rq = CacheRequest::from(normal_rq).value();
+                auto rq = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_rq));
 
-                auto session = cc.fetch(rq, yield).value();
+                auto session = unwrap(cc.fetch(rq, yield));
                 auto h = session.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-cache");
@@ -547,9 +547,9 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
                 Request normal_rq{http::verb::get, "http://mypage", 11};
                 normal_rq.set(http::field::if_none_match, "123");
                 normal_rq.set(http_::request_group_hdr, dht_group);
-                auto rq  = CacheRequest::from(normal_rq).value();
+                auto rq  = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_rq));
 
-                auto session = cc.fetch(rq, yield).value();
+                auto session = unwrap(cc.fetch(rq, yield));
                 auto h = session.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::not_modified);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin-not-modified");
@@ -560,9 +560,9 @@ BOOST_AUTO_TEST_CASE(test_if_none_match)
                 Request normal_rq{http::verb::get, "http://mypage", 11};
                 normal_rq.set(http::field::if_none_match, "abc");
                 normal_rq.set(http_::request_group_hdr, dht_group);
-                auto rq  = CacheRequest::from(normal_rq).value();
+                auto rq  = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_rq));
 
-                auto session = cc.fetch(rq, yield).value();
+                auto session = unwrap(cc.fetch(rq, yield));
                 auto h = session.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin-ok");
@@ -621,8 +621,8 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 // since the cached version is fresh enough.
                 Request normal_req{http::verb::get, "http://foo", 11};
                 normal_req.set(http_::request_group_hdr, dht_group);
-                auto req = CacheRequest::from(normal_req).value();
-                auto session = cc.fetch(req, yield).value();
+                auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+                auto session = unwrap(cc.fetch(req, yield));
                 auto h = session.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-cache");
@@ -634,8 +634,8 @@ BOOST_AUTO_TEST_CASE(test_req_no_cache_fresh_origin_ok)
                 normal_req.set(http::field::cache_control, "no-cache");
                 normal_req.set(http_::request_group_hdr, dht_group);
 
-                auto req = CacheRequest::from(normal_req).value();
-                auto session = cc.fetch(req, yield).value();
+                auto req = unwrap(CacheRequest::from(CacheType::Bep5Http{}, normal_req));
+                auto session = unwrap(cc.fetch(req, yield));
                 auto h = session.response_header();
                 BOOST_CHECK_EQUAL(h.result(), http::status::ok);
                 BOOST_CHECK_EQUAL(h["X-Test"], "from-origin");
