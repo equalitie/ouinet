@@ -39,11 +39,11 @@ public class Ouinet {
             System.loadLibrary("gpg-error");
             System.loadLibrary("gcrypt");
 
-            System.loadLibrary("client");
+            System.loadLibrary("ouinet_client");
             System.loadLibrary("native-lib");
         } else {
             ReLinkerInstance relinker = ReLinker.recursively();
-            relinker.loadLibrary(context, "client");
+            relinker.loadLibrary(context, "ouinet_client");
             relinker.loadLibrary(context, "native-lib");
         }
 
