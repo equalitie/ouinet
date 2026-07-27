@@ -73,6 +73,11 @@ struct InjectingCacheType {
     )
     InjectingCacheType(V&& v) : value(std::forward<V>(v)) {}
 
+    template<class Visitor, class Self>
+    decltype(auto) visit(this Self&& self, Visitor&& visitor) {
+        return std::visit(std::forward<Visitor>(visitor), std::forward<Self>(self).value);
+    }
+
     template<class Alt> bool is() const {
         return std::holds_alternative<Alt>(value);
     }

@@ -392,7 +392,13 @@ CacheControl::do_fetch_fresh(const CacheRequest& rq, Async yield) {
         return std::unexpected(asio::error::operation_not_supported);
     }
 
-    return fetch_fresh(rq.to_inject_request(), yield);
+    auto inject_rq = rq.to_inject_request();
+
+    if (!inject_rq) {
+        return std::unexpected(asio::error::invalid_argument);
+    }
+
+    return fetch_fresh(*inject_rq, yield);
 }
 
 std::expected<CacheControl::CacheEntry, sys::error_code>

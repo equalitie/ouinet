@@ -438,8 +438,6 @@ struct Client::Impl {
         auto& group = request.dht_group();
         bool is_head_request = request.method() == http::verb::head;
 
-        namespace err = asio::error;
-
         LOG_DEBUG(yield, " Requesting from the cache: ", resource_id);
 
         std::size_t rs_sz = 0;
@@ -464,89 +462,93 @@ struct Client::Impl {
 
         util::LogPath log_path = yield.log_path().tag("multi_peer_reader");
 
-        std::unique_ptr<MultiPeerReader> reader;
+        LOG_DEBUG(yield, " Distributed cache lookup: ", request.cache_type());
+        LOG_DEBUG(yield, "    dht=", (_dht ? "yes" : "no"));
+        LOG_DEBUG(yield, "    i2p=", (_i2p_tracker ? "yes" : "no"));
 
-        std::optional<metrics::Request> metrics;
+        using VisitR = std::expected<std::unique_ptr<MultiPeerReader>, sys::error_code>;
 
-        LOG_DEBUG(yield, " Distributed cache lookup:");
-        LOG_DEBUG(yield, "     dht=", (_dht ? "yes" : "no"));
-        LOG_DEBUG(yield, "     i2p=", (_i2p_tracker ? "yes" : "no"));
+        auto reader = request.cache_type().visit(overloaded {
+                [&] (CacheType::Bep5Http) -> VisitR {
+                    auto peer_lookup_ = dht_peer_lookup(compute_swarm_name(group));
 
-        if (_dht) {
-            metrics = metrics_client.new_cache_in_request();
+                    auto local_peers = _local_peer_discovery.found_peers();
 
-            auto peer_lookup_ = dht_peer_lookup(compute_swarm_name(group));
+                    if (_dht) {
+                        if (get_logger().get_threshold() <= DEBUG) {
+                            LOG_DEBUG(yield, " Peer lookup with DHT and local discovery:");
+                            LOG_DEBUG(yield, "    resource_id= ", resource_id);
+                            LOG_DEBUG(yield, "    group=       ", group);
+                            LOG_DEBUG(yield, "    swarm_name=  ", peer_lookup_->swarm_name());
+                            LOG_DEBUG(yield, "    infohash=    ", peer_lookup_->infohash());
+                            LOG_DEBUG(yield, "    local_peers= ", local_peers);
+                        };
 
-            auto local_peers = _local_peer_discovery.found_peers();
+                        return std::make_unique<MultiPeerReader>
+                            ( _ex
+                            , resource_id
+                            , resource_key
+                            , _cache_pk
+                            , std::move(local_peers)
+                            , std::move(peer_lookup_)
+                            , _newest_proto_seen
+                            , log_path);
+                    }
+                    else {
+                        if (get_logger().get_threshold() <= DEBUG) {
+                            LOG_DEBUG(yield, " Peer lookup with local discovery only:");
+                            LOG_DEBUG(yield, "    resource_id= ", resource_id);
+                            LOG_DEBUG(yield, "    local_peers= ", local_peers);
+                        };
 
-            if (get_logger().get_threshold() <= DEBUG) {
-                LOG_DEBUG(yield, " Peer lookup with DHT and local discovery:");
-                LOG_DEBUG(yield, "    resource_id= ", resource_id);
-                LOG_DEBUG(yield, "    group=       ", group);
-                LOG_DEBUG(yield, "    swarm_name=  ", peer_lookup_->swarm_name());
-                LOG_DEBUG(yield, "    infohash=    ", peer_lookup_->infohash());
-                LOG_DEBUG(yield, "    local_peers= ", local_peers);
-            };
+                        return std::make_unique<MultiPeerReader>
+                            ( _ex
+                            , resource_id
+                            , resource_key
+                            , _cache_pk
+                            , std::move(local_peers)
+                            , _lan_my_endpoints
+                            , _newest_proto_seen
+                            , log_path);
+                    }
+                },
+                [&] (CacheType::Bep3HTTPOverI2P) -> VisitR {
+                    if (!_i2p_tracker) {
+                        return std::unexpected(asio::error::no_protocol_option);
+                    }
 
-            reader = std::make_unique<MultiPeerReader>
-                ( _ex
-                , resource_id
-                , resource_key
-                , _cache_pk
-                , std::move(local_peers)
-                , std::move(peer_lookup_)
-                , _newest_proto_seen
-                , log_path);
-        }
-        else if (_i2p_tracker) {
-            auto i2p_lookup = i2p_peer_lookup(compute_swarm_name(group));
+                    auto i2p_lookup = i2p_peer_lookup(compute_swarm_name(group));
 
-            auto local_peers = _local_peer_discovery.found_peers();
+                    auto local_peers = _local_peer_discovery.found_peers();
 
-            if (get_logger().get_threshold() <= DEBUG) {
-                LOG_DEBUG(yield, " Peer lookup with I2P tracker and local discovery:");
-                LOG_DEBUG(yield, "    resource_id= ", resource_id);
-                LOG_DEBUG(yield, "    group=       ", group);
-                LOG_DEBUG(yield, "    infohash=    ", i2p_lookup->infohash());
-                LOG_DEBUG(yield, "    local_peers= ", local_peers);
-            };
+                    if (get_logger().get_threshold() <= DEBUG) {
+                        LOG_DEBUG(yield, " Peer lookup with I2P tracker and local discovery:");
+                        LOG_DEBUG(yield, "    resource_id= ", resource_id);
+                        LOG_DEBUG(yield, "    group=       ", group);
+                        LOG_DEBUG(yield, "    infohash=    ", i2p_lookup->infohash());
+                        LOG_DEBUG(yield, "    local_peers= ", local_peers);
+                    };
 
-            // Using I2P specific constructor which doesn't deal with lan endpoints
-            // for now to make it less complicated.
-            reader = std::make_unique<MultiPeerReader>
-                ( _ex
-                , resource_id
-                , resource_key
-                , _cache_pk
-                , std::move(i2p_lookup)
-                , _i2p_tracker->get_session()
-                , _newest_proto_seen
-                , log_path);
-        }
-        else {
-            auto local_peers = _local_peer_discovery.found_peers();
+                    // Using I2P specific constructor which doesn't deal with lan endpoints
+                    // for now to make it less complicated.
+                    return std::make_unique<MultiPeerReader>
+                        ( _ex
+                        , resource_id
+                        , resource_key
+                        , _cache_pk
+                        , std::move(i2p_lookup)
+                        , _i2p_tracker->get_session()
+                        , _newest_proto_seen
+                        , log_path);
+                }
+            });
 
-            if (get_logger().get_threshold() <= DEBUG) {
-                LOG_DEBUG(yield, " Peer lookup with local discovery only:");
-                LOG_DEBUG(yield, "    resource_id= ", resource_id);
-                LOG_DEBUG(yield, "    local_peers= ", local_peers);
-            };
-
-            reader = std::make_unique<MultiPeerReader>
-                ( _ex
-                , resource_id
-                , resource_key
-                , _cache_pk
-                , std::move(local_peers)
-                , _lan_my_endpoints
-                , _newest_proto_seen
-                , log_path);
-        }
+        if (!reader) return std::unexpected(reader.error());
 
         auto s =  Session::create(
-                std::move(reader),
+                std::move(*reader),
                 is_head_request,
-                std::move(metrics),
+                metrics_client.new_cache_in_request(),
                 yield.tag("read_hdr"));
 
         if (s) {

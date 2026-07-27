@@ -119,8 +119,20 @@ CacheRetrieveRequest CacheRequest::to_retrieve_request() const {
 }
 
 
-CacheInjectRequest CacheRequest::to_inject_request() const {
-    return CacheInjectRequest(_header, _resource_id, _dht_group);
+std::optional<CacheInjectRequest> CacheRequest::to_inject_request() const {
+    using R = std::optional<CacheInjectRequest>;
+
+    return _cache_type.visit(overloaded {
+            [&] (CacheType::Bep5Http type) -> R {
+                return CacheInjectRequest(_header, type, _resource_id, _dht_group);
+            },
+            [&] (CacheType::Bep3HTTPOverI2P type) -> R {
+                return CacheInjectRequest(_header, type, _resource_id, _dht_group);
+            },
+            [&] (CacheType::Ouisync) -> R {
+                return {};
+            },
+        });
 }
 
 void CacheRequest::set_if_none_match(std::string_view if_none_match) {

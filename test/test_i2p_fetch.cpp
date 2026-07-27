@@ -14,6 +14,7 @@
 #include "client.h"
 #include "ssl/util.h"
 #include "async_sleep.h"
+#include "route.h"
 
 using namespace std;
 using namespace ouinet;
@@ -38,7 +39,7 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-Request build_cache_request() {
+Request build_cache_request(Route route) {
     int version = 11;
     std::string host = test_url.host;
     std::string target = test_url.reassemble();
@@ -47,6 +48,7 @@ Request build_cache_request() {
     req.set(http::field::host, host);
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     req.set(http_::request_group_hdr, target);
+    req.set("X-Ouinet-Route", util::str(route));
     return req;
 }
 
@@ -237,21 +239,24 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
         auto control_body = fetch_from_origin(yield).body();
 
-        auto rq = build_cache_request();
-
         // The "seeder" fetches the signed content through the "injector"
-        auto rs1 = fetch_through_client(seeder, rq, yield);
+        auto rs1 = fetch_through_client(
+                seeder,
+                build_cache_request(Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}),
+                yield);
 
         BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
         BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_REQUIRE_EQUAL(rs1.body(), control_body);
 
         // Give "seeder" time to announce
-        Cancel cancel;
         async_sleep(20s, yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
-        auto rs2 = fetch_through_client(leecher, rq, yield);
+        auto rs2 = fetch_through_client(
+                leecher,
+                build_cache_request(Route::DCache{CacheType::Bep3HTTPOverI2P{}}),
+                yield);
 
         BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);
         BOOST_REQUIRE_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);

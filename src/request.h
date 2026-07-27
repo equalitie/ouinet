@@ -170,18 +170,24 @@ public:
         return i->value();
     }
 
+    InjectingCacheType cache_type() const {
+        return _cache_type;
+    }
+
 private:
     friend class CacheRequest;
 
-    CacheInjectRequest(http::request_header<> header, cache::ResourceId resource_id, std::string dht_group) :
+    CacheInjectRequest(http::request_header<> header, InjectingCacheType cache_type, cache::ResourceId resource_id, std::string dht_group) :
         _header(std::move(header)),
         _resource_id(std::move(resource_id)),
-        _dht_group(std::move(dht_group))
+        _dht_group(std::move(dht_group)),
+        _cache_type(cache_type)
     {}
 
     http::request_header<> _header;
     cache::ResourceId _resource_id;
     std::string _dht_group;
+    InjectingCacheType _cache_type;
 };
 
 //--------------------------------------------------------------------
@@ -197,7 +203,7 @@ public:
         return _header;
     }
 
-    CacheInjectRequest to_inject_request() const;
+    std::optional<CacheInjectRequest> to_inject_request() const;
     CacheRetrieveRequest to_retrieve_request() const;
 
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-None-Match

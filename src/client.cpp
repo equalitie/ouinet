@@ -57,6 +57,7 @@
 #include "upnp_updater.h"
 #include "task.h"
 #include "util/executor.h"
+#include "util/debug.h"
 
 #include "task.h"
 #include "logger.h"
@@ -1214,9 +1215,6 @@ Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, A
     return timeout(
         default_timeout::fetch_http(),
         [&](Async yield) -> std::expected<Session, sys::error_code> {
-            // Connect to the injector.
-            // TODO: Maybe refactor with `fetch_via_self`.
-
             if (auto result = wait_for_injector(yield); !result) {
                 return std::unexpected(result.error());
             }

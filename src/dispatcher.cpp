@@ -190,7 +190,12 @@ SysResult<Response> Dispatcher::fetch_from_public_injector(CacheType cache_type,
         LOG_ERROR(yield, " Invalid request");
         return std::unexpected(asio::error::invalid_argument);
     }
-    auto r = routes.public_injector(cache_rq->to_inject_request(), yield);
+    const auto injector_rq = cache_rq->to_inject_request();
+    if (!injector_rq) {
+        LOG_ERROR(yield, " Invalid request");
+        return std::unexpected(asio::error::invalid_argument);
+    }
+    auto r = routes.public_injector(*injector_rq, yield);
     return wrap<Response::PublicInjector>(std::move(*cache_rq), std::move(r));
 }
 
