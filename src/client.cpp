@@ -652,7 +652,6 @@ private:
     // For debugging
     uint64_t _next_connection_id = 0;
     ConnectionPool<Endpoint> _injector_connections;
-    ConnectionPool<bool> _self_connections;  // stored value is unused
     std::optional<OriginPools> _origin_pools;
 
     asio::ssl::context inj_ctx;
@@ -1259,9 +1258,7 @@ Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, A
             LOG_DEBUG(yield, " Sending a request to the injector");
 
             // Send request
-            auto write_e = compat([&](asio::yield_context yield) {
-                return request.async_write(con, yield);
-            })(yield.tag("write_injector_req"));
+            auto write_e = request.async_write(*con, yield.tag("write_injector_req"));
             if (!write_e) {
                 LOG_WARN(yield, " Failed to send request to the injector; ec=", write_e.error());
                 metrics.finish(write_e.error());

@@ -8,6 +8,7 @@
 #include "namespaces.h"
 #include "cache/resource_id.h"
 #include "util/crypto_stream_key.h"
+#include "util/async.h"
 #include "cache_type.h"
 #include "api.h"
 #include <variant>
@@ -152,10 +153,14 @@ public:
     void set_druid(std::string_view druid);
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) {
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(WriteStream& con, Async yield) {
         http::request<http::empty_body> msg(_header);
         msg.prepare_payload();
-        http::async_write(con, msg, yield);
+        auto r = http::async_write(con, msg, yield);
+        if (!r) return std::unexpected(r.error());
+        return {};
     }
 
     std::optional<const std::string_view> get_if_none_match_field() const {
@@ -254,9 +259,13 @@ public:
     void set_druid(std::string_view druid);
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) {
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(WriteStream& con, Async yield) {
         _request.prepare_payload();
-        http::async_write(con, _request, yield);
+        auto r = http::async_write(con, _request, yield);
+        if (!r) return std::unexpected(r.error());
+        return {};
     }
 
 private:
@@ -284,9 +293,11 @@ public:
     http::verb method() const;
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) {
-        std::visit(
-            [&] (auto& alt) { alt.async_write(con, yield); },
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(WriteStream& con, Async yield) {
+        return std::visit(
+            [&] (auto& alt) { return alt.async_write(con, yield); },
             static_cast<Base&>(*this)
         );
     }
