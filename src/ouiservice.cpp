@@ -136,7 +136,7 @@ void OuiServiceClient::add( Endpoint endpoint
 
 sys::error_code OuiServiceClient::start(Async yield)
 {
-    assert(_implementation);
+    if (!_implementation) return {};
 
     _started = false;
 

@@ -2,6 +2,7 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "util/bytes.h"
+#include "util/debug.h"
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
@@ -607,7 +608,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "disabled.<br>\n";
     ss << "<br>\n";
 
-    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+    ss << "Injector endpoint: " << debug(config.injector_endpoint<CacheType::Bep5Http>()) << "<br>\n";
     ss << "<br>\n";
 
     ss << "DNS protocols enabled: "

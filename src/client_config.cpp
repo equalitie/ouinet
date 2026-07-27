@@ -460,7 +460,20 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 throw error("Failed to parse endpoint: ", injector_ep_str);
             }
 
-            _injector_ep = *opt;
+            std::move(*opt).visit( overloaded {
+                [&] (asio::ip::tcp::endpoint ep) {
+                    _injector_endpoints.get<CacheType::Bep5Http>() = std::move(ep);
+                },
+                [&] (Endpoint::Utp ep) {
+                    _injector_endpoints.get<CacheType::Bep5Http>() = std::move(ep);
+                },
+                [&] (Endpoint::Bep5) {
+                    throw error("Bep5 endpoints are set implicitly");
+                },
+                [&] (I2pAddress ep) {
+                    _injector_endpoints.get<CacheType::Bep3HTTPOverI2P>() = std::move(ep);
+                }
+            });
         }
     }
 
@@ -572,13 +585,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                             "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
                     }
 
-                    if (_injector_ep && _injector_ep->get_if<Endpoint::Bep5>()) {
-                        throw error("A BEP5 injector endpoint is derived implicitly"
-                                    " when using '--cache-type=bep5-http',"
-                                    " but it is already set to: ", *_injector_ep);
-                    }
-                    if (!_injector_ep) {
-                        _injector_ep = Endpoint::Bep5{
+                    auto& injector_ep = _injector_endpoints.get<CacheType::Bep5Http>();
+
+                    if (!injector_ep) {
+                        injector_ep = Endpoint::Bep5{
                             bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
                         };
                     }
@@ -591,6 +601,14 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                     if (!_cache_http_pubkey) {
                         throw std::runtime_error(
                             "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
+                    }
+
+                    auto& injector_ep = _injector_endpoints.get<CacheType::Bep5Http>();
+
+                    if (!injector_ep) {
+                        injector_ep = Endpoint::Bep5{
+                            bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+                        };
                     }
                 },
                 [&] (const CacheType::Ouisync& type) {
@@ -619,16 +637,16 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 "string is missing a colon: ", cred));
         }
 
-        if (!_injector_ep) {
+        if (!_injector_endpoints.get<CacheType::Bep5Http>() && !_injector_endpoints.get<CacheType::Bep3HTTPOverI2P>()) {
             throw error(
                 "The '--injector-credentials' argument must be used with "
                 "'--injector-ep'");
         }
 
-        _injector_credentials[*_injector_ep] = cred;
+        _injector_credentials = cred;
     }
 
-        if (vm.count("i2p-hops-per-tunnel")) {
+    if (vm.count("i2p-hops-per-tunnel")) {
         auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
 
         if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
@@ -638,16 +656,12 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 ));
         }
 
-        if (!(//If we neither connecting for an i2p injector
-            (_injector_ep && _injector_ep->get_if<I2pAddress>()) ||
-            //nor we are not  running a Bep5 over i2p cache
-            _enabled_caches.get(CacheType::Bep3HTTPOverI2P{})))
-          {
+        if (!_injector_endpoints.get<CacheType::Bep3HTTPOverI2P>()) {
             throw std::runtime_error(
                 "The '--i2p-hops-per-tunnel' argument must be used with "
                 "'--injector-ep' with an i2p injector or with "
                 "--cache-type=bep3-http-over-i2p ");
-          }
+        }
 
         _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
     }

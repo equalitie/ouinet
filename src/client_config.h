@@ -13,6 +13,7 @@
 #include "util.h"
 #include "api.h"
 #include "util/sign.h"
+#include "util/overloaded.h"
 #include "endpoint.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
@@ -55,6 +56,33 @@ struct OuisyncCacheConfig {
     std::string page_index_token;
 };
 
+// ----
+
+template<class... TypePairs> struct TypeValueMap {};
+
+template<class K, class V, class ... RestPairs>
+struct TypeValueMap<std::pair<K, V>, RestPairs...> : public TypeValueMap<RestPairs...> {
+    std::pair<K, V> value;
+
+    template<class T> auto& get() {
+        if constexpr (std::is_same_v<K, T>) {
+            return value.second;
+        } else {
+            return TypeValueMap<RestPairs...>::template get<T>();
+        }
+    }
+
+    template<class T> const auto& get() const {
+        if constexpr (std::is_same_v<K, T>) {
+            return value.second;
+        } else {
+            return TypeValueMap<RestPairs...>::template get<T>();
+        }
+    }
+};
+
+// ----
+
 class OUINET_CLIENT_API ClientConfig {
     struct EnabledCaches {
         bool Bep5Http = false;
@@ -66,6 +94,12 @@ class OUINET_CLIENT_API ClientConfig {
         bool is_any_cache_enabled() const;
         bool is_injecting_cache_enabled() const;
     };
+
+    using InjectorEndpoints = TypeValueMap<
+        std::pair<CacheType::Bep5Http, std::optional<Endpoint>>,
+        // TODO: Also allow swarms
+        std::pair<CacheType::Bep3HTTPOverI2P, std::optional<I2pAddress>>
+    >;
 
 public:
     ClientConfig() = default;
@@ -83,8 +117,9 @@ public:
         return _repo_root;
     }
 
-    const boost::optional<Endpoint>& injector_endpoint() const {
-        return _injector_ep;
+    template<class CacheType>
+    const auto& injector_endpoint() const {
+        return _injector_endpoints.get<CacheType>();
     }
 
     const std::string& tls_injector_cert_path() const {
@@ -152,10 +187,8 @@ public:
     }
 
     boost::optional<std::string>
-    credentials_for(const Endpoint& injector) const {
-        auto i = _injector_credentials.find(injector);
-        if (i == _injector_credentials.end()) return {};
-        return i->second;
+    injector_credentials() const {
+        return _injector_credentials;
     }
 
     asio::ip::tcp::endpoint front_end_endpoint() const {
@@ -295,7 +328,7 @@ private:
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
-    boost::optional<Endpoint> _injector_ep;
+    InjectorEndpoints _injector_endpoints;
     std::string _tls_injector_cert_path;
 
     std::string _tls_ca_cert_store_dir;
@@ -323,7 +356,7 @@ private:
     bool _cache_private = false;
 
     std::string _client_credentials;
-    std::map<Endpoint, std::string> _injector_credentials;
+    std::string _injector_credentials;
 
     fs::path _cache_static_path;
     fs::path _cache_static_content_path;
