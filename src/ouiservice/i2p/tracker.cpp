@@ -120,8 +120,7 @@ I2pTrackerClient::announce(NodeID infohash, Async yield)
     return std::expected<void, Error::Announce>();
 }
 
-std::expected<void, Error::Announce>
-I2pTrackerClient::handshake(Async yield)
+void I2pTrackerClient::handshake(Async yield)
 {
     // Log our serving identity in the exact form the integration tests key on
     // (b32=<52 chars>.b32.i2p): they use it to correlate this client's b32
@@ -132,7 +131,7 @@ I2pTrackerClient::handshake(Async yield)
         auto r = send_request(handshake_target(_session->local_addr()), yield);
         if (r) {
             LOG_DEBUG("BEP3 tracker: tracker handshake successful");
-            return std::expected<void, Error::Announce>();
+            return;
         }
         LOG_DEBUG("BEP3 tracker: handshake attempt failed; ", r.error());
         util::exponential_backoff(i, yield);

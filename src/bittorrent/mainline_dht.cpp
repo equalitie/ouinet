@@ -1642,16 +1642,18 @@ std::expected<DhtNode::BootstrapResult, sys::error_code>
 DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
                          , Async yield)
 {
+    using EpResult = std::expected<udp::endpoint, sys::error_code>;
+
     std::expected<udp::endpoint, sys::error_code> bootstrap_ep =
         util::apply(
             bootstrap_address,
-            [&] (const udp::endpoint& ep) {
+            [&] (const udp::endpoint& ep) -> EpResult {
                 return ep;
             },
-            [&] (const asio::ip::address& addr) {
+            [&] (const asio::ip::address& addr) -> EpResult {
                 return udp::endpoint{addr, bootstrap::default_port};
             },
-            [&] (const std::string& addr) {
+            [&] (const std::string& addr) -> EpResult {
                 string_view hp(addr), host, port;
                 std::tie(host, port) = util::split_ep(hp);
                 auto ep = resolve(
@@ -1665,6 +1667,7 @@ DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
                 if (!ep) {
                     LOG_DEBUG(yield, "Unable to resolve bootstrap server, giving up: "
                                    , addr, "; error=", ep.error());
+                    return std::unexpected(ep.error());
                 }
 
                 return *ep;

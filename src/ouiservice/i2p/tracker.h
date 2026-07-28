@@ -84,9 +84,7 @@ public:
     // announce or lookup, so real requests do not fail simply because the
     // tunnel is not yet established. Retries with exponential backoff until
     // success or the yield is cancelled.
-    [[nodiscard]]
-    std::expected<void, Error::Announce>
-    handshake(Async);
+    void handshake(Async);
 
     I2pTrackerClient(I2pTrackerClient const&) = delete;
     I2pTrackerClient(I2pTrackerClient &&) = delete;
