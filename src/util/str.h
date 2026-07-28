@@ -63,4 +63,19 @@ std::string join( const Arg& parts
     return ss.str();
 }
 
+inline
+std::string ordinal(int n) {
+    std::ostringstream ss;
+    ss << n;
+
+    switch (n) {
+        case 1:  ss << "st"; break;
+        case 2:  ss << "nd"; break;
+        case 3:  ss << "rd"; break;
+        default: ss << "th"; break;
+    }
+
+    return ss.str();
+}
+
 }} // namespaces

@@ -35,7 +35,7 @@ vector<bootstrap::Address> bootstraps {
         // Alternative bootstrap servers from the Ouinet project.
         , "router.bt.ouinet.work"
         // Part of previous name (in case of DNS failure).
-        , asio::ip::make_address("74.3.163.127")
+        , asio::ip::make_address("168.222.245.126")
         , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
 };
 

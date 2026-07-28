@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio/error.hpp>
 #include <memory>
 
 #include "async.h"
@@ -67,27 +68,23 @@ public:
     };
 
 private:
-    struct Waiter : std::enable_shared_from_this<Waiter> {
+    struct Waiter {
         util::intrusive::list_hook hook;
         asio::any_completion_handler<void(sys::error_code)> handler;
-        bool aborted = false;
 
-        void complete(auto& exec) {
+        void complete(auto& exec, sys::error_code ec) {
+            if (!hook.is_linked()) {
+                // Already completed
+                return;
+            }
+
             // Make sure this waiter won't be completed again before the below
             // `post` finishes.
             hook.unlink();
 
-            asio::post(exec, [self = shared_from_this()] () mutable {
-                    sys::error_code ec;
-                    if (self->aborted) {
-                        ec = asio::error::operation_aborted;
-                    }
-                    self->handler(ec);
-                    // The `handles` holds shared ptr to this waiter. Resetting
-                    // it so `this` can be destroyed.
-                    self->handler = {};
-                }
-            );
+            asio::post(exec, [ec, handler = std::move(handler)] () mutable {
+                handler(ec);
+            });
         }
     };
 
@@ -171,7 +168,7 @@ void WaitCondition::Lock::release()
     if (_wait_state->locks.empty()) {
         auto& waiters = _wait_state->waiters;
         while (!waiters.empty()) {
-            waiters.front().complete(_wait_state->exec);
+            waiters.front().complete(_wait_state->exec, sys::error_code());
         }
     }
 
@@ -190,8 +187,7 @@ WaitCondition::~WaitCondition() {
     auto& waiters = _wait_state->waiters;
     while (!waiters.empty()) {
         auto& waiter = waiters.front();
-        waiter.aborted = true;
-        waiter.complete(_wait_state->exec);
+        waiter.complete(_wait_state->exec, asio::error::operation_aborted);
     }
 }
 
@@ -236,18 +232,8 @@ auto WaitCondition::do_wait(Cancel* cancel, CompletionToken token)
             _wait_state->waiters.push_back(*waiter);
 
             if (cancel) {
-                // Pass the waiter to the cancel slot by weak_ptr to avoid use-after-free when the
-                // cancel is signaled after the waiter's been completed.
-                std::weak_ptr<Waiter> weak_waiter(waiter);
-
-                cancel_slot = cancel->connect([exec = _exec, weak_waiter = std::move(weak_waiter)] {
-                    auto waiter = weak_waiter.lock();
-                    if (!waiter) {
-                        return;
-                    }
-
-                    waiter->aborted = true;
-                    waiter->complete(exec);
+                cancel_slot = cancel->connect([exec = _exec, waiter] {
+                    waiter->complete(exec, asio::error::operation_aborted);
                 });
             }
 
