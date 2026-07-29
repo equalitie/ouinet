@@ -85,7 +85,7 @@ def output_yielder(handle: Popen) -> Generator[str, None, None]:
             for line in iter(handle.stdout.readline, ""):
                 if isinstance(line, bytes):
                     line = line.decode("utf-8")
-                yield line
+                yield line.rstrip()
         except:
             pass
 

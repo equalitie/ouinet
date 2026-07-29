@@ -21,12 +21,12 @@ class OuinetProcessProtocol(object):
 
     def __init__(self, proc_config, watchpoint_regexes: List[str]):
         self.regexes: List[str] = watchpoint_regexes
-        self.benchmarks: dict[str, bool] = {}
+        self.benchmarks: dict[str, re.Match[str] |  None] = {}
         self._proc_config = proc_config
         self.app_name = proc_config.app_name
 
         for regex in self.regexes:
-            self.benchmarks[regex] = False
+            self.benchmarks[regex] = None
 
         self._logger: logging.Logger = logging.getLogger()
 
@@ -46,7 +46,7 @@ class OuinetProcessProtocol(object):
             match = re.match(regex, data)
             if match:
                 if not self.benchmarks[regex]:
-                    self.benchmarks[regex] = True
+                    self.benchmarks[regex] = match
 
     # maybe have a different class for that?
     # def check_i2p_error_received(self, data):

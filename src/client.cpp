@@ -538,12 +538,12 @@ private:
         auto future = get_or_create_i2p_session_future(yield.get_executor());
 
         auto future_result = _i2p_session_future->wait(yield);
-        if (!future_result.has_value()) {
+        if (!future_result) {
             LOG_ERROR("Failed to create I2pSession: broken promise");
             return nullptr;
         }
         auto& create_result = future_result.value();
-        if (!create_result.has_value()) {
+        if (!create_result) {
             LOG_ERROR("Failed to create I2pSession: ", create_result.error());
             return nullptr;
         }

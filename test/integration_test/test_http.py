@@ -5,6 +5,7 @@
 
 
 from typing import List, Generator, Optional
+import re
 import string
 
 import sys
@@ -235,7 +236,7 @@ async def try_fetch_over_i2p(content) -> Response:
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
         print("request attempt no " + str(i + 1) + "...")
         try:
-            response = await request_echo(TestFixtures.I2P_CLIENT["port"], content)
+            response = await request_echo(TestFixtures.I2P_CLIENT["port"], content, {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'})
             assert_ok(response, content)
             return response
         except Exception as e:
@@ -253,7 +254,7 @@ async def try_fetch_bytes_over_i2p(size: int) -> Response:
             print("request attempt no " + str(i + 1) + "...")
 
             request_start = time()
-            response = request_sized_content(TestFixtures.I2P_CLIENT["port"], size)
+            response = await request_sized_content(TestFixtures.I2P_CLIENT["port"], size, {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'})
             response.raise_for_status()
 
             print(
@@ -276,15 +277,16 @@ async def try_fetch_bytes_over_i2p(size: int) -> Response:
     raise IOError("All attempts to fetch a sized request failed: ", errors)
 
 
-async def wait_for_benchmark(process: OuinetProcess, benchmark: str) -> None:
+async def wait_for_benchmark(process: OuinetProcess, benchmark: str) -> re.Match[str]:
     start = time()
-    while not process.callbacks[benchmark]:
+    while process.callbacks[benchmark] is None:
         print("waiting for", benchmark, "-", floor(time() - start), "s", end="\r")
         await asyncio.sleep(1)
     print("successfully waited for", benchmark, "\n\n")
+    return process.callbacks[benchmark]
 
 
-def request_sized_content(port, content_size) -> Response:
+async def request_sized_content(port, content_size, header = {}) -> Response:
     """
     Send a get request to request the test server to send a random content of a specific size
     """
@@ -293,10 +295,10 @@ def request_sized_content(port, content_size) -> Response:
         TestFixtures.TEST_HTTP_SERVER_PORT,
         str(content_size),
     )
-    return request_url(port, url)
+    return await request_url(port, url, header)
 
 
-async def request_echo(proxy_port, echo_content) -> Response:
+async def request_echo(proxy_port, echo_content, headers = {}) -> Response:
     """
     Send a get request to request the test server to echo the content.
     Runs in a thread to avoid blocking the event loop so logs are visible.
@@ -306,17 +308,17 @@ async def request_echo(proxy_port, echo_content) -> Response:
         TestFixtures.TEST_HTTP_SERVER_PORT,
         echo_content,
     )
-    return await asyncio.to_thread(request_url, proxy_port, url)
+    return await request_url(proxy_port, url, headers)
 
 
-def request_url(port, url) -> Response:
+async def request_url(port, url, headers = {}) -> Response:
     proxies = {"http": f"http://127.0.0.1:{port}"}
     host = urlparse(url).hostname
-    headers = {"X-Ouinet-Group": host}
-    print("sending request to", url)
+    headers["X-Ouinet-Group"] = host
+    print("sending request to", url, " ", proxies)
     try:
         timeout = None
-        response = requests.get(url, proxies=proxies, headers=headers, timeout=timeout)
+        response = await asyncio.to_thread(requests.get, url, proxies=proxies, headers=headers, timeout=timeout)
     except ReadTimeout:
         raise IOError(
             f"Client has took more than {timeout} seconds to respond. It is possible that the client is having a problem but does not report it via http codes."
@@ -471,7 +473,6 @@ async def test_tcp_transport(certificate_file, http_server):
         name=TestFixtures.TCP_CLIENT["name"],
         args=[
             "--disable-origin-access",
-            "--cache-type=none",  # Use only Proxy mechanism
             "--listen-on-tcp",
             f"127.0.0.1:{TestFixtures.TCP_CLIENT['port']}",
             "--front-end-ep",
@@ -601,9 +602,9 @@ async def test_tcp_cache(certificate_file, http_server):
 
 @pytest.mark.timeout(TestFixtures.BEP5_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_wikipedia_mainline_dht(http_server, certificate_file):
+async def test_example_mainline_dht(http_server, certificate_file):
     """
-    A test to reach wikipedia without using our own injector
+    A test to reach example.org without using our own injector
     """
 
     # Client
@@ -629,7 +630,7 @@ async def test_wikipedia_mainline_dht(http_server, certificate_file):
     # Peer candidates will necessarily be after DHT storing contacts
     await wait_for_injector_peer_candidates(frontend_port)
 
-    response = request_url(client_port, "http://example.org")
+    response = await request_url(client_port, "http://example.org")
 
     if not response.status_code == 200:
         raise Exception(
@@ -666,9 +667,9 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
     )  # "--disable-cache"
 
     # wait for the injector tunnel to be advertised
-    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    match = await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
     # Gets generated only when injector is ready
-    injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
+    injector_i2p_public_id = match.group(1)
     assert injector_i2p_public_id
 
     # Wait so the injector id gets advertised on the DHT
@@ -687,7 +688,6 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
         idx_key=None,
         args=[
             "--disable-origin-access",
-            "--disable-cache",
             "--listen-on-tcp",
             "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
             "--injector-ep",
