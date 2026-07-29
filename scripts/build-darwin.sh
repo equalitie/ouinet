@@ -95,6 +95,37 @@ function combine {
                 -framework ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework \
                 -debug-symbols ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework.dSYM \
                 -output ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
+
+            # ouinet.framework loads asio_utp as a shared library at runtime
+            # (@rpath/asio_utp.framework/asio_utp). It is built as its own
+            # framework (see CMakeLists.txt) and shipped in a companion
+            # xcframework that the app must embed & sign alongside
+            # ouinet.xcframework.
+            # Select the real framework bundle (one that actually contains the
+            # Mach-O binary), skipping Xcode's EagerLinkingTBDs stub frameworks.
+            ASIO_UTP_OS64=$(find ${DIR}/build-os64 -type d -name asio_utp.framework \
+                ! -path '*/EagerLinkingTBDs/*' -exec test -f '{}/asio_utp' ';' -print | head -1)
+            ASIO_UTP_SIM=$(find ${DIR}/build-simulatorarm64 -type d -name asio_utp.framework \
+                ! -path '*/EagerLinkingTBDs/*' -exec test -f '{}/asio_utp' ';' -print | head -1)
+            if [[ -d "${ASIO_UTP_OS64}" && -d "${ASIO_UTP_SIM}" ]]; then
+                # Bundle the dSYMs (generated next to each framework) so the
+                # xcframework carries symbols for crash symbolication, matching
+                # ouinet.xcframework.
+                ASIO_UTP_XCF_ARGS=(-framework "${ASIO_UTP_OS64}")
+                [[ -d "${ASIO_UTP_OS64}.dSYM" ]] && \
+                    ASIO_UTP_XCF_ARGS+=(-debug-symbols "${ASIO_UTP_OS64}.dSYM")
+                ASIO_UTP_XCF_ARGS+=(-framework "${ASIO_UTP_SIM}")
+                [[ -d "${ASIO_UTP_SIM}.dSYM" ]] && \
+                    ASIO_UTP_XCF_ARGS+=(-debug-symbols "${ASIO_UTP_SIM}.dSYM")
+                rm -rf ${DIR}/${OUTPUT_DIR}/asio_utp.xcframework
+                xcodebuild -create-xcframework \
+                    "${ASIO_UTP_XCF_ARGS[@]}" \
+                    -output ${DIR}/${OUTPUT_DIR}/asio_utp.xcframework
+            else
+                echo "ERROR: asio_utp.framework not found for both platforms" \
+                     "(os64='${ASIO_UTP_OS64}' sim='${ASIO_UTP_SIM}'); build both before combining" >&2
+                exit 1
+            fi
         else
             echo "ERROR: ${DIR}/build-iphonesimulator not found, please build before combining frameworks"
             exit 1
