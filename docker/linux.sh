@@ -21,6 +21,8 @@ container_duration=1d
 cmake_build_type=Debug
 android_abi=arm64-v8a
 android_publish=n
+windows_sign_artifacts=n
+sign_directory=/opt/sign
 env=()
 
 source $(dirname $0)/util.sh linux
@@ -92,6 +94,9 @@ while [[ "$#" -gt 0 ]]; do
             android_publish=y
             cmake_build_type=Release
             ;;
+        --windows-sign-artifacts)
+          windows_sign_artifacts=y
+            ;;
         --env-var|-e)
             env+=("$2"); shift
             ;;
@@ -103,6 +108,19 @@ done
 
 if [ -z "$target_oss" ]; then
     error "Missing --target-os parameter"
+fi
+
+if [[ "$windows_sign_artifacts" == y ]]; then
+  if ! [[ " ${target_oss[*]} " == *" windows "* ]]; then
+      error "Option \`--windows-sign-artifacts\` can be used" \
+            "only with \`--target-os windows\`."
+  fi
+  if ! [[ " ${env[*]} " == *" SIGN_CERT_BASE64="* ]] || \
+     ! [[ " ${env[*]} " == *" SIGN_CERT_PASSWORD="* ]]; then
+      error 'Pass `-e SIGN_CERT_BASE64="$(base64 cert.pfx)"`' \
+            'and `-e SIGN_CERT_PASSWORD=abcd1234`' \
+            'when using `--windows-sign-artifacts`.'
+  fi
 fi
 
 # Most likely returns 'amd64' or 'arm64'
@@ -151,6 +169,8 @@ function build_image (
         pkg-config
         # For building and testing Windows binaries
         mingw-w64-x86-64-dev g++-mingw-w64-x86-64 libz-mingw-w64-dev gettext locales wine64
+        # For signing Windows artifacts
+        osslsigncode
         # For building Android binaries
         wget unzip openjdk-21-jdk ninja-build
         # For integration tests
@@ -299,7 +319,10 @@ function check_artifacts_exist_for_target_os (
 build_image
 
 if ! is_container_running; then
-    dock run --platform linux/$docker_platform -d --rm --name $container_name $image_name sleep $container_duration
+    dock run --platform linux/$docker_platform \
+             -d --rm --tmpfs $sign_directory \
+             --name $container_name $image_name \
+             sleep $container_duration
 fi
 
 if [ "$enter_on_exit" = y ]; then
@@ -453,6 +476,43 @@ for target_os in ${target_oss[@]}; do
             )
 
             exe bash -c "${script[*]}"
+        fi
+    fi
+
+    # Sign Windows artifacts
+    if [ "$target_os" == windows ]; then
+        if [ "$windows_sign_artifacts" = y ]; then
+          opt_env=()
+          for v in "${env[@]}"; do
+              case $v in
+                SIGN_CERT_*) opt_env+=(-e "$v");;
+                *);;
+              esac
+          done
+          exe "${opt_env[@]}" bash -c 'echo -n "$SIGN_CERT_BASE64" | base64 -d > /opt/sign/cert.pfx'
+          artifacts=($(list_artifacts_for_target_os $target_os))
+          for artifact in "${artifacts[@]}"; do
+              if [[ $artifact == *.exe ]]; then
+                  input_artifact="$sign_directory/in/$(basename $artifact)"
+                  output_artifact="$sign_directory/out/$(basename $artifact)"
+                  script=(
+                      "rm -rf $sign_directory/{in,out};"
+                      "mkdir -p $sign_directory/{in,out};"
+                      "mv $artifact $input_artifact;"
+                      "osslsigncode sign "
+                          "-pkcs12 $sign_directory/cert.pfx"
+                          '-pass "$SIGN_CERT_PASSWORD"'
+                          '-n "Ouinet" -i "https://equalitie.org"'
+                          "-in $input_artifact"
+                          "-out $output_artifact;"
+                      "mv $output_artifact $artifact;"
+                      "rm -rf $sign_directory/{in,out}/*;"
+                  )
+                  echo "Signing $artifact"
+                  exe "${opt_env[@]}" bash -c "${script[*]}"
+              fi
+          done
+          exe bash -c "rm ${sign_directory}/cert.pfx"
         fi
     fi
 
