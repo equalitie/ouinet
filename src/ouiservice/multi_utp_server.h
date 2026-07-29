@@ -31,7 +31,6 @@ public:
 
 private:
     std::list<std::unique_ptr<State>> _states;
-    //util::AsyncQueue<GenericStream> _accept_queue;
     asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
     Cancel _cancel;
 };

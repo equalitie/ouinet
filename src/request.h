@@ -246,7 +246,7 @@ private:
 // * All `X-Ouinet...` headers are removed from the request
 class InsecureRequest {
 public:
-    static boost::optional<InsecureRequest> from(http::request<http::string_body>);
+    static boost::optional<InsecureRequest> from(InjectingCacheType cache_type, http::request<http::string_body>);
 
     InsecureRequest(const InsecureRequest&) = default;
     InsecureRequest(InsecureRequest&&) = default;
@@ -268,11 +268,17 @@ public:
         return {};
     }
 
+    InjectingCacheType cache_type() const {
+        return _cache_type;
+    }
+
 private:
-    InsecureRequest(http::request<http::string_body> request) :
+    InsecureRequest(InjectingCacheType cache_type, http::request<http::string_body> request) :
+        _cache_type(cache_type),
         _request(std::move(request))
     {}
 
+    InjectingCacheType _cache_type;
     http::request<http::string_body> _request;
 };
 
@@ -300,6 +306,10 @@ public:
             [&] (auto& alt) { return alt.async_write(con, yield); },
             static_cast<Base&>(*this)
         );
+    }
+
+    InjectingCacheType cache_type() const {
+        return std::visit([] (const auto& rq) { return rq.cache_type(); }, static_cast<const Base&>(*this));
     }
 
     void authorize(std::string_view credentials);

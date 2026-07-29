@@ -78,7 +78,7 @@ public:
     
         [[nodiscard]]
         virtual SysResult<Session>
-        private_injector(const Request&, Async) = 0;
+        private_injector(InjectingCacheType, const Request&, Async) = 0;
 
         [[nodiscard]]
         virtual SysResult<Session>
@@ -106,7 +106,7 @@ private:
     SysResult<Response> fetch_from_origin(Request const&, Async);
     SysResult<Response> fetch_from_dcache(CacheType, Request const&, Async);
     SysResult<Response> fetch_from_public_injector(CacheType, Request const&, Async);
-    SysResult<Response> fetch_from_private_injector(CacheType, Request const&, Async);
+    SysResult<Response> fetch_from_private_injector(InjectingCacheType, Request const&, Async);
     SysResult<Response> fetch_from_cache_control(CacheType, Request const&, Async);
 
 private:

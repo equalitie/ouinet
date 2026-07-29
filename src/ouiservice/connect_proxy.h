@@ -7,10 +7,10 @@ namespace ouinet {
 namespace ouiservice {
 
 // Wraps HTTP CONNECT proxy over an existing service.
-class ConnectProxyOuiServiceClient : public OuiServiceImplementationClient
+class ConnectProxyOuiServiceClient : public OuiServiceClient
 {
 public:
-    using BaseServicePtr = std::unique_ptr<OuiServiceImplementationClient>;
+    using BaseServicePtr = std::unique_ptr<OuiServiceClient>;
 
 public:
     ConnectProxyOuiServiceClient(BaseServicePtr base_):
@@ -20,10 +20,6 @@ public:
     [[nodiscard]]
     sys::error_code start(Async yield) override {
         return _base->start(yield);
-    }
-
-    void stop() override {
-        _base->stop();
     }
 
     [[nodiscard]]

@@ -199,8 +199,8 @@ SysResult<Response> Dispatcher::fetch_from_public_injector(CacheType cache_type,
     return wrap<Response::PublicInjector>(std::move(*cache_rq), std::move(r));
 }
 
-SysResult<Response> Dispatcher::fetch_from_private_injector(CacheType, Request const& request, Async yield) {
-    auto r = routes.private_injector(request, yield);
+SysResult<Response> Dispatcher::fetch_from_private_injector(InjectingCacheType cache_type, Request const& request, Async yield) {
+    auto r = routes.private_injector(cache_type, request, yield);
     return wrap<Response::PrivateInjector>(std::move(r));
 }
 

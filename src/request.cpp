@@ -145,10 +145,11 @@ void InsecureRequest::authorize(std::string_view credentials) {
     ouinet::authorize(_request, credentials);
 }
 
-boost::optional<InsecureRequest> InsecureRequest::from(http::request<http::string_body> request) {
+boost::optional<InsecureRequest> InsecureRequest::from(InjectingCacheType cache_type, http::request<http::string_body> request)
+{
     if (is_private(request)) return {};
     util::remove_ouinet_fields_ref(request);  // avoid accidental injection
-    return InsecureRequest(std::move(request));
+    return InsecureRequest(cache_type, std::move(request));
 }
 
 void PublicInjectorRequest::authorize(std::string_view credentials) {

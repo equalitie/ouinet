@@ -44,10 +44,10 @@ class OUINET_COMMON_API TlsOuiServiceServer : public OuiServiceImplementationSer
     asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
 };
 
-class OUINET_COMMON_API TlsOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API TlsOuiServiceClient : public OuiServiceClient
 {
     public:
-    using BaseServicePtr = std::unique_ptr<OuiServiceImplementationClient>;
+    using BaseServicePtr = std::unique_ptr<OuiServiceClient>;
 
     public:
     TlsOuiServiceClient(BaseServicePtr base_, asio::ssl::context& context):
@@ -56,10 +56,6 @@ class OUINET_COMMON_API TlsOuiServiceClient : public OuiServiceImplementationCli
 
     sys::error_code start(Async yield) override {
         return _base->start(yield);
-    }
-
-    void stop() override {
-        _base->stop();
     }
 
     [[nodiscard]]

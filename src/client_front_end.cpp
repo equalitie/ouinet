@@ -712,11 +712,12 @@ ClientFrontEnd::handle_portal( ClientConfig& config
     return {};
 }
 
-size_t ClientFrontEnd::injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept{
+inline
+size_t injector_candidates_n(ouiservice::Bep5Client* client) noexcept {
     if (!client) {
         return 0;
     }
-    return client -> injector_candidates_n();
+    return client->injector_candidates_n();
 }
 
 std::expected<void, sys::error_code>
@@ -727,7 +728,7 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
                                  , const bittorrent::DhtBase* dht
                                  , const Request& req, Response& res, ostringstream& ss
                                  , cache::Client* cache_client
-                                 , std::shared_ptr<ouiservice::Bep5Client> client
+                                 , ouiservice::Bep5Client* client
                                  , ClientFrontEndMetricsController& metrics
                                  , Async yield)
 {
@@ -937,7 +938,7 @@ ClientFrontEnd::serve( ClientConfig& config
                      , const Request& req
                      , Client::RunningState client_state
                      , cache::Client* cache_client
-                     , std::shared_ptr<ouiservice::Bep5Client> client
+                     , ouiservice::Bep5Client* client
                      , const CACertificate& ca
                      , boost::optional<UdpEndpoint> local_ep
                      , const std::shared_ptr<UPnPs>& upnps_ptr
