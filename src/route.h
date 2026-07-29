@@ -2,6 +2,7 @@
 
 #include "namespaces.h"
 #include "cache_type.h"
+#include "api.h"
 
 #include <boost/beast/http/message.hpp>
 
@@ -54,16 +55,16 @@ struct Route {
 
     static std::optional<Route> choose(const http::request_header<>&, const ClientConfig&);
 
-    friend std::ostream& operator<<(std::ostream&, FrontEnd const&);
-    friend std::ostream& operator<<(std::ostream&, Origin const&);
-    friend std::ostream& operator<<(std::ostream&, BlindInjector const&);
-    friend std::ostream& operator<<(std::ostream&, OriginOrBlindInjector const&);
-    friend std::ostream& operator<<(std::ostream&, PublicInjector const&);
-    friend std::ostream& operator<<(std::ostream&, DCache const&);
-    friend std::ostream& operator<<(std::ostream&, OriginOrDCache const&);
-    friend std::ostream& operator<<(std::ostream&, PublicInjectorOrDCache const&);
-    friend std::ostream& operator<<(std::ostream&, OriginOrPublicInjectorOrDCache const&);
-    friend std::ostream& operator<<(std::ostream&, Route const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, FrontEnd const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, Origin const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, BlindInjector const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, OriginOrBlindInjector const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, PublicInjector const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, DCache const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, OriginOrDCache const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, PublicInjectorOrDCache const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, OriginOrPublicInjectorOrDCache const&);
+    OUINET_CLIENT_API friend std::ostream& operator<<(std::ostream&, Route const&);
 };
 
 } // namespace
