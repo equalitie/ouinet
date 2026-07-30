@@ -3,6 +3,7 @@
 #include "address.h"
 #include "util/async.h"
 #include "async_sleep.h"
+#include "../../logger.h"
 
 namespace ouinet {
 
@@ -35,6 +36,8 @@ std::expected<I2pSession, Error::Create> I2pSession::create(Async yield, std::op
 
     auto c_rs = sam->create_session(id, yield);
     if (!c_rs) return error(c_rs.error());
+
+    LOG_INFO("I2P: session created, local address=", *c_rs);
 
     auto inner = std::make_shared<Inner>(std::move(*sam), std::move(id), std::move(*c_rs));
 

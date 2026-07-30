@@ -211,7 +211,6 @@ public:
         return asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 7656);
     }
 
-    Sam(asio::ip::tcp::socket socket);
     Sam(Sam&&);
 
     // Connect to TCP socket and handshake
@@ -257,6 +256,11 @@ public:
     ~Sam();
 
 private:
+    // Only `Sam::connect` may construct a Sam. This way it ensures the socket is
+    // open and connected before handing it in. Because Inner constructor
+    // relies on the socket being open when caching the remote endpoint.
+    Sam(asio::ip::tcp::socket socket);
+
     // Private, because not useful outside of this class. Feel free to make
     // public if needed.
     [[nodiscard]]
