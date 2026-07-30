@@ -32,7 +32,7 @@ namespace ouinet::ouiservice::i2poui {
     size_t init_counter;
 }
 
-static i2p::util::Mapping make_tunnel_params(size_t hops) {
+static std::map<std::string, std::string> make_tunnel_params(size_t hops) {
     //i2pd does not support more than 8 hops
     auto h = std::to_string(std::min(hops, (size_t)8));
     return {

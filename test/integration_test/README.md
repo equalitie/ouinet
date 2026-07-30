@@ -43,7 +43,15 @@ $ cd test/integration_test
 $ python try_i2p_at_browser.py
 ```
 
-You need to wait first for the injector i2p tunnel and then for the client tunnel to get established. When both tunnels are established, you need to set your browser to use `127.0.0.1:3888` as both HTTP and HTTPS proxy.
+You need to wait first for the injector i2p tunnel and then for the client tunnels to get established. The script spins up three clients, each with a distinct proxy port — point your browser to use one of the followings as both HTTP and HTTPS proxy. depending on what you want to exercise:
+
+| role                                        | HTTP/HTTPS proxy    |
+| ------------------------------------------- | ------------------- |
+| **client1** — baseline, direct injector, no cache | `127.0.0.1:3888` |
+| **client2** — BEP3 cache contributor (knows injector) | `127.0.0.1:8074` |
+| **client3** — BEP3 cache puller (no injector)         | `127.0.0.1:8072` |
+
+Typical flow: browse a URL through client1 to sanity-check the injector path, then the same URL through client2 to seed the BEP3 cache, then the same URL through client3 — that request must succeed via BEP3 cache lookup only.
 
 Then you need to tell your browser to trust Ouinet Authority Certificate which could be found at `ouinet/test/integration_test/repos/i2p_client/ssl-ca-cert.pem`.
 

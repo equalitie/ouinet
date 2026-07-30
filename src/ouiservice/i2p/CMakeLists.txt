@@ -55,6 +55,9 @@ target_link_libraries(ouiservice-i2p
         z
         libi2pdlang
         OpenSSL::SSL
+        # logger.cpp (built into this .so via __/__/logger.cpp.o) uses
+        # boost::filesystem.
+        Boost::filesystem
     PUBLIC
         ouinet_asio
         ouinet_asio_ssl

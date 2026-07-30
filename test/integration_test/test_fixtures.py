@@ -20,8 +20,8 @@ class TestFixtures:
     BEP5_CACHE_TIMEOUT = 900
     BEP3_CACHE_TIMEOUT = I2P_TRANSPORT_TIMEOUT + BEP5_CACHE_TIMEOUT
 
-    #BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
-    BEP3_TRACKER_ID = "2qqoqlnajwd7qbtdfdn7enadnwktiqnn5ysear3ammt4dq6m65iq.b32.i2p"  #opentracker-i2p
+    BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
+    #BEP3_TRACKER_ID = "2qqoqlnajwd7qbtdfdn7enadnwktiqnn5ysear3ammt4dq6m65iq.b32.i2p"  #opentracker-i2p
 
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
@@ -65,8 +65,11 @@ class TestFixtures:
     )
 
     I2P_CLIENT = {
-        "name": "i2p_client",
+        "name": "cacheless_i2p_client",
         "port": 3888,
+        # Distinct fe_port so this fixture can be run alongside CACHE_CLIENT[0]
+        # (which defaults to 8078) without a front-end port collision.
+        "fe_port": 8081,
         "i2cp_port": 7454,
     }
     I2P_DISCOVERED_ID_ANNOUNCE_PORT = 8998
