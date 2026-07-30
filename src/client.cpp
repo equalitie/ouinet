@@ -2056,8 +2056,7 @@ Client::State::setup_cache(Async yield)
     if (!_config.is_cache_enabled(CacheType::Bep5Http{})
         && !_config.is_cache_enabled(CacheType::Bep3HTTPOverI2P{}))
     {
-        //unsupported cache type
-        return std::unexpected(asio::error::operation_not_supported);
+        return {};
     }
 
     LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
