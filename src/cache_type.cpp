@@ -1,5 +1,6 @@
 #include "cache_type.h"
 #include "util/overloaded.h"
+#include <algorithm>
 
 namespace ouinet {
 
