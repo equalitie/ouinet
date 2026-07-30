@@ -19,9 +19,6 @@ namespace ouinet {
 
 class CachePeerRetrieveRequest {
 public:
-    CachePeerRetrieveRequest(const CachePeerRetrieveRequest&) = default;
-    CachePeerRetrieveRequest(CachePeerRetrieveRequest&&) = default;
-
     http::verb method() const {
         return _method;
     }
@@ -64,9 +61,6 @@ private:
 
 class CacheOuisyncRetrieveRequest {
 public:
-    CacheOuisyncRetrieveRequest(const CacheOuisyncRetrieveRequest&) = default;
-    CacheOuisyncRetrieveRequest(CacheOuisyncRetrieveRequest&&) = default;
-
     http::verb method() const {
         return _method;
     }
@@ -104,12 +98,6 @@ public:
         CacheOuisyncRetrieveRequest
     >;
 
-    CacheRetrieveRequest(CacheRetrieveRequest const&) = default;
-    CacheRetrieveRequest(CacheRetrieveRequest &&) = default;
-
-    CacheRetrieveRequest& operator=(CacheRetrieveRequest const&) = default;
-    CacheRetrieveRequest& operator=(CacheRetrieveRequest &&) = default;
-
     template<class V>
     requires(
         !std::is_same_v<V, CacheRetrieveRequest> &&
@@ -134,9 +122,6 @@ private:
 
 class CacheInjectRequest {
 public:
-    CacheInjectRequest(const CacheInjectRequest&) = default;
-    CacheInjectRequest(CacheInjectRequest&&) = default;
-
     http::verb method() const {
         return _header.method();
     }
@@ -247,9 +232,6 @@ private:
 class InsecureRequest {
 public:
     static boost::optional<InsecureRequest> from(InjectingCacheType cache_type, http::request<http::string_body>);
-
-    InsecureRequest(const InsecureRequest&) = default;
-    InsecureRequest(InsecureRequest&&) = default;
 
     http::verb method() const {
         return _request.method();
