@@ -3,6 +3,7 @@
 #include "task.h"
 #include "util/async.h"
 #include "bittorrent/node_id.h"
+#include "logger.h"
 
 #include <chrono>
 #include <vector>
@@ -113,6 +114,8 @@ struct I2pAnnouncer::State {
 
                 while (Entry* entry = find_entry_to_announce()) {
                     if (tracker->announce(entry->infohash, yield).has_value()) {
+                        // Used by python test
+                        LOG_DEBUG(yield, " BEP3 announced ", entry->infohash);
                         entry->announce_at = steady_clock::now() + period;
                     } else {
                         was_error = true;

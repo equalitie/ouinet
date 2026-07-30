@@ -1989,6 +1989,8 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
 
         auto route = Route::choose(req, _config);
 
+        LOG_DEBUG(yield, " Chosen route: ", debug(route));
+
         if (!route) {
             LOG_WARN(yield, " Failed to choose route for request");
             auto rs = retrieval_failure_response(req);
@@ -2016,6 +2018,8 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
             if (!r || !req.keep_alive() || !rs.keep_alive()) break;
             continue;
         }
+
+        LOG_DEBUG(yield, " Response: ", response->header());
 
         if (auto r = response->write(con, yield); !r) {
             LOG_DEBUG(yield, " Failed to write response to UA: ", response.error());

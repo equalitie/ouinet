@@ -220,6 +220,7 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.CACHE_CLIENT_PEER_FOUND,
                 TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
                 TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
+                TestFixtures.I2P_ANNOUNCER_ANNOUNCED_REGEX,
             ],
         ),
     )
@@ -278,9 +279,9 @@ async def try_fetch_bytes_over_i2p(size: int) -> Response:
 async def wait_for_benchmark(process: OuinetProcess, benchmark: str) -> re.Match[str]:
     start = time()
     while process.callbacks[benchmark] is None:
-        print("waiting for", benchmark, "-", floor(time() - start), "s", end="\r")
+        print("waiting for", process.name(), benchmark, "-", floor(time() - start), "s", end="\r")
         await asyncio.sleep(1)
-    print("successfully waited for", benchmark, "\n\n")
+    print("successfully waited for", process.name(), benchmark, "\n\n")
     return process.callbacks[benchmark]
 
 
@@ -862,28 +863,20 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # Wait for BEP3 announcer to be fully ready (server tunnel + tracker)
     await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
 
-    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
-    print(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
-    )
-
-    # TODO: do not wait a fixed time, check for output
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-    print("done waiting")
-
     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
     response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
     assertEquals(response.status_code, 200)
     assertEquals(response.text, content)
 
-    # This somehow cause client1 to crash
-    # Shut injector down to ensure it does not seed content to cache client
-    # await injector.stop()
+    # Shut injector down to ensure, because why not. Note that the cache client
+    # wouldn't download the resource from the injector anyway because it's
+    # instructed to get it from the dcache.
+    await injector.stop()
 
     # Wait for client to cache the response
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX)
+    # Wait for client to announce it has the response
+    await wait_for_benchmark(client, TestFixtures.I2P_ANNOUNCER_ANNOUNCED_REGEX)
 
     # Client2: retrieves from BEP3 distributed cache (no injector)
     cache_client = run_tcp_client(
@@ -909,21 +902,13 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # Wait for client2's I2P tunnel (needed to talk to BEP3 tracker)
     await wait_for_benchmark(cache_client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
     await wait_for_benchmark(cache_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
-    await wait_for_benchmark(cache_client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
 
-    # Give I2P tunnels time to fully establish routing after the tunnel reports ready
-    print(
-        "waiting "
-        + str(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-        + " secs for the tunnel to get advertised on the DHT..."
-    )
-
-    # TODO: do not wait a fixed time, check for output
-    await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
-    print("done waiting")
 
     # Retrieve cached content
     response = await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content, TestFixtures.DCACHE_I2P_ROUTE)
 
     # Make sure client2 got it from cache
     assert response.headers['X-Ouinet-Source'] == 'dist-cache'
+
+    # Wait for cache client to announce it has the response
+    await wait_for_benchmark(cache_client, TestFixtures.I2P_ANNOUNCER_ANNOUNCED_REGEX)

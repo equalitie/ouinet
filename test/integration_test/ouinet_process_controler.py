@@ -255,6 +255,9 @@ class OuinetProcess(object):
             return True
         return False
 
+    def name(self) -> str:
+        return self.config.app_name
+
     async def stop(self):
         if self._has_started and not self._term_signal_sent:  # stop only if started
             self._has_started = False
