@@ -214,11 +214,9 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.TCP_CLIENT_PORT_READY_REGEX,
                 TestFixtures.TCP_CLIENT_DISCOVERY_START,
                 TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
-                TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED,
                 TestFixtures.FRESH_SUCCESS_REGEX,
                 TestFixtures.DHT_INITIALIZED_REGEX,
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
-                TestFixtures.RESPONSE_RECEIVED_FROM_CACHE,
                 TestFixtures.CACHE_CLIENT_PEER_FOUND,
                 TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
                 TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
@@ -236,7 +234,7 @@ async def try_fetch_over_i2p(content) -> Response:
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
         print("request attempt no " + str(i + 1) + "...")
         try:
-            response = await request_echo(TestFixtures.I2P_CLIENT["port"], content, {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'})
+            response = await request_echo(TestFixtures.I2P_CLIENT["port"], content, TestFixtures.PUBLIC_INJECTOR_I2P_ROUTE)
             assert_ok(response, content)
             return response
         except Exception as e:
@@ -254,7 +252,7 @@ async def try_fetch_bytes_over_i2p(size: int) -> Response:
             print("request attempt no " + str(i + 1) + "...")
 
             request_start = time()
-            response = await request_sized_content(TestFixtures.I2P_CLIENT["port"], size, {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'})
+            response = await request_sized_content(TestFixtures.I2P_CLIENT["port"], size, TestFixtures.PUBLIC_INJECTOR_I2P_ROUTE)
             response.raise_for_status()
 
             print(
@@ -497,11 +495,11 @@ async def test_tcp_transport(certificate_file, http_server):
     assertEquals(response.text, content)
 
 
-async def get_cached_echo(port: int, content: str) -> Response:
+async def get_cached_echo(port: int, content: str, header = {}) -> Response:
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
         try:
             print(f"get_cached_echo attempt {i + 1}...")
-            response = await request_echo(port, content)
+            response = await request_echo(port, content, header)
             if response.status_code == 200:
                 assertEquals(response.text, content)
                 return response
@@ -593,11 +591,10 @@ async def test_tcp_cache(certificate_file, http_server):
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
 
     # Now request the same page from second client
-    await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
+    response = await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
     # # make sure it was served from cache
-    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
-    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
+    assert response.headers['X-Ouinet-Source'] == 'dist-cache'
 
 
 @pytest.mark.timeout(TestFixtures.BEP5_CACHE_TIMEOUT)
@@ -737,9 +734,9 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
 
     # wait for the injector tunnel to be advertised
 
-    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
-    injector_i2p_public_id = i2pinjector.get_I2P_public_ID()
-    # injector_i2p_public_id = TestFixtures.INJECTOR_I2P_PUBLIC_ID
+    match = await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    injector_i2p_public_id = match.group(1)
+
     # empty public id means injector coludn't read the endpoint file
     assert injector_i2p_public_id
 
@@ -809,12 +806,12 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
     await wait_for_dht_ready(cache_client)
     port = TestFixtures.CACHE_CLIENT[1]["port"]
     assert isinstance(port, int)
-    await get_cached_echo(port, content)
+    response = await get_cached_echo(port, content)
 
     # Make sure it was served from cache
     # This might be wrong: if it is not served from cache it last for ever or we should
     # have a common clue and then check where it was served from.
-    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
+    assert response.headers['X-Ouinet-Source'] == 'dist-cache'
 
 
 @pytest.mark.timeout(TestFixtures.BEP3_CACHE_TIMEOUT)
@@ -926,8 +923,7 @@ async def test_bep3_cache_over_i2p(http_server, log):
     print("done waiting")
 
     # Retrieve cached content
-    await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
+    response = await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content, TestFixtures.DCACHE_I2P_ROUTE)
 
-    # Make sure client1 served it and client2 got it from cache
-    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
-    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
+    # Make sure client2 got it from cache
+    assert response.headers['X-Ouinet-Source'] == 'dist-cache'

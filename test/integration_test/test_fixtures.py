@@ -100,13 +100,9 @@ class TestFixtures:
     CACHE_CLIENT_PEER_FOUND = (
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
-    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve/serve_local END[\s\S]*"
-    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve_utp_req/serve_local END[\s\S]*"
-    BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*BEP3 announcer successfully initiated[\s\S]*"
+    BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*I2P announcer successfully initiated[\s\S]*"
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
-
-    RESPONSE_RECEIVED_FROM_CACHE = r"[\s\S]*X-Ouinet-Source: dist-cache[\s\S]*"
 
     IPNS_ID_ANNOUNCE_REGEX = r"[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
     BEP5_PUBK_ANNOUNCE_REGEX = r"[\s\S]*BEP5 Index: ([0-9A-Fa-f]+)[\s\S]*"
@@ -160,3 +156,6 @@ AzZPXqk+2eab43GbbD6keXRGIufMThKGyrRX+9aIaV3tx3uWAOfWVmlzf9w3gV3D
 lmjPSOXmUsOLk0PFwoy7O7n9zJKNrUy1N2O+j0tH5HVXOnSjpS8aNrMtpfHS
 -----END CERTIFICATE-----
 """
+
+    PUBLIC_INJECTOR_I2P_ROUTE = {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'}
+    DCACHE_I2P_ROUTE          = {'X-Ouinet-Route': 'DCache Bep3HTTPOverI2P'}

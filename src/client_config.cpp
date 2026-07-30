@@ -656,7 +656,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 ));
         }
 
-        if (!_injector_endpoints.get<CacheType::Bep3HTTPOverI2P>()) {
+        if (!_injector_endpoints.get<CacheType::Bep3HTTPOverI2P>() && !_enabled_caches.get(CacheType::Bep3HTTPOverI2P{})) {
             throw std::runtime_error(
                 "The '--i2p-hops-per-tunnel' argument must be used with "
                 "'--injector-ep' with an i2p injector or with "
