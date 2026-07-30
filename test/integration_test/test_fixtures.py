@@ -45,7 +45,7 @@ class TestFixtures:
     INDEX_READY_REGEX_INDEX = 1
     REQUEST_CACHED_REGEX_INDEX = 2
 
-    REPO_FOLDER_NAME = "test_repos"
+    REPO_FOLDER_NAME = "/tmp/ouinet_python_test"
     # TODO: they should be in the same dir I think
     I2P_FOLDER_NAME = "i2p"
 
