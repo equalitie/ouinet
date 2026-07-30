@@ -1,5 +1,7 @@
 #include "create_i2p_session.h"
+#include "ouiservice/i2p/address.h"
 #include "task.h"
+#include "logger.h"
 
 namespace ouinet {
 
@@ -10,12 +12,18 @@ create_i2p_session(Cancel cancel, util::LogPath log_path, asio::any_io_executor 
     task::spawn_detached(exec, [
         promise,
         cancel,
-        log_path = std::move(log_path)
+        log_path = log_path.tag("create_i2p_session")
     ]
     (asio::yield_context yield) mutable {
-        auto i2p_session = I2pSession::create(Async(yield, cancel, log_path.tag("I2pSession::create")));
+        auto i2p_session = I2pSession::create(Async(yield, cancel, log_path));
 
         if (i2p_session.has_value()) {
+            // Used by python test
+            {
+                if (auto b32 = I2pAddress::b64_to_b32(i2p_session->local_addr().value)) {
+                    LOG_DEBUG(log_path, " I2P Session created, local_addr: ", *b32, ".b32.i2p");
+                }
+            }
             auto ptr = std::make_shared<I2pSession>(std::move(*i2p_session));
             promise.set_value(ptr);
         } else {

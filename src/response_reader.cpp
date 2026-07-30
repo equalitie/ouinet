@@ -1,6 +1,15 @@
 #include "response_reader.h"
+#include "util/async.h"
+#include "util/select.h"
+#include <boost/beast/http/read.hpp>
 
 namespace ouinet::http_response {
+
+std::expected<std::optional<Part>, sys::error_code>
+AbstractReader::timed_async_read_part(std::chrono::steady_clock::duration d, Async yield)
+{
+    return timeout(d, [&](Async yield) { return async_read_part(yield); }, yield);
+}
 
 Reader::Reader(GenericStream in)
     : _in(std::move(in))

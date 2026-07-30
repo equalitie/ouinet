@@ -40,7 +40,7 @@ class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationSer
     asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
 };
 
-class OUINET_COMMON_API UtpOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API UtpOuiServiceClient : public OuiServiceClient
 {
     public:
     UtpOuiServiceClient( asio::any_io_executor
@@ -49,8 +49,6 @@ class OUINET_COMMON_API UtpOuiServiceClient : public OuiServiceImplementationCli
 
     [[nodiscard]]
     sys::error_code start(Async) override;
-
-    void stop() override {}
 
     [[nodiscard]]
     std::expected<GenericStream, sys::error_code> connect(Async) override;

@@ -60,6 +60,11 @@ public:
         return std::get_if<T>(&_alternative);
     }
 
+    template<class Visitor, class Self>
+    decltype(auto) visit(this Self&& self, Visitor&& visitor) {
+        return std::visit(std::forward<Visitor>(visitor), std::forward<Self>(self)._alternative);
+    }
+
 private:
     Alternatives _alternative;
 };

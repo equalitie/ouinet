@@ -57,55 +57,17 @@ private:
     ConditionVariable _connection_available;
 };
 
-class OuiServiceImplementationClient
+class OuiServiceClient
 {
     public:
-    virtual ~OuiServiceImplementationClient() {}
+    virtual ~OuiServiceClient() {}
 
     [[nodiscard]]
     virtual sys::error_code  start(Async) = 0;
 
-    virtual void stop() = 0;
-
     [[nodiscard]]
     virtual
     std::expected<GenericStream, sys::error_code> connect(Async) = 0;
-};
-
-/*
- * This temporary version supports only a single active implementation, and
- * therefore is just an empty shell. Later versions will support functionality
- * like trying multiple parallel implementations.
- */
-class OUINET_COMMON_API OuiServiceClient
-{
-    public:
-    struct ConnectInfo {
-        GenericStream connection;
-        Endpoint remote_endpoint;
-    };
-
-    public:
-    OuiServiceClient(const asio::any_io_executor&);
-
-    void add(Endpoint, std::unique_ptr<OuiServiceImplementationClient>);
-
-    [[nodiscard]]
-    sys::error_code start(Async);
-
-    void stop();
-
-    [[nodiscard]]
-    std::expected<ConnectInfo, sys::error_code> connect(Async);
-
-    ~OuiServiceClient();
-
-    private:
-    std::optional<Endpoint> _endpoint;
-    std::shared_ptr<OuiServiceImplementationClient> _implementation;
-    bool _started;
-    ConditionVariable _started_condition;
-    Cancel _cancel;
 };
 
 } // ouinet namespace

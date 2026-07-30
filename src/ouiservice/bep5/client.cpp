@@ -74,7 +74,7 @@ constexpr std::chrono::duration SUCCESS_WAIT_DURATION = 1min;
 struct Bep5Client::Swarm
 {
 private:
-    using Peer  = AbstractClient;
+    using Peer  = OuiServiceClient;
     using Peers = util::LruCache<asio::ip::udp::endpoint, std::shared_ptr<Peer>>;
 
 private:
@@ -304,14 +304,14 @@ private:
     }
 
     [[nodiscard]]
-    sys::error_code ping_one_injector(std::shared_ptr<AbstractClient> injector, Async yield)
+    sys::error_code ping_one_injector(std::shared_ptr<OuiServiceClient> injector, Async yield)
     {
         auto con = injector->connect(yield);
         if (!con.has_value()) return con.error();
         return sys::error_code();
     }
 
-    bool ping_injectors( const std::vector<std::shared_ptr<AbstractClient>>& injectors
+    bool ping_injectors( const std::vector<std::shared_ptr<OuiServiceClient>>& injectors
                        , Async yield)
     {
         WaitCondition wc(get_executor());
@@ -338,10 +338,10 @@ private:
         return bool(success_cancel);
     }
 
-    std::vector<std::shared_ptr<AbstractClient>> select_injectors_to_ping() {
+    std::vector<std::shared_ptr<OuiServiceClient>> select_injectors_to_ping() {
         // Select the first (at most) `injectors_to_ping` injectors after shuffling them.
         auto injector_map = _injector_swarm->peers();
-        std::vector<std::shared_ptr<AbstractClient>> injectors;
+        std::vector<std::shared_ptr<OuiServiceClient>> injectors;
         injectors.reserve(injector_map.size());
         for (auto& p : injector_map)
             injectors.push_back(p.second);
@@ -472,14 +472,6 @@ size_t Bep5Client::injector_candidates_n() const noexcept {
     }
 
     return _injector_swarm -> peers().size();
-}
-
-void Bep5Client::stop()
-{
-    _cancel();
-    _injector_swarm = nullptr;
-    _helpers_swarm  = nullptr;
-    _injector_pinger = nullptr;
 }
 
 void Bep5Client::status_loop(Async yield)
@@ -727,7 +719,7 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
 }
 
 std::expected<GenericStream, sys::error_code>
-Bep5Client::connect_single(AbstractClient& cli, bool use_tls, Async yield)
+Bep5Client::connect_single(OuiServiceClient& cli, bool use_tls, Async yield)
 {
     auto con = cli.connect(yield);
     if (!con.has_value()) return std::unexpected(con.error());
@@ -745,7 +737,10 @@ Bep5Client::connect_single(AbstractClient& cli, bool use_tls, Async yield)
 
 Bep5Client::~Bep5Client()
 {
-    stop();
+    _cancel();
+    _injector_swarm = nullptr;
+    _helpers_swarm  = nullptr;
+    _injector_pinger = nullptr;
 }
 
 AsioExecutor Bep5Client::get_executor()

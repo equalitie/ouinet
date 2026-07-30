@@ -66,7 +66,7 @@ public:
         return config().repo_root() / "tls-cert.pem";
     }
 
-    std::optional<I2pAddress> i2p_address(Async);
+    std::expected<I2pAddress, sys::error_code> i2p_address(Async);
 
 private:
     struct Inner;

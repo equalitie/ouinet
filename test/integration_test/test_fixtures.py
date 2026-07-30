@@ -53,10 +53,9 @@ class TestFixtures:
     INJECTOR_CONF_FILE_CONTENT = "open-file-limit = 32768\n"
 
     I2P_INJECTOR_NAME = "i2p_injector"
-    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Tunnel has been established"
+    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Session created, local_addr:\s*(\S+)$"
 
     I2P_INJECTOR_PRIVATE_KEY = "KWi-Y9dah6Acn52RFt6AnbAgr~c6zn0p9wSkuJMfiOe1tRAJ3wxxM36Hx1ASDS0no9EXoWBMk4EkiTSC7p4FNAuODhpTzITKQowOyBUWwSJnC4xzTYdturDqaZ3kJAPXgfxZoCQyPHMy3p8x7I7A3g03Pmlt26pQPF7slbUfp~Gptl0lQVKCwpHoIc1WlgcCzZDEAjCRcAuw36r5tluL3qrHVcJhsv73ZBq-ZfOoWAgi5D~UsUoq82EdpvpC6B37I9Gsj44IDByAG7xvG44R9RiJ3-ZBbGkAebJXhOtWFcoDoX~pnOcscY~q8C6HdYVG7gsfMWwW0cmD8YsCx0eYAByqMB~lmOWcEiBXFMj3Mcswtsk-5vSZmoiRvYs57g2hq8EHGm77~bOmoseUan2NjJRDwiCJa4X8jWv2qbYN84hEa2vALoxfNNoc0Feq3N9MjACf6H0kg4BpqBS0qG0wXHEjH9L~TwmpkdnjpB8iW2jp~v7XGjm7q5S2ycySQrHxBQAEAAEAAPGosOGDfqdjVcsK1h4tnCQUvuDyOOq1nI9bA2XCCje8T77VNux4z7IncMAZy02G04WD2bYCDusTgbeKCgtGdVoiF9zT3wpqOmpSDfs1fPPnIDZrTt1CJHg4vnu~RhqBoaXLRFjsojZ4lC~UYXWKaawTm0~mvexvSzzXOYwlzAi0Cgp1zHNPHS8BI9afnQjvNGLzdNaZ4gHlC1Am0iNmUA0WvQ3OsZFC7HRoOa9FtzLg8FCgKrIcNORCJKRIknrC7ODVnd5WJsEfrVTQlQXeBwB56POz1lrEEtSRHlMIap6YhKGSDKBpAUubrGqYtkiiOAXJp1QCAqyPaLeZumf2VeJ9AeU6lVvqP6dK3sDf7Tj2lbF7O92LlanedKNoEDa1Ow=="
-    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Tunnel has been established"
     I2P_INJECTOR_ADDRESS_RECEIVED_REGEX = r"[\s\S]*Received: I2P seeder[\s\S]*"
     I2P_CLIENT_FINISHED_READING_REGEX = r"[\s\S]*Finish reading[\s\S]*"
     I2P_CLIENT_ERROR_READING_REGEX = (
@@ -101,13 +100,9 @@ class TestFixtures:
     CACHE_CLIENT_PEER_FOUND = (
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
-    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve/serve_local END[\s\S]*"
-    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve_utp_req/serve_local END[\s\S]*"
-    BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*BEP3 announcer successfully initiated[\s\S]*"
+    BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*I2P announcer successfully initiated[\s\S]*"
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
-
-    RESPONSE_RECEIVED_FROM_CACHE = r"[\s\S]*X-Ouinet-Source: dist-cache[\s\S]*"
 
     IPNS_ID_ANNOUNCE_REGEX = r"[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
     BEP5_PUBK_ANNOUNCE_REGEX = r"[\s\S]*BEP5 Index: ([0-9A-Fa-f]+)[\s\S]*"
@@ -161,3 +156,6 @@ AzZPXqk+2eab43GbbD6keXRGIufMThKGyrRX+9aIaV3tx3uWAOfWVmlzf9w3gV3D
 lmjPSOXmUsOLk0PFwoy7O7n9zJKNrUy1N2O+j0tH5HVXOnSjpS8aNrMtpfHS
 -----END CERTIFICATE-----
 """
+
+    PUBLIC_INJECTOR_I2P_ROUTE = {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'}
+    DCACHE_I2P_ROUTE          = {'X-Ouinet-Route': 'DCache Bep3HTTPOverI2P'}

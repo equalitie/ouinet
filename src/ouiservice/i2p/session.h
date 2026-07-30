@@ -25,6 +25,9 @@ public:
             sys::error_code code() const {
                 return std::visit([] (auto& e) { return e.code(); }, value);
             }
+            operator sys::error_code() const {
+                return code();
+            }
         };
         struct Connect {
             using Value = std::variant<Sam::Error::Connect, Sam::Error::Invoke>;

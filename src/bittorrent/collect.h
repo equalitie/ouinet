@@ -82,9 +82,7 @@ void collect(
             if (dbg) cerr << dbg << " Start waiting for candidate (active jobs:"
                           << active_jobs.size() << " new_candidates:" << new_candidates.size() << ")\n";
 
-            auto result = compat([&](Cancel cancel, asio::yield_context yield) {
-                new_candidates.async_flush(cs, cancel, yield);
-            })(local_yield);
+            auto result = new_candidates.async_pop_one_or_more(cs, yield);
 
             if (dbg) cerr << dbg << " End waiting for candidate "
                           << debug(result) << " " << cs.size() << "\n";
@@ -129,12 +127,7 @@ void collect(
                 // Make sure we don't get stuck waiting for candidates when
                 // there is no more work and this candidate has not returned
                 // any new ones.
-                compat([&](Cancel cancel, asio::yield_context yield) {
-                    new_candidates.async_push( NodeContact()
-                                                , asio::error::eof
-                                                , cancel
-                                                , yield);
-                })(yield);
+                new_candidates.push_back(NodeContact(), asio::error::eof);
             };
 
             bool is_first_round = first_candidates.count(candidate);

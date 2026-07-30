@@ -10,7 +10,6 @@
 #include "../bittorrent/mainline_dht.h"
 #include "../response_reader.h"
 #include "../util/sign.h"
-#include "cache_entry.h"
 #include "resource_id.h"
 #include "dht_groups.h"
 #include "peer_message.h"
@@ -26,6 +25,7 @@ namespace bittorrent {
 
 class Session;
 class Async;
+class CachePeerRetrieveRequest;
 
 namespace cache {
 
@@ -35,7 +35,7 @@ private:
     using opt_path = boost::optional<fs::path>;
 
     [[nodiscard]]
-    static std::expected<std::unique_ptr<Client>, sys::error_code>
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
     build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , sign::PublicKey cache_pk
          , fs::path cache_dir
@@ -49,7 +49,7 @@ public:
 
 public:
     [[nodiscard]]
-    static std::expected<std::unique_ptr<Client>, sys::error_code>
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
     build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , sign::PublicKey cache_pk
          , fs::path cache_dir
@@ -63,7 +63,7 @@ public:
     }
 
     [[nodiscard]]
-    static std::expected<std::unique_ptr<Client>, sys::error_code>
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
     build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
          , sign::PublicKey cache_pk
          , fs::path cache_dir
@@ -92,10 +92,7 @@ public:
     // This may add a response source header.
     [[nodiscard]]
     std::expected<Session, sys::error_code>
-    load( const ResourceId&
-        , const CryptoStreamKey&
-        , const GroupName& group
-        , bool is_head_request
+    load( const CachePeerRetrieveRequest&
         , metrics::Client& metrics
         , Async);
 

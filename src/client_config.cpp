@@ -6,6 +6,7 @@
 #include "parse/endpoint.h"
 #include "bep5_swarms.h"
 #include "util/bytes.h"
+#include "util/overloaded.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -31,6 +32,39 @@ static boost::optional<T> as_optional(const boost::program_options::variables_ma
         return boost::none;
     }
     return vm[name].as<T>();
+}
+
+template<typename T>
+static std::vector<T> as_vector(const boost::program_options::variables_map& vm, const char* name) {
+    auto opt_vec = as_optional<std::vector<T>>(vm, name);
+    if (!opt_vec) return {};
+    return std::move(*opt_vec);
+}
+
+bool ClientConfig::EnabledCaches::get(CacheType type) const {
+    return std::visit(overloaded {
+                [&] (const CacheType::Bep5Http&) { return Bep5Http; },
+                [&] (const CacheType::Bep3HTTPOverI2P&) { return Bep3HTTPOverI2P; },
+                [&] (const CacheType::Ouisync&) { return Ouisync; },
+            },
+            type.value);
+}
+
+void ClientConfig::EnabledCaches::set(CacheType type, bool value) {
+    return std::visit(overloaded {
+                [&] (const CacheType::Bep5Http&) { Bep5Http = value; },
+                [&] (const CacheType::Bep3HTTPOverI2P&) { Bep3HTTPOverI2P = value; },
+                [&] (const CacheType::Ouisync&) { Ouisync = value; },
+            },
+            type.value);
+}
+
+bool ClientConfig::EnabledCaches::is_any_cache_enabled() const {
+    return Bep5Http || Bep3HTTPOverI2P || Ouisync;
+}
+
+bool ClientConfig::EnabledCaches::is_injecting_cache_enabled() const {
+    return Bep5Http || Bep3HTTPOverI2P;
 }
 
 asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom);
@@ -147,8 +181,9 @@ boost::program_options::options_description ClientConfig::description_full()
 
     po::options_description cache("Cache options");
     cache.add_options()
-       ("cache-type", po::value<string>()->default_value("none")
-        , "Type of d-cache {none, bep5-http, ouisync}")
+       ("cache-type", po::value<vector<string>>()
+        , "Type of d-cache {bep5-http, bep3-http-over-i2p, ouisync}. "
+          "Can be used multiple times to enable different types of cache types")
        ("cache-http-public-key"
         , po::value<string>()
         , "Public key for HTTP signatures in the BEP5/HTTP cache "
@@ -193,9 +228,6 @@ boost::program_options::options_description ClientConfig::description_full()
           "This option is persistent.")
        ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
         , "Disable access to the injector. "
-          "This option is persistent.")
-       ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false)
-        , "Disable access to cached content. "
           "This option is persistent.")
        ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
         , "Disable proxied access to the origin (via the injector). "
@@ -272,7 +304,6 @@ boost::program_options::options_description ClientConfig::description_saved()
         ("bt-bootstrap-no-default", po::bool_switch(&_bt_bootstrap_no_default))
         ("disable-origin-access", po::bool_switch(&_disable_origin_access))
         ("disable-injector-access", po::bool_switch(&_disable_injector_access))
-        ("disable-cache-access", po::bool_switch(&_disable_cache_access))
         ("disable-proxy-access", po::bool_switch(&_disable_proxy_access))
         ;
     return desc;
@@ -292,7 +323,6 @@ void ClientConfig::save_persistent() {
 
     ss << "disable-origin-access = " << _disable_origin_access << endl;
     ss << "disable-injector-access = " << _disable_injector_access << endl;
-    ss << "disable-cache-access = " << _disable_cache_access << endl;
     ss << "disable-proxy-access = " << _disable_proxy_access << endl;
 
     try {
@@ -373,14 +403,12 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _is_log_file_enabled(true);
     }
 
-    if (auto opt = as_optional<vector<string>>(vm, "bt-bootstrap-extra")) {
-        for (const auto& btbsx : *opt) {
-            // Better processing will take place later on, just very basic checking here.
-            auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
-            if (!btbs_addr)
-                throw error("Invalid BitTorrent bootstrap server: ", btbsx);
-            _bt_bootstrap_extras.insert(*btbs_addr);
-        }
+    for (const auto& btbsx : as_vector<string>(vm, "bt-bootstrap-extra")) {
+        // Better processing will take place later on, just very basic checking here.
+        auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
+        if (!btbs_addr)
+            throw error("Invalid BitTorrent bootstrap server: ", btbsx);
+        _bt_bootstrap_extras.insert(*btbs_addr);
     }
 
     if (vm["bt-bootstrap-no-default"].as<bool>()) {
@@ -432,7 +460,20 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 throw error("Failed to parse endpoint: ", injector_ep_str);
             }
 
-            _injector_ep = *opt;
+            std::move(*opt).visit( overloaded {
+                [&] (asio::ip::tcp::endpoint ep) {
+                    _injector_endpoints.get<CacheType::Bep5Http>() = std::move(ep);
+                },
+                [&] (Endpoint::Utp ep) {
+                    _injector_endpoints.get<CacheType::Bep5Http>() = std::move(ep);
+                },
+                [&] (Endpoint::Bep5) {
+                    throw error("Bep5 endpoints are set implicitly");
+                },
+                [&] (I2pAddress ep) {
+                    _injector_endpoints.get<CacheType::Bep3HTTPOverI2P>() = std::move(ep);
+                }
+            });
         }
     }
 
@@ -525,56 +566,64 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
     maybe_set_pk("cache-http-public-key", _cache_http_pubkey);
 
-    if (auto opt = as_optional<string>(vm, "cache-type")) {
-        auto type_str = *opt;
+    for (auto type_str : as_vector<string>(vm, "cache-type")) {
+        auto cache_type = CacheType::from_cmd_arg(type_str);
 
-        if (type_str == "bep5-http") {
-            // https://redmine.equalit.ie/issues/14920#note-1
-            _cache_type = CacheType::Bep5Http;
-
-            LOG_DEBUG("Using bep5-http cache");
-
-            if (!_cache_http_pubkey) {
-                throw error(
-                    "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
-            }
-
-            if (_injector_ep && _injector_ep->get_if<Endpoint::Bep5>()) {
-                throw error("A BEP5 injector endpoint is derived implicitly"
-                            " when using '--cache-type=bep5-http',"
-                            " but it is already set to: ", *_injector_ep);
-            }
-            if (!_injector_ep) {
-                _injector_ep = Endpoint::Bep5{
-                    bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-                };
-            }
-        }
-        else if (type_str == "bep3-http-over-i2p") {
-            _cache_type = CacheType::Bep3HTTPOverI2P;
-
-            LOG_DEBUG("Using bep3-http cache over i2p");
-
-            if (!_cache_http_pubkey) {
-                throw std::runtime_error(
-                    "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
-            }
-        }
-        else if (type_str == "ouisync" || type_str == "") {
-            if (auto token_opt = as_optional<string>(vm, "ouisync-page-index")) {
-                _cache_type = CacheType::Ouisync;
-                _ouisync = OuisyncCacheConfig { *token_opt };
-            } else {
-                throw error("Argument --cache-type=ouisync requires --ouisync-page-index=<page_index_repo_read_token>");
-            }
-        }
-        else if (type_str == "none" || type_str == "") {
-            _cache_type = CacheType::None;
-        }
-        else {
-            throw error("Unknown '--cache-type' argument: ", type_str);
+        if (!cache_type) {
+            throw error("Unknown '--cache-type' argument: \"", type_str, "\"");
         }
 
+        std::visit(overloaded {
+                [&] (const CacheType::Bep5Http& type) {
+                    LOG_INFO("Enabling bep5-http cache");
+
+                    // https://redmine.equalit.ie/issues/14920#note-1
+                    _enabled_caches.set(type, true);
+
+                    if (!_cache_http_pubkey) {
+                        throw error(
+                            "'--cache-type=bep5-http' must be used with '--cache-http-public-key'");
+                    }
+
+                    auto& injector_ep = _injector_endpoints.get<CacheType::Bep5Http>();
+
+                    if (!injector_ep) {
+                        injector_ep = Endpoint::Bep5{
+                            bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+                        };
+                    }
+                },
+                [&] (const CacheType::Bep3HTTPOverI2P& type) {
+                    LOG_INFO("Enabling bep3-http cache over i2p");
+
+                    _enabled_caches.set(type, true);
+
+                    if (!_cache_http_pubkey) {
+                        throw std::runtime_error(
+                            "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
+                    }
+
+                    auto& injector_ep = _injector_endpoints.get<CacheType::Bep5Http>();
+
+                    if (!injector_ep) {
+                        injector_ep = Endpoint::Bep5{
+                            bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
+                        };
+                    }
+                },
+                [&] (const CacheType::Ouisync& type) {
+                    LOG_INFO("Enabling Ouisync cache");
+
+                    _enabled_caches.set(type, true);
+
+                    if (auto token_opt = as_optional<string>(vm, "ouisync-page-index")) {
+                        _ouisync = OuisyncCacheConfig { *token_opt };
+                    } else {
+                        throw error("Argument --cache-type=ouisync requires --ouisync-page-index=<page_index_repo_read_token>");
+                    }
+                },
+            },
+            cache_type->value);
     }
 
     if (auto opt = as_optional<string>(vm, "injector-credentials")) {
@@ -588,16 +637,16 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 "string is missing a colon: ", cred));
         }
 
-        if (!_injector_ep) {
+        if (!_injector_endpoints.get<CacheType::Bep5Http>() && !_injector_endpoints.get<CacheType::Bep3HTTPOverI2P>()) {
             throw error(
                 "The '--injector-credentials' argument must be used with "
                 "'--injector-ep'");
         }
 
-        _injector_credentials[*_injector_ep] = cred;
+        _injector_credentials = cred;
     }
 
-        if (vm.count("i2p-hops-per-tunnel")) {
+    if (vm.count("i2p-hops-per-tunnel")) {
         auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
 
         if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
@@ -607,22 +656,18 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                 ));
         }
 
-        if (!(//If we neither connecting for an i2p injector
-            (_injector_ep && _injector_ep->get_if<I2pAddress>()) ||
-            //nor we are not  running a Bep5 over i2p cache
-            (_cache_type == CacheType::Bep3HTTPOverI2P)))
-          {
+        if (!_injector_endpoints.get<CacheType::Bep3HTTPOverI2P>() && !_enabled_caches.get(CacheType::Bep3HTTPOverI2P{})) {
             throw std::runtime_error(
                 "The '--i2p-hops-per-tunnel' argument must be used with "
                 "'--injector-ep' with an i2p injector or with "
                 "--cache-type=bep3-http-over-i2p ");
-          }
+        }
 
         _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
     }
 
     if (auto opt = as_optional<string>(vm, "i2p-bep3-tracker")) {
-        if (_cache_type != CacheType::Bep3HTTPOverI2P) {
+        if (!_enabled_caches.get(CacheType::Bep3HTTPOverI2P{})) {
             throw std::runtime_error(
                 "'--i2p-bep3-tracker' can only be used with '--cache-type=bep3-http-over-i2p'");
         }
@@ -634,16 +679,16 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _i2p_bep3_tracker = std::move(*addr);
     }
 
-    if (_cache_type == CacheType::Bep3HTTPOverI2P && !_i2p_bep3_tracker) {
+    if (_enabled_caches.get(CacheType::Bep3HTTPOverI2P{}) && !_i2p_bep3_tracker) {
         throw std::runtime_error(
             "'--cache-type=bep3-http-over-i2p' requires '--i2p-bep3-tracker' to be set");
     }
 
-    if (_cache_type == CacheType::None) {
+    if (!_enabled_caches.is_any_cache_enabled()) {
         LOG_WARN("Not using d-cache");
     }
 
-    if (is_cache_enabled() && _cache_type == CacheType::Bep5Http && !_cache_http_pubkey) {
+    if (_enabled_caches.get(CacheType::Bep5Http{}) && !_cache_http_pubkey) {
         throw error("BEP5/HTTP cache selected but no injector HTTP public key specified");
     }
 
@@ -673,9 +718,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         _local_domain = boost::algorithm::to_lower_copy(local_domain);
     }
 
-    auto opt_protos = as_optional<vector<string>>(vm, "dns-protocol");
-
-    for (const auto& proto_name : *opt_protos) {
+    for (const auto& proto_name : as_vector<string>(vm, "dns-protocol")) {
         dns::bridge::Protocol proto;
         try {
             proto = dns::bridge::str_to_proto(proto_name);
@@ -686,6 +729,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         if ( ranges::find(_dns_config.protocols, proto) ==  _dns_config.protocols.end())
             _dns_config.protocols.emplace_back(proto);
     }
+
     LOG_DEBUG( "DNS protocols enabled: ["
              , dns::Resolver::protos_to_str(_dns_config.protocols)
              , "]");

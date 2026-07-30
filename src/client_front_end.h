@@ -1,8 +1,9 @@
 #pragma once
 
 #include <boost/asio/ip/udp.hpp>
-#include <boost/asio/spawn.hpp>
-#include <boost/beast.hpp>
+#include <boost/beast/http/message.hpp>
+#include <boost/beast/http/string_body.hpp>
+#include <boost/beast/http/dynamic_body.hpp>
 #include <boost/intrusive/list.hpp>
 #include <chrono>
 #include <cstddef>
@@ -11,7 +12,6 @@
 #include "namespaces.h"
 #include "ouiservice/bep5/client.h"
 #include "ssl/ca_certificate.h"
-#include "logger.h"
 #include "cxx/metrics.h"
 
 namespace ouinet { namespace cache {
@@ -98,7 +98,7 @@ public:
          , const http::request<http::string_body>&
          , Client::RunningState
          , cache::Client*
-         , std::shared_ptr<ouiservice::Bep5Client> client
+         , ouiservice::Bep5Client*
          , const CACertificate&
          , boost::optional<UdpEndpoint> local_ep
          , const std::shared_ptr<UPnPs>&
@@ -173,7 +173,7 @@ private:
                  , Response&
                  , std::ostringstream&
                  , cache::Client*
-                 , std::shared_ptr<ouiservice::Bep5Client> client
+                 , ouiservice::Bep5Client*
                  , ClientFrontEndMetricsController& metrics
                  , Async);
 
@@ -191,8 +191,6 @@ private:
     // Enabling the log file also enables debugging temporarily.
     void enable_log_to_file(ClientConfig&);
     void disable_log_to_file(ClientConfig&);
-
-    size_t injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept;
 };
 
 } // ouinet namespace

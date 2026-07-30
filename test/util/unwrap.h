@@ -1,5 +1,8 @@
 #pragma once
 
+#include <expected>
+#include <optional>
+
 namespace ouinet {
 
 namespace detail {
@@ -33,6 +36,24 @@ template<typename E> void unwrap(std::expected<void, E> exp, std::source_locatio
     } else {
         BOOST_CHECK(true);
     }
+}
+
+template<typename E> E unwrap(std::optional<E> opt, std::source_location loc = std::source_location::current()) {
+    if (!opt) {
+        BOOST_FAIL(loc.file_name() << ":" << loc.line() << " error: optional is `none`");
+    } else {
+        BOOST_CHECK(true);
+    }
+    return std::move(*opt);
+}
+
+template<typename E> E& unwrap(E* ptr, std::source_location loc = std::source_location::current()) {
+    if (!ptr) {
+        BOOST_FAIL(loc.file_name() << ":" << loc.line() << " error: pointer is `nullptr`");
+    } else {
+        BOOST_CHECK(true);
+    }
+    return *ptr;
 }
 
 void unwrap(sys::error_code ec, std::source_location loc = std::source_location::current()) {

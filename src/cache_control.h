@@ -1,14 +1,13 @@
 #pragma once
 
 #include <boost/asio/error.hpp>
-#include <boost/asio/spawn.hpp>
-#include <boost/beast/http.hpp>
+#include <boost/beast/http/message.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <stdexcept>
-#include "cache/cache_entry.h"
 #include "request.h"
 #include "namespaces.h"
 #include "api.h"
+#include "session.h"
 
 namespace ouinet {
 using ouinet::util::AsioExecutor;
@@ -16,21 +15,21 @@ using ouinet::util::AsioExecutor;
 static const boost::posix_time::time_duration default_max_cached_age
     = boost::posix_time::hours(7 * 24);  // one week
 
-// Announcements are processed one at a time in Android to avoid increasing battery usage
-#ifdef __ANDROID__
-    const size_t default_max_simultaneous_announcements = 1;
-#else
-    const size_t default_max_simultaneous_announcements = 16;
-#endif
-
 class GenericStream;
 
 class OUINET_CLIENT_API CacheControl {
+    struct CacheEntry {
+        // Data time stamp, not a date/time on errors.
+        boost::posix_time::ptime time_stamp;
+    
+        // Cached data.
+        Session response;
+    };
+
 public:
-    using Response = http::response<http::dynamic_body>;
 
     using FetchStored = std::function<
-        std::expected<CacheEntry, sys::error_code>(const CacheRetrieveRequest&, Async)
+        std::expected<Session, sys::error_code>(const CacheRetrieveRequest&, Async)
     >;
 
     // If not null, the given cache entry is already available
@@ -70,10 +69,10 @@ public:
     bool is_expired( const http::response_header<>&
                    , boost::posix_time::ptime time_stamp);
 
+private:
     static
     bool is_expired(const CacheEntry&);
 
-private:
     std::expected<Session, sys::error_code>
     do_fetch_fresh(const CacheRequest&, Async);
 

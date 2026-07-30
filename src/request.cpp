@@ -1,8 +1,8 @@
 #include "request.h"
 #include "http_util.h"
 #include "authenticate.h"
-#include "cache/cache_entry.h"
 #include "cache/resource_key.h"
+#include "util/overloaded.h"
 #include "logger.h"
 
 namespace ouinet {
@@ -53,7 +53,7 @@ static bool is_private(http::request_header<> const& hdr) {
     return ret;
 }
 
-boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr) {
+std::optional<CacheRequest> CacheRequest::from(CacheType cache_type, http::request_header<> orig_hdr) {
     auto dht_group = extract_dht_group(orig_hdr);
     if (!dht_group) return {};
 
@@ -85,7 +85,7 @@ boost::optional<CacheRequest> CacheRequest::from(http::request_header<> orig_hdr
 
     auto resource_key = cache::resource_key::from_url(hdr->target());
 
-    return CacheRequest(std::move(*hdr), std::move(resource_id), resource_key, std::move(*dht_group));
+    return CacheRequest(std::move(*hdr), cache_type, std::move(resource_id), resource_key, std::move(*dht_group));
 }
 
 //----
@@ -101,12 +101,38 @@ void CacheInjectRequest::set_druid(std::string_view druid) {
 //----
 
 CacheRetrieveRequest CacheRequest::to_retrieve_request() const {
-    return CacheRetrieveRequest(_header.method(), _resource_id, _resource_key, _dht_group);
+    using R = CacheRetrieveRequest;
+
+    auto method = _header.method();
+
+    return _cache_type.visit(overloaded {
+            [&] (CacheType::Bep5Http type) -> R {
+                return CachePeerRetrieveRequest(method, type, _resource_id, _resource_key, _dht_group);
+            },
+            [&] (CacheType::Bep3HTTPOverI2P type) -> R {
+                return CachePeerRetrieveRequest(method, type, _resource_id, _resource_key, _dht_group);
+            },
+            [&] (CacheType::Ouisync) -> R {
+                return CacheOuisyncRetrieveRequest(method, _resource_id, _dht_group);
+            },
+        });
 }
 
 
-CacheInjectRequest CacheRequest::to_inject_request() const {
-    return CacheInjectRequest(_header, _resource_id, _dht_group);
+std::optional<CacheInjectRequest> CacheRequest::to_inject_request() const {
+    using R = std::optional<CacheInjectRequest>;
+
+    return _cache_type.visit(overloaded {
+            [&] (CacheType::Bep5Http type) -> R {
+                return CacheInjectRequest(_header, type, _resource_id, _dht_group);
+            },
+            [&] (CacheType::Bep3HTTPOverI2P type) -> R {
+                return CacheInjectRequest(_header, type, _resource_id, _dht_group);
+            },
+            [&] (CacheType::Ouisync) -> R {
+                return {};
+            },
+        });
 }
 
 void CacheRequest::set_if_none_match(std::string_view if_none_match) {
@@ -119,10 +145,11 @@ void InsecureRequest::authorize(std::string_view credentials) {
     ouinet::authorize(_request, credentials);
 }
 
-boost::optional<InsecureRequest> InsecureRequest::from(http::request<http::string_body> request) {
+boost::optional<InsecureRequest> InsecureRequest::from(InjectingCacheType cache_type, http::request<http::string_body> request)
+{
     if (is_private(request)) return {};
     util::remove_ouinet_fields_ref(request);  // avoid accidental injection
-    return InsecureRequest(std::move(request));
+    return InsecureRequest(cache_type, std::move(request));
 }
 
 void PublicInjectorRequest::authorize(std::string_view credentials) {
@@ -155,6 +182,14 @@ http::verb PublicInjectorRequest::method() const {
 
 bool PublicInjectorRequest::is_inject_request() const {
     return std::get_if<CacheInjectRequest>(static_cast<const Base*>(this)) != nullptr;
+}
+
+std::ostream& operator<<(std::ostream& os, CacheOuisyncRetrieveRequest const& rq) {
+    return os << "CacheOuisyncRetrieveRequest{ "
+        "method:" << rq._method << ", " <<
+        "resource_id:" << rq._resource_id << ", " <<
+        "group_id:" << rq._dht_group <<
+        " }";
 }
 
 } // namespace ouinet

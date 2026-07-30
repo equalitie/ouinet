@@ -7,7 +7,6 @@
 #include "../namespaces.h"
 #include "dht_lookup.h"
 #include "hash_list.h"
-#include "../util/async_generator.h"
 #include "../util/log_path.h"
 #include "../session.h"
 #include "resource_id.h"

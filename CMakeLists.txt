@@ -230,13 +230,15 @@ endif()
 ################################################################################
 
 file(GLOB client_sources
+    "./src/cache_type.cpp"
     "./src/client.cpp"
     "./src/client.cpp"
     "./src/client_config.cpp"
     "./src/client_front_end.cpp"
     "./src/client_lib.cpp"
     "./src/cache_control.cpp"
-    "./src/request_routing.cpp"
+    "./src/route.cpp"
+    "./src/dispatcher.cpp"
     "./src/ssl/dummy_certificate.cpp"
     "./src/ouiservice/bep5/client.cpp"
     "./src/ouiservice/connect_proxy.cpp"
@@ -246,6 +248,7 @@ file(GLOB client_sources
     "./src/cache/hash_list.cpp"
     "./src/cache/http_store.cpp"
     "./src/cache/local_peer_discovery.cpp"
+    "./src/util/storing_reader.cpp"
     "./src/cache/multi_peer_reader.cpp"
     "./src/cache/multi_peer_reader_error.cpp"
     "./src/cache/resource_key.cpp"

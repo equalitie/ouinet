@@ -59,11 +59,6 @@ void TlsOuiServiceServer::stop_listen()
     _cancel();
 
     while (_accept_queue.try_receive([] (sys::error_code ec, GenericStream s) { s.close(); })) {}
-    //while (!_accept_queue.empty()) {
-    //    auto c = move(_accept_queue.back());
-    //    _accept_queue.pop();
-    //    c.close();
-    //}
 
     _base->stop_listen();
 };

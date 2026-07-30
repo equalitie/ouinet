@@ -4,11 +4,9 @@
 #include <boost/asio/spawn.hpp>
 #include <namespaces.h>
 #include <async_sleep.h>
-#include <util/async_generator.h>
+#include <task.h>
 #include <iostream>
 #include <chrono>
-
-BOOST_AUTO_TEST_SUITE(ouinet_util)
 
 using namespace std;
 using namespace ouinet;
@@ -97,63 +95,3 @@ BOOST_AUTO_TEST_CASE(test_cancel) {
         parent();
     }
 }
-
-BOOST_AUTO_TEST_CASE(test_async_generator) {
-    using util::AsyncGenerator;
-
-    {
-        asio::io_context ctx;
-
-        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-            AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
-                q.push_back(1);
-            });
-
-            Cancel cancel;
-            auto opt_val = gen.async_get_value(cancel, yield);
-
-            BOOST_REQUIRE(opt_val && *opt_val == 1);
-        });
-
-        ctx.run();
-    }
-
-    {
-        asio::io_context ctx;
-
-        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-            AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
-                asio::post(ctx, y);
-                q.push_back(1);
-                asio::post(ctx, y);
-                if (c) or_throw(y, asio::error::operation_aborted);
-            });
-
-            Cancel cancel;
-            auto opt_val = gen.async_get_value(cancel, yield);
-
-            BOOST_REQUIRE(opt_val && *opt_val == 1);
-        });
-
-        ctx.run();
-    }
-
-    {
-        asio::io_context ctx;
-
-        task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-            AsyncGenerator<int> gen(ctx, [&] (auto& q, auto c, auto y) {
-                asio::post(ctx, y);
-            });
-
-            Cancel cancel;
-            sys::error_code ec;
-            auto opt_val = gen.async_get_value(cancel, yield[ec]);
-            BOOST_REQUIRE(!opt_val);
-        });
-
-        ctx.run();
-    }
-}
-
-BOOST_AUTO_TEST_SUITE_END()

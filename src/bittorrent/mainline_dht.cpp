@@ -198,9 +198,7 @@ static bool read_nodes( bool is_v4
 
     if (nodes.empty()) return false;
 
-    return compat([&](Cancel cancel, asio::yield_context yield) {
-        sink.async_push_many(nodes, cancel, yield);
-    })(yield).has_value();
+    return sink.async_push_many(nodes, yield).has_value();
 }
 
 DhtNode::DhtNode( const AsioExecutor& exec
@@ -2199,9 +2197,7 @@ std::optional<BencodedMap> DhtNode::query_get_peers(
         std::ignore = query_find_node(infohash, node, closer_nodes_v, yield);
     }
 
-    std::ignore = compat([&](Cancel cancel, asio::yield_context yield) {
-        closer_nodes.async_push_many(closer_nodes_v, cancel, yield);
-    })(yield);
+    std::ignore = closer_nodes.async_push_many(closer_nodes_v, yield);
 
     return std::move(*response);
 }

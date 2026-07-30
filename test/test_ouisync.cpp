@@ -2,6 +2,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
+#include <boost/beast/version.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/stacktrace.hpp>
@@ -17,6 +18,7 @@
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "client.h"
+#include "route.h"
 #include "util/str.h"
 #include "ssl/util.h"
 #include "util/unwrap.h"
@@ -44,7 +46,7 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-Request build_cache_request(util::Url url, std::string group) {
+Request build_cache_request(util::Url url, Route route, std::string group) {
     int version = 11;
     std::string host = url.host;
     std::string target = url.reassemble();
@@ -53,6 +55,7 @@ Request build_cache_request(util::Url url, std::string group) {
     req.set(http::field::host, host);
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     req.set(http_::request_group_hdr, group);
+    req.set("X-Ouinet-Route", util::str(route));
     return req;
 }
 
@@ -241,10 +244,11 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
 
         auto control_body = fetch_from_origin(test_url, yield).body();
 
-        auto rq = build_cache_request(test_url, group);
-
         // The "seeder" fetches the signed content through the "injector"
-        auto rs1 = fetch_through_client(seeder, rq, yield);
+        auto rs1 = fetch_through_client(
+                seeder,
+                build_cache_request(test_url, Route::PublicInjector{CacheType::Bep5Http{}}, group),
+                yield);
 
         BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
         BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
@@ -279,7 +283,10 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
         unwrap(file.close(yield));
 
         // The "leecher" client fetches the content from the Ouisync `session`
-        auto rs2 = fetch_through_client(leecher, rq, yield);
+        auto rs2 = fetch_through_client(
+                leecher,
+                build_cache_request(test_url, Route::DCache{CacheType::Ouisync{}}, group),
+                yield);
 
         BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);
         BOOST_REQUIRE_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_ouisync);

@@ -2,6 +2,7 @@
 #include "http_sign.h"
 #include "chain_hasher.h"
 #include "parse/number.h"
+#include "util/compat.h"
 #include "logger.h"
 
 using namespace std;

@@ -56,6 +56,7 @@ endfunction()
 
 add_test(TARGET test_cancel TYPE HEADER)
 add_test(TARGET test_promise TYPE HEADER)
+add_test(TARGET test_result TYPE HEADER)
 
 add_test(TARGET test_async)
 add_test(TARGET test_parser)

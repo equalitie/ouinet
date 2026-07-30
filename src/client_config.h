@@ -13,12 +13,14 @@
 #include "util.h"
 #include "api.h"
 #include "util/sign.h"
+#include "util/overloaded.h"
 #include "endpoint.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
 #include "ouiservice/i2p/address.h"
 #include "logger.h"
+#include "cache_type.h"
 
 namespace boost::program_options {
     class variables_map;
@@ -29,6 +31,13 @@ namespace ouinet {
 
 //TODO: move this to somewhere where both client and injector config has access to
 #define _MAX_I2P_HOPS 8
+
+// Announcements are processed one at a time in Android to avoid increasing battery usage
+#ifdef __ANDROID__
+    const size_t default_max_simultaneous_announcements = 1;
+#else
+    const size_t default_max_simultaneous_announcements = 16;
+#endif
 
 struct MetricsConfig {
     bool enable_on_start = false;
@@ -47,10 +56,52 @@ struct OuisyncCacheConfig {
     std::string page_index_token;
 };
 
-class OUINET_CLIENT_API ClientConfig {
-public:
-    enum class CacheType { None, Bep5Http, Bep3HTTPOverI2P, Ouisync };
+// ----
 
+template<class... TypePairs> struct TypeValueMap {};
+
+template<class K, class V, class ... RestPairs>
+struct TypeValueMap<std::pair<K, V>, RestPairs...> : public TypeValueMap<RestPairs...> {
+    std::pair<K, V> value;
+
+    template<class T> auto& get() {
+        if constexpr (std::is_same_v<K, T>) {
+            return value.second;
+        } else {
+            return TypeValueMap<RestPairs...>::template get<T>();
+        }
+    }
+
+    template<class T> const auto& get() const {
+        if constexpr (std::is_same_v<K, T>) {
+            return value.second;
+        } else {
+            return TypeValueMap<RestPairs...>::template get<T>();
+        }
+    }
+};
+
+// ----
+
+class OUINET_CLIENT_API ClientConfig {
+    struct EnabledCaches {
+        bool Bep5Http = false;
+        bool Bep3HTTPOverI2P = false;
+        bool Ouisync = false;
+
+        bool get(CacheType) const;
+        void set(CacheType, bool);
+        bool is_any_cache_enabled() const;
+        bool is_injecting_cache_enabled() const;
+    };
+
+    using InjectorEndpoints = TypeValueMap<
+        std::pair<CacheType::Bep5Http, std::optional<Endpoint>>,
+        // TODO: Also allow swarms
+        std::pair<CacheType::Bep3HTTPOverI2P, std::optional<I2pAddress>>
+    >;
+
+public:
     ClientConfig() = default;
 
     // Throws on error
@@ -66,8 +117,9 @@ public:
         return _repo_root;
     }
 
-    const boost::optional<Endpoint>& injector_endpoint() const {
-        return _injector_ep;
+    template<class CacheType>
+    const auto& injector_endpoint() const {
+        return _injector_endpoints.get<CacheType>();
     }
 
     const std::string& tls_injector_cert_path() const {
@@ -105,9 +157,8 @@ public:
         return _udp_mux_rx_limit * 1000 / 8;
     }
 
-    bool is_cache_enabled() const { return _cache_type != CacheType::None; }
-    CacheType cache_type() const { return _cache_type; }
-    bool is_cache_bep5() const { return _cache_type == CacheType::Bep5Http; }
+    bool is_cache_enabled(CacheType type) const { return _enabled_caches.get(type); }
+    bool is_injecting_cache_enabled() const { return _enabled_caches.is_injecting_cache_enabled(); }
 
     boost::posix_time::time_duration max_cached_age() const {
         return _max_cached_age;
@@ -136,10 +187,8 @@ public:
     }
 
     boost::optional<std::string>
-    credentials_for(const Endpoint& injector) const {
-        auto i = _injector_credentials.find(injector);
-        if (i == _injector_credentials.end()) return {};
-        return i->second;
+    injector_credentials() const {
+        return _injector_credentials;
     }
 
     asio::ip::tcp::endpoint front_end_endpoint() const {
@@ -250,9 +299,6 @@ public:
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
     void is_log_file_enabled(bool v) { CHANGE_AND_SAVE_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
 
-    bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
-    void is_cache_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_cache_access, !v); }
-
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
     void is_origin_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_origin_access, !v); }
 
@@ -282,7 +328,7 @@ private:
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
-    boost::optional<Endpoint> _injector_ep;
+    InjectorEndpoints _injector_endpoints;
     std::string _tls_injector_cert_path;
 
     std::string _tls_ca_cert_store_dir;
@@ -292,7 +338,6 @@ private:
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
     bool _bt_allow_martians = false;
-    bool _disable_cache_access = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
@@ -301,6 +346,7 @@ private:
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
+    EnabledCaches _enabled_caches;
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
@@ -310,12 +356,11 @@ private:
     bool _cache_private = false;
 
     std::string _client_credentials;
-    std::map<Endpoint, std::string> _injector_credentials;
+    std::string _injector_credentials;
 
     fs::path _cache_static_path;
     fs::path _cache_static_content_path;
     boost::optional<sign::PublicKey> _cache_http_pubkey;
-    CacheType _cache_type = CacheType::None;
     std::string _local_domain;
     bool _allow_private_targets = false;
     std::map<std::string, std::string> _add_request_fields;

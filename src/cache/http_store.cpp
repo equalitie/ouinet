@@ -103,8 +103,8 @@ public:
         : dirp(dirp), ex(ex) {}
 
 private:
-    const fs::path& dirp;
-    const AsioExecutor& ex;
+    const fs::path dirp;
+    const AsioExecutor ex;
 
     std::string uri;  // for warnings
     http_response::Head head;  // for merging in the trailer later on

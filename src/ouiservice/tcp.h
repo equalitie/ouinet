@@ -32,7 +32,7 @@ class OUINET_COMMON_API TcpOuiServiceServer : public OuiServiceImplementationSer
     asio::ip::tcp::endpoint _endpoint;
 };
 
-class OUINET_COMMON_API TcpOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API TcpOuiServiceClient : public OuiServiceClient
 {
     public:
     TcpOuiServiceClient(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
@@ -40,7 +40,6 @@ class OUINET_COMMON_API TcpOuiServiceClient : public OuiServiceImplementationCli
     // Tcp clients don't have any internal async IO to be started/stopped.
     [[nodiscard]]
     sys::error_code start(Async) override;
-    void stop() override {}
 
     [[nodiscard]]
     std::expected<GenericStream, sys::error_code> connect(Async) override;

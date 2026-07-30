@@ -1032,19 +1032,19 @@ Injector::~Injector() {
     stop();
 }
 
-std::optional<I2pAddress> Injector::i2p_address(Async yield) {
+std::expected<I2pAddress, sys::error_code> Injector::i2p_address(Async yield) {
     if (!_inner->_i2p_session_future) {
-        return {};
+        return std::unexpected(asio::error::service_not_found);
     }
 
     auto future_result = _inner->_i2p_session_future->wait(yield);
 
     if (!future_result.has_value()) {
-        return {};
+        return std::unexpected(future_result.error());
     }
-    auto& create_result = future_result.value();
+    auto create_result = future_result.value();
     if (!create_result.has_value()) {
-        return {};
+        return std::unexpected(create_result.error());
     }
 
     return (*create_result)->local_addr();

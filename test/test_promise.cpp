@@ -81,3 +81,16 @@ BOOST_AUTO_TEST_CASE(sanity) {
         BOOST_REQUIRE_EQUAL(*destroyed, true);
     });
 }
+
+BOOST_AUTO_TEST_CASE(ready) {
+    test_run([] (auto yield) {
+        int v = 42;
+        using P = Promise<decltype(v)>;
+        auto f = P::Future::make_ready(v);
+
+        auto value = f.wait(yield);
+        BOOST_REQUIRE(value.has_value());
+        BOOST_REQUIRE_EQUAL(*value, v);
+    });
+
+}

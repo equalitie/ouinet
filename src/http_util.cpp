@@ -210,7 +210,7 @@ ouinet::util::format_date(posix_time::ptime date)
 
 boost::string_view
 ouinet::util::http_injection_field( const http::response_header<>& rsh
-                                  , const string& field)
+                                  , std::string_view field)
 {
     auto ih = rsh[http_::response_injection_hdr];
     if (ih.empty()) return {};  // missing header

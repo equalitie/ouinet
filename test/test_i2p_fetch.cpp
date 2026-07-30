@@ -2,16 +2,19 @@
 #include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
+#include <boost/beast/version.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <namespaces.h>
 #include <chrono>
 #include "util/test_dir.h"
+#include "util/unwrap.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "client.h"
 #include "ssl/util.h"
 #include "async_sleep.h"
+#include "route.h"
 
 using namespace std;
 using namespace ouinet;
@@ -36,7 +39,7 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-Request build_cache_request() {
+Request build_cache_request(Route route) {
     int version = 11;
     std::string host = test_url.host;
     std::string target = test_url.reassemble();
@@ -45,6 +48,7 @@ Request build_cache_request() {
     req.set(http::field::host, host);
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     req.set(http_::request_group_hdr, target);
+    req.set("X-Ouinet-Route", util::str(route));
     return req;
 }
 
@@ -60,15 +64,15 @@ Request build_origin_request() {
 }
 
 
-Response fetch_through_client(const Client& client, Request req, asio::yield_context yield) {
+Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
-    stream.async_connect(client.get_proxy_endpoint(), yield);
+    unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
 
-    http::async_write(stream, req, yield);
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield);
+    unwrap(http::async_read(stream, b, res, yield));
     return res;
 }
 
@@ -84,7 +88,7 @@ asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket,
     return stream;
 }
 
-Response fetch_from_origin(asio::yield_context yield) {
+Response fetch_from_origin(Async yield) {
     auto url = test_url;
 
     if (url.port.empty()) url.port = "443";
@@ -93,7 +97,7 @@ Response fetch_from_origin(asio::yield_context yield) {
     auto exec = yield.get_executor();
 
     tcp::resolver resolver(exec);
-    auto const results = resolver.async_resolve(url.host, url.port, yield);
+    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
 
     asio::ssl::context ctx{asio::ssl::context::tls_client};
     ouinet::ssl::util::load_tls_ca_certificates(ctx);
@@ -103,16 +107,16 @@ Response fetch_from_origin(asio::yield_context yield) {
     std::string host = req[http::field::host];
 
     tcp::socket socket(exec);
-    asio::async_connect(socket, results, yield);
+    unwrap(asio::async_connect(socket, results, yield));
 
     auto stream = setup_tls_stream(std::move(socket), ctx, host);
-    stream.async_handshake(asio::ssl::stream_base::client, yield);
+    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
 
-    http::async_write(stream, req, yield);
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield);
+    unwrap(http::async_read(stream, b, res, yield));
 
     sys::error_code ignored_ec;
     stream.shutdown(ignored_ec);
@@ -129,8 +133,6 @@ void check_exception(std::exception_ptr e) {
         }
     } catch (const std::exception& e) {
         BOOST_FAIL("Test failed with exception: " << e.what());
-    } catch (...) {
-        BOOST_FAIL("Test failed with unknown exception");
     }
 }
 
@@ -141,7 +143,7 @@ void run(asio::io_context& ctx, F&& async_test) {
     std::optional<steady_clock::time_point> spawn_end;
 
     asio::spawn(ctx, [&spawn_end, async_test = std::move(async_test)] (asio::yield_context yield) {
-            async_test(yield);
+            async_test(Async(yield));
             spawn_end = steady_clock::now();
         },
         check_exception);
@@ -177,7 +179,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
     auto swarms = std::make_shared<MockDht::Swarms>();
 
-    run(ctx, [&] (asio::yield_context yield) {
+    run(ctx, [&] (Async yield) {
         Injector injector(make_config<InjectorConfig>({
                 "./no_injector_exec"s,
                 "--repo"s, root.make_subdir("injector").string(),
@@ -195,7 +197,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--injector-credentials"s, injector_credentials,
                 "--cache-type=bep3-http-over-i2p"s,
                 "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-ep=i2p:" + injector.i2p_address(Async(yield, Cancel()))->value,
+                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).value,
                 "--i2p-bep3-tracker"s, bep3_tracker_id,
                 "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
                 "--disable-origin-access"s,
@@ -237,21 +239,24 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
         auto control_body = fetch_from_origin(yield).body();
 
-        auto rq = build_cache_request();
-
         // The "seeder" fetches the signed content through the "injector"
-        auto rs1 = fetch_through_client(seeder, rq, yield);
+        auto rs1 = fetch_through_client(
+                seeder,
+                build_cache_request(Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}),
+                yield);
 
         BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
         BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_REQUIRE_EQUAL(rs1.body(), control_body);
 
         // Give "seeder" time to announce
-        Cancel cancel;
-        async_sleep(20s, cancel, yield);
+        async_sleep(20s, yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
-        auto rs2 = fetch_through_client(leecher, rq, yield);
+        auto rs2 = fetch_through_client(
+                leecher,
+                build_cache_request(Route::DCache{CacheType::Bep3HTTPOverI2P{}}),
+                yield);
 
         BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);
         BOOST_REQUIRE_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);

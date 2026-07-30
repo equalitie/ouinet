@@ -2,6 +2,7 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "util/bytes.h"
+#include "util/debug.h"
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
@@ -13,6 +14,7 @@
 #include "cache/client.h"
 #include "ouiservice/bep5/client.h"
 
+#include <boost/beast/version.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/address.hpp>
@@ -478,7 +480,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
         { "origin_access",     [&](bool enable) { config.is_origin_access_enabled(enable);                           } },
         { "proxy_access",      [&](bool enable) { config.is_proxy_access_enabled(enable);                            } },
         { "injector_access",   [&](bool enable) { config.is_injector_access_enabled(enable);                         } },
-        { "distributed_cache", [&](bool enable) { config.is_cache_access_enabled(enable);                            } },
+        { "distributed_cache", [&](bool enable) { config.is_cache_enabled(CacheType::Bep5Http{});                    } },
         { "auto_refresh",      [&](bool enable) { _auto_refresh_enabled = enable;                                    } },
         { "logfile",           [&](bool enable) { enable ? enable_log_to_file(config) : disable_log_to_file(config); } },
         { "metrics",           [&](bool enable) { enable ? metrics.enable() : metrics.disable();                     } },
@@ -548,7 +550,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>O</u>rigin access",'o',      "origin_access", config.is_origin_access_enabled()};
     ss << ToggleInput{"<u>P</u>roxy access", 'p',      "proxy_access", config.is_proxy_access_enabled()};
     ss << ToggleInput{"<u>I</u>njector proxy", 'i',    "injector_access", config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{})};
 
     ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
@@ -606,7 +608,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "disabled.<br>\n";
     ss << "<br>\n";
 
-    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+    ss << "Injector endpoint: " << debug(config.injector_endpoint<CacheType::Bep5Http>()) << "<br>\n";
     ss << "<br>\n";
 
     ss << "DNS protocols enabled: "
@@ -710,11 +712,12 @@ ClientFrontEnd::handle_portal( ClientConfig& config
     return {};
 }
 
-size_t ClientFrontEnd::injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept{
+inline
+size_t injector_candidates_n(ouiservice::Bep5Client* client) noexcept {
     if (!client) {
         return 0;
     }
-    return client -> injector_candidates_n();
+    return client->injector_candidates_n();
 }
 
 std::expected<void, sys::error_code>
@@ -725,7 +728,7 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
                                  , const bittorrent::DhtBase* dht
                                  , const Request& req, Response& res, ostringstream& ss
                                  , cache::Client* cache_client
-                                 , std::shared_ptr<ouiservice::Bep5Client> client
+                                 , ouiservice::Bep5Client* client
                                  , ClientFrontEndMetricsController& metrics
                                  , Async yield)
 {
@@ -738,7 +741,7 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
         {"injector_access", config.is_injector_access_enabled()},
         {"injector_peers_n", injector_candidates_n(client)},
         {"injector_ready", injector_candidates_n(client) > 1},
-        {"distributed_cache", config.is_cache_access_enabled()},
+        {"distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{})},
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},
@@ -935,7 +938,7 @@ ClientFrontEnd::serve( ClientConfig& config
                      , const Request& req
                      , Client::RunningState client_state
                      , cache::Client* cache_client
-                     , std::shared_ptr<ouiservice::Bep5Client> client
+                     , ouiservice::Bep5Client* client
                      , const CACertificate& ca
                      , boost::optional<UdpEndpoint> local_ep
                      , const std::shared_ptr<UPnPs>& upnps_ptr

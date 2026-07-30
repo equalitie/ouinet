@@ -18,7 +18,7 @@ namespace bittorrent {
 
 namespace ouiservice {
 
-class Bep5Client : public OuiServiceImplementationClient
+class Bep5Client : public OuiServiceClient
 {
 public:
     enum Target : uint8_t { none = 0, helpers = 1, injectors = 2 };
@@ -43,13 +43,12 @@ private:
         return os << "?";
     }
 
-    using AbstractClient = OuiServiceImplementationClient;
     struct Swarm;
     class InjectorPinger;
 
     struct Candidate {
         asio::ip::udp::endpoint endpoint;
-        std::shared_ptr<AbstractClient> client;
+        std::shared_ptr<OuiServiceClient> client;
         SwarmType swarm_type;
 
         friend std::ostream& operator<<(std::ostream& os, const Candidate& c) {
@@ -77,7 +76,7 @@ public:
 
     [[nodiscard]]
     sys::error_code start(Async) override;
-    void stop() override;
+
     size_t injector_candidates_n() const noexcept;
 
     [[nodiscard]]
@@ -93,7 +92,7 @@ public:
 private:
     void status_loop(Async);
 
-    std::expected<GenericStream, sys::error_code> connect_single(AbstractClient&, bool use_tls, Async);
+    std::expected<GenericStream, sys::error_code> connect_single(OuiServiceClient&, bool use_tls, Async);
 
 private:
     std::shared_ptr<bittorrent::DhtBase> _dht;

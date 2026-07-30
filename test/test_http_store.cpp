@@ -11,6 +11,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/beast.hpp>
 
 #include <cache/http_sign.h>
 #include <cache/http_store.h>
