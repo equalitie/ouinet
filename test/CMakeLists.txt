@@ -1,7 +1,5 @@
 cmake_minimum_required (VERSION 3.13)
 
-link_libraries(ouinet_common)
-
 if(MINGW)
     # Add `#include <winsock2.h>` to every cpp file.
     # This gets rid of an error and a warning:
@@ -12,141 +10,146 @@ if(MINGW)
     add_definitions(-include winsock2.h)
 endif()
 
+set(OUINET_TEST_TARGETS)
 
-######################################################################
-add_executable(test-parser "test_parser.cpp")
+add_library(ouinet_test_utils OBJECT ./util/http_server.cpp)
+ouinet_setup(TARGET ouinet_test_utils LINK ouinet_asio)
 
-######################################################################
-add_executable(test_crypto_stream "test_crypto_stream.cpp")
+function(add_test)
+    set(options)
+    set(oneValueArgs TARGET TYPE TARGET_SRC)
+    set(multiValueArgs SRCS)
 
-######################################################################
-add_executable(test-cache "test_cache_control.cpp")
-target_link_libraries(test-cache injector_lib client_lib)
+    cmake_parse_arguments(
+        ARG
+        "${options}"
+        "${oneValueArgs}"
+        "${multiValueArgs}"
+        ${ARGN}
+    )
 
-######################################################################
-add_executable(test-wait-condition "test_wait_condition.cpp")
+    set(tmp ${OUINET_TEST_TARGETS})
+    list(APPEND tmp ${ARG_TARGET})
+    set(OUINET_TEST_TARGETS ${tmp} PARENT_SCOPE)
 
-######################################################################
-add_executable(test-scheduler "test_scheduler.cpp")
-
-######################################################################
-add_executable(test-timeout-stream "test_timeout_stream.cpp")
-
-######################################################################
-add_executable(test-response-reader "test-response-reader.cpp")
-target_link_libraries(test-response-reader ouinet_common)
-
-######################################################################
-add_executable(test-response-writer "test-response-writer.cpp")
-
-################################################################################
-if (NOT WIN32)
-add_executable(test-persistent-lru-cache "test_persistent_lru_cache.cpp")
-endif ()
-
-################################################################################
-if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-bittorrent "test_bittorrent.cpp")
-    target_link_libraries(test-bittorrent ouinet_common)
-endif()
-
-################################################################################
-if (NOT WIN32)
-add_executable(bt-bep44 "bt-bep44.cpp")
-endif ()
-
-################################################################################
-if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-routing-table "test-routing-table.cpp")
-endif()
-
-################################################################################
-add_executable(bt-bep5 "bt-bep5.cpp")
-
-######################################################################
-add_executable(test-watch-dog "test_watch_dog.cpp")
-
-######################################################################
-add_executable(test-util "test-util.cpp")
-
-if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-    set_target_properties(test-util PROPERTIES COMPILE_FLAGS "-fsanitize=address")
-    if(${CMAKE_GENERATOR} STREQUAL "Xcode")
-        set_target_properties(test-util PROPERTIES LINK_FLAGS "-fsanitize=address")
-    else()
-        target_link_libraries(test-util asan)
+    if (NOT ARG_TARGET_SRC)
+        set(ARG_TARGET_SRC ${ARG_TARGET}.cpp)
     endif()
+
+    add_executable(${ARG_TARGET} ${ARG_TARGET_SRC} ${ARG_SRCS})
+
+    if (ARG_TYPE STREQUAL "HEADER")
+        target_link_libraries(${ARG_TARGET} PUBLIC ouinet_asio Boost::unit_test_framework)
+        target_include_directories(${ARG_TARGET} PUBLIC ../src)
+        target_compile_options(${ARG_TARGET} PUBLIC -std=c++23)
+    else ()
+        ouinet_setup(TARGET ${ARG_TARGET}
+            LINK
+                ouinet_client
+                ouinet_injector
+                ouinet_rs
+                ouinet_test_utils
+                Boost::unit_test_framework
+        )
+    endif()
+endfunction()
+
+add_test(TARGET test_cancel TYPE HEADER)
+add_test(TARGET test_promise TYPE HEADER)
+add_test(TARGET test_result TYPE HEADER)
+
+add_test(TARGET test_async)
+add_test(TARGET test_parser)
+add_test(TARGET test_cache_control)
+add_test(TARGET test_crypto_stream)
+add_test(TARGET test_wait_condition)
+add_test(TARGET test_select)
+add_test(TARGET test_scheduler)
+add_test(TARGET test_timeout_stream)
+add_test(TARGET test_response_reader)
+add_test(TARGET test_response_writer)
+
+if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+    add_test(TARGET test_client_stop)
 endif ()
 
-######################################################################
-add_executable(test-logger "test_logger.cpp")
+if (NOT WIN32)
+    add_test(TARGET test_persistent_lru_cache)
+endif ()
 
-######################################################################
-add_executable(test-connection-pool "test-connection-pool.cpp")
-
-######################################################################
-add_executable(oui-server "ouiservice-server.cpp")
-
-######################################################################
-add_executable(oui-client "ouiservice-client.cpp")
-
-######################################################################
-add_executable(test-http-util "test_http_util.cpp")
-
-######################################################################
-add_executable(test-http-sign "test_http_sign.cpp")
-target_link_libraries(test-http-sign injector_lib)
-
-######################################################################
-add_executable(test-http-store "test_http_store.cpp")
-target_link_libraries(test-http-store client_lib injector_lib)
-
-######################################################################
-add_executable(test-atomic-temp "test_atomic_temp.cpp")
-target_link_libraries(test-atomic-temp client_lib)
-
-######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-cache-announcer
-        "performance_test/test_cache_announcer.cpp"
-        "../test/util/bittorrent_utils.cpp")
+    add_test(TARGET test_bittorrent)
 endif()
 
-add_executable(test-bencoding "test_bencoding.cpp")
-target_link_libraries(test-bencoding ouinet_common)
+if (NOT WIN32)
+    add_test(TARGET bt_bep44)
+endif ()
 
-######################################################################
-add_executable(test-file-io "test_file_io.cpp")
-
-######################################################################
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
-    add_executable(test-dht "test_dht.cpp")
+    add_test(TARGET test_routing_table)
 endif()
 
-######################################################################
-add_executable(test-metrics "test-metrics.cpp")
+add_test(TARGET bt_bep5)
+add_test(TARGET test_watch_dog)
+add_test(TARGET test_util)
+add_test(TARGET test_logger)
+add_test(TARGET test_connection_pool)
+add_test(TARGET test_http_util)
+add_test(TARGET test_http_sign)
+add_test(TARGET test_http_store)
+add_test(TARGET test_atomic_temp)
 
-######################################################################
-add_executable(test-dns "test-dns.cpp")
+# TODO: This one uses dirty tricks and needs to be refactored:
+#   * It `#include`s a cpp file
+#   * It redefines `private` to `public` to access some data
+#if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+#    add_test(TARGET test_cache_announcer
+#        TARGET_SRC "performance_test/test_cache_announcer.cpp"
+#        SRCS "../test/util/bittorrent_utils.cpp"
+#       )
+#endif()
 
-######################################################################
-add_executable(test-injector-resolver "test_injector_resolver.cpp")
-target_link_libraries(test-injector-resolver injector_lib)
+add_test(TARGET test_bencoding)
 
-######################################################################
-add_executable(test_fetch "test_fetch.cpp")
-target_link_libraries(test_fetch injector_lib client_lib)
+add_test(TARGET test_file_io)
 
-######################################################################
-add_executable(test-client-stop "test_client_stop.cpp")
-target_link_libraries(test-client-stop client_lib)
+if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
+    add_test(TARGET test_dht)
+endif()
 
-######################################################################
+add_test(TARGET test_metrics)
+add_test(TARGET test_injector_resolver)
+add_test(TARGET test_dns)
+add_test(TARGET test_fetch)
+
+add_test(TARGET test_i2p)
+add_test(TARGET test_i2p_endpoint)
+add_test(TARGET test_i2p_fetch)
+add_test(TARGET test_i2p_tracker)
+
+if (WITH_OUISYNC)
+    add_test(TARGET test_ouisync)
+endif()
+
 if(UNIX AND NOT APPLE AND NOT CYGWIN)
     set(LINUX TRUE)
 endif()
 
 if(LINUX)
-    add_executable(manual_browse_scrape "manual/browse_scrape.cpp")
-    target_link_libraries(manual_browse_scrape client_lib)
+    add_test(TARGET manual_browse_scrape TARGET_SRC "manual/browse_scrape.cpp")
 endif()
+
+######################################################################
+
+if (LINUX)
+    include(rust/cmake/rust_test.cmake)
+    add_rust_test(test_connectivity)
+endif()
+
+######################################################################
+string(REPLACE ";" " " OUINET_TEST_TARGETS_STR "tests: ${OUINET_TEST_TARGETS}")
+add_custom_target(list_test_targets
+    #COMMAND ${CMAKE_COMMAND} -E echo "${OUINET_TEST_TARGETS_STR}"
+    COMMAND echo "${OUINET_TEST_TARGETS_STR}"
+    VERBATIM
+    USES_TERMINAL)

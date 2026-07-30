@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE bittorrent
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 #include <boost/optional.hpp>
 #include <boost/asio.hpp>
 
@@ -10,11 +10,13 @@
 #define private public
 #include <bittorrent/dht_node.h>
 #include <bittorrent/code.h>
+#include <util/compat.h>
 #include <util/hash.h>
 
 #include "constants.h"
 #include "task.h"
 #include "cxx/metrics.h"
+#include "async_sleep.h"
 
 namespace utf = boost::unit_test;
 
@@ -62,23 +64,31 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
     using namespace ouinet::bittorrent;
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor()
-        , metrics_dht.dht_node_ipv4()
-        , std::make_shared<dns::Resolver>()
-        , rx_limit);
+    DhtNode dht(
+        exec,
+        metrics_dht.dht_node_ipv4(),
+        std::make_shared<dns::Resolver>(),
+        rx_limit,
+        {},
+        {},
+        {}
+    );
 
-    task::spawn_detached(ctx, [&] (auto yield) {
+    task::spawn_detached(exec, [&] (auto yield) {
         sys::error_code ec;
-        Signal<void()> cancel_signal;
+        Cancel cancel_signal;
 
         NodeID infohash = util::sha1_digest("ouinet-test-" + to_string(time(0)));
 
-        dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
+        compat([&](Async yield) {
+            return dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield); // TODO: IPv6
+        })(yield[ec]);
 
         asio::steady_timer timer(dht.get_executor());
         while (!ec && !dht.ready()) {
@@ -87,11 +97,41 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
         }
         BOOST_REQUIRE(!ec);
 
-        dht.tracker_announce(infohash, dht.wan_endpoint().port(), cancel_signal, yield[ec]);
-        BOOST_REQUIRE_MESSAGE(!ec, "Announcing failed with: " << ec.message());
+        const uint8_t max_retries = 5;
 
-        auto peers = dht.tracker_get_peers(infohash , cancel_signal, yield[ec]);
-        BOOST_REQUIRE_MESSAGE(!ec, "Get peers failed with: " << ec.message());
+        for (uint8_t i = 0; i < max_retries; i++) {
+            compat([&](Async yield) {
+                return dht.tracker_announce(infohash, dht.wan_endpoint().port(), yield);
+            })(cancel_signal, yield[ec]);
+            if (!ec) {
+                break;
+            } else {
+                BOOST_TEST_MESSAGE("Announcing (" << i << "/" << max_retries << ") failed with: " << ec.message());
+                ec = {};
+                async_sleep(3s, cancel_signal, yield[ec]);
+                BOOST_REQUIRE(!ec);
+            }
+        }
+
+        BOOST_REQUIRE_MESSAGE(!ec, "Announcing failed");
+
+        std::set<udp::endpoint> peers;
+
+        for (uint8_t i = 0; i < max_retries; i++) {
+            peers = compat([&](Async yield) {
+                return dht.tracker_get_peers(infohash, yield);
+            })(cancel_signal, yield[ec]);
+            if (!ec) {
+                break;
+            } else {
+                BOOST_TEST_MESSAGE("Get peers (" << i << "/" << max_retries << ") failed with: " << ec.message());
+                ec = {};
+                async_sleep(3s, cancel_signal, yield[ec]);
+                BOOST_REQUIRE(!ec);
+            }
+        }
+
+        BOOST_REQUIRE_MESSAGE(!ec, "Get peers failed");
 
         BOOST_REQUIRE(peers.count(dht.wan_endpoint()));
 
@@ -108,19 +148,25 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     using namespace ouinet::bittorrent;
 
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht(ctx.get_executor()
-        , metrics_dht.dht_node_ipv4()
-        , std::make_shared<dns::Resolver>()
-        , rx_limit);
+    DhtNode dht(
+        exec,
+        metrics_dht.dht_node_ipv4(),
+        std::make_shared<dns::Resolver>(),
+        rx_limit,
+        {},
+        {},
+        {}
+    );
 
     auto mutable_data = []( const string& value
                           , const string& salt
-                          , const util::Ed25519PrivateKey& private_key)
+                          , const sign::SecretKey& private_key)
     {
         // Use the timestamp as a version ID.
         using Time = boost::posix_time::ptime;
@@ -137,22 +183,24 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     sys::error_code ec;
     Cancel cancel;
 
-    auto skey = util::Ed25519PrivateKey::generate();
+    auto skey = sign::SecretKey::generate();
     auto pkey = skey.public_key();
 
     size_t push_get_count = 8;
     size_t success_count = 0;
 
-    task::spawn_detached(ctx, [&] (auto yield) {
-        dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield[ec]); // TODO: IPv6
+    task::spawn_detached(exec, [&] (auto yield) {
+        compat([&](Async yield) {
+            return dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield); // TODO: IPv6
+        })(yield[ec]);
 
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE(dht.ready());
 
-        WaitCondition wc(ctx);
+        WaitCondition wc(exec);
 
         for (size_t i = 0; i < push_get_count; i++) {
-        task::spawn_detached(ctx, [&, lock = wc.lock(), i] (auto yield) {
+        task::spawn_detached(exec, [&, lock = wc.lock(), i] (auto yield) {
                 BOOST_REQUIRE(!ec);
 
                 stringstream salt;

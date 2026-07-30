@@ -39,28 +39,38 @@ foreach (component ${BUILT_BOOST_COMPONENTS})
     _boost_library_filename(${component} Boost_${UPPERCOMPONENT}_LIBRARY)
 
     if (NOT TARGET Boost::${component})
-        add_library(boost_${component} UNKNOWN IMPORTED)
-        set_target_properties(boost_${component} PROPERTIES
+        add_library(Boost::${component} STATIC IMPORTED GLOBAL)
+        add_dependencies(Boost::${component} built_boost)
+
+        set_target_properties(Boost::${component} PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}"
             IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
             IMPORTED_LOCATION ${Boost_${UPPERCOMPONENT}_LIBRARY}
         )
 
-        add_library(boost_${component}_ INTERFACE)
-        add_library(Boost::${component} ALIAS boost_${component}_)
-        add_dependencies(boost_${component}_ built_boost)
-
         _static_Boost_recursive_dependencies(${component} dependencies)
         _static_Boost_external_libraries(${component} libraries)
-        set(_Boost_${UPPERCOMPONENT}_LINK_LIBRARIES boost_${component})
+
+        set(_Boost_${UPPERCOMPONENT}_LINK_LIBRARIES)
+
+        if (component STREQUAL "process" AND (WIN32 OR MINGW))
+            list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES ntdll)
+        endif()
+
+        if (component STREQUAL "filesystem" AND (WIN32 OR MINGW))
+            list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES bcrypt)
+        endif()
+
         foreach (dependency ${dependencies})
             _boost_library_filename(${dependency} dependency_filename)
             list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES ${dependency_filename})
         endforeach()
+
         foreach (library ${libraries})
             list(APPEND _Boost_${UPPERCOMPONENT}_LINK_LIBRARIES ${library})
         endforeach()
-        set_target_properties(boost_${component}_ PROPERTIES
+
+        set_target_properties(Boost::${component} PROPERTIES
             INTERFACE_LINK_LIBRARIES "${_Boost_${UPPERCOMPONENT}_LINK_LIBRARIES}"
         )
     endif()

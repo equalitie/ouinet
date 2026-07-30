@@ -1,11 +1,12 @@
 #pragma once
 
-#include "dht.h"
 #include <map>
+#include "dht.h"
+#include "api.h"
 
 namespace ouinet::bittorrent {
 
-class MockDht : public DhtBase {
+class OUINET_COMMON_API MockDht : public DhtBase {
     struct Peer {
         std::string name;
         UdpEndpoint endpoint;
@@ -26,20 +27,17 @@ public:
 
     void set_endpoints(const std::set<UdpEndpoint>&) override;
 
-    UdpEndpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context) override;
+    Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
     std::set<UdpEndpoint> local_endpoints() const override;
 
     std::set<UdpEndpoint> wan_endpoints() const override;
 
-    std::set<UdpEndpoint> tracker_announce(
-        NodeID infohash,
-        boost::optional<int> port,
-        Cancel,
-        asio::yield_context
-    ) override;
+    std::expected<std::set<UdpEndpoint>, sys::error_code>
+    tracker_announce(NodeID infohash, std::optional<int> port, Async) override;
 
-    std::set<UdpEndpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) override;
+    std::expected<std::set<UdpEndpoint>, sys::error_code>
+    tracker_get_peers(NodeID infohash, Async) override;
 
     Executor get_executor() override;
 
@@ -47,12 +45,12 @@ public:
 
     bool is_bootstrapped() const override;
 
-    void wait_all_ready(Cancel&, asio::yield_context) override;
+    void wait_all_ready(Async) override;
 
     void stop() override;
 
     // Normal DHT wouldn't allow localhost endpoints.
-    bool is_martian(const UdpEndpoint&) const override { return false; }
+    bool is_peer_allowed(const UdpEndpoint&) const override { return true; }
 
     void can_not_see(std::string peer_name);
 

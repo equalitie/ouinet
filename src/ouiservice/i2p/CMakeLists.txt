@@ -1,59 +1,119 @@
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required (VERSION 3.13)
 
 include(ExternalProject)
 
 ################################################################################
-option(WITH_BINARY "" OFF)
-option(WITH_GUI "" OFF)
-
-add_definitions( -DBOOST_ASIO_DYN_LINK )
-add_subdirectory(./i2pd/build)
-
-# We link these libraries statically, which means their own dependencies must
-# be listed explicitly on the libraries themselves rather than ouiservice-i2p.
-set_target_properties(libi2pd PROPERTIES
-    INTERFACE_LINK_LIBRARIES
-        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system;OpenSSL::Crypto;OpenSSL::SSL"
-)
-set_target_properties(libi2pdclient PROPERTIES
-    INTERFACE_LINK_LIBRARIES
-        "Boost::date_time;Boost::filesystem;Boost::program_options;Boost::system;OpenSSL::Crypto;OpenSSL::SSL"
-)
-
-# i2pd messes with CMAKE_MODULE_PATH, which breaks automatic dependency handling.
-# Work around this issue by setting them by hand.
-add_dependencies(libi2pd OpenSSL::Crypto OpenSSL::SSL Boost::boost)
-add_dependencies(libi2pdclient OpenSSL::Crypto OpenSSL::SSL Boost::boost)
+if (WITH_I2PD)
+    block()
+        set(WITH_BINARY ON)
+        set(WITH_LIBRARY OFF)
+        set(WITH_GUI OFF)
+        set(BUILD_TESTING OFF)
+    
+        if (MINGW)
+            set(WITH_STATIC ON)
+    
+            # HACK: `find_package(ZLIB)` used by i2pd can't find pre-installed
+            # zlib on msys64 for some reason.
+            find_package(ZLIB QUIET)
+            if(NOT ZLIB_FOUND)
+                set(ZLIB_LIBRARY c:/msys64/usr/lib/libz.a)
+                set(ZLIB_INCLUDE_DIR c:/msys64/usr/include)
+            endif()
+        endif()
+    
+        add_subdirectory(./i2pd/build)
+    endblock()
+    
+    # We build our own boost and openssl, so make sure those are built before i2pd
+    # starts building so it can use those. Normally this should be automatic, but i2pd
+    # does not specify that the later two libraries depend on Boost.
+    if (TARGET built_boost)
+        add_dependencies(libi2pd built_boost)
+        add_dependencies(libi2pdclient built_boost)
+        add_dependencies(libi2pdlang built_boost)
+    endif()
+    if (TARGET built_openssl)
+        add_dependencies(libi2pd built_openssl)
+        add_dependencies(libi2pdclient built_openssl)
+        add_dependencies(libi2pdlang built_openssl)
+    endif()
+    
+    if(POLICY CMP0079)
+        # Allows adding the libraries below
+        # https://stackoverflow.com/a/75246115/273348
+        cmake_policy(SET CMP0079 NEW)
+    endif()
+    
+    target_link_libraries(libi2pd       PUBLIC Boost::program_options)
+    target_link_libraries(libi2pdclient PUBLIC Boost::program_options)
+    target_link_libraries(libi2pdlang   PUBLIC                       )
+    
+    if (ANDROID)
+        target_compile_definitions(i2pd PRIVATE ANDROID_BINARY=1)
+    endif()
+endif()
 
 ################################################################################
-project(ouiservice-i2p)
+project(ouinet_i2p)
 
-add_library(ouiservice-i2p
-    "./tunnel.cpp"
-    "./client.cpp"
-    "./server.cpp"
-    "./service.cpp"
-    "../../logger.cpp"
-)
-add_library(ouinet::ouiservice-i2p ALIAS ouiservice-i2p)
-target_include_directories(ouiservice-i2p
-    PRIVATE
-        "./i2pd/libi2pd"
-        "./i2pd/libi2pd_client"
-    INTERFACE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
-target_link_libraries(ouiservice-i2p
-    PRIVATE
-        libi2pdclient
-        libi2pd
-        z
-        OpenSSL::SSL
-    PUBLIC
-        ouinet_dependencies
+add_library(ouinet_i2p OBJECT
+    "./address.cpp"
+    "./address.cpp"
+    "./sam.cpp"
+    "./i2pd.cpp"
+    "./session.cpp"
+    "./session_id.cpp"
+    "./tracker.cpp"
+    "./tracker_lookup.cpp"
+    "./announcer.cpp"
+    "./util/create_i2p_session.cpp"
 )
 
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
+set(ouinet_i2p_libs
+    ouinet_asio
+)
+
+set(ouinet_i2p_defs
+    OUINET_API_I2P_EXPORT
+    OUINET_API_COMMON_LOCAL
+)
+
+if (WITH_I2PD)
+    list(APPEND ouinet_i2p_libs Boost::process)
+    list(APPEND ouinet_i2p_defs OUINET_WITH_I2PD)
+endif()
+
+ouinet_setup(TARGET ouinet_i2p
+    LINK ${ouinet_i2p_libs}
+    DEFS ${ouinet_i2p_defs}
+)
+
+if (WITH_I2PD)
+    add_dependencies(ouinet_i2p i2pd)
+endif()
+
+target_include_directories(ouinet_i2p INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+################################################################################
+
+# Place the resulting binaries at the root of the build directory.
+set_target_properties(ouinet_i2p PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+if (WITH_I2PD)
+    set_target_properties(i2pd PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+endif()
+
+################################################################################
+if (WITH_I2PD AND ANDROID)
     externalproject_add(android-ifaddrs
         GIT_REPOSITORY https://github.com/PurpleI2P/android-ifaddrs
         GIT_TAG 8f9a87cd8d1a9c0cd1219f1ab9ef4ad1947cae30
@@ -74,7 +134,5 @@ if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     )
     add_dependencies(ifaddrs android-ifaddrs)
     set_target_properties(ifaddrs PROPERTIES LINKER_LANGUAGE C)
-    target_link_libraries(ouiservice-i2p
-        PRIVATE ifaddrs
-    )
+    target_link_libraries(libi2pd PRIVATE ifaddrs)
 endif()

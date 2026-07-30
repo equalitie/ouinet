@@ -1,18 +1,24 @@
+#include <boost/asio/spawn.hpp>
 #include <list>
 #include <sstream>
 #include <iomanip>
+#include <cstdlib>
+#include <ctime>
 #include "announcer.h"
 #include "util/async_queue.h"
 #include "logger.h"
 #include "defer.h"
+#include "../util/compat.h"
+#include "../util/debug.h"
 #include "../util/wait_condition.h"
 #include "async_sleep.h"
 #include "bittorrent/node_id.h"
-#include "util/handler_tracker.h"
+#include "task.h"
 #include <boost/utility/string_view.hpp>
 
-#define _LOGPFX "Announcer: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
+#ifdef __EXPERIMENTAL__
+#include <bittorrent/bep3_tracker.h>
+#endif
 
 using namespace std;
 using namespace ouinet;
@@ -38,7 +44,7 @@ struct Entry {
     Entry() = default;
 
     Entry(Announcer::Key key)
-        : key(move(key))
+        : key(std::move(key))
         , infohash(util::sha1_digest(this->key))
     { }
 
@@ -49,28 +55,28 @@ struct Entry {
 };
 
 //--------------------------------------------------------------------
-// Loop
+// Base Loop
 struct Announcer::Loop {
     using Entries = util::AsyncQueue<Entry, std::list>;
 
     AsioExecutor ex;
-    shared_ptr<bt::DhtBase> dht;
     Entries entries;
     size_t _simultaneous_announcements;
     Cancel _cancel;
     Cancel _timer_cancel;
+    util::LogPath _log_path;
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements)
-        : ex(dht->get_executor())
-        , dht(move(dht))
+    Loop(AsioExecutor ex, size_t simultaneous_announcements, util::LogPath log_path)
+        : ex(ex)
         , entries(ex)
         , _simultaneous_announcements(simultaneous_announcements)
+        , _log_path(std::move(log_path))
     { }
 
-    inline static bool debug() { return logger.get_threshold() <= DEBUG; }
+    inline static bool debug() { return get_logger().get_threshold() <= DEBUG; }
 
     Entries::iterator find_entry_by_key(const Key& key) {
         for (auto i = entries.begin(); i != entries.end(); ++i) {
@@ -84,10 +90,10 @@ struct Announcer::Loop {
         bool already_has_key = (entry_i != entries.end());
 
         if (already_has_key) {
-            _DEBUG("Adding ", key, " (already exists)");
+            LOG_DEBUG(_log_path, " Adding ", key, " (already exists)");
             entry_i->first.to_remove = false;
         } else {
-            _DEBUG("Adding ", key);
+            LOG_DEBUG(_log_path, " Adding ", key);
         }
 
         if (already_has_key) return false;
@@ -101,7 +107,7 @@ struct Announcer::Loop {
             if (e.attempted_update()) break;
         }
 
-        entries.insert(i, Entry(move(key)));
+        entries.insert(i, Entry(std::move(key)));
         _timer_cancel();
         _timer_cancel = Cancel();
         return true;
@@ -114,7 +120,7 @@ struct Announcer::Loop {
             if (i->first.key == key) break;  // found
         if (i == entries.end()) return false;  // not found
 
-        _DEBUG("Marking ", key, " for removal");
+        LOG_DEBUG(_log_path, " Marking ", key, " for removal");
         // The actual removal is not done here but in the main loop.
         i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.
@@ -168,7 +174,7 @@ struct Announcer::Loop {
             ss << " ago";
         };
 
-        _DEBUG("Entries:");
+        LOG_DEBUG(_log_path, " Entries:");
         for (auto& ep : entries) {
             auto& e = ep.first;
             ss << " " << e.infohash << " | successful_update=";
@@ -177,23 +183,24 @@ struct Announcer::Loop {
             print(e.failed_update);
             ss << " | key=" << e.key;
 
-            _DEBUG(ss.str());
+            LOG_DEBUG(_log_path, " ", ss.str());
             ss.str({});
         }
     }
 
-    Entries::iterator pick_entry(Cancel& cancel, asio::yield_context yield)
-    {        auto end = entries.end();
-
-        while (!cancel) {
+    std::expected<Entries::iterator, sys::error_code> pick_entry(Async yield)
+    {
+        while (true) {
             if (entries.empty()) {
-                // XXX: Temporary handler tracking as this coroutine sometimes
-                // fails to exit.
-                TRACK_HANDLER();
-                sys::error_code ec;
-                _DEBUG("No entries to update, waiting...");
-                entries.async_wait_for_push(cancel, yield[ec]);
-                return_or_throw_on_error(yield, cancel, ec, end);
+                LOG_DEBUG(yield, " No entries to update, waiting...");
+
+                auto result = entries.async_wait_for_push(yield);
+
+                if (!result) {
+                    return std::unexpected(result.error());
+                }
+
+                continue;
             }
 
             assert(!entries.empty());
@@ -202,80 +209,57 @@ struct Announcer::Loop {
 
             auto d = next_update_after(i->first);
 
-            _DEBUG( "Found entry to update. It'll be updated in "
-                  , chrono::duration_cast<chrono::seconds>(d).count()
-                  , " seconds: ", i->first.key);
+            LOG_DEBUG( yield, " Found entry to update. It'll be updated in "
+                            , chrono::duration_cast<chrono::seconds>(d).count()
+                            , " seconds: ", i->first.key);
 
             if (d == 0s) return i;
 
-            auto cc = cancel.connect([&] { _timer_cancel(); });
-            async_sleep(ex, d, _timer_cancel, yield);
+            auto cc = yield.cancel_slot([&] { _timer_cancel(); });
+            async_sleep(d, yield);
         }
-
-        return or_throw(yield, asio::error::operation_aborted, end);
     }
 
     void start()
     {
-        TRACK_SPAWN(dht->get_executor(), [&] (asio::yield_context yield) {
-            Cancel cancel(_cancel);
-            sys::error_code ec;
-            loop(cancel, yield[ec]);
+        task::spawn_detached(ex, [this] (asio::yield_context y) {
+            loop(Async(y, _cancel, _log_path));
         });
     }
 
-    void loop(Cancel& cancel, asio::yield_context yield)
+    void loop(Async yield)
     {
-        {
-            // XXX: Temporary handler tracking as this coroutine sometimes
-            // fails to exit.
-            TRACK_HANDLER();
-            sys::error_code ec;
-            _DEBUG("Waiting for DHT");
-            dht->wait_all_ready(cancel, yield[ec]);
-        }
-
-        auto on_exit = defer([&] {
-            _DEBUG("Exiting the loop; cancel=", (cancel ? "true":"false"));
+        auto on_exit = defer([log_path = yield.log_path(), cancel = Cancel(yield.get_cancel())] {
+            LOG_DEBUG(log_path, " Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
-        WaitCondition wcon(dht->get_executor());
+        WaitCondition wc(ex);
 
-        while (!cancel) {
-            sys::error_code ec_wcon;
-
+        while (true) {
             for (size_t n = 0; n < _simultaneous_announcements; ++n) {
-                sys::error_code ec;
-                _DEBUG("Picking entry to update");
-                auto ei = pick_entry(cancel, yield[ec]);
+                LOG_DEBUG(yield, " Picking entry to update (", (n + 1), "/", _simultaneous_announcements, ")");
+                auto ei = pick_entry(yield);
+                assert(ei);
 
-                if (cancel) return;
-                assert(!ec);
-                ec = {};
-
-                if (ei->first.to_remove) {
+                if ((**ei).first.to_remove) {
                     // Marked for removal, drop the entry and get another one.
-                    entries.erase(ei);
+                    entries.erase(*ei);
                     continue;
                 }
 
-                TRACK_SPAWN(dht->get_executor(), ([&, lock = wcon.lock()] (asio::yield_context yield) {
-                    sys::error_code ec_coro;
-
+                yield.spawn([this, lock = wc.lock()] (Async yield) {
                     // Try inserting three times before moving to the next entry
                     bool success = false;
 
-                    Entry e = move(ei->first);
+                    Entry e = std::move(entries.begin()->first);
                     for (int i = 0; i != 3; ++i) {
-                        // XXX: Temporary handler tracking as this coroutine sometimes
-                        // fails to exit.
-                        TRACK_HANDLER();
-                        announce(e, cancel, yield[ec_coro]);
-                        if (cancel) return;
-                        if (!ec_coro) { success = true; break; }
-                        async_sleep(ex, chrono::seconds(1+i), cancel, yield[ec_coro]);
-                        if (cancel) return;
-                        ec_coro = {};
+                        auto result = announce(e, yield);
+                        if (result) {
+                            success = true;
+                            break;
+                        }
+
+                        async_sleep(chrono::seconds(1+i), yield);
                     }
 
                     if (success) {
@@ -285,46 +269,78 @@ struct Announcer::Loop {
                         e.failed_update     = Clock::now();
                     }
 
-                    if (!e.to_remove) entries.push_back(move(e));
+                    if (!e.to_remove) entries.push_back(std::move(e));
                     if (debug()) { print_entries(); }
-                }));
+                });
 
-                entries.erase(ei);
+                entries.erase(*ei);
             }
 
-            wcon.wait(yield[ec_wcon]);
+            std::ignore = wc.wait(yield);
         }
-
-        return or_throw(yield, asio::error::operation_aborted);
     }
 
-    void announce(Entry& e, Cancel& cancel, asio::yield_context yield)
-    {
-        _DEBUG("Announcing: ", e.key, "...");
+    // Virtual announce method - to be overridden by children
+    virtual std::expected<void, sys::error_code>
+    announce(Entry& e, Async yield) = 0;
 
-        sys::error_code ec;
-        auto e_key{debug() ? e.key : ""};  // cancellation trashes the key
-        dht->tracker_announce(e.infohash, boost::none, cancel, yield[ec]);
-
-        _DEBUG("Announcing: ", e_key, ": done; ec=", ec);
-
-        return or_throw(yield, ec);
-    }
-
-    ~Loop() { _cancel(); }
+    virtual ~Loop() { _cancel(); }
 };
 
 //--------------------------------------------------------------------
-// Announcer
-Announcer::Announcer(std::shared_ptr<bittorrent::DhtBase> dht, size_t simultaneous_announcements)
-    : _loop(new Loop(std::move(dht), simultaneous_announcements))
+// Bep5Loop - announces to DHT
+struct Bep5Loop : public Announcer::Loop {
+    shared_ptr<bt::DhtBase> dht;
+
+    Bep5Loop(
+        shared_ptr<bt::DhtBase> dht,
+        size_t simultaneous_announcements,
+        util::LogPath log_path
+    )
+        : Loop(dht->get_executor(), simultaneous_announcements, std::move(log_path))
+        , dht(std::move(dht))
+    { }
+
+    void start()
+    {
+        task::spawn_detached(ex, [this] (asio::yield_context y) {
+            Async yield(y, _cancel, _log_path);
+
+            // Wait for DHT to be ready before starting the loop
+            LOG_DEBUG(yield, " Waiting for DHT");
+            dht->wait_all_ready(yield);
+
+            loop(yield);
+        });
+    }
+
+    std::expected<void, sys::error_code> announce(Entry& e, Async yield) override
+    {
+        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e.key, "...");
+
+        auto endpoints = dht->tracker_announce(e.infohash, std::nullopt, yield);
+
+        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e.key
+                           , ": done; result=", ouinet::debug(endpoints));
+
+        if (!endpoints) {
+            return std::unexpected(endpoints.error());
+        }
+
+        return {};
+    }
+};
+
+//--------------------------------------------------------------------
+// Base Announcer
+Announcer::Announcer(AsioExecutor ex, size_t simultaneous_announcements)
+    : _loop(nullptr)
 {
-    _loop->start();
 }
 
 bool Announcer::add(Key key)
 {
-    return _loop->add(move(key));
+    return _loop->add(std::move(key));
 }
 
 bool Announcer::remove(const Key& key) {
@@ -332,3 +348,18 @@ bool Announcer::remove(const Key& key) {
 }
 
 Announcer::~Announcer() {}
+
+//--------------------------------------------------------------------
+// Bep5Announcer
+Bep5Announcer::Bep5Announcer(
+    std::shared_ptr<bittorrent::DhtBase> dht,
+    size_t simultaneous_announcements,
+    util::LogPath log_path
+)
+    : Announcer(dht->get_executor(), simultaneous_announcements)
+{
+    _loop = make_unique<Bep5Loop>(std::move(dht), simultaneous_announcements, std::move(log_path));
+    static_cast<Bep5Loop*>(_loop.get())->start();
+}
+
+Bep5Announcer::~Bep5Announcer() {}

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "util/crypto.h"
+#include "util/sign.h"
+#include "api.h"
 
-namespace ouinet { namespace bep5 {
+namespace ouinet::bep5 {
 
 // Ouinet swarm names are constructed following this pattern:
 //
@@ -32,19 +33,22 @@ namespace ouinet { namespace bep5 {
 // Please bear in mind that BitTorrent DHT IDs are not the swarm names themselves,
 // but their respective SHA1 digests.
 
-std::string compute_injector_swarm_name( const ouinet::util::Ed25519PublicKey&
+OUINET_COMMON_API
+std::string compute_injector_swarm_name( const sign::PublicKey&
                                        , unsigned protocol_version);
 
-std::string compute_bridge_swarm_name( const ouinet::util::Ed25519PublicKey&
+OUINET_COMMON_API
+std::string compute_bridge_swarm_name( const sign::PublicKey&
                                      , unsigned protocol_version);
 
 // Reuse the resulting prefix with `compute_uri_swarm_name` below.
-std::string compute_uri_swarm_prefix( const ouinet::util::Ed25519PublicKey&
+OUINET_COMMON_API
+std::string compute_uri_swarm_prefix( const sign::PublicKey&
                                     , unsigned protocol_version);
 
 // Reuse the prefix resulting from `compute_uri_swarm_prefix` above.
+OUINET_COMMON_API
 std::string compute_uri_swarm_name( boost::string_view prefix
                                   , boost::string_view uri);
 
-}} // namespaces
-
+} // namespaces

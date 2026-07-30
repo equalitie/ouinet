@@ -1,18 +1,25 @@
-#define BOOST_TEST_MODULE dht
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/tools/old/interface.hpp>
+#define BOOST_TEST_MODULE test_dht
+#include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
 
+#include <iomanip>
 #include <chrono>
 #include <constants.h>
+#include <util/compat.h>
+#include <util/debug.h>
 #include <util/hash.h>
 
 #define private public
-#include <bittorrent/mainline_dht.h>
-#include <bittorrent/udp_multiplexer.h>
 #include <bittorrent/dht_storage.h>
 #include <bittorrent/dht_node.h>
+#include <bittorrent/mainline_dht.h>
+#include <bittorrent/node_id.h>
+#include <bittorrent/udp_multiplexer.h>
 
-BOOST_AUTO_TEST_SUITE(dht)
+#include "util/async_test.h"
+#include "util/dht.h"
+#include "util/unwrap.h"
 
 using namespace std;
 using namespace chrono;
@@ -28,32 +35,32 @@ vector<bootstrap::Address> bootstraps {
         // Alternative bootstrap servers from the Ouinet project.
         , "router.bt.ouinet.work"
         // Part of previous name (in case of DNS failure).
-        , asio::ip::make_address("74.3.163.127")
+        , asio::ip::make_address("168.222.245.126")
         , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
 };
 
-void init_without_bootstrapping(asio::io_context& ctx, DhtNode& dht_node) {
-    task::spawn_detached(ctx, [&](auto yield) {
+void init_without_bootstrapping(asio::any_io_executor exec, DhtNode& dht_node) {
+    task::spawn_detached(exec, [&](auto yield) {
         sys::error_code ec;
         auto local_ep = udp::endpoint{asio::ip::make_address("0.0.0.0"), 0};
-        auto m = asio_utp::udp_multiplexer(ctx);
+        auto m = asio_utp::udp_multiplexer(exec);
         m.bind(local_ep, ec);
 
-        dht_node._multiplexer = make_unique<UdpMultiplexer>(move(m));
-        dht_node._tracker = make_unique<Tracker>(ctx.get_executor());
-        dht_node._data_store = make_unique<DataStore>(ctx.get_executor());
+        dht_node._multiplexer = make_unique<UdpMultiplexer>(std::move(m));
+        dht_node._tracker = make_unique<Tracker>(exec);
+        dht_node._data_store = make_unique<DataStore>(exec);
 
         dht_node._node_id = NodeID::zero();
         dht_node._next_transaction_id = 1;
     });
 
-    task::spawn_detached(ctx, [&](auto yield) {
-        dht_node.receive_loop(yield);
+    task::spawn_detached(exec, [&](auto yield) {
+        dht_node.receive_loop(Async(yield));
     });
 }
 
-void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
-    task::spawn_detached(ctx, [&](auto yield) {
+void do_bootstrap(asio::any_io_executor exec, DhtNode& dht_node) {
+    task::spawn_detached(exec, [&](auto yield) {
         size_t success{0};
 
         cout << "server\t"
@@ -70,10 +77,9 @@ void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
             Clock::time_point now;
 
             start = Clock::now();
-            auto r = dht_node.bootstrap_single(
-                    bs,
-                    dht_node._cancel,
-                    yield[ec]);
+            auto r = compat([&](Async yield) {
+                return dht_node.bootstrap_single(bs, yield);
+            })(dht_node._cancel, yield[ec]);
             now = Clock::now();
             auto elapsed = duration_cast<seconds>(now - start).count();
 
@@ -102,17 +108,51 @@ void bootstrap(asio::io_context& ctx, DhtNode& dht_node) {
 BOOST_AUTO_TEST_CASE(test_bootstrap)
 {
     asio::io_context ctx;
+    auto exec = ctx.get_executor();
 
     auto metrics_client = metrics::Client();
     auto metrics_dht = metrics_client.mainline_dht();
     auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
-    DhtNode dht_node(ctx.get_executor(), metrics_dht.dht_node_ipv4(), dns_resolver, rx_limit);
+    DhtNode dht_node(
+        exec,
+        metrics_dht.dht_node_ipv4(),
+        dns_resolver,
+        rx_limit,
+        {},
+        {},
+        {}
+    );
 
-    init_without_bootstrapping(ctx, dht_node);
-    bootstrap(ctx, dht_node);
+    init_without_bootstrapping(exec, dht_node);
+    do_bootstrap(exec, dht_node);
     ctx.run();
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_CASE(test_local)
+{
+    get_logger().set_threshold(DEBUG);
+
+    async_test([](Async yield) {
+        auto start = steady_clock::now();
+        auto nodes = spawn_dht_nodes(8, yield);
+        auto elapsed = duration_cast<milliseconds>(steady_clock::now() - start);
+
+        cout << nodes.size() << " nodes bootstrapped in " << elapsed.count() << "ms." << endl;
+
+        NodeID infohash = util::sha1_digest("hello world");
+
+        {
+            auto peers = unwrap(nodes[0]->tracker_announce(infohash, std::nullopt, yield));
+            BOOST_REQUIRE(peers.empty());
+        }
+
+        {
+            auto actual = unwrap(nodes[1]->tracker_get_peers(infohash, yield));
+            auto expected = nodes[0]->local_endpoints();
+
+            BOOST_REQUIRE_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected.begin(), expected.end());
+        }
+    });
+}

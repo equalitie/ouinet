@@ -1,5 +1,6 @@
 #include <boost/crc.hpp>
 #include "node_id.h"
+#include "util/random.h"
 
 using namespace ouinet::bittorrent;
 using namespace std;
@@ -83,6 +84,14 @@ NodeID NodeID::max()
                          , 0xff, 0xff, 0xff, 0xff
                          , 0xff, 0xff, 0xff, 0xff
                          , 0xff, 0xff, 0xff, 0xff } };
+}
+
+/* static */
+NodeID NodeID::random()
+{
+    NodeID id;
+    util::random::data(id.buffer.data(), id.buffer.size());
+    return id;
 }
 
 NodeID NodeID::generate(asio::ip::address address)

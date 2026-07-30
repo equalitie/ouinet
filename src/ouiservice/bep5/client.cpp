@@ -7,20 +7,16 @@
 #include "../../async_sleep.h"
 #include "../../bittorrent/mainline_dht.h"
 #include "../../bittorrent/bep5_announcer.h"
-#include "../../bittorrent/is_martian.h"
 #include "../../logger.h"
 #include "../../util/hash.h"
 #include "../../util/lru_cache.h"
 #include "../../ssl/util.h"
-#include "../../util/handler_tracker.h"
+#include "../../task.h"
 #include "../../util/wait_condition.h"
 #include "../../util/watch_dog.h"
-
-#define _LOGPFX "Bep5Client: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _VERBOSE(...)  LOG_VERBOSE(_LOGPFX, __VA_ARGS__)
-#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
+#include "../../util/select.h"
+#include "../../util/semaphore.h"
+#include <boost/asio/experimental/channel.hpp>
 
 // It is ok to have many of these as a resort if injectors are not reachable,
 // as long as they are fresh in the DHT.
@@ -38,14 +34,14 @@ static const auto injector_ping_period = std::chrono::minutes(10);
 static const auto injector_ping_period_debug = std::chrono::minutes(2);
 static const auto injector_pong_timeout = std::chrono::seconds(60);
 
-using namespace std;
 using namespace ouinet;
 using namespace ouiservice;
+using namespace std::chrono_literals;
 
 namespace bt = bittorrent;
 
 using udp = asio::ip::udp;
-using Clock = chrono::steady_clock;
+using Clock = std::chrono::steady_clock;
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 {
@@ -72,78 +68,41 @@ choose_multiplexer_for(bt::DhtBase& dht, const udp::endpoint& ep)
     return boost::none;
 }
 
-// Based on <https://stackoverflow.com/a/7222201>
-// and `../dht_lookup.h`.
-namespace boost {
-static inline void hash_combine(std::size_t& seed, const asio::ip::address& addr)
-{
-    // IPv4 addresses are encoded as IPv4-mapped IPv6 addresses
-    // to hash every address consistently regardless of the protocol version,
-    // so no need to take the protocol into account.
-    //boost::hash_combine(seed, ep.protocol().protocol());
-
-    asio::ip::address_v6::bytes_type addr6{0,0,0,0, 0,0,0,0, 0xff,0xff,0xff,0xff, 0,0,0,0};
-    if (addr.is_v4()) {
-        auto addr4 = addr.to_v4().to_uint();
-        for (unsigned i = 15; i > 11; --i) {
-            addr6[i] = addr4 & 0x000000fful;
-            addr4 >>= 8;
-        }
-    } else {
-        assert(addr.is_v6());
-        addr6 = addr.to_v6().to_bytes();
-    }
-
-    boost::hash_combine(seed, addr6);
-}
-
-static inline void hash_combine(std::size_t& seed, const asio::ip::udp::endpoint& ep)
-{
-    boost::hash_combine(seed, ep.address());
-    boost::hash_combine(seed, ep.port());
-}
-}
-
-template <>
-struct std::hash<asio::ip::udp::endpoint>
-{
-    inline std::size_t operator() (const asio::ip::udp::endpoint& ep) const
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, ep);
-        return seed;
-    }
-};
+constexpr std::chrono::duration ERROR_WAIT_DURATION = 1s;
+constexpr std::chrono::duration SUCCESS_WAIT_DURATION = 1min;
 
 struct Bep5Client::Swarm
 {
 private:
-    using Peer  = AbstractClient;
+    using Peer  = OuiServiceClient;
     using Peers = util::LruCache<asio::ip::udp::endpoint, std::shared_ptr<Peer>>;
 
 private:
-    Bep5Client* _owner;
-    shared_ptr<bt::DhtBase> _dht;
+    std::shared_ptr<bt::DhtBase> _dht;
     bt::NodeID _infohash;
+    SwarmType _type;
     Cancel _lifetime_cancel;
-    size_t _get_peers_call_count = 0;
+    std::optional<std::chrono::steady_clock::time_point> _last_success_time;
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
     const bool _connect_proxy;
+    util::LogPath _log_path;
 
 public:
-    Swarm( Bep5Client* owner
-         , bt::NodeID infohash
-         , shared_ptr<bt::DhtBase> dht
+    Swarm( bt::NodeID infohash
+         , std::shared_ptr<bt::DhtBase> dht
          , size_t capacity
+         , SwarmType type
          , Cancel& cancel
-         , bool connect_proxy)
-        : _owner(owner)
-        , _dht(move(dht))
+         , bool connect_proxy
+         , util::LogPath log_path)
+        : _dht(std::move(dht))
         , _infohash(infohash)
+        , _type(type)
         , _lifetime_cancel(cancel)
         , _peers(capacity)
         , _connect_proxy(connect_proxy)
+        , _log_path(std::move(log_path))
     {}
 
     ~Swarm() {
@@ -152,112 +111,99 @@ public:
     }
 
     void start() {
-        TRACK_SPAWN(_dht->get_executor(), [&] (asio::yield_context yield) {
-            Cancel cancel(_lifetime_cancel);
-            sys::error_code ec;
-            loop(cancel, yield[ec]);
+        task::spawn_detached(_dht->get_executor(), [&] (asio::yield_context y) {
+            loop(Async(y, _lifetime_cancel, _log_path));
         });
     }
 
     const Peers& peers() const { return _peers; }
 
-    void wait_for_ready(Cancel cancel, asio::yield_context yield) {
-        if (_get_peers_call_count != 0) return;
+    std::vector<Candidate> candidates() const {
+            std::vector<Candidate> ret;
+            ret.reserve(_peers.size());
+            for (auto& p : _peers) ret.push_back({p.first, p.second, _type});
+            return ret;
+    }
 
+    bool is_ready() const {
+        if (!_last_success_time) return false;
+        auto duration = std::chrono::steady_clock::now() - *_last_success_time;
+        return duration < 5 * SUCCESS_WAIT_DURATION;
+    }
+
+    void wait_for_ready(Async yield) {
+        if (is_ready()) return;
         WaitCondition wc(_dht->get_executor());
-
         _wait_condition_locks.push_back(wc.lock());
-
-        sys::error_code ec;
-        wc.wait(cancel, yield[ec]);
-
-        if (cancel)
-            return or_throw(yield, asio::error::operation_aborted);
+        wc.wait(yield);
     }
 
     AsioExecutor get_executor() { return _dht->get_executor(); }
 
+    friend std::ostream& operator << (std::ostream& os, const Swarm& swarm) {
+        return os << swarm._type << "/" << swarm._infohash;
+    }
+
 private:
-    void loop(Cancel& cancel, asio::yield_context yield) {
-        auto ex = _dht->get_executor();
+    void loop(Async yield) {
+        while (true) {
+            _dht->wait_all_ready(yield);
 
-        {
-            sys::error_code ec;
-            _dht->wait_all_ready(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec);
-        }
-
-        while (!cancel) {
-            sys::error_code ec;
-
-            if (log_debug()) {
-                _DEBUG("Getting peers from swarm ", _infohash);
-            }
-
-            auto endpoints = _dht->tracker_get_peers(_infohash, cancel, yield[ec]);
-
-            assert(!cancel || ec == asio::error::operation_aborted);
-
-            if (cancel) break;
-
-            _get_peers_call_count++;
-            _wait_condition_locks.clear();
-
-            if (ec) {
-                async_sleep(ex, 1s, cancel, yield);
+            LOG_DEBUG(yield, " Looking for peers (infohash=", _infohash, ")...");
+            auto endpoints = _dht->tracker_get_peers(_infohash, yield);
+            if (!endpoints || endpoints->empty()) {
+                LOG_DEBUG(yield, " Looking for peers (infohash=", _infohash
+                               , ") done: 0 found. Retry in ", ERROR_WAIT_DURATION);
+                async_sleep(ERROR_WAIT_DURATION, yield);
                 continue;
             }
 
-            if (log_debug()) {
-                _DEBUG("New endpoints: ", endpoints.size());
-                for (auto ep: endpoints) {
-                    _DEBUG("    ", ep);
-                }
-            }
+            LOG_DEBUG(yield, " Looking for peers (infohash=", _infohash
+                           , ") done: ", endpoints->size(), " found");
 
-            add_peers(move(endpoints));
+            _last_success_time = std::chrono::steady_clock::now();
 
-            async_sleep(ex, 1min, cancel, yield);
+            add_peers(std::move(*endpoints));
+            _wait_condition_locks.clear();
+
+            async_sleep(SUCCESS_WAIT_DURATION, yield);
         }
+
+        _wait_condition_locks.clear();
     }
 
-    bool log_debug() {
-        if (!_owner) return false;
-        return _owner->_log_debug;
-    }
-
-    shared_ptr<Peer> make_peer(const udp::endpoint& ep)
+    std::shared_ptr<Peer> make_peer(const udp::endpoint& ep)
     {
         auto opt_m = choose_multiplexer_for(*_dht, ep);
 
         if (!opt_m) {
-            _ERROR("Failed to choose multiplexer");
+            LOG_ERROR(_log_path, " Failed to choose multiplexer");
             return nullptr;
         }
 
-        auto utp_client = make_unique<UtpOuiServiceClient>
-            (_dht->get_executor(), move(*opt_m), util::str(ep));
+        auto utp_client = std::make_unique<UtpOuiServiceClient>
+            (_dht->get_executor(), std::move(*opt_m), ep);
 
         if (!utp_client->verify_remote_endpoint()) {
-            _ERROR("Failed to bind uTP client");
+            LOG_ERROR(_log_path, " Failed to bind uTP client");
             return nullptr;
         }
 
         if (_connect_proxy) {
-            return make_unique<ConnectProxyOuiServiceClient>(move(utp_client));
+            return std::make_unique<ConnectProxyOuiServiceClient>(std::move(utp_client));
         }
         else {
             return utp_client;
         }
     }
 
-    void add_peers(set<udp::endpoint> eps)
+    void add_peers(std::set<udp::endpoint> eps)
     {
         auto wan_eps = _dht->wan_endpoints();
         auto lan_eps = _dht->local_endpoints();
 
         for (auto ep : eps) {
-            if (_dht->is_martian(ep)) continue;
+            if (!_dht->is_peer_allowed(ep)) continue;
 
             // Don't connect to self
             if (wan_eps.count(ep) || lan_eps.count(ep)) continue;
@@ -266,29 +212,33 @@ private:
             if (r) continue;  // already known, moved to front
             auto p = make_peer(ep);
             if (!p) continue;
-            _peers.put(ep, move(p));
+            _peers.put(ep, std::move(p));
         }
     }
 };
 
 class Bep5Client::InjectorPinger {
 public:
-    InjectorPinger( shared_ptr<Bep5Client::Swarm> injector_swarm
-                  , string helper_swarm_name
+    InjectorPinger( std::shared_ptr<Bep5Client::Swarm> injector_swarm
+                  , std::string helper_swarm_name
                   , bool helper_announcement_enabled
-                  , shared_ptr<bt::DhtBase> dht
-                  , Cancel& cancel)
+                  , std::shared_ptr<bt::DhtBase> dht
+                  , Cancel& cancel
+                  , const util::LogPath& log_path)
         : _lifetime_cancel(cancel)
-        , _injector_swarm(move(injector_swarm))
+        , _injector_swarm(std::move(injector_swarm))
         , _random_generator(std::random_device()())
-        , _helper_announcer(new bt::Bep5ManualAnnouncer(util::sha1_digest(helper_swarm_name), dht))
+        , _helper_announcer(std::make_unique<bt::Bep5ManualAnnouncer>( util::sha1_digest(helper_swarm_name)
+                                                                     , dht
+                                                                     , log_path))
         , _helper_announcement_enabled(helper_announcement_enabled)
     {
-        TRACK_SPAWN(_injector_swarm->get_executor(),
-                    [this] (asio::yield_context yield) {
-            sys::error_code ec;
-            loop(yield[ec]);
-        });
+        task::spawn_detached(
+            _injector_swarm->get_executor(),
+            [this, log_path] (asio::yield_context yield) {
+                loop(Async(yield, _lifetime_cancel, std::move(log_path)));
+            }
+        );
     }
 
     ~InjectorPinger() { _lifetime_cancel(); }
@@ -305,41 +255,39 @@ public:
         return _injector_was_seen;
     }
 private:
-    void loop(asio::yield_context yield) {
-        Cancel cancel(_lifetime_cancel);
+    void loop(Async yield) {
+        _injector_swarm->wait_for_ready(yield);
 
-        sys::error_code ec;
-        _injector_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        boost::optional<std::chrono::steady_clock::time_point> _last_ping_time;
 
-        boost::optional<chrono::steady_clock::time_point> _last_ping_time;
-        while (!cancel) {
-            _DEBUG("Waiting to ping injectors...");
+        while (true) {
+            LOG_DEBUG(yield, " Waiting to ping injectors...");
             _injector_was_seen = false;
             if (_last_ping_time && (Clock::now() - *_last_ping_time) < _ping_frequency) {
                 auto d = (*_last_ping_time + _ping_frequency) - Clock::now();
-                async_sleep(get_executor(), d, cancel, yield);
-                if (cancel) return;
+                async_sleep(d, yield);
             }
-            _DEBUG("Waiting to ping injectors: done");
+            LOG_DEBUG(yield, " Waiting to ping injectors: done");
 
             bool got_reply = _injector_was_seen;
+
             if (got_reply) {
                 // A succesful direct connection during the pause is taken as a sign of reachability.
                 if (_helper_announcement_enabled)
-                    _DEBUG("Made connection to injector, announcing as helper (bridge)");
+                    LOG_DEBUG(yield, " Made connection to injector, announcing as helper (bridge)");
                 else
-                    _DEBUG("Made connection to injector, announcements as helper (bridge) are disabled");
+                    LOG_DEBUG(yield, " Made connection to injector, announcements as helper (bridge) are disabled");
             } else {
-                got_reply = ping_injectors(select_injectors_to_ping(), cancel, yield[ec]);
-                if (!cancel && ec)
-                    _ERROR("Failed to ping injectors; ec=", ec);
-                return_or_throw_on_error(yield, cancel, ec);
+                got_reply = ping_injectors(select_injectors_to_ping(), yield);
+
                 if (got_reply){
                     if (_helper_announcement_enabled)
-                        _DEBUG("Got pong from injectors, announcing as helper (bridge)");
+                        LOG_DEBUG(yield, " Got pong from injectors, announcing as helper (bridge)");
                     else
-                        _DEBUG("Got pong from injectors, announcements as helper (bridge) are disabled");
+                        LOG_DEBUG(yield, " Got pong from injectors, announcements as helper (bridge) are disabled");
+                }
+                else {
+                    LOG_ERROR(yield, " Failed to ping injectors");
                 }
             }
 
@@ -349,57 +297,51 @@ private:
                 if (_helper_announcement_enabled)
                     _helper_announcer->update();
             } else {
-                _VERBOSE("Did not get pong from injectors,"
-                         " the network may be down or they may be blocked");
+                LOG_VERBOSE(yield, " Did not get pong from injectors,"
+                                   " the network may be down or they may be blocked");
             }
         }
     }
 
-    bool ping_one_injector( shared_ptr<AbstractClient> injector
-                          , Cancel& cancel
-                          , asio::yield_context yield)
+    [[nodiscard]]
+    sys::error_code ping_one_injector(std::shared_ptr<OuiServiceClient> injector, Async yield)
     {
-        sys::error_code ec;
-        auto con = injector->connect(yield[ec], cancel);
-        return_or_throw_on_error(yield, cancel, ec, false);
-        return true;
+        auto con = injector->connect(yield);
+        if (!con.has_value()) return con.error();
+        return sys::error_code();
     }
 
-    bool ping_injectors( const std::vector<shared_ptr<AbstractClient>>& injectors
-                       , Cancel cancel
-                       , asio::yield_context yield)
+    bool ping_injectors( const std::vector<std::shared_ptr<OuiServiceClient>>& injectors
+                       , Async yield)
     {
-        auto ex = get_executor();
+        WaitCondition wc(get_executor());
 
-        WaitCondition wc(ex);
-
-        Cancel success_cancel(cancel);
+        Cancel success_cancel(yield.get_cancel());
 
         for (auto inj : injectors) {
-            TRACK_SPAWN(ex, ([&, inj, lock = wc.lock()]
-                    (asio::yield_context yield) {
-                Cancel c(cancel);
-                auto sc = success_cancel.connect([&] { c(); });
+            yield.spawn(success_cancel, [&, inj, lock = wc.lock()] (Async yield) {
+                auto wd = watch_dog(
+                        yield.get_executor(),
+                        injector_pong_timeout,
+                        [&] { yield.cancel(); });
 
-                sys::error_code ec;
-                auto wd = watch_dog(ex, injector_pong_timeout, [&] { c(); });
-                if (ping_one_injector(inj, c, yield[ec])) {
+                sys::error_code ec = ping_one_injector(inj, yield);
+
+                if (!ec) {
                     success_cancel();
                 }
-            }));
+            });
         }
 
-        sys::error_code ec;
-        wc.wait(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, false);
+        wc.wait(yield);
 
         return bool(success_cancel);
     }
 
-    std::vector<shared_ptr<AbstractClient>> select_injectors_to_ping() {
+    std::vector<std::shared_ptr<OuiServiceClient>> select_injectors_to_ping() {
         // Select the first (at most) `injectors_to_ping` injectors after shuffling them.
         auto injector_map = _injector_swarm->peers();
-        std::vector<shared_ptr<AbstractClient>> injectors;
+        std::vector<std::shared_ptr<OuiServiceClient>> injectors;
         injectors.reserve(injector_map.size());
         for (auto& p : injector_map)
             injectors.push_back(p.second);
@@ -416,86 +358,112 @@ private:
 private:
     static const bool _debug = false;  // for development testing only
     Cancel _lifetime_cancel;
-    shared_ptr<Bep5Client::Swarm> _injector_swarm;
+    std::shared_ptr<Bep5Client::Swarm> _injector_swarm;
     bool _injector_was_seen = false;
     const Clock::duration _ping_frequency = (_debug ? injector_ping_period_debug : injector_ping_period);
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
     bool _helper_announcement_enabled = true;
+    util::LogPath _log_path;
 };
 
-Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
-                      , string injector_swarm_name
+Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
+                      , std::string injector_swarm_name
                       , asio::ssl::context* injector_tls_ctx
-                      , Target targets)
+                      , Target targets
+                      , const util::LogPath& log_path)
     : _dht(dht)
-    , _injector_swarm_name(move(injector_swarm_name))
+    , _injector_swarm_name(std::move(injector_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
     , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
-        _ERROR("DHT has no endpoints!");
+        LOG_ERROR(log_path, " DHT has no endpoints!");
     }
 }
 
-Bep5Client::Bep5Client( shared_ptr<bt::DhtBase> dht
-                      , string injector_swarm_name
-                      , string helpers_swarm_name
+Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
+                      , std::string injector_swarm_name
+                      , std::string helpers_swarm_name
                       , bool helper_announcement_enabled
                       , asio::ssl::context* injector_tls_ctx
-                      , Target targets)
+                      , Target targets
+                      , const util::LogPath& log_path)
     : _dht(dht)
-    , _injector_swarm_name(move(injector_swarm_name))
-    , _helpers_swarm_name(move(helpers_swarm_name))
+    , _injector_swarm_name(std::move(injector_swarm_name))
+    , _helpers_swarm_name(std::move(helpers_swarm_name))
     , _helper_announcement_enabled(helper_announcement_enabled)
     , _injector_tls_ctx(injector_tls_ctx)
     , _random_generator(std::random_device()())
     , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
-        _ERROR("DHT has no endpoints!");
+        LOG_ERROR(log_path, " DHT has no endpoints!");
     }
 
     assert(_helpers_swarm_name.size());
 }
 
-void Bep5Client::start(asio::yield_context yield)
+sys::error_code Bep5Client::start(Async yield)
 {
+    auto slot = _cancel.connect([&] { yield.cancel(); });
+
     {
         bt::NodeID infohash = util::sha1_digest(_injector_swarm_name);
 
-        _INFO("Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
+        LOG_INFO(yield, " Injector swarm: sha1('", _injector_swarm_name, "'): ", infohash.to_hex());
 
-        _injector_swarm.reset(new Swarm(this, infohash, _dht, injector_swarm_capacity, _cancel, false));
+        _injector_swarm.reset(new Swarm(
+            infohash,
+            _dht,
+            injector_swarm_capacity,
+            SwarmType::injector,
+            _cancel,
+            false,
+            yield.log_path()
+        ));
         _injector_swarm->start();
     }
 
     if (!_helpers_swarm_name.empty()) {
         bt::NodeID infohash = util::sha1_digest(_helpers_swarm_name);
 
-        _INFO("Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
+        LOG_INFO(yield, " Helper swarm (bridges): sha1('", _helpers_swarm_name, "'): ", infohash.to_hex());
 
-        _helpers_swarm.reset(new Swarm(this, infohash, _dht, helper_swarm_capacity, _cancel, true));
+        _helpers_swarm.reset(new Swarm(
+            infohash,
+            _dht,
+            helper_swarm_capacity,
+            SwarmType::helper,
+            _cancel,
+            true,
+            yield.log_path()
+        ));
         _helpers_swarm->start();
 
-        _helpers_swarm->wait_for_ready(_cancel, yield);
-        if (_cancel) return;
-        _injector_swarm->wait_for_ready(_cancel, yield);
-        if (_cancel) return;
+        // At least one of the swarm must be ready
+        select(
+            yield,
+            [&](auto yield) { _helpers_swarm->wait_for_ready(yield);  },
+            [&](auto yield) { _injector_swarm->wait_for_ready(yield); }
+        );
 
         _injector_pinger.reset(new InjectorPinger(  _injector_swarm
                                                   , _helpers_swarm_name
                                                   , _helper_announcement_enabled
                                                   , _dht
-                                                  , _cancel));
+                                                  , _cancel
+                                                  , yield.log_path()));
+    } else {
+        _injector_swarm->wait_for_ready(yield);
     }
 
-    TRACK_SPAWN(get_executor(),
-                [this] (asio::yield_context yield) {
-        sys::error_code ec;
-        status_loop(yield[ec]);
+    task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
+        status_loop(Async(yield, _cancel));
     });
+
+    return sys::error_code();
 }
 
 size_t Bep5Client::injector_candidates_n() const noexcept {
@@ -506,230 +474,273 @@ size_t Bep5Client::injector_candidates_n() const noexcept {
     return _injector_swarm -> peers().size();
 }
 
-void Bep5Client::stop()
+void Bep5Client::status_loop(Async yield)
 {
-    _cancel();
-    _injector_swarm = nullptr;
-    _helpers_swarm  = nullptr;
-    _injector_pinger = nullptr;
-}
-
-void Bep5Client::status_loop(asio::yield_context yield)
-{
-    assert(!_cancel);
-
-    Cancel cancel(_cancel);
-    sys::error_code ec;
-
     assert(_injector_swarm);
-    {
-        _injector_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
-    }
+    _injector_swarm->wait_for_ready(yield);
 
     if (_helpers_swarm) {
-        _helpers_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        _helpers_swarm->wait_for_ready(yield);
     }
 
-    while (!cancel) {
-        ec = {};
-        async_sleep(get_executor(), 1min, cancel, yield[ec]);
-
-        if (ec || cancel || logger.get_threshold() > DEBUG)
-            continue;
+    while (true) {
+        async_sleep(1min, yield);
 
         auto inj_n = _injector_swarm->peers().size();
         auto hlp_n = _helpers_swarm ? _helpers_swarm->peers().size() : 0;
-        logger.debug(util::str(
+
+        get_logger().debug(util::str(
             "Bep5Client: Swarm status;",
             " injectors=", inj_n, (inj_n == injector_swarm_capacity ? " (max)" : ""),
             " bridges=", hlp_n, (hlp_n == helper_swarm_capacity ? " (max)" : "")));
     }
 }
 
-std::vector<Bep5Client::Candidate> Bep5Client::get_peers(Target target)
+std::expected<GenericStream, sys::error_code> Bep5Client::connect(Async yield)
 {
-    std::vector<Candidate> inj;
-    std::vector<Candidate> hlp;
+    return connect(yield, true, _default_targets);
+}
 
-    auto& inj_m = _injector_swarm->peers();
-    auto* hlp_m = _helpers_swarm ? &_helpers_swarm->peers() : nullptr;
+using Target = Bep5Client::Target;
 
-    if (target & Target::injectors) {
-        inj.reserve(inj_m.size());
-        for (auto p : inj_m) inj.push_back({p.first, p.second, Target::injectors});
-    }
+struct Bep5Client::Candidates {
+    std::set<udp::endpoint> used_candidates;
+    boost::optional<udp::endpoint> preferred_ep;
+    std::optional<Candidate> preferred;
+    std::vector<Candidate> inj_candidates;
+    std::vector<Candidate> hlp_candidates;
+    std::default_random_engine rand_engine;
 
-    if (hlp_m && (target & Target::helpers)) {
-        hlp.reserve(hlp_m->size());
-        for (auto p : *hlp_m) hlp.push_back({p.first, p.second, Target::helpers});
-    }
+    Candidates(boost::optional<udp::endpoint> const& preferred_ep) :
+        preferred_ep(preferred_ep),
+        rand_engine(std::chrono::system_clock::now().time_since_epoch().count())
+    {}
 
-    std::shuffle(inj.begin(), inj.end(), _random_generator);
-    std::shuffle(hlp.begin(), hlp.end(), _random_generator);
+    void try_insert(Candidate candidate) {
+        if (used_candidates.count(candidate.endpoint)) {
+            return;
+        }
 
-    std::vector<Candidate> ret;
-    ret.reserve(inj.size() + hlp.size());
+        if (preferred_ep && *preferred_ep == candidate.endpoint) {
+            preferred = candidate;
+            return;
+        }
 
-    for (auto& p : inj) { ret.push_back(p); }
-    for (auto& p : hlp) { ret.push_back(p); }
+        if (is_in(candidate, inj_candidates)) return;
+        if (is_in(candidate, hlp_candidates)) return;
 
-    //auto wan_eps = _dht->wan_endpoints();
-    //auto lan_eps = _dht->local_endpoints();
-    //cerr << "wan: "; for (auto& i : wan_eps) cerr << i << ","; cerr << "\n";
-    //cerr << "lan: "; for (auto& i : lan_eps) cerr << i << ","; cerr << "\n";
-    //cerr << "inj: "; for (auto& i : inj) cerr << i.endpoint << ","; cerr << "\n";
-    //cerr << "hlp: "; for (auto& i : hlp) cerr << i.endpoint << ","; cerr << "\n";
-
-    // If there is a peer that has woked recently then use that one
-    if (_last_working_ep) {
-        for (auto i = ret.begin(); i != ret.end(); ++i) {
-            if (i->endpoint == *_last_working_ep) {
-                if (i != ret.begin()) {
-                    std::swap(*i, ret.front());
-                }
+        switch (candidate.swarm_type) {
+            case SwarmType::injector:
+                inj_candidates.push_back(candidate);
                 break;
-            }
+            case SwarmType::helper:
+                hlp_candidates.push_back(candidate);
+                break;
         }
     }
 
-    return ret;
-}
+    std::optional<Candidate> pick_candidate() {
+        std::optional<Candidate> ret;
 
-GenericStream Bep5Client::connect(asio::yield_context yield, Cancel& cancel)
-{
-    return connect(yield, cancel, true, _default_targets);
-}
+        if (preferred) {
+            ret = std::move(*preferred);
+            preferred.reset();
+        }
+        else {
+            ret = random_remove_from(inj_candidates);
+            if (!ret) ret = random_remove_from(hlp_candidates);
+        }
 
-GenericStream Bep5Client::connect( asio::yield_context yield
-                                 , Cancel& cancel_
-                                 , bool tls
-                                 , Target target)
-{
-    assert(!_cancel);
-    assert(!cancel_);
+        if (ret) {
+            used_candidates.insert(ret->endpoint);
+        }
 
-    Cancel cancel(cancel_);
-    auto cancel_con = _cancel.connect([&] { cancel(); });
-
-    sys::error_code ec;
-
-    if (_injector_swarm && (target & Target::injectors)) {
-        _injector_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, GenericStream());
+        return ret;
     }
 
-    if (_helpers_swarm && (target & Target::helpers)) {
-        _helpers_swarm->wait_for_ready(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, GenericStream());
+    std::optional<Candidate> random_remove_from(std::vector<Candidate>& candidates) {
+        if (candidates.empty()) return {};
+        std::uniform_int_distribution<size_t> random{0, candidates.size() - 1};
+        auto i = candidates.begin() + random(rand_engine);
+        auto ret = std::move(*i);
+        auto last = candidates.end() - 1;
+        if (i != last) {
+            *i = std::move(*last);
+        }
+        candidates.resize(candidates.size() - 1);
+        return ret;
     }
 
-    WaitCondition wc(get_executor());
+    bool is_in(Candidate& c, std::vector<Candidate> const& in) const {
+        for (auto& i : in) {
+            if (c.endpoint == i.endpoint) return true;
+        }
+        return false;
+    }
+};
 
-    Cancel spawn_cancel(cancel); // Cancels all spawned coroutines
-
-    Target ret_target = Target::none;
-    asio::ip::udp::endpoint ret_ep;
-    GenericStream ret_con;
-
-    uint32_t i = 0;
+std::expected<GenericStream, sys::error_code>
+Bep5Client::connect(Async yield, bool use_tls, Target target)
+{
+    auto slot = _cancel.connect([&] { yield.cancel(); });
 
     auto exec = get_executor();
 
-    for (auto peer : get_peers(target)) {
-        auto j = i++;
+    asio::experimental::channel<void(sys::error_code, std::vector<Candidate>)> channel(exec, 2);
 
-        const uint32_t k = 10;
-        uint32_t delay_ms = (j <= k) ? 0 : ((j-k) * 100);
+    auto inj_swarm = (target & Target::injectors) ? _injector_swarm.get() : nullptr;
+    auto hlp_swarm = (target & Target::helpers)   ? _helpers_swarm. get() : nullptr;
 
-        TRACK_SPAWN(exec, ([
-            =,
-            this,
-            &spawn_cancel,
-            &ret_target,
-            &ret_con,
-            &ret_ep,
-            lock = wc.lock()
-        ] (asio::yield_context y) mutable {
-            sys::error_code ec;
+    if (!inj_swarm && !hlp_swarm) {
+        return std::unexpected(asio::error::network_unreachable);
+    }
 
-            if (delay_ms) {
-                async_sleep(exec, chrono::milliseconds(delay_ms), spawn_cancel, y);
-                if (spawn_cancel) return;
+    Cancel spawn_cancel(yield.get_cancel()); // Cancels all spawned coroutines
+
+    auto channel_slot = spawn_cancel.connect([&] { if (channel.is_open()) channel.close(); });
+
+    WaitCondition wc(exec);
+
+    size_t job_count = (inj_swarm ? 1 : 0) + (hlp_swarm ? 1 : 0);
+
+    for (auto swarm : std::array<Swarm*, 2>{inj_swarm, hlp_swarm}) {
+        if (swarm == nullptr) continue;
+
+        yield.spawn(spawn_cancel, [&job_count, &channel, swarm, lock = wc.lock()] (Async yield) {
+            std::vector<Candidate> peers;
+
+            LOG_DEBUG(yield, " Looking up peers in swarm ", *swarm);
+
+            while (true) {
+                swarm->wait_for_ready(yield);
+                peers = swarm->candidates();
+
+                if (!peers.empty()) {
+                    break;
+                }
             }
 
-            _DEBUG("trying to contact", peer.endpoint);
-            auto con = connect_single(*peer.client, tls, spawn_cancel, y[ec]);
-            assert(!spawn_cancel || ec == asio::error::operation_aborted);
-            if (spawn_cancel || ec) return;
-            ret_target = peer.target;
-            ret_con = move(con);
-            ret_ep  = peer.endpoint;
-            spawn_cancel();
-        }));
+            LOG_DEBUG(yield, " Found ", peers.size(), " peers in swarm ", *swarm, ":");
+            for (auto peer: peers) {
+                LOG_DEBUG(yield, "     ", peer.endpoint);
+            }
+
+            channel.async_send(sys::error_code(), std::move(peers), yield);
+
+            if (--job_count == 0 && channel.is_open()) {
+                channel.close();
+            }
+        });
     }
 
-    wc.wait(yield[ec]);
+    struct Result {
+        SwarmType swarm_type;
+        asio::ip::udp::endpoint endpoint;
+        GenericStream connection;
+    };
 
-    if (cancel) {
-        ec = asio::error::operation_aborted;
-    }
-    else if (!ret_con.has_implementation()) {
-        ec = asio::error::network_unreachable;
-    }
-    else {
-        assert(!ec);
-        ec = {};
+    std::optional<Result> result;
+
+    Candidates candidates(_last_working_ep);
+
+    auto concurrency = std::make_optional<util::Semaphore>(10, exec);
+    auto concurrency_slot = spawn_cancel.connect([&concurrency] { concurrency.reset(); });
+
+    while (!spawn_cancel) {
+        auto new_candidates = channel.async_receive(yield);
+        if (!new_candidates.has_value()) {
+            break;
+        }
+
+        for (auto& candidate : *new_candidates) {
+            candidates.try_insert(candidate);
+        }
+
+        while (auto peer = candidates.pick_candidate()) {
+            if (!concurrency) break;
+
+            std::optional<util::Semaphore::Lock> concurrency_lock;
+
+            try {
+                concurrency_lock = concurrency->await_lock(yield).value();
+            }
+            catch (Async::Cancelled const&) {
+                if (yield.is_cancelled()) throw;
+                // Otherwise cancelled by `spawn_cancel`. In which case we just
+                // exit the loops.
+                break;
+            }
+
+            asio::steady_timer timer(exec);
+            timer.expires_after(100ms);
+            timer.async_wait([cl = std::move(concurrency_lock).value()] (auto) {});
+
+            yield.spawn([
+                self = this,
+                peer,
+                use_tls,
+                &spawn_cancel,
+                &result,
+                lock = wc.lock()
+            ] (Async yield) mutable {
+                LOG_DEBUG(yield, " Connecting to ", peer->swarm_type, "; ep=", peer->endpoint, "...");
+                auto con = self->connect_single(*peer->client, use_tls, yield);
+                if (!con) {
+                    return;
+                }
+
+                result = Result {
+                    peer->swarm_type,
+                    peer->endpoint,
+                    std::move(*con)
+                };
+
+                spawn_cancel();
+            });
+        }
     }
 
-    if (ec) {
+    wc.wait(yield);
+
+    if (!result) {
+        LOG_DEBUG(yield, " Did not connect to injector");
         _last_working_ep = boost::none;
-        _DEBUG( "Did not connect to any peer;"
-              , " peers=", i
-              , " ec=", ec);
-    } else {
-        _last_working_ep = ret_ep;
-        if (ret_target == Target::injectors) {
-            if (_injector_pinger)
-                _injector_pinger->injector_was_seen_now();
-            _DEBUG("Connected to injector peer directly; rep=", ret_ep);
-        } else if (ret_target == Target::helpers)
-            _DEBUG("Connected to injector via helper peer (bridge); rep=", ret_ep);
-        else
-            assert(0 && "Invalid peer type");
+        return std::unexpected(asio::error::network_unreachable);
     }
 
-    return or_throw(yield, ec, move(ret_con));
+    _last_working_ep = result->endpoint;
+
+    if (result->swarm_type == SwarmType::injector && _injector_pinger) {
+        _injector_pinger->injector_was_seen_now();
+    }
+
+    LOG_DEBUG(yield, " Connected to ", result->swarm_type, "; ep=", result->endpoint);
+    return std::move(result->connection);
 }
 
-GenericStream
-Bep5Client::connect_single( AbstractClient& cli
-                          , bool tls
-                          , Cancel& cancel
-                          , asio::yield_context yield)
+std::expected<GenericStream, sys::error_code>
+Bep5Client::connect_single(OuiServiceClient& cli, bool use_tls, Async yield)
 {
-    sys::error_code ec;
-    auto con = cli.connect(yield[ec], cancel);
-    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
+    auto con = cli.connect(yield);
+    if (!con.has_value()) return std::unexpected(con.error());
 
-    if (!tls) return con;
+    if (!use_tls) return std::move(*con);
 
     assert(_injector_tls_ctx);
 
     if (!_injector_tls_ctx) {
-        return or_throw<GenericStream>(yield, asio::error::bad_descriptor);
+        return std::unexpected(asio::error::bad_descriptor);
     }
 
-    return ssl::util::client_handshake( std::move(con)
-                                      , *_injector_tls_ctx, ""
-                                      , cancel
-                                      , yield);
+    return ssl::util::client_handshake(std::move(*con), *_injector_tls_ctx, "" , yield);
 }
 
 Bep5Client::~Bep5Client()
 {
-    stop();
+    _cancel();
+    _injector_swarm = nullptr;
+    _helpers_swarm  = nullptr;
+    _injector_pinger = nullptr;
 }
 
 AsioExecutor Bep5Client::get_executor()

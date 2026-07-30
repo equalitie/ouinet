@@ -1,4 +1,5 @@
-brotli
 pytest
+pytest-timeout
+brotli
 pytest-asyncio
 requests

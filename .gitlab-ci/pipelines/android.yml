@@ -1,101 +1,25 @@
-include:
-  - .gitlab-ci/jobs/common/prepare-builder-image.yml
-
-android / prepare-builder-image:
-  variables:
-    TARGET_PLATFORM: 'android'
-  extends:
-    .prepare-builder-image
-  needs:
-    - job: 'linux / prepare-builder-image'
-      optional: true
-
 android / build:
-  variables:
-    TARGET_PLATFORM: 'android'
-    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
   stage: build
   tags:
-    - docker
+    - shell+docker
+  variables:
+    BUILD_PATH: 'build'
+    TARGET_OS: 'android'
+    CMAKE_BUILD_TYPE: 'Release'
+  script:
+    - >
+      ./docker/linux.sh
+      --target-os $TARGET_OS
+      --artifact-dir $BUILD_PATH
+      --cmake-build-type $CMAKE_BUILD_TYPE
+      $CONTAINER_ARGS
+  artifacts:
+    paths:
+      - $BUILD_PATH/$TARGET_OS/*.aar
+    expire_in: 6h
   needs:
-    - job: 'android / prepare-builder-image'
-      optional: true
     - job: 'linux / build'
-  image: $BUILDER_IMAGE
-  script:
-    - mkdir -p build.android
-    - cd build.android
-    - ../scripts/build-android.sh
-  artifacts:
-    paths:
-      - build.android/build-android-*/ouinet/outputs/aar/*.aar
-      - build.android/build-android-*/ouinet/outputs/apk/*.apk
-    expire_in: 6h
-
-android / build-asan:
-  variables:
-    TARGET_PLATFORM: 'android'
-    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
-  stage: build
-  tags:
-    - docker
-  needs:
-    - job: 'android / prepare-builder-image'
       optional: true
-    - job: 'linux / build-asan'
-  image: $BUILDER_IMAGE
-  script:
-    - mkdir -p build.android-asan
-    - cd build.android-asan
-    - env WITH_ASAN=ON ../scripts/build-android.sh
-  artifacts:
-    paths:
-      - build.android-asan/build-android-*/ouinet/outputs/aar/*.aar
-      - build.android-asan/build-android-*/ouinet/outputs/apk/*.apk
-    expire_in: 6h
-  when: manual
-  allow_failure: true
-
-android / build-release:
-  variables:
-    TARGET_PLATFORM: 'android'
-    BUILDER_IMAGE: '$CI_REGISTRY_IMAGE:$TARGET_PLATFORM-builder'
-  stage: build
-  tags:
-    - docker
-  needs:
-    - job: 'android / prepare-builder-image'
-      optional: true
-  image: $BUILDER_IMAGE
-  script:
-    - mkdir -p build.android-release
-    - cd build.android-release
-    - ../scripts/build-android.sh -r
-  artifacts:
-    paths:
-      - build.android-release/build-android-*/ouinet/outputs/aar/*.aar
-      - build.android-release/build-android-*/ouinet/outputs/apk/*.apk
-    expire_in: 6h
-  when: manual
-  allow_failure: true
-
-# TODO: Remove this job when the builder image created by prepare-builder-image
-#       is stable enough to build a production Ouinet AAR.
-android / build-prod-image:
-  stage: release
-  tags:
-    - shell
-  needs:
-    - job: 'linux / build-prod-image'
-      optional: true
-    - job: 'android / build'
-  script:
-    - echo $CI_REGISTRY_PASSWORD | docker login --password-stdin -u $CI_REGISTRY_USER $CI_REGISTRY
-    - docker build -t $CI_REGISTRY_IMAGE:android - < Dockerfile.android
-    - docker push $CI_REGISTRY_IMAGE:android
-    - docker logout $CI_REGISTRY
+      artifacts: false
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      allow_failure: true
-
+     - !reference [.optional_job, rules]

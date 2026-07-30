@@ -18,23 +18,42 @@
 #include <fstream>
 
 #include "util/str.h"
+#include "api.h"
+
 #include <boost/optional/optional.hpp>
 #include <boost/utility/string_view.hpp>
 
+class Logger;
+
+OUINET_COMMON_API Logger& get_logger();
+
 // Logger macros which should be used for efficiency
 // (also see <https://pzemtsov.github.io/2014/05/05/do-macro.html> for statement protection)
-#define LOG_SILLY(...) do { if (logger.get_threshold() <= SILLY) logger.silly(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_DEBUG(...) do { if (logger.get_threshold() <= DEBUG) logger.debug(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_VERBOSE(...) do { if (logger.get_threshold() <= VERBOSE) logger.verbose(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_INFO(...) do { if (logger.get_threshold() <= INFO) logger.info(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_WARN(...) do { if (logger.get_threshold() <= WARN) logger.warn(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_ERROR(...) do { if (logger.get_threshold() <= ERROR_LEVEL) logger.error(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define LOG_ABORT(...) logger.abort(ouinet::util::str(__VA_ARGS__)) 
+#define OUI_LOG_SILLY(...) do { if (get_logger().get_threshold() <= SILLY) get_logger().silly(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define OUI_LOG_DEBUG(...) do { if (get_logger().get_threshold() <= DEBUG) get_logger().debug(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define OUI_LOG_VERBOSE(...) do { if (get_logger().get_threshold() <= VERBOSE) get_logger().verbose(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define OUI_LOG_INFO(...) do { if (get_logger().get_threshold() <= INFO) get_logger().info(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define OUI_LOG_WARN(...) do { if (get_logger().get_threshold() <= WARN) get_logger().warn(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define OUI_LOG_ERROR(...) do { if (get_logger().get_threshold() <= ERROR_LEVEL) get_logger().error(ouinet::util::str(__VA_ARGS__)); } while (false)
+#define OUI_LOG_ABORT(...) get_logger().abort(ouinet::util::str(__VA_ARGS__)) 
+
+#ifndef LOG_DEBUG
+    // Would be nice if we could just use these, but some dependencies (notably i2pd)
+    // leak inclusion of `sys/syslog.h` which define it to their own values and
+    // we get redefinition warnings.
+    #define LOG_SILLY OUI_LOG_SILLY
+    #define LOG_DEBUG OUI_LOG_DEBUG
+    #define LOG_VERBOSE OUI_LOG_VERBOSE
+    #define LOG_INFO OUI_LOG_INFO
+    #define LOG_WARN OUI_LOG_WARN
+    #define LOG_ERROR OUI_LOG_ERROR
+    #define LOG_ABORT OUI_LOG_ABORT
+#endif
 
 // Standard log levels, ascending order of specificity.
 enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR_LEVEL, ABORT };
 
-log_level_t default_log_level();
+OUINET_COMMON_API log_level_t default_log_level();
 
 inline std::ostream& operator<<(std::ostream& os, log_level_t ll) {
     switch (ll) {
@@ -61,7 +80,7 @@ inline boost::optional<log_level_t> log_level_from_string(const std::string& ll)
     return {};
 }
 
-class Logger
+class OUINET_COMMON_API Logger
 {
   protected:
     bool _stamp_with_time = false;
@@ -104,7 +123,5 @@ class Logger
 
     void assert_or_die(bool expr, std::string failure_message, std::string function_name = "");
 };
-
-extern Logger logger;
 
 #endif // SRC_LOGGER_H_

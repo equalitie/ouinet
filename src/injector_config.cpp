@@ -7,6 +7,7 @@
 #include "http_logger.h"
 #include "logger.h"
 #include "constants.h"
+#include "ssl/util.h"
 
 namespace ouinet {
 
@@ -29,8 +30,12 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("bt-bootstrap-extra", po::value<std::vector<string>>()->composing()
          , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
            "to start the DHT (can be used several times). "
-           "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
-           "This option is persistent.")
+           "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. ")
+        ("bt-bootstrap-no-default", po::bool_switch()->default_value(false)
+         , "Don't use default BitTorrent bootstrap servers."
+           "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used.")
+        ("bt-allow-martians", po::bool_switch()->default_value(false)
+         , "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful mostly for testing.")
         ("udp-mux-rx-limit"
          , po::value<uint32_t>()->default_value(500)
          , "Max rate limit that's allowed for incoming packets to the "
@@ -47,15 +52,11 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
         ("listen-on-utp", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (cleartext)")
         ("listen-on-utp-tls", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (encrypted)")
-#ifdef __EXPERIMENTAL__
-        ("listen-on-lampshade", po::value<string>(), "IP:PORT endpoint on which we'll listen using the lampshade pluggable transport")
-        ("listen-on-obfs2", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs2 pluggable transport")
-        ("listen-on-obfs3", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs3 pluggable transport")
-        ("listen-on-obfs4", po::value<string>(), "IP:PORT endpoint on which we'll listen using the obfs4 pluggable transport")
         ("listen-on-i2p",
          po::value<string>(),
          "Whether we should be listening on I2P (true/false)")
-#endif // ifdef __EXPERIMENTAL__
+        ("i2p-hops-per-tunnel", po::value<size_t>()
+         , "number intermediary hops to be used for I2P garlic routing.")
         // It always announces the TLS uTP endpoint since
         // a TLS certificate is always generated.
         ("credentials", po::value<string>()
@@ -70,10 +71,6 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
          , "Allows the injection of targets resolving to private addresses. "
            "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
-        ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
-         , "Disable DNS over HTTPS for domain name resolution. "
-           "When this option is present the injector will fallback to the default DNS mechanism "
-           "provided by the operating system. Deprecated, use --dns-protocol instead.")
         ("dns-protocol", po::value<std::vector<string>>()
                              ->composing()
                              ->default_value(dns_default_protocols,
@@ -82,7 +79,9 @@ boost::program_options::options_description InjectorConfig::options_description(
            "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
            "the nameservers. The option can be used multiple times to select more than one protocol.")
 
-        ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
+        ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir)
+         , "Path to the CA certificate store directory")
+        ("tls-ca-cert-store-file", po::value<std::vector<string>>(&_tls_ca_cert_store_files)
          , "Path to the CA certificate store file")
         // Cache options
         ("ed25519-private-key", po::value<string>()
@@ -164,7 +163,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         auto ll_o = log_level_from_string(level);
         if (!ll_o)
             throw std::runtime_error(util::str("Invalid log level: ", level));
-        logger.set_threshold(*ll_o);
+        get_logger().set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
     }
 
@@ -180,6 +179,14 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
                 throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
             _bt_bootstrap_extras.insert(*btbs_addr);
         }
+    }
+
+    if (vm["bt-bootstrap-no-default"].as<bool>()) {
+        _bt_bootstrap_no_default = true;
+    }
+
+    if (vm["bt-allow-martians"].as<bool>()) {
+        _bt_allow_martians = true;
     }
 
     if (vm.count("udp-mux-rx-limit")) {
@@ -210,22 +217,7 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _allow_private_targets = true;
     }
 
-    // Pre-load opt_protos to keep compatibility with disable-doh
     auto opt_protos = vm["dns-protocol"].as<std::vector<string>>();
-
-    // If disable-doh is present 'https' is removed from protocols selected by 'dns-protocols`
-    // the mechanism makes sure that at least one protocol is selected otherwise adds
-    // 'plain' to 'dns-protocols' list.
-    // This code will be deleted too when the deprecated option `disable-doh` is removed.
-    if (vm["disable-doh"].as<bool>()) {
-        LOG_WARN("Option '--disable-doh' is deprecated, use '--dns-protocol' instead");
-        auto doh = std::find( opt_protos.begin(), opt_protos.end(), "https");
-        if (doh != opt_protos.end())
-            opt_protos.erase(doh);
-        if (opt_protos.empty())
-            opt_protos.emplace_back("plain");
-        _disable_doh = true;
-    }
 
     for (const auto& proto_name : opt_protos) {
         dns::bridge::Protocol proto;
@@ -244,7 +236,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
              , "]");
 
 
-#ifdef __EXPERIMENTAL__
     // Unfortunately, Boost.ProgramOptions doesn't support arguments without
     // values in config files. Thus we need to force the 'listen-on-i2p' arg
     // to have one of the strings values "true" or "false".
@@ -258,7 +249,27 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
 
         _listen_on_i2p = (value == "true");
     }
-#endif // ifdef __EXPERIMENTAL__
+
+    if (vm.count("i2p-hops-per-tunnel")) {
+        auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
+
+        if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
+            throw std::runtime_error(util::str(
+                "The '--i2p-hops-per-tunnel' argument expects an integer "
+                "between 1 and 8"
+                ));
+        }
+
+        if (!(//If we are not listening on i2p
+              (_listen_on_i2p)))
+          {
+            throw std::runtime_error(
+                "The '--i2p-hops-per-tunnel' argument must be used with "
+                "'--listen-on-i2p option");
+          }
+
+        _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
+    }
 
     if (vm.count("listen-on-tcp")) {
         auto opt_tcp_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
@@ -290,24 +301,6 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         _utp_tls_endpoint = ep;
     }
 
-#ifdef __EXPERIMENTAL__
-    if (vm.count("listen-on-lampshade")) {
-        _lampshade_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-lampshade"].as<string>());
-    }
-
-    if (vm.count("listen-on-obfs2")) {
-        _obfs2_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs2"].as<string>());
-    }
-
-    if (vm.count("listen-on-obfs3")) {
-        _obfs3_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs3"].as<string>());
-    }
-
-    if (vm.count("listen-on-obfs4")) {
-        _obfs4_endpoint = *parse::endpoint<asio::ip::tcp>(vm["listen-on-obfs4"].as<string>());
-    }
-#endif // ifdef __EXPERIMENTAL__
-
     // Please note that generating keys takes a long time
     // and it may cause time outs in CI tests.
     setup_ed25519_private_key( vm.count("ed25519-private-key")
@@ -318,6 +311,16 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     _bep5_injector_swarm_name
         = bep5::compute_injector_swarm_name( _ed25519_private_key.public_key()
                                            , http_::protocol_version_current);
+
+    {
+        _origin_ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+        ssl::util::load_tls_ca_certificates(_origin_ssl_ctx, _tls_ca_cert_store_dir);
+        for (auto& verify_file : _tls_ca_cert_store_files) {
+            sys::error_code ec;
+            _origin_ssl_ctx.load_verify_file(verify_file, ec);
+            if (ec) throw error("Failed to load origin CA certificate from \"", verify_file, "\"");
+        }
+    }
 }
 
 void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
@@ -332,14 +335,14 @@ void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
             return;
         }
 
-        _ed25519_private_key = util::Ed25519PrivateKey::generate();
+        _ed25519_private_key = sign::SecretKey::generate();
 
         boost::nowide::ofstream(priv_config) << _ed25519_private_key;
         boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
         return;
     }
 
-    _ed25519_private_key = *util::Ed25519PrivateKey::from_hex(hex);
+    _ed25519_private_key = *sign::SecretKey::from_hex(hex);
     boost::nowide::ofstream(priv_config) << _ed25519_private_key;
     boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
 }

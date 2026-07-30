@@ -88,7 +88,7 @@ String injectorCredentials
 String injectorTlsCert
 String injectorTlsCertPath
 String caRootCertPath
-String tlsCaCertStorePath
+String tlsCaCertStoreDir
 ```
 
 * BEP5 Cache:

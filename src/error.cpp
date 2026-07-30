@@ -1,5 +1,6 @@
 #include "error.h"
 #include "namespaces.h"
+#include "api.h"
 
 namespace ouinet {
 
@@ -19,6 +20,8 @@ public:
         {
             case OuinetError::success: return "no error";
             case OuinetError::openssl_failed_to_generate_random_data: return "OpenSSL failed to produce random data";
+            case OuinetError::i2p: return "I2P error";
+            case OuinetError::broken_promise: return "broken promise";
         }
 
         std::snprintf(buffer, len, "Unknown error %d", ev );
@@ -26,6 +29,7 @@ public:
     }
 };
 
+OUINET_COMMON_API
 sys::error_category const& ouinet_error_category() {
     static const OuinetErrorCategory instance;
     return instance;

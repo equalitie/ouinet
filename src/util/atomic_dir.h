@@ -5,12 +5,12 @@
 #include <boost/system/error_code.hpp>
 
 #include "../namespaces.h"
-#include "../declspec.h"
+#include "../api.h"
 #include "temp_dir.h"
 
 namespace ouinet::util {
 
-class OUINET_DECL atomic_dir {
+class OUINET_CLIENT_API atomic_dir {
 public:
     // Create a directory to atomically replace `path` once it is committed.
     // Storage is backed by a temporary directory in the parent directory of `path`

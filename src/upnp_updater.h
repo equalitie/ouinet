@@ -8,11 +8,11 @@
 
 #include <upnp.h>
 #include <util/random.h>
-#include <util/signal.h>
+#include <util/cancel.h>
 #include <util/str.h>
 #include <async_sleep.h>
 #include <defer.h>
-#include "util/handler_tracker.h"
+#include "task.h"
 
 namespace ouinet {
 
@@ -30,7 +30,7 @@ public:
         , _internal_port(internal_port)
         , _random_id(util::random::number<uint16_t>())
     {
-        TRACK_SPAWN(exec, ([
+        task::spawn_detached(exec, [
             this,
             exec,
             c = _lifetime_cancel
@@ -43,9 +43,9 @@ public:
                         LOG_WARN("UPnP Loop has thrown an exception, will restart in 5s");
                     }
                 }
-                async_sleep(exec, std::chrono::seconds(5), c, yield);
+                async_sleep(std::chrono::seconds(5), c, yield);
             }
-        }));
+        });
     }
 
     ~UPnPUpdater() {
@@ -96,7 +96,7 @@ private:
                 LOG_DEBUG("UPnP: Failed to get local IPv4 address, waiting ", get_local_ipv4_attempts);
                 if ( ++get_local_ipv4_attempts >= 5) {
                     mapping_disabled();
-                    async_sleep(exec, failure_wait_time, cancel, yield);
+                    async_sleep(failure_wait_time, cancel, yield);
                 }
                 if (cancel) return;
                 continue;  // probably no connection
@@ -110,13 +110,13 @@ private:
                 _is_available = false;
                 mapping_disabled();
                 LOG_DEBUG("UPnP: No IGDs found, waiting");
-                async_sleep(exec, failure_wait_time, cancel, yield);
+                async_sleep(failure_wait_time, cancel, yield);
                 if (cancel) return;
                 continue;
             }
             _is_available = true;
 
-            auto igds = move(r_igds.value());
+            auto igds = std::move(r_igds.value());
 
             LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\"...");
             size_t success_cnt = 0;
@@ -187,7 +187,7 @@ private:
 
                 mapping_enabled();
             }
-            _external_endpoints = move(ext_eps);
+            _external_endpoints = std::move(ext_eps);
             LOG_DEBUG("UPnP: Setting mappings for \"", mapping_desc, "\": done");
 
             if (success_cnt == 0 && !earlier_buggy_timeout) mapping_disabled();
@@ -211,7 +211,7 @@ private:
                 return duration_cast<seconds>(success_wait_time - round_elapsed);
             }();
 
-            async_sleep(exec, wait_time, cancel, yield);
+            async_sleep(wait_time, cancel, yield);
             if (cancel) return;
         }
     }

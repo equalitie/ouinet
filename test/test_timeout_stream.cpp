@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE timeout_stream
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
@@ -18,11 +18,10 @@ using tcp = asio::ip::tcp;
 using namespace std::chrono_literals;
 using Clock = std::chrono::steady_clock;
 
-void async_sleep( asio::io_context& ioc
-                , asio::steady_timer::duration duration
+void async_sleep( asio::steady_timer::duration duration
                 , asio::yield_context yield)
 {
-    asio::steady_timer timer(ioc);
+    asio::steady_timer timer(yield.get_executor());
     timer.expires_after(duration);
     sys::error_code ec;
     timer.async_wait(yield[ec]);
@@ -47,17 +46,18 @@ unsigned ms(Clock::duration d) {
 
 BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
     asio::io_context ioc;
+    auto exec = ioc.get_executor();
 
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor acceptor(ioc, loopback_ep);
+    tcp::acceptor acceptor(exec, loopback_ep);
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         acceptor.async_accept(s, yield);
 
         auto timeout_duration = 500ms;
 
-        TimeoutStream<tcp::socket> t(move(s));
+        TimeoutStream<tcp::socket> t(std::move(s));
         t.set_read_timeout(timeout_duration);
 
         std::string rx_buf(1, '\0');
@@ -70,10 +70,10 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
         BOOST_REQUIRE_EQUAL(ec, asio::error::timed_out);
     });
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         s.async_connect(acceptor.local_endpoint(), yield);
-        async_sleep(ioc, 1s, yield);
+        async_sleep(1s, yield);
     });
 
     ioc.run();
@@ -81,17 +81,18 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_1) {
 
 BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
     asio::io_context ioc;
+    auto exec = ioc.get_executor();
 
     auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor acceptor(ioc, loopback_ep);
+    tcp::acceptor acceptor(exec, loopback_ep);
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         acceptor.async_accept(s, yield);
 
         auto timeout_duration = 500ms;
 
-        TimeoutStream<tcp::socket> t(move(s));
+        TimeoutStream<tcp::socket> t(std::move(s));
         t.set_read_timeout(timeout_duration);
 
         std::string rx_buf(1, '\0');
@@ -113,17 +114,17 @@ BOOST_AUTO_TEST_CASE(test_read_timeout_2) {
         }
     });
 
-    task::spawn_detached(ioc, [&](auto yield) {
-        tcp::socket s(ioc);
+    task::spawn_detached(exec, [&](auto yield) {
+        tcp::socket s(exec);
         s.async_connect(acceptor.local_endpoint(), yield);
 
-        async_sleep(ioc, 250ms, yield);
+        async_sleep(250ms, yield);
 
         sys::error_code ec;
         string tx_buf("a");
         asio::async_write(s, asio::buffer(tx_buf), yield[ec]);
 
-        async_sleep(ioc, 1s, yield);
+        async_sleep(1s, yield);
     });
 
     ioc.run();

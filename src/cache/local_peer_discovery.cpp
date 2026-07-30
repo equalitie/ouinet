@@ -2,7 +2,7 @@
 #include <boost/asio/ip/multicast.hpp>
 #include "local_peer_discovery.h"
 #include <util/random.h>
-#include <util/handler_tracker.h>
+#include <task.h>
 #include <parse/number.h>
 #include <parse/endpoint.h>
 #include <logger.h>
@@ -80,7 +80,7 @@ struct LocalPeerDiscovery::Impl {
         : _ex(ex)
         , _socket(ex)
         , _id(id)
-        , _advertised_eps(move(advertised_eps))
+        , _advertised_eps(std::move(advertised_eps))
     {
         sys::error_code ec;
 
@@ -110,7 +110,7 @@ struct LocalPeerDiscovery::Impl {
     }
 
     void broadcast_search_query(Cancel& cancel) {
-        TRACK_SPAWN(_ex, ([&, cancel = cancel] (asio::yield_context yield) {
+        task::spawn_detached(_ex, [&, cancel = cancel] (asio::yield_context yield) {
             sys::error_code ec;
             udp::endpoint ep = multicast_ep;
             _socket.async_send_to( asio::buffer(query_message())
@@ -120,15 +120,15 @@ struct LocalPeerDiscovery::Impl {
                 LOG_ERROR("LocalPeerDiscovery: Failed to broadcast search query;"
                           " ec=", ec, " ep=", ep);
             }
-        }));
+        });
     }
 
     void start_listening_to_broadcast(Cancel& cancel) {
-        TRACK_SPAWN(_ex, ([&, cancel = cancel] (asio::yield_context yield) mutable {
+        task::spawn_detached(_ex, [&, cancel = cancel] (asio::yield_context yield) mutable {
             sys::error_code ec;
             if (cancel) return;
             listen_to_broadcast(cancel, yield[ec]);
-        }));
+        });
     }
 
     void listen_to_broadcast(Cancel& cancel, asio::yield_context yield) {
@@ -148,7 +148,7 @@ struct LocalPeerDiscovery::Impl {
             if (ec) {
                 LOG_ERROR("LocalPeerDiscovery: failed to receive;"
                           " ec=", ec);
-                async_sleep(_ex, chrono::seconds(1), cancel, yield);
+                async_sleep(chrono::seconds(1), cancel, yield);
                 if (cancel) break;
                 continue;
             }
@@ -212,7 +212,7 @@ struct LocalPeerDiscovery::Impl {
     {
         auto opt_eps = consume_endpoints(sv, peer_ep.address());
         if (!opt_eps) return;
-        add_endpoints(peer_id, peer_ep, move(*opt_eps));
+        add_endpoints(peer_id, peer_ep, std::move(*opt_eps));
         sys::error_code ec;
         _socket.async_send_to( asio::buffer(reply_message())
                              , peer_ep
@@ -225,7 +225,7 @@ struct LocalPeerDiscovery::Impl {
     {
         auto opt_eps = consume_endpoints(sv, peer_ep.address());
         if (!opt_eps) return;
-        add_endpoints(peer_id, peer_ep, move(*opt_eps));
+        add_endpoints(peer_id, peer_ep, std::move(*opt_eps));
     }
 
     void handle_bye(boost::string_view sv, PeerId peer_id)
@@ -234,7 +234,7 @@ struct LocalPeerDiscovery::Impl {
 
         if (i == _peers.end()) return;
 
-        if (logger.would_log(INFO)) {
+        if (get_logger().would_log(INFO)) {
             ostringstream ss;
             for (auto ep : i->second.advertised_eps) { ss << ep << ";"; }
             LOG_INFO("LocalPeerDiscovery: Lost local ouinet peer(s) ", ss.str());
@@ -245,12 +245,12 @@ struct LocalPeerDiscovery::Impl {
 
     void add_endpoints(PeerId peer_id, udp::endpoint peer_ep, set<udp::endpoint> eps)
     {
-        if (logger.would_log(INFO)) {
+        if (get_logger().would_log(INFO)) {
             ostringstream ss;
             for (auto ep : eps) { ss << ep << ";"; }
             LOG_INFO("LocalPeerDiscovery: Found local ouinet peer(s) ", ss.str());
         }
-        _peers[peer_id] = {peer_ep, move(eps)};
+        _peers[peer_id] = {peer_ep, std::move(eps)};
     }
 };
 

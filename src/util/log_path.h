@@ -3,11 +3,12 @@
 #include <memory>
 #include <string>
 #include <ostream>
+#include "api.h"
 
 namespace ouinet::util {
 
 // To help keep track about which coroutine we're logging from.
-class LogPath {
+class OUINET_COMMON_API LogPath {
 private:
     struct Node;
 

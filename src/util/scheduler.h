@@ -3,7 +3,7 @@
 #include <boost/intrusive/list.hpp>
 #include "condition_variable.h"
 #include "../or_throw.h"
-#include "signal.h"
+#include "cancel.h"
 
 namespace ouinet {
 
@@ -90,6 +90,10 @@ public:
 
     Slot wait_for_slot(asio::yield_context yield);
     Slot wait_for_slot(Cancel&, asio::yield_context yield);
+
+    [[nodiscard]]
+    std::expected<Slot, sys::error_code> wait_for_slot(Async yield);
+
     Slot get_slot() {
         Slot slot(this);
         _slots.push_back(slot);
@@ -130,6 +134,16 @@ Scheduler::Slot Scheduler::wait_for_slot(asio::yield_context yield)
 {
     Cancel unused_cancel;
     return wait_for_slot(unused_cancel, yield);
+}
+
+inline
+std::expected<Scheduler::Slot, sys::error_code> Scheduler::wait_for_slot(Async yield) {
+    sys::error_code ec;
+    Cancel cancel = yield.get_cancel();
+    auto slot = wait_for_slot(cancel, yield.asio_yield()[ec]);
+    if (yield.is_cancelled()) throw Async::Cancelled();
+    if (ec) return std::unexpected(ec);
+    return slot;
 }
 
 inline

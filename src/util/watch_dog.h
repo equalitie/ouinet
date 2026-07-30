@@ -2,12 +2,13 @@
 
 #include <boost/asio/coroutine.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/optional.hpp>
 #include <boost/asio/spawn.hpp>
 #include "../defer.h"
 #include "../or_throw.h"
 #include "../util/executor.h"
-#include "../util/signal.h"
-#include "../util/handler_tracker.h"
+#include "../util/cancel.h"
+#include "../task.h"
 #include "../namespaces.h"
 
 namespace ouinet {
@@ -241,7 +242,6 @@ public:
 
         task::spawn_detached(ex, [self_ = this, ex, d, on_timeout = std::move(on_timeout)]
                          (asio::yield_context yield) mutable {
-            TRACK_HANDLER();
             State state(self_, Clock::now() + d, ex);
             self_->state = &state;
 

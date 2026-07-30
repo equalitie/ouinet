@@ -1,5 +1,5 @@
-#include <task.h>
 #include <namespaces.h>
+#include <boost/asio/spawn.hpp>
 #include <boost/asio/buffer.hpp>
 #include "record_processor.h"
 
@@ -10,7 +10,7 @@ void CxxRecordProcessor::execute( rust::String report_name
                                 , rust::Vec<rust::u8> report_content
                                 , rust::Box<bridge::CxxOneShotSender> on_finish) const
 {
-    task::spawn_detached(executor
+    asio::spawn(executor
             , [ async_callback = async_callback
               , report_name = std::move(report_name)
               , report_content = std::move(report_content)
@@ -29,6 +29,9 @@ void CxxRecordProcessor::execute( rust::String report_name
         }
 
         on_finish->send(true);
+    },
+    [] (std::exception_ptr e) {
+        if (e) std::rethrow_exception(e);
     });
 }
 

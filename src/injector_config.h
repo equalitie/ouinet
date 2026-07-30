@@ -6,16 +6,20 @@
 #include <boost/program_options.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl/context.hpp>
 #include <boost/regex.hpp>
 #include <boost/filesystem/path.hpp>
-#include "declspec.h"
+#include "api.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
-#include "util/crypto.h"
+#include "util/sign.h"
+#include "util/str.h"
 
 #include "cxx/dns.h"
 
 namespace ouinet {
+//TODO: move this to somewhere where both client and injector config has access to
+#define _MAX_I2P_HOPS 8
 
 template<class... Args>
 inline
@@ -26,15 +30,16 @@ std::runtime_error error(Args&&... args) {
 #define _HTTP_LOG_FILE_NAME "access.log"
 static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
 
-class OUINET_DECL InjectorConfig {
+class OUINET_INJECTOR_API InjectorConfig {
 public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 
     InjectorConfig() = default;
-    InjectorConfig(const InjectorConfig&) = default;
     InjectorConfig(InjectorConfig&&) = default;
-    InjectorConfig& operator=(const InjectorConfig&) = default;
     InjectorConfig& operator=(InjectorConfig&&) = default;
+
+    InjectorConfig(const InjectorConfig&) = delete;
+    InjectorConfig& operator=(const InjectorConfig&) = delete;
 
     // May thow on error.
     InjectorConfig(int argc, const char** argv);
@@ -46,6 +51,14 @@ public:
 
     const ExtraBtBsServers& bt_bootstrap_extras() const {
         return _bt_bootstrap_extras;
+    }
+
+    bool bt_bootstrap_no_default() const {
+        return _bt_bootstrap_no_default;
+    }
+
+    bool bt_allow_martians() const {
+        return _bt_allow_martians;
     }
 
     uint32_t udp_mux_rx_limit_in_bytes() const {
@@ -60,10 +73,12 @@ public:
     boost::filesystem::path repo_root() const
     { return _repo_root; }
 
-#ifdef __EXPERIMENTAL__
     bool listen_on_i2p() const
     { return _listen_on_i2p; }
-#endif // ifdef __EXPERIMENTAL__
+
+    size_t i2p_hops_per_tunnel() const {
+      return _i2p_hops_per_tunnel;
+    }
 
     std::string bep5_injector_swarm_name() const
     {
@@ -89,20 +104,6 @@ public:
     boost::optional<asio::ip::udp::endpoint> utp_tls_endpoint() const
     { return _utp_tls_endpoint; }
 
-#ifdef __EXPERIMENTAL__
-    boost::optional<asio::ip::tcp::endpoint> lampshade_endpoint() const
-    { return _lampshade_endpoint; }
-
-    boost::optional<asio::ip::tcp::endpoint> obfs2_endpoint() const
-    { return _obfs2_endpoint; }
-
-    boost::optional<asio::ip::tcp::endpoint> obfs3_endpoint() const
-    { return _obfs3_endpoint; }
-
-    boost::optional<asio::ip::tcp::endpoint> obfs4_endpoint() const
-    { return _obfs4_endpoint; }
-#endif // ifdef __EXPERIMENTAL__
-
     std::string credentials() const
     { return _credentials; }
 
@@ -115,17 +116,15 @@ public:
     bool is_private_target_allowed() const
     { return _allow_private_targets; }
 
-    bool is_doh_enabled() const
-    { return !_disable_doh; }
-
     dns::Config dns_config() const
     { return _dns_config; }
 
-    const std::string& tls_ca_cert_store_path() const
-    { return _tls_ca_cert_store_path; }
-
-    util::Ed25519PrivateKey cache_private_key() const
+    sign::SecretKey cache_private_key() const
     { return _ed25519_private_key; }
+
+    asio::ssl::context& origin_ssl_ctx() {
+        return _origin_ssl_ctx;
+    }
 
 private:
     void setup_ed25519_private_key(const std::string& hex);
@@ -138,31 +137,28 @@ private:
     bool _is_help = false;
     boost::filesystem::path _repo_root;
     ExtraBtBsServers _bt_bootstrap_extras;
+    bool _bt_bootstrap_no_default = false;
+    bool _bt_allow_martians = false;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_injector;
     boost::optional<size_t> _open_file_limit;
-#ifdef __EXPERIMENTAL__
     bool _listen_on_i2p = false;
-#endif // ifdef __EXPERIMENTAL__
-    std::string _tls_ca_cert_store_path;
+    size_t _i2p_hops_per_tunnel = 3;
+
+    std::string _tls_ca_cert_store_dir;
+    std::vector<std::string> _tls_ca_cert_store_files;
+    asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+
     boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
     boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
     boost::optional<asio::ip::udp::endpoint> _utp_tls_endpoint;
-#ifdef __EXPERIMENTAL__
-    boost::optional<asio::ip::tcp::endpoint> _lampshade_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _obfs2_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _obfs3_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _obfs4_endpoint;
-#endif // ifdef __EXPERIMENTAL__
     std::string _bep5_injector_swarm_name;
     boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
     std::string _credentials;
     bool _disable_proxy = false;
     boost::optional<boost::regex> _target_rx;
     bool _allow_private_targets = false;
-    [[deprecated("Use _dns_config instead.")]]
-    bool _disable_doh = false;
-    util::Ed25519PrivateKey _ed25519_private_key;
+    sign::SecretKey _ed25519_private_key;
 
     dns::Config _dns_config;
 };

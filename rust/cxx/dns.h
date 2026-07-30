@@ -1,17 +1,19 @@
 #pragma once
 
 #include <functional>
+#include <expected>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/system.hpp>
 
-#include "util/signal.h"
-#include "util/yield.h"
-
 // Forward declarations for dns.rs.h
 namespace ouinet::dns::bridge {
     class BasicCompleter;
+}
+
+namespace ouinet {
+    class Async;
 }
 
 #include "ouinet-rs/src/dns.rs.h"
@@ -42,13 +44,13 @@ public:
     static std::string protos_to_str(rust::Vec<bridge::Protocol> protos);
 
     /// Resolve the given DNS name.
-    Output resolve(const std::string& name, boost::asio::yield_context);
+    [[nodiscard]]
+    std::expected<Output, boost::system::error_code> resolve(const std::string& name, Async);
 
     /// Resolve and return a TCP endpoint
-    TcpLookup resolve( const std::string& host
-                     , uint16_t port
-                     , const Cancel& cancel
-                     , YieldContext yield);
+    [[nodiscard]]
+    std::expected<TcpLookup, boost::system::error_code>
+    resolve(const std::string& host, uint16_t port, Async);
 
 
     /// Close this DNS resolver, cancelling any ongoing lookups. Any subsequent lookups return with

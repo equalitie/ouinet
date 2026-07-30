@@ -2,17 +2,19 @@
 #include "generic_stream.h"
 #include "util.h"
 #include "util/bytes.h"
+#include "util/debug.h"
 #include "defer.h"
 #include "client_config.h"
 #include "version.h"
 #include "upnp_updater.h"
 #include "split_string.h"
-#include "or_throw.h"
+#include "util/async.h"
 
 #include "bittorrent/dht.h"
 #include "cache/client.h"
 #include "ouiservice/bep5/client.h"
 
+#include <boost/beast/version.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/address.hpp>
@@ -87,10 +89,10 @@ struct ClientFrontEnd::Input {
 
     Input( string html_label, char shortcut, string name
          , vector<E> values, E current_value)
-        : html_label(move(html_label))
+        : html_label(std::move(html_label))
         , shortcut(shortcut)
-        , name(move(name))
-        , values(move(values))
+        , name(std::move(name))
+        , values(std::move(values))
         , current_value(current_value)
     {}
 
@@ -221,7 +223,7 @@ void ClientFrontEnd::disable_log_to_file(ClientConfig& config) {
 
 static void load_log_file(ClientConfig& config, ostringstream& out_ss) {
     if (!config.is_log_file_enabled()) return;
-    std::fstream* logfile = logger.get_log_file();
+    std::fstream* logfile = get_logger().get_log_file();
     assert(logfile && "No log file in spite of configuration saying so");
     logfile->flush();
     logfile->seekg(0);
@@ -449,16 +451,16 @@ std::optional<bool> parse_enable(std::string& str) {
     }
 }
 
-void ClientFrontEnd::handle_portal( ClientConfig& config
-                                  , Client::RunningState cstate
-                                  , boost::optional<UdpEndpoint> local_ep
-                                  , const std::shared_ptr<UPnPs>& upnps_ptr
-                                  , const bittorrent::DhtBase* dht
-                                  , const Request& req, Response& res, ostringstream& ss
-                                  , cache::Client* cache_client
-                                  , ClientFrontEndMetricsController& metrics
-                                  , Cancel cancel
-                                  , YieldContext yield)
+std::expected<void, sys::error_code>
+ClientFrontEnd::handle_portal( ClientConfig& config
+                             , Client::RunningState cstate
+                             , boost::optional<UdpEndpoint> local_ep
+                             , const std::shared_ptr<UPnPs>& upnps_ptr
+                             , const bittorrent::DhtBase* dht
+                             , const Request& req, Response& res, ostringstream& ss
+                             , cache::Client* cache_client
+                             , ClientFrontEndMetricsController& metrics
+                             , Async yield)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -478,7 +480,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         { "origin_access",     [&](bool enable) { config.is_origin_access_enabled(enable);                           } },
         { "proxy_access",      [&](bool enable) { config.is_proxy_access_enabled(enable);                            } },
         { "injector_access",   [&](bool enable) { config.is_injector_access_enabled(enable);                         } },
-        { "distributed_cache", [&](bool enable) { config.is_cache_access_enabled(enable);                            } },
+        { "distributed_cache", [&](bool enable) { config.is_cache_enabled(CacheType::Bep5Http{});                    } },
         { "auto_refresh",      [&](bool enable) { _auto_refresh_enabled = enable;                                    } },
         { "logfile",           [&](bool enable) { enable ? enable_log_to_file(config) : disable_log_to_file(config); } },
         { "metrics",           [&](bool enable) { enable ? metrics.enable() : metrics.disable();                     } },
@@ -490,7 +492,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
             if (!enable.has_value()) {
                 res.result(http::status::bad_request);
                 ss << it->first << " accepts {enable,disable}, given \"" << it->second << "\"";
-                return;
+                return {};
             }
             handler(*enable);
             query_handled = true;
@@ -498,11 +500,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     }
 
     if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
-        sys::error_code ec;
-        auto yield_ = yield.native();
-        cache_client->local_purge(cancel, yield_[ec]);
-        if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec = asio::error::operation_aborted) return or_throw(yield_, ec);
+        std::ignore = cache_client->local_purge(yield);
         query_handled = true;
     }
 
@@ -519,7 +517,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
                "    </head>\n"
                "</html>\n";
-        return;
+        return {};
     }
 
     ss << "<!DOCTYPE html>\n"
@@ -551,14 +549,14 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
     ss << ToggleInput{"<u>O</u>rigin access",'o',      "origin_access", config.is_origin_access_enabled()};
     ss << ToggleInput{"<u>P</u>roxy access", 'p',      "proxy_access", config.is_proxy_access_enabled()};
     ss << ToggleInput{"<u>I</u>njector proxy", 'i',    "injector_access", config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_access_enabled()};
+    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{})};
 
     ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
     bool log_file_enabled = config.is_log_file_enabled();
     ss << ToggleInput{"<u>L</u>og file", 'l', "logfile", log_file_enabled};
     if (log_file_enabled)
-        ss << "Logging debug output to file: " << as_safe_html(logger.current_log_file())
+        ss << "Logging debug output to file: " << as_safe_html(get_logger().current_log_file())
            << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
            << "Download log file" << "</a><br>\n";
 
@@ -609,17 +607,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "disabled.<br>\n";
     ss << "<br>\n";
 
-    ss << "Injector endpoint: " << config.injector_endpoint() << "<br>\n";
+    ss << "Injector endpoint: " << debug(config.injector_endpoint<CacheType::Bep5Http>()) << "<br>\n";
     ss << "<br>\n";
 
     ss << "DNS protocols enabled: "
        << dns::Resolver::protos_to_str(config.dns_config().protocols)
-       << ".<br><br>\n";
-
-    ss << "DNS over HTTPS: "
-       << ( config.is_doh_enabled()
-          ? "enabled"
-          : "disabled" )
        << ".<br><br>\n";
 
     {
@@ -650,7 +642,7 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "<h2>Distributed cache</h2>\n";
         auto inj_pubkey = config.cache_http_pub_key();
         if (inj_pubkey) {
-            auto inj_pubkey_s = inj_pubkey->serialize();
+            auto inj_pubkey_s = inj_pubkey->to_bytes();
             ss << "Injector pubkey (hex): " << util::bytes::to_hex(inj_pubkey_s) << "<br>\n";
             ss << "Injector pubkey (Base32): " << util::base32up_encode(inj_pubkey_s) << "<br>\n";
             ss << "<br>\n";
@@ -665,15 +657,11 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
                               " (i.e. not older than %s).<br>\n")
               % max_age.total_seconds() % past_as_string(max_age));
 
-        sys::error_code ec;
-        auto yield_ = yield.native();
-        auto local_size = cache_client->local_size(cancel, yield_[ec]);
-        if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
+        auto local_size = cache_client->local_size(yield);
 
         ss << "Approximate size of content cached locally: ";
-        if (ec) ss << "(unknown)";
-        else ss << (boost::format("%.02f MiB") % (local_size / 1048576.));
+        if (!local_size) ss << "(unknown)";
+        else ss << (boost::format("%.02f MiB") % (*local_size / 1048576.));
         ss << "<br>\n";
 
         ss << "<form method=\"get\">\n"
@@ -719,26 +707,29 @@ void ClientFrontEnd::handle_portal( ClientConfig& config
 
     ss << "    </body>\n"
           "</html>\n";
+
+    return {};
 }
 
-size_t ClientFrontEnd::injector_candidates_n(std::shared_ptr<ouiservice::Bep5Client> client) const noexcept{
+inline
+size_t injector_candidates_n(ouiservice::Bep5Client* client) noexcept {
     if (!client) {
         return 0;
     }
-    return client -> injector_candidates_n();
+    return client->injector_candidates_n();
 }
 
-void ClientFrontEnd::handle_api_status( ClientConfig& config
-                                      , Client::RunningState cstate
-                                      , boost::optional<UdpEndpoint> local_ep
-                                      , const std::shared_ptr<UPnPs>& upnps_ptr
-                                      , const bittorrent::DhtBase* dht
-                                      , const Request& req, Response& res, ostringstream& ss
-                                      , cache::Client* cache_client
-                                      , std::shared_ptr<ouiservice::Bep5Client> client
-                                      , ClientFrontEndMetricsController& metrics
-                                      , Cancel cancel
-                                      , YieldContext yield)
+std::expected<void, sys::error_code>
+ClientFrontEnd::handle_api_status( ClientConfig& config
+                                 , Client::RunningState cstate
+                                 , boost::optional<UdpEndpoint> local_ep
+                                 , const std::shared_ptr<UPnPs>& upnps_ptr
+                                 , const bittorrent::DhtBase* dht
+                                 , const Request& req, Response& res, ostringstream& ss
+                                 , cache::Client* cache_client
+                                 , ouiservice::Bep5Client* client
+                                 , ClientFrontEndMetricsController& metrics
+                                 , Async yield)
 {
     res.set(http::field::content_type, "application/json");
 
@@ -749,7 +740,7 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"injector_access", config.is_injector_access_enabled()},
         {"injector_peers_n", injector_candidates_n(client)},
         {"injector_ready", injector_candidates_n(client) > 1},
-        {"distributed_cache", config.is_cache_access_enabled()},
+        {"distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{})},
         {"max_cached_age", config.max_cached_age().total_seconds()},
         {"ouinet_version", Version::VERSION_NAME},
         {"ouinet_build_id", Version::BUILD_ID},
@@ -758,7 +749,6 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
-        {"doh_enabled", config.is_doh_enabled()},
         {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
     };
@@ -787,19 +777,17 @@ void ClientFrontEnd::handle_api_status( ClientConfig& config
     }
 
     if (cache_client) {
-        sys::error_code ec;
-        auto yield_ = yield.native();
-        auto sz = cache_client->local_size(cancel, yield_[ec]);
-        if (!ec && cancel) ec = asio::error::operation_aborted;
-        if (ec == asio::error::operation_aborted) return or_throw(yield_, ec);
-        if (ec) {
-            LOG_ERROR("Front-end: Failed to get local cache size; ec=", ec);
+        auto sz = cache_client->local_size(yield);
+        if (!sz) {
+            LOG_ERROR("Front-end: Failed to get local cache size; ec=", sz.error());
         } else {
-            response["local_cache_size"] = sz;
+            response["local_cache_size"] = *sz;
         }
     }
 
     ss << response;
+
+    return {};
 }
 
 void ClientFrontEnd::handle_api_groups(std::string_view sub_path
@@ -885,9 +873,7 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
 
 void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
                                        , const Request& req, Response& res, ostringstream& ss
-                                       , ClientFrontEndMetricsController& metrics
-                                       , Cancel cancel
-                                       , YieldContext yield)
+                                       , ClientFrontEndMetricsController& metrics)
 {
     res.set(http::field::content_type, "text/html");
 
@@ -946,21 +932,21 @@ void ClientFrontEnd::handle_api_endpoints(const std::string_view proxy_endpoint
     ss << response;
 }
 
-Response ClientFrontEnd::serve( ClientConfig& config
-                              , const Request& req
-                              , Client::RunningState client_state
-                              , cache::Client* cache_client
-                              , std::shared_ptr<ouiservice::Bep5Client> client
-                              , const CACertificate& ca
-                              , boost::optional<UdpEndpoint> local_ep
-                              , const std::shared_ptr<UPnPs>& upnps_ptr
-                              , const bittorrent::DhtBase* dht
-                              , ClientFrontEndMetricsController& metrics
-                              , const std::string_view proxy_endpoint
-                              , const std::string_view frontend_endpoint
-                              , const std::string_view frontend_unix_socket_endpoint
-                              , Cancel cancel
-                              , YieldContext yield)
+std::expected<Response, sys::error_code>
+ClientFrontEnd::serve( ClientConfig& config
+                     , const Request& req
+                     , Client::RunningState client_state
+                     , cache::Client* cache_client
+                     , ouiservice::Bep5Client* client
+                     , const CACertificate& ca
+                     , boost::optional<UdpEndpoint> local_ep
+                     , const std::shared_ptr<UPnPs>& upnps_ptr
+                     , const bittorrent::DhtBase* dht
+                     , ClientFrontEndMetricsController& metrics
+                     , const std::string_view proxy_endpoint
+                     , const std::string_view frontend_endpoint
+                     , const std::string_view frontend_unix_socket_endpoint
+                     , Async yield)
 {
     if (auto& token = config.front_end_access_token()) {
         std::string_view header_key = "X-Ouinet-Front-End-Token";
@@ -1008,24 +994,21 @@ Response ClientFrontEnd::serve( ClientConfig& config
     } else if (path == pinned_list_apath) {
         handle_pinned_list(req, res, ss, cache_client);
     } else if (path == status_api_path) {
-        sys::error_code e;
         handle_api_status( config, client_state, local_ep, upnps_ptr, dht
-                         , req, res, ss, cache_client, client, metrics, cancel
-                         , yield[e]);
+                         , req, res, ss, cache_client, client, metrics
+                         , yield);
     } else if (path.starts_with(groups_api_path)) {
         path.remove_prefix(groups_api_path.size());
         handle_api_groups(path, req, res, ss, cache_client);
     } else if (path.starts_with(metrics_api_path)) {
         path.remove_prefix(metrics_api_path.size());
-        sys::error_code e;
-        handle_api_metrics(path, req, res, ss, metrics, cancel , yield[e]);
+        handle_api_metrics(path, req, res, ss, metrics);
     } else if (path.starts_with(endpoints_api_path)) {
         handle_api_endpoints(proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
     } else {
-        sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps_ptr, dht
-                     , req, res, ss, cache_client, metrics, cancel
-                     , yield[e]);
+                     , req, res, ss, cache_client, metrics
+                     , yield);
     }
 
     Response::body_type::reader reader(res, res.body());
@@ -1039,4 +1022,3 @@ Response ClientFrontEnd::serve( ClientConfig& config
 }
 
 ClientFrontEnd::~ClientFrontEnd() {}
-

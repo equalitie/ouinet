@@ -1,33 +1,38 @@
 #pragma once
 
 #include <boost/asio/ssl.hpp>
+#include <boost/asio/experimental/channel.hpp>
 
 #include "../ouiservice.h"
-#include "../util/signal.h"
-#include "../util/async_queue.h"
+#include "../util/cancel.h"
+#include "../util/async.h"
+#include "api.h"
 
 namespace ouinet {
+
 namespace ouiservice {
 
 // Wraps TLS over an existing service.
-class TlsOuiServiceServer : public OuiServiceImplementationServer
+class OUINET_COMMON_API TlsOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
     using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
 
-    TlsOuiServiceServer( const AsioExecutor& ex
+    TlsOuiServiceServer( asio::any_io_executor ex
                        , BaseServicePtr base
                        , asio::ssl::context& context)
-        : _ex(ex)
+        : _ex(std::move(ex))
         , _base(std::move(base))
         , _ssl_context(context)
-        , _accept_queue(_ex /*, TODO: max size? */)
+        , _accept_queue(_ex, 256)
     {};
 
-    void start_listen(asio::yield_context) override;
+    [[nodiscard]]
+    sys::error_code start_listen(Async) override;
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context yield) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> accept(Async) override;
 
     ~TlsOuiServiceServer();
 
@@ -36,28 +41,25 @@ class TlsOuiServiceServer : public OuiServiceImplementationServer
     BaseServicePtr _base;
     asio::ssl::context& _ssl_context;
     Cancel _cancel;
-    util::AsyncQueue<GenericStream> _accept_queue;
+    asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
 };
 
-class TlsOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API TlsOuiServiceClient : public OuiServiceClient
 {
     public:
-    using BaseServicePtr = std::unique_ptr<OuiServiceImplementationClient>;
+    using BaseServicePtr = std::unique_ptr<OuiServiceClient>;
 
     public:
     TlsOuiServiceClient(BaseServicePtr base_, asio::ssl::context& context):
         _base(std::move(base_)), _ssl_context(context)
     {};
 
-    void start(asio::yield_context yield) override {
-        _base->start(yield);
+    sys::error_code start(Async yield) override {
+        return _base->start(yield);
     }
 
-    void stop() override {
-        _base->stop();
-    }
-
-    GenericStream connect(asio::yield_context, Cancel&) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async) override;
 
     private:
     BaseServicePtr _base;

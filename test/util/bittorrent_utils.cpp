@@ -34,7 +34,10 @@ public:
         auto bt_dht = std::make_shared<bt::MainlineDht>( _ctx.get_executor()
                                                        , metrics_client.mainline_dht()
                                                        , std::make_shared<dns::Resolver>()
-                                                       , rx_limit);
+                                                       , rx_limit
+                                                       , boost::filesystem::path{}
+                                                       , bt::bootstrap::Config{}
+                                                       , util::LogPath{});
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);
@@ -81,7 +84,7 @@ public:
 
 private:
     asio::io_context& _ctx;
-    Signal<void()> _shutdown_signal;
+    Cancel _shutdown_signal;
 
     shared_ptr<bt::MainlineDht> _bt_dht;
     WaitCondition _bt_dht_wc;

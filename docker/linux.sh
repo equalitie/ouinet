@@ -3,27 +3,29 @@
 set -e
 
 host=
-docker_host=
 clean=
 target_oss=()
 run_all_tests=
 run_cpp_tests=()
+run_cpp_rust_tests=()
 run_python_tests=
 enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
+with_ouisync=n
+host_ouisync_dir=
 with_asan=n
+container_name=
+image_name=
+container_duration=1d
+cmake_build_type=Debug
+android_abi=arm64-v8a
+
+source $(dirname $0)/util.sh linux
 
 function print_help (
     echo "Utility to build Ouinet in a Docker container"
     echo
-)
-
-function error (
-    msg="$*"
-    print_help
-    echo "Error: $msg"
-    exit 1
 )
 
 function parse_target_os (
@@ -39,13 +41,15 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
         --host|-H)
             host="$2"; shift
-            docker_host="--host=ssh://$host"
             ;;
         --target-os|-t)
             target_oss+=($(parse_target_os $2)); shift
             ;;
         --run-cpp-test)
             run_cpp_tests+=($2); shift
+            ;;
+        --run-cpp-rust-tests)
+            run_cpp_rust_tests=y
             ;;
         --run-python-tests)
             run_python_tests=y
@@ -59,12 +63,30 @@ while [[ "$#" -gt 0 ]]; do
         --enter-on-exit)
             enter_on_exit=y
             ;;
+        --with-ouisync)
+            with_ouisync=y
+            ;;
+        --use-ouisync-dir)
+            host_ouisync_dir=$2; shift;
+            ;;
         --with-asan)
             with_asan=y
             ;;
         --artifact-dir)
             artifact_dir=$2; shift;
             mkdir -p $artifact_dir
+            ;;
+        --container-name)
+            container_name=($2); shift
+            ;;
+        --image-name)
+            image_name=($2); shift
+            ;;
+        --container-duration)
+            container_duration=($2); shift
+            ;;
+        --cmake-build-type)
+            cmake_build_type=($2); shift
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -76,24 +98,38 @@ if [ -z "$target_oss" ]; then
     error "Missing --target-os parameter"
 fi
 
-image_name=$USER.ouinet.build
-container_name=$USER.ouinet.build
+# Most likely returns 'amd64' or 'arm64'
+docker_default_platform=$(dock version --format '{{.Server.Arch}}')
+
+# Being explicit about docker platform is useful when building on Arm based
+# Mackintosh PCs as cross compilation for Android or Windows doesn't work on
+# Arm.
+function docker_choose_platform {(
+    # Windows and Android don't build on arm
+    if is_in android ${target_oss[@]} || is_in windows ${target_oss[@]} ; then
+        echo 'amd64'
+    else
+        echo $docker_default_platform
+    fi
+)}
+
+docker_platform=$(docker_choose_platform)
+name_suffix=$([ "$docker_platform" = "$docker_default_platform" ] && echo "" || echo ".$docker_platform")
+image_name=$(choose_docker_image_name $image_name)$name_suffix
+container_name=$(choose_docker_container_name $container_name)$name_suffix
 
 work_dir=/opt
-src_dir=$work_dir/ouinet
+ouinet_dir=$work_dir/ouinet
 
-echo "Host:           $docker_host"
+echo "Host:           $host"
 echo "Target OS:      ${target_oss[*]}"
 echo "Image name:     $image_name"
 echo "Container name: $container_name"
+echo "Clean:          $([ "$clean" = y ] && echo yes || echo no)"
 echo ""
 
-function dock (
-    docker $docker_host "$@"
-)
-
 function build_image (
-    rust_version=1.92.0
+    rust_version=1.96.0
 
     rust_target=(
         aarch64-linux-android
@@ -103,10 +139,10 @@ function build_image (
     )
 
     apt_dependencies=(
-        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev
+        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev gdb
         # For building Ouisync
-        pkg-config libfuse3-dev
-        # For building Windows binaries
+        pkg-config
+        # For building and testing Windows binaries
         mingw-w64-x86-64-dev g++-mingw-w64-x86-64 libz-mingw-w64-dev gettext locales wine64
         # For building Android binaries
         wget unzip openjdk-21-jdk ninja-build
@@ -126,7 +162,7 @@ function build_image (
 
     # https://developer.android.com/studio#command-tools
     android_sdk_version=13114758
-    android_home=$src_dir/sdk
+    android_home=$ouinet_dir/sdk
 
     dockerfile=(
         "FROM debian:trixie-slim"
@@ -155,27 +191,7 @@ function build_image (
         "RUN echo 'PS1=\"\\h/$container_name:\\W \\u$ \"' >> ~/.bashrc"
     )
 
-    echo -e "${dockerfile[@]/*/&'\n'}" | dock build -t $image_name -
-)
-
-# Shortcut for `docker $docker_host exec ... $container_name ...`
-function exe (
-    opt_w=
-    opt_i=
-    opt_t=
-    opt_e=()
-    while [[ "$#" -gt 0 ]]; do
-        case $1 in
-            -w) opt_w="-w=$2"; shift ;;
-            -i) opt_i="-i" ;;
-            -t) opt_t="-t" ;;
-            -it) opt_i="-i"; opt_t="-t" ;;
-            -e) opt_e+=("$2"); shift ;;
-            *) break ;;
-        esac
-        shift
-    done
-    dock exec $opt_w $opt_i $opt_t ${opt_e[@]/#/'-e '} $container_name "$@"
+    echo -e "${dockerfile[@]/*/&'\n'}" | dock build --platform linux/$docker_platform -t $image_name -
 )
 
 function enter (
@@ -183,71 +199,44 @@ function enter (
 )
 
 function is_container_running (
-    [ -n "$(dock ps -a -q -f name=$container_name 2>/dev/null)" ]
-)
-
-# Test whether the first arg is in the rest of the args
-function is_in (
-    item=$1; shift
-    list="$@"
-    for i in ${list[@]}; do
-        if [ "$item" == "$i" ]; then return 0; fi
-    done
-    return 1
-)
-
-function copy_local_sources (
-    rsync_exclude_dirs=(
-        '/build'
-        '/rust/target'
-        '/sdk'
-        '/_gradle-home'
-        '/build-android-*'
-        '/gradle-*'
-    )
-
-    if ! is_in android ${target_oss[@]}; then
-        # Only Android building requires the .git/ directory
-        rsync_exclude_dirs+=(.git)
-    fi
-
-    rsync -e "docker $docker_host exec -i" \
-        -av --no-links --delete \
-        ${rsync_exclude_dirs[@]/#/--exclude=} \
-        $(pwd)/ $container_name:$src_dir
+    [ -n "$(dock ps -a -q -f name=^$container_name$ 2>/dev/null)" ]
 )
 
 function list_artifacts_for_target_os (
     target_os=$1
     case "$target_os" in
-        linux)
-            artifacts=(
-                $build_dir/client
-                $build_dir/injector
-                $build_dir/libgcrypt.so.20.5.0
-                $build_dir/libgpg-error.so.0.38.0
-                $build_dir/libouinet_asio.so
-                $build_dir/libouinet_asio_ssl.so
-                $build_dir/libouinet_asio_ssl.so
-                $build_dir/libclient.so
-                $build_dir/libinjector.so
-            )
+        linux|android)
+            exe_suffix=""
+            lib_suffix=".so"
             ;;
         windows)
+            exe_suffix=".exe"
+            lib_suffix=".dll"
+            ;;
+        *) error "Invalid target_os ($target_os) in 'list_artifacts_for_target_os'"
+    esac
+    case "$target_os" in
+        linux|windows)
             artifacts=(
-                $build_dir/client.exe
-                $build_dir/injector.exe
-                $build_dir/gcrypt/out/bin/libgcrypt-20.dll
-                $build_dir/gpg_error/out/bin/libgpg-error-0.dll
-                $build_dir/libouinet_asio.dll
-                $build_dir/libouinet_asio_ssl.dll
-                $build_dir/libclient_lib.dll
-                $build_dir/libinjector_lib.dll
+                $build_dir/client$exe_suffix
+                $build_dir/injector$exe_suffix
+                $build_dir/libasio_utp$lib_suffix
+                $build_dir/libouinet_asio$lib_suffix
+                $build_dir/libouinet_common$lib_suffix
+                $build_dir/libouinet_client$lib_suffix
+                $build_dir/libouinet_injector$lib_suffix
             )
+
+            if [[ "$with_ouisync" == y ]]; then
+                artifacts+=(
+                  $build_dir/libcpp_ouisync_client$lib_suffix
+                  $build_dir/libcpp_ouisync_service$lib_suffix
+                )
+            fi
             ;;
         android)
             artifacts=(
-                $src_dir/build-android-omni-debug/ouinet/outputs/aar/ouinet-debug.aar
+                $ouinet_dir/build-android-$android_abi-${cmake_build_type,,}/ouinet/outputs/aar/ouinet-${cmake_build_type,,}.aar
             )
             ;;
         *) error "Invalid target_os ($target_os) in 'list_artifacts_for_target_os'"
@@ -257,37 +246,75 @@ function list_artifacts_for_target_os (
 
 function check_artifacts_exist_for_target_os (
     target_os=$1
-    missing=()
-    for artifact in $(list_artifacts_for_target_os $target_os); do
-        if [ ! -f "$artifact" ]; then
-            missing+=($artifact)
-        fi
-    done
-    if [ -f "${missing[*]}" ]; then
+
+    script=(
+        "missing=();"
+        "for artifact in $(list_artifacts_for_target_os $target_os); do"
+        "    if [ ! -f \$artifact ]; then"
+        "       missing+=(\$artifact);"
+        "    fi"
+        "done;"
+        "echo \${missing[*]}"
+    )
+
+    missing=$(exe bash -c "${script[*]}")
+
+    if [ -n "${missing[*]}" ]; then
         error "Missing artifacts for $target_os: ${missing[@]}"
     fi
-
 )
 
 # ---
 
-if [ "$clean" = y ]; then
-    dock container rm -f $container_name 2>/dev/null || true
-fi
-
 build_image
 
 if ! is_container_running; then
-    dock run -d --rm --name $container_name $image_name sleep 1d
+    dock run --platform linux/$docker_platform -d --rm --name $container_name $image_name sleep $container_duration
 fi
 
 if [ "$enter_on_exit" = y ]; then
     trap enter EXIT
 fi
 
-exe bash -c "mkdir -p $src_dir"
+# ---
 
-copy_local_sources
+exe bash -c "mkdir -p $ouinet_dir"
+
+function copy_local_sources (
+    host_src_dir=${1%/}
+    container_dst_dir=$2
+
+    exclude=(
+        '/build'
+        '/rust/target'
+        '/sdk'
+        '/_gradle-home'
+        '/build-android-*'
+        '/gradle-*'
+        '/target'
+        '/bindings/cpp/build'
+        '/bindings/cpp/examples/build'
+        '/bindings/kotlin/build'
+        '/cmake-build-*'
+    )
+
+    if ! is_in android ${target_oss[@]}; then
+        # Only Android building requires the .git/ directory
+        exclude+=(.git)
+    fi
+
+    docker_rsync ${exclude[@]/#/-e } $host_src_dir $container_dst_dir
+)
+
+copy_local_sources $(pwd) $ouinet_dir
+
+# Prevent "dubious ownership" errors
+exe git config --global --add safe.directory $ouinet_dir
+
+if [ -n "$host_ouisync_dir" ]; then
+    container_ouisync_dir=$work_dir/ouisync
+    copy_local_sources $host_ouisync_dir $container_ouisync_dir
+fi
 
 # ---
 
@@ -297,94 +324,80 @@ for target_os in ${target_oss[@]}; do
     if [ "$target_os" == linux -o "$target_os" == windows ]; then
         build_dir=$work_dir/build.$target_os
 
+        if [ "$clean" = y ]; then
+            exe rm -rf $build_dir
+        fi
+
         exe bash -c "mkdir -p $build_dir"
 
         cmake_configure_options=(
-            -DCMAKE_BUILD_TYPE=Debug
+            -DCMAKE_BUILD_TYPE=$cmake_build_type
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
-            -DWITH_EXPERIMENTAL=OFF
             -DCORROSION_BUILD_TESTS=ON
-            -DWITH_OUISYNC=OFF
-            # For testing with custom Ouisync sources
-            #-DOUISYNC_SRC_DIR=$HOME/work/ouisync
+            -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
             -DOUINET_MEASURE_BUILD_TIMES=OFF
         )
-        
+
         if [ "$target_os" == windows ]; then
             cmake_configure_options+=(
-                -DCMAKE_TOOLCHAIN_FILE=$src_dir/cmake/toolchain-mingw64.cmake
+                -DCMAKE_TOOLCHAIN_FILE=$ouinet_dir/cmake/toolchain-mingw64.cmake
             )
         fi
-    
-        exe -w $build_dir cmake $src_dir "${cmake_configure_options[@]}"
-        exe -w $build_dir cmake --build . -v -j $(exe nproc)
+
+        if [ -n "$container_ouisync_dir" ]; then
+            cmake_configure_options+=(-DOUISYNC_SRC_DIR=$container_ouisync_dir)
+        fi
+
+        exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
+        exe -w $build_dir cmake --build . -j $(exe nproc) ${run_cpp_tests[@]/#/--target }
     else
-        exe -w $src_dir ./scripts/build-android.sh
+        if [ "$clean" = y ]; then
+            exe -w $ouinet_dir git clean -dfX
+        fi
+
+        env=(
+          ABI="$android_abi"
+        )
+        exe ${env[@]/#/-e } -w $ouinet_dir ./scripts/build-android.sh $([ "$cmake_build_type" = "Release" ] && echo " -r")
     fi
 
-    check_artifacts_exist_for_target_os $target_os
+    if [ -n "$artifact_dir" ]; then
+        check_artifacts_exist_for_target_os $target_os
+    fi
     
     ### Rust Tests
 
-    if [ "$run_all_tests" == y ]; then
+    if [ "$run_all_tests" == y -o "$run_cpp_rust_tests" == y ]; then
         # Only on Linux because `cargo` would look for libouinet_asio.so which is not
         # built for Windows (only dll).
         if [ "$target_os" == linux ]; then
             env=(
-                CXXFLAGS="-I$build_dir/boost/install/include"
+                CXXFLAGS="-I$build_dir/boost/src/built_boost"
                 LD_LIBRARY_PATH="$build_dir"
                 LIBRARY_PATH="$build_dir"
                 RUST_BACKTRACE=1
                 RUST_LOG=ouinet_rs=debug
             )
-            exe ${env[@]/#/-e } cargo test --verbose --manifest-path $src_dir/rust/Cargo.toml -- --nocapture
+            exe ${env[@]/#/-e } cargo test --manifest-path $ouinet_dir/rust/Cargo.toml -- --nocapture
         fi
     fi
-        
-    ### C++ Tests
-    if [ "$run_all_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
-        if [ "$target_os" != android ]; then
-            if [ "$run_all_tests" == y ]; then
-                test_targets=$(exe cmake --build $build_dir --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g')
-            else
-                test_targets=${run_cpp_tests[@]}
-            fi
-        
-            binary_suffix=
-            env=()
-            lanucher=
-        
-            if [ "$target_os" == windows ]; then
-                launcher="wine"
-                binary_suffix=.exe
-                winepaths=(
-                    $build_dir
-                    $build_dir/gcrypt/out/bin
-                    $build_dir/gpg_error/out/bin
-                    /usr/lib/gcc/x86_64-w64-mingw32/14-win32
-                )
-                env+=(WINEPATH="$(IFS=';'; echo "${winepaths[*]}")")
-            fi
-        
-            if [ "$with_asan" = y ]; then
-                # TODO: We are violating the "One Definition Rule" because the
-                # client and injector libraries share a lot of code.
-                env+=(ASAN_OPTIONS=detect_odr_violation=0)
-            fi
 
-            for test in ${test_targets[@]}; do
-                if is_in $test ${excluded_test_targets[@]} ; then
-                    echo "::: Skipping excluded test $test"
-                    continue
-                fi
-                echo "::: Running test: $test"
-                exe ${env[@]/#/-e } $launcher $build_dir/test/$test$binary_suffix --log_level=unit_scope
-            done
+    ### C++ Tests
+
+    if [ "$run_all_tests" == y -o "$run_cpp_rust_tests" == y -o -n "${run_cpp_tests[*]}" ]; then
+        if [ "$target_os" != android ]; then
+            args=(
+                --build-dir $build_dir
+                ${run_cpp_tests[@]/#/--run-test }
+                ${excluded_test_targets[@]/#/--exclude-test }
+            )
+
+            exe -w $ouinet_dir bash -c "./scripts/run_cpp_tests.sh ${args[*]}"
         fi
     fi
 
     ### Python Tests
-    
+
     # TODO: Run these when `$target_os = windows` as well (through Wine)
     if [ "$target_os" = linux ]; then
         if [ "$run_python_tests" = y -o "$run_all_tests" = y ]; then
@@ -394,13 +407,13 @@ for target_os in ${target_oss[@]}; do
                 "fi;"
                 "source $build_dir/venv/bin/activate;"
                 "pip install twisted pytest requests pytest_asyncio;"
-            
+
                 "export OUINET_BUILD_DIR=$build_dir;"
-                "export OUINET_REPO_DIR=$src_dir;"
-            
-                "$src_dir/scripts/run_integration_tests.sh;"
+                "export OUINET_REPO_DIR=$ouinet_dir;"
+
+                "$ouinet_dir/scripts/run_python_tests.sh;"
             )
-            
+
             exe bash -c "${script[*]}"
         fi
     fi
@@ -408,7 +421,7 @@ for target_os in ${target_oss[@]}; do
     ### Download artifacts
 
     if [ -n "$artifact_dir" ]; then
-        artifacts=$(list_artifacts_for_target_os $target_os)
+        artifacts=($(list_artifacts_for_target_os $target_os))
 
         dst_dir=$artifact_dir/$target_os
         mkdir -p $dst_dir

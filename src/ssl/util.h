@@ -9,11 +9,11 @@
 #include <boost/filesystem.hpp>
 #include <boost/nowide/fstream.hpp>
 
-#include "../generic_stream.h"
-#include "../or_throw.h"
-#include "../util/signal.h"
-#include "../util/ssl_stream.h"
-
+#include "generic_stream.h"
+#include "or_throw.h"
+#include "util/ssl_stream.h"
+#include "util/async.h"
+#include "api.h"
 
 namespace ouinet::ssl::util {
 
@@ -53,12 +53,11 @@ static inline std::string read_bio(BIO* bio) {
 // using SNI.  Verification against a valid CA is done in any case.
 template<class Stream>
 static inline
-ouinet::GenericStream
+std::expected<ouinet::GenericStream, sys::error_code>
 client_handshake( Stream&& con
                 , boost::asio::ssl::context& ssl_context
                 , const std::string& host
-                , Signal<void()>& abort_signal
-                , boost::asio::yield_context yield)
+                , Async yield)
 {
     using namespace std;
     using namespace ouinet;
@@ -66,7 +65,7 @@ client_handshake( Stream&& con
 
     boost::system::error_code ec;
 
-    auto ssl_sock = SslStream<Stream>(move(con), ssl_context);
+    auto ssl_sock = SslStream<Stream>(std::move(con), ssl_context);
     bool check_host = host.length() > 0;
 
     if (check_host)
@@ -77,13 +76,14 @@ client_handshake( Stream&& con
     if (check_host && !::SSL_set_tlsext_host_name(ssl_sock->native_handle(), host.c_str()))
         ec = {static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category()};
 
-    if (!ec) {
-        auto slot = abort_signal.connect([&] { ssl_sock->next_layer().close(); });
-        ssl_sock->async_handshake(ssl::stream_base::client, yield[ec]);
-    }
-    return_or_throw_on_error(yield, abort_signal, ec, GenericStream{});
+    if (ec) return std::unexpected(ec);
 
-    return GenericStream(move(ssl_sock));
+    auto slot = yield.cancel_slot([&] { ssl_sock->next_layer().close(); });
+    auto r = ssl_sock->async_handshake(ssl::stream_base::client, yield);
+
+    if (!r) return std::unexpected(r.error());
+
+    return GenericStream(std::move(ssl_sock));
 }
 
 static inline
@@ -118,33 +118,7 @@ get_server_context( const std::string& cert_chain
     return ssl_context;
 }
 
-static inline
-void load_tls_ca_certificates( asio::ssl::context& ctx
-                             , const std::string& path_str)
-{
-    using namespace std;
-
-    if (path_str.empty()) return;
-
-    fs::path path = path_str;
-
-    if (!exists(path)) {
-        ostringstream ss;
-        ss << "Can not read CA certificates from \"" << path << "\": "
-           << "No such file or directory";
-        throw runtime_error(ss.str());
-    }
-
-    if (fs::is_directory(path)) {
-        ctx.add_verify_path(path_str);
-        return;
-    }
-
-    ostringstream ss;
-    ss << boost::nowide::ifstream(path).rdbuf();
-    ctx.add_certificate_authority(asio::buffer(ss.str()));
-}
-
-void set_default_verify_paths(asio::ssl::context&);
+OUINET_COMMON_API void load_tls_ca_certificates(asio::ssl::context& ctx);
+OUINET_COMMON_API void load_tls_ca_certificates(asio::ssl::context& ctx, const std::string& path_str);
 
 } // namespace

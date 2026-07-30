@@ -6,37 +6,38 @@
 
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/local/stream_protocol.hpp>
-#include <boost/algorithm/string/case_conv.hpp>
-#include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
 #include "namespaces.h"
 #include "cache_control.h"
 #include "util.h"
-#include "declspec.h"
-#include "util/bytes.h"
-#include "parse/endpoint.h"
-#include "util/crypto.h"
-#ifndef __WIN32
-#include "increase_open_file_limit.h"
-#endif
+#include "api.h"
+#include "util/sign.h"
+#include "util/overloaded.h"
 #include "endpoint.h"
-#include "logger.h"
 #include "constants.h"
-#include "bep5_swarms.h"
-#include "util.h"
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
+#include "ouiservice/i2p/address.h"
+#include "logger.h"
+#include "cache_type.h"
 
-#include "cxx/dns.h"
+namespace boost::program_options {
+    class variables_map;
+    class options_description;
+} // namespace
 
 namespace ouinet {
 
-#define _LOG_FILE_NAME "log.txt"
-static const fs::path log_file_name{_LOG_FILE_NAME};
+//TODO: move this to somewhere where both client and injector config has access to
+#define _MAX_I2P_HOPS 8
 
-#define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
-static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
+// Announcements are processed one at a time in Android to avoid increasing battery usage
+#ifdef __ANDROID__
+    const size_t default_max_simultaneous_announcements = 1;
+#else
+    const size_t default_max_simultaneous_announcements = 16;
+#endif
 
 struct MetricsConfig {
     bool enable_on_start = false;
@@ -49,10 +50,58 @@ struct MetricsConfig {
     static std::unique_ptr<MetricsConfig> parse(const boost::program_options::variables_map&);
 };
 
-class OUINET_DECL ClientConfig {
-public:
-    enum class CacheType { None, Bep5Http };
+struct OuisyncCacheConfig {
+    // Read token for the page index repository which contains directories one per host name
+    // and inside them crawls of corresponding websites.
+    std::string page_index_token;
+};
 
+// ----
+
+template<class... TypePairs> struct TypeValueMap {};
+
+template<class K, class V, class ... RestPairs>
+struct TypeValueMap<std::pair<K, V>, RestPairs...> : public TypeValueMap<RestPairs...> {
+    std::pair<K, V> value;
+
+    template<class T> auto& get() {
+        if constexpr (std::is_same_v<K, T>) {
+            return value.second;
+        } else {
+            return TypeValueMap<RestPairs...>::template get<T>();
+        }
+    }
+
+    template<class T> const auto& get() const {
+        if constexpr (std::is_same_v<K, T>) {
+            return value.second;
+        } else {
+            return TypeValueMap<RestPairs...>::template get<T>();
+        }
+    }
+};
+
+// ----
+
+class OUINET_CLIENT_API ClientConfig {
+    struct EnabledCaches {
+        bool Bep5Http = false;
+        bool Bep3HTTPOverI2P = false;
+        bool Ouisync = false;
+
+        bool get(CacheType) const;
+        void set(CacheType, bool);
+        bool is_any_cache_enabled() const;
+        bool is_injecting_cache_enabled() const;
+    };
+
+    using InjectorEndpoints = TypeValueMap<
+        std::pair<CacheType::Bep5Http, std::optional<Endpoint>>,
+        // TODO: Also allow swarms
+        std::pair<CacheType::Bep3HTTPOverI2P, std::optional<I2pAddress>>
+    >;
+
+public:
     ClientConfig() = default;
 
     // Throws on error
@@ -68,16 +117,25 @@ public:
         return _repo_root;
     }
 
-    const boost::optional<Endpoint>& injector_endpoint() const {
-        return _injector_ep;
+    template<class CacheType>
+    const auto& injector_endpoint() const {
+        return _injector_endpoints.get<CacheType>();
     }
 
     const std::string& tls_injector_cert_path() const {
         return _tls_injector_cert_path;
     }
 
-    const std::string& tls_ca_cert_store_path() const {
-        return _tls_ca_cert_store_path;
+    asio::ssl::context& origin_ssl_ctx() {
+        return _origin_ssl_ctx;
+    }
+
+    size_t i2p_hops_per_tunnel() const {
+      return _i2p_hops_per_tunnel;
+    }
+
+    const boost::optional<I2pAddress>& i2p_bep3_tracker() const {
+      return _i2p_bep3_tracker;
     }
 
     const asio::ip::tcp::endpoint& local_endpoint() const {
@@ -99,8 +157,8 @@ public:
         return _udp_mux_rx_limit * 1000 / 8;
     }
 
-    bool is_cache_enabled() const { return _cache_type != CacheType::None; }
-    CacheType cache_type() const { return _cache_type; }
+    bool is_cache_enabled(CacheType type) const { return _enabled_caches.get(type); }
+    bool is_injecting_cache_enabled() const { return _enabled_caches.is_injecting_cache_enabled(); }
 
     boost::posix_time::time_duration max_cached_age() const {
         return _max_cached_age;
@@ -122,21 +180,15 @@ public:
         return _cache_static_content_path;
     }
 
-    boost::optional<std::string> bep5_bridge_swarm_name() {
-        if (!_cache_http_pubkey) return boost::none;
-        return bep5::compute_bridge_swarm_name( *_cache_http_pubkey
-                                              , http_::protocol_version_current);
-    }
+    boost::optional<std::string> bep5_bridge_swarm_name() const;
 
     bool is_bridge_announcement_enabled() const {
         return !_disable_bridge_announcement;
     }
 
     boost::optional<std::string>
-    credentials_for(const Endpoint& injector) const {
-        auto i = _injector_credentials.find(injector);
-        if (i == _injector_credentials.end()) return {};
-        return i->second;
+    injector_credentials() const {
+        return _injector_credentials;
     }
 
     asio::ip::tcp::endpoint front_end_endpoint() const {
@@ -155,17 +207,13 @@ public:
         return _proxy_access_token;
     }
 
-    boost::optional<util::Ed25519PublicKey> cache_http_pub_key() const {
+    boost::optional<sign::PublicKey> cache_http_pub_key() const {
         return _cache_http_pubkey;
     }
 
     const std::string& client_credentials() const { return _client_credentials; }
 
     std::string local_domain() const { return _local_domain; }
-
-    bool is_doh_enabled() const {
-        return !_disable_doh;
-    }
 
     dns::Config dns_config() const
     {
@@ -180,9 +228,7 @@ public:
 
     bool is_help() const { return _is_help; }
 
-    auto description() {
-        return description_full();
-    }
+    void describe(std::ostream& os);
 
     // Is `nullptr` if metrics is disabled
     const MetricsConfig* metrics() const {
@@ -199,263 +245,18 @@ public:
         return _add_request_fields;
     }
 
-private:
-    boost::program_options::options_description description_full()
-    {
-        using namespace std;
-        namespace po = boost::program_options;
-
-        po::options_description general("General options");
-        general.add_options()
-           ("help", "Produce this help message")
-           ("repo", po::value<string>(), "Path to the repository root")
-           ("drop-saved-opts", po::bool_switch()->default_value(false)
-            , "Drop saved persistent options right before start "
-              "(only use command line arguments and configuration file)")
-           ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
-            , "Set log level: silly, debug, verbose, info, warn, error, abort. "
-              "This option is persistent.")
-           ("enable-log-file", po::bool_switch()->default_value(false)
-            , "Enable writing log messages to "
-              "log file \"" _LOG_FILE_NAME "\" under the repository root. "
-              "This option is persistent.")
-           ("bt-bootstrap-extra", po::value<vector<string>>()->composing()
-            , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
-              "to start the DHT (can be used several times). "
-              "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. "
-              "This option is persistent.")
-#ifndef __WIN32
-           ("open-file-limit"
-            , po::value<unsigned int>()
-            , "To increase the maximum number of open files")
-#endif
-           ;
-
-        po::options_description services("Service options");
-        services.add_options()
-           ("listen-on-tcp"
-            , po::value<string>()->default_value("127.0.0.1:8077")
-            , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
-           ("udp-mux-port"
-           , po::value<uint16_t>()
-           , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
-           ("udp-mux-rx-limit"
-           , po::value<uint32_t>()
-           , "Max rate limit that's allowed for incoming packets to the "
-             "UDP multiplexer. The value is expressed in Kbps. To leave it "
-             "unlimited, set it to zero.")
-           ("client-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the client")
-           ("tls-ca-cert-store-path", po::value<string>(&_tls_ca_cert_store_path)
-            , "Path to the CA certificate store file")
-           ("front-end-ep"
-            , po::value<string>()->default_value("127.0.0.1:8078")
-            , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
-            ("front-end-unix-socket-ep"
-            , po::value<string>()
-            , "Path to the front-end Unix socket. Absolute or relative to repo root.")
-           ("front-end-access-token"
-            , po::value<string>()
-            , "Token to access the front end, use agents will need to include the X-Ouinet-Front-End-Token "
-              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
-           ("proxy-access-token"
-            , po::value<string>()
-            , "Token to access the http proxy, use agents will need to include the X-Ouinet-Proxy-Token "
-              "with the value of this string in http request headers or get the \"403 Forbidden\" response.")
-           ("disable-bridge-announcement"
-            , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
-            , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
-              "Previous announcements could take up to an hour to expire.")
-           ("request-body-limit"
-            , po::value<uint64_t>()->default_value(_max_req_body_size)
-            , "Set the max size of body requests in KiB. This could be "
-              "useful to handle big POST/PUT requests from the UA, e.g. non-chunked "
-              "uploads, etc. To leave it unlimited, set it to zero.")
-           ("add-request-field"
-            , po::value<std::vector<std::string>>()->composing()
-            , "A <FIELD>:<VALUE> pair representing a HTTP header field and "
-              "value to add to every request coming from the User Agent before "
-              "Ouinet processes it. Useful for testing when using e.g. Firefox "
-              "as the UA.")
-           ;
-
-        po::options_description injector("Injector options");
-        injector.add_options()
-           ("injector-ep"
-            , po::value<string>()
-            , "Injector's endpoint as <TYPE>:<EP>, "
-              "where <TYPE> can be \"tcp\", \"utp\",  "
-#ifdef __EXPERIMENTAL__
-              "\"obfs2\", \"obfs3\", \"obfs4\", \"lampshade\" or \"i2p\", "
-#endif // ifdef __EXPERIMENTAL__
-              "and <EP> depends on the type of endpoint: "
-              "<IP>:<PORT> for TCP and uTP"
-#ifdef __EXPERIMENTAL__
-              ", <IP>:<PORT>[,<OPTION>=<VALUE>...] for OBFS and Lampshade, "
-              "<B32_PUBKEY>.b32.i2p or <B64_PUBKEY> for I2P"
-#endif // ifdef __EXPERIMENTAL__
-           )
-           ("injector-credentials", po::value<string>()
-            , "<username>:<password> authentication pair for the injector")
-           ("injector-tls-cert-file", po::value<string>(&_tls_injector_cert_path)
-            , "Path to the injector's TLS certificate; enable TLS for TCP and uTP")
-           ;
-
-        po::options_description cache("Cache options");
-        cache.add_options()
-           ("cache-type", po::value<string>()->default_value("none")
-            , "Type of d-cache {none, bep5-http}")
-           ("cache-http-public-key"
-            , po::value<string>()
-            , "Public key for HTTP signatures in the BEP5/HTTP cache "
-              "(hex-encoded or Base32-encoded)")
-           ("max-cached-age"
-            , po::value<int>()->default_value(_max_cached_age.total_seconds())
-            , "Discard cached content older than this many seconds "
-              "(0: discard all; -1: discard none)")
-           ("max-simultaneous-announcements"
-            , po::value<int>()->default_value(_max_simultaneous_announcements)
-            , "Defines the number of simultaneous BEP5 announcements "
-              "performed by the announcer loop to the DHT.")
-          ("cache-private"
-           , po::bool_switch(&_cache_private)->default_value(false)
-           , "Store responses regardless of being private or "
-             "the result of an authorized request "
-             "(in spite of Section 3 of RFC 7234), "
-             "unless tagged as private to the Ouinet client. "
-             "Sensitive headers are still removed from Injector requests. "
-             "May need special injector configuration. "
-             "USE WITH CAUTION.")
-          ("cache-static-repo"
-           , po::value<string>()
-           , "Repository for internal files of the static cache "
-             "(to use as read-only fallback for the local cache); "
-             "if this is not given but a static cache content root is, "
-             "\"" _DEFAULT_STATIC_CACHE_SUBDIR "\" under that directory is assumed.")
-          ("cache-static-root"
-           , po::value<string>()
-           , "Root directory for content files of the static cache. "
-             "The static cache always requires this (even if empty).")
-          ;
-
-        po::options_description requests("Request options");
-        requests.add_options()
-           ("disable-origin-access", po::bool_switch(&_disable_origin_access)->default_value(false)
-            , "Disable direct access to the origin (forces use of injector and the cache). "
-              "This option is persistent.")
-           ("disable-injector-access", po::bool_switch(&_disable_injector_access)->default_value(false)
-            , "Disable access to the injector. "
-              "This option is persistent.")
-           ("disable-cache-access", po::bool_switch(&_disable_cache_access)->default_value(false)
-            , "Disable access to cached content. "
-              "This option is persistent.")
-           ("disable-proxy-access", po::bool_switch(&_disable_proxy_access)->default_value(false)
-            , "Disable proxied access to the origin (via the injector). "
-              "This option is persistent.")
-           ("local-domain"
-            , po::value<string>()->default_value("local")
-            , "Always use origin access and never use cache for this TLD")
-            ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
-            , "Allows using non-origin channels, like injectors, dist-cache, etc, "
-              "to fetch targets using private addresses. "
-              "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
-            ;
-
-        po::options_description dns("DNS options");
-        dns.add_options()
-           ("disable-doh", po::bool_switch(&_disable_doh)->default_value(false)
-            , "Disable DNS over HTTPS for origin access and bootstrap domain resolution. "
-              "When this option is present the client will fallback to the default DNS mechanism "
-              "provided by the operating system. Deprecated, use --dns-protocol instead.")
-           ("dns-protocol", po::value<vector<string>>()
-                                ->composing()
-                                ->default_value(dns_default_protocols,
-                                                util::join(dns_default_protocols, ","))
-            ,"DNS protocols used by the resolver. This option can be set to: plain or https. "
-              "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
-              "the nameservers. The option can be used multiple times to select more than one protocol.")
-           ;
-
-        po::options_description metrics("Metrics options");
-        metrics.add_options()
-           ("metrics-enable-on-start", po::bool_switch()->default_value(false)
-            , "Enable metrics at startup. Must be used with --metrics-server-url")
-           ("metrics-server-url", po::value<string>()
-            , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
-           ("metrics-server-token", po::value<string>()
-            , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
-           ("metrics-server-cacert", po::value<string>()
-            , "Tls CA certificate for the metrics server")
-           ("metrics-server-cacert-file", po::value<string>()
-            , "File containing the CA certificate for the metrics server")
-           ("metrics-encryption-key", po::value<string>()
-            , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
-              "the following. \n"
-              "   First generate the private key:\n"
-              "     `openssl genpkey -algorithm x25519 -out private_key.pem`\n"
-              "   Then get the public encryption key:\n"
-              "     `openssl pkey -in private_key.pem -pubout -out public_key.pem`"
-              )
-           ("metrics-delete-after"
-            , po::value<uint64_t>()->default_value(metrics::default_delete_after_seconds)
-            , "Metrics records older than this duration will be deleted. "
-              "The value is expressed in seconds.")
-           ;
-
-        po::options_description desc;
-        desc
-            .add(general)
-            .add(services)
-            .add(injector)
-            .add(cache)
-            .add(requests)
-            .add(dns)
-            .add(metrics);
-        return desc;
+    const std::optional<OuisyncCacheConfig>& ouisync_cache_config() const {
+        return _ouisync;
     }
+
+private:
+    boost::program_options::options_description description_full();
 
     // A restricted version of the above, only accepting persistent configuration options,
     // with no defaults nor descriptions.
-    boost::program_options::options_description description_saved()
-    {
-        namespace po = boost::program_options;
+    boost::program_options::options_description description_saved();
 
-        po::options_description desc;
-        desc.add_options()
-            ("log-level", po::value<std::string>())
-            ("enable-log-file", po::bool_switch())
-            ("bt-bootstrap-extra", po::value<std::vector<std::string>>()->composing())
-            ("disable-origin-access", po::bool_switch(&_disable_origin_access))
-            ("disable-injector-access", po::bool_switch(&_disable_injector_access))
-            ("disable-cache-access", po::bool_switch(&_disable_cache_access))
-            ("disable-proxy-access", po::bool_switch(&_disable_proxy_access))
-            ;
-        return desc;
-    }
-
-    void save_persistent() {
-        using namespace std;
-        ostringstream ss;
-
-        ss << "log-level = " << log_level() << endl;
-        ss << "enable-log-file = " << is_log_file_enabled() << endl;
-
-        for (const auto& btbs_addr : _bt_bootstrap_extras)
-            ss << "bt-bootstrap-extra = " << btbs_addr << endl;
-
-        ss << "disable-origin-access = " << _disable_origin_access << endl;
-        ss << "disable-injector-access = " << _disable_injector_access << endl;
-        ss << "disable-cache-access = " << _disable_cache_access << endl;
-        ss << "disable-proxy-access = " << _disable_proxy_access << endl;
-
-        try {
-            fs::path ouinet_save_path = _repo_root/_ouinet_conf_save_file;
-            LOG_DEBUG("Saving persistent options");
-            ofstream(ouinet_save_path.string(), fstream::out | fstream::trunc) << ss.str();
-        } catch (const exception& e) {
-            LOG_ERROR("Failed to save persistent options: ", e.what());
-        }
-    }
+    void save_persistent();
 
 public:
     using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
@@ -469,8 +270,8 @@ public:
 }
 #define CHANGE_AND_SAVE(_F, _V) CHANGE_AND_SAVE_OPS((_V) == _F, _F = (_V))
 
-    log_level_t log_level() const { return logger.get_threshold(); }
-    void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == logger.get_threshold(), logger.set_threshold(level)); }
+    log_level_t log_level() const { return get_logger().get_threshold(); }
+    void log_level(log_level_t level) { CHANGE_AND_SAVE_OPS(level == get_logger().get_threshold(), get_logger().set_threshold(level)); }
 
     const ExtraBtBsServers& bt_bootstrap_extras() const {
         return _bt_bootstrap_extras;
@@ -479,11 +280,24 @@ public:
         CHANGE_AND_SAVE_OPS(bts == _bt_bootstrap_extras, _bt_bootstrap_extras = std::move(bts));
     }
 
+    bool bt_bootstrap_no_default() const {
+        return _bt_bootstrap_no_default;
+    }
+
+    void bt_bootstrap_no_default(bool value) {
+        CHANGE_AND_SAVE_OPS(value == _bt_bootstrap_no_default, _bt_bootstrap_no_default = value);
+    }
+
+    bool bt_allow_martians() const {
+        return _bt_allow_martians;
+    }
+
+    void bt_allow_martians(bool value) {
+        _bt_allow_martians = value;
+    }
+
     bool is_log_file_enabled() const { return _is_log_file_enabled(); }
     void is_log_file_enabled(bool v) { CHANGE_AND_SAVE_OPS(v == _is_log_file_enabled(), _is_log_file_enabled(v)); }
-
-    bool is_cache_access_enabled() const { return is_cache_enabled() && !_disable_cache_access; }
-    void is_cache_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_cache_access, !v); }
 
     bool is_origin_access_enabled() const { return !_disable_origin_access; }
     void is_origin_access_enabled(bool v) { CHANGE_AND_SAVE(_disable_origin_access, !v); }
@@ -500,26 +314,11 @@ public:
 #undef CHANGE_AND_SAVE
 
 private:
-    inline bool _is_log_file_enabled() const {
-        return logger.get_log_file() != nullptr;
+    bool _is_log_file_enabled() const {
+        return get_logger().get_log_file() != nullptr;
     }
 
-    inline void _is_log_file_enabled(bool v) {
-        if (!v) {
-            logger.log_to_file("");
-            return;
-        }
-
-        if (_is_log_file_enabled()) return;
-
-        auto current_log_path = logger.current_log_file();
-        auto ouinet_log_path = current_log_path.empty()
-            ? (_repo_root / log_file_name).string()
-            : current_log_path;
-
-        logger.log_to_file(ouinet_log_path);
-        LOG_INFO("Log file set to: ", ouinet_log_path);
-    }
+    void _is_log_file_enabled(bool v);
 
 private:
     bool _is_help = false;
@@ -529,11 +328,16 @@ private:
     asio::ip::tcp::endpoint _local_ep;
     boost::optional<uint16_t> _udp_mux_port;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
-    boost::optional<Endpoint> _injector_ep;
+    InjectorEndpoints _injector_endpoints;
     std::string _tls_injector_cert_path;
-    std::string _tls_ca_cert_store_path;
+
+    std::string _tls_ca_cert_store_dir;
+    std::vector<std::string> _tls_ca_cert_store_files;
+    asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+
     ExtraBtBsServers _bt_bootstrap_extras;
-    bool _disable_cache_access = false;
+    bool _bt_bootstrap_no_default = false;
+    bool _bt_allow_martians = false;
     bool _disable_origin_access = false;
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
@@ -542,6 +346,7 @@ private:
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
+    EnabledCaches _enabled_caches;
 
     boost::posix_time::time_duration _max_cached_age
         = default_max_cached_age;
@@ -551,23 +356,23 @@ private:
     bool _cache_private = false;
 
     std::string _client_credentials;
-    std::map<Endpoint, std::string> _injector_credentials;
+    std::string _injector_credentials;
 
     fs::path _cache_static_path;
     fs::path _cache_static_content_path;
-    boost::optional<util::Ed25519PublicKey> _cache_http_pubkey;
-    CacheType _cache_type = CacheType::None;
+    boost::optional<sign::PublicKey> _cache_http_pubkey;
     std::string _local_domain;
-    [[deprecated("Use _dns_config instead.")]]
-    bool _disable_doh = false;
     bool _allow_private_targets = false;
     std::map<std::string, std::string> _add_request_fields;
 
     dns::Config _dns_config;
 
     std::unique_ptr<MetricsConfig> _metrics;
+
+    size_t _i2p_hops_per_tunnel = 3;
+    boost::optional<I2pAddress> _i2p_bep3_tracker;
+
+    std::optional<OuisyncCacheConfig> _ouisync;
 };
 
-#undef _LOG_FILE_NAME
-#undef _DEFAULT_STATIC_CACHE_SUBDIR
 } // ouinet namespace

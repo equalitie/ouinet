@@ -2,7 +2,7 @@
 
 #include <boost/asio/error.hpp>
 #include <boost/regex.hpp>
-#include <skyr/url.hpp>
+#include <boost/url.hpp>
 
 #include "logger.h"
 #include "parse/number.h"
@@ -16,7 +16,7 @@ namespace http = beast::http;
 namespace posix_time = boost::posix_time;
 
 
-std::pair<std::string, uint16_t>
+std::optional<std::pair<std::string, uint16_t>>
 ouinet::util::get_host_port(const http::request_header<>& req)
 {
     auto target = req.target();
@@ -32,44 +32,47 @@ ouinet::util::get_host_port(const http::request_header<>& req)
 
     if (hp.empty() && req.version() == 10) {
         // HTTP/1.0 proxy client with no ``Host:``, use URL.
-        skyr::url url{std::string(target)};
-        if (!url.port().empty()) {
-            boost::string_view port_sv = url.port();
-            port = parse::number<unsigned>(port_sv).get();
+        auto url = boost::urls::parse_uri(target);
+        if (!url) {
+            return {};
         }
-        return make_pair(url.hostname(), port);
+        if (!url->port().empty()) {
+            boost::string_view port_sv = url->port();
+            port = parse::number<unsigned>(port_sv).value();
+        }
+        return make_pair(url->host(), port);
     }
 
     auto [host, port_sv] = split_ep(hp);
 
     if ( !port_sv.empty() ) {
-        port = parse::number<uint16_t>(port_sv).get();
+        port = parse::number<uint16_t>(port_sv).value();
     }
     return make_pair(std::string(host), port);
 }
 
-boost::optional<ouinet::util::HttpResponseByteRange>
+std::optional<ouinet::util::HttpResponseByteRange>
 ouinet::util::HttpResponseByteRange::parse(boost::string_view s)
 {
     static const boost::regex range_rx("^bytes ([0-9]+)-([0-9]+)/([0-9]+|\\*)$");
     boost::cmatch m;
     if (!boost::regex_match(s.begin(), s.end(), m, range_rx))
-        return boost::none;
+        return std::nullopt;
 
     // Get values, check for overflows.
     s.remove_prefix(m.position(1));
     auto first = parse::number<size_t>(s);
-    if (!first) return boost::none;
+    if (!first) return std::nullopt;
     s.remove_prefix(1);  // '-'
     auto last = parse::number<size_t>(s);
-    if (!last) return boost::none;
+    if (!last) return std::nullopt;
     s.remove_prefix(1);  // '/'
     auto length = parse::number<size_t>(s);
-    if (m[3] != "*" && !length) return boost::none;
+    if (m[3] != "*" && !length) return std::nullopt;
 
     if ( (*last < *first)
        || (length && *last >= *length))
-        return boost::none;  // off-limits
+        return std::nullopt;  // off-limits
 
     return ouinet::util::HttpResponseByteRange{*first, *last, std::move(length)};
 }
@@ -207,7 +210,7 @@ ouinet::util::format_date(posix_time::ptime date)
 
 boost::string_view
 ouinet::util::http_injection_field( const http::response_header<>& rsh
-                                  , const string& field)
+                                  , std::string_view field)
 {
     auto ih = rsh[http_::response_injection_hdr];
     if (ih.empty()) return {};  // missing header
@@ -302,12 +305,12 @@ ouinet::util::to_cache_response(http::response_header<> rs, sys::error_code& ec)
         return rs;
     }
 
-    rs = remove_ouinet_fields(move(rs));
+    rs = remove_ouinet_fields(std::move(rs));
     // TODO: Handle `Trailer:` properly.
     // TODO: This list was created by going through some 100 responses from
     // bbc.com. Careful selection from all possible (standard) fields is
     // needed.
-    return filter_fields( move(rs)
+    return filter_fields( std::move(rs)
                         , http::field::server
                         , http::field::retry_after
                         , http::field::content_length

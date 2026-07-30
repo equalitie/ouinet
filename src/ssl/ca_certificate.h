@@ -8,13 +8,14 @@
 #include <openssl/x509v3.h>
 
 #include "detail/ca_certificate.h"
+#include "api.h"
 
 namespace ouinet {
 
 // TODO: Properly split CA and end certificate machinery and interface
 // into separate classes (and then rename this file).
 
-class BaseCertificate {
+class OUINET_COMMON_API BaseCertificate {
 protected:
     BaseCertificate(const std::string& cn, bool is_ca);
 

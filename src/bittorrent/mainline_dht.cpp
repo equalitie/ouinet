@@ -1,18 +1,37 @@
-
 // Temporary, shall be removed once I'm done with this branch
 #define SPEED_DEBUG 0
 
-#include "mainline_dht.h"
-#include "udp_multiplexer.h"
-#include "code.h"
-#include "cxx/dns.h"
-#include "debug_ctx.h"
-#include "collect.h"
-#include "proximity_map.h"
-#include "debug_ctx.h"
-#include "is_martian.h"
-#include "dht_node.h"
+#include <chrono>
+#include <cstddef>
+#include <expected>
+#include <iostream>
+#include <random>
+#include <set>
 
+#include <boost/asio/error.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/steady_timer.hpp>
+#if SPEED_DEBUG
+#   include <boost/optional/optional_io.hpp>
+#endif
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/rolling_mean.hpp>
+#include <boost/accumulators/statistics/rolling_variance.hpp>
+#include <boost/accumulators/statistics/rolling_count.hpp>
+
+#include "bencoding.h"
+#include "code.h"
+#include "collect.h"
+#include "debug_ctx.h"
+#include "dht_node.h"
+#include "mainline_dht.h"
+#include "node_contact.h"
+#include "proximity_map.h"
+#include "udp_multiplexer.h"
+
+#include "cxx/dns.h"
 #include "../async_sleep.h"
 #include "../defer.h"
 #include "../parse/endpoint.h"
@@ -21,54 +40,35 @@
 #include "../util/address.h"
 #include "../util/atomic_file.h"
 #include "../util/bytes.h"
+#include "../util/compat.h"
 #include "../util/condition_variable.h"
-#include "../util/crypto.h"
+#include "../util/debug.h"
+#include "../util/select.h"
+#include "../util/sign.h"
 #include "../util/str.h"
 #include "../util/success_condition.h"
 #include "../util/file_io.h"
 #include "../util/variant.h"
 #include "../logger.h"
 
-#include <boost/asio/buffer.hpp>
-#include <boost/asio/steady_timer.hpp>
-#if SPEED_DEBUG
-#   include <boost/optional/optional_io.hpp>
-#endif
-
-#include <boost/accumulators/accumulators.hpp>
-#include <boost/accumulators/statistics/stats.hpp>
-#include <boost/accumulators/statistics/rolling_mean.hpp>
-#include <boost/accumulators/statistics/rolling_variance.hpp>
-#include <boost/accumulators/statistics/rolling_count.hpp>
-
-#include <chrono>
-#include <random>
-#include <set>
-
-#include <iostream>
-
-#define _LOGPFX "BT DHT: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _INFO(...)  LOG_INFO(_LOGPFX, __VA_ARGS__)
-#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
-#define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
-
 namespace ouinet {
 namespace bittorrent {
 
-using std::move;
 using std::make_unique;
 using std::vector;
 using std::string;
 using boost::string_view;
-using std::cerr; using std::endl;
+using std::cerr;
 using Candidates = std::vector<NodeContact>;
 namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
-using std::make_shared;
 namespace fs = boost::filesystem;
 
 #define DEBUG_SHOW_MESSAGES 0
+
+// Max number of queries that can be handled concurrently. When this number is reached, any incoming
+// queries are ignored.
+const int MAX_HANDLE_QUERY_CONCURRENCY = 32;
 
 class Stat {
 private:
@@ -166,9 +166,9 @@ private:
 
 static bool read_nodes( bool is_v4
                       , const BencodedMap& response
+                      , PeerFilter peer_filter
                       , util::AsyncQueue<NodeContact>& sink
-                      , Cancel& cancel
-                      , asio::yield_context yield)
+                      , Async yield)
 {
     std::vector<NodeContact> nodes;
 
@@ -187,19 +187,18 @@ static bool read_nodes( bool is_v4
     }
 
     // Remove invalid endpoints
-    nodes.erase( std::remove_if
-                  ( nodes.begin()
-                  , nodes.end()
-                  , [] (auto& n) { return is_martian(n.endpoint); })
-               , nodes.end());
+    nodes.erase(
+        std::remove_if(
+            nodes.begin(),
+            nodes.end(),
+            [peer_filter] (auto& n) { return !peer_filter.is_allowed(n.endpoint); }
+        ),
+        nodes.end()
+    );
 
     if (nodes.empty()) return false;
 
-    sys::error_code ec;
-    sink.async_push_many(nodes, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, false);
-
-    return true;
+    return sink.async_push_many(nodes, yield).has_value();
 }
 
 DhtNode::DhtNode( const AsioExecutor& exec
@@ -207,35 +206,43 @@ DhtNode::DhtNode( const AsioExecutor& exec
                 , std::shared_ptr<dns::Resolver> dns_resolver
                 , const uint32_t mux_rx_limit
                 , fs::path storage_dir
-                , std::set<bootstrap::Address> extra_bs):
+                , bootstrap::Config bs
+                , util::LogPath log_path
+):
     _exec(exec),
     _ready(false),
     _stats(new Stats()),
     _dns_resolver(std::move(dns_resolver)),
     _mux_rx_limit(mux_rx_limit),
     _storage_dir(std::move(storage_dir)),
-    _extra_bs(std::move(extra_bs)),
-    _metrics(std::move(metrics))
+    _bootstrap_config(std::move(bs)),
+    _metrics(std::move(metrics)),
+    _log_path(std::move(log_path))
 {
 }
 
-void DhtNode::start(udp::endpoint local_ep, asio::yield_context yield)
+std::expected<void, sys::error_code> DhtNode::start(udp::endpoint local_ep, Async yield)
 {
     if (local_ep.address().is_loopback()) {
-        _WARN( "Node shall be bound to the loopback address and "
-             , "thus won't be able to communicate with the world");
+        LOG_WARN(yield, " Node shall be bound to the loopback address and "
+                      , "thus won't be able to communicate with the world");
     }
 
-    sys::error_code ec;
     auto m = asio_utp::udp_multiplexer(_exec);
+
+    sys::error_code ec;
     m.bind(local_ep, ec);
-    if (ec) return or_throw(yield, ec);
-    return start(move(m), yield);
+
+    if (ec) {
+        return std::unexpected(ec);
+    }
+
+    return start(std::move(m), yield);
 }
 
-void DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
+std::expected<void, sys::error_code> DhtNode::start(asio_utp::udp_multiplexer m, Async yield)
 {
-    _multiplexer = std::make_unique<UdpMultiplexer>(move(m), _mux_rx_limit);
+    _multiplexer = std::make_unique<UdpMultiplexer>(std::move(m), _mux_rx_limit);
 
     _tracker = std::make_unique<Tracker>(_exec);
     _data_store = std::make_unique<DataStore>(_exec);
@@ -243,18 +250,20 @@ void DhtNode::start(asio_utp::udp_multiplexer m, asio::yield_context yield)
     _node_id = NodeID::zero();
     _next_transaction_id = 1;
 
-    TRACK_SPAWN(_exec, [this] (asio::yield_context yield) {
+    yield.spawn(_cancel, [this] (auto yield) {
         receive_loop(yield);
     });
 
-    sys::error_code ec;
-    bootstrap(yield[ec]);
+    auto result = bootstrap(yield);
+    if (!result) {
+        return std::unexpected(result.error());
+    }
 
-    if (!ec) TRACK_SPAWN(_exec, [this] (asio::yield_context yield) {
+    yield.spawn(_cancel, [this] (auto yield) {
         store_contacts_loop(yield);
     });
 
-    return or_throw(yield, ec);
+    return {};
 }
 
 fs::path DhtNode::stored_contacts_path() const
@@ -265,27 +274,28 @@ fs::path DhtNode::stored_contacts_path() const
 }
 
 static
-std::set<NodeContact>
-read_stored_contacts( const AsioExecutor& exec
-                    , const fs::path& path
-                    , Cancel cancel
-                    , asio::yield_context yield)
+std::expected<std::set<NodeContact>, sys::error_code>
+read_stored_contacts(const fs::path& path, Async yield)
 {
     std::set<NodeContact> ret;
 
-    sys::error_code ec;
-    auto file = util::file_io::open_readonly(exec, path, ec);
-    if (ec) return or_throw(yield, ec, ret);
+    auto file = util::file_io::open_readonly(yield.get_executor(), path);
+    if (!file) {
+        return std::unexpected(file.error());
+    }
 
-    size_t filesize = util::file_io::file_size(file, ec);
-    if (ec) return or_throw(yield, ec, ret);
+    auto filesize = util::file_io::file_size(*file);
+    if (!filesize) {
+        return std::unexpected(filesize.error());
+    }
 
-    std::string data(filesize, '\0');
+    std::string data(*filesize, '\0');
 
-    util::file_io::read(file, asio::buffer(data), cancel, yield[ec]);
-    assert(!cancel || ec == asio::error::operation_aborted);
-    if (cancel) ec = asio::error::operation_aborted;
-    if (ec) return or_throw(yield, ec, ret);
+    auto result = util::file_io::read(*file, asio::buffer(data), yield);
+
+    if (!result) {
+        return std::unexpected(result.error());
+    }
 
     boost::string_view sw = data;
 
@@ -315,29 +325,27 @@ read_stored_contacts( const AsioExecutor& exec
 }
 
 static
-void write_stored_contacts( const AsioExecutor& exec
-                          , std::set<NodeContact> contacts
-                          , const fs::path& path
-                          , Cancel cancel
-                          , asio::yield_context yield)
+std::expected<void, sys::error_code>
+write_stored_contacts( std::set<NodeContact> contacts
+                     , const fs::path& path
+                     , Async yield)
 {
-    sys::error_code ec;
-    sys::error_code ignored_ec;
+    auto old_contacts = read_stored_contacts(path, yield);
+    if (!old_contacts) {
+        return std::unexpected(old_contacts.error());
+    }
 
-    auto report = defer([&ec] {
-        if (ec) _ERROR("Failed to store contacts; ec=", ec);
-        else _DEBUG("Successfully stored contacts");
-    });
+    auto result0 = util::file_io::check_or_create_directory(path.parent_path());
+    if (!result0) {
+        LOG_ERROR(yield, " Failed to store contacts: ", result0.error());
+        return std::unexpected(result0.error());
+    }
 
-    auto old_contacts = read_stored_contacts(exec, path, cancel, yield[ignored_ec]);
-    if (cancel) return or_throw(yield, asio::error::operation_aborted);
-
-    util::file_io::check_or_create_directory(path.parent_path(), ec);
-    if (ec) return or_throw(yield, ec);
-
-    auto atomic_file = util::atomic_file::make(exec, path, ec);
-    if (ec) return or_throw(yield, ec);
-    assert(atomic_file);
+    auto atomic_file = util::atomic_file::make(yield.get_executor(), path);
+    if (!atomic_file) {
+        LOG_ERROR(yield, " Failed to store contacts: ", atomic_file.error());
+        return std::unexpected(atomic_file.error());
+    }
 
     string data;
 
@@ -348,10 +356,10 @@ void write_stored_contacts( const AsioExecutor& exec
             auto iter = contacts.begin();
             c = *iter;
             contacts.erase(iter);
-        } else if (!old_contacts.empty()) {
-            auto iter = old_contacts.begin();
+        } else if (!old_contacts->empty()) {
+            auto iter = old_contacts->begin();
             c = *iter;
-            old_contacts.erase(iter);
+            old_contacts->erase(iter);
         } else {
             break;
         }
@@ -360,9 +368,28 @@ void write_stored_contacts( const AsioExecutor& exec
         data += util::str(c.id, ",", c.endpoint);
     }
 
-    util::file_io::write(atomic_file->lowest_layer(), asio::buffer(data), cancel, yield[ec]);
-    if (!ec) atomic_file->commit(ec);
-    if (ec) return or_throw(yield, ec);
+    auto result1 = util::file_io::write(
+            atomic_file->lowest_layer(),
+            asio::buffer(data),
+            yield
+        );
+
+    if (!result1) {
+        LOG_ERROR(yield, " Failed to store contacts: ", result1.error());
+        return std::unexpected(result1.error());
+    }
+
+    auto result2 = compat([&](sys::error_code& ec) {
+        atomic_file->commit(ec);
+    })();
+    if (!result2) {
+        LOG_ERROR(yield, " Failed to store contacts: ", result2.error());
+        return std::unexpected(result2.error());
+    }
+
+    LOG_DEBUG(yield, " Successfully stored contacts");
+
+    return {};
 }
 
 void DhtNode::store_contacts() const
@@ -375,14 +402,17 @@ void DhtNode::store_contacts() const
 
     auto contacts = _routing_table->dump_contacts();
 
-    TRACK_SPAWN_AFTER_STOP(_exec, ([
-        exec = _exec,
-        path = move(path),
-        contacts = move(contacts)
+    task::spawn_detached(_exec, ([
+        path = std::move(path),
+        contacts = std::move(contacts),
+        cancel = _cancel,
+        log_path = _log_path
     ] (asio::yield_context yield) mutable {
-        Cancel cancel;
-        sys::error_code ignored_ec;
-        write_stored_contacts(exec, move(contacts), path, cancel, yield[ignored_ec]);
+        std::ignore = write_stored_contacts(
+            std::move(contacts),
+            path,
+            Async(yield, std::move(cancel), std::move(log_path))
+        );
     }));
 }
 
@@ -401,39 +431,40 @@ DhtNode::~DhtNode()
     stop();
 }
 
-std::set<udp::endpoint> DhtNode::tracker_get_peers(
+std::expected<std::set<udp::endpoint>, sys::error_code> DhtNode::tracker_get_peers(
     NodeID infohash,
-    Cancel& cancel,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
     std::set<udp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
-    tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield[ec]);
-    return or_throw(yield, ec, std::move(peers));
+
+    auto result = tracker_do_search_peers(infohash, peers, responsible_nodes, yield);
+
+    if (!result) {
+        return std::unexpected(result.error());
+    }
+
+    return peers;
 }
 
-std::set<udp::endpoint> DhtNode::tracker_announce(
+std::expected<std::set<udp::endpoint>, sys::error_code> DhtNode::tracker_announce(
     NodeID infohash,
-    boost::optional<int> port,
-    Cancel& cancel,
-    asio::yield_context yield
+    std::optional<int> port,
+    Async yield
 ) {
-    sys::error_code ec;
     std::set<udp::endpoint> peers;
     std::map<NodeID, TrackerNode> responsible_nodes;
-    tracker_do_search_peers(infohash, peers, responsible_nodes, cancel, yield[ec]);
-    if (ec) {
-        return or_throw<std::set<udp::endpoint>>(yield, ec, std::move(peers));
+
+    auto result = tracker_do_search_peers(infohash, peers, responsible_nodes, yield);
+    if (!result) {
+        return std::unexpected(result.error());
     }
 
     bool success = false;
-    auto cancelled = cancel.connect([]{});
     WaitCondition wc(_exec);
     for (auto& i : responsible_nodes) {
-        TRACK_SPAWN(_exec, ([&, i, lock = wc.lock()] (asio::yield_context yield) {
-            sys::error_code ec;
-            send_write_query(
+        yield.spawn([&, i, lock = wc.lock()] (Async yield) {
+            auto result = send_write_query(
                 i.second.node_endpoint,
                 i.first,
                 "announce_peer",
@@ -444,44 +475,40 @@ std::set<udp::endpoint> DhtNode::tracker_announce(
                     { "implied_port", port ? int64_t(0) : int64_t(1) },
                     { "port", port ? int64_t(*port) : int64_t(0) }
                 },
-                cancel,
-                yield[ec]
+                yield
             );
-            if (!ec) {
+
+            if (result) {
                 success = true;
+            } else {
+                LOG_WARN(yield, " failed to send announce_peer query to ", i.second.node_endpoint, ": ", result.error());
             }
-        }));
+        });
     }
     wc.wait(yield);
 
-    ec = cancelled ? boost::asio::error::operation_aborted
-                   : success ? sys::error_code()
-                             : boost::asio::error::network_down;
-
-    return or_throw<std::set<udp::endpoint>>(yield, ec, std::move(peers));
+    if (success) {
+        return std::move(peers);
+    } else {
+        return std::unexpected(boost::asio::error::network_down);
+    }
 }
 
-boost::optional<BencodedValue> DhtNode::data_get_immutable(
-    const NodeID& key,
-    Cancel& cancel,
-    asio::yield_context yield
-) {
-    sys::error_code ec;
+std::optional<BencodedValue> DhtNode::data_get_immutable(const NodeID& key, Async yield) {
     /*
      * This is a ProximitySet, really.
      */
     ProximityMap<boost::none_t> responsible_nodes(key, RESPONSIBLE_TRACKERS_PER_SWARM);
-    boost::optional<BencodedValue> data;
+    std::optional<BencodedValue> data;
 
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect(dbg, key, [&](
+    auto result = collect(dbg, key, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        Cancel& cancel,
-        asio::yield_context yield
+        Async yield
     ) {
         if (!candidate.id && responsible_nodes.full()) {
             return;
@@ -498,18 +525,20 @@ boost::optional<BencodedValue> DhtNode::data_get_immutable(
             return;
         }
 
-        boost::optional<BencodedMap> response_ = query_get_data(
-            key,
-            candidate,
-            closer_nodes,
-            wd, &dbg,
-            cancel,
-            yield
-        );
-
+        auto response_ = compat([&](Cancel cancel, asio::yield_context yield) {
+            return query_get_data(
+                key,
+                candidate,
+                closer_nodes,
+                wd, &dbg,
+                cancel,
+                yield
+            );
+        })(yield);
         if (!response_) return;
+        if (!*response_) return;
 
-        BencodedMap& response = *response_;
+        BencodedMap& response = **response_;
 
         if (candidate.id) {
             responsible_nodes.insert({ *candidate.id, boost::none });
@@ -522,9 +551,13 @@ boost::optional<BencodedValue> DhtNode::data_get_immutable(
                 return;
             }
         }
-    }, cancel, yield[ec]);
+    }, yield);
 
-    return or_throw<boost::optional<BencodedValue>>(yield, ec, std::move(data));
+    if (!result) {
+        return std::nullopt;
+    }
+
+    return data;
 }
 
 NodeID DhtNode::data_put_immutable(
@@ -544,45 +577,49 @@ NodeID DhtNode::data_put_immutable(
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect(dbg, key, [&](
-        const Contact& candidate,
-        WatchDog& wd,
-        util::AsyncQueue<NodeContact>& closer_nodes,
-        Signal<void()>& cancel,
-        asio::yield_context yield
-    ) {
-        if (!candidate.id && responsible_nodes.full()) {
-            return;
-        }
+    compat([&](Async yield) {
+        return collect(dbg, key, [&](
+            const Contact& candidate,
+            WatchDog& wd,
+            util::AsyncQueue<NodeContact>& closer_nodes,
+            Async yield
+        ) {
+            if (!candidate.id && responsible_nodes.full()) {
+                return;
+            }
 
-        if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-            return;
-        }
+            if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+                return;
+            }
 
-        boost::optional<BencodedMap> response_ = query_get_data(
-            key,
-            candidate,
-            closer_nodes,
-            wd, &dbg,
-            cancel,
-            yield
-        );
+            auto response_ = compat([&](Cancel cancel, asio::yield_context yield) {
+                return query_get_data(
+                    key,
+                    candidate,
+                    closer_nodes,
+                    wd, &dbg,
+                    cancel,
+                    yield
+                );
+            })(yield);
 
-        if (!response_) return;
+            if (!response_) return;
+            if (!*response_) return;
 
-        BencodedMap& response = *response_;
+            BencodedMap& response = **response_;
 
-        boost::optional<std::string> put_token = response["token"].as_string();
+            boost::optional<std::string> put_token = response["token"].as_string();
 
-        if (!put_token) return;
+            if (!put_token) return;
 
-        if (candidate.id) {
-            responsible_nodes.insert({
-                *candidate.id,
-                { candidate.endpoint, std::move(*put_token) }
-            });
-        }
-    }, cancel, yield[ec]);
+            if (candidate.id) {
+                responsible_nodes.insert({
+                    *candidate.id,
+                    { candidate.endpoint, std::move(*put_token) }
+                });
+            }
+        }, yield);
+    })(cancel, yield[ec]);
 
     if (ec) {
         return or_throw<NodeID>(yield, ec, std::move(key));
@@ -592,24 +629,26 @@ NodeID DhtNode::data_put_immutable(
     auto cancelled = cancel.connect([]{});
     WaitCondition wc(_exec);
     for (auto& i : responsible_nodes) {
-        TRACK_SPAWN(_exec, ([&, lock = wc.lock()] (asio::yield_context yield) {
+        task::spawn_detached(_exec, [&, lock = wc.lock()] (asio::yield_context yield) {
             sys::error_code ec;
-            send_write_query(
-                i.second.node_endpoint,
-                i.first,
-                "put",
-                {
-                    { "id", _node_id.to_bytestring() },
-                    { "v", data },
-                    { "token", i.second.put_token }
-                },
-                cancel,
-                yield[ec]
-            );
+
+            compat([&](Async yield) {
+                return send_write_query(
+                    i.second.node_endpoint,
+                    i.first,
+                    "put",
+                    {
+                        { "id", _node_id.to_bytestring() },
+                        { "v", data },
+                        { "token", i.second.put_token }
+                    },
+                    yield
+                );
+            })(cancel, yield[ec]);
             if (!ec) {
                 success = true;
             }
-        }));
+        });
     }
     wc.wait(yield);
 
@@ -619,7 +658,7 @@ NodeID DhtNode::data_put_immutable(
 }
 
 boost::optional<MutableDataItem> DhtNode::data_get_mutable(
-    const util::Ed25519PublicKey& public_key,
+    const sign::PublicKey& public_key,
     boost::string_view salt,
     Cancel& cancel,
     asio::yield_context yield
@@ -640,87 +679,89 @@ boost::optional<MutableDataItem> DhtNode::data_get_mutable(
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect(dbg, target_id, [&](
-        const Contact& candidate,
-        WatchDog& wd,
-        util::AsyncQueue<NodeContact>& closer_nodes,
-        Cancel& cancel,
-        asio::yield_context yield
-    ) {
-        if (!candidate.id && responsible_nodes.full()) {
-            return;
-        }
+    compat([&](Async yield) {
+        return collect(dbg, target_id, [&](
+            const Contact& candidate,
+            WatchDog& wd,
+            util::AsyncQueue<NodeContact>& closer_nodes,
+            Async yield
+        ) {
+            if (!candidate.id && responsible_nodes.full()) {
+                return;
+            }
 
-        if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-            return;
-        }
+            if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+                return;
+            }
 
-        /*
-         * We want to find the latest version of the data, so don't stop early.
-         */
+            /*
+            * We want to find the latest version of the data, so don't stop early.
+            */
 
-        assert(!cancel);
+            auto response_ = compat([&](Cancel cancel, asio::yield_context yield) {
+                return query_get_data2(
+                    target_id,
+                    candidate,
+                    closer_nodes,
+                    wd,
+                    dbg,
+                    cancel,
+                    yield
+                );
+            })(yield);
 
-        boost::optional<BencodedMap> response_ = query_get_data2(
-            target_id,
-            candidate,
-            closer_nodes,
-            wd,
-            dbg,
-            cancel,
-            yield
-        );
+            if (!response_) return;
+            if (!*response_) return;
 
-        if (cancel || !response_) return;
+            BencodedMap& response = **response_;
 
-        BencodedMap& response = *response_;
+            if (candidate.id) {
+                responsible_nodes.insert({ *candidate.id, boost::none });
+            }
 
-        if (candidate.id) {
-            responsible_nodes.insert({ *candidate.id, boost::none });
-        }
+            if (response["k"] != util::bytes::to_string(public_key.to_bytes())) {
+                return;
+            }
 
-        if (response["k"] != util::bytes::to_string(public_key.serialize())) {
-            return;
-        }
+            boost::optional<int64_t> sequence_number = response["seq"].as_int();
+            if (!sequence_number) return;
 
-        boost::optional<int64_t> sequence_number = response["seq"].as_int();
-        if (!sequence_number) return;
+            auto signature = response["sig"].as_string_view();
+            if (!signature || signature->size() != sign::Signature::size) return;
 
-        auto signature = response["sig"].as_string_view();
-        if (!signature || signature->size() != util::Ed25519PublicKey::sig_size) return;
-
-        MutableDataItem item {
-            public_key,
-            std::string(salt),
-            response["v"],
-            *sequence_number,
-            util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature)
-        };
-        if (item.verify()) {
-            if (!data || *sequence_number > data->sequence_number) {
-                data = std::move(item);
-                /*
-                 * XXX: This isn't correct! We shouldn't stop with the first
-                 * validly signed item we get. Ideally we would get the item
-                 * from some N closest nodes to `target_id`. But that is
-                 * impractical because many of the closest nodes won't respond
-                 * and make us wait for too long (and we sometimes time-out even
-                 * though there _is_ some value already).
-                 *
-                 * TODO: Make this function not return a single value, but a
-                 * "generator" of dht mutable items. Then the user of this
-                 * function can have a look at it and decide whether it's
-                 * "fresh enough" (e.g. if it's a http response, it may still
-                 * be fresh).
-                 */
-                if (!cancel_wd) {
-                    cancel_wd = WatchDog(_exec
-                                        , std::chrono::seconds(5)
-                                        , [&] { cancel(); });
+            MutableDataItem item {
+                public_key,
+                std::string(salt),
+                response["v"],
+                *sequence_number,
+                { util::bytes::to_array<uint8_t, sign::Signature::size>(*signature) }
+            };
+            if (item.verify()) {
+                if (!data || *sequence_number > data->sequence_number) {
+                    data = std::move(item);
+                    /*
+                    * XXX: This isn't correct! We shouldn't stop with the first
+                    * validly signed item we get. Ideally we would get the item
+                    * from some N closest nodes to `target_id`. But that is
+                    * impractical because many of the closest nodes won't respond
+                    * and make us wait for too long (and we sometimes time-out even
+                    * though there _is_ some value already).
+                    *
+                    * TODO: Make this function not return a single value, but a
+                    * "generator" of dht mutable items. Then the user of this
+                    * function can have a look at it and decide whether it's
+                    * "fresh enough" (e.g. if it's a http response, it may still
+                    * be fresh).
+                    */
+                    if (!cancel_wd) {
+                        cancel_wd = WatchDog(_exec
+                                            , std::chrono::seconds(5)
+                                            , [&] { cancel(); });
+                    }
                 }
             }
-        }
-    }, internal_cancel, yield[ec]);
+        }, yield);
+    })(internal_cancel, yield[ec]);
 
     if (ec == asio::error::operation_aborted && !cancel && data) {
         // Only internal cancel was called to indicate we're done
@@ -754,9 +795,9 @@ NodeID DhtNode::data_put_mutable(
                              , asio::yield_context yield) -> bool {
             BencodedMap put_message {
                 { "id", _node_id.to_bytestring() },
-                { "k", util::bytes::to_string(data.public_key.serialize()) },
+                { "k", util::bytes::to_string(data.public_key.to_bytes()) },
                 { "seq", data.sequence_number },
-                { "sig", util::bytes::to_string(data.signature) },
+                { "sig", util::bytes::to_string(data.signature.bytes) },
                 { "v", data.value },
                 { "token", std::string(put_token) }
             };
@@ -768,7 +809,9 @@ NodeID DhtNode::data_put_mutable(
             wd.expires_after(_stats->max_reply_wait_time("put"));
 
             sys::error_code ec;
-            send_write_query(ep, id, "put", put_message, cancel, yield[ec]);
+            compat([&](Async yield) {
+                return send_write_query(ep, id, "put", put_message, yield);
+            })(cancel, yield[ec]);
 
             if (cancel) ec = asio::error::operation_aborted;
 
@@ -777,100 +820,103 @@ NodeID DhtNode::data_put_mutable(
 
     std::set<udp::endpoint> blacklist;
 
-    collect(dbg, target_id, [&](
-        const Contact& candidate,
-        WatchDog& wd,
-        util::AsyncQueue<NodeContact>& closer_nodes,
-        Cancel& cancel,
-        asio::yield_context yield
-    ) {
-        if (!candidate.id && responsible_nodes.full()) {
-            return;
-        }
+    compat([&](Async yield) {
+        return collect(dbg, target_id, [&](
+            const Contact& candidate,
+            WatchDog& wd,
+            util::AsyncQueue<NodeContact>& closer_nodes,
+            Async yield
+        ) {
+            if (!candidate.id && responsible_nodes.full()) {
+                return;
+            }
 
-        if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
-            return;
-        }
+            if (candidate.id && !responsible_nodes.would_insert(*candidate.id)) {
+                return;
+            }
 
-        if (blacklist.count(candidate.endpoint)) {
-            return;
-        }
+            if (blacklist.count(candidate.endpoint)) {
+                return;
+            }
 
-        boost::optional<BencodedMap> response_ = query_get_data3(
-            target_id,
-            candidate,
-            closer_nodes,
-            wd,
-            dbg,
-            cancel,
-            yield
-        );
+            auto response_ = compat([&](Cancel cancel, asio::yield_context yield) {
+                return query_get_data3(
+                    target_id,
+                    candidate,
+                    closer_nodes,
+                    wd,
+                    dbg,
+                    cancel,
+                    yield
+                );
+            })(yield);
 
-        if (cancel) return;
+            if (!response_ || !*response_) {
+                blacklist.insert(candidate.endpoint);
+                return;
+            }
 
-        if (!response_) {
-            blacklist.insert(candidate.endpoint);
-            return;
-        }
+            BencodedMap& response = **response_;
 
-        BencodedMap& response = *response_;
+            auto put_token = response["token"].as_string_view();
+            if (!put_token) {
+                return;
+            }
 
-        auto put_token = response["token"].as_string_view();
-        if (!put_token) {
-            return;
-        }
+            if (candidate.id) {
+                if (responsible_nodes.would_insert(*candidate.id)) {
+                    auto write_success = compat([&](Cancel cancel, asio::yield_context yield) {
+                        return write_to_node( *candidate.id
+                                            , candidate.endpoint
+                                            , *put_token
+                                            , wd
+                                            , cancel
+                                            , yield);
+                    })(yield);
 
-        if (candidate.id) {
-            if (responsible_nodes.would_insert(*candidate.id)) {
-                auto write_success = write_to_node( *candidate.id
-                                                  , candidate.endpoint
-                                                  , *put_token
-                                                  , wd
-                                                  , cancel
-                                                  , yield);
-
-                if (write_success) {
-                    responsible_nodes.insert({*candidate.id, boost::none});
-                    return;
+                    if (!write_success || !*write_success) {
+                        responsible_nodes.insert({*candidate.id, boost::none});
+                        return;
+                    }
                 }
             }
-        }
 
-        if (cancel) return;
-
-        if (response["k"] != util::bytes::to_string(data.public_key.serialize())) {
-            return;
-        }
-
-        boost::optional<int64_t> response_seq = response["seq"].as_int();
-        if (!response_seq) return;
-
-        auto response_sig = response["sig"].as_string_view();
-        if (!response_sig || response_sig->size() != util::Ed25519PublicKey::sig_size) return;
-
-        MutableDataItem item {
-            data.public_key,
-            data.salt,
-            response["v"],
-            *response_seq,
-            util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*response_sig)
-        };
-
-        if (item.verify()) {
-            if (*response_seq < data.sequence_number) {
-                /*
-                 * This node has an old version of this data entry.
-                 * Update it even if it is no longer responsible.
-                 */
-                write_to_node( *candidate.id
-                             , candidate.endpoint
-                             , *put_token
-                             , wd
-                             , cancel
-                             , yield);
+            if (response["k"] != util::bytes::to_string(data.public_key.to_bytes())) {
+                return;
             }
-        }
-    }, local_cancel, yield[ec]);
+
+            boost::optional<int64_t> response_seq = response["seq"].as_int();
+            if (!response_seq) return;
+
+            auto response_sig = response["sig"].as_string_view();
+            if (!response_sig || response_sig->size() != sign::Signature::size) return;
+
+            MutableDataItem item {
+                data.public_key,
+                data.salt,
+                response["v"],
+                *response_seq,
+                { util::bytes::to_array<uint8_t, sign::Signature::size>(*response_sig) }
+            };
+
+            if (item.verify()) {
+                if (*response_seq < data.sequence_number) {
+                    /*
+                    * This node has an old version of this data entry.
+                    * Update it even if it is no longer responsible.
+                    */
+                    std::ignore = compat([&](Cancel cancel, asio::yield_context yield) {
+                        return write_to_node( *candidate.id
+                                            , candidate.endpoint
+                                            , *put_token
+                                            , wd
+                                            , cancel
+                                            , yield);
+                    })(yield);
+                }
+            }
+        }, yield);
+    })(local_cancel, yield[ec]);
 
     if (cancel_signal) {
         ec = asio::error::operation_aborted;
@@ -882,11 +928,12 @@ NodeID DhtNode::data_put_mutable(
 }
 
 
-void DhtNode::receive_loop(asio::yield_context yield)
+void DhtNode::receive_loop(Async yield)
 {
-    while (true) {
-        sys::error_code ec;
+    bool handle_query_ok = true;
+    int concurrency = 0;
 
+    while (handle_query_ok) {
         /*
          * Later versions of boost::asio make it possible to (1) wait for a
          * datagram, (2) find out the size, (3) allocate a buffer, (4) recv
@@ -894,27 +941,26 @@ void DhtNode::receive_loop(asio::yield_context yield)
          */
         udp::endpoint sender;
 
-        const boost::string_view packet
-            = _multiplexer->receive(sender, _cancel, yield[ec]);
-
-        if (ec) {
+        auto packet = compat([&](Cancel cancel, asio::yield_context yield) {
+            return _multiplexer->receive(sender, cancel, yield);
+        })(yield);
+        if (!packet) {
             break;
         }
 
         // TODO: The bencode parser should only need a string_view.
-        boost::optional<BencodedValue> decoded_message = bencoding_decode(packet);
+        boost::optional<BencodedValue> decoded_message = bencoding_decode(*packet);
 
         if (!decoded_message) {
 #           if DEBUG_SHOW_MESSAGES
-            std::cerr << "recv: " << sender
-                      << " Failed parsing \"" << packet << "\"" << std::endl;
+            LOG_DEBUG(yield, " recv: ", sender, " Failed parsing \"", packet, "\"");
 #           endif
 
             continue;
         }
 
 #       if DEBUG_SHOW_MESSAGES
-        std::cerr << "recv: " << sender << " " << *decoded_message << std::endl;
+        LOG_DEBUG(yield, " recv: ", sender, " ", *decoded_message);
 #       endif
 
         BencodedMap* message_map = decoded_message->as_map();
@@ -933,7 +979,31 @@ void DhtNode::receive_loop(asio::yield_context yield)
         }
 
         if (*message_type == "q") {
-            handle_query(sender, *message_map);
+            if (concurrency >= MAX_HANDLE_QUERY_CONCURRENCY) {
+                LOG_WARN(yield, " too many concurrent queries");
+                continue;
+            }
+
+            ++concurrency;
+
+            yield.spawn(
+                [
+                    this,
+                    sender,
+                    message_map = std::move(*message_map),
+                    &handle_query_ok,
+                    &concurrency
+                ] (Async yield) mutable {
+                    auto cleanup = defer([&] {
+                        --concurrency;
+                    });
+
+                    auto result = handle_query(sender, message_map, yield);
+                    if (!result) {
+                        handle_query_ok = false;
+                    }
+                }
+            );
         } else if (*message_type == "r" || *message_type == "e") {
             auto it = _active_requests.find(*transaction_id);
             if (it != _active_requests.end() && it->second.destination == sender) {
@@ -943,25 +1013,18 @@ void DhtNode::receive_loop(asio::yield_context yield)
     }
 }
 
-void DhtNode::store_contacts_loop(asio::yield_context yield)
+void DhtNode::store_contacts_loop(Async yield)
 {
     fs::path path = stored_contacts_path();
     if (path == fs::path()) return;
-
-    Cancel cancel(_cancel);
 
     while (true) {
         if (!_routing_table) return;
         auto contacts = _routing_table->dump_contacts();
 
-        sys::error_code ignored_ec;
-        write_stored_contacts(_exec, move(contacts), path, cancel, yield[ignored_ec]);
-        if (cancel) return;
+        std::ignore = write_stored_contacts(std::move(contacts), path, yield);
 
-        sys::error_code ec;
-        async_sleep(_exec, std::chrono::minutes(6), cancel, yield[ec]);
-        if (cancel) return;
-        return_or_throw_on_error(yield, cancel, ec);
+        async_sleep(std::chrono::minutes(6), yield);
     }
 }
 
@@ -990,37 +1053,32 @@ std::string DhtNode::new_transaction_string()
 #endif
 }
 
-void DhtNode::send_datagram(
-    udp::endpoint destination,
-    const BencodedMap& message
-) {
-#   if DEBUG_SHOW_MESSAGES
-    std::cerr << "send: " << destination << " " << message << " :: " << i->second << std::endl;
-#   endif
-    _multiplexer->send(bencoding_encode(message), destination);
-}
-
-void DhtNode::send_datagram(
+std::expected<void, sys::error_code> DhtNode::send_datagram(
     udp::endpoint destination,
     const BencodedMap& message,
-    Cancel& cancel,
-    asio::yield_context yield
+    Async yield
 ) {
 #   if DEBUG_SHOW_MESSAGES
-    std::cerr << "send: " << destination << " " << message << " :: " << i->second << std::endl;
+    LOG_DEBUG(yield, " send: ", destination, " ", message, " :: ", i->second);
 #   endif
-    _multiplexer->send(bencoding_encode(message), destination, cancel, yield);
+    return compat([&](Cancel cancel, asio::yield_context yield) {
+        _multiplexer->send(
+            bencoding_encode(message),
+            destination,
+            cancel,
+            yield
+        );
+    })(yield);
 }
 
-void DhtNode::send_query(
+std::expected<void, sys::error_code> DhtNode::send_query(
     udp::endpoint destination,
     std::string transaction,
     std::string query_type,
     BencodedMap query_arguments,
-    Cancel& cancel,
-    asio::yield_context yield
+    Async yield
 ) {
-    send_datagram(
+    return send_datagram(
         destination,
         BencodedMap {
             { "y", "q" },
@@ -1029,7 +1087,6 @@ void DhtNode::send_query(
             // TODO: version string
             { "t", std::move(transaction) }
         },
-        cancel,
         yield
     );
 }
@@ -1041,23 +1098,20 @@ void DhtNode::send_query(
  * If destination_id is set, update the routing table in accordance with
  * whether a successful reply was received.
  */
-BencodedMap DhtNode::send_query_await_reply(
+std::expected<BencodedMap, sys::error_code> DhtNode::send_query_await_reply(
     Contact dst,
     const std::string& query_type,
     const BencodedMap& query_arguments,
     WatchDog* dms,
     DebugCtx* dbg,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
     using namespace std::chrono;
 
-    assert(!cancel_signal);
+    auto cancel_con = _cancel.connect([&]() { yield.cancel(); });
 
-    sys::error_code ec;
-
-    //auto timeout = _stats->max_reply_wait_time(query_type);
-    auto timeout = std::chrono::seconds(10);
+    //auto timeout_duration = _stats->max_reply_wait_time(query_type);
+    auto timeout_duration = std::chrono::seconds(10);
 
     if (dms) {
         auto d1 = dms->time_to_finish();
@@ -1068,163 +1122,126 @@ BencodedMap DhtNode::send_query_await_reply(
 
     auto start = Clock::now();
 
-    BencodedMap response; // Return value
-
-    ConditionVariable reply_and_timeout_condition(_exec);
-    boost::optional<sys::error_code> first_error_code;
-
-    asio::steady_timer timeout_timer(_exec);
-    timeout_timer.expires_after(timeout);
-
-    bool timer_handler_executed = false;
-
-    timeout_timer.async_wait([&] (const sys::error_code&) {
-        timer_handler_executed = true;
-        if (!first_error_code) {
-            first_error_code = asio::error::timed_out;
-        }
-        reply_and_timeout_condition.notify();
-    });
-
-    auto cancelled = cancel_signal.connect([&] {
-        first_error_code = asio::error::operation_aborted;
-        timeout_timer.cancel();
-    });
-
-    auto terminated = _cancel.connect([&] {
-        first_error_code = asio::error::operation_aborted;
-        timeout_timer.cancel();
-    });
-
     std::string transaction = new_transaction_string();
+
+    std::optional<BencodedMap> response;
+    ConditionVariable response_cv(yield.get_executor());
 
     _active_requests[transaction] = {
         dst.endpoint,
         [&] (BencodedMap&& response_) {
-            /*
-             * This function is never called when the Dht object is
-             * destructed, thus the terminate_slot.
-             */
-            if (first_error_code) {
-                return;
-            }
-            first_error_code = sys::error_code(); // success;
             response = std::move(response_);
-            timeout_timer.cancel();
+            response_cv.notify();
         }
     };
 
-    send_query(
-        dst.endpoint,
-        transaction,
-        std::move(query_type),
-        std::move(query_arguments),
-        cancel_signal,
-        yield[ec]
+    auto cleanup = defer([&, cancel = _cancel]() {
+        if (!cancel) {
+            _active_requests.erase(transaction);
+        }
+    });
+
+    auto result = timeout(
+        timeout_duration,
+        [&](auto yield) -> std::expected<BencodedMap, sys::error_code> {
+            auto send_result = send_query(
+                dst.endpoint,
+                transaction,
+                std::move(query_type),
+                std::move(query_arguments),
+                yield
+            );
+
+            if (!send_result) {
+                return std::unexpected(send_result.error());
+            }
+
+            while (!response) {
+                response_cv.wait(yield);
+            }
+
+            return std::move(*response);
+        },
+        yield
     );
 
-    if (ec) {
-        first_error_code = ec;
-        timeout_timer.cancel();
-    }
-
-    if (!timer_handler_executed) {
-        reply_and_timeout_condition.wait(yield);
-    }
-
-    if (terminated) {
-        return or_throw<BencodedMap>(yield, asio::error::operation_aborted);
-    }
-
-    /*
-     * We do this cleanup when cancelling the operation, but NOT when
-     * the Dht object has been destroyed.
-     */
-    _active_requests.erase(transaction);
-
-    assert(first_error_code);
-
-    if (cancelled || *first_error_code == asio::error::operation_aborted) {
-        return or_throw<BencodedMap>(yield, asio::error::operation_aborted);
-    }
-
-    if (!*first_error_code) {
+    if (result) {
         _stats->add_reply_time(query_type, Clock::now() - start);
     }
 
     if (dst.id) {
         NodeContact contact{ .id = *dst.id, .endpoint = dst.endpoint };
 
-        if (*first_error_code || response["y"] != "r") {
-            /*
-             * Record the failure in the routing table.
-             */
+        if (!result || (*result)["y"] != "r") {
+            // Record the failure in the routing table.
             _routing_table->fail_node(contact);
         } else {
-            /*
-             * Add the node to the routing table, subject to space limitations.
-             */
+            // Add the node to the routing table, subject to space limitations.
             _routing_table->try_add_node(contact, true);
         }
     }
 
-    return or_throw<BencodedMap>(yield, *first_error_code, std::move(response));
+    return result;
 }
 
-void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
+std::expected<void, sys::error_code> DhtNode::handle_query(udp::endpoint sender, BencodedMap& query, Async yield)
 {
     assert(query["y"] == "q");
 
     const auto transaction_ = query["t"].as_string_view();
 
-    if (!transaction_) { return; }
+    if (!transaction_) { return {}; }
 
     const auto transaction = *transaction_;
 
-    auto send_error = [&] (int code, std::string description) {
-        send_datagram(
+    auto send_error = [&] (int code, std::string description, Async yield) {
+        return send_datagram(
             sender,
             BencodedMap {
                 { "y", "e" },
                 { "t", std::string(transaction) },
-                { "e", BencodedList{code, description} }
-            }
+                { "e", BencodedList{code, description} },
+                { "ip", encode_endpoint(sender) }
+            },
+            yield
         );
     };
 
-    auto send_reply = [&] (BencodedMap reply) {
+    auto send_reply = [&] (BencodedMap reply, Async yield) {
         reply["id"] = _node_id.to_bytestring();
 
-        send_datagram(
+        return send_datagram(
             sender,
             BencodedMap {
-                // TODO: Send version "v" and sender endpoint "ip" (same in
+                // TODO: Send version "v" (same in
                 // above error reply).
                 // https://wiki.theory.org/BitTorrentSpecification
                 // http://www.bittorrent.org/beps/bep_0020.html
                 { "y", "r" },
                 { "t", std::string(transaction) },
-                { "r", std::move(reply) }
-            }
+                { "r", std::move(reply) },
+                { "ip", encode_endpoint(sender) },
+            },
+            yield
         );
     };
 
     if (!query["q"].is_string()) {
-        return send_error(203, "Missing field 'q'");
+        return send_error(203, "Missing field 'q'", yield);
     }
     string_view query_type = *query["q"].as_string_view();
 
     if (!query["a"].is_map()) {
-        return send_error(203, "Missing field 'a'");
+        return send_error(203, "Missing field 'a'", yield);
     }
     BencodedMap& arguments = *query["a"].as_map();
 
     boost::optional<string_view> sender_id = arguments["id"].as_string_view();
     if (!sender_id) {
-        return send_error(203, "Missing argument 'id'");
+        return send_error(203, "Missing argument 'id'", yield);
     }
     if (sender_id->size() != 20) {
-        return send_error(203, "Malformed argument 'id'");
+        return send_error(203, "Malformed argument 'id'", yield);
     }
     NodeContact contact;
     contact.id = NodeID::from_bytestring(*sender_id);
@@ -1243,14 +1260,14 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
     }
 
     if (query_type == "ping") {
-        return send_reply({});
+        return send_reply({}, yield);
     } else if (query_type == "find_node") {
         boost::optional<string_view> target_id_ = arguments["target"].as_string_view();
         if (!target_id_) {
-            return send_error(203, "Missing argument 'target'");
+            return send_error(203, "Missing argument 'target'", yield);
         }
         if (target_id_->size() != 20) {
-            return send_error(203, "Malformed argument 'target'");
+            return send_error(203, "Malformed argument 'target'", yield);
         }
         NodeID target_id = NodeID::from_bytestring(*target_id_);
 
@@ -1278,14 +1295,14 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
             reply["nodes6"] = nodes;
         }
 
-        return send_reply(reply);
+        return send_reply(reply, yield);
     } else if (query_type == "get_peers") {
         boost::optional<string_view> infohash_ = arguments["info_hash"].as_string_view();
         if (!infohash_) {
-            return send_error(203, "Missing argument 'info_hash'");
+            return send_error(203, "Missing argument 'info_hash'", yield);
         }
         if (infohash_->size() != 20) {
-            return send_error(203, "Malformed argument 'info_hash'");
+            return send_error(203, "Malformed argument 'info_hash'", yield);
         }
         NodeID infohash = NodeID::from_bytestring(*infohash_);
 
@@ -1324,25 +1341,25 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
             reply["values"] = peer_list;
         }
 
-        return send_reply(reply);
+        return send_reply(reply, yield);
     } else if (query_type == "announce_peer") {
         boost::optional<string_view> infohash_ = arguments["info_hash"].as_string_view();
         if (!infohash_) {
-            return send_error(203, "Missing argument 'info_hash'");
+            return send_error(203, "Missing argument 'info_hash'", yield);
         }
         if (infohash_->size() != 20) {
-            return send_error(203, "Malformed argument 'info_hash'");
+            return send_error(203, "Malformed argument 'info_hash'", yield);
         }
         NodeID infohash = NodeID::from_bytestring(*infohash_);
 
         boost::optional<string_view> token_ = arguments["token"].as_string_view();
         if (!token_) {
-            return send_error(203, "Missing argument 'token'");
+            return send_error(203, "Missing argument 'token'", yield);
         }
         string_view token = *token_;
         boost::optional<int64_t> port_ = arguments["port"].as_int();
         if (!port_) {
-            return send_error(203, "Missing argument 'port'");
+            return send_error(203, "Missing argument 'port'", yield);
         }
         boost::optional<int64_t> implied_port_ = arguments["implied_port"].as_int();
         int effective_port;
@@ -1368,24 +1385,24 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
                 }
             }
             if (!contains_self) {
-                return send_error(201, "This torrent is not my responsibility");
+                return send_error(201, "This torrent is not my responsibility", yield);
             }
         }
 
         if (!_tracker->verify_token(sender.address(), infohash, token)) {
-            return send_error(203, "Incorrect announce token");
+            return send_error(203, "Incorrect announce token", yield);
         }
 
         _tracker->add_peer(infohash, tcp::endpoint(sender.address(), effective_port));
 
-        return send_reply({});
+        return send_reply({}, yield);
     } else if (query_type == "get") {
         boost::optional<string_view> target_ = arguments["target"].as_string_view();
         if (!target_) {
-            return send_error(203, "Missing argument 'target'");
+            return send_error(203, "Missing argument 'target'", yield);
         }
         if (target_->size() != 20) {
-            return send_error(203, "Malformed argument 'target'");
+            return send_error(203, "Malformed argument 'target'", yield);
         }
         NodeID target = NodeID::from_bytestring(*target_);
 
@@ -1412,39 +1429,39 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
             boost::optional<BencodedValue> immutable_value = _data_store->get_immutable(target);
             if (immutable_value) {
                 reply["v"] = *immutable_value;
-                return send_reply(reply);
+                return send_reply(reply, yield);
             }
         }
 
         boost::optional<MutableDataItem> mutable_item = _data_store->get_mutable(target);
         if (mutable_item) {
             if (sequence_number_ && *sequence_number_ <= mutable_item->sequence_number) {
-                return send_reply(reply);
+                return send_reply(reply, yield);
             }
 
-            reply["k"] = util::bytes::to_string(mutable_item->public_key.serialize());
+            reply["k"] = util::bytes::to_string(mutable_item->public_key.to_bytes());
             reply["seq"] = mutable_item->sequence_number;
-            reply["sig"] = util::bytes::to_string(mutable_item->signature);
+            reply["sig"] = util::bytes::to_string(mutable_item->signature.bytes);
             reply["v"] = mutable_item->value;
-            return send_reply(reply);
+            return send_reply(reply, yield);
         }
 
-        return send_reply(reply);
+        return send_reply(reply, yield);
     } else if (query_type == "put") {
         boost::optional<string_view> token_ = arguments["token"].as_string_view();
         if (!token_) {
-            return send_error(203, "Missing argument 'token'");
+            return send_error(203, "Missing argument 'token'", yield);
         }
 
         if (!arguments.count("v")) {
-            return send_error(203, "Missing argument 'v'");
+            return send_error(203, "Missing argument 'v'", yield);
         }
         BencodedValue value = arguments["v"];
         /*
          * Size limit specified in BEP 44
          */
         if (bencoding_encode(value).size() >= 1000) {
-            return send_error(205, "Argument 'v' too big");
+            return send_error(205, "Argument 'v' too big", yield);
         }
 
         if (arguments["k"].is_string()) {
@@ -1453,25 +1470,25 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
              */
             boost::optional<string_view> public_key_ = arguments["k"].as_string_view();
             if (!public_key_) {
-                return send_error(203, "Missing argument 'k'");
+                return send_error(203, "Missing argument 'k'", yield);
             }
-            if (public_key_->size() != util::Ed25519PublicKey::key_size) {
-                return send_error(203, "Malformed argument 'k'");
+            if (public_key_->size() != sign::PublicKey::size) {
+                return send_error(203, "Malformed argument 'k'", yield);
             }
-            util::Ed25519PublicKey public_key(util::bytes::to_array<uint8_t, util::Ed25519PublicKey::key_size>(*public_key_));
+            sign::PublicKey public_key(util::bytes::to_array<uint8_t, sign::PublicKey::size>(*public_key_));
 
             boost::optional<string_view> signature_ = arguments["sig"].as_string_view();
             if (!signature_) {
-                return send_error(203, "Missing argument 'sig'");
+                return send_error(203, "Missing argument 'sig'", yield);
             }
-            if (signature_->size() != util::Ed25519PublicKey::sig_size) {
-                return send_error(203, "Malformed argument 'sig'");
+            if (signature_->size() != sign::Signature::size) {
+                return send_error(203, "Malformed argument 'sig'", yield);
             }
-            util::Ed25519PublicKey::sig_array_t signature = util::bytes::to_array<uint8_t, util::Ed25519PublicKey::sig_size>(*signature_);
+            sign::Signature::Bytes signature = util::bytes::to_array<uint8_t, sign::Signature::size>(*signature_);
 
             boost::optional<int64_t> sequence_number_ = arguments["seq"].as_int();
             if (!sequence_number_) {
-                return send_error(203, "Missing argument 'seq'");
+                return send_error(203, "Missing argument 'seq'", yield);
             }
             int64_t sequence_number = *sequence_number_;
 
@@ -1480,14 +1497,14 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
              * Size limit specified in BEP 44
              */
             if (salt_ && salt_->size() > 64) {
-                return send_error(207, "Argument 'salt' too big");
+                return send_error(207, "Argument 'salt' too big", yield);
             }
             std::string salt = salt_ ? std::move(*salt_) : "";
 
             NodeID target = _data_store->mutable_get_id(public_key, salt);
 
             if (!_data_store->verify_token(sender.address(), target, *token_)) {
-                return send_error(203, "Incorrect put token");
+                return send_error(203, "Incorrect put token", yield);
             }
 
             /*
@@ -1506,7 +1523,7 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
                     }
                 }
                 if (!contains_self) {
-                    return send_error(201, "This data item is not my responsibility");
+                    return send_error(201, "This data item is not my responsibility", yield);
                 }
             }
 
@@ -1515,34 +1532,34 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
                 salt,
                 value,
                 sequence_number,
-                signature
+                { signature }
             };
             if (!item.verify()) {
-                return send_error(206, "Invalid signature");
+                return send_error(206, "Invalid signature", yield);
             }
 
             boost::optional<MutableDataItem> existing_item = _data_store->get_mutable(target);
             if (existing_item) {
                 if (sequence_number < existing_item->sequence_number) {
-                    return send_error(302, "Sequence number less than current");
+                    return send_error(302, "Sequence number less than current", yield);
                 }
 
                 if (
                        sequence_number == existing_item->sequence_number
                     && bencoding_encode(value) != bencoding_encode(existing_item->value)
                 ) {
-                    return send_error(302, "Sequence number not updated");
+                    return send_error(302, "Sequence number not updated", yield);
                 }
 
                 boost::optional<int64_t> compare_and_swap_ = arguments["cas"].as_int();
                 if (compare_and_swap_ && *compare_and_swap_ != existing_item->sequence_number) {
-                    return send_error(301, "Compare-and-swap mismatch");
+                    return send_error(301, "Compare-and-swap mismatch", yield);
                 }
             }
 
             _data_store->put_mutable(item);
 
-            return send_reply({});
+            return send_reply({}, yield);
         } else {
             /*
              * This is an immutable data item.
@@ -1550,7 +1567,7 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
             NodeID target = _data_store->immutable_get_id(value);
 
             if (!_data_store->verify_token(sender.address(), target, *token_)) {
-                return send_error(203, "Incorrect put token");
+                return send_error(203, "Incorrect put token", yield);
             }
 
             /*
@@ -1569,49 +1586,42 @@ void DhtNode::handle_query(udp::endpoint sender, BencodedMap& query)
                     }
                 }
                 if (!contains_self) {
-                    return send_error(201, "This data item is not my responsibility");
+                    return send_error(201, "This data item is not my responsibility", yield);
                 }
             }
 
             _data_store->put_immutable(value);
 
-            return send_reply({});
+            return send_reply({}, yield);
         }
     } else {
-        return send_error(204, "Query type not implemented");
+        return send_error(204, "Query type not implemented", yield);
     }
 }
 
-asio::ip::udp::endpoint resolve(
-    const AsioExecutor& exec,
+std::expected<asio::ip::udp::endpoint, sys::error_code>
+resolve(
     asio::ip::udp ipv,
     const std::string& addr,
     const std::string& port,
     const std::shared_ptr<dns::Resolver>& dns_resolver,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
-
     using UdpLookup = udp::resolver::results_type;
     using UdpEndpoint = typename UdpLookup::endpoint_type;
     using Answers = std::vector<asio::ip::address>;
     UdpLookup results;
 
-    auto answers = dns_resolver->resolve(addr, yield[ec]);
-    if (!ec) {
-        string_view port_strv = port;
-        auto port_int = parse::number<uint16_t>(port_strv).get();
-        util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{answers, port_int};
-        results = UdpLookup::create(eps.begin(), eps.end(),
-                                    addr, port);
+    auto answers = dns_resolver->resolve(addr, yield);
+
+    if (!answers) {
+        return std::unexpected(answers.error());
     }
 
-    if (cancel_signal) ec = asio::error::operation_aborted;
-
-    if (ec) {
-        return or_throw<udp::endpoint>(yield, ec);
-    }
+    string_view port_strv = port;
+    auto port_int = parse::number<uint16_t>(port_strv).value();
+    util::AddrsAsEndpoints<Answers, UdpEndpoint> eps{std::move(*answers), port_int};
+    results = UdpLookup::create(eps.begin(), eps.end(), addr, port);
 
     for (const auto& result : results) {
         auto ep = result.endpoint();
@@ -1623,127 +1633,89 @@ asio::ip::udp::endpoint resolve(
         }
     }
 
-    return or_throw<udp::endpoint>(yield, asio::error::not_found);
+    return std::unexpected(sys::error_code(asio::error::not_found));
 }
 
-static void fix_cancel_invariant(const Cancel& cancel, sys::error_code& ec)
-{
-    assert(!cancel || ec == asio::error::operation_aborted);
-    if (cancel) ec = asio::error::operation_aborted;
-}
-
-DhtNode::BootstrapResult
+std::expected<DhtNode::BootstrapResult, sys::error_code>
 DhtNode::bootstrap_single( bootstrap::Address bootstrap_address
-                         , Cancel cancel
-                         , asio::yield_context yield)
+                         , Async yield)
 {
-    sys::error_code ec;
+    std::expected<udp::endpoint, sys::error_code> bootstrap_ep =
+        util::apply(
+            bootstrap_address,
+            [&] (const udp::endpoint& ep) {
+                return ep;
+            },
+            [&] (const asio::ip::address& addr) {
+                return udp::endpoint{addr, bootstrap::default_port};
+            },
+            [&] (const std::string& addr) {
+                string_view hp(addr), host, port;
+                std::tie(host, port) = util::split_ep(hp);
+                auto ep = resolve(
+                        _multiplexer->is_v4() ? udp::v4() : udp::v6(),
+                        std::string(host),
+                        port.empty() ? util::str(bootstrap::default_port) : std::string(port),
+                        _dns_resolver,
+                        yield
+                    );
 
-    udp::endpoint bootstrap_ep = util::apply(bootstrap_address,
-        [&] (const udp::endpoint& ep) {
-            return ep;
-        },
-        [&] (const asio::ip::address& addr) {
-            return udp::endpoint{addr, bootstrap::default_port};
-        },
-        [&] (const std::string& addr) {
-            string_view hp(addr), host, port;
-            std::tie(host, port) = util::split_ep(hp);
-            auto ep = resolve(
-                _exec,
-                _multiplexer->is_v4() ? udp::v4() : udp::v6(),
-                std::string(host),
-                port.empty() ? util::str(bootstrap::default_port) : std::string(port),
-                _dns_resolver,
-                cancel,
-                yield[ec]
-            );
+                if (!ep) {
+                    LOG_DEBUG(yield, "Unable to resolve bootstrap server, giving up: "
+                                   , addr, "; error=", ep.error());
+                }
 
-            fix_cancel_invariant(cancel, ec);
-
-            if (ec && !cancel) {
-                _DEBUG( "Unable to resolve bootstrap server, giving up: "
-                      , addr, "; ec=", ec);
+                return *ep;
             }
+        );
 
-            return ep;
-        });
-
-    if (ec) {
-        return or_throw<BootstrapResult>(yield, ec);
+    if (!bootstrap_ep) {
+        return std::unexpected(bootstrap_ep.error());
     }
 
-    BencodedMap initial_ping_reply = send_query_await_reply(
-        { bootstrap_ep, boost::none },
+    auto initial_ping_reply = send_query_await_reply(
+        { *bootstrap_ep, boost::none },
         "ping",
         BencodedMap{{ "id" , _node_id.to_bytestring() }},
         nullptr,
         nullptr,
-        cancel,
-        yield[ec]
+        yield
     );
 
-    fix_cancel_invariant(cancel, ec);
-
-    if (ec == asio::error::operation_aborted) {
-        return or_throw<BootstrapResult>(yield, ec);
+    if (!initial_ping_reply) {
+        LOG_DEBUG(yield, " Bootstrap server does not reply, giving up: "
+                       , bootstrap_address, "; error=", initial_ping_reply.error());
+        return std::unexpected(initial_ping_reply.error());
     }
 
-    if (ec) {
-        _DEBUG( "Bootstrap server does not reply, giving up: "
-              , bootstrap_address, "; ec=", ec);
-        return or_throw<BootstrapResult>(yield, ec);
-    }
-
-    auto my_ip = initial_ping_reply["ip"].as_string_view();
+    auto my_ip = (*initial_ping_reply)["ip"].as_string_view();
 
     if (!my_ip) {
-        _DEBUG("Unexpected bootstrap server reply, giving up (no IP)");
-        _DEBUG("   ", initial_ping_reply);
-        return or_throw<BootstrapResult>(yield, asio::error::fault);
+        LOG_DEBUG(yield, " Unexpected bootstrap server reply, giving up (no IP)");
+        LOG_DEBUG(yield, "   ", *initial_ping_reply);
+        return std::unexpected(asio::error::fault);
     }
 
-    boost::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
+    std::optional<asio::ip::udp::endpoint> my_endpoint = decode_endpoint(*my_ip);
 
     if (!my_endpoint) {
-        _DEBUG("Unexpected bootstrap server reply, giving up (can't parse IP)");
-        _DEBUG("   ", initial_ping_reply);
-        return or_throw<BootstrapResult>(yield, asio::error::fault);
+        LOG_DEBUG(yield, " Unexpected bootstrap server reply, giving up (can't parse IP)");
+        LOG_DEBUG(yield, "   ", *initial_ping_reply);
+        return std::unexpected(asio::error::fault);
     }
 
-    return {*my_endpoint, bootstrap_ep};
+    return BootstrapResult{ *my_endpoint, *bootstrap_ep };
 }
 
-void DhtNode::bootstrap(asio::yield_context yield)
+std::expected<void, sys::error_code> DhtNode::bootstrap(Async yield)
 {
-    // Create on stack so that the member one isn't used after ~DhtNode
-    Cancel cancel(_cancel);
+    auto cancel_con = _cancel.connect([&] { yield.cancel(); });
 
     auto metrics = _metrics.bootstrap();
 
-    sys::error_code ec;
-    sys::error_code ignored_ec;
-
-    vector<bootstrap::Address> bootstraps {
-                               "dht.libtorrent.org:25401"
-                               , "dht.transmissionbt.com:6881"
-                               // Alternative bootstrap servers from the Ouinet project.
-                               , "router.bt.ouinet.work"
-                               // Part of previous name (in case of DNS failure).
-                               , asio::ip::make_address("74.3.163.127")
-                               , "routerx.bt.ouinet.work:5060"  // squat popular UDP high port (SIP)
-                               };
-
-    for (auto& bootstrap : _extra_bs) {
-        bootstraps.push_back(bootstrap);
-    }
-
-    auto old_contacts = read_stored_contacts(_exec
-                                            , stored_contacts_path()
-                                            , cancel
-                                            , yield[ignored_ec]);
-
-    if (cancel) return or_throw(yield, asio::error::operation_aborted);
+    auto bootstraps = _bootstrap_config.collect();
+    auto old_contacts = read_stored_contacts(stored_contacts_path(), yield)
+        .value_or(std::set<NodeContact>{});
 
     for (auto& c : old_contacts) {
         bootstraps.push_back(c.endpoint);
@@ -1758,8 +1730,8 @@ void DhtNode::bootstrap(asio::yield_context yield)
         using MyEndpoint   = udp::endpoint;
         using NodeEndpoint = udp::endpoint;
 
-        std::random_device r;
-        auto rng = std::default_random_engine(r());
+        std::random_device random_device;
+        auto rng = std::default_random_engine(random_device());
         std::shuffle(bootstraps.begin(), bootstraps.end(), rng);
 
         struct Stats {
@@ -1767,11 +1739,11 @@ void DhtNode::bootstrap(asio::yield_context yield)
             std::set<NodeEndpoint> nodes;
         };
 
-        auto add_result = [] (auto& rs, auto r, size_t score) -> Stats& {
-            auto p = rs.insert({r.my_ep, {score, {r.node_ep}}});
+        auto add_result = [] (auto& results, auto result, size_t score) -> Stats& {
+            auto p = results.insert({result.my_ep, {score, {result.node_ep}}});
             auto& stats = p.first->second;
             if (p.second) return stats;
-            if (stats.nodes.insert(r.node_ep).second) {
+            if (stats.nodes.insert(result.node_ep).second) {
                 stats.score += score;
             }
             return stats;
@@ -1787,67 +1759,63 @@ void DhtNode::bootstrap(asio::yield_context yield)
                                 , [](const std::string&)       { return SCORE_GOAL; });
         };
 
-        while (!cancel) {
+        while (true) {
             using namespace std::chrono;
 
-            Cancel done_cancel(cancel);
+            Async child_yield(yield);
 
-            std::map<MyEndpoint, Stats> rs;
-
+            std::map<MyEndpoint, Stats> results;
             WaitCondition wc(_exec);
-
             size_t k = 0;
-            for (const auto &bs : bootstraps) {
-                TRACK_SPAWN(_exec , ([
-                    &,
-                    lock = wc.lock(),
-                    bs = bs
-                ] (asio::yield_context yield) {
-                    sys::error_code ec;
 
-                    _DEBUG("Bootstrapping node: ", bs, "...");
+            try {
+                for (const auto &bs : bootstraps) {
+                    child_yield.spawn([
+                        &,
+                        lock = wc.lock(),
+                        bs = bs
+                    ] (Async yield) {
+                        LOG_DEBUG(yield, " Bootstrapping node: ", bs, "...");
 
-                    auto r = bootstrap_single(bs, done_cancel, yield[ec]);
+                        auto result = bootstrap_single(bs, yield);
+                        LOG_DEBUG(yield, " Bootstrapping node: ", bs, ": done; result=", debug(result));
 
-                    fix_cancel_invariant(done_cancel, ec);
+                        if (!result || !_peer_filter.is_allowed(result->my_ep)) return;
 
-                    _DEBUG("Bootstrapping node: ", bs, ": done; ec=", ec);
+                        auto& stats = add_result(results, *result, score_of(bs));
 
-                    if (ec || is_martian(r.my_ep)) return;
+                        if (stats.score >= SCORE_GOAL) {
+                            my_endpoint = result->my_ep;
+                            node_endpoints = std::move(stats.nodes);
+                            child_yield.cancel();
+                        }
+                    });
 
-                    auto& stats = add_result(rs, r, score_of(bs));
-
-                    if (stats.score >= SCORE_GOAL) {
-                        my_endpoint = r.my_ep;
-                        node_endpoints = move(stats.nodes);
-                        done_cancel();
+                    // Try enough nodes quickly in parallel. Then try the rest with
+                    // 300ms delays.
+                    k += score_of(bs);
+                    if (k < SCORE_GOAL) {
+                        async_sleep(milliseconds(300), child_yield);
                     }
-                }));
-
-                // Try enough nodes quickly in parallel. Then try the rest with
-                // 300ms delays.
-                k += score_of(bs);
-                if (k < SCORE_GOAL) {
-                    async_sleep(_exec, milliseconds(300), done_cancel, yield);
                 }
-
-                if (done_cancel) break;
+            } catch (Async::Cancelled& e) {
+                if (yield.is_cancelled()) {
+                    throw e;
+                }
             }
 
-            sys::error_code ec;
-            wc.wait(yield[ec]);
+            wc.wait(yield);
 
-            if (cancel) return or_throw(yield, asio::error::operation_aborted);
             if (node_endpoints.size()) break;
 
             // We did not get enough score, but perhaps we have at least
             // something. If so, let's use that.
-            if (rs.size()) {
+            if (results.size()) {
                 size_t max_score = 0;
-                for (auto r : rs) {
+                for (auto r : results) {
                     if (r.second.score > max_score) {
                         my_endpoint = r.first;
-                        node_endpoints = move(r.second.nodes);
+                        node_endpoints = std::move(r.second.nodes);
                         max_score = r.second.score;
                     }
                 }
@@ -1856,17 +1824,15 @@ void DhtNode::bootstrap(asio::yield_context yield)
 
             // We could not bootstrap off any of the known nodes, wait a bit
             // and try again.
-            async_sleep(_exec, seconds(10), cancel, yield);
+            async_sleep(seconds(10), yield);
         }
     }
-
-    if (cancel) return or_throw(yield, asio::error::operation_aborted);
 
     assert(node_endpoints.size());
 
     _wan_endpoint = my_endpoint;
 
-    _INFO("WAN endpoint: ", _wan_endpoint);
+    LOG_INFO(yield, " WAN endpoint: ", _wan_endpoint);
 
     auto send_ping_fn = [&] (const NodeContact& c) { send_ping(c); };
     _node_id = NodeID::generate(_wan_endpoint.address());
@@ -1894,9 +1860,12 @@ void DhtNode::bootstrap(asio::yield_context yield)
     /*
      * Lookup our own ID, constructing a basic path to ourselves.
      */
-    find_closest_nodes(_node_id, cancel, yield[ec]);
-
-    if (ec) return or_throw(yield, ec);
+    auto contacts = compat([&](Cancel cancel, asio::yield_context yield) {
+        return find_closest_nodes(_node_id, cancel, yield);
+    })(yield);
+    if (!contacts) {
+        return std::unexpected(contacts.error());
+    }
 
     /*
      * We now know enough nodes that general DHT queries should succeed. The
@@ -1905,22 +1874,31 @@ void DhtNode::bootstrap(asio::yield_context yield)
      */
     _ready = true;
     metrics.mark_success();
+
+    return {};
 }
 
 
 template<class Evaluate>
-void DhtNode::collect(
+requires std::invocable<
+    Evaluate,
+    const Contact&,
+    WatchDog&,
+    util::AsyncQueue<NodeContact>&,
+    Async
+>
+std::expected<void, sys::error_code>
+DhtNode::collect(
     DebugCtx& dbg,
     const NodeID& target_id,
     Evaluate&& evaluate,
-    Cancel cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    auto canceled = _cancel.connect([&] { cancel_signal(); });
+    auto canceled = _cancel.connect([&] { yield.cancel(); });
 
     if (!_routing_table) {
         // We're not yet bootstrapped.
-        return or_throw(yield, asio::error::try_again);
+        return std::unexpected(asio::error::try_again);
     }
 
     // (Note: can't use lambda because we need default constructibility now)
@@ -1956,18 +1934,14 @@ void DhtNode::collect(
         seed_candidates.insert({ ep, boost::none });
     }
 
-    auto terminated = _cancel.connect([]{});
     ::ouinet::bittorrent::collect(
         dbg,
-        _exec,
         std::move(seed_candidates),
         std::forward<Evaluate>(evaluate),
-        cancel_signal,
         yield
     );
-    if (terminated) {
-        or_throw(yield, asio::error::operation_aborted);
-    }
+
+    return {};
 }
 
 std::vector<NodeContact> DhtNode::find_closest_nodes(
@@ -1981,36 +1955,35 @@ std::vector<NodeContact> DhtNode::find_closest_nodes(
     DebugCtx dbg;
     dbg.enable_log = SPEED_DEBUG;
 
-    collect(dbg, target_id, [&](
-        const Contact& candidate,
-        WatchDog& dms,
-        util::AsyncQueue<NodeContact>& closer_nodes,
-        Cancel& cancel_signal,
-        asio::yield_context yield
-    ) {
-        if (!candidate.id && out.full()) {
+    compat([&](Async yield) {
+        return collect(dbg, target_id, [&](
+            const Contact& candidate,
+            WatchDog& dms,
+            util::AsyncQueue<NodeContact>& closer_nodes,
+            Async yield
+        ) {
+            if (!candidate.id && out.full()) {
+                return;
+            }
+
+            if (candidate.id && !out.would_insert(*candidate.id)) {
+                return;
+            }
+
+            auto accepted = query_find_node2( target_id
+                                            , candidate
+                                            , closer_nodes
+                                            , dms
+                                            , &dbg
+                                            , yield);
+
+            if (accepted && *accepted && candidate.id) {
+                out.insert({ *candidate.id, candidate.endpoint });
+            }
+
             return;
-        }
-
-        if (candidate.id && !out.would_insert(*candidate.id)) {
-            return;
-        }
-
-        bool accepted = query_find_node2( target_id
-                                        , candidate
-                                        , closer_nodes
-                                        , dms
-                                        , &dbg
-                                        , cancel_signal
-                                        , yield[ec]);
-
-        if (accepted && candidate.id) {
-            out.insert({ *candidate.id, candidate.endpoint });
-        }
-
-        return;
-    }
-    , cancel_signal, yield[ec]);
+        }, yield);
+    })(cancel_signal, yield[ec]);
 
     std::vector<NodeContact> output_set;
     for (auto& c : out) {
@@ -2020,21 +1993,17 @@ std::vector<NodeContact> DhtNode::find_closest_nodes(
     return or_throw<std::vector<NodeContact>>(yield, ec, std::move(output_set));
 }
 
-BencodedMap DhtNode::send_ping(
+std::expected<BencodedMap, sys::error_code> DhtNode::send_ping(
     NodeContact contact,
-    Cancel& cancel,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
-
     return send_query_await_reply(
         contact,
         "ping",
         BencodedMap{{ "id", _node_id.to_bytestring() }},
         nullptr,
         nullptr,
-        cancel,
-        yield[ec]
+        yield
     );
 }
 
@@ -2044,51 +2013,52 @@ void DhtNode::send_ping(NodeContact contact)
     // that we need to spawn an unlimited number of coroutines.  Perhaps it
     // would be better if functions using this send_ping function would only
     // spawn a limited number of coroutines and use only that.
-    TRACK_SPAWN(_exec, ([
+    task::spawn_detached(_exec, [
         this,
         contact,
-        cancel = _cancel
+        cancel = _cancel,
+        log_path = _log_path
     ] (asio::yield_context yield) mutable {
-        sys::error_code ec;
-        send_ping(contact, cancel, yield[ec]);
-    }));
+        std::ignore = send_ping(contact, Async(yield, cancel, std::move(log_path)));
+    });
 }
 
 /*
  * Send a query that writes data to the DHT. Repeat up to 5 times until we
  * get a positive response.
  */
-void DhtNode::send_write_query(
+std::expected<void, sys::error_code> DhtNode::send_write_query(
     udp::endpoint destination,
     NodeID destination_id,
     const std::string& query_type,
     const BencodedMap& query_arguments,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
     /*
      * Retry the write message a couple of times.
      */
     const int TRIES = 3;
-    sys::error_code ec;
+
+    sys::error_code last_error;
+
     for (int i = 0; i < TRIES; i++) {
-        BencodedMap write_reply = send_query_await_reply(
+        auto result = send_query_await_reply(
             { destination, destination_id },
             query_type,
             query_arguments,
             nullptr,
             nullptr,
-            cancel_signal,
-            yield[ec]
+            yield
         );
 
-        if (ec == asio::error::operation_aborted) {
-            break;
-        } else if (!ec) {
-            break;
+        if (result) {
+            return {};
+        } else {
+            last_error = result.error();
         }
     }
-    or_throw(yield, ec);
+
+    return std::unexpected(last_error);
 }
 
 /**
@@ -2100,12 +2070,9 @@ bool DhtNode::query_find_node(
     NodeID target_id,
     Contact node,
     std::vector<NodeContact>& closer_nodes,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
-
-    BencodedMap find_node_reply = send_query_await_reply(
+    auto find_node_reply = send_query_await_reply(
         node,
         "find_node",
         BencodedMap {
@@ -2114,17 +2081,15 @@ bool DhtNode::query_find_node(
         },
         nullptr,
         nullptr,
-        cancel_signal,
-        yield[ec]
+        yield
     );
-
-    if (ec) {
+    if (!find_node_reply) {
         return false;
     }
-    if (find_node_reply["y"] != "r") {
+    if ((*find_node_reply)["y"] != "r") {
         return false;
     }
-    BencodedMap* response = find_node_reply["r"].as_map();
+    BencodedMap* response = (*find_node_reply)["r"].as_map();
     if (!response) {
         return false;
     }
@@ -2144,22 +2109,15 @@ bool DhtNode::query_find_node(
     return !closer_nodes.empty();
 }
 
-bool DhtNode::query_find_node2(
+std::expected<bool, sys::error_code> DhtNode::query_find_node2(
     NodeID target_id,
     Contact node,
     util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx* dbg,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    assert(!cancel_signal);
-
-    Cancel cancel(cancel_signal);
-
-    sys::error_code ec;
-
-    BencodedMap find_node_reply = send_query_await_reply(
+    auto find_node_reply = send_query_await_reply(
         node,
         "find_node",
         BencodedMap {
@@ -2168,37 +2126,34 @@ bool DhtNode::query_find_node2(
         },
         &dms,
         dbg,
-        cancel,
-        yield[ec]
+        yield
     );
+    if (!find_node_reply) {
+        return std::unexpected(find_node_reply.error());
+    }
 
-    return_or_throw_on_error(yield, cancel, ec, false);
-
-    if (find_node_reply["y"] != "r") {
+    if ((*find_node_reply)["y"] != "r") {
         return false;
     }
 
-    BencodedMap* response = find_node_reply["r"].as_map();
+    BencodedMap* response = (*find_node_reply)["r"].as_map();
     if (!response) {
         return false;
     }
 
-    return read_nodes(is_v4(), *response, closer_nodes, cancel, yield[ec]);
+    return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
 }
 
 // http://bittorrent.org/beps/bep_0005.html#get-peers
-boost::optional<BencodedMap> DhtNode::query_get_peers(
+std::optional<BencodedMap> DhtNode::query_get_peers(
     NodeID infohash,
     Contact node,
     util::AsyncQueue<NodeContact>& closer_nodes,
     WatchDog& dms,
     DebugCtx* dbg,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
-
-    BencodedMap get_peers_reply = send_query_await_reply(
+    auto get_peers_reply = send_query_await_reply(
         node,
         "get_peers",
         BencodedMap {
@@ -2207,19 +2162,17 @@ boost::optional<BencodedMap> DhtNode::query_get_peers(
         },
         &dms,
         dbg,
-        cancel_signal,
-        yield[ec]
+        yield
     );
-
-    if (ec) {
-        return boost::none;
+    if (!get_peers_reply) {
+        return std::nullopt;
     }
-    if (get_peers_reply["y"] != "r") {
-        return boost::none;
+    if ((*get_peers_reply)["y"] != "r") {
+        return std::nullopt;
     }
-    BencodedMap* response = get_peers_reply["r"].as_map();
+    BencodedMap* response = (*get_peers_reply)["r"].as_map();
     if (!response) {
-        return boost::none;
+        return std::nullopt;
     }
 
     std::vector<NodeContact> closer_nodes_v;
@@ -2227,12 +2180,12 @@ boost::optional<BencodedMap> DhtNode::query_get_peers(
     if (is_v4()) {
         auto nodes = (*response)["nodes"].as_string_view();
         if (!NodeContact::decode_compact_v4(*nodes, closer_nodes_v)) {
-            return boost::none;
+            return std::nullopt;
         }
     } else {
         auto nodes6 = (*response)["nodes6"].as_string_view();
         if (!NodeContact::decode_compact_v6(*nodes6, closer_nodes_v)) {
-            return boost::none;
+            return std::nullopt;
         }
     }
 
@@ -2241,22 +2194,12 @@ boost::optional<BencodedMap> DhtNode::query_get_peers(
          * We got a reply to get_peers, but it does not contain nodes.
          * Follow up with a find_node to fill the gap.
          */
-        auto cancelled = cancel_signal.connect([]{});
-        query_find_node(
-            infohash,
-            node,
-            closer_nodes_v,
-            cancel_signal,
-            yield
-        );
-        if (cancelled) {
-            return boost::none;
-        }
+        std::ignore = query_find_node(infohash, node, closer_nodes_v, yield);
     }
 
-    closer_nodes.async_push_many(closer_nodes_v, cancel_signal, yield[ec]);
+    std::ignore = closer_nodes.async_push_many(closer_nodes_v, yield);
 
-    return {std::move(*response)};
+    return std::move(*response);
 }
 
 // http://bittorrent.org/beps/bep_0044.html#get-message
@@ -2271,18 +2214,19 @@ boost::optional<BencodedMap> DhtNode::query_get_data(
 ) {
     sys::error_code ec;
 
-    BencodedMap get_reply = send_query_await_reply(
-        node,
-        "get",
-        BencodedMap {
-            { "id", _node_id.to_bytestring() },
-            { "target", key.to_bytestring() }
-        },
-        nullptr,
-        nullptr,
-        cancel,
-        yield[ec]
-    );
+    BencodedMap get_reply = compat([&](Async yield) {
+        return send_query_await_reply(
+            node,
+            "get",
+            BencodedMap {
+                { "id", _node_id.to_bytestring() },
+                { "target", key.to_bytestring() }
+            },
+            nullptr,
+            nullptr,
+            yield
+        );
+    })(cancel, yield[ec]);
 
     if (ec == asio::error::operation_aborted) {
         return boost::none;
@@ -2300,14 +2244,16 @@ boost::optional<BencodedMap> DhtNode::query_get_data(
          * TODO: Perhaps using a separate routing table for BEP 44 nodes would
          * improve things here?
          */
-        query_find_node2(
-            key,
-            node,
-            closer_nodes,
-            dms, dbg,
-            cancel,
-            yield
-        );
+        compat([&](Async yield) {
+            return query_find_node2(
+                key,
+                node,
+                closer_nodes,
+                dms, dbg,
+                yield
+            );
+        })(cancel, yield);
+
         return boost::none;
     }
 
@@ -2317,14 +2263,16 @@ boost::optional<BencodedMap> DhtNode::query_get_data(
          * Query it using find_node instead. Ignore errors and hope for
          * the best; we are just trying to find some closer nodes here.
          */
-        query_find_node2(
-            key,
-            node,
-            closer_nodes,
-            dms, dbg,
-            cancel,
-            yield
-        );
+        compat([&](Async yield) {
+            return query_find_node2(
+                key,
+                node,
+                closer_nodes,
+                dms, dbg,
+                yield
+            );
+        })(cancel, yield);
+
         return boost::none;
     }
 
@@ -2332,7 +2280,9 @@ boost::optional<BencodedMap> DhtNode::query_get_data(
 
     if (!response) return boost::none;
 
-    read_nodes(is_v4(), *response, closer_nodes, cancel, yield[ec]);
+    compat([&](Async yield) {
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
+    })(cancel, yield[ec]);
 
     return {std::move(*response)};
 }
@@ -2362,30 +2312,33 @@ boost::optional<BencodedMap> DhtNode::query_get_data2(
     // through nodes without BEP 44 support slows things down quite a lot.
     WatchDog wd(_exec, _stats->max_reply_wait_time("get"), [&] () mutable {
         if (local_cancel) return;
-        TRACK_SPAWN(_exec, ([&, lock = wc.lock()] ( asio::yield_context yield) {
+        task::spawn_detached(_exec, [&, lock = wc.lock()] ( asio::yield_context yield) {
             if (dbg) cerr << dbg << "query_find_node2 start " << node << "\n";
             sys::error_code ec;
-            query_find_node2(key, node, closer_nodes, dms, &dbg, local_cancel, yield[ec]);
+            compat([&](Async yield) {
+                return query_find_node2(key, node, closer_nodes, dms, &dbg, yield);
+            })(local_cancel, yield[ec]);
             if (dbg) cerr << dbg << "query_find_node2 end " << node << "\n";
             local_cancel();
-        }));
+        });
     });
 
     assert(!cancel_signal);
     assert(!local_cancel);
     if (dbg) cerr << dbg << "send_query_await_reply get start " << node << "\n";
-    BencodedMap get_reply = send_query_await_reply(
-        node,
-        "get",
-        BencodedMap {
-            { "id", _node_id.to_bytestring() },
-            { "target", key.to_bytestring() }
-        },
-        &dms,
-        &dbg,
-        local_cancel,
-        yield[ec]
-    );
+    BencodedMap get_reply = compat([&](Async yield) {
+        return send_query_await_reply(
+            node,
+            "get",
+            BencodedMap {
+                { "id", _node_id.to_bytestring() },
+                { "target", key.to_bytestring() }
+            },
+            &dms,
+            &dbg,
+            yield
+        );
+    })(local_cancel, yield[ec]);
 
     if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << util::str(ec) << "\n";
     sys::error_code ec_;
@@ -2406,7 +2359,9 @@ boost::optional<BencodedMap> DhtNode::query_get_data2(
 
     if (!response) return boost::none;
 
-    read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
+    compat([&](Async yield) {
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
+    })(cancel_signal, yield[ec]);
 
     return {std::move(*response)};
 }
@@ -2432,18 +2387,19 @@ boost::optional<BencodedMap> DhtNode::query_get_data3(
     assert(!cancel_signal);
     assert(!local_cancel);
     if (dbg) cerr << dbg << "send_query_await_reply get start " << node << "\n";
-    BencodedMap get_reply = send_query_await_reply(
-        node,
-        "get",
-        BencodedMap {
-            { "id", _node_id.to_bytestring() },
-            { "target", key.to_bytestring() }
-        },
-        &dms,
-        &dbg,
-        local_cancel,
-        yield[ec]
-    );
+    BencodedMap get_reply = compat([&](Async yield) {
+        return send_query_await_reply(
+            node,
+            "get",
+            BencodedMap {
+                { "id", _node_id.to_bytestring() },
+                { "target", key.to_bytestring() }
+            },
+            &dms,
+            &dbg,
+            yield
+        );
+    })(local_cancel, yield[ec]);
 
     if (dbg) cerr << dbg << "send_query_await_reply get end: " << node << "; ec=" << util::str(ec) << "\n";
 
@@ -2461,7 +2417,9 @@ boost::optional<BencodedMap> DhtNode::query_get_data3(
 
     if (!response) return boost::none;
 
-    read_nodes(is_v4(), *response, closer_nodes, cancel_signal, yield[ec]);
+    compat([&](Async yield) {
+        return read_nodes(is_v4(), *response, _peer_filter, closer_nodes, yield);
+    })(cancel_signal, yield[ec]);
 
     return {std::move(*response)};
 }
@@ -2470,14 +2428,12 @@ boost::optional<BencodedMap> DhtNode::query_get_data3(
  * Perform a get_peers search. Returns the peers found, as well as necessary
  * data to later perform an announce operation.
  */
-void DhtNode::tracker_do_search_peers(
+std::expected<void, sys::error_code> DhtNode::tracker_do_search_peers(
     NodeID infohash,
     std::set<udp::endpoint>& peers,
     std::map<NodeID, TrackerNode>& responsible_nodes,
-    Cancel& cancel_signal,
-    asio::yield_context yield
+    Async yield
 ) {
-    sys::error_code ec;
     struct ResponsibleNode {
         asio::ip::udp::endpoint node_endpoint;
         std::vector<udp::endpoint> peers;
@@ -2486,12 +2442,11 @@ void DhtNode::tracker_do_search_peers(
     ProximityMap<ResponsibleNode> responsible_nodes_full(infohash, RESPONSIBLE_TRACKERS_PER_SWARM);
 
     DebugCtx dbg;
-    collect(dbg, infohash, [&](
+    auto result = collect(dbg, infohash, [&](
         const Contact& candidate,
         WatchDog& wd,
         util::AsyncQueue<NodeContact>& closer_nodes,
-        Cancel& cancel_signal,
-        asio::yield_context yield
+        Async yield
     ) {
         if (!candidate.id && responsible_nodes_full.full()) {
             return;
@@ -2500,16 +2455,14 @@ void DhtNode::tracker_do_search_peers(
             return;
         }
 
-        boost::optional<BencodedMap> response_ = query_get_peers(
+        auto response_ = query_get_peers(
             infohash,
             candidate,
             closer_nodes,
             wd,
             &dbg,
-            cancel_signal,
             yield
         );
-
         if (!response_) return;
 
         BencodedMap& response = *response_;
@@ -2526,7 +2479,7 @@ void DhtNode::tracker_do_search_peers(
                     auto peer_string = peer.as_string_view();
                     if (!peer_string) continue;
 
-                    boost::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
+                    std::optional<udp::endpoint> endpoint = decode_endpoint(*peer_string);
                     if (!endpoint) continue;
 
                     node.peers.push_back(*endpoint);
@@ -2534,7 +2487,7 @@ void DhtNode::tracker_do_search_peers(
             }
             responsible_nodes_full.insert({ *candidate.id, std::move(node) });
         }
-    }, cancel_signal, yield[ec]);
+    }, yield);
 
     peers.clear();
     responsible_nodes.clear();
@@ -2543,22 +2496,30 @@ void DhtNode::tracker_do_search_peers(
         responsible_nodes[i.first] = { i.second.node_endpoint, i.second.put_token };
     }
 
-    or_throw(yield, ec);
+    return result;
 }
 
+std::ostream& operator << (std::ostream& os, const DhtNode::BootstrapResult& result) {
+    return os << "{ my_ep=" << result.my_ep << ", node_ep=" << result.node_ep << " }";
+}
+
+// -------------------------------------------------------------------------------------------------
 
 MainlineDht::MainlineDht( const AsioExecutor& exec
                         , metrics::MainlineDht metrics
                         , std::shared_ptr<dns::Resolver> dns_resolver
                         , uint32_t mux_rx_limit
                         , fs::path storage_dir
-                        , std::set<bootstrap::Address> extra_bs)
+                        , bootstrap::Config bootstrap_config
+                        , util::LogPath log_path)
     : _exec(exec)
+    , _ready_cv(exec)
     , _dns_resolver(std::move(dns_resolver))
     , _mux_rx_limit(mux_rx_limit)
     , _storage_dir(std::move(storage_dir))
-    , _extra_bs(std::move(extra_bs))
+    , _bootstrap_config(std::move(bootstrap_config))
     , _metrics(std::move(metrics))
+    , _log_path(std::move(log_path))
 {
 }
 
@@ -2587,7 +2548,8 @@ void MainlineDht::set_endpoints(const std::set<udp::endpoint>& eps)
         m.bind(ep, ec);
         assert(!ec);
         if (ec) continue;
-        add_endpoint(move(m));
+
+        (void) add_endpoint(std::move(m));
     }
 }
 
@@ -2598,30 +2560,6 @@ metrics::DhtNode metrics_dht_node_for(metrics::MainlineDht& metrics, const asio:
         assert(addr.is_v6());
         return metrics.dht_node_ipv6();
     }
-}
-
-void MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
-{
-    auto local_ep = m.local_endpoint();
-
-    {  // replace the node if existing
-        auto it = _nodes.find(local_ep);
-        if (it != _nodes.end()) {
-            _nodes.erase(it);
-        }
-    }
-
-    _nodes[local_ep] = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()),
-                                            _dns_resolver, _mux_rx_limit, _storage_dir);
-
-    TRACK_SPAWN(_exec, ([&, m = move(m)] (asio::yield_context yield) mutable {
-        auto ep = m.local_endpoint();
-        auto con = _cancel.connect([&] { _nodes.erase(ep); });
-
-        sys::error_code ec;
-        _nodes[ep]->start(move(m), yield[ec]);
-        assert(!con || ec == asio::error::operation_aborted);
-    }));
 }
 
 std::set<udp::endpoint> MainlineDht::wan_endpoints() const {
@@ -2642,181 +2580,133 @@ void MainlineDht::stop() {
     _nodes.clear();
 }
 
-asio::ip::udp::endpoint
-MainlineDht::add_endpoint( asio_utp::udp_multiplexer m
-                         , asio::yield_context yield)
+Promise<asio::ip::udp::endpoint>::Future
+MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
 {
     auto local_ep = m.local_endpoint();
 
-    {  // replace the node if existing
-        auto it = _nodes.find(local_ep);
-        if (it != _nodes.end()) {
-            _nodes.erase(it);
+    auto& node = _nodes[local_ep] = make_unique<DhtNode>(
+        _exec,
+        metrics_dht_node_for(_metrics, local_ep.address()),
+        _dns_resolver,
+        _mux_rx_limit,
+        _storage_dir,
+        _bootstrap_config,
+        _log_path
+    );
+    node->set_peer_filter(_peer_filter);
+
+    Promise<asio::ip::udp::endpoint> promise(_exec);
+    auto future = promise.get_future();
+
+    task::spawn_detached(
+        _exec,
+        [
+            this,
+            log_path = _log_path,
+            m = std::move(m),
+            promise = std::move(promise),
+            local_ep
+        ](auto y) mutable {
+            Async yield(y, _cancel, std::move(log_path));
+
+            auto cancelled = yield.cancel_slot([&] {
+                if (auto it = _nodes.find(local_ep); it != _nodes.end()) {
+                    _nodes.erase(it);
+                }
+            });
+
+            auto& node = _nodes[local_ep];
+            auto result = node->start(std::move(m), yield);
+
+            if (result) {
+                promise.set_value(node->wan_endpoint());
+            }
+
+            // TODO: should we send errors as well?
+
+            _ready_cv.notify();
         }
-    }
+    );
 
-    auto node = make_unique<DhtNode>(_exec, metrics_dht_node_for(_metrics, local_ep.address()),
-                                     _dns_resolver, _mux_rx_limit, _storage_dir, _extra_bs);
-
-    auto cc = _cancel.connect([&] { node = nullptr; });
-
-    sys::error_code ec;
-    node->start(move(m), yield[ec]);
-
-    assert(!cc || ec == asio::error::operation_aborted);
-    if (cc) ec = asio::error::operation_aborted;
-    if (ec) return or_throw<asio::ip::udp::endpoint>(yield, ec);
-
-    auto wan_ep = node->wan_endpoint();
-
-    assert(!_nodes.count(local_ep));
-    assert(node);
-
-    _nodes[local_ep] = std::move(node);
-
-    return wan_ep;
+    return future;
 }
 
-std::set<udp::endpoint> MainlineDht::tracker_announce(
+std::expected<std::set<udp::endpoint>, sys::error_code>
+MainlineDht::tracker_announce(
     NodeID infohash,
-    boost::optional<int> port,
-    Cancel cancel,
-    asio::yield_context yield
+    std::optional<int> port,
+    Async yield
 ) {
-    auto cc = _cancel.connect([&] { cancel(); });
+    auto cc = _cancel.connect([&] { yield.cancel(); });
 
-    std::set<udp::endpoint> output;
+    std::expected<std::set<udp::endpoint>, sys::error_code> output =
+        std::unexpected(asio::error::network_unreachable);
 
-    WaitCondition wc(_exec);
+    WaitCondition wc(yield.get_executor());
+
     for (auto& i : _nodes) {
-        TRACK_SPAWN(_exec, ([
+        yield.spawn([
             &,
-            ep = i.first,
-            p = i.second.get(),
+            node = i.second.get(),
             lock = wc.lock()
-        ] (asio::yield_context yield) {
-            sys::error_code ec;
-            std::set<udp::endpoint> peers = i.second->tracker_announce(infohash, port, cancel, yield[ec]);
-            assert(!cancel || ec == asio::error::operation_aborted);
-            if (cancel) ec = asio::error::operation_aborted;
-            if (ec) { return; }
-            output.insert(peers.begin(), peers.end());
-        }));
+        ] (Async yield) {
+            auto peers = node->tracker_announce(infohash, port, yield);
+
+            if (peers) {
+                if (output) {
+                    output->insert(peers->begin(), peers->end());
+                } else {
+                    output = std::move(peers);
+                }
+            } else {
+                if (!output) {
+                    output = std::unexpected(peers.error());
+                }
+            }
+        });
     }
 
     wc.wait(yield);
 
-    sys::error_code ec;
-
-    if (cancel) {
-        ec = asio::error::operation_aborted;
-    } else if (output.empty()) {
-        ec = asio::error::network_unreachable;
-    }
-
-    return or_throw<std::set<udp::endpoint>>(yield, ec, move(output));
+    return output;
 }
 
-void MainlineDht::mutable_put(
-    const MutableDataItem& data,
-    Cancel& top_cancel,
-    asio::yield_context yield
-) {
-    Cancel cancel(top_cancel);
-
-    SuccessCondition condition(_exec);
-    WaitCondition wait_all(_exec);
-
-    for (auto& i : _nodes) {
-        TRACK_SPAWN(_exec, ([
-            &,
-            lock = condition.lock(),
-            lock_all = wait_all.lock()
-        ] (asio::yield_context yield) {
-            if (!i.second->ready()) {
-                return;
-            }
-
-            sys::error_code ec;
-            i.second->data_put_mutable(data, cancel, yield[ec]);
-
-            if (ec) return;
-
-            lock.release(true);
-        }));
-    }
-
-    auto cancelled = cancel.connect([&] {
-        condition.cancel();
-    });
-
-    auto terminated = _cancel.connect([&] {
-        condition.cancel();
-    });
-
-    sys::error_code ec;
-
-    if (condition.wait_for_success(yield)) {
-        cancel();
-    } else {
-        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
-        else                       { ec = asio::error::network_unreachable; }
-    }
-
-    wait_all.wait(yield);
-
-    return or_throw(yield, ec);
-}
-
-std::set<udp::endpoint> MainlineDht::tracker_get_peers(NodeID infohash, Cancel& cancel_signal, asio::yield_context yield)
+std::expected<std::set<udp::endpoint>, sys::error_code>
+MainlineDht::tracker_get_peers(NodeID infohash, Async yield)
 {
-    std::set<udp::endpoint> output;
-    sys::error_code ec;
+    auto terminated = _cancel.connect([&] { yield.cancel(); });
 
-    Cancel cancel_attempts;
+    std::expected<std::set<udp::endpoint>, sys::error_code> output =
+        std::unexpected(asio::error::network_unreachable);
 
-    SuccessCondition success_condition(_exec);
-    WaitCondition completed_condition(_exec);
+    WaitCondition wc(yield.get_executor());
+
     for (auto& i : _nodes) {
-        TRACK_SPAWN(_exec, ([
-            &,
-            success = success_condition.lock(),
-            complete = completed_condition.lock()
-        ] (asio::yield_context yield) {
+        yield.spawn([&, lock = wc.lock()] (auto yield) {
             if (!i.second->ready()) {
                 return;
             }
 
-            sys::error_code ec;
-            std::set<udp::endpoint> peers = i.second->tracker_get_peers(infohash, cancel_attempts, yield[ec]);
+            auto peers = i.second->tracker_get_peers(infohash, yield);
 
-            output.insert(peers.begin(), peers.end());
-
-            if (peers.size()) {
-                success.release(true);
+            if (peers) {
+                if (output) {
+                    output->insert(peers->begin(), peers->end());
+                } else {
+                    output = std::move(*peers);
+                }
+            } else {
+                if (!output) {
+                    output = std::unexpected(peers.error());
+                }
             }
-        }));
+        });
     }
 
-    auto cancelled = cancel_signal.connect([&] {
-        success_condition.cancel();
-    });
-    auto terminated = _cancel.connect([&] {
-        success_condition.cancel();
-    });
-    if (!success_condition.wait_for_success(yield)) {
-        if (success_condition.cancelled()) {
-            ec = asio::error::operation_aborted;
-        } else {
-            ec = asio::error::network_unreachable;
-        }
-    }
+    wc.wait(yield);
 
-    cancel_attempts();
-
-    completed_condition.wait(yield);
-
-    return or_throw(yield, ec, move(output));
+    return output;
 }
 
 boost::optional<BencodedValue> MainlineDht::immutable_get(
@@ -2824,15 +2714,15 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
         Cancel& cancel_signal,
         asio::yield_context yield
 ) {
-    boost::optional<BencodedValue> output;
+    std::optional<BencodedValue> output;
     sys::error_code ec;
 
-    Signal<void()> cancel_attempts;
+    Cancel cancel_attempts;
 
     SuccessCondition success_condition(_exec);
     WaitCondition completed_condition(_exec);
     for (auto& i : _nodes) {
-        TRACK_SPAWN(_exec, ([
+        task::spawn_detached(_exec, [
             &,
             success = success_condition.lock(),
             complete = completed_condition.lock()
@@ -2842,13 +2732,17 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
             }
 
             sys::error_code ec;
-            boost::optional<BencodedValue> data = i.second->data_get_immutable(key, cancel_attempts, yield[ec]);
+            auto data = compat(
+                [&](Async yield) -> std::expected<std::optional<BencodedValue>, sys::error_code> {
+                    return i.second->data_get_immutable(key, yield);
+                }
+            )(cancel_attempts, yield[ec]);
 
             if (!ec && data) {
                 output = data;
                 success.release(true);
             }
-        }));
+        });
     }
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();
@@ -2873,8 +2767,59 @@ boost::optional<BencodedValue> MainlineDht::immutable_get(
     return or_throw<boost::optional<BencodedValue>>(yield, ec);
 }
 
+void MainlineDht::mutable_put(
+    const MutableDataItem& data,
+    Cancel& top_cancel,
+    asio::yield_context yield
+) {
+    Cancel cancel(top_cancel);
+
+    SuccessCondition condition(_exec);
+    WaitCondition wait_all(_exec);
+
+    for (auto& i : _nodes) {
+        task::spawn_detached(_exec, [
+            &,
+            lock = condition.lock(),
+            lock_all = wait_all.lock()
+        ] (asio::yield_context yield) {
+            if (!i.second->ready()) {
+                return;
+            }
+
+            sys::error_code ec;
+            i.second->data_put_mutable(data, cancel, yield[ec]);
+
+            if (ec) return;
+
+            lock.release(true);
+        });
+    }
+
+    auto cancelled = cancel.connect([&] {
+        condition.cancel();
+    });
+
+    auto terminated = _cancel.connect([&] {
+        condition.cancel();
+    });
+
+    sys::error_code ec;
+
+    if (condition.wait_for_success(yield)) {
+        cancel();
+    } else {
+        if (condition.cancelled()) { ec = asio::error::operation_aborted;   }
+        else                       { ec = asio::error::network_unreachable; }
+    }
+
+    wait_all.wait(yield);
+
+    return or_throw(yield, ec);
+}
+
 boost::optional<MutableDataItem> MainlineDht::mutable_get(
-    const util::Ed25519PublicKey& public_key,
+    const sign::PublicKey& public_key,
     boost::string_view salt,
     Cancel& cancel_signal,
     asio::yield_context yield
@@ -2882,13 +2827,13 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     boost::optional<MutableDataItem> output;
     sys::error_code ec;
 
-    Signal<void()> cancel_attempts;
+    Cancel cancel_attempts;
 
     SuccessCondition success_condition(_exec);
     WaitCondition completed_condition(_exec);
 
     for (auto& i : _nodes) {
-        TRACK_SPAWN(_exec, ([
+        task::spawn_detached(_exec, [
             &,
             success = success_condition.lock(),
             complete = completed_condition.lock()
@@ -2909,7 +2854,7 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
                 output = data;
                 success.release(true);
             }
-        }));
+        });
     }
     auto cancelled = cancel_signal.connect([&] {
         success_condition.cancel();
@@ -2933,31 +2878,24 @@ boost::optional<MutableDataItem> MainlineDht::mutable_get(
     return or_throw(yield, ec, std::move(output));
 }
 
-bool MainlineDht::is_martian(UdpEndpoint const& ep) const {
-    return bittorrent::is_martian(ep);
+bool MainlineDht::is_peer_allowed(UdpEndpoint const& ep) const {
+    return _peer_filter.is_allowed(ep);
 }
 
-void MainlineDht::wait_all_ready(
-    Cancel& cancel_signal,
-    asio::yield_context yield
-) {
-    assert(!cancel_signal);
-    if (cancel_signal) return;
-
-    Cancel c(cancel_signal);
-    auto cancelled = _cancel.connect([&] { c(); });
-
-    sys::error_code ec;
-
-    while (!c && !all_ready()) {
-        async_sleep(_exec, std::chrono::milliseconds(200), c, yield[ec]);
+void MainlineDht::set_peer_filter(PeerFilter filter) {
+    _peer_filter = filter;
+    for (auto& p : _nodes) {
+        p.second->set_peer_filter(filter);
     }
-
-    if (c) ec = asio::error::operation_aborted;
-
-    return or_throw(yield, ec);
 }
 
+void MainlineDht::wait_all_ready(Async yield) {
+    auto cancelled = _cancel.connect([&] { yield.cancel(); });
+
+    while (!all_ready()) {
+        _ready_cv.wait(yield);
+    }
+}
 
 std::ostream& operator<<(std::ostream& os, const Contact& c)
 {

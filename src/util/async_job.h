@@ -1,21 +1,19 @@
 #pragma once
 
 #include "../defer.h"
+#include "async.h"
 #include "condition_variable.h"
+#include <optional>
 
 namespace ouinet {
 
 template<class Retval> class AsyncJob {
 public:
-    using Job = std::function<Retval(Cancel&, asio::yield_context)>;
+    using Result = std::expected<Retval, sys::error_code>;
+    using Job = std::function<Result(Async)>;
     using OnFinish = std::function<void()>;
-    using OnFinishSig = Signal<void()>;
-    using Connection = typename OnFinishSig::Connection;
+    using Connection = typename Cancel::Connection;
 
-    struct Result {
-        sys::error_code ec;
-        Retval retval;
-    };
 
 public:
     AsyncJob(const AsioExecutor& ex)
@@ -59,22 +57,26 @@ public:
                          (asio::yield_context yield) {
             AsyncJob* self = s;
 
-            Signal<void()> cancel;
+            Cancel cancel;
 
             self->_self = &self;
             self->_cancel_signal = &cancel;
 
-            sys::error_code ec;
-            Retval retval = job(cancel, yield[ec]);
+            std::optional<Result> result;
+
+            try {
+                result = job(Async(yield, cancel));
+            }
+            catch (Async::Cancelled const&) {
+                result = std::unexpected(asio::error::operation_aborted);
+            }
 
             if (!self) return;
 
             self->_self = nullptr;
             self->_cancel_signal = nullptr;
 
-            ec = compute_error_code(ec, cancel);
-
-            self->_result = Result{ ec, std::move(retval) };
+            self->_result = std::move(*result);
 
             auto on_finish_sig = std::move(self->_on_finish_sig);
             on_finish_sig();
@@ -98,10 +100,10 @@ public:
           Result&  result() &      { return *_result; }
           Result&& result() &&     { return std::move(*_result); }
 
-    boost::optional<Connection> on_finish_sig(OnFinish on_finish)
+    std::optional<Connection> on_finish_sig(OnFinish on_finish)
     {
         if (!_self) {
-            return boost::none;
+            return std::nullopt;
         }
         else {
             return _on_finish_sig.connect(std::move(on_finish));
@@ -111,6 +113,14 @@ public:
     bool is_running() const { return _self; }
 
     void stop(asio::yield_context yield) {
+        if (!is_running()) return;
+        cancel();
+        ConditionVariable cv(_ex);
+        auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
+        cv.wait(yield);
+    }
+
+    void stop(Async yield) {
         if (!is_running()) return;
         cancel();
         ConditionVariable cv(_ex);
@@ -141,10 +151,10 @@ public:
 
 private:
     AsioExecutor _ex;
-    boost::optional<Result> _result;
-    Signal<void()>* _cancel_signal = nullptr;
+    std::optional<Result> _result;
+    Cancel* _cancel_signal = nullptr;
     AsyncJob** _self = nullptr;
-    Signal<void()> _on_finish_sig;
+    Cancel _on_finish_sig;
 };
 
 } // namespace

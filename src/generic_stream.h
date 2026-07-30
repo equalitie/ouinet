@@ -7,18 +7,16 @@
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <functional>
 #include <vector>
 #include <iostream>
-#include <util/executor.h>
 
 namespace ouinet {
 
-using ouinet::util::AsioExecutor;
-
 class GenericStream {
 public:
-    using executor_type = AsioExecutor;
+    using executor_type = boost::asio::any_io_executor;
 
 private:
     using OnRead  = std::function<void(sys::error_code, size_t)>;
@@ -203,7 +201,7 @@ public:
             // socket it continues reading from it.
             // Test vector: uTP x TLS x bbc.com
             // (Same with the async_write_some operation)
-            _shared->impl->read_impl([h = move(handler), shared = _shared]
+            _shared->impl->read_impl([h = std::move(handler), shared = _shared]
                              (const system::error_code& ec, size_t size) {
                                  if (!shared->impl || !shared->impl->is_open()) {
                                     (*h)(asio::error::shut_down, 0);
@@ -244,7 +242,7 @@ public:
                 , _shared->impl->write_buffers.begin());
 
             // TODO: Same as the comment in async_read_some operation
-            _shared->impl->write_impl([h = move(handler), shared = _shared]
+            _shared->impl->write_impl([h = std::move(handler), shared = _shared]
                               (const system::error_code& ec, size_t size) {
                                  if (!shared->impl || !shared->impl->is_open()) {
                                     (*h)(asio::error::shut_down, 0);
@@ -263,7 +261,7 @@ public:
     const std::string& remote_endpoint() const { return _remote_endpoint; }
 
 private:
-    AsioExecutor _executor;
+    executor_type _executor;
 
     struct Shared {
         std::unique_ptr<Base> impl;

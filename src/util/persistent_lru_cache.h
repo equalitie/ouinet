@@ -11,12 +11,16 @@
 #include "../namespaces.h"
 #include "../defer.h"
 #include "atomic_file.h"
-#include "signal.h"
 #include "file_io.h"
 #include "scheduler.h"
 #include "bytes.h"
+#include "async.h"
 
-namespace ouinet { namespace util {
+namespace ouinet {
+    class Cancel;
+}
+
+namespace ouinet::util {
 
 namespace persisten_lru_cache_detail {
     static const auto temp_file_prefix = "tmp.";
@@ -70,7 +74,8 @@ public:
         const Value& value() const;
         const Key& key() const;
 
-        async_file_handle open(sys::error_code&) const;
+        [[nodiscard]]
+        std::expected<async_file_handle, sys::error_code> open() const;
     };
 
 private:
@@ -83,24 +88,16 @@ public:
     PersistentLruCache(const PersistentLruCache&) = delete;
     PersistentLruCache(PersistentLruCache&&) = delete;
 
+    [[nodiscard]]
     static
-    std::unique_ptr<PersistentLruCache> load( const AsioExecutor&
-                                            , boost::filesystem::path dir
-                                            , size_t max_size
-                                            , Cancel&
-                                            , asio::yield_context);
+    std::expected<std::unique_ptr<PersistentLruCache>, sys::error_code>
+    load( boost::filesystem::path dir
+        , size_t max_size
+        , Async);
 
-    static
-    std::unique_ptr<PersistentLruCache> load( asio::io_context&
-                                            , boost::filesystem::path dir
-                                            , size_t max_size
-                                            , Cancel&
-                                            , asio::yield_context);
-
-    void insert( std::string key
-               , Value value
-               , Cancel&
-               , asio::yield_context);
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    insert(std::string key, Value value, Async);
 
     iterator find(const std::string& key);
 
@@ -150,46 +147,44 @@ private:
 template<class Value>
 class PersistentLruCache<Value>::Element {
 public:
+    [[nodiscard]]
     static
-    std::shared_ptr<Element> read( const AsioExecutor& ex
-                                 , fs::path path
-                                 , uint64_t* ts_out
-                                 , Cancel& cancel
-                                 , asio::yield_context yield)
+    std::expected<std::shared_ptr<Element>, sys::error_code>
+    read(fs::path path, uint64_t* ts_out, Async yield)
     {
-        using Ret = std::shared_ptr<Element>;
-
         sys::error_code ec;
 
-        auto on_exit = defer([&] { if (ec) file_io::remove_file(path); });
+        auto on_exit = defer([&] { if (ec) std::ignore = file_io::remove_file(path); });
 
-        auto file = file_io::open_readonly(ex, path, ec);
-        if (ec) return or_throw<Ret>(yield, ec);
+        auto file = file_io::open_readonly(yield.get_executor(), path);
+        if (!file) return std::unexpected(file.error());
 
-        auto ts = file_io::read_number<uint64_t>(file, cancel, yield[ec]);
-        if (ec) return or_throw<Ret>(yield, ec);
+        auto ts = file_io::read_number<uint64_t>(*file, yield);
+        if (!ts) return std::unexpected(ts.error());
 
-        if (ts_out) *ts_out = ts;
+        if (ts_out) *ts_out = *ts;
 
-        auto key_size = file_io::read_number<uint32_t>(file, cancel, yield[ec]);
-        if (ec) return or_throw<Ret>(yield, ec);
+        auto key_size = file_io::read_number<uint32_t>(*file, yield);
+        if (!key_size) return std::unexpected(key_size.error());
 
-        std::string key(key_size, '\0');
-        file_io::read(file, asio::buffer(key), cancel, yield[ec]);
-        if (ec) return or_throw<Ret>(yield, ec);
+        std::string key(*key_size, '\0');
+        auto read = file_io::read(*file, asio::buffer(key), yield);
+        if (!read) return std::unexpected(read.error());
 
         Value value;
 
-        value.read(file, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, Ret());
+        auto vr = value.read(*file, yield);
+        if (!vr) return std::unexpected(vr.error());
 
-        return std::make_shared<Element>( ex
+        return std::make_shared<Element>( yield.get_executor()
                                         , std::move(key)
                                         , std::move(path)
                                         , std::move(value));
     }
 
-    void update(Value value, Cancel& cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    update(Value value, Async yield)
     {
         using namespace persisten_lru_cache_detail;
 
@@ -202,18 +197,32 @@ public:
         // Create a new entry file "atomically" (at least inside the program)
         // by writing data to a temporary file and replacing the existing file.
         // Otherwise we might be overwriting old data that others are reading.
-        auto af = atomic_file::make( _ex, _path
-                          , persisten_lru_cache_detail::temp_file_model, ec);
-        if (ec) return or_throw(yield, ec);
+        auto af = atomic_file::make( _ex, _path, persisten_lru_cache_detail::temp_file_model);
+        if (!af) return std::unexpected(af.error());
         auto& f = af->lowest_layer();
-        if (!ec) file_io::write_number<uint64_t>(f, ts, cancel, yield[ec]);
-        if (!ec) file_io::write_number<uint32_t>(f, _key.size(), cancel, yield[ec]);
-        if (!ec) file_io::write(f, asio::buffer(_key), cancel, yield[ec]);
-        //if (!ec) file_io::write(f, asio::buffer(value), cancel, yield[ec]);
-        if (!ec) _value.write(f, cancel, yield[ec]);
-        if (!ec) af->commit(ec);
+        if (auto r = file_io::write_number<uint64_t>(f, ts, yield); !r) {
+            return std::unexpected(r.error());
+        }
 
-        return or_throw(yield, ec);
+        if (auto r = file_io::write_number<uint32_t>(f, _key.size(), yield); !r) {
+            return std::unexpected(r.error());
+        }
+
+        if (auto r = file_io::write(f, asio::buffer(_key), yield); !r) {
+            return std::unexpected(r.error());
+        }
+
+        //if (auto r = file_io::write(f, asio::buffer(value), cancel, yield[ec]); !r) {
+        //    return std::unexpected(r.error());
+        //}
+        if (auto r = _value.write(f, yield); !r) {
+            return std::unexpected(r.error());
+        }
+
+        af->commit(ec);
+        if (ec) return std::unexpected(ec);
+
+        return {};
     }
 
     const Value& value() const {
@@ -221,16 +230,19 @@ public:
     }
 
     // Read-only byte-oriented access to on-disk data.
-    async_file_handle open_value(sys::error_code& ec) const {
-        auto f = file_io::open_readonly(_ex, _path, ec);
-        if (!ec) file_io::fseek(f, content_start(), ec);
-        return f;
+    [[nodiscard]]
+    std::expected<async_file_handle, sys::error_code> open_value() const {
+        auto f = file_io::open_readonly(_ex, _path);
+        if (!f) return std::unexpected(f.error());
+        auto r = file_io::fseek(*f, content_start());
+        if (!r) return std::unexpected(r.error());
+        return std::move(*f);
     }
 
     ~Element()
     {
         if (!_keep_file_on_destruct) {
-            file_io::remove_file(_path);
+            std::ignore = file_io::remove_file(_path);
         }
     }
 
@@ -249,9 +261,10 @@ public:
         _keep_file_on_destruct = true;
     }
 
-    Scheduler::Slot lock(Cancel& cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<Scheduler::Slot, sys::error_code> lock(Async yield)
     {
-        return _scheduler.wait_for_slot(cancel, yield);
+        return _scheduler.wait_for_slot(yield);
     }
 
     const std::string& key() const { return _key; }
@@ -273,44 +286,26 @@ private:
 };
 
 template<class Value>
+[[nodiscard]]
 inline
-std::unique_ptr<PersistentLruCache<Value>>
-PersistentLruCache<Value>::load( asio::io_context& ctx
-                               , boost::filesystem::path dir
+std::expected<std::unique_ptr<PersistentLruCache<Value>>, sys::error_code>
+PersistentLruCache<Value>::load( boost::filesystem::path dir
                                , size_t max_size
-                               , Cancel& cancel
-                               , asio::yield_context yield)
-{
-    return load( ctx.get_executor()
-               , std::move(dir)
-               , max_size
-               , cancel
-               , std::move(yield));
-}
-
-template<class Value>
-inline
-std::unique_ptr<PersistentLruCache<Value>>
-PersistentLruCache<Value>::load( const AsioExecutor& ex
-                               , boost::filesystem::path dir
-                               , size_t max_size
-                               , Cancel& cancel
-                               , asio::yield_context yield)
+                               , Async yield)
 {
     using namespace persisten_lru_cache_detail;
 
     using Ret = std::unique_ptr<PersistentLruCache<Value>>;
 
-    sys::error_code ec;
-
     if (!dir.is_absolute()) {
         dir = fs::absolute(dir);
     }
 
-    if (!ec) file_io::check_or_create_directory(dir, ec);
-    if (ec) return or_throw<Ret>(yield, ec);
+    if (auto r = file_io::check_or_create_directory(dir); !r) {
+        return std::unexpected(r.error());
+    }
 
-    Ret lru(new PersistentLruCache<Value>(ex, dir, max_size));
+    Ret lru(new PersistentLruCache<Value>(yield.get_executor(), dir, max_size));
 
     // Id helps us resolve the case when two entries have the same timestamp
     using Id = std::pair<uint64_t, uint64_t>;
@@ -327,15 +322,11 @@ PersistentLruCache<Value>::load( const AsioExecutor& ex
             if (is_cache_entry(entry, dir)) {
                 fs::path path(dir / entry->d_name);
                 uint64_t ts;
-                auto e = Element::read(ex, path, &ts, cancel, yield[ec]);
+                auto e = Element::read(path, &ts, yield);
 
-                if (cancel) {
-                    return or_throw<Ret>(yield, asio::error::operation_aborted);
-                }
+                if (!e) continue;
 
-                if (ec) continue;
-
-                elements.insert({Id{ts, i++}, e});
+                elements.insert({Id{ts, i++}, std::move(*e)});
             }
         }
     }
@@ -370,10 +361,8 @@ PersistentLruCache<Value>::PersistentLruCache( const AsioExecutor& ex
 
 template<class Value>
 inline
-void PersistentLruCache<Value>::insert( std::string key
-                                      , Value value
-                                      , Cancel& cancel
-                                      , asio::yield_context yield)
+std::expected<void, sys::error_code>
+PersistentLruCache<Value>::insert(std::string key, Value value, Async yield)
 {
     auto it = _map.find(key);
 
@@ -403,12 +392,11 @@ void PersistentLruCache<Value>::insert( std::string key
         _list.pop_back();
     }
 
-    if (!e) return;
+    if (!e) return {};
 
-    sys::error_code ec;
-    auto slot = e->lock(cancel, yield[ec]);
-    if (ec) return or_throw(yield, ec);
-    e->update(std::move(value), cancel, yield);
+    auto slot = e->lock(yield);
+    if (!slot) return std::unexpected(slot.error());
+    return e->update(std::move(value), yield);
 }
 
 template<class Value>
@@ -452,11 +440,12 @@ PersistentLruCache<Value>::iterator::key() const
 }
 
 template<class Value>
+[[nodiscard]]
 inline
-async_file_handle
-PersistentLruCache<Value>::iterator::open(sys::error_code& ec) const
+std::expected<async_file_handle, sys::error_code>
+PersistentLruCache<Value>::iterator::open() const
 {
-    return i->second->second->open_value(ec);
+    return i->second->second->open_value();
 }
 
 template<class Value>
@@ -468,4 +457,4 @@ PersistentLruCache<Value>::~PersistentLruCache()
     }
 }
 
-}} // namespaces
+} // namespaces

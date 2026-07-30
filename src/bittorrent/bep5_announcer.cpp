@@ -1,14 +1,13 @@
 #include "bep5_announcer.h"
 #include "../async_sleep.h"
 #include "../logger.h"
-#include "../util/handler_tracker.h"
+#include "../task.h"
+#include "../util/condition_variable.h"
+#include "../util/debug.h"
 #include "../util/wait_condition.h"
+#include <chrono>
 #include <random>
 #include <iostream>
-
-#define _LOGPFX "Bep5Announcer: "
-#define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
 
 using namespace std;
 using namespace ouinet;
@@ -36,14 +35,18 @@ private:
 
 enum class Type { Periodic, Manual };
 
-struct detail::Bep5AnnouncerImpl
+struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
     : public enable_shared_from_this<detail::Bep5AnnouncerImpl>
 {
-    Bep5AnnouncerImpl(NodeID infohash, std::weak_ptr<DhtBase> dht_w, Type type)
+    Bep5AnnouncerImpl( NodeID infohash
+                     , std::weak_ptr<DhtBase> dht_w
+                     , Type type
+                     , util::LogPath log_path)
         : type(type)
         , cv(dht_w.lock()->get_executor())
         , infohash(infohash)
-        , dht_w(move(dht_w))
+        , dht_w(std::move(dht_w))
+        , log_path(log_path.tag("Bep5Announcer"))
     {}
 
     void start()
@@ -53,57 +56,70 @@ struct detail::Bep5AnnouncerImpl
         if (auto dht = dht_w.lock()) {
             auto exec = dht->get_executor();
 
-            TRACK_SPAWN(exec, ([
-                &, self, exec
-            ] (asio::yield_context yield) mutable {
-                loop(exec, yield);
-            }));
+            task::spawn_detached(
+                exec,
+                [self = std::move(self)] (asio::yield_context y) mutable {
+                    self->loop(Async(y, self->log_path));
+                }
+            );
         }
     }
 
-    void loop(AsioExecutor& exec, asio::yield_context yield)
+    void loop(Async yield)
     {
         using namespace std::chrono_literals;
 
-        _DEBUG("Start for infohash: ", infohash);
+        auto cancel_con = cancel.connect([&] { yield.cancel(); });
+
+        LOG_DEBUG(yield, " Start for infohash: ", infohash);
 
         UniformRandomDuration random_timeout;
 
-        while (!cancel) {
+        // Retry failed announces with exponential backoff strategy.
+        const chrono::milliseconds min_fail_sleep(100);
+        const chrono::milliseconds max_fail_sleep(60000);
+        chrono::milliseconds fail_sleep = min_fail_sleep;
+
+
+        while (true) {
             if (type == Type::Manual && !go_again) {
-                _DEBUG("Waiting for manual announce for infohash: ", infohash, "...");
+                LOG_DEBUG(yield, " Waiting for manual announce for infohash: ", infohash, "...");
                 while (!go_again) {
-                    sys::error_code ec;
-                    cv.wait(cancel, yield[ec]);
-                    if (cancel) return;
+                    cv.wait(yield);
                 }
-                _DEBUG("Waiting for manual announce for infohash: ", infohash, ": done");
+                LOG_DEBUG(yield, " Waiting for manual announce for infohash: ", infohash, ": done");
             }
             go_again = false;
 
             auto dht = dht_w.lock();
             if (!dht) return;
 
-            _DEBUG("Announcing infohash: ", infohash, "...");
+            if (!dht->all_ready()) {
+                LOG_DEBUG(yield, " Waiting for DHT to get ready...");
+                dht->wait_all_ready(yield);
+                LOG_DEBUG(yield, " Waiting for DHT to get ready: done");
+            }
 
-            sys::error_code ec;
-            dht->tracker_announce(infohash, boost::none, cancel, yield[ec]);
+            LOG_DEBUG(yield, " Announcing infohash ", infohash, "...");
 
-            if (cancel) return;
+            auto result = dht->tracker_announce(infohash, std::nullopt, yield);
 
             dht.reset();
 
-            if (ec) {
-                _WARN("Announcing infohash: ", infohash, ": failed; ec=", ec);
-                // TODO: Arbitrary timeout
-                _DEBUG("Will retry infohash because of announcement error: ", infohash);
-                async_sleep(exec, random_timeout(1s, 1min), cancel, yield);
-                if (cancel) return;
+            if (result) {
+                LOG_DEBUG(yield, " Announcing infohash ", infohash, ": ok");
+                fail_sleep = min_fail_sleep;
+            } else {
+                LOG_DEBUG(yield, " Announcing infohash ", infohash
+                               , " failed: ", result.error().what()
+                               , ". Retry in ", fail_sleep, "ms");
+
+                async_sleep(fail_sleep, yield);
+                fail_sleep = min(2 * fail_sleep, max_fail_sleep);
+
                 go_again = true;  // do not wait for manual request
                 continue;
             }
-
-            _DEBUG("Announcing infohash: ", infohash, ": done");
 
             if (type == Type::Manual) continue;  // wait for new manual request immediately
 
@@ -113,16 +129,16 @@ struct detail::Bep5AnnouncerImpl
             // Alternatively, set a closer period but use a normal (instead of uniform) distribution.
             auto sleep = debug ? random_timeout(2min, 4min) : random_timeout(5min, 12min);
 
-            _DEBUG( "Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
-                  , "s to announce infohash: ", infohash);
+            LOG_DEBUG(yield, " Waiting for ", chrono::duration_cast<chrono::seconds>(sleep).count()
+                           , "s to announce infohash: ", infohash);
 
-            async_sleep(exec, sleep, cancel, yield);
+            async_sleep(sleep, yield);
         }
     }
 
     void update() {
         if (type != Type::Manual) return;
-        _DEBUG("Manual update requested for infohash: ", infohash);
+        LOG_DEBUG(log_path, " Manual update requested for infohash: ", infohash);
         go_again = true;
         cv.notify();
     }
@@ -132,13 +148,18 @@ struct detail::Bep5AnnouncerImpl
     bool go_again = false;
     NodeID infohash;
     weak_ptr<DhtBase> dht_w;
+    util::LogPath log_path;
     Cancel cancel;
     static const bool debug = false;  // for development testing only
 };
 
 Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
-                                            , std::weak_ptr<DhtBase> dht)
-    : _impl(make_shared<detail::Bep5AnnouncerImpl>(infohash, move(dht), Type::Periodic))
+                                            , std::weak_ptr<DhtBase> dht
+                                            , util::LogPath log_path)
+    : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
+                                                  , std::move(dht)
+                                                  , Type::Periodic
+                                                  , std::move(log_path)))
 {
     _impl->start();
 }
@@ -150,8 +171,12 @@ Bep5PeriodicAnnouncer::~Bep5PeriodicAnnouncer()
 }
 
 Bep5ManualAnnouncer::Bep5ManualAnnouncer( NodeID infohash
-                                        , std::weak_ptr<DhtBase> dht)
-    : _impl(make_shared<detail::Bep5AnnouncerImpl>(infohash, move(dht), Type::Manual))
+                                        , std::weak_ptr<DhtBase> dht
+                                        , util::LogPath log_path)
+    : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
+                                                  , std::move(dht)
+                                                  , Type::Manual
+                                                  , std::move(log_path)))
 {
     _impl->start();
 }

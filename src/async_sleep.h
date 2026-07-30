@@ -1,27 +1,24 @@
 #pragma once
 
-#include <boost/asio/steady_timer.hpp>
-#include "namespaces.h"
+#include "util/cancel.h"
 
-#include "util/executor.h"
-#include "util/signal.h"
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/spawn.hpp>
+#include "namespaces.h"
+#include "api.h"
 
 namespace ouinet {
 
-using ouinet::util::AsioExecutor;
+class Async;
 
-bool async_sleep( const AsioExecutor& exec
-                , asio::steady_timer::duration duration
-                , Signal<void()>& cancel
+// Returns `false` if cancelled
+OUINET_COMMON_API
+bool async_sleep( asio::steady_timer::duration duration
+                , Cancel& cancel
                 , asio::yield_context yield);
 
-inline
-bool async_sleep( asio::io_context& ctx
-                , asio::steady_timer::duration duration
-                , Signal<void()>& cancel
-                , asio::yield_context yield)
-{
-    return async_sleep(ctx.get_executor(), duration, cancel, yield);
-}
+// Throws `Async::Cancelled` if cancelled
+OUINET_COMMON_API
+void async_sleep(asio::steady_timer::duration duration, Async);
 
-} // ouinet namespace
+} // namespace

@@ -1,13 +1,17 @@
 #pragma once
 
+#include <asio_utp/udp_multiplexer.hpp>
 #include <boost/asio/spawn.hpp>
 #include <set>
-#include <asio_utp/udp_multiplexer.hpp>
 #include "node_id.h"
 #include "namespaces.h"
-#include "util/signal.h"
+#include "../util/promise.h"
 
-namespace ouinet::bittorrent {
+namespace ouinet {
+
+class Cancel;
+
+namespace bittorrent {
 
 class DhtBase {
 public:
@@ -22,23 +26,17 @@ public:
 
     virtual void set_endpoints(const std::set<UdpEndpoint>&) = 0;
 
-    virtual UdpEndpoint add_endpoint(asio_utp::udp_multiplexer, asio::yield_context) = 0;
+    virtual Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) = 0;
 
     virtual std::set<UdpEndpoint> local_endpoints() const = 0;
 
     virtual std::set<UdpEndpoint> wan_endpoints() const = 0;
 
-    /*
-     * TODO: announce() and put() functions don't have any real error detection.
-     */
-    virtual std::set<UdpEndpoint> tracker_announce(
-        NodeID infohash,
-        boost::optional<int> port,
-        Cancel,
-        asio::yield_context
-    ) = 0;
+    virtual std::expected<std::set<UdpEndpoint>, sys::error_code>
+    tracker_announce(NodeID infohash, std::optional<int> port, Async) = 0;
 
-    virtual std::set<UdpEndpoint> tracker_get_peers(NodeID infohash, Cancel&, asio::yield_context) = 0;
+    virtual std::expected<std::set<UdpEndpoint>, sys::error_code>
+    tracker_get_peers(NodeID infohash, Async) = 0;
 
     virtual Executor get_executor() = 0;
 
@@ -46,11 +44,11 @@ public:
 
     virtual bool is_bootstrapped() const = 0;
 
-    virtual void wait_all_ready(Cancel&, asio::yield_context) = 0;
+    virtual void wait_all_ready(Async) = 0;
 
     virtual void stop() = 0;
 
-    virtual bool is_martian(const UdpEndpoint&) const = 0;
+    virtual bool is_peer_allowed(const UdpEndpoint&) const = 0;
 };
 
-} // namespace ouinet::bittorrent
+}} // namespace ouinet::bittorrent

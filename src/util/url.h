@@ -3,10 +3,11 @@
 #include <string>
 #include <optional>
 #include <boost/utility/string_view.hpp>
+#include "api.h"
 
 namespace ouinet::util {
 
-struct Url {
+struct OUINET_COMMON_API Url {
     // Uniform Resource Identifier (URI): Generic Syntax
     // https://www.ietf.org/rfc/rfc3986.txt
 

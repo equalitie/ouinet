@@ -11,7 +11,7 @@ from typing import Generator
 from traceback import format_stack
 import asyncio
 from subprocess import TimeoutExpired
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE, STDOUT, check_output
 
 from test_fixtures import TestFixtures
 
@@ -80,10 +80,12 @@ def spawn(command: List[str]) -> Popen:
 def output_yielder(handle: Popen) -> Generator[str, None, None]:
     with handle:
         try:
+            if not handle.stdout:
+                raise IOError("no stdout on process")
             for line in iter(handle.stdout.readline, ""):
                 if isinstance(line, bytes):
                     line = line.decode("utf-8")
-                yield line
+                yield line.rstrip()
         except:
             pass
 
@@ -99,10 +101,12 @@ class OuinetProcess(object):
         Args
         ouinet_config            A OuinetConfig instance containing the configuration
                                  related to this process
-        process_ready_deferred   a deferred object which get called back when the process is ready
         """
         self.config = ouinet_config
-
+        # in case the communication process protocol is not explicitly set
+        # starts a default process protocol to check on Fatal errors
+        # TODO: This option apparently has been removed. Check if we ever need
+        # preset process protocol.
         self._proc_protocol = OuinetProcessProtocol(
             self.config, ouinet_config.benchmark_regexes
         )
@@ -173,8 +177,8 @@ class OuinetProcess(object):
 
         self._proc_protocol.app_name = self.config.app_name
 
-        print("spawning a process")
         self.command = self.config.argv
+        print("Spawning process " + " ".join(self.command))
 
         self._proc = spawn(self.command)
         self.output = output_yielder(self._proc)
@@ -196,15 +200,20 @@ class OuinetProcess(object):
                 stderr,
             )
 
+    def next(self) -> str:
+        try:
+            return self.output.__next__()
+        except StopIteration:
+            return "\nNo more stdout for " + self.command[0]
+
     async def stdout_listening_task(self):
         try:
             while True:
-                if not self._term_signal_sent:
-                    self.assert_process_is_alive()
-                else:
+                if self._term_signal_sent:
                     return
+                self.assert_process_is_alive()
 
-                line: str = await asyncio.to_thread(self.output.__next__)
+                line: str = await asyncio.to_thread(self.next)
                 assert isinstance(line, str)
                 self._proc_protocol.errReceived(line)
 
@@ -239,7 +248,8 @@ class OuinetProcess(object):
             listener.cancel()
             await listener
 
-    def is_teardown(self) -> bool:
+    # It is not is_teardown to avoid self-detection
+    def is_tearingdown(self) -> bool:
         tb = "\n".join(format_stack())
         if "teardown" in tb.lower():
             return True
@@ -252,7 +262,7 @@ class OuinetProcess(object):
             print("process " + self.config.app_name + " stopping")
 
             # Introspection for extra debug details
-            if self.is_teardown():
+            if self.is_tearingdown():
                 print("this is happening as a part of teardown")
             else:
                 print("the process is being stopped from inside the test body")
@@ -290,6 +300,15 @@ class OuinetClient(OuinetProcess):
 
 
 class OuinetCacheClient(OuinetClient):
+    def __init__(self, client_config: OuinetConfig):
+        super(OuinetCacheClient, self).__init__(client_config)
+        self.set_process_protocol(
+            OuinetBEP5CacheProcessProtocol(
+                proc_config=self.config,
+                benchmark_regexes=client_config.benchmark_regexes,
+            )
+        )
+
     def served_from_cache(self):
         """
         returns true if any request has been served from cache
@@ -313,10 +332,22 @@ class OuinetInjector(OuinetProcess):
         super(OuinetInjector, self).__init__(injector_config)
         # Isn't it supposed to do it BEFORE initializing the superclass?
         self.config.argv = [
-            os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector"),
+            OuinetInjector.injector_path(),
             "--repo",
             self.config.config_folder_name,
         ] + self.config.argv
+
+    @staticmethod
+    def has_i2p() -> bool:
+        output = check_output([OuinetInjector.injector_path(), "--help"]).decode(
+            "utf-8"
+        )
+        return "i2p" in output
+
+    @staticmethod
+    def injector_path() -> str:
+        """Helper function for injector capabilities check"""
+        return os.path.join(ouinet_env["OUINET_BUILD_DIR"], "injector")
 
     def get_index_key(self) -> str:
         """Return a key string used to access the cache index created by this injector."""
@@ -338,4 +369,38 @@ class OuinetBEP5CacheInjector(OuinetInjector):
         )
 
     def get_index_key(self):
-        return self._proc_protocol.public_key
+        return self._proc_protocol.bep5_public_key
+
+
+class OuinetI2PInjector(OuinetInjector):
+    """
+    As above, but for the 'injector'
+    It is a child of Ouinetinjector with i2p ouiservice
+    """
+
+    def __init__(self, injector_config, private_key_blob=None):
+        super(OuinetI2PInjector, self).__init__(injector_config)
+        # we use cache process protocol to be able to store
+        # cache public key in case we need it
+        self.set_process_protocol(
+            OuinetBEP5CacheProcessProtocol(
+                proc_config=self.config,
+                benchmark_regexes=injector_config.benchmark_regexes,
+            )
+        )
+
+        self._setup_i2p_private_key(private_key_blob)
+
+    def _setup_i2p_private_key(self, private_key_blob):
+        if not os.path.exists(self.config.config_folder_name + "/i2p"):
+            os.makedirs(self.config.config_folder_name + "/i2p")
+
+        if private_key_blob:
+            with open(
+                self.config.config_folder_name + "/i2p/i2p-private-key", "w"
+            ) as private_key_file:
+                private_key_file.write(private_key_blob)
+
+
+    def get_index_key(self):
+        return self._proc_protocol.bep5_public_key

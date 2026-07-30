@@ -2,9 +2,9 @@
 
 #include <queue>
 #include "condition_variable.h"
-#include "../or_throw.h"
+#include "util/async.h"
 
-namespace ouinet { namespace util {
+namespace ouinet::util {
 
 template<class T, template<typename...> class Q = std::deque> class AsyncQueue {
 private:
@@ -19,8 +19,8 @@ public:
         : AsyncQueue(ctx.get_executor(), max_size)
     {}
 
-    AsyncQueue(const AsioExecutor& ex, size_t max_size = -1)
-        : _ex(ex)
+    AsyncQueue(asio::any_io_executor ex, size_t max_size = -1)
+        : _ex(std::move(ex))
         , _max_size(max_size)
         , _rx_cv(_ex)
         , _tx_cv(_ex)
@@ -29,7 +29,7 @@ public:
     AsyncQueue(const AsyncQueue&) = delete;
     AsyncQueue& operator=(const AsyncQueue&) = delete;
 
-    // Might be possible, but non-trivial (I think)
+    // TODO
     AsyncQueue(AsyncQueue&&) = delete;
     AsyncQueue& operator=(AsyncQueue&&) = delete;
 
@@ -39,42 +39,44 @@ public:
         _rx_cv.notify();
     }
 
-    void async_push(T val, Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_push(T val, sys::error_code ec, Async yield)
     {
-        async_push(std::move(val), sys::error_code(), std::move(cancel), yield);
-    }
-
-    void async_push( T val
-                   , sys::error_code ec_
-                   , Cancel cancel
-                   , asio::yield_context yield)
-    {
-        auto slot = _destroy_signal.connect([&] { cancel(); });
-
-        sys::error_code ec;
+        auto slot = _destroy_signal.connect([&] { yield.cancel(); });
 
         while (_queue.size() >= _max_size) {
-            _tx_cv.wait(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec);
+            auto r = _tx_cv.wait(yield);
+            if (!r) return r;
         }
 
-        _queue.push_back({std::move(val), ec_});
+        _queue.push_back({std::move(val), ec});
         _rx_cv.notify();
+
+        return {};
     }
 
-    // Deprecated, use push_back
-    void push(T val)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_push(T val, Async yield)
     {
-        _queue.push_back({std::move(val), sys::error_code{}});
-        _rx_cv.notify();
+        return async_push(std::move(val), sys::error_code{}, yield);
     }
 
+    // Does not block, may temporarily increase the queue size until popped.
     void push_back(T val)
     {
-        _queue.push_back({std::move(val), sys::error_code{}});
+        push_back(std::move(val), sys::error_code{});
+    }
+
+    // Does not block, may temporarily increase the queue size until popped.
+    void push_back(T val, sys::error_code ec)
+    {
+        _queue.push_back({std::move(val), ec});
         _rx_cv.notify();
     }
 
+    // Does not block, may temporarily increase the queue size until popped.
     void push_front(T val)
     {
         _queue.push_front({std::move(val), sys::error_code{}});
@@ -82,21 +84,19 @@ public:
     }
 
     template<class Range>
-    void async_push_many( const Range& range
-                        , Cancel cancel
-                        , asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_push_many(const Range& range, Async yield)
     {
-        auto slot = _destroy_signal.connect([&] { cancel(); });
-
-        sys::error_code ec;
+        auto slot = _destroy_signal.connect([&] { yield.cancel(); });
 
         auto i = std::begin(range);
         auto end = std::end(range);
 
         while (i != end) {
             while (_queue.size() >= _max_size) {
-                _tx_cv.wait(cancel, yield[ec]);
-                return_or_throw_on_error(yield, cancel, ec);
+                auto r = _tx_cv.wait(yield);
+                if (!r) return r;
             }
 
             while (_queue.size() < _max_size && i != end) {
@@ -106,25 +106,27 @@ public:
 
             _rx_cv.notify();
         }
+
+        return {};
     }
 
-    void async_wait_for_push(Cancel cancel, asio::yield_context yield)
-    {
-        auto slot = _destroy_signal.connect([&] { cancel(); });
-        sys::error_code ec;
-        _rx_cv.wait(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+    // Wait for push, but don't pop
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_wait_for_push(Async yield) {
+        auto slot = _destroy_signal.connect([&] { yield.cancel(); });
+        return _rx_cv.wait(yield);
     }
 
-    T async_pop(Cancel cancel, asio::yield_context yield)
+    [[nodiscard]]
+    std::expected<T, sys::error_code>
+    async_pop(Async yield)
     {
-        auto slot = _destroy_signal.connect([&] { cancel(); });
-
-        sys::error_code ec;
+        auto slot = _destroy_signal.connect([&] { yield.cancel(); });
 
         while (_queue.empty()) {
-            _rx_cv.wait(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, T{});
+            auto r = _rx_cv.wait(yield);
+            if (!r) return std::unexpected(r.error());
         }
 
         assert(!_queue.empty());
@@ -134,36 +136,38 @@ public:
 
         _tx_cv.notify();
 
-        return or_throw<T>(yield, ret.second, std::move(ret.first));
+        if (ret.second) return std::unexpected(ret.second);
+        return {std::move(ret.first)};
     }
 
-    size_t async_flush( std::queue<T>& out
-                      , Cancel cancel
-                      , asio::yield_context yield)
+    // Pop one or more
+    [[nodiscard]]
+    std::expected<size_t, sys::error_code>
+    async_pop_one_or_more(std::queue<T>& out, Async yield)
     {
-        auto slot = _destroy_signal.connect([&] { cancel(); });
-
-        sys::error_code ec;
+        auto slot = _destroy_signal.connect([&] { yield.cancel(); });
 
         while (_queue.empty()) {
-            _rx_cv.wait(cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, 0);
+            auto r = _rx_cv.wait(yield);
+            if (!r) return std::unexpected(r.error());
         }
 
         assert(!_queue.empty());
+
+        size_t count = 0;
 
         while (!_queue.empty()) {
             auto p = std::move(_queue.front());
             _queue.pop_front();
             if (!p.second) {
                 out.push(std::move(p.first));
+                ++count;
             }
         }
 
         _tx_cv.notify();
 
-        ec = compute_error_code(ec, cancel);
-        return or_throw<size_t>(yield, ec, 0);
+        return count;
     }
 
     T& back() {
@@ -203,13 +207,13 @@ public:
     const_iterator begin() const { return _queue.begin(); }
     const_iterator end()   const { return _queue.end();   }
 
-    AsioExecutor get_executor()
+    asio::any_io_executor get_executor()
     {
         return _ex;
     }
 
 private:
-    AsioExecutor _ex;
+    asio::any_io_executor _ex;
     size_t _max_size;
     Queue _queue;
     ConditionVariable _rx_cv;
@@ -217,4 +221,4 @@ private:
     Cancel _destroy_signal;
 };
 
-}} // namespaces
+} // namespace

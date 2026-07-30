@@ -12,11 +12,15 @@
 #include "mutable_data.h"
 #include "node_id.h"
 
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/executor.h"
-#include "../util/signal.h"
+#include "../util/cancel.h"
 
-namespace ouinet::bittorrent {
+namespace ouinet {
+
+class Cancel;
+
+namespace bittorrent {
 
 namespace ip = asio::ip;
 using ip::tcp;
@@ -73,7 +77,7 @@ class Swarm {
 
 } // namespace detail
 
-class Tracker {
+class OUINET_COMMON_API Tracker {
     public:
     Tracker(const AsioExecutor&);
     ~Tracker();
@@ -95,10 +99,10 @@ class Tracker {
     AsioExecutor _exec;
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, std::unique_ptr<detail::Swarm>> _swarms;
-    Signal<void()> _terminate_signal;
+    Cancel _terminate_signal;
 };
 
-class DataStore {
+class OUINET_COMMON_API DataStore {
     public:
     /*
      * Validity specified at
@@ -124,7 +128,7 @@ class DataStore {
     void put_immutable(BencodedValue value);
     boost::optional<BencodedValue> get_immutable(NodeID id);
 
-    static NodeID mutable_get_id(util::Ed25519PublicKey public_key, boost::string_view salt);
+    static NodeID mutable_get_id(sign::PublicKey public_key, boost::string_view salt);
     void put_mutable(MutableDataItem item);
     boost::optional<MutableDataItem> get_mutable(NodeID id);
 
@@ -142,7 +146,7 @@ class DataStore {
     detail::DhtWriteTokenStorage _token_storage;
     std::map<NodeID, ImmutableStoredItem> _immutable_data;
     std::map<NodeID, MutableStoredItem> _mutable_data;
-    Signal<void()> _terminate_signal;
+    Cancel _terminate_signal;
 };
 
-} // namespaces
+}} // namespaces

@@ -16,6 +16,20 @@
 
 - (OuinetConfig*)setFrontEndEp:(NSString*)address;
 
+- (OuinetConfig*)setFrontEndAccessToken:(NSString*)token;
+
+- (OuinetConfig*)setMetricsEnableOnStart:(BOOL)value;
+
+- (OuinetConfig*)setMetricsServerUrl:(NSString*)url;
+
+- (OuinetConfig*)setMetricsServerToken:(NSString*)token;
+
+- (OuinetConfig*)setMetricsServerTlsCaCert:(NSString*)caCert;
+
+- (OuinetConfig*)setMetricsEncryptionKey:(NSString*)key;
+
+- (OuinetConfig*)setMetricsDeleteAfter:(NSString*)duration;
+
 - (OuinetConfig*)setDisableOriginAccess:(BOOL)value;
 
 - (OuinetConfig*)setDisableProxyAccess:(BOOL)value;
@@ -36,13 +50,27 @@
 
 - (NSString*)getInjectorTlsCertPath;
 
-- (NSString*)getTlsCaCertStorePath;
+- (NSString*)getTlsCaCertStoreDir;
 
 - (NSString*)getCacheType;
 
 - (NSString*)getListenOnTcp;
 
 - (NSString*)getFrontEndEp;
+
+- (NSString*)getFrontEndAccessToken;
+
+- (BOOL)getMetricsEnableOnStart;
+
+- (NSString*)getMetricsServerUrl;
+
+- (NSString*)getMetricsServerToken;
+
+- (NSString*)getMetricsServerTlsCaCertPath;
+
+- (NSString*)getMetricsEncryptionKey;
+
+- (NSString*)getMetricsDeleteAfter;
 
 - (NSString*)getLogLevel;
 

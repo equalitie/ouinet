@@ -1,9 +1,14 @@
 #pragma once
 
+#include <expected>
 #include "generic_stream.h"
 #include "response_reader.h"
 #include "util/watch_dog.h"
+#include "util/async.h"
+#include "util/compat.h"
+#include <boost/asio/spawn.hpp>
 #include <cxx/metrics.h>
+#include "api.h"
 
 namespace ouinet {
 
@@ -13,7 +18,7 @@ enum PartModifier {
     RemoveChunkHeaderExtension,
 };
 
-class Session : public http_response::AbstractReader {
+class OUINET_COMMON_API Session : public http_response::AbstractReader {
 public:
     using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 
@@ -39,38 +44,44 @@ public:
     {}
 
     // Construct the session and read response head
-    static Session create(GenericStream, bool is_head_response, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(GenericStream, bool is_head_response, Async);
 
-    static Session create(GenericStream, bool is_head_response, std::optional<metrics::Request>, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(GenericStream, bool is_head_response, std::optional<metrics::Request>, Async);
 
     template<class Reader>
-    static Session create(std::unique_ptr<Reader>&&, bool is_head_response, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(std::unique_ptr<Reader>&&, bool is_head_response, Async);
 
     template<class Reader>
-    static Session create(std::unique_ptr<Reader>&&, bool is_head_response, std::optional<metrics::Request>, Cancel, asio::yield_context);
+    static std::expected<Session, sys::error_code>
+    create(std::unique_ptr<Reader>&&, bool is_head_response, std::optional<metrics::Request>, Async);
 
-    const bool head_was_read() const { return _head_was_read; }
+    bool head_was_read() const { return _head_was_read; }
 
           http_response::Head& response_header()       { return _head; }
     const http_response::Head& response_header() const { return _head; }
 
-    boost::optional<http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     template<class SinkStream>
-    void flush_response(
-            SinkStream&,
-            Cancel&,
-            asio::yield_context,
-            PartModifier part_modifier = PartModifier::DoNothing);
+    std::expected<void, sys::error_code>
+    flush_response(SinkStream&, Async, PartModifier part_modifier = PartModifier::DoNothing);
 
     template<class Handler>
-    void flush_response(Cancel, asio::yield_context, Handler&& h);
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    flush_response(Async, Handler&& h);
+
     // The timeout will get reset with each successful send/recv operation,
     // so that the exchange does not get stuck for too long.
     template<class Handler, class TimeoutDuration>
-    void flush_response( Cancel&, asio::yield_context
-                       , Handler&& h, TimeoutDuration);
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    flush_response(Async, Handler&& h, TimeoutDuration);
+
 
     bool is_done() const override {
         if (!_reader) return false;
@@ -132,65 +143,66 @@ private:
 
 template<class Reader>
 inline
-Session Session::create( std::unique_ptr<Reader>&& reader
-                       , bool is_head_response
-                       , Cancel cancel, asio::yield_context yield)
+std::expected<Session, sys::error_code> Session::create(
+    std::unique_ptr<Reader>&& reader,
+    bool is_head_response,
+    Async yield
+)
 {
     return Session::create( std::forward<std::unique_ptr<Reader>>(reader)
                           , is_head_response
                           , {}
-                          , std::move(cancel)
                           , std::move(yield));
 }
 
 template<class Reader>
 inline
-Session Session::create( std::unique_ptr<Reader>&& reader
-                       , bool is_head_response
-                       , std::optional<metrics::Request> metrics
-                       , Cancel cancel, asio::yield_context yield)
+std::expected<Session, sys::error_code> Session::create(
+    std::unique_ptr<Reader>&& reader,
+    bool is_head_response,
+    std::optional<metrics::Request> metrics,
+    Async yield
+)
 {
-    assert(!cancel);
-
-    sys::error_code ec;
-
-    auto head_opt_part = reader->async_read_part(cancel, yield[ec]);
-
-    if (!ec && !head_opt_part) {
+    auto head_opt_part = reader->async_read_part(yield);
+    if (head_opt_part && !*head_opt_part) {
         // This is ok for the reader,
         // but it should be made explicit to code creating sessions.
-        ec = http::error::end_of_stream;
+        head_opt_part = std::unexpected(http::error::end_of_stream);
     }
 
-    if (ec) {
-        finish_metering(metrics, ec);
-        return or_throw<Session>(yield, ec);
+    if (!head_opt_part) {
+        finish_metering(metrics, head_opt_part.error());
+        return std::unexpected(head_opt_part.error());
     }
 
-    auto head = head_opt_part->as_head();
+    auto head = (**head_opt_part).as_head();
 
     if (!head) {
-        ec = http::error::unexpected_body;
+        auto ec = http::error::unexpected_body;
         finish_metering(metrics, ec);
-        return or_throw<Session>(yield, ec);
+        return std::unexpected(ec);
     }
 
-    return Session{std::move(*head), std::move(metrics), is_head_response, std::move(reader)};
+    return Session(
+        std::move(*head),
+        std::move(metrics),
+        is_head_response,
+        std::move(reader)
+    );
 }
 
 //--------------------------------------------------------------------
 
 template<class Handler>
 inline
-void
-Session::flush_response(Cancel cancel,
-                        asio::yield_context yield,
-                        Handler&& h)
+std::expected<void, sys::error_code>
+Session::flush_response(Async yield, Handler&& h)
 {
-    auto destroyed = _destroyed.connect([&cancel] { cancel(); });
+    auto destroyed = _destroyed.connect([&yield] { yield.cancel(); });
 
     if (!_reader)
-        return or_throw(yield, asio::error::not_connected);
+        return std::unexpected(asio::error::not_connected);
 
     assert(!_head_was_read);
 
@@ -198,23 +210,25 @@ Session::flush_response(Cancel cancel,
 
     _head_was_read = true;
 
-    h(http_response::Part{_head}, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec);
+    if (auto r = h(http_response::Part{_head}, yield); !r) {
+        return std::unexpected(r.error());
+    }
 
-    if (_is_head_response) return;
+    if (_is_head_response) return {};
 
     while (true) {
         if (!_reader)
-            return or_throw(yield, asio::error::not_connected);
+            return std::unexpected(asio::error::not_connected);
 
-        auto opt_part = _reader->async_read_part(cancel, yield[ec]);
-        assert(ec != http::error::end_of_stream);
-        ec = compute_error_code(ec, cancel);
+        auto opt_part_r = _reader->async_read_part(yield);
 
-        if (ec) {
+        if (!opt_part_r) {
+            auto ec = opt_part_r.error();
             finish_metering(_metrics, ec);
-            return or_throw(yield, ec);
+            return std::unexpected(ec);
         }
+
+        auto opt_part = std::move(*opt_part_r);
 
         if (!opt_part) {
             finish_metering(_metrics, ec);
@@ -227,56 +241,61 @@ Session::flush_response(Cancel cancel,
             }
         }
 
-        h(std::move(*opt_part), cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec);
+        if (auto r = h(std::move(*opt_part), yield); !r) {
+            return std::unexpected(r.error());
+        }
     }
+
+    return {};
 }
 
 template<class Handler, class TimeoutDuration>
 inline
-void
-Session::flush_response(Cancel& cancel,
-                        asio::yield_context yield,
-                        Handler&& h,
-                        TimeoutDuration timeout)
+std::expected<void, sys::error_code>
+Session::flush_response(Async yield, Handler&& h, TimeoutDuration timeout)
 {
-    Cancel timeout_cancel(cancel);
-    auto op_wd = watch_dog( get_executor(), timeout
-                          , [&timeout_cancel] { timeout_cancel(); });
+    Async timeout_yield = yield;
 
-    sys::error_code ec;
-    flush_response( timeout_cancel, yield[ec]
-                  , [&h, &op_wd, timeout] (auto&& part, auto& c, auto y) {
-        sys::error_code e;
-        h(std::move(part), c, y[e]);
-        return_or_throw_on_error(y, c, e);
-        op_wd.expires_after(timeout);  // the part was successfully forwarded
-    });
+    try {
+        auto op_wd = watch_dog( get_executor(), timeout
+                              , [&timeout_yield] { timeout_yield.cancel(); });
 
-    fail_on_error_or_timeout(yield, cancel, ec, op_wd);
+        auto r = flush_response(timeout_yield, [&h, &op_wd, timeout] (auto&& part, auto y) -> std::expected<void, sys::error_code> {
+            std::expected<void, sys::error_code> r = h(std::move(part), y);
+            if (!r) return std::unexpected(r.error());
+            op_wd.expires_after(timeout);  // the part was successfully forwarded
+            return {};
+        });
+
+        if (!r) return std::unexpected(r.error());
+    }
+    catch (Async::Cancelled const&) {
+        if (yield.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
+    }
+
+    return {};
 }
 
 template<class SinkStream>
 inline
-void
-Session::flush_response(SinkStream& sink,
-                        Cancel& cancel,
-                        asio::yield_context yield,
-                        PartModifier part_modifier)
+std::expected<void, sys::error_code>
+Session::flush_response(SinkStream& sink, Async yield, PartModifier part_modifier)
 {
-    return flush_response(cancel, yield, [&sink, part_modifier] (auto&& part, auto& c, auto y) {
+    return flush_response(yield, [&sink, part_modifier] (auto&& part, auto y) {
         switch (part_modifier) {
             case PartModifier::DoNothing:
-                part.async_write(sink, c, y);
-                break;
+                return part.async_write(sink, y);
             case PartModifier::RemoveChunkHeaderExtension:
                 if (auto chunk_hdr = part.as_chunk_hdr()) {
                     chunk_hdr->exts.clear();
-                    http_response::Part(std::move(*chunk_hdr)).async_write(sink, c, y);
+                    return http_response::Part(std::move(*chunk_hdr)).async_write(sink, y);
                 } else {
-                    part.async_write(sink, c, y);
+                    return part.async_write(sink, y);
                 }
-                break;
+            default:
+                assert(false && "unreachable");
+                std::terminate();
         }
     });
 }

@@ -1,8 +1,8 @@
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
+#include "util/async.h"
 
-
-namespace ouinet { namespace util { namespace file_io {
+namespace ouinet::util::file_io {
 
 namespace errc = boost::system::errc;
 
@@ -13,122 +13,122 @@ last_error()
     return make_error_code(static_cast<errc::errc_t>(errno));
 }
 
-void
-fseek(async_file_handle& f, size_t pos, sys::error_code& ec)
+std::expected<void, sys::error_code>
+fseek(async_file_handle& f, size_t pos)
 {
     if (lseek(f.native_handle(), pos, SEEK_SET) == -1) {
-        ec = last_error();
+        sys::error_code ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
+        return std::unexpected(ec);
     }
+    return {};
 }
 
-size_t
-current_position(async_file_handle& f, sys::error_code& ec)
+std::expected<size_t, sys::error_code>
+current_position(async_file_handle& f)
 {
     off_t offset = lseek(f.native_handle(), 0, SEEK_CUR);
 
     if (offset == -1) {
-        ec = last_error();
+        sys::error_code ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
-        return size_t(-1);
+        return std::unexpected(ec);
     }
 
     return offset;
 }
 
-size_t
-file_size(async_file_handle& f, sys::error_code& ec)
+std::expected<size_t, sys::error_code>
+file_size(async_file_handle& f)
 {
-    auto start_pos = current_position(f, ec);
-    if (ec) return size_t(-1);
+    auto start_pos = current_position(f);
+    if (!start_pos) return std::unexpected(start_pos.error());
 
     if (lseek(f.native_handle(), 0, SEEK_END) == -1) {
-        ec = last_error();
+        sys::error_code ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
+        return std::unexpected(ec);
     }
 
-    auto end = current_position(f, ec);
-    if (ec) return size_t(-1);
+    auto end = current_position(f);
+    if (!end) return std::unexpected(end.error());
 
-    fseek(f, start_pos, ec);
-    if (ec) return size_t(-1);
+    auto r = fseek(f, *start_pos);
+    if (!r) return std::unexpected(r.error());
 
-    return end;
+    return *end;
 }
 
-size_t
-file_remaining_size(async_file_handle& f, sys::error_code& ec)
+std::expected<size_t, sys::error_code>
+file_remaining_size(async_file_handle& f)
 {
-    auto size = file_size(f, ec);
-    if (ec) return 0;
+    auto size = file_size(f);
+    if (!size) return std::unexpected(size.error());
 
-    auto pos = current_position(f, ec);
-    if (ec) return 0;
+    auto pos = current_position(f);
+    if (!pos) return std::unexpected(pos.error());
 
-    return size - pos;
+    return *size - *pos;
 }
 
 static
-async_file_handle
-open( int file
-    , const AsioExecutor& exec
-    , sys::error_code& ec)
+std::expected<async_file_handle, sys::error_code>
+open(int file, const AsioExecutor& exec)
 {
     if (file == -1) {
-        ec = last_error();
+        sys::error_code ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
-        return async_file_handle(exec);
+        return std::unexpected(ec);
     }
 
     async_file_handle f(exec, file);
-    fseek(f, 0, ec);
+    auto r = fseek(f, 0);
+    if (!r) return std::unexpected(r.error());
 
     return f;
 }
 
-async_file_handle
+std::expected<async_file_handle, sys::error_code>
 open_or_create( const AsioExecutor& exec
-              , const fs::path& p
-              , sys::error_code& ec)
+              , const fs::path& p)
 {
     int file = ::open(p.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-    return open(file, exec, ec);
+    return open(file, exec);
 }
 
-async_file_handle
+std::expected<async_file_handle, sys::error_code>
 open_readonly( const AsioExecutor& exec
-             , const fs::path& p
-             , sys::error_code& ec)
+             , const fs::path& p)
 {
     int file = ::open(p.c_str(), O_RDONLY);
-    return open(file, exec, ec);
+    return open(file, exec);
 }
 
-int
-dup_fd(async_file_handle& f, sys::error_code& ec)
+std::expected<int, sys::error_code>
+dup_fd(async_file_handle& f)
 {
     int file = ::dup(f.native_handle());
     if (file == -1) {
-        ec = last_error();
+        sys::error_code ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
+        return std::unexpected(ec);
     }
     return file;
 }
 
-void
-truncate( async_file_handle& f
-        , size_t new_length
-        , sys::error_code& ec)
+std::expected<void, sys::error_code>
+truncate(async_file_handle& f, size_t new_length)
 {
     if (ftruncate(f.native_handle(), new_length) != 0) {
-        ec = last_error();
+        sys::error_code ec = last_error();
         if (!ec) ec = make_error_code(errc::no_message);
+        return std::unexpected(ec);
     }
-    fseek(f, new_length, ec);
+    return fseek(f, new_length);
 }
 
-bool
-check_or_create_directory(const fs::path& dir, sys::error_code& ec)
+std::expected<bool, sys::error_code>
+check_or_create_directory(const fs::path& dir)
 {
     // https://www.boost.org/doc/libs/1_69_0/libs/system/doc/html/system.html#ref_boostsystemerror_code_hpp
 
@@ -136,63 +136,50 @@ check_or_create_directory(const fs::path& dir, sys::error_code& ec)
 
     if (fs::exists(dir)) {
         if (!is_directory(dir)) {
-            ec = make_error_code(errc::not_a_directory);
-            return false;
+            return std::unexpected(make_error_code(errc::not_a_directory));
         }
 
         return false;
     }
     else {
+        sys::error_code ec;
         if (!create_directories(dir, ec)) {
             if (!ec) ec = make_error_code(errc::operation_not_permitted);
-            return false;
+            return std::unexpected(ec);
         }
         assert(is_directory(dir));
         return true;
     }
 }
 
-void
-read( async_file_handle& f
-    , asio::mutable_buffer b
-    , Cancel& cancel
-    , asio::yield_context yield)
+std::expected<void, sys::error_code>
+read(async_file_handle& f, asio::mutable_buffer b, Async yield)
 {
-    auto cancel_slot = cancel.connect([&] { f.close(); });
-    sys::error_code ec;
-    asio::async_read(f, b, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec);
+    auto cancel_slot = yield.cancel_slot([&] { f.close(); });
+    auto r = asio::async_read(f, b, yield);
+    if (!r) return std::unexpected(r.error());
+    return {};
 }
 
-void
-write( async_file_handle& f
-     , asio::const_buffer b
-     , Cancel& cancel
-     , asio::yield_context yield)
+std::expected<void, sys::error_code>
+write(async_file_handle& f, asio::const_buffer b, Async yield)
 {
-    auto cancel_slot = cancel.connect([&] { f.close(); });
-    sys::error_code ec;
-    asio::async_write(f, b, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec);
+    auto cancel_slot = yield.cancel_slot([&] { f.close(); });
+    auto r = asio::async_write(f, b, yield);
+    if (!r) return std::unexpected(r.error());
+    return {};
 }
 
-void
+std::expected<void, sys::error_code>
 remove_file(const fs::path& p)
 {
-    if (!exists(p)) return;
+    if (!exists(p)) return {};
     assert(is_regular_file(p));
-    if (!is_regular_file(p)) return;
-    sys::error_code ignored_ec;
-    fs::remove(p, ignored_ec);
-}
-
-void
-remove_file(const fs::path& p, sys::error_code& ec)
-{
-    if (!exists(p)) return;
-    assert(is_regular_file(p));
-    if (!is_regular_file(p)) return;
+    if (!is_regular_file(p)) return {};
+    sys::error_code ec;
     fs::remove(p, ec);
+    if (ec) return std::unexpected(ec);
+    return {};
 }
 
-}}} // namespaces
+} // namespace

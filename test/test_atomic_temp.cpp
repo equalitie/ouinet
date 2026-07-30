@@ -1,6 +1,6 @@
 #define BOOST_TEST_MODULE atomic_temp
 #include <boost/test/data/test_case.hpp>
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <boost/filesystem.hpp>
 
@@ -13,6 +13,7 @@
 #include <util/temp_file.h>
 
 #include <namespaces.h>
+#include "util/unwrap.h"
 
 
 BOOST_AUTO_TEST_SUITE(ouinet_atomic_temp)
@@ -22,13 +23,23 @@ using namespace ouinet;
 
 using ouinet::util::AsioExecutor;
 
+[[nodiscard]]
 static
-void
+std::expected<void, sys::error_code>
 populate_directory( const fs::path& dir
-                  , const AsioExecutor& ex, sys::error_code& ec) {
-    util::file_io::open_or_create(ex, dir / "testfile", ec);
-    if (!ec) fs::create_directory(dir / "testdir", ec);
-    if (!ec) util::file_io::open_or_create(ex, dir / "testdir" / "testfile", ec);
+                  , const AsioExecutor& ex) {
+    if (auto r = util::file_io::open_or_create(ex, dir / "testfile"); !r) {
+        return std::unexpected(r.error());
+    }
+
+    sys::error_code ec;
+    fs::create_directory(dir / "testdir", ec);
+    if (ec) return std::unexpected(ec);
+
+    if (auto r = util::file_io::open_or_create(ex, dir / "testdir" / "testfile"); !r) {
+        return std::unexpected(r.error());
+    }
+    return {};
 }
 
 static
@@ -67,8 +78,7 @@ BOOST_DATA_TEST_CASE(test_temp_dir, boost::unit_test::data::make(true_false), ke
         BOOST_REQUIRE(fs::exists(td_path));
         BOOST_REQUIRE(fs::is_directory(td_path));
 
-        populate_directory(td_path, ctx.get_executor(), ec);
-        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
+        unwrap(populate_directory(td_path, ctx.get_executor()));
     }
 
     if (!keep) {
@@ -89,14 +99,13 @@ BOOST_DATA_TEST_CASE(test_tmp_file, boost::unit_test::data::make(true_false), ke
     {
         sys::error_code ec;
 
-        auto tf = util::temp_file::make(ctx.get_executor(), ec);
-        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
+        auto tf = unwrap(util::temp_file::make(ctx.get_executor()));
 
-        BOOST_CHECK(tf->keep_on_close());
-        tf->keep_on_close(keep);
-        BOOST_CHECK_EQUAL(tf->keep_on_close(), keep);
+        BOOST_CHECK(tf.keep_on_close());
+        tf.keep_on_close(keep);
+        BOOST_CHECK_EQUAL(tf.keep_on_close(), keep);
 
-        tf_path = tf->path();
+        tf_path = tf.path();
         BOOST_REQUIRE(fs::exists(tf_path));
         BOOST_REQUIRE(fs::is_regular_file(tf_path));
     }
@@ -125,8 +134,7 @@ BOOST_DATA_TEST_CASE(test_atomic_dir, boost::unit_test::data::make(true_false), 
         BOOST_REQUIRE(fs::exists(ad_temp_path));
         BOOST_REQUIRE(fs::is_directory(ad_temp_path));
 
-        populate_directory(ad_temp_path, ctx.get_executor(), ec);
-        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
+        unwrap(populate_directory(ad_temp_path, ctx.get_executor()));
 
         if (commit) {
             ad->commit(ec);
@@ -152,12 +160,9 @@ BOOST_DATA_TEST_CASE(test_atomic_file, boost::unit_test::data::make(true_false),
         if (fs::exists(af_temp_path)) fs::remove_all(af_temp_path);
     });
     {
-        sys::error_code ec;
+        auto af = unwrap(util::atomic_file::make(ctx.get_executor(), af_path));
 
-        auto af = util::atomic_file::make(ctx.get_executor(), af_path, ec);
-        BOOST_REQUIRE_EQUAL(ec.value(), sys::errc::success);
-
-        BOOST_CHECK_EQUAL(af->path(), af_path);
+        BOOST_CHECK_EQUAL(af.path(), af_path);
         BOOST_REQUIRE(!fs::exists(af_path));
 
     }

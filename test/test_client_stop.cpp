@@ -1,25 +1,18 @@
-#define BOOST_TEST_MODULE utility
-#include <boost/test/included/unit_test.hpp>
+#define BOOST_TEST_MODULE test_client_stop
+#include <boost/test/unit_test.hpp>
 
-#include <boost/beast/core.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/stacktrace.hpp>
-#include <boost/system/result.hpp>
-#include <namespaces.h>
-#include <iostream>
+#include "namespaces.h"
 #include <chrono>
 #include "util/test_dir.h"
-#include "util/crypto.h"
 #include "bittorrent/mock_dht.h"
-#include "injector.h"
 #include "client.h"
-#include "ssl/util.h"
 
 using namespace std;
 using namespace ouinet;
 using namespace std::chrono_literals;
-using namespace boost::asio::ip;
+//using namespace boost::asio::ip;
 using bittorrent::MockDht;
 
 constexpr uint16_t wait_for_connections = 12;
@@ -82,8 +75,6 @@ BOOST_AUTO_TEST_CASE(test_client_start_stop) {
 
     TestDir root;
 
-    const std::string injector_credentials = "username:password";
-
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     Client client(ctx, make_config<ClientConfig>({
@@ -92,7 +83,6 @@ BOOST_AUTO_TEST_CASE(test_client_start_stop) {
             "--repo"s, root.make_subdir("client").string(),
             "--cache-type=bep5-http"s,
             "--cache-http-public-key=mhwc7k2qui4d3jbrqdbtrahh23auezoiz5sgkg35qmb3j6mvvn2q"s,
-            "--udp-mux-port=59846"s,
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,

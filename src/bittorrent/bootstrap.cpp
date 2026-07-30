@@ -1,5 +1,6 @@
 #include "bootstrap.h"
 
+#include <iterator>
 #include <tuple>
 
 #include <boost/algorithm/string/case_conv.hpp>
@@ -78,6 +79,18 @@ operator<<(std::ostream& os, const Address& a) {
         , [&os] (const std::string& s) { os << s; }
         );
     return os;
+}
+
+std::vector<Address> Config::collect() const {
+    std::vector<Address> out;
+
+    if (_default) {
+        std::copy(default_servers.begin(), default_servers.end(), std::back_inserter(out));
+    }
+
+    std::copy(_extra.begin(), _extra.end(), std::back_inserter(out));
+
+    return out;
 }
 
 } // bootstrap namespace
