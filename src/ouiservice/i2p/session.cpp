@@ -61,7 +61,7 @@ std::expected<asio::ip::tcp::socket, Error::Connect> I2pSession::connect(const I
     if (!sam) return error(sam.error());
 
     // TODO: Validate response is OK
-    auto i_rs = sam->invoke("STREAM CONNECT ID=" + _inner->id.value + " DESTINATION=" + remote_addr.value + " SILENT=false", yield);
+    auto i_rs = sam->invoke("STREAM CONNECT ID=" + _inner->id.value + " DESTINATION=" + remote_addr.as_str() + " SILENT=false", yield);
     if (!i_rs) return error(i_rs.error());
 
     return sam->release_socket();

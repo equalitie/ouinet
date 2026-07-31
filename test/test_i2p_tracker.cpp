@@ -20,6 +20,7 @@
 
 using namespace ouinet;
 using namespace bittorrent;
+using namespace std::string_literals;
 namespace test = boost::unit_test;
 
 void handle_exception(std::exception_ptr ep) {
@@ -116,11 +117,11 @@ BOOST_AUTO_TEST_CASE(code) {
                "xubURM37RTmF2FnwQ-JVjbg9XyJpj4p9ELXcZIvqhD-Lw7o7DdtocrNQ9BQAEAAcA"
                "AA==";
 
-    auto expected_b32 = "up476ksq55ggimakh45q2pjfaz4n5ptsjmxpsxcrebnhk72lgmrq";
+    auto expected_b32 = "up476ksq55ggimakh45q2pjfaz4n5ptsjmxpsxcrebnhk72lgmrq"s += I2pAddress::B32::SUFFIX;
 
-    auto calculated_b32 = I2pAddress::b64_to_b32(b64);
+    auto calculated_b32 = unwrap(I2pAddress::B64::parse(b64)).to_b32();
 
-    BOOST_REQUIRE_EQUAL(calculated_b32, expected_b32);
+    BOOST_REQUIRE_EQUAL(calculated_b32.as_str(), expected_b32);
 }
 
 BOOST_AUTO_TEST_CASE(announce_and_get_peers) {
@@ -139,8 +140,7 @@ BOOST_AUTO_TEST_CASE(announce_and_get_peers) {
 
         auto infohash = NodeID::random();
 
-        auto a_b64_addr = tracker_a.get_session()->local_addr();
-        auto a_b32_addr = *I2pAddress::b64_to_b32(a_b64_addr.value) + ".b32.i2p";
+        auto a_b32_addr = tracker_a.get_session()->local_addr().to_b32();
 
         BOOST_TEST_MESSAGE("Announcing infohash " << infohash);
 
@@ -155,7 +155,7 @@ BOOST_AUTO_TEST_CASE(announce_and_get_peers) {
         BOOST_REQUIRE_EQUAL(peers.size(), 1);
 
         auto peer = *peers.begin();
-        BOOST_REQUIRE_EQUAL(peer.value, a_b32_addr);
+        BOOST_REQUIRE_EQUAL(peer, a_b32_addr);
 
         std::string message_tx = "hello world";
 

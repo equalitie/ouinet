@@ -197,7 +197,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--injector-credentials"s, injector_credentials,
                 "--cache-type=bep3-http-over-i2p"s,
                 "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).value,
+                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).as_str(),
                 "--i2p-bep3-tracker"s, bep3_tracker_id,
                 "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
                 "--disable-origin-access"s,

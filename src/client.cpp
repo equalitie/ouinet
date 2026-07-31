@@ -467,7 +467,6 @@ private:
     fs::path ca_dh_path()   const { return _config.repo_root() / OUINET_CA_DH_FILE;   }
     fs::path error_page_path()   const { return _config.repo_root() / OUINET_ERROR_PAGE_FILE;   }
 
-    asio::io_context& get_io_context() { return _ctx; }
     AsioExecutor get_executor() { return _ctx.get_executor(); }
 
     Cancel& get_shutdown_signal() { return _shutdown_signal; }
@@ -533,9 +532,8 @@ private:
 
                 // Used by python test
                 {
-                    if (auto b32 = I2pAddress::b64_to_b32(session->local_addr().value)) {
-                        LOG_DEBUG(yield, " I2P Session created, local_addr: ", *b32, ".b32.i2p");
-                    }
+                    auto b32 = session->local_addr().to_b32();
+                    LOG_DEBUG(yield, " I2P Session created, local_addr: ", b32);
                 }
 
                 return std::make_shared<I2pSession>(std::move(*session));

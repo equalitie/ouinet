@@ -1,6 +1,7 @@
 #include "address.h"
 #include <string_view>
 #include "util/hash.h"
+#include "util/overloaded.h"
 #include <boost/beast/core/detail/base64.hpp>
 
 namespace ouinet {
@@ -8,15 +9,16 @@ namespace ouinet {
 // Validate I2P address:
 // https://i2p.net/en/docs/overview/naming/
 
-bool is_valid_b32(std::string_view s) {
-    static const std::string_view suffix = ".b32.i2p";
+using B32 = I2pAddress::B32;
+using B64 = I2pAddress::B64;
 
-    if (!s.ends_with(suffix)) return false;
+bool is_valid_b32(std::string_view s) {
+    if (!s.ends_with(B32::SUFFIX)) return false;
 
     // Traditional b32 addresses are exactly 52 encoded characters without .b32.i2p
     // b33 extended addresses are 56+ encoded characters
     // these are used for encrypted lease-sets
-    size_t label_len = s.size() - suffix.size();
+    size_t label_len = s.size() - B32::SUFFIX.size();
     if (label_len!= 52 && label_len < 56) return false;
 
     for (size_t i = 0; i < label_len; ++i) {
@@ -27,11 +29,9 @@ bool is_valid_b32(std::string_view s) {
 }
 
 bool is_valid_b64(std::string_view s) {
-    // It MAY have a suffix
-    static const std::string_view suffix = ".b64.i2p";
-
-    if (s.ends_with(suffix)) {
-        s.remove_suffix(suffix.size());
+    // It MAY have the suffix
+    if (s.ends_with(B64::SUFFIX)) {
+        s.remove_suffix(B64::SUFFIX.size());
     }
 
     // B64 addresses contain keys which are at least 516 bytes long
@@ -58,15 +58,21 @@ bool is_valid_b64(std::string_view s) {
 }
 
 /* static */
+std::optional<B32> B32::parse(std::string_view s) {
+    if (is_valid_b32(s)) return B32(std::string(s));
+    return {};
+}
+
+/* static */
+std::optional<B64> B64::parse(std::string_view s) {
+    if (is_valid_b64(s)) return B64(std::string(s));
+    return {};
+}
+
+/* static */
 std::optional<I2pAddress> I2pAddress::parse(std::string_view s) {
-    if (is_valid_b32(s)) {
-        return I2pAddress(std::string(s));
-    }
-
-    if (is_valid_b64(s)) {
-        return I2pAddress(std::string(s));
-    }
-
+    if (auto a = B32::parse(s)) return a;
+    if (auto a = B64::parse(s)) return a;
     return {};
 }
 
@@ -143,8 +149,8 @@ std::string encode_b32(std::span<unsigned char> in, bool with_padding = false) {
     return output;
 }
 
-/* static */
-std::optional<std::string> I2pAddress::b64_to_b32(std::string in) {
+static
+std::optional<std::string> b64_to_b32(std::string in) {
     auto binary = decode_b64(std::move(in));
     if (!binary) return {};
     auto digest = util::sha256_digest(std::string_view(binary->begin(), binary->end()));
@@ -152,10 +158,38 @@ std::optional<std::string> I2pAddress::b64_to_b32(std::string in) {
 }
 
 /* static */
-std::optional<I2pAddress> I2pAddress::from_binary_b32(std::span<unsigned char> bytes) {
-    if (bytes.size() != B32_ADDR_BINARY_SIZE) return {};
-    return I2pAddress(encode_b32(bytes) + ".b32.i2p");
+std::optional<B32> B32::from_binary(std::span<unsigned char> bytes) {
+    if (bytes.size() != B32::BYTE_SIZE) return {};
+    return B32(encode_b32(bytes) += B32::SUFFIX);
+}
+
+const std::string& I2pAddress::as_str() const {
+    return visit([] (auto& addr) -> auto& { return addr.value; });
+}
+
+B32 B64::to_b32() const {
+    auto b32 = b64_to_b32(value);
+    if (!b32) throw std::runtime_error("Invalid I2P b64 address in `to_b32` conversion");
+    return B32{*b32 += B32::SUFFIX};
+}
+
+B32 I2pAddress::to_b32() const {
+    return visit(overloaded{
+            [] (const B32& addr) -> B32 { return addr; },
+            [] (const B64& addr) -> B32 { return addr.to_b32(); }
+        });
+}
+
+std::ostream& operator<<(std::ostream& os, I2pAddress const& addr) {
+    return addr.visit([&os] (auto& addr) -> auto& { return os << addr; });
+}
+
+std::ostream& operator<<(std::ostream& os, B32 const& addr) {
+    return os << addr.value;
+}
+
+std::ostream& operator<<(std::ostream& os, B64 const& addr) {
+    return os << addr.value;
 }
 
 } // namespace ouinet
-

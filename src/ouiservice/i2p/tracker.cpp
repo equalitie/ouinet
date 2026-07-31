@@ -45,7 +45,7 @@ static void fill_common_target(std::ostream& os, const NodeID& infohash, const I
     os << "/a"
        << "?info_hash=" << percent_encode(infohash.to_bytestring())
        << "&peer_id=" << percent_encode(peer_id.to_bytestring())
-       << "&ip=" << percent_encode(local_server_addr.value);
+       << "&ip=" << percent_encode(local_server_addr.as_str());
 }
 
 static std::string get_peers_target(const NodeID& infohash, const I2pAddress& local_server_addr) {
@@ -79,7 +79,7 @@ static std::string handshake_target(const I2pAddress& local_server_addr) {
 
 static http::request<http::empty_body> make_request(const I2pAddress& tracker_addr, std::string target) {
     http::request<http::empty_body> rq{http::verb::get, std::move(target), 11};
-    rq.set(http::field::host, tracker_addr.value);
+    rq.set(http::field::host, tracker_addr.as_str());
     rq.set(http::field::user_agent, "Ouinet/1.0");
     return rq;
 }
@@ -180,10 +180,11 @@ I2pTrackerClient::get_peers(NodeID infohash, Async yield)
     } else if (peers_it->second.is_string()) {
         // Compact I2P format: concatenated 32-byte DestHashes
         const auto data = *peers_it->second.as_string();
-        constexpr size_t SIZE = I2pAddress::B32_ADDR_BINARY_SIZE;
+        constexpr size_t SIZE = I2pAddress::B32::BYTE_SIZE;
 
         for (size_t i = 0; i + SIZE <= data.size() ; i += SIZE) {
-            auto dest = *I2pAddress::from_binary_b32(std::span((unsigned char*)data.data() + i, SIZE));
+            // Note: This "unwrap" is OK because `from_binary` only fails if SIZE != B32::BYTE_SIZE
+            auto dest = *I2pAddress::B32::from_binary(std::span((unsigned char*)data.data() + i, SIZE));
             peers.insert(std::move(dest));
         }
     }

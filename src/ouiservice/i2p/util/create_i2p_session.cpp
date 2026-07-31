@@ -20,9 +20,8 @@ create_i2p_session(Cancel cancel, util::LogPath log_path, asio::any_io_executor 
         if (i2p_session.has_value()) {
             // Used by python test
             {
-                if (auto b32 = I2pAddress::b64_to_b32(i2p_session->local_addr().value)) {
-                    LOG_DEBUG(log_path, " I2P Session created, local_addr: ", *b32, ".b32.i2p");
-                }
+                auto b32 = i2p_session->local_addr().to_b32();
+                LOG_DEBUG(log_path, " I2P Session created, local_addr: ", b32);
             }
             auto ptr = std::make_shared<I2pSession>(std::move(*i2p_session));
             promise.set_value(ptr);
