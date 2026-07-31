@@ -406,7 +406,7 @@ for target_os in ${target_oss[@]}; do
                 "    python3 -m venv $build_dir/venv;"
                 "fi;"
                 "source $build_dir/venv/bin/activate;"
-                "pip install twisted pytest requests pytest_asyncio;"
+                "pip install twisted pytest requests pytest_asyncio pytest-timeout;"
 
                 "export OUINET_BUILD_DIR=$build_dir;"
                 "export OUINET_REPO_DIR=$ouinet_dir;"
