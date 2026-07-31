@@ -95,12 +95,6 @@ class Client::State : public enable_shared_from_this<Client::State> {
         Created, Failed, Started, Stopped
     };
 
-    using I2pSessionPromise = Promise<
-            std::expected<
-                std::shared_ptr<I2pSession>,
-                I2pSession::Error::Create
-            >
-        >;
 public:
     State( asio::io_context& ctx
          , ClientConfig cfg
@@ -527,27 +521,27 @@ private:
         p = make_unique<UPnPUpdater>(executor, ext_port, local_ep.port());
     }
 
-    I2pSessionPromise::Future get_or_create_i2p_session_future(asio::any_io_executor exec) {
-        if (!_i2p_session_future) {
-            _i2p_session_future = create_i2p_session(_shutdown_signal, _log_path, exec);
-        }
-        return *_i2p_session_future;
-    }
+    TaskHandle<SysResult<std::shared_ptr<I2pSession>>> get_or_create_i2p_session_task() {
+        using R = SysResult<std::shared_ptr<I2pSession>>;
 
-    std::shared_ptr<I2pSession> get_or_create_i2p_session(Async yield) {
-        auto future = get_or_create_i2p_session_future(yield.get_executor());
+        if (_i2p_session_create) return *_i2p_session_create;
 
-        auto future_result = _i2p_session_future->wait(yield);
-        if (!future_result) {
-            LOG_ERROR("Failed to create I2pSession: broken promise");
-            return nullptr;
-        }
-        auto& create_result = future_result.value();
-        if (!create_result) {
-            LOG_ERROR("Failed to create I2pSession: ", create_result.error());
-            return nullptr;
-        }
-        return *create_result;
+        _i2p_session_create = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path, [](Async yield) -> R {
+                auto session = I2pSession::create(yield);
+
+                if (!session) return std::unexpected(session.error());
+
+                // Used by python test
+                {
+                    if (auto b32 = I2pAddress::b64_to_b32(session->local_addr().value)) {
+                        LOG_DEBUG(yield, " I2P Session created, local_addr: ", *b32, ".b32.i2p");
+                    }
+                }
+
+                return std::make_shared<I2pSession>(std::move(*session));
+            });
+
+        return *_i2p_session_create;
     }
 
     [[nodiscard]]
@@ -601,14 +595,14 @@ private:
     }
 
     void start_accepting_i2p(Async yield) {
-        auto session = get_or_create_i2p_session(yield);
+        auto session = get_or_create_i2p_session_task().wait(yield);
         if (!session) return;
 
         if (auto tracker_addr = _config.i2p_bep3_tracker()) {
-            _cache->enable_i2p(session, *tracker_addr);
+            _cache->enable_i2p(*session, *tracker_addr);
         }
 
-        yield.spawn([this, session] (Async yield) mutable {
+        yield.spawn([this, session = std::move(*session)] (Async yield) mutable {
             while (true) {
                 auto con = session->accept(yield);
                 if (!con.has_value()) {
@@ -692,8 +686,8 @@ private:
     std::optional<ouisync_service::Ouisync> _ouisync;
     std::string _frontend_unix_socket_endpoint;
 
-    // This could be created either because of cache or injector
-    std::optional<I2pSessionPromise::Future> _i2p_session_future;
+    // This could be created either because of cache or intent to connect to the injector
+    std::optional<TaskHandle<SysResult<std::shared_ptr<I2pSession>>>> _i2p_session_create;
 
     shared_ptr<dns::Resolver> _dns_resolver;
 };
@@ -2529,26 +2523,14 @@ void Client::State::setup_injectors()
 
             std::expected<GenericStream, sys::error_code>
             connect(Async yield) override {
-                auto future_result = _i2p_session_future.wait(yield);
-
-                if (!future_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
-                }
-                auto& create_result = future_result.value();
-                if (!create_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
-                }
-                auto session = *create_result;
-                auto result = session->connect(_addr, yield);
-                if (!result.has_value()) {
-                    return std::unexpected(result.error().code());
-                }
+                auto result = _session->connect(_addr, yield);
+                if (!result) return std::unexpected(result.error().code());
                 return std::move(*result);
             }
 
-            Client(I2pAddress addr, I2pSessionPromise::Future i2p_session_future, Cancel cancel, util::LogPath log_path):
+            Client(I2pAddress addr, std::shared_ptr<I2pSession> session, Cancel cancel, util::LogPath log_path):
                 _addr(std::move(addr)),
-                _i2p_session_future(std::move(i2p_session_future)),
+                _session(std::move(session)),
                 _cancel(std::move(cancel)),
                 _log_path(std::move(log_path))
             {}
@@ -2558,7 +2540,7 @@ void Client::State::setup_injectors()
             }
 
             I2pAddress _addr;
-            I2pSessionPromise::Future _i2p_session_future;
+            std::shared_ptr<I2pSession> _session;
             Cancel _cancel;
             util::LogPath _log_path;
         };
@@ -2568,9 +2550,13 @@ void Client::State::setup_injectors()
                 _shutdown_signal,
                 _log_path,
                 [this, ep] (Async yield) -> R {
+                auto session = get_or_create_i2p_session_task().wait(yield);
+
+                if (!session) return std::unexpected(session.error());
+
                 return std::make_unique<Client>(
                         *ep,
-                        get_or_create_i2p_session_future(yield.get_executor()),
+                        std::move(*session),
                         _shutdown_signal,
                         _log_path);
             });
