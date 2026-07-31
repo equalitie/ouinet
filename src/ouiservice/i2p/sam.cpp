@@ -39,10 +39,15 @@ std::optional<std::string_view> read_key(std::string_view& in) {
 
 struct Sam::Inner {
     asio::ip::tcp::socket socket;
+    asio::ip::tcp::endpoint remote_ep;
     WaitCondition mutex;
 
     Inner(asio::ip::tcp::socket socket):
         socket(std::move(socket)),
+        // Capture the endpoint while the socket is guaranteed to be open
+        // (Sam::connect just async_connect'd it). Querying it later, e.g.
+        // after the SAM control socket has been closed, would raise EBADF.
+        remote_ep(this->socket.remote_endpoint()),
         mutex(this->socket.get_executor())
     {}
 };
@@ -306,7 +311,10 @@ void Sam::close() {
 }
 
 asio::ip::tcp::endpoint Sam::remote_endpoint() const {
-    return _inner->socket.remote_endpoint();
+    // Return the endpoint we connected to originally. if you call
+    // socket.remote_endpoint() here it throws exception when
+    // SAM control socket has been closed (EBADF)
+    return _inner->remote_ep;
 }
 
 Sam::~Sam() {
