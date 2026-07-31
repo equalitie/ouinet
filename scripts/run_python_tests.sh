@@ -1,5 +1,18 @@
 #!/bin/bash
 
+# Empty means all tests
+run_tests=()
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --run-test)
+            run_tests+="$2"; shift
+            ;;
+        *) error "Unknown option $1" ;;
+    esac
+    shift
+done
+
 if [ -z "$OUINET_REPO_DIR" ]; then
     if [ ! -d ".git" ]; then
         echo "Please either set OUINET_REPO_DIR to point to the root of Ouinet repository or run the script from the root of Ouinet repository:"
@@ -28,4 +41,4 @@ if [ ! -f "$OUINET_BUILD_DIR/client" ] || [ ! -f "$OUINET_BUILD_DIR/injector" ];
     exit 1
 fi
 
-python -m pytest -s -vvx $OUINET_REPO_DIR/test/integration_test
+python -m pytest -s -vvx $OUINET_REPO_DIR/test/integration_test ${run_tests/#/-k }
