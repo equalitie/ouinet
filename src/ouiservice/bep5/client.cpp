@@ -161,9 +161,13 @@ private:
             LOG_DEBUG(yield, " Looking for peers (infohash=", _infohash
                            , ") done: ", endpoints->size(), " found");
 
-            _last_success_time = std::chrono::steady_clock::now();
 
             add_peers(std::move(*endpoints));
+
+            // If no peers were added then we're still not ready
+            if (_peers.empty()) continue;
+
+            _last_success_time = std::chrono::steady_clock::now();
             _wait_condition_locks.clear();
 
             async_sleep(SUCCESS_WAIT_DURATION, yield);
