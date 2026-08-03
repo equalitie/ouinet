@@ -11,6 +11,9 @@
 #include "util/unwrap.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
+#include "ouiservice/i2p/session.h"
+#include "ouiservice/i2p/tracker.h"
+#include "util/random.h"
 #include "client.h"
 #include "ssl/util.h"
 #include "async_sleep.h"
@@ -39,7 +42,13 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-Request build_cache_request(Route route) {
+std::string_view get_group(const Request& rq) {
+    auto group = rq[http_::request_group_hdr];
+    assert(!group.empty());
+    return group;
+}
+
+Request build_cache_request(Route route, std::string resource_group) {
     int version = 11;
     std::string host = test_url.host;
     std::string target = test_url.reassemble();
@@ -47,7 +56,7 @@ Request build_cache_request(Route route) {
     Request req{http::verb::get, target, version};
     req.set(http::field::host, host);
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http_::request_group_hdr, target);
+    req.set(http_::request_group_hdr, resource_group);
     req.set("X-Ouinet-Route", util::str(route));
     return req;
 }
@@ -160,6 +169,22 @@ void run(asio::io_context& ctx, F&& async_test) {
     }
 }
 
+void wait_for_peer_on_tracker(
+        I2pAddress::B32 tracker_addr,
+        bittorrent::NodeID infohash,
+        I2pAddress::B32 peer_addr,
+        Async yield) {
+    auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(yield)));
+    auto tracker = I2pTrackerClient(session, tracker_addr);
+    for (int i = 0; i < 30; ++i) {
+        auto peers = unwrap(tracker.get_peers(infohash, yield));
+        if (peers.contains(peer_addr)) {
+            return;
+        }
+        async_sleep(1s, yield);
+    }
+    BOOST_FAIL("Failed to wait for peer appearing on the tracker");
+}
 
 // An integration test with three identities: the 'injector', a 'seeder' client
 // and a 'leecher' client.
@@ -174,7 +199,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     TestDir root;
 
     const std::string injector_credentials = "username:password";
-    const std::string bep3_tracker_id = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p";
+    auto tracker_addr = unwrap(I2pAddress::B32::parse("z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p"));
     const std::string i2p_fast_tunnel_hop_count = "1";
 
     auto swarms = std::make_shared<MockDht::Swarms>();
@@ -197,8 +222,8 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--injector-credentials"s, injector_credentials,
                 "--cache-type=bep3-http-over-i2p"s,
                 "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).as_str(),
-                "--i2p-bep3-tracker"s, bep3_tracker_id,
+                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).to_b32().as_str(),
+                "--i2p-bep3-tracker"s, tracker_addr.as_str(),
                 "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
                 "--disable-origin-access"s,
                 "--disable-proxy-access"s,
@@ -209,7 +234,9 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             }),
             util::LogPath("seeder"),
             [&ctx, swarms] () {
-                return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
+                auto dht = std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
+                dht->can_not_see("injector");
+                return dht;
             });
 
         Client leecher(ctx, make_config<ClientConfig>({
@@ -217,7 +244,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--log-level=DEBUG"s,
                 "--repo"s, root.make_subdir("leecher").string(),
                 "--cache-type=bep3-http-over-i2p"s,
-                "--i2p-bep3-tracker"s, bep3_tracker_id,
+                "--i2p-bep3-tracker"s, tracker_addr.as_str(),
                 "--cache-http-public-key"s, injector.cache_http_public_key(),
                 "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
                 "--disable-origin-access"s,
@@ -229,6 +256,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
             util::LogPath("leecher"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
+                dht->can_not_see("seeder");
                 dht->can_not_see("injector");
                 return dht;
             });
@@ -237,25 +265,31 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         seeder.start();
         leecher.start();
 
+        auto resource_group = util::random::printable_ascii(10);
+
         auto control_body = fetch_from_origin(yield).body();
 
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(
                 seeder,
-                build_cache_request(Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}),
+                build_cache_request(Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}, resource_group),
                 yield);
 
         BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
         BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
         BOOST_REQUIRE_EQUAL(rs1.body(), control_body);
 
-        // Give "seeder" time to announce
-        async_sleep(20s, yield);
+        // Wait for seeder to announce
+        wait_for_peer_on_tracker(
+                tracker_addr,
+                leecher.compute_infohash_for_resource_group(resource_group),
+                unwrap(seeder.local_i2p_address(yield)).to_b32(),
+                yield);
 
         // The "leecher" client fetches the signed content from the "seeder"
         auto rs2 = fetch_through_client(
                 leecher,
-                build_cache_request(Route::DCache{CacheType::Bep3HTTPOverI2P{}}),
+                build_cache_request(Route::DCache{CacheType::Bep3HTTPOverI2P{}}, resource_group),
                 yield);
 
         BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);

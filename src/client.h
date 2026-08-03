@@ -13,6 +13,8 @@
 namespace ouinet {
 
 class ClientConfig;
+class I2pAddress;
+class Async;
 
 class OUINET_CLIENT_API Client {
 private:
@@ -60,6 +62,9 @@ public:
 
     std::shared_ptr<bittorrent::DhtBase> get_dht() const;
 
+    bittorrent::NodeID compute_infohash_for_resource_group(std::string_view group) const;
+
+    std::expected<I2pAddress, sys::error_code> local_i2p_address(Async) const;
 private:
     std::shared_ptr<State> _state;
 };

@@ -37,6 +37,7 @@
 #include "ssl/dummy_certificate.h"
 #include "ssl/util.h"
 #include "bittorrent/mainline_dht.h"
+#include "bep5_swarms.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p/session.h"
@@ -58,6 +59,7 @@
 #include "task.h"
 #include "util/executor.h"
 #include "util/debug.h"
+#include "util/hash.h"
 
 #include "task.h"
 #include "logger.h"
@@ -2718,6 +2720,21 @@ const ClientConfig& Client::config() const {
 
 std::shared_ptr<bt::DhtBase> Client::get_dht() const {
     return _state->_bt_dht;
+}
+
+bittorrent::NodeID Client::compute_infohash_for_resource_group(std::string_view group) const {
+    auto cache_pub_key = *_state->_config.cache_http_pub_key();
+    std::string uri_swarm_prefix = bep5::compute_uri_swarm_prefix(cache_pub_key, http_::protocol_version_current);
+    std::string swarm_name = bep5::compute_uri_swarm_name(uri_swarm_prefix, {group.begin(), group.size()});
+    util::SHA1::digest_type hash = util::sha1_digest(swarm_name);
+    return bittorrent::NodeID(hash);
+}
+
+SysResult<I2pAddress> Client::local_i2p_address(Async yield) const {
+    if (!_state->_i2p_session_create) return std::unexpected(asio::error::operation_not_supported);
+    auto session = _state->_i2p_session_create->wait(yield);
+    if (!session) return std::unexpected(session.error());
+    return (*session)->local_addr();
 }
 
 //------------------------------------------------------------------------------
