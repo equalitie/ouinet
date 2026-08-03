@@ -2,12 +2,17 @@
 
 #include "namespaces.h"
 #include "async.h"
-#include "api.h"
 
 #include <boost/asio/spawn.hpp>
 #include <variant>
 
 namespace ouinet {
+
+//--------------------------------------------------------------------
+
+template<class V> class MappedTaskHandle;
+
+//--------------------------------------------------------------------
 
 template<class V> class TaskHandle {
 public:
@@ -25,6 +30,40 @@ private:
             state(wc.lock())
         {}
 
+        bool has_result() const {
+            return std::visit(overloaded {
+                    [] (const WaitCondition::Lock&) { return false; },
+                    [] (const Result&) { return true; }
+                },
+                state);
+        }
+
+        V& wait_ref(Async yield) {
+            auto slot = cancel.connect([&] { yield.cancel(); });
+
+            if (!has_result()) {
+                wc.wait(yield);
+            }
+
+            return std::visit(overloaded {
+                    [] (V& value) -> V& { return value; },
+                    [] (const std::exception_ptr& eptr) -> V& { std::rethrow_exception(eptr); }
+                },
+                std::get<Result>(state));
+        }
+
+        const V& get_result_ref() const {
+            if (!has_result()) {
+                throw std::runtime_error("Called TaskHandle::get_result() on unfinished task");
+            }
+
+            return std::visit(overloaded {
+                    [] (const V& value) -> const V& { return value; },
+                    [] (const std::exception_ptr& eptr) -> const V& { std::rethrow_exception(eptr); }
+                },
+                std::get<Result>(state));
+        }
+
         ~Shared() {
             cancel();
         }
@@ -35,63 +74,93 @@ private:
     };
 
 public:
-    TaskHandle(TaskHandle const&) = default;
-    TaskHandle(TaskHandle&&) = default;
-
-    TaskHandle& operator=(TaskHandle const&) = default;
-    TaskHandle& operator=(TaskHandle&&) = default;
-
     V wait(Async yield) {
-        return wait_ref(yield);
+        return _shared->wait_ref(yield);
     }
 
     V& wait_ref(Async yield) {
-        auto slot = _shared->cancel.connect([&] { yield.cancel(); });
-
-        auto& state = _shared->state;
-
-        if (!has_result()) {
-            _shared->wc.wait(yield);
-        }
-
-        return std::visit(overloaded {
-                [&] (V& value) -> V& { return value; },
-                [&] (const std::exception_ptr& eptr) -> V& { std::rethrow_exception(eptr); }
-            },
-            std::get<Result>(state));
+        return _shared->wait_ref(yield);
     }
 
     const V& get_result_ref() const {
-        auto& state = _shared->state;
-
-        if (!has_result()) {
-            throw std::runtime_error("Called TaskHandle::get_result() on unfinished task");
-        }
-
-        return std::visit(overloaded {
-                [&] (V& value) -> V& { return value; },
-                [&] (const std::exception_ptr& eptr) -> V& { std::rethrow_exception(eptr); }
-            },
-            std::get<Result>(state));
+        return _shared->get_result_ref();
     }
 
     bool has_result() const {
-        return std::visit(overloaded {
-                [] (const WaitCondition::Lock&) { return false; },
-                [] (const Result&) { return true; }
-            },
-            _shared->state);
+        return _shared->has_result();
     }
+
+    template<class MapFunc>
+    [[nodiscard]]
+    MappedTaskHandle<
+        std::invoke_result_t<MapFunc, V>
+    >
+    map(MapFunc map_func) const;
 
 private:
     template<class F>
     friend TaskHandle<std::invoke_result_t<F, Async>>
     spawn_for_result(asio::any_io_executor, Cancel, util::LogPath, F);
 
+    template<class> friend class MappedTaskHandle;
+
     TaskHandle(std::shared_ptr<Shared> shared): _shared(std::move(shared)) {}
 
     std::shared_ptr<Shared> _shared;
 };
+
+//--------------------------------------------------------------------
+
+template<class MV> class MappedTaskHandle {
+private:
+    struct SharedBase {
+        virtual MV wait(Async yield) = 0;
+        virtual bool has_result() const = 0;
+        virtual ~SharedBase() = default;
+    };
+
+public:
+    MV wait(Async yield) {
+        return _shared->wait(yield);
+    }
+
+    bool has_result() const {
+        return _shared->has_result();
+    }
+
+private:
+    template<class> friend class TaskHandle;
+
+    std::shared_ptr<SharedBase> _shared;
+};
+
+//--------------------------------------------------------------------
+
+template<class V>
+template<class MapFunc>
+MappedTaskHandle<
+    std::invoke_result_t<MapFunc, V>
+>
+TaskHandle<V>::map(MapFunc map_func) const {
+    using MV = std::invoke_result_t<MapFunc, V>;
+
+    struct Shared : MappedTaskHandle<MV>::SharedBase {
+        MV wait(Async async) override {
+            return _map_func(_inner->wait_ref(async));
+        }
+
+        bool has_result() const override {
+            return _inner->has_result();
+        }
+
+        std::shared_ptr<TaskHandle<V>::Shared> _inner;
+        MapFunc _map_func;
+    };
+
+    return MappedTaskHandle<MV>(std::make_shared<Shared>(_shared, std::move(map_func)));
+}
+
+//--------------------------------------------------------------------
 
 template<class F>
 [[nodiscard]]
@@ -119,6 +188,10 @@ spawn_for_result(
             func = std::move(func),
             log_path = std::move(log_path)
         ] (asio::yield_context y) {
+            // Note that the following line of code may not be executed right
+            // after the `asio::spawn` call depending on whether or not
+            // `asio::spawn` was called from the same `exec`utor. So we have
+            // to check for cancellation.
             if (cancel) throw Async::Cancelled();
 
             V value = func(Async(y, cancel, log_path));
@@ -143,7 +216,7 @@ spawn_for_result(
             }
         });
 
-    return R{ std::move(shared) };
+    return R(std::move(shared));
 }
 
 } // namespace
