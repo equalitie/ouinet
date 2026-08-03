@@ -1130,7 +1130,7 @@ Client::State::fetch_fresh_through_connect_proxy( const Rq& rq
             }
 
             OuiServiceClient* injector = nullptr;
-            
+
             if (auto r = pick_injector(cache_type, yield); !r) {
                 return std::unexpected(r.error());
             }
@@ -1258,7 +1258,7 @@ std::expected<
 Client::State::get_injector_connection(InjectingCacheType cache_type, Async yield)
 {
     OuiServiceClient* injector = nullptr;
-   
+
     if (auto r = pick_injector(cache_type, yield); !r) {
         return std::unexpected(r.error());
     }
@@ -1274,17 +1274,17 @@ Client::State::get_injector_connection(InjectingCacheType cache_type, Async yiel
     }
 
     LOG_DEBUG(yield, " Connecting to the injector");
-    
+
     auto connect_e = injector->connect(yield);
-    
+
     if (!connect_e) {
         LOG_WARN(yield, " Failed to connect to injector; ec=", connect_e.error());
         return std::unexpected(connect_e.error());
     }
-    
+
     auto connect = std::move(*connect_e);
-    
-    
+
+
     auto con = _injector_connections.wrap(std::move(connect));
 
     return con;
@@ -1746,7 +1746,7 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         front_end(const Request& rq, Async yield) override {
             return client_state.fetch_fresh_from_front_end(rq, yield);
         }
-    
+
         SysResult<Session>
         origin(const Request& rq_, Async yield) override {
             auto rq = rq_;
@@ -1765,7 +1765,7 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         public_injector(const CacheInjectRequest& rq, Async yield) override {
             return client_state.fetch_fresh_through_simple_proxy(rq, yield);
         }
-    
+
         SysResult<Session>
         private_injector(InjectingCacheType cache_type, const Request& rq_, Async yield) override {
             auto rq = rq_;
@@ -2259,15 +2259,14 @@ void Client::State::listen_tcp
 
             GenericStream connection(std::move(socket) , std::move(tcp_shutter));
 
-            task::spawn_detached( _ctx, [
-                this,
+            spawn_detached(_ctx.get_executor(), _shutdown_signal, _log_path, [
                 self = shared_from_this(),
                 c = std::move(connection),
                 handler,
                 lock = wait_condition.lock()
-            ](asio::yield_context yield) mutable {
-                if (was_stopped()) return;
-                handler(std::move(c), Async(yield, _shutdown_signal, _log_path));
+            ] (Async yield) mutable {
+                if (self->was_stopped()) return;
+                handler(std::move(c), yield);
             });
         }
     }
@@ -2315,15 +2314,14 @@ void Client::State::listen_unix_socket
 
             GenericStream connection(std::move(socket) , std::move(unix_socket_shutter));
 
-            task::spawn_detached( _ctx, [
-                this,
+            spawn_detached(_ctx.get_executor(), _shutdown_signal, _log_path.tag("unix_socket"), [
                 self = shared_from_this(),
                 c = std::move(connection),
                 handler,
                 lock = wait_condition.lock()
-            ](asio::yield_context yield) mutable {
-                if (was_stopped()) return;
-                handler(std::move(c), Async(yield, _shutdown_signal, util::LogPath("unix_socket")));
+            ] (Async yield) mutable {
+                if (self->was_stopped()) return;
+                handler(std::move(c), yield);
             });
         }
     }
@@ -2391,17 +2389,16 @@ void Client::State::start_ouinet()
     next_internal_state = InternalState::Started;
 
     if (_ouisync) {
-        task::spawn_detached(_ctx, [
-            this,
+        spawn_detached(_ctx.get_executor(), _shutdown_signal, _log_path, [
             self = shared_from_this()
-        ] (asio::yield_context yield) mutable {
-            sys::error_code ec = _ouisync->start(Async(yield, _shutdown_signal, _log_path));
+        ] (Async yield) mutable {
+            sys::error_code ec = self->_ouisync->start(yield);
 
             if (!ec) {
-                LOG_INFO("Ouisync started");
+                LOG_INFO(yield, " Ouisync started");
             }
             else {
-                LOG_ERROR("Failed to start Ouisync: ", ec.message());
+                LOG_ERROR(yield, " Failed to start Ouisync: ", ec.message());
             }
         });
     }
@@ -2492,11 +2489,16 @@ void Client::State::start_ouinet()
 
     setup_injectors();
 
-    task::spawn_detached(_ctx, [this] (asio::yield_context yield) {
-        if (was_stopped()) return;
-        auto r = setup_cache(Async(yield, _shutdown_signal, _log_path.tag("setup_cache")));
-        if (!r) LOG_ERROR("Failed to setup cache; ec=", r.error());
-    });
+    spawn_detached(
+        _ctx.get_executor(),
+        _shutdown_signal,
+        _log_path.tag("setup_cache"),
+        [this] (Async yield) {
+            if (was_stopped()) return;
+            auto r = setup_cache(yield);
+            if (!r) LOG_ERROR(yield, " Failed to setup cache; ec=", r.error());
+        }
+    );
 }
 
 //------------------------------------------------------------------------------

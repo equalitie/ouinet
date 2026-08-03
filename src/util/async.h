@@ -11,6 +11,7 @@
 #include <boost/asio/async_result.hpp>
 
 #include <expected>
+#include <type_traits>
 
 namespace ouinet {
 
@@ -113,6 +114,12 @@ public:
         return _cancel;
     }
 
+    /// Returns a `Async` derived from `this` but which does not get cancelled when `this` gets
+    /// cancelled.
+    Async suppress_cancel() {
+        return Async(_asio_yield, _log_path);
+    }
+
     friend std::ostream& operator<<(std::ostream& os, const Async& y) {
         return os << y._log_path;
     }
@@ -158,6 +165,91 @@ static_assert(std::is_same_v<
     asio::associated_executor_t<Async>,
     asio::any_io_executor
 >);
+
+namespace detail {
+
+template<typename Function>
+requires std::invocable<Function, Async>
+auto make_coroutine(Function&& func, Cancel cancel, util::LogPath log_path) {
+    return [
+        func = std::forward<Function>(func),
+        cancel = std::move(cancel),
+        log_path = std::move(log_path)
+    ] (boost::asio::yield_context yield) mutable {
+        func(Async(yield, std::move(cancel), std::move(log_path)));
+    };
+}
+
+} // namespace detail
+
+/// Spawns a top-level coroutine
+template<typename Function>
+requires std::invocable<Function, Async>
+void spawn_detached(
+    const boost::asio::any_io_executor& exec,
+    Cancel cancel,
+    util::LogPath log_path,
+    Function&& func,
+    std::source_location location = std::source_location::current()
+)
+{
+    task::spawn_detached(
+        exec,
+        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), std::move(log_path)),
+        std::move(location)
+    );
+}
+
+/// Spawns a top-level coroutine
+template<typename Function>
+requires std::invocable<Function, Async>
+void spawn_detached(
+    const boost::asio::any_io_executor& exec,
+    Cancel cancel,
+    Function&& func,
+    std::source_location location = std::source_location::current()
+)
+{
+    task::spawn_detached(
+        exec,
+        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), util::LogPath()),
+        std::move(location)
+    );
+}
+
+/// Spawns a top-level coroutine
+template<typename Function>
+requires std::invocable<Function, Async>
+void spawn_detached(
+    const boost::asio::any_io_executor& exec,
+    util::LogPath log_path,
+    Function&& func,
+    std::source_location location = std::source_location::current()
+)
+{
+    task::spawn_detached(
+        exec,
+        detail::make_coroutine(std::forward<Function>(func), Cancel(), std::move(log_path)),
+        std::move(location)
+    );
+}
+
+/// Spawns a top-level coroutine
+template<typename Function>
+requires std::invocable<Function, Async>
+void spawn_detached(
+    const boost::asio::any_io_executor& exec,
+    Function&& func,
+    std::source_location location = std::source_location::current()
+)
+{
+    task::spawn_detached(
+        exec,
+        detail::make_coroutine(std::forward<Function>(func), Cancel(), util::LogPath()),
+        std::move(location)
+    );
+}
+
 
 } // ouinet namespace
 

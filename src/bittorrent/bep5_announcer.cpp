@@ -2,6 +2,7 @@
 #include "../async_sleep.h"
 #include "../logger.h"
 #include "../task.h"
+#include "../util/async.h"
 #include "../util/condition_variable.h"
 #include "../util/debug.h"
 #include "../util/wait_condition.h"
@@ -56,10 +57,11 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
         if (auto dht = dht_w.lock()) {
             auto exec = dht->get_executor();
 
-            task::spawn_detached(
+            spawn_detached(
                 exec,
-                [self = std::move(self)] (asio::yield_context y) mutable {
-                    self->loop(Async(y, self->log_path));
+                log_path,
+                [self = std::move(self)] (Async yield) mutable {
+                    self->loop(yield);
                 }
             );
         }

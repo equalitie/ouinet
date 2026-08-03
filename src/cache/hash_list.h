@@ -27,11 +27,12 @@ struct OUINET_CLIENT_API HashList {
 
     bool verify() const;
 
-    static HashList load(
-            http_response::Reader&,
-            const PubKey&,
-            Cancel&,
-            asio::yield_context);
+    static
+    std::expected<HashList, sys::error_code> load(
+        http_response::Reader&,
+        const PubKey&,
+        Async
+    );
 
     [[nodiscard]]
     std::expected<void, sys::error_code>

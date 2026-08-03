@@ -4,6 +4,7 @@
 #include "parse/number.h"
 #include "util/compat.h"
 #include "logger.h"
+#include <expected>
 
 using namespace std;
 using namespace ouinet;
@@ -88,35 +89,32 @@ struct Parser {
 };
 
 /* static */
-HashList HashList::load(
-        http_response::Reader& r,
-        const PubKey& pk,
-        Cancel& c,
-        asio::yield_context y)
+std::expected<HashList, sys::error_code> HashList::load(
+    http_response::Reader& r,
+    const PubKey& pk,
+    Async yield)
 {
     using namespace std::chrono_literals;
     static const auto bad_msg = sys::errc::make_error_code(sys::errc::bad_message);
 
-    assert(!c);
-
-    sys::error_code ec;
-
-    auto part = compat([&](Async yield) {
-        return r.timed_async_read_part(5s, yield);
-    })(c, y[ec]);
-
-    if (!ec && !part) {
-        assert(0);
-        ec = sys::errc::make_error_code(sys::errc::bad_message);
+    auto part_e = r.timed_async_read_part(5s, yield);
+    if (!part_e) {
+        return std::unexpected(part_e.error());
     }
-    return_or_throw_on_error(y, c, ec, HashList{});
+    auto part = std::move(*part_e);
+    if (!part) {
+        assert(0);
+        return std::unexpected(sys::errc::make_error_code(sys::errc::bad_message));
+    }
 
-    if (!part->is_head()) return or_throw<HashList>(y, bad_msg);
+    if (!part->is_head()) {
+        return std::unexpected(bad_msg);
+    }
 
     auto raw_head = std::move(*part->as_head());
 
     if (raw_head.result() == http::status::not_found) {
-        return or_throw<HashList>(y, asio::error::not_found);
+        return std::unexpected(asio::error::not_found);
     }
 
     auto orig_status_sv = raw_head[ORIGINAL_STATUS];
@@ -124,14 +122,16 @@ HashList HashList::load(
     raw_head.erase(ORIGINAL_STATUS);
 
     if (!orig_status) {
-        return or_throw<HashList>(y, bad_msg);
+        return std::unexpected(bad_msg);
     }
 
     raw_head.result(*orig_status);
 
     auto head_o = SignedHead::verify_and_create(std::move(raw_head), pk);
 
-    if (!head_o) return or_throw<HashList>(y, bad_msg);
+    if (!head_o) {
+        return std::unexpected(bad_msg);
+    }
 
     head_o->erase(http::field::content_length);
     head_o->set(http::field::transfer_encoding, "chunked");
@@ -148,10 +148,14 @@ HashList HashList::load(
     std::vector<Block> blocks;
 
     while (true) {
-        part = compat([&](Async yield) { return r.timed_async_read_part(5s, yield); })(c, y[ec]);
-        return_or_throw_on_error(y, c, ec, HashList{});
-
-        if (!part) break;
+        part_e = r.timed_async_read_part(5s, yield);
+        if (!part_e) {
+            return std::unexpected(part_e.error());
+        }
+        part = std::move(*part_e);
+        if (!part) {
+            break;
+        }
 
         if (part->is_body()) {
             parser.append_data(*part->as_body());
@@ -167,8 +171,9 @@ HashList HashList::load(
             if (!magic_checked) {
                 auto magic_line = parser.read_line();
                 if (magic_line) {
-                    if (*magic_line != MAGIC)
-                        return or_throw<HashList>(y, bad_msg);
+                    if (*magic_line != MAGIC) {
+                        return std::unexpected(bad_msg);
+                    }
                     magic_checked = true;
                     progress = true;
                 }
@@ -193,20 +198,22 @@ HashList HashList::load(
 
             if (!progress) {
                 if (parser.buffer.size() > MAX_LINE_SIZE_BYTES) {
-                    _WARN("Line too long");
-                    return or_throw<HashList>(y, bad_msg);
+                    LOG_WARN(yield, "Line too long");
+                    return std::unexpected(bad_msg);
                 }
                 break;
             }
         }
     }
 
-    if (blocks.empty()) return or_throw<HashList>(y, bad_msg);
+    if (blocks.empty()) {
+        return std::unexpected(bad_msg);
+    }
 
     HashList hs{std::move(*head_o), std::move(blocks)};
 
     if (!hs.verify()) {
-        return or_throw<HashList>(y, bad_msg);
+        return std::unexpected(bad_msg);
     }
 
     return hs;

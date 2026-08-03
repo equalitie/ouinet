@@ -67,19 +67,17 @@ struct GarbageCollector {
 
     void start()
     {
-        task::spawn_detached(_executor, [&] (asio::yield_context y) {
-            Async yield(y, _cancel, _log_path);
-
-            _DEBUG("Garbage collector started");
+        spawn_detached(_executor, _cancel, _log_path, [&] (Async yield) {
+            LOG_DEBUG(yield, " Garbage collector started");
             while (true) {
                 async_sleep(chrono::minutes(7), yield);
 
-                _DEBUG("Collecting garbage...");
+                LOG_DEBUG(yield, " Collecting garbage...");
                 auto r = http_store.for_each([&] (cache::ResourceId const& resource_id, auto rr, Async y) {
                     return keep(resource_id, std::move(rr), y);
                 }, yield);
-                if (!r) _WARN("Collecting garbage: failed; ec=", r.error());
-                else _DEBUG("Collecting garbage: done");
+                if (!r) LOG_WARN(yield, " Collecting garbage: failed; ec=", r.error());
+                else LOG_DEBUG(yield, " Collecting garbage: done");
             }
         });
     }
@@ -757,7 +755,7 @@ struct Client::Impl {
         }
 
         auto groups_dir = _cache_dir / groups_curver_subdir;
-            
+
         if (auto r = static_groups
                 ? load_backed_dht_groups(groups_dir, std::move(static_groups), yield)
                 : load_dht_groups(groups_dir, yield)) {
@@ -767,7 +765,7 @@ struct Client::Impl {
             return std::unexpected(r.error());
         }
 
-        auto r = _http_store->for_each([&] (const auto& resource_id, auto rr, auto yield) {
+        auto r = _http_store->for_each([&] (const auto& resource_id, auto rr, Async yield) {
             return keep_cache_entry(resource_id, std::move(rr), yield);
         }, yield);
         if (!r) return std::unexpected(r.error());

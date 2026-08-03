@@ -1,3 +1,5 @@
+#include "logger.h"
+#include "util/wait_condition.h"
 #define BOOST_TEST_MODULE test_fetch
 #include <boost/test/unit_test.hpp>
 #include <boost/test/data/test_case.hpp>
@@ -8,19 +10,19 @@
 #include "util/dht.h"
 #include "util/test_dir.h"
 #include "util/http_server.h"
+#include "util/unwrap.h"
 #include "injector.h"
 #include "client.h"
 #include "util/random.h"
 #include "ssl/util.h"
 
+namespace data = boost::unit_test::data;
 using namespace std;
 using namespace ouinet;
 using namespace ouinet::bittorrent;
 using namespace std::chrono_literals;
 using namespace boost::asio::ip;
 using tcp = asio::ip::tcp;
-
-const auto dht_impls = boost::unit_test::data::make({ DhtImpl::mock, DhtImpl::real });
 
 template<class Config>
 static Config make_config(const std::vector<std::string>& args) {
@@ -79,13 +81,13 @@ Request build_private_request(const util::Url& url) {
 
 Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
-    stream.async_connect(client.get_proxy_endpoint(), yield).value();
+    unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
 
-    http::async_write(stream, req, yield).value();
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield).value();
+    unwrap(http::async_read(stream, b, res, yield));
     return res;
 }
 
@@ -108,24 +110,24 @@ Response fetch_from_origin(util::Url url, asio::ssl::context& ctx, Async yield) 
     auto exec = yield.get_executor();
 
     tcp::resolver resolver(exec);
-    auto const results = resolver.async_resolve(url.host, url.port, yield).value();
+    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
 
     auto req = build_origin_request(url);
     std::string host = req[http::field::host];
 
     tcp::socket socket(exec);
-    asio::async_connect(socket, results, yield).value();
+    unwrap(asio::async_connect(socket, results, yield));
 
     auto stream = setup_tls_stream(std::move(socket), ctx, url.host);
-    stream.async_handshake(asio::ssl::stream_base::client, yield).value();
+    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
 
-    http::async_write(stream, req, yield).value();
+    unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    http::async_read(stream, b, res, yield).value();
+    unwrap(http::async_read(stream, b, res, yield));
 
-    (void) stream.async_shutdown(yield);
+    unwrap(stream.async_shutdown(yield));
 
     BOOST_REQUIRE_EQUAL(res.result(), http::status::ok);
 
@@ -190,11 +192,9 @@ asio::ssl::context client_ssl_context_for(const HttpServer& server) {
 }
 
 std::string generate_random_body() {
-    // TODO: Some tests fail with larger body sizes
-    //size_t min_size = 64;
-    //size_t max_size = 2 * 1024 * 1024;
-    //auto size = util::random::number<size_t>(min_size, max_size);
-    size_t size = 65536;
+    size_t min_size = 64;
+    size_t max_size = 2 * 1024 * 1024;
+    auto size = util::random::number<size_t>(min_size, max_size);
     return util::random::printable_ascii(size);
 }
 
@@ -259,18 +259,27 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     });
 }
 
-// An integration test with three identities: the 'injector', a 'seeder' client
-// and a 'leecher' client.
+// An integration test with three types of nodes: the 'injector', a number of 'seeder' clients
+// and a number of 'leecher' clients.
 //
-// * The 'seeder' client fetches a resource through the injector and stores it locally.
-// * The 'leecher' client then fetches the resource from the 'seeder'.
+// * The 'seeder' clients fetch a resource through the injector and store it locally.
+// * The 'leecher' clients then fetch the resource from the 'seeder's.
 //
-// The test is using `MockDht` because the `MainlineDht` wouldn't work locally.
+// The test has variants for mock DHT and real DHT as well as for different number of seeders and
+// leechers.
 BOOST_DATA_TEST_CASE(
     test_storing_into_and_fetching_from_the_cache,
-    dht_impls,
-    dht_impl
+    data::make({ DhtImpl::mock, DhtImpl::real })
+        * data::make({ 1, 2 })  // TODO: use more seeders
+        * data::make({ 1, 2 }), // TODO: use more leechers
+    dht_impl,
+    seeder_count,
+    leecher_count
 ) {
+    get_logger().set_threshold(DEBUG);
+
+    LOG_INFO("dht_impl=", dht_impl, " seeder_count=", seeder_count, " leecher_count=", leecher_count);
+
     asio::io_context ctx;
 
     TestDir root;
@@ -301,79 +310,116 @@ BOOST_DATA_TEST_CASE(
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
         );
 
-        Client seeder(
-            ctx,
-            make_config<ClientConfig>({
-                "./no_client_exec"s,
-                "--log-level=DEBUG"s,
-                "--repo"s, root.make_subdir("seeder").string(),
-                "--injector-credentials"s, injector_credentials,
-                "--cache-type=bep5-http"s,
-                "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-                "--disable-origin-access"s,
-                // Bind to random ports to avoid clashes
-                "--listen-on-tcp=127.0.0.1:0"s,
-                "--front-end-ep=127.0.0.1:0"s,
-                "--allow-private-targets",
-                "--bt-bootstrap-no-default",
-                "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians"
-            }),
-            util::LogPath("seeder"),
-            mock_dht_builder("seeder", yield.get_executor(), mock_dht_swarms)
-        );
+        std::vector<Client> seeders;
+        for (int i = 0; i < seeder_count; ++i) {
+            auto name = util::str("seeder-", i);
 
-        Client leecher(
-            ctx,
-            make_config<ClientConfig>({
-                "./no_client_exec"s,
-                "--log-level=DEBUG"s,
-                "--repo"s, root.make_subdir("leecher").string(),
-                "--injector-credentials"s, injector_credentials,
-                "--cache-type=bep5-http"s,
-                "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-                "--disable-origin-access"s,
-                "--disable-injector-access"s,
-                // Bind to random ports to avoid clashes
-                "--listen-on-tcp=127.0.0.1:0"s,
-                "--front-end-ep=127.0.0.1:0"s,
-                "--allow-private-targets",
-                "--bt-bootstrap-no-default",
-                "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians"
-            }),
-            util::LogPath("leecher"),
-            mock_dht_builder("leecher", yield.get_executor(), mock_dht_swarms)
-        );
+            seeders.emplace_back(
+                ctx,
+                make_config<ClientConfig>({
+                    "./no_client_exec"s,
+                    "--log-level=DEBUG"s,
+                    "--repo"s, root.make_subdir(name).string(),
+                    "--injector-credentials"s, injector_credentials,
+                    "--cache-type=bep5-http"s,
+                    "--cache-http-public-key"s, injector.cache_http_public_key(),
+                    "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+                    "--disable-origin-access"s,
+                    // Bind to random ports to avoid clashes
+                    "--listen-on-tcp=127.0.0.1:0"s,
+                    "--front-end-ep=127.0.0.1:0"s,
+                    "--allow-private-targets",
+                    "--bt-bootstrap-no-default",
+                    "--bt-bootstrap-extra", util::str(dht_endpoint),
+                    "--bt-allow-martians"
+                }),
+                util::LogPath(name),
+                mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
+            );
+        }
+
+        std::vector<Client> leechers;
+        for (int i = 0; i < leecher_count; ++i) {
+            auto name = util::str("leecher-", i);
+
+            leechers.emplace_back(
+                ctx,
+                make_config<ClientConfig>({
+                    "./no_client_exec"s,
+                    "--log-level=DEBUG"s,
+                    "--repo"s, root.make_subdir(name).string(),
+                    "--injector-credentials"s, injector_credentials,
+                    "--cache-type=bep5-http"s,
+                    "--cache-http-public-key"s, injector.cache_http_public_key(),
+                    "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+                    "--disable-origin-access"s,
+                    "--disable-injector-access"s,
+                    // Bind to random ports to avoid clashes
+                    "--listen-on-tcp=127.0.0.1:0"s,
+                    "--front-end-ep=127.0.0.1:0"s,
+                    "--allow-private-targets",
+                    "--bt-bootstrap-no-default",
+                    "--bt-bootstrap-extra", util::str(dht_endpoint),
+                    "--bt-allow-martians"
+                }),
+                util::LogPath(name),
+                mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
+            );
+        }
 
         // Clients are started explicitly
-        seeder.start();
-        leecher.start();
+        for (auto& client : seeders) {
+            client.start();
+        }
+
+        for (auto& client : leechers) {
+            client.start();
+        }
 
         auto ssl_ctx = client_ssl_context_for(server);
         auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
         auto rq = build_cache_request(url);
 
-        // The "seeder" fetches the signed content through the "injector"
-        auto rs1 = fetch_through_client(seeder, rq, yield);
+        // "Seeders" fetch the signed content through the "injector"
+        WaitCondition fetch_from_injector_wc(yield.get_executor());
 
-        BOOST_CHECK_EQUAL(rs1.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
-        BOOST_CHECK_EQUAL(rs1.body(), control_body);
+        for (auto& seeder : seeders) {
+            yield.spawn([&, lock = fetch_from_injector_wc.lock()] (Async yield) {
+                auto rs = fetch_through_client(seeder, rq, yield);
 
-        // The "leecher" client fetches the signed content from the "seeder"
-        auto rs2 = fetch_through_client(leecher, rq, yield);
+                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+                BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+                BOOST_CHECK_EQUAL(rs.body(), control_body);
+            });
+        }
 
-        BOOST_CHECK_EQUAL(rs2.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
-        BOOST_CHECK_EQUAL(rs2.body(), control_body);
+        fetch_from_injector_wc.wait(yield).value();
+
+        // "Leechers" fetch the signed content from the "seeders"
+        WaitCondition fetch_from_seeders_wc(yield.get_executor());
+
+        for (auto& leecher : leechers) {
+            yield.spawn([&, lock = fetch_from_seeders_wc.lock()] (Async yield) {
+                auto rs = fetch_through_client(leecher, rq, yield);
+
+                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+                BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
+                BOOST_CHECK_EQUAL(rs.body(), control_body);
+            });
+        }
+
+        fetch_from_seeders_wc.wait(yield).value();
 
         injector.stop();
-        seeder.stop();
-        leecher.stop();
+
+        for (auto& client: seeders) {
+            client.stop();
+        }
+
+        for (auto& client: leechers) {
+            client.stop();
+        }
     });
 }
 
@@ -455,7 +501,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
 BOOST_DATA_TEST_CASE(
     test_fetching_private_route_30_times,
-    dht_impls,
+    data::make({ DhtImpl::mock, DhtImpl::real }),
     dht_impl
 ) {
     asio::io_context ctx;

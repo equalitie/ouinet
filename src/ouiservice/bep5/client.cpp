@@ -111,8 +111,8 @@ public:
     }
 
     void start() {
-        task::spawn_detached(_dht->get_executor(), [&] (asio::yield_context y) {
-            loop(Async(y, _lifetime_cancel, _log_path));
+        spawn_detached(_dht->get_executor(), _lifetime_cancel, _log_path, [&] (Async yield) {
+            loop(yield);
         });
     }
 
@@ -237,11 +237,11 @@ public:
                                                                      , log_path))
         , _helper_announcement_enabled(helper_announcement_enabled)
     {
-        task::spawn_detached(
+        spawn_detached(
             _injector_swarm->get_executor(),
-            [this, log_path] (asio::yield_context yield) {
-                loop(Async(yield, _lifetime_cancel, std::move(log_path)));
-            }
+            _lifetime_cancel,
+            log_path,
+            [this] (Async yield) { loop(yield); }
         );
     }
 

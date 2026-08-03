@@ -125,21 +125,21 @@ public:
         cancel();
         ConditionVariable cv(_ex);
         auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
-        cv.wait(yield);
+        cv.wait(yield).value();
     }
 
-    void wait_for_finish(asio::yield_context yield) {
+    void wait_for_finish(Async yield) {
         if (!is_running()) return;
-        ConditionVariable cv(_ex);
-        auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
-        cv.wait(yield);
-    }
 
-    void wait_for_finish(Cancel& c, asio::yield_context yield) {
-        auto con = c.connect([&] { cancel(); });
-        sys::error_code ec;
-        wait_for_finish(yield[ec]);
-        return_or_throw_on_error(yield, c, ec);;
+        std::optional<Cancel::Connection> cancelled;
+        if (_cancel_signal) {
+            cancelled = _cancel_signal->connect([&] { yield.cancel(); });
+        }
+
+        ConditionVariable cv(_ex);
+        auto finished = _on_finish_sig.connect([&cv] { cv.notify(); });
+
+        cv.wait(yield).value();
     }
 
     void cancel() {

@@ -70,7 +70,7 @@ struct HttpRequestByteRange {
     parse(boost::string_view);
 
     friend std::ostream& operator<<(std::ostream& os, HttpRequestByteRange const& r) {
-        return os << "{ first: " << r.first << ", last: " << r.last << "}";
+        return os << "{ first: " << r.first << ", last: " << r.last << " }";
     }
 };
 

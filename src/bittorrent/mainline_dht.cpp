@@ -402,18 +402,12 @@ void DhtNode::store_contacts() const
 
     auto contacts = _routing_table->dump_contacts();
 
-    task::spawn_detached(_exec, ([
+    spawn_detached(_exec, _cancel, _log_path, [
         path = std::move(path),
-        contacts = std::move(contacts),
-        cancel = _cancel,
-        log_path = _log_path
-    ] (asio::yield_context yield) mutable {
-        std::ignore = write_stored_contacts(
-            std::move(contacts),
-            path,
-            Async(yield, std::move(cancel), std::move(log_path))
-        );
-    }));
+        contacts = std::move(contacts)
+    ] (Async yield) mutable {
+        std::ignore = write_stored_contacts(std::move(contacts), path, yield);
+    });
 }
 
 void DhtNode::stop()
@@ -995,7 +989,11 @@ void DhtNode::receive_loop(Async yield)
                     &concurrency
                 ] (Async yield) mutable {
                     auto cleanup = defer([&] {
-                        --concurrency;
+                        // Not sure why this `if` is needed, but we were sometimes getting memory
+                        // access errors without it.
+                        if (!yield.is_cancelled()) {
+                            --concurrency;
+                        }
                     });
 
                     auto result = handle_query(sender, message_map, yield);
@@ -2016,14 +2014,14 @@ void DhtNode::send_ping(NodeContact contact)
     // that we need to spawn an unlimited number of coroutines.  Perhaps it
     // would be better if functions using this send_ping function would only
     // spawn a limited number of coroutines and use only that.
-    task::spawn_detached(_exec, [
-        this,
-        contact,
-        cancel = _cancel,
-        log_path = _log_path
-    ] (asio::yield_context yield) mutable {
-        std::ignore = send_ping(contact, Async(yield, cancel, std::move(log_path)));
-    });
+    spawn_detached(
+        _exec,
+        _cancel,
+        _log_path,
+        [this, contact] (Async yield) mutable {
+            std::ignore = send_ping(contact, yield);
+        }
+    );
 }
 
 /*

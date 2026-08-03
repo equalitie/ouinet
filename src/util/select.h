@@ -8,7 +8,6 @@
 #include "async.h"
 #include "async_sleep.h"
 #include "condition_variable.h"
-#include "expected.h"
 
 namespace ouinet {
 
@@ -88,6 +87,48 @@ std::expected<T, E0> maybe_flatten(std::expected<std::expected<T, E0>, E1> e) {
     }
 }
 
+// Holder for the return value of `select`. Can't use `std::optional` directly because it doesn't
+// work with `void`.
+template<typename T>
+struct SelectResultHolder {
+    std::optional<T> result;
+
+    template<typename F>
+    void assign(F f, Async yield) {
+        auto r = T(f(yield));
+
+        if (!result) {
+            result = std::move(r);
+        }
+    }
+
+    operator bool() const {
+        return result.has_value();
+    }
+
+    T&& get() && {
+        return std::move(result).value();
+    }
+};
+
+template<>
+struct SelectResultHolder<void> {
+    bool result = false;
+
+    template<typename F>
+    void assign(F f, Async yield) {
+        f(yield);
+        result = true;
+    }
+
+    operator bool() const {
+        return result;
+    }
+
+    void get() && {}
+};
+
+
 } // namespace detail
 
 // Runs multiple coroutines concurrently waiting for the first to complete, then returns its result
@@ -98,58 +139,69 @@ auto select(Async yield, Fs... fs) {
 
     using Result = detail::select_result<std::invoke_result_t<Fs, Async>...>;
 
+    // RAII guard that notifies about branch completion.
+    struct BranchGuard {
+        size_t& remaining;
+        ConditionVariable& cv;
+
+        ~BranchGuard() {
+            --remaining;
+            cv.notify();
+        }
+    };
+
+    detail::SelectResultHolder<Result> holder;
+    size_t remaining = sizeof...(Fs);
     ConditionVariable cv(yield.get_executor());
 
-    if constexpr (std::is_void_v<Result>) {
-        bool result = false;
+    // Wait for all branches to complete. This needs to run at scope exit even in case of exception
+    // to ensure all of the coroutines spawned from this function complete before this function
+    // exits.
+    //
+    // Note we can't use RAII for this because we might need to throw `Async::Cancelled`
+    // afterwards and it's UB to throw exceptions from destructors.
+    auto cleanup = [&remaining, &cv] (Async yield) {
+        while (remaining > 0) {
+            std::ignore = cv.wait(yield);
+        }
+    };
 
-        (
-            yield.spawn([f = std::move(fs), &cv, &result](Async yield) {
-                f(yield);
+    Async branch_yield(yield);
 
-                // TODO: This shouldn't be necessary but I was getting segfaults without it...
-                if (yield.is_cancelled()) {
-                    return;
-                }
+    (
+        branch_yield.spawn([f = std::move(fs), &holder, &remaining, &cv] (Async yield) {
+            BranchGuard guard { remaining, cv };
+            holder.assign(std::move(f), yield);
+        }),
+        ...
+    );
 
-                result = true;
-                cv.notify();
-            }),
-            ...
-        );
-
-        while (!result) {
-            cv.wait(yield);
+    try {
+        // Wait for the first branch to complete.
+        while (!holder) {
+            cv.wait(yield).value();
         }
 
-        // Cancel the other branches
-        yield.cancel();
-    } else {
-        std::optional<Result> result;
+        // Cancel the other branches and wait for them to complete.
+        branch_yield.cancel();
+        cleanup(yield.suppress_cancel());
 
-        (
-            yield.spawn([f = std::move(fs), &cv, &result](Async yield) {
-                auto local_result = Result(f(yield));
-
-                // TODO: This shouldn't be necessary but I was getting segfaults without it...
-                if (yield.is_cancelled()) {
-                    return;
-                }
-
-                result = std::move(local_result);
-                cv.notify();
-            }),
-            ...
-        );
-
-        while (!result.has_value()) {
-            cv.wait(yield);
+        // If this whole `select` has been cancelled during the above `cleanup`, we need to
+        // propagate the `Cancelled` exception.
+        if (yield.is_cancelled()) {
+            throw Async::Cancelled();
         }
 
-        // Cancel the other branches
-        yield.cancel();
+        return std::move(holder).get();
+    } catch (...) {
+        // Ensure all coroutines are completed before rethrowing the exception.
 
-        return std::move(result).value();
+        if (!branch_yield.is_cancelled()) {
+            branch_yield.cancel();
+        }
+
+        cleanup(yield.suppress_cancel());
+        throw;
     }
 }
 
