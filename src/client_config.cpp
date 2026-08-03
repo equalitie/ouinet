@@ -6,7 +6,9 @@
 #include "parse/endpoint.h"
 #include "bep5_swarms.h"
 #include "util/bytes.h"
+#include "util/debug.h"
 #include "util/overloaded.h"
+#include "util/str.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -28,17 +30,25 @@ std::runtime_error error(Args && ...args) {
 // Helper to avoid writing the name of the option twice.
 template<typename T>
 static boost::optional<T> as_optional(const boost::program_options::variables_map& vm, const char* name) {
-    if (vm.count(name) == 0) {
+    auto v = vm[name];
+
+    if (v.empty()) {
         return boost::none;
+    } else {
+        return v.as<T>();
     }
-    return vm[name].as<T>();
 }
 
+// Helper for extracting multiple values
 template<typename T>
 static std::vector<T> as_vector(const boost::program_options::variables_map& vm, const char* name) {
-    auto opt_vec = as_optional<std::vector<T>>(vm, name);
-    if (!opt_vec) return {};
-    return std::move(*opt_vec);
+    auto v = vm[name];
+
+    if (v.empty()) {
+        return std::vector<T>();
+    } else {
+        return v.as<std::vector<T>>();
+    }
 }
 
 bool ClientConfig::EnabledCaches::get(CacheType type) const {
@@ -67,8 +77,8 @@ bool ClientConfig::EnabledCaches::is_injecting_cache_enabled() const {
     return Bep5Http || Bep3HTTPOverI2P;
 }
 
-asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom);
-asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, const char* for_whom);
+asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const std::string& for_whom);
+asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, const std::string& for_whom);
 
 boost::program_options::options_description ClientConfig::description_full()
 {
@@ -256,14 +266,21 @@ boost::program_options::options_description ClientConfig::description_full()
     metrics.add_options()
        ("metrics-enable-on-start", po::bool_switch()->default_value(false)
         , "Enable metrics at startup. Must be used with --metrics-server-url")
-       ("metrics-server-url", po::value<string>()
-        , "URL to the metrics server where statistics/metrics records will be sent over HTTP.")
-       ("metrics-server-token", po::value<string>()
-        , "Token sent to the server as 'token: <TOKEN>' HTTP header.")
-       ("metrics-server-cacert", po::value<string>()
-        , "Tls CA certificate for the metrics server")
-       ("metrics-server-cacert-file", po::value<string>()
-        , "File containing the CA certificate for the metrics server")
+       ("metrics-server-url", po::value<std::vector<string>>()->composing()
+        , "URL to the metrics server where statistics/metrics records will be sent over HTTP. "
+          "This option can be repeated to specify multiple servers.")
+       ("metrics-server-token", po::value<std::vector<string>>()->composing()
+        , "Token sent to the server as 'token: <TOKEN>' HTTP header. "
+          "This option must be specified once for each server specified with --metrics-server-url. "
+          "To use no token for a particular server, set this option to '.'. "
+          "To use no token for any server, this option can be omitted.")
+       ("metrics-server-cacert", po::value<std::vector<string>>()->composing()
+        , "TLS CA certificate for the metrics server. "
+          "This option must be specified once for each server specified with --metrics-server-url. "
+          "To use default certificate for a particular server, set this option to '.'. "
+          "To read the certificate from a file, set this option to the path to the file prefixed with '@' "
+          "(example: '@/path/to/cert'). "
+          "To use default certificates for all servers, this option can be omitted.")
        ("metrics-encryption-key", po::value<string>()
         , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
           "the following. \n"
@@ -754,57 +771,92 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 }
 
 std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options::variables_map& vm) {
-    bool enable_on_start = false;
-    boost::optional<util::Url> server_url;
-    boost::optional<std::string> server_token;
-    boost::optional<asio::ssl::context> server_cacert;
-    std::optional<metrics::EncryptionKey> encryption_key;
+    auto raw_server_urls = as_vector<std::string>(vm, "metrics-server-url");
+    auto raw_server_tokens = as_vector<std::string>(vm, "metrics-server-token");
+    auto raw_server_cacerts = as_vector<std::string>(vm, "metrics-server-cacert");
 
-    if (auto opt = as_optional<std::string>(vm, "metrics-server-url")) {
-        auto url = util::Url::from(*opt);
-        if (!url) {
+    if (!raw_server_urls.empty()) {
+        if (!raw_server_tokens.empty() && raw_server_tokens.size() != raw_server_urls.size()) {
             throw error(
-                    "The '--metrics-server-url' argument must be a valid URL");
+                "Wrong number of occurrences of --metrics-server-token (",
+                raw_server_tokens.size(),
+                ") - it must be the same as the number of occurrences of --metrics-server-url (",
+                raw_server_urls.size(), ") or zero"
+            );
         }
-        server_url = std::move(*url);
+
+        if (!raw_server_cacerts.empty() && raw_server_cacerts.size() != raw_server_urls.size()) {
+            throw error(
+                "Wrong number of occurrences of --metrics-server-cacert (",
+                raw_server_cacerts.size(),
+                ") - it must be the same as the number of occurrences of --metrics-server-url (",
+                raw_server_urls.size(), ") or zero"
+            );
+        }
+    } else {
+        if (!raw_server_tokens.empty()) {
+            throw error("--metrics-server-token can only be used together with --metrics-server-url");
+        }
+
+        if (!raw_server_cacerts.empty()) {
+            throw error("--metrics-server-cacert can only be used together with --metrics-server-url");
+        }
     }
 
+    std::vector<MetricsServerConfig> servers;
+    for (int i = 0; i < raw_server_urls.size(); ++i) {
+        auto raw_url = std::move(raw_server_urls[i]);
+        auto raw_token = i < raw_server_tokens.size() ? std::move(raw_server_tokens[i]) : "";
+        auto raw_cacert = i < raw_server_cacerts.size() ? std::move(raw_server_cacerts[i]) : "";
+
+        auto url = util::Url::from(raw_url);
+        if (!url) {
+            throw error(
+                "Invalid argument in the ",
+                util::ordinal(i + 1),
+                " occurrence of --metrics-server-url: ",
+                std::quoted(raw_url),
+                " is not a valid URL"
+            );
+        }
+
+        std::optional<std::string> token;
+        if (!raw_token.empty() && raw_token != ".") {
+            token = std::move(raw_token);
+        }
+
+        std::optional<asio::ssl::context> cacert;
+        if (!raw_cacert.empty() && raw_cacert != ".") {
+            auto name = util::str("metrics server ", url->reassemble());
+
+            if (raw_cacert.starts_with("@")) {
+                cacert = load_tls_client_ctx_from_string(raw_cacert.substr(1), name);
+            } else {
+                cacert = load_tls_client_ctx_from_file(raw_cacert, name);
+            }
+        }
+
+        servers.emplace_back(
+            std::move(*url),
+            std::move(token),
+            std::move(cacert)
+        );
+    }
+
+    bool enable_on_start = false;
     if (auto opt = as_optional<bool>(vm, "metrics-enable-on-start")) {
         if (*opt) {
-            if (!server_url) {
+            if (servers.empty()) {
                 throw error("--metrics-enable-on-start must be used with --metrics-server-url");
             }
             enable_on_start = *opt;
         }
     }
 
-    if (auto opt = as_optional<std::string>(vm, "metrics-server-token")) {
-        if (!server_url) {
-            throw error("The --metrics-server-token must be used with --metrics-server-url");
-        }
-        server_token = *opt;
-    }
-
-    auto server_cacert_str = as_optional<std::string>(vm, "metrics-server-cacert");
-    auto server_cacert_file = as_optional<std::string>(vm, "metrics-server-cacert-file");
-
-    if (server_cacert_str && server_cacert_file) {
-        throw error("Only one of the --metrics-server-cacert and --metrics-server-cacert-file options may be specified");
-    }
-
-    if ((server_cacert_str || server_cacert_file) && !server_url) {
-        throw error("--metrics-server-cacert and --metrics-server-cacert-file can only be used together with --metrics-server-url");
-    }
-
-    if (server_cacert_str) {
-        server_cacert = load_tls_client_ctx_from_string(*server_cacert_str, "metrics server");
-    } else if (server_cacert_file) {
-        server_cacert = load_tls_client_ctx_from_file(*server_cacert_file, "metrics server");
-    }
-
-    if (server_url) {
+    std::optional<metrics::EncryptionKey> encryption_key;
+    if (!servers.empty()) {
         if (auto opt = as_optional<std::string>(vm, "metrics-encryption-key")) {
-            auto key_str= *opt;
+            auto key_str = *opt;
             if ( !key_str.starts_with("-----BEGIN") ) {
                 key_str = "-----BEGIN PUBLIC KEY-----\n" + key_str + "\n"
                           "-----END PUBLIC KEY-----\n";
@@ -818,22 +870,21 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         }
     }
 
-    if (!server_url) return nullptr;
+    if (servers.empty()) {
+        return nullptr;
+    }
 
     auto delete_after_seconds = *as_optional<std::uint64_t>(vm, "metrics-delete-after");
 
-    return std::unique_ptr<MetricsConfig>(
-            new MetricsConfig {
-                enable_on_start,
-                std::move(*server_url),
-                std::move(server_token),
-                std::move(server_cacert),
-                std::move(*encryption_key),
-                delete_after_seconds,
-            });
+    return std::make_unique<MetricsConfig>(
+        enable_on_start,
+        std::move(servers),
+        std::move(*encryption_key),
+        delete_after_seconds
+    );
 }
 
-asio::ssl::context load_tls_client_ctx_from_string(const std::string& cert_str, const char* for_whom) {
+asio::ssl::context load_tls_client_ctx_from_string(const std::string& cert_str, const std::string& for_whom) {
         asio::ssl::context ctx{asio::ssl::context::tls_client};
         sys::error_code ec;
 
@@ -855,7 +906,7 @@ asio::ssl::context load_tls_client_ctx_from_string(const std::string& cert_str, 
         return ctx;
 }
 
-asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const char* for_whom) {
+asio::ssl::context load_tls_client_ctx_from_file(const std::string& path, const std::string& for_whom) {
     asio::ssl::context ctx{asio::ssl::context::tls_client};
     sys::error_code ec;
 

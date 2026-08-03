@@ -10,6 +10,7 @@
 
 #include "cache/client.h"
 
+#include "client_config.h"
 #include "namespaces.h"
 #include "origin_pools.h"
 #include "cxx/dns.h"
@@ -63,6 +64,7 @@
 
 #include "task.h"
 #include "logger.h"
+#include "util/wait_condition.h"
 
 using namespace std;
 using namespace ouinet;
@@ -411,6 +413,12 @@ private:
     void
     send_metrics_record( std::string_view record_name
                        , asio::const_buffer record_content
+                       , Async);
+
+    void
+    send_metrics_record( std::string_view record_name
+                       , asio::const_buffer record_content
+                       , MetricsServerConfig& server
                        , Async);
 
     template<class Resp>
@@ -1371,7 +1379,11 @@ Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, A
     );
 }
 
-void Client::State::send_metrics_record(std::string_view record_name, asio::const_buffer record_content, Async yield) {
+void Client::State::send_metrics_record(
+    std::string_view record_name,
+    asio::const_buffer record_content,
+    Async yield)
+{
     auto metrics_conf = _config.metrics();
 
     if (!metrics_conf) {
@@ -1379,20 +1391,36 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
         throw_error(asio::error::invalid_argument);
     }
 
-    const util::Url& server_url = metrics_conf->server_url;
+    WaitCondition wc(yield.get_executor());
 
+    // Send to all configured servers concurrently.
+    for (auto& server_conf : metrics_conf->servers) {
+        yield.spawn([&, lock = wc.lock()] (Async yield) {
+            send_metrics_record(record_name, record_content, server_conf, yield);
+        });
+    }
+
+    wc.wait(yield).value();
+}
+
+void Client::State::send_metrics_record(
+    std::string_view record_name,
+    asio::const_buffer record_content,
+    MetricsServerConfig& server_conf,
+    Async yield
+) {
     http::request<http::buffer_body> req;
 
     req.version(11);
     req.method(http::verb::post);
-    req.target(server_url.reassemble());
-    req.set(http::field::host, server_url.host_and_port());
+    req.target(server_conf.url.reassemble());
+    req.set(http::field::host, server_conf.url.host_and_port());
     req.set(http::field::user_agent, "Ouinet.Client");
     req.set(http::field::content_type, "application/octet-stream");
     req.set("X-Ouinet-Metrics-Record-Name", util::to_beast(record_name));
 
-    if (metrics_conf->server_token) {
-        req.set("X-Ouinet-Metrics-Server-Token", *metrics_conf->server_token);
+    if (server_conf.token) {
+        req.set("X-Ouinet-Metrics-Server-Token", *server_conf.token);
     }
 
     req.body().data = const_cast<void*>(record_content.data());
@@ -1400,8 +1428,8 @@ void Client::State::send_metrics_record(std::string_view record_name, asio::cons
     req.body().more = false;
     req.prepare_payload();
 
-    auto& tls_ctx = metrics_conf->server_cacert
-                  ? *metrics_conf->server_cacert
+    auto& tls_ctx = server_conf.cacert
+                  ? *server_conf.cacert
                   : _config.origin_ssl_ctx();
 
     // Try sending the record to the origin directly.
