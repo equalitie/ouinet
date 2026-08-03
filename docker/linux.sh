@@ -244,8 +244,6 @@ function list_artifacts_for_target_os (
     esac
     case "$target_os" in
         linux|windows)
-            gcrypt_bin_dir=$build_dir/gcrypt/out/bin
-            gpg_error_bin_dir=$build_dir/gpg_error/out/bin
             artifacts=(
                 $build_dir/client$exe_suffix
                 $build_dir/injector$exe_suffix
@@ -253,11 +251,22 @@ function list_artifacts_for_target_os (
                 $build_dir/libouinet_asio_ssl$lib_suffix
                 $build_dir/libclient_lib$lib_suffix
                 $build_dir/libinjector_lib$lib_suffix
-                $gcrypt_bin_dir/libgcrypt-20$lib_suffix
-                $gpg_error_bin_dir/libgpg-error-0$lib_suffix
             )
 
+            if [[ "$target_os" == linux ]]; then
+                artifacts=(
+                    $build_dir/libgcrypt.so.20.5.0
+                    $build_dir/libgcrypt.so.20
+                    $build_dir/libgcrypt.so
+                    $build_dir/libgpg-error.so.0.38.0
+                    $build_dir/libgpg-error.so.0
+                    $build_dir/libgpg-error.so
+                )
+            fi
+
             if [[ "$target_os" == windows ]]; then
+                gcrypt_bin_dir=$build_dir/gcrypt/out/bin
+                gpg_error_bin_dir=$build_dir/gpg_error/out/bin
                 mingw_gcc_dir=/usr/lib/gcc/x86_64-w64-mingw32/14-win32
                 mingw_lib_dir=/usr/x86_64-w64-mingw32/lib
 
@@ -265,7 +274,12 @@ function list_artifacts_for_target_os (
                 artifacts+=(
                   $ouinet_dir/src/client_lib.h
                 )
-                # dll.a file
+                # dll files
+                artifacts+=(
+                    $gcrypt_bin_dir/libgcrypt-20$lib_suffix
+                    $gpg_error_bin_dir/libgpg-error-0$lib_suffix
+                )
+                # dll.a files
                 gcrypt_lib_dir=$build_dir/gcrypt/out/lib
                 gpg_error_lib_dir=$build_dir/gpg_error/out/lib
                 artifacts+=(
