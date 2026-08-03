@@ -130,6 +130,28 @@ set_target_properties(asio_utp PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+if (IOS)
+    # asio_utp stays a shared library (linking it statically can produce
+    # undefined behaviour across the Asio/libutp shared-library boundary), but a
+    # bare .dylib is not reliably accepted by App Store review. Package it as a
+    # proper framework so it can be embedded and code-signed in the app bundle.
+    # ouinet.framework loads it at runtime via @rpath/asio_utp.framework/asio_utp
+    # (resolved through the existing @executable_path/Frameworks rpath).
+    # NOTE: asio_utp is defined in the modules/asio-utp submodule; this
+    # parent-side customization keeps the submodule untouched (allowed by
+    # CMP0079, set above).
+    set_target_properties(asio_utp PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.asio-utp
+        VERSION 1.0.0
+        SOVERSION 1.0.0
+        MACOSX_FRAMEWORK_BUNDLE_VERSION ${VERSION_NAME}
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+    )
+endif()
+
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
