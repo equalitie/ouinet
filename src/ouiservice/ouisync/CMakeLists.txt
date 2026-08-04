@@ -19,7 +19,7 @@ if (WITH_OUISYNC)
         FetchContent_Declare(
             ouisync
             GIT_REPOSITORY "https://github.com/equalitie/ouisync"
-            GIT_TAG        "869004e84fb35e2f850f7b4e0f912979f6d72ed2"
+            GIT_TAG        "259ee79a56a7c8f144648665faccc74a82e1409b"
         )
 
         FetchContent_MakeAvailable(ouisync)
@@ -48,6 +48,11 @@ if (WITH_OUISYNC)
         DEFS OUINET_API_OUISYNC_EXPORT
     )
 
+    set_target_properties(cpp_ouisync_common PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
     set_target_properties(cpp_ouisync_service PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
