@@ -104,7 +104,7 @@ UtpOuiServiceClient::connect(Async yield)
     using namespace chrono_literals;
 
     sys::error_code ec;
-    asio_utp::socket socket(yield.get_executor());
+    asio_utp::socket socket(_ex);
 
     static const chrono::seconds retry_timeout[] = { 4s , 8s , 16s };
 
