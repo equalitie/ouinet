@@ -249,12 +249,12 @@ function list_artifacts_for_target_os (
                 $build_dir/injector$exe_suffix
                 $build_dir/libouinet_asio$lib_suffix
                 $build_dir/libouinet_asio_ssl$lib_suffix
-                $build_dir/libclient_lib$lib_suffix
-                $build_dir/libinjector_lib$lib_suffix
             )
 
             if [[ "$target_os" == linux ]]; then
-                artifacts=(
+                artifacts+=(
+                    $build_dir/libclient$lib_suffix
+                    $build_dir/libinjector$lib_suffix
                     $build_dir/libgcrypt.so.20.5.0
                     $build_dir/libgcrypt.so.20
                     $build_dir/libgcrypt.so
@@ -276,6 +276,8 @@ function list_artifacts_for_target_os (
                 )
                 # dll files
                 artifacts+=(
+                    $build_dir/libclient_lib$lib_suffix
+                    $build_dir/libinjector_lib$lib_suffix
                     $gcrypt_bin_dir/libgcrypt-20$lib_suffix
                     $gpg_error_bin_dir/libgpg-error-0$lib_suffix
                 )
