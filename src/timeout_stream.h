@@ -239,22 +239,25 @@ auto TimeoutStream<InnerStream>::async_read_some
     , Token&& token)
 {
     auto init = [&] (auto completion_handler) {
-        _state->read_handler = std::move(completion_handler);
+        // Per-op handler slot; see async_write_some for the rationale.
+        auto op_handler =
+            std::make_shared<ReadHandler>(std::move(completion_handler));
 
-        setup_deadline(_max_read_duration, *_state->read_deadline, [s = _state] {
-            auto h = std::move(s->read_handler);
+        setup_deadline(_max_read_duration, *_state->read_deadline,
+                       [s = _state, op_handler] {
+            if (!*op_handler) return;
+            auto h = std::move(*op_handler);
             s->inner.close();
             h(asio::error::timed_out, 0);
         });
 
         _state->inner.async_read_some( bs
-                                     , [s = _state]
+                                     , [s = _state, op_handler]
                                        (const sys::error_code& ec, size_t size) {
                                            s->read_deadline->stop();
-                                           if (s->read_handler) {
-                                               auto h = std::move(s->read_handler);
-                                               h(ec, size);
-                                           }
+                                           if (!*op_handler) return;
+                                           auto h = std::move(*op_handler);
+                                           h(ec, size);
                                        });
     };
 
@@ -274,22 +277,25 @@ auto TimeoutStream<InnerStream>::async_write_some( const ConstBufferSequence& bs
 
     boost::asio::async_completion<Token, Sig> init(token);
 
-    _state->write_handler = std::move(init.completion_handler);
+    // down't share write buffer between two writer
+    auto op_handler =
+        std::make_shared<WriteHandler>(std::move(init.completion_handler));
 
-    setup_deadline(_max_write_duration, *_state->write_deadline, [s = _state] {
-        auto h = std::move(s->write_handler);
+    setup_deadline(_max_write_duration, *_state->write_deadline,
+                   [s = _state, op_handler] {
+        if (!*op_handler) return;
+        auto h = std::move(*op_handler);
         s->inner.close();
         h(asio::error::timed_out, 0);
     });
 
     _state->inner.async_write_some( bs
-                                  , [s = _state]
+                                  , [s = _state, op_handler]
                                     (const sys::error_code& ec, size_t size) {
                                         s->write_deadline->stop();
-                                        if (s->write_handler) {
-                                            auto h = std::move(s->write_handler);
-                                            h(ec, size);
-                                        }
+                                        if (!*op_handler) return;
+                                        auto h = std::move(*op_handler);
+                                        h(ec, size);
                                     });
 
     return init.result.get();

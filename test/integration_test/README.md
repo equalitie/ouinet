@@ -55,7 +55,21 @@ Typical flow: browse a URL through client1 to sanity-check the injector path, th
 
 Then you need to tell your browser to trust Ouinet Authority Certificate which could be found at `ouinet/test/integration_test/repos/i2p_client/ssl-ca-cert.pem`.
 
+
+### Installing the CENO browser extension
+
+For a response to be injected or looked up in the distributed cache, the request must carry an `X-Ouinet-Group` header. A plain Firefox proxy setup does not add it. The CENO extension injects that header for every request. You must load it from source:
+
+1. Clone the extension repository:
+
+   ```
+   $ git clone https://gitlab.com/ceno-app/ceno-ext-settings.git
+   ```
+
+2. In Firefox, open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick `manifest.json` from the cloned tree.
+
 from there on you should be able to use your browser to browser websites through Ouinet through an anonymous I2P tunnel.
+
 
 ### I2P Browser tests without relaying on the Python script.
 

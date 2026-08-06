@@ -29,7 +29,9 @@ private:
         virtual executor_type get_executor() = 0;
 
         virtual void read_impl (OnRead&&)  = 0;
-        virtual void write_impl(OnWrite&&) = 0;
+        // Buffers are owned by the operation, not by Base — see the note on
+        // the crash fix below.
+        virtual void write_impl(WriteBuffers, OnWrite&&) = 0;
 
         virtual void close() = 0;
         virtual bool is_open() const = 0;
@@ -37,7 +39,6 @@ private:
         virtual ~Base() {}
 
         ReadBuffers  read_buffers;
-        WriteBuffers write_buffers;
     };
 
     template<class Impl>
@@ -64,9 +65,16 @@ private:
             _impl.async_read_some(read_buffers, std::move(on_read));
         }
 
-        void write_impl(OnWrite&& on_write) override
+        // Don't share the write buffer 
+        // by every write on this stream.
+        void write_impl(WriteBuffers wbufs, OnWrite&& on_write) override
         {
-            _impl.async_write_some(write_buffers, std::move(on_write));
+            auto p = std::make_shared<WriteBuffers>(std::move(wbufs));
+            _impl.async_write_some(*p,
+                [p, h = std::move(on_write)]
+                (const sys::error_code& ec, size_t size) mutable {
+                    h(ec, size);
+                });
         }
 
         void close() override
@@ -234,15 +242,12 @@ public:
 
             auto handler = make_shared<decltype(completion_handler)>(std::move(completion_handler));
 
-            _shared->impl->write_buffers.resize(distance( asio::buffer_sequence_begin(bs)
-                                                        , asio::buffer_sequence_end(bs)));
-
-            copy( asio::buffer_sequence_begin(bs)
-                , asio::buffer_sequence_end(bs)
-                , _shared->impl->write_buffers.begin());
+            WriteBuffers wbufs( asio::buffer_sequence_begin(bs)
+                              , asio::buffer_sequence_end(bs));
 
             // TODO: Same as the comment in async_read_some operation
-            _shared->impl->write_impl([h = move(handler), shared = _shared]
+            _shared->impl->write_impl(std::move(wbufs),
+                              [h = move(handler), shared = _shared]
                               (const system::error_code& ec, size_t size) {
                                  if (!shared->impl || !shared->impl->is_open()) {
                                     (*h)(asio::error::shut_down, 0);
