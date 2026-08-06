@@ -193,6 +193,10 @@ void wait_for_peer_on_tracker(
 //
 // The test is using `MockDht` because the `MainlineDht` wouldn't work locally.
 BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
+    // Logging is normally first enabled in either the Client or the Injector, but we want to
+    // see log lines even before that (mainly from the I2P code).
+    get_logger().set_threshold(DEBUG);
+
     asio::io_context ctx;
 
     TestDir root;
