@@ -979,7 +979,7 @@ Injector::Injector(
 
                 if (!result.has_value()) {
                     LOG_WARN("Failed to accept I2P connection");
-                    return std::unexpected(result.error().code());
+                    return std::unexpected(result.error());
                 }
 
                 return std::move(*result);

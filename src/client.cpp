@@ -2552,7 +2552,7 @@ void Client::State::setup_injectors()
             std::expected<GenericStream, sys::error_code>
             connect(Async yield) override {
                 auto result = _session->connect(_addr, yield);
-                if (!result) return std::unexpected(result.error().code());
+                if (!result) return std::unexpected(result.error());
                 return std::move(*result);
             }
 

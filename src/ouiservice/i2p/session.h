@@ -22,11 +22,8 @@ public:
                     { return os << "Create {" << e << "}"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
-            }
             operator sys::error_code() const {
-                return code();
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Connect {
@@ -37,8 +34,8 @@ public:
                     { return os << "Connect {" << e << "}"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Accept {
@@ -49,8 +46,8 @@ public:
                     { return os << "Accept {" << e << "}"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
     };
