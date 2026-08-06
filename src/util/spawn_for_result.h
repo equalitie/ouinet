@@ -2,6 +2,8 @@
 
 #include "namespaces.h"
 #include "async.h"
+#include "util/wait_condition.h"
+#include "util/overloaded.h"
 
 #include <boost/asio/spawn.hpp>
 #include <variant>
@@ -14,9 +16,21 @@ template<class V> class MappedTaskHandle;
 
 //--------------------------------------------------------------------
 
+namespace detail {
+    template<class T> struct RefOrVoid       { using type = T&;   };
+    template<>        struct RefOrVoid<void> { using type = void; };
+    template<class T> struct ConstRefOrVoid       { using type = const T&; };
+    template<>        struct ConstRefOrVoid<void> { using type = void;     };
+}
+
+//--------------------------------------------------------------------
+
 template<class V> class TaskHandle {
 public:
-    using Result = std::variant<V, std::exception_ptr>;
+    using StoredV = std::conditional_t<std::is_void_v<V>, std::monostate, V>;
+    using Result = std::variant<StoredV, std::exception_ptr>;
+    template<class T> using Ref = detail::RefOrVoid<T>::type;
+    template<class T> using ConstRef = detail::ConstRefOrVoid<T>::type;
 
 private:
     struct Shared {
@@ -38,7 +52,7 @@ private:
                 state);
         }
 
-        V& wait_ref(Async yield) {
+        Ref<V> wait_ref(Async yield) {
             auto slot = cancel.connect([&] { yield.cancel(); });
 
             if (!has_result()) {
@@ -52,7 +66,7 @@ private:
                 std::get<Result>(state));
         }
 
-        const V& get_result_ref() const {
+        ConstRef<V> get_result_ref() const requires (!std::is_void_v<V>) {
             if (!has_result()) {
                 throw std::runtime_error("Called TaskHandle::get_result() on unfinished task");
             }
@@ -78,11 +92,11 @@ public:
         return _shared->wait_ref(yield);
     }
 
-    V& wait_ref(Async yield) {
+    Ref<V> wait_ref(Async yield) {
         return _shared->wait_ref(yield);
     }
 
-    const V& get_result_ref() const {
+    ConstRef<V> get_result_ref() const {
         return _shared->get_result_ref();
     }
 
@@ -96,6 +110,17 @@ public:
         std::invoke_result_t<MapFunc, V>
     >
     map(MapFunc map_func) const;
+
+    // Same state as when moved from
+    TaskHandle() = default;
+
+    void cancel() {
+        _shared->cancel();
+    }
+
+    void join(Async yield) {
+        _shared->join(yield);
+    }
 
 private:
     template<class F>
@@ -194,10 +219,19 @@ spawn_for_result(
             // to check for cancellation.
             if (cancel) throw Async::Cancelled();
 
-            V value = func(Async(y, cancel, log_path));
+            if constexpr (std::is_void_v<V>) {
+                func(Async(y, cancel, log_path));
 
-            if (auto shared = weak.lock()) {
-                shared->state = std::move(value);
+                if (auto shared = weak.lock()) {
+                    shared->state = std::monostate{};
+                }
+            }
+            else {
+                V value = func(Async(y, cancel, log_path));
+
+                if (auto shared = weak.lock()) {
+                    shared->state = std::move(value);
+                }
             }
         },
         [weak] (std::exception_ptr eptr) {
