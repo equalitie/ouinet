@@ -162,10 +162,9 @@ void run(asio::io_context& ctx, F&& async_test) {
     // Test that after the test ended, the `ctx.run()` function exited in a timely manner.
     // If `!spawn_end` then the test threw an exception which already makes the test fail.
     if (spawn_end) {
-        auto test_end = steady_clock::now();
-        auto elapsed_ms = duration_cast<milliseconds>(test_end - *spawn_end).count();
+        auto elapsed = steady_clock::now() - *spawn_end;
         // TODO: Keep reducing the allowed timeout
-        BOOST_REQUIRE_LT(elapsed_ms, 5000);
+        BOOST_REQUIRE_LT(elapsed, 5s);
     }
 }
 
