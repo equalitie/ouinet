@@ -1,8 +1,24 @@
 #include "i2pd.h"
+#include "logger.h"
 
 namespace ouinet {
 
+const char* log_level_to_str(I2pd::LogLevel log_level) {
+    switch (log_level) {
+        case I2pd::LogLevel::debug: return "debug";
+        case I2pd::LogLevel::info: return "info";
+        case I2pd::LogLevel::warn: return "warn";
+        case I2pd::LogLevel::error: return "error";
+        case I2pd::LogLevel::none: return "none";
+        default:
+            LOG_WARN("Invalid I2pd log level enum ", static_cast<int>(log_level));
+            return "none";
+    }
+}
+
 std::vector<std::string> I2pd::Config::to_vector() const {
+    using namespace std::string_literals;
+
     return std::vector<std::string>{
         "--datadir", (i2pd_root_dir / "datadir").string(),
         "--tunconf", (i2pd_root_dir / "tunnels.conf").string(),
@@ -12,7 +28,7 @@ std::vector<std::string> I2pd::Config::to_vector() const {
         "--sam.enabled=1",
         "--http.enabled=0", // web console
         "--upnp.enabled=0", // default is disabled, should we enable?
-        "--loglevel=warn", // warn is default, choices are: debug, info, warn, error, none
+        "--loglevel="s + log_level_to_str(log_level),
     }; 
 }
 
