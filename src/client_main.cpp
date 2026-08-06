@@ -1,7 +1,6 @@
 #include "client.h"
 #include "logger.h"
 #include "force_exit_on_signal.h"
-#include <csignal>
 #include <iostream>
 
 using namespace ouinet;
@@ -9,11 +8,6 @@ using namespace std;
 
 int main(int argc, const char* argv[])
 {
-    // When stdout/stderr is piped to a slow reader (e.g. the pytest harness),
-    // a filled pipe + write() raises SIGPIPE, whose default action terminates
-    // the process. Ignore it so heavy logging under tests doesn't kill us.
-    std::signal(SIGPIPE, SIG_IGN);
-
     ClientConfig cfg;
 
     try {
