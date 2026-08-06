@@ -249,6 +249,7 @@ function list_artifacts_for_target_os (
                 $build_dir/injector$exe_suffix
                 $build_dir/libouinet_asio$lib_suffix
                 $build_dir/libouinet_asio_ssl$lib_suffix
+                $build_dir/libasio_utp$lib_suffix
             )
 
             if [[ "$target_os" == linux ]]; then
