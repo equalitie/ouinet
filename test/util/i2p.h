@@ -48,7 +48,7 @@ std::optional<I2pd> ensure_i2p_service(Async yield) {
     BOOST_TEST_MESSAGE("No I2P service found, starting \"" << i2pd_path << "\"");
     BOOST_TEST_MESSAGE("I2pd data dir: " << i2pd_data_dir.path() << "\n");
 
-    auto i2pd = unwrap(I2pd::start(i2pd_path, i2pd_data_dir.path(), yield.get_executor(), util::LogPath("i2pd")));
+    auto i2pd = unwrap(I2pd::start_exe(i2pd_path, i2pd_data_dir.path(), yield.get_executor(), util::LogPath("i2pd")));
 
     BOOST_TEST_MESSAGE("Waiting for i2pd to get ready");
 
