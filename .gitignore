@@ -12,6 +12,7 @@ Vagrantfile.kvm
 
 android/.idea/
 android/.gradle/
+android/.kotlin/
 android/android.iml
 android/builddir/
 android/build/

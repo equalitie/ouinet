@@ -20,6 +20,13 @@ add_compile_options(-Wno-unqualified-std-cast-call)
 add_subdirectory(../.. libouinet)
 add_library(native-lib SHARED src/main/cpp/native-lib.cpp )
 
+target_link_options(i2pd PRIVATE
+  "-Wl,--enable-new-dtags"
+  "-Wl,-rpath,\$ORIGIN"
+)
+set_target_properties(i2pd PROPERTIES
+   SKIP_BUILD_RPATH OFF)
+
 target_link_libraries(native-lib
     PRIVATE
         ouinet_client
