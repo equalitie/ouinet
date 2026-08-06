@@ -3,10 +3,17 @@ cmake_minimum_required (VERSION 3.13)
 include(ExternalProject)
 
 ################################################################################
+if (WITH_I2PD_EXE OR WITH_I2PD_LIB)
+    set(WITH_I2PD TRUE)
+endif()
+
 if (WITH_I2PD)
     block()
-        set(WITH_BINARY ON)
-        set(WITH_LIBRARY OFF)
+        if (WITH_I2PD_EXE)
+            set(WITH_BINARY ON)
+        else(WITH_I2PD_LIB)
+            set(WITH_LIBRARY ON)
+        endif()
         set(WITH_GUI OFF)
         set(BUILD_TESTING OFF)
     
@@ -57,43 +64,65 @@ endif()
 ################################################################################
 project(ouinet_i2p)
 
-add_library(ouinet_i2p OBJECT
-    "./address.cpp"
-    "./address.cpp"
-    "./sam.cpp"
-    "./i2pd.cpp"
-    "./session.cpp"
-    "./session_id.cpp"
-    "./tracker.cpp"
-    "./tracker_lookup.cpp"
-    "./announcer.cpp"
-    "./util/create_i2p_session.cpp"
-)
-
-set(ouinet_i2p_libs
-    ouinet_asio
-)
-
 set(ouinet_i2p_defs
     OUINET_API_I2P_EXPORT
     OUINET_API_COMMON_LOCAL
 )
 
-if (WITH_I2PD)
-    list(APPEND ouinet_i2p_libs Boost::process)
-    list(APPEND ouinet_i2p_defs OUINET_WITH_I2PD)
+if (ANDROID)
+    list(APPEND ouinet_i2p_defs PRIVATE ANDROID_BINARY=1)
 endif()
+
+set(ouinet_i2p_libs
+    ouinet_asio
+)
+
+set(ouinet_i2p_includes)
+
+set(ouinet_i2p_cpps
+    address.cpp
+    address.cpp
+    sam.cpp
+    i2pd.cpp
+    session.cpp
+    session_id.cpp
+    tracker.cpp
+    tracker_lookup.cpp
+    announcer.cpp
+    util/create_i2p_session.cpp
+)
+
+if (WITH_I2PD_EXE)
+    list(APPEND ouinet_i2p_defs PUBLIC OUINET_WITH_I2PD_EXE)
+    list(APPEND ouinet_i2p_libs Boost::process)
+    list(APPEND ouinet_i2p_cpps i2pd_exe.cpp)
+endif()
+
+if(WITH_I2PD_LIB)
+    list(APPEND ouinet_i2p_defs PUBLIC OUINET_WITH_I2PD_LIB)
+    list(APPEND ouinet_i2p_libs libi2pd libi2pdclient libi2pdlang)
+    list(APPEND ouinet_i2p_includes ./i2pd/daemon ./i2pd/libi2pd ./i2pd/libi2pd_client ./i2pd/i18n)
+    list(APPEND ouinet_i2p_cpps
+        i2pd_lib.cpp
+        i2pd/daemon/Daemon.cpp
+        i2pd/daemon/I2PControl.cpp
+        i2pd/daemon/HTTPServer.cpp
+        i2pd/daemon/I2PControlHandlers.cpp
+        i2pd/daemon/UnixDaemon.cpp
+    )
+endif()
+
+add_library(ouinet_i2p OBJECT ${ouinet_i2p_cpps})
 
 ouinet_setup(TARGET ouinet_i2p
     LINK ${ouinet_i2p_libs}
     DEFS ${ouinet_i2p_defs}
+    INCS PRIVATE ${ouinet_i2p_includes}
 )
 
-if (WITH_I2PD)
+if (WITH_I2PD_EXE)
     add_dependencies(ouinet_i2p i2pd)
 endif()
-
-target_include_directories(ouinet_i2p INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 ################################################################################
 
@@ -104,7 +133,7 @@ set_target_properties(ouinet_i2p PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
-if (WITH_I2PD)
+if (WITH_I2PD_EXE)
     set_target_properties(i2pd PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

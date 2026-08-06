@@ -26,7 +26,13 @@ option(WITH_TEST "Compile tests" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_OUISYNC "Build with Ouisync" OFF)
-option(WITH_I2PD "Build with i2pd" OFF)
+option(WITH_I2PD_LIB "Build with i2pd as a library" ON)
+if (IOS)
+    # iOS does not support spawning child processes
+    option(WITH_I2PD_EXE "Build with i2pd as a separate executable" OFF)
+else()
+    option(WITH_I2PD_EXE "Build with i2pd as a separate executable" ON)
+endif()
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
@@ -38,7 +44,8 @@ message(STATUS "Options:")
 message(STATUS "  WITH_TEST                : ${WITH_TEST}")
 message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
-message(STATUS "  WITH_I2PD                : ${WITH_I2PD}")
+message(STATUS "  WITH_I2PD_EXE            : ${WITH_I2PD_EXE}")
+message(STATUS "  WITH_I2PD_LIB            : ${WITH_I2PD_LIB}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
 message(STATUS "")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
@@ -126,7 +133,7 @@ add_subdirectory(./rust)
 
 function(ouinet_setup)
     set(oneValueArgs TARGET)
-    set(multiValueArgs LINK DEFS)
+    set(multiValueArgs LINK DEFS INCS)
 
     cmake_parse_arguments(
         ARG
@@ -158,7 +165,8 @@ function(ouinet_setup)
         ${OUINET_ROOT_DIR}/modules/asio-utp/include
         ${OUINET_ROOT_DIR}/modules/cpp-upnp/include
         ${BUILT_BOOST_INCLUDE_DIR}
-        ${OPENSSL_INCLUDE_DIR})
+        ${OPENSSL_INCLUDE_DIR}
+        ${ARG_INCS})
     target_link_libraries(${ARG_TARGET} ${ARG_LINK})
 endfunction()
 
