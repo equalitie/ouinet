@@ -3,13 +3,19 @@
 
 namespace ouinet {
 
-const char* log_level_to_str(I2pd::LogLevel log_level) {
+enum class I2pdLogLevel { debug, info, warn, error, none };
+
+// I used `none` here because it's quite verbose and doesn't seem to
+// provide much information. Normally the default is `warn`.
+static constexpr I2pdLogLevel log_level = I2pdLogLevel::none;
+
+static const char* log_level_to_str(I2pdLogLevel log_level) {
     switch (log_level) {
-        case I2pd::LogLevel::debug: return "debug";
-        case I2pd::LogLevel::info: return "info";
-        case I2pd::LogLevel::warn: return "warn";
-        case I2pd::LogLevel::error: return "error";
-        case I2pd::LogLevel::none: return "none";
+        case I2pdLogLevel::debug: return "debug";
+        case I2pdLogLevel::info: return "info";
+        case I2pdLogLevel::warn: return "warn";
+        case I2pdLogLevel::error: return "error";
+        case I2pdLogLevel::none: return "none";
         default:
             LOG_WARN("Invalid I2pd log level enum ", static_cast<int>(log_level));
             return "none";

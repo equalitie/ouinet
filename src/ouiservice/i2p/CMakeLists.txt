@@ -89,6 +89,7 @@ set(ouinet_i2p_cpps
     tracker.cpp
     tracker_lookup.cpp
     announcer.cpp
+    service.cpp
     util/create_i2p_session.cpp
 )
 

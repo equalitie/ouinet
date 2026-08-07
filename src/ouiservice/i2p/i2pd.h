@@ -17,8 +17,6 @@ namespace util { class LogPath; }
 // Class for controlling the `i2pd` executable/library
 class OUINET_I2P_API I2pd {
 public:
-    enum class LogLevel { debug, info, warn, error, none };
-
     class Config {
     public:
         Config(fs::path i2pd_root_dir):
@@ -27,10 +25,6 @@ public:
     
         std::vector<std::string> to_vector() const;
     
-        // I used `none` here because it's quite verbose and doesn't seem to
-        // provide much information. Normally the default is `warn`.
-        LogLevel log_level = LogLevel::none;
-
     private:
         fs::path i2pd_root_dir;
     };

@@ -52,7 +52,8 @@ public:
         };
     };
 
-    I2pSession(I2pSession&& other) = default;
+    I2pSession(I2pSession&&) = default;
+    I2pSession& operator=(I2pSession&&) = default;
 
     [[nodiscard]]
     static std::expected<I2pSession, Error::Create> create(Async, std::optional<asio::ip::tcp::endpoint> sam_ep = {});

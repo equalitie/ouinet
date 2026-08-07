@@ -50,11 +50,14 @@ struct I2pd::InnerExe : I2pd::InnerBase {
             std::string output;
             std::string line;
 
+            auto err_trace = _log_path.tag("i2pd");
+            auto log_trace = _log_path.tag("i2pd").tag("log");
+
             while (true) {
                 auto size_r = asio::async_read_until(_out, buffer, '\n', yield);
 
                 if (!size_r.has_value()) {
-                    LOG_DEBUG(_log_path, " ", size_r.error().message());
+                    LOG_DEBUG(err_trace, " ", size_r.error().message());
                     break;
                 }
 
@@ -62,7 +65,7 @@ struct I2pd::InnerExe : I2pd::InnerBase {
                 std::string line;
                 std::getline(is, line);
 
-                LOG_DEBUG(_log_path, " ", line);
+                LOG_DEBUG(log_trace, " ", line);
             }
         });
     }

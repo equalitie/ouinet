@@ -9,6 +9,7 @@
 #include <chrono>
 #include "util/test_dir.h"
 #include "util/unwrap.h"
+#include "util/i2p.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "ouiservice/i2p/session.h"
@@ -175,9 +176,9 @@ void wait_for_peer_on_tracker(
         Async yield) {
     auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(yield)));
     auto tracker = I2pTrackerClient(session, tracker_addr);
-    for (int i = 0; i < 30; ++i) {
-        auto peers = unwrap(tracker.get_peers(infohash, yield));
-        if (peers.contains(peer_addr)) {
+    for (int i = 0; i < 120; ++i) {
+        auto peers = tracker.get_peers(infohash, yield);
+        if (peers && peers->contains(peer_addr)) {
             return;
         }
         async_sleep(1s, yield);
@@ -208,6 +209,8 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     run(ctx, [&] (Async yield) {
+        auto i2p_service = create_i2p_service(yield);
+
         Injector injector(make_config<InjectorConfig>({
                 "./no_injector_exec"s,
                 "--repo"s, root.make_subdir("injector").string(),

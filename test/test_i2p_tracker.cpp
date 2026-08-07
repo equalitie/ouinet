@@ -82,7 +82,7 @@ BOOST_AUTO_TEST_CASE(tracker_status) {
     asio::io_context ctx;
 
     spawn(ctx, [&] (Async yield) mutable {
-        auto i2pd = ensure_i2p_service(yield);
+        auto i2p_service = create_i2p_service(yield);
 
         auto session = unwrap(I2pSession::create(yield));
 
@@ -133,7 +133,7 @@ BOOST_AUTO_TEST_CASE(announce_and_get_peers) {
     };
 
     spawn(ctx, [&] (Async yield) mutable {
-        auto i2pd = ensure_i2p_service(yield);
+        auto i2p_service = create_i2p_service(yield);
 
         auto tracker_a = create_tracker(yield);
         auto tracker_b = create_tracker(yield);
