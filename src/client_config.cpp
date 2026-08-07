@@ -619,14 +619,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                         throw std::runtime_error(
                             "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
                     }
-
-                    auto& injector_ep = _injector_endpoints.get<CacheType::Bep5Http>();
-
-                    if (!injector_ep) {
-                        injector_ep = Endpoint::Bep5{
-                            bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-                        };
-                    }
                 },
                 [&] (const CacheType::Ouisync& type) {
                     LOG_INFO("Enabling Ouisync cache");
