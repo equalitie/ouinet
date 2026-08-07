@@ -149,7 +149,8 @@ I2pTrackerClient::get_peers(NodeID infohash, Async yield)
     // Parse bencoded tracker response
     auto decoded = bittorrent::bencoding_decode(*body);
     if (!decoded || !decoded->is_map()) {
-        LOG_WARN("BEP3 tracker: not a bencoded body\n", *body);
+        LOG_WARN(yield, " BEP3 tracker: not a bencoded body (size: ", body->size() ,")");
+        LOG_WARN(*body);
         return error(Error::InvalidResponse { std::move(*body) });
     }
 

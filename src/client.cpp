@@ -2542,7 +2542,7 @@ void Client::State::setup_injectors()
     using R = SysResult<std::unique_ptr<OuiServiceClient>>;
 
     if (auto ep = _config.injector_endpoint<CacheType::Bep3HTTPOverI2P>()) {
-        LOG_INFO("Setting up injector: ", *ep);
+        LOG_INFO(_log_path, " Setting up injector: ", *ep);
 
         struct Client : public OuiServiceClient {
             sys::error_code start(Async) override {
@@ -2593,7 +2593,7 @@ void Client::State::setup_injectors()
     auto injector_ep = _config.injector_endpoint<CacheType::Bep5Http>();
 
     if (injector_ep) {
-        LOG_INFO("Setting up injector: ", *injector_ep);
+        LOG_INFO(_log_path, " Setting up injector: ", *injector_ep);
 
         _injector_utp = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path,
             [this, injector_ep] (Async yield) -> R {
