@@ -32,29 +32,36 @@ bool I2pd::is_start_exe_implemented() { return true; }
 // NOTE: iOS does not allow starting processes (macOS does).
 struct I2pd::InnerExe : I2pd::InnerBase {
     bp::process _process;
-    asio::readable_pipe _out;
+    asio::readable_pipe _stdcout;
+    asio::readable_pipe _stdcerr;
     util::LogPath _log_path;
     Cancel _cancel;
 
-    InnerExe(bp::process process, asio::readable_pipe out, util::LogPath log_path):
+    InnerExe(bp::process process, asio::readable_pipe stdcout, asio::readable_pipe stdcerr, util::LogPath log_path):
         _process(std::move(process)),
-        _out(std::move(out)),
+        _stdcout(std::move(stdcout)),
+        _stdcerr(std::move(stdcerr)),
         _log_path(std::move(log_path))
     {
-        task::spawn_detached(process.get_executor(), [this, cancel = _cancel] (asio::yield_context y_) mutable {
+        start_reading_pipe(_stdcout, "out");
+        start_reading_pipe(_stdcerr, "err");
+    }
+
+    void start_reading_pipe(asio::readable_pipe& pipe, const char* tag) {
+        task::spawn_detached(_process.get_executor(), [this, &pipe, tag, cancel = _cancel] (asio::yield_context y_) mutable {
             Async yield(y_, cancel);
 
-            auto slot = cancel.connect([&] { if (_out.is_open()) _out.close(); });
+            auto slot = cancel.connect([&] { if (pipe.is_open()) pipe.close(); });
 
             asio::streambuf buffer;
             std::string output;
             std::string line;
 
             auto err_trace = _log_path.tag("i2pd");
-            auto log_trace = _log_path.tag("i2pd").tag("log");
+            auto log_trace = _log_path.tag("i2pd").tag(tag);
 
             while (true) {
-                auto size_r = asio::async_read_until(_out, buffer, '\n', yield);
+                auto size_r = asio::async_read_until(pipe, buffer, '\n', yield);
 
                 if (!size_r.has_value()) {
                     LOG_DEBUG(err_trace, " ", size_r.error().message());
@@ -98,7 +105,8 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
         asio::any_io_executor exec,
         util::LogPath log_path) {
     LOG_DEBUG(log_path, " Starting I2P daemon (process)");
-    asio::readable_pipe out{exec};
+    asio::readable_pipe stdcout{exec};
+    asio::readable_pipe stdcerr{exec};
 
     try {
         bp::process proc(
@@ -107,18 +115,15 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
             config.to_vector(),
             bp::process_stdio{
                 {}, // stdin
-                out, // stdout
-                out // stdcerr
+                stdcout, // stdout
+                stdcerr // stdcerr
             }
-#           ifdef __unix__
-            , ExecHandler{});
-#           else
           );
-#           endif
 
         return I2pd(std::make_unique<InnerExe>(
                 std::move(proc),
-                std::move(out),
+                std::move(stdcout),
+                std::move(stdcerr),
                 std::move(log_path)
             ));
     }
