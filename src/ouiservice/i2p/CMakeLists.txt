@@ -32,6 +32,16 @@ if (WITH_I2PD)
         add_subdirectory(./i2pd/build)
     endblock()
     
+    if (MINGW)                                                                                                                                          
+        # mingw-w64 GCC's libstdc++.a (tinfo.o) and Boost's c++23 object files                                                                                          
+        # both emit a non-weak definition of std::type_info::operator==,                                                                                                
+        # causing a "multiple definition" link error (GCC bug 110572). Both                                                                                             
+        # definitions are identical implementations of the same standard                                                                                                
+        # function, so it's safe to let the linker keep either one.                                                                                                     
+        target_link_options(i2pd PRIVATE -Wl,--allow-multiple-definition)                                                                                               
+        set(MINGW_EXTRA iphlpapi)
+    endif()     
+
     # We build our own boost and openssl, so make sure those are built before i2pd
     # starts building so it can use those. Normally this should be automatic, but i2pd
     # does not specify that the later two libraries depend on Boost.
@@ -52,8 +62,8 @@ if (WITH_I2PD)
         cmake_policy(SET CMP0079 NEW)
     endif()
     
-    target_link_libraries(libi2pd       PUBLIC Boost::program_options)
-    target_link_libraries(libi2pdclient PUBLIC Boost::program_options)
+    target_link_libraries(libi2pd       PUBLIC Boost::program_options ${MINGW_EXTRA})
+    target_link_libraries(libi2pdclient PUBLIC Boost::program_options ${MINGW_EXTRA})
     target_link_libraries(libi2pdlang   PUBLIC                       )
     
     if (ANDROID)
@@ -111,12 +121,22 @@ if(WITH_I2PD_LIB)
         i2pd/daemon/I2PControlHandlers.cpp
         i2pd/daemon/UnixDaemon.cpp
     )
+    if(UNIX)
+        list(APPEND ouinet_i2p_cpps i2pd/daemon/UnixDaemon.cpp)
+    elseif(WIN32 OR MINGW)
+        list(APPEND ouinet_i2p_cpps
+            i2pd/Win32/Win32App.cpp
+            i2pd/Win32/Win32Service.cpp
+            i2pd/Win32/Win32NetState.cpp
+            i2pd/Win32/DaemonWin32.cpp
+        )
+    endif()
 endif()
 
 add_library(ouinet_i2p OBJECT ${ouinet_i2p_cpps})
 
 ouinet_setup(TARGET ouinet_i2p
-    LINK ${ouinet_i2p_libs}
+    LINK ${ouinet_i2p_libs} ${MINGW_EXTRA}
     DEFS ${ouinet_i2p_defs}
     INCS PRIVATE ${ouinet_i2p_includes}
 )
