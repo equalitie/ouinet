@@ -100,26 +100,40 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
     LOG_DEBUG(log_path, " Starting I2P daemon (process)");
     asio::readable_pipe out{exec};
 
-    bp::process proc(
-        exec,
-        i2pd_binary_path.string(),
-        config.to_vector(),
-        bp::process_stdio{
-            {}, // stdin
-            out, // stdout
-            out // stdcerr
-        }
-#       ifdef __unix__
-        , ExecHandler{});
-#       else
-        );
-#       endif
+    try {
+        bp::process proc(
+            exec,
+            i2pd_binary_path.string(),
+            config.to_vector(),
+            bp::process_stdio{
+                {}, // stdin
+                out, // stdout
+                out // stdcerr
+            }
+#           ifdef __unix__
+            , ExecHandler{});
+#           else
+          );
+#           endif
 
-    return I2pd(std::make_unique<InnerExe>(
-            std::move(proc),
-            std::move(out),
-            std::move(log_path)
-        ));
+        return I2pd(std::make_unique<InnerExe>(
+                std::move(proc),
+                std::move(out),
+                std::move(log_path)
+            ));
+    }
+    catch (const sys::system_error& e) {
+        LOG_WARN(log_path, " Failed to start `i2pd`, system_error: ", e.what());
+        return std::unexpected(e.code());
+    }
+    catch (const std::exception& e) {
+        LOG_WARN(log_path, " Failed to start `i2pd`, std::exception: ", e.what());
+        return std::unexpected(asio::error::fault);
+    }
+    catch (...) {
+        LOG_WARN(log_path, " Failed to start `i2pd`");
+        return std::unexpected(asio::error::fault);
+    }
 }
 
 } // namespace
