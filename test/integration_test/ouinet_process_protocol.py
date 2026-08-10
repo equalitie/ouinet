@@ -20,13 +20,13 @@ class OuinetProcessProtocol(object):
     """
 
     def __init__(self, proc_config, watchpoint_regexes: List[str]):
-        super(OuinetProcessProtocol, self).__init__()
         self.regexes: List[str] = watchpoint_regexes
-        self.benchmarks: dict[str, bool] = {}
+        self.benchmarks: dict[str, re.Match[str] |  None] = {}
         self._proc_config = proc_config
+        self.app_name = proc_config.app_name
 
         for regex in self.regexes:
-            self.benchmarks[regex] = False
+            self.benchmarks[regex] = None
 
         self._logger: logging.Logger = logging.getLogger()
 
@@ -46,7 +46,11 @@ class OuinetProcessProtocol(object):
             match = re.match(regex, data)
             if match:
                 if not self.benchmarks[regex]:
-                    self.benchmarks[regex] = True
+                    self.benchmarks[regex] = match
+
+    # maybe have a different class for that?
+    # def check_i2p_error_received(self, data):
+    #     return re.match(TestFixtures.I2P_CLIENT_ERROR_READING_REGEX, data)
 
     def processExited(self, reason):
         print("process exited for protocol :", self)
@@ -97,7 +101,7 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
         super(OuinetBEP5CacheProcessProtocol, self).__init__(
             proc_config, benchmark_regexes
         )
-        self.public_key = ""
+        self.bep5_public_key = ""
 
     def errReceived(self, data: str):
         self.look_for_public_key(data)
@@ -106,4 +110,4 @@ class OuinetBEP5CacheProcessProtocol(OuinetCacheProcessProtocol, object):
     def look_for_public_key(self, data):
         pubkey_search_result = re.match(TestFixtures.BEP5_PUBK_ANNOUNCE_REGEX, data)
         if pubkey_search_result:
-            self.public_key = pubkey_search_result.group(1)
+            self.bep5_public_key = pubkey_search_result.group(1)

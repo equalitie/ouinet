@@ -12,14 +12,13 @@ void atomic_file::commit(sys::error_code& ec) {
     _temp_file.keep_on_close(false);
 }
 
-boost::optional<atomic_file>
+std::expected<atomic_file, sys::error_code>
 atomic_file::make( const AsioExecutor& ex
                  , fs::path path
-                 , const fs::path& temp_model
-                 , sys::error_code& ec)
+                 , const fs::path& temp_model)
 {
-    auto temp_file = temp_file::make(ex, path.parent_path(), temp_model, ec);
-    if (ec) return boost::none;
+    auto temp_file = temp_file::make(ex, path.parent_path(), temp_model);
+    if (!temp_file) return std::unexpected(temp_file.error());
     temp_file->keep_on_close(false);
     return atomic_file(std::move(*temp_file), std::move(path));
 }

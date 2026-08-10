@@ -2,24 +2,28 @@
 
 #include <list>
 #include <boost/asio/ip/udp.hpp>
+#include <boost/asio/experimental/channel.hpp>
 #include <boost/optional.hpp>
 #include <asio_utp.hpp>
 
+#include "api.h"
 #include "../ouiservice.h"
-#include "../util/async_queue.h"
 
 namespace ouinet {
 namespace ouiservice {
 
-class UtpOuiServiceServer : public OuiServiceImplementationServer
+class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    UtpOuiServiceServer(const AsioExecutor&, asio::ip::udp::endpoint endpoint);
+    UtpOuiServiceServer(asio::any_io_executor, asio::ip::udp::endpoint endpoint, util::LogPath);
 
-    void start_listen(asio::yield_context) override;
+    [[nodiscard]]
+    sys::error_code start_listen(Async) override;
+
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> accept(Async) override;
 
     ~UtpOuiServiceServer();
 
@@ -29,34 +33,35 @@ class UtpOuiServiceServer : public OuiServiceImplementationServer
     }
 
     private:
-    AsioExecutor _ex;
+    asio::any_io_executor _ex;
     asio::ip::udp::endpoint _endpoint;
     Cancel _cancel;
     std::unique_ptr<asio_utp::udp_multiplexer> _udp_multiplexer;
-    util::AsyncQueue<GenericStream> _accept_queue;
+    asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
 };
 
-class UtpOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API UtpOuiServiceClient : public OuiServiceClient
 {
     public:
-    UtpOuiServiceClient( const AsioExecutor&
+    UtpOuiServiceClient( asio::any_io_executor
                        , asio_utp::udp_multiplexer
-                       , std::string remote_endpoint);
+                       , asio::ip::udp::endpoint remote_endpoint);
 
-    void start(asio::yield_context) override {}
-    void stop() override {}
+    [[nodiscard]]
+    sys::error_code start(Async) override;
 
-    GenericStream connect(asio::yield_context, Cancel&) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async) override;
 
     boost::optional<asio::ip::udp::endpoint> local_endpoint() const {
         return _udp_multiplexer.local_endpoint();
     }
 
-    bool verify_remote_endpoint() const { return bool(_remote_endpoint); }
+    bool verify_remote_endpoint() const { return true; }
 
     private:
-    AsioExecutor _ex;
-    boost::optional<asio::ip::udp::endpoint> _remote_endpoint;
+    asio::any_io_executor _ex;
+    asio::ip::udp::endpoint _remote_endpoint;
     asio_utp::udp_multiplexer _udp_multiplexer;
 };
 

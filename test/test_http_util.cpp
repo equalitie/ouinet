@@ -1,6 +1,6 @@
 #define BOOST_TEST_MODULE blocker
 #include <cstdint>
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/empty_body.hpp>

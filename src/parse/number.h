@@ -3,9 +3,10 @@
 #include <limits>
 #include <boost/optional.hpp>
 #include <boost/utility/string_view.hpp>
+#include <string_view>
 #include "../util.h"
 
-namespace ouinet { namespace parse {
+namespace ouinet::parse {
 
 //--------------------------------------------------------------------
 
@@ -43,7 +44,7 @@ namespace detail {
 
 template<class T>
 std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value && detail::IsAllowed<T>::value
-                , boost::optional<T>
+                , std::optional<T>
                 >
 number(boost::string_view& s)
 {
@@ -68,7 +69,7 @@ number(boost::string_view& s)
             return 0;
         }
         s = s_;
-        return boost::none;
+        return std::nullopt;
     }
 
     auto max_str = detail::MaxStr<sizeof(T)>().str();
@@ -76,7 +77,7 @@ number(boost::string_view& s)
     // Check the parsed string will fit into T without overflow.
     if (endpos > max_str.size()) {
         s = s_;
-        return boost::none;
+        return std::nullopt;
     }
 
     // Still checking the above.
@@ -87,7 +88,7 @@ number(boost::string_view& s)
 
             if (d_in > d_max) {
                 s = s_;
-                return boost::none;
+                return std::nullopt;
             }
 
             if (d_in < d_max) {
@@ -116,7 +117,7 @@ number(boost::string_view& s)
 #if BOOST_VERSION >= 108000
 template<class T>
 std::enable_if_t< std::is_unsigned<T>::value && std::is_integral<T>::value && detail::IsAllowed<T>::value
-                , boost::optional<T>
+                , std::optional<T>
                 >
 number(beast::string_view& s)
 {
@@ -194,4 +195,14 @@ number(boost::string_view& s)
 }
 
 //--------------------------------------------------------------------
-}} // namespaces
+
+template<class N>
+std::optional<N> number(std::string_view& s) {
+    boost::string_view bs(s.data(), s.size());
+    auto n = number<N>(bs);
+    s = std::string_view(bs.data(), bs.size());
+    if (!n) return {};
+    return *n;
+}
+
+} // namespace

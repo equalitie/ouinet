@@ -10,7 +10,7 @@
 #include "../util/condition_variable.h"
 #include "../async_sleep.h"
 #include "rate_counter.h"
-#include "../util/handler_tracker.h"
+#include "../task.h"
 
 namespace ouinet { namespace bittorrent {
 
@@ -29,7 +29,8 @@ private:
     struct SendEntry {
         std::string message;
         udp::endpoint to;
-        Signal<void(sys::error_code)> sent_signal;
+        sys::error_code* return_ec;
+        Cancel sent_signal;
     };
 
     struct RecvEntry : IntrusiveHook {
@@ -46,7 +47,6 @@ public:
     AsioExecutor get_executor();
 
     void send(std::string&& message, const udp::endpoint& to, Cancel&, asio::yield_context);
-    void send(std::string&& message, const udp::endpoint& to);
 
     // NOTE: The pointer inside the returned string_view is guaranteed to
     // be valid only until the next coroutine based async IO call or until
@@ -75,7 +75,7 @@ private:
     std::list<SendEntry> _send_queue;
     ConditionVariable _send_queue_nonempty;
     IntrusiveList<RecvEntry> _receive_queue;
-    Signal<void()> _terminate_signal;
+    Cancel _terminate_signal;
     asio::steady_timer _rate_limiting_timer;
     RateCounter _rc_rx;
     RateCounter _rc_tx;
@@ -110,7 +110,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
 
             while (true) {
                 sys::error_code ec;
-                async_sleep(get_executor(), seconds(1), cancel, yield[ec]);
+                async_sleep(seconds(1), cancel, yield[ec]);
                 if (cancel) return;
 
                 cerr << "Current BT rate ";
@@ -133,7 +133,8 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
     });
 #endif
 
-    TRACK_SPAWN(get_executor(), [this] (asio::yield_context yield) {
+    // Wait for messages from Ouinet DHT code, then send them over UDP to peers.
+    task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
         Cancel cancel(_terminate_signal);
 
         auto terminated = cancel.connect([&] {
@@ -153,29 +154,29 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
                 continue;
             }
 
-            SendEntry& entry = _send_queue.front();
+            auto entry = _send_queue.begin();
 
             sys::error_code ec;
 
-            if (!ec) {
-                _socket.async_send_to(buffer(entry.message), entry.to, yield[ec]);
-            }
+            _socket.async_send_to(buffer(entry->message), entry->to, yield[ec]);
 
             if (terminated) break;
 
             if (!ec) {
-                sent += entry.message.size();
-                _rc_tx.update(entry.message.size());
+                sent += entry->message.size();
+                _rc_tx.update(entry->message.size());
                 maintain_max_rate_bytes_per_sec(_rc_tx.rate(), max_rate, yield[ec]);
                 if (terminated) break;
             }
 
-            _send_queue.front().sent_signal(ec);
-            _send_queue.pop_front();
+            *entry->return_ec = ec;
+            entry->sent_signal();
+            _send_queue.erase(entry);
         }
     });
 
-    TRACK_SPAWN(get_executor(), [this] (asio::yield_context yield) {
+    // Receive UDP packets from peers, then send them to Ouinet DHT code.
+    task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
         auto terminated = _terminate_signal.connect([]{});
 
         std::vector<uint8_t> buf;
@@ -194,6 +195,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
             recv += size;
             if (_rx_limit > 0) {
                 maintain_max_rate_bytes_per_sec(_rc_rx.rate(), _rx_limit, yield[ec]);
+                if (terminated) return;
             }
 
             for (auto& entry : std::move(_receive_queue)) {
@@ -240,8 +242,9 @@ void UdpMultiplexer::send(
     _send_queue.emplace_back();
     _send_queue.back().message = std::move(message);
     _send_queue.back().to = to;
-    auto sent_slot = _send_queue.back().sent_signal.connect([&] (sys::error_code ec_) {
-        ec = ec_;
+    _send_queue.back().return_ec = &ec;
+
+    auto sent_slot = _send_queue.back().sent_signal.connect([&] () {
         condition.notify();
     });
 
@@ -260,21 +263,7 @@ void UdpMultiplexer::send(
         or_throw(yield, asio::error::operation_aborted);
     }
 
-    if (ec) {
-        or_throw(yield, ec);
-    }
-}
-
-inline
-void UdpMultiplexer::send(
-    std::string&& message,
-    const udp::endpoint& to
-) {
-    _send_queue.emplace_back();
-    _send_queue.back().message = std::move(message);
-    _send_queue.back().to = to;
-
-    _send_queue_nonempty.notify();
+    return or_throw(yield, ec);
 }
 
 inline

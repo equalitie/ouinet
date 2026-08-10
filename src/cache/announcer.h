@@ -1,29 +1,42 @@
 #pragma once
 
-#include "bittorrent/bep5_announcer.h"
-#include "util/hash.h"
+#include "../bittorrent/bep5_announcer.h"
+#include "../util/hash.h"
+#include "../util/executor.h"
+#include "../util/log_path.h"
+#include "namespaces.h"
 #include <memory>
 
 namespace ouinet { namespace cache {
 
+// Base Announcer class with shared announcement loop logic
 class Announcer {
-private:
-    struct Loop;
-
 public:
+    struct Loop;
     using Key = std::string;
 
-    Announcer(std::shared_ptr<bittorrent::DhtBase>, size_t);
+    Announcer(asio::any_io_executor ex, size_t simultaneous_announcements);
 
     // Return true if the key was not being announced, false otherwise.
     bool add(Key key);
     // Return true if the key was being announced, false otherwise.
     bool remove(const Key&);
 
-    ~Announcer();
+    virtual ~Announcer();
 
-private:
+protected:
     std::unique_ptr<Loop> _loop;
+};
+
+// BEP5 Announcer - announces to DHT
+class Bep5Announcer final : public Announcer {
+public:
+    Bep5Announcer(
+        std::shared_ptr<bittorrent::DhtBase>,
+        size_t simultaneous_announcements,
+        util::LogPath log_path
+    );
+    ~Bep5Announcer();
 };
 
 }} // namespaces

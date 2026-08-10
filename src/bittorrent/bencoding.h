@@ -7,6 +7,7 @@
 #include <boost/optional.hpp>
 #include <boost/variant.hpp>
 #include <boost/utility/string_view.hpp>
+#include "api.h"
 
 namespace ouinet {
 namespace bittorrent {
@@ -99,9 +100,13 @@ class BencodedValue : public detail::value {
 constexpr uint8_t depth_limit = 100;
 constexpr int length_limit = 2000000;
 
+OUINET_COMMON_API
 std::string bencoding_encode(const BencodedValue& value);
+
+OUINET_COMMON_API
 boost::optional<BencodedValue> bencoding_decode(boost::string_view encoded);
 
+OUINET_COMMON_API
 std::ostream& operator<<(std::ostream&, const BencodedValue&);
 
 } // bittorrent namespace

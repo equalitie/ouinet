@@ -102,9 +102,9 @@ BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
     // [Validity Period, 9.4.1](https://cabforum.org/wp-content/uploads/BRv1.2.3.pdf).
     X509_gmtime_adj(X509_get_notAfter(_x), 15*ssl::util::ONE_YEAR);
     X509_set_pubkey(_x, _pk);
-    
+
     X509_NAME* name = X509_get_subject_name(_x);
-    
+
     // This function creates and adds the entry, working out the
     // correct string type and performing checks on its length.
     if (!X509_NAME_add_entry_by_txt( name, "CN"
@@ -112,7 +112,7 @@ BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
                                    , (const unsigned char*) cn.c_str()
                                    , -1, -1, 0))
         throw runtime_error("Failed in X509_NAME_add_entry_by_txt");
-    
+
     // Its self signed so set the issuer name to be the same as the
     // subject.
     X509_set_issuer_name(_x, name);
@@ -123,12 +123,12 @@ BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
         ssl::util::x509_add_ext(_x, NID_key_usage, "critical,keyCertSign,cRLSign");
     }
     ssl::util::x509_add_ext(_x, NID_subject_key_identifier, "hash");
-    
+
     // Some Netscape specific extensions
     if (is_ca) {
         ssl::util::x509_add_ext(_x, NID_netscape_cert_type, "sslCA");
     }
-    
+
     if (!X509_sign(_x, _pk, EVP_sha256()))
         throw runtime_error("Failed in X509_sign");
 
@@ -152,9 +152,9 @@ BaseCertificate::BaseCertificate(const std::string& cn, bool is_ca)
 BaseCertificate::BaseCertificate(std::string pem_cert, std::string pem_key, std::string pem_dh)
     : _x(nullptr)
     , _pk(nullptr)
-    , _pem_private_key(move(pem_key))
-    , _pem_certificate(move(pem_cert))
-    , _pem_dh_param(move(pem_dh))
+    , _pem_private_key(std::move(pem_key))
+    , _pem_certificate(std::move(pem_cert))
+    , _pem_dh_param(std::move(pem_dh))
     , _next_serial_number(std::time(nullptr) * CERT_SERNUM_SCALE)
 {
     {

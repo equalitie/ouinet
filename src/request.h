@@ -8,26 +8,20 @@
 #include "namespaces.h"
 #include "cache/resource_id.h"
 #include "util/crypto_stream_key.h"
-#include "util/yield.h"
-#include "declspec.h"
+#include "util/async.h"
+#include "cache_type.h"
+#include "api.h"
+#include <variant>
 
 namespace ouinet {
 
-// Cache request sent either to the origin through injector or to peers.
-//
-// * Injector and peers can see the request in plain text
-// * Non white listed headers are removed
-// * Only GET or HEAD requests are allowed
-// * Request body is removed (if present)
-// * GET arguments (`?...`) are removed from the request target
-// * Requests containing the http_::request_private_hdr field are not allowed
-// * Requests must contain the http_::request_group_hdr unless on Apple devices
-class CacheRetrieveRequest {
-public:
-    CacheRetrieveRequest(const CacheRetrieveRequest&) = default;
-    CacheRetrieveRequest(CacheRetrieveRequest&&) = default;
+//--------------------------------------------------------------------
 
-    http::verb method() const;
+class CachePeerRetrieveRequest {
+public:
+    http::verb method() const {
+        return _method;
+    }
 
     const cache::ResourceId& resource_id() const {
         return _resource_id;
@@ -41,27 +35,93 @@ public:
         return _dht_group;
     }
 
-private:
-    friend class CacheRequest;
+    InjectingCacheType cache_type() const {
+        return _cache_type;
+    }
 
-    CacheRetrieveRequest(http::verb method, cache::ResourceId resource_id, CryptoStreamKey const& resource_key, std::string dht_group) :
+private:
+    friend class CacheRequest; // can construct
+
+    CachePeerRetrieveRequest(http::verb method, InjectingCacheType cache_type, cache::ResourceId resource_id, CryptoStreamKey resource_key, std::string dht_group) :
         _method(method),
         _resource_id(std::move(resource_id)),
-        _resource_key(resource_key),
-        _dht_group(std::move(dht_group))
+        _resource_key(std::move(resource_key)),
+        _dht_group(std::move(dht_group)),
+        _cache_type(cache_type)
     {}
 
     http::verb _method;
     cache::ResourceId _resource_id;
     CryptoStreamKey _resource_key;
     std::string _dht_group;
+    InjectingCacheType _cache_type;
 };
+
+//--------------------------------------------------------------------
+
+class CacheOuisyncRetrieveRequest {
+public:
+    http::verb method() const {
+        return _method;
+    }
+
+    const cache::ResourceId& resource_id() const {
+        return _resource_id;
+    }
+
+    const std::string& dht_group() const {
+        return _dht_group;
+    }
+
+    friend std::ostream& operator<<(std::ostream&, CacheOuisyncRetrieveRequest const&);
+
+private:
+    friend class CacheRequest; // can construct
+
+    CacheOuisyncRetrieveRequest(http::verb method, cache::ResourceId resource_id, std::string dht_group) :
+        _method(method),
+        _resource_id(std::move(resource_id)),
+        _dht_group(std::move(dht_group))
+    {}
+
+    http::verb _method;
+    cache::ResourceId _resource_id;
+    std::string _dht_group;
+};
+
+//--------------------------------------------------------------------
+
+class CacheRetrieveRequest {
+public:
+    using Alternatives = std::variant<
+        CachePeerRetrieveRequest,
+        CacheOuisyncRetrieveRequest
+    >;
+
+    template<class V>
+    requires(
+        !std::is_same_v<V, CacheRetrieveRequest> &&
+        std::constructible_from<Alternatives, V>
+    )
+    CacheRetrieveRequest(V&& v) : _value(std::forward<V>(v)) {}
+
+    template<class Visitor, class Self>
+    decltype(auto) visit(this Self&& self, Visitor&& visitor) {
+        return std::visit(std::forward<Visitor>(visitor), std::forward<Self>(self)._value);
+    }
+
+    const cache::ResourceId& resource_id() const {
+        return visit([] (auto& r) -> cache::ResourceId const& { return r.resource_id(); });
+    }
+
+private:
+    Alternatives _value;
+};
+
+//--------------------------------------------------------------------
 
 class CacheInjectRequest {
 public:
-    CacheInjectRequest(const CacheInjectRequest&) = default;
-    CacheInjectRequest(CacheInjectRequest&&) = default;
-
     http::verb method() const {
         return _header.method();
     }
@@ -78,10 +138,14 @@ public:
     void set_druid(std::string_view druid);
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) {
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(WriteStream& con, Async yield) {
         http::request<http::empty_body> msg(_header);
         msg.prepare_payload();
-        http::async_write(con, msg, yield);
+        auto r = http::async_write(con, msg, yield);
+        if (!r) return std::unexpected(r.error());
+        return {};
     }
 
     std::optional<const std::string_view> get_if_none_match_field() const {
@@ -96,32 +160,40 @@ public:
         return i->value();
     }
 
+    InjectingCacheType cache_type() const {
+        return _cache_type;
+    }
+
 private:
     friend class CacheRequest;
 
-    CacheInjectRequest(http::request_header<> header, cache::ResourceId resource_id, std::string dht_group) :
+    CacheInjectRequest(http::request_header<> header, InjectingCacheType cache_type, cache::ResourceId resource_id, std::string dht_group) :
         _header(std::move(header)),
         _resource_id(std::move(resource_id)),
-        _dht_group(std::move(dht_group))
+        _dht_group(std::move(dht_group)),
+        _cache_type(cache_type)
     {}
 
     http::request_header<> _header;
     cache::ResourceId _resource_id;
     std::string _dht_group;
+    InjectingCacheType _cache_type;
 };
 
-class OUINET_DECL CacheRequest {
+//--------------------------------------------------------------------
+
+class OUINET_CLIENT_API CacheRequest {
 public:
     // TODO: This is only used in tests now, use it also when constructing the message.
     static const uint8_t HTTP_VERSION = 11;
 
-    static boost::optional<CacheRequest> from(http::request_header<>, YieldContext);
+    static std::optional<CacheRequest> from(CacheType, http::request_header<>);
 
     const http::request_header<>& header() const {
         return _header;
     }
 
-    CacheInjectRequest to_inject_request() const;
+    std::optional<CacheInjectRequest> to_inject_request() const;
     CacheRetrieveRequest to_retrieve_request() const;
 
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-None-Match
@@ -134,20 +206,22 @@ public:
     }
 
 private:
-    CacheRequest(http::request_header<> header, cache::ResourceId resource_id, CryptoStreamKey const& resource_key, std::string dht_group) :
+    CacheRequest(http::request_header<> header, CacheType cache_type, cache::ResourceId resource_id, CryptoStreamKey const& resource_key, std::string dht_group) :
         _header(std::move(header)),
         _resource_id(std::move(resource_id)),
         _resource_key(resource_key),
-        _dht_group(std::move(dht_group))
+        _dht_group(std::move(dht_group)),
+        _cache_type(cache_type)
     {}
 
     http::request_header<> _header;
     cache::ResourceId _resource_id;
     CryptoStreamKey _resource_key;
     std::string _dht_group;
+    CacheType _cache_type;
 };
 
-//----
+//--------------------------------------------------------------------
 
 // Sent through the injector and to the origin when the original request from
 // the user agent is not a secure HTTPS (i.e. http://...). In such case the
@@ -157,10 +231,7 @@ private:
 // * All `X-Ouinet...` headers are removed from the request
 class InsecureRequest {
 public:
-    static boost::optional<InsecureRequest> from(http::request<http::string_body>);
-
-    InsecureRequest(const InsecureRequest&) = default;
-    InsecureRequest(InsecureRequest&&) = default;
+    static boost::optional<InsecureRequest> from(InjectingCacheType cache_type, http::request<http::string_body>);
 
     http::verb method() const {
         return _request.method();
@@ -170,20 +241,30 @@ public:
     void set_druid(std::string_view druid);
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) {
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(WriteStream& con, Async yield) {
         _request.prepare_payload();
-        http::async_write(con, _request, yield);
+        auto r = http::async_write(con, _request, yield);
+        if (!r) return std::unexpected(r.error());
+        return {};
+    }
+
+    InjectingCacheType cache_type() const {
+        return _cache_type;
     }
 
 private:
-    InsecureRequest(http::request<http::string_body> request) :
+    InsecureRequest(InjectingCacheType cache_type, http::request<http::string_body> request) :
+        _cache_type(cache_type),
         _request(std::move(request))
     {}
 
+    InjectingCacheType _cache_type;
     http::request<http::string_body> _request;
 };
 
-//----
+//--------------------------------------------------------------------
 
 using PublicInjectorRequestAlternatives = std::variant<CacheInjectRequest, InsecureRequest>;
 
@@ -200,11 +281,17 @@ public:
     http::verb method() const;
 
     template<class WriteStream>
-    void async_write(WriteStream& con, asio::yield_context yield) {
-        std::visit(
-            [&] (auto& alt) { alt.async_write(con, yield); },
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    async_write(WriteStream& con, Async yield) {
+        return std::visit(
+            [&] (auto& alt) { return alt.async_write(con, yield); },
             static_cast<Base&>(*this)
         );
+    }
+
+    InjectingCacheType cache_type() const {
+        return std::visit([] (const auto& rq) { return rq.cache_type(); }, static_cast<const Base&>(*this));
     }
 
     void authorize(std::string_view credentials);

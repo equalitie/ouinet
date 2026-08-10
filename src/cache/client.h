@@ -9,13 +9,13 @@
 
 #include "../bittorrent/mainline_dht.h"
 #include "../response_reader.h"
-#include "../util/crypto.h"
-#include "../util/yield.h"
-#include "cache_entry.h"
+#include "../util/sign.h"
 #include "resource_id.h"
 #include "dht_groups.h"
 #include "peer_message.h"
 #include "util/crypto_stream_key.h"
+#include "ouiservice/i2p/fwd.h"
+#include "ouiservice/i2p/address.h"
 
 namespace ouinet {
 
@@ -24,6 +24,8 @@ namespace bittorrent {
 }
 
 class Session;
+class Async;
+class CachePeerRetrieveRequest;
 
 namespace cache {
 
@@ -32,47 +34,47 @@ private:
     struct Impl;
     using opt_path = boost::optional<fs::path>;
 
-    static std::unique_ptr<Client>
-    build( AsioExecutor ex
-         , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-         , util::Ed25519PublicKey cache_pk
+    [[nodiscard]]
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
+    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+         , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , opt_path static_cache_dir
          , opt_path static_cache_content_dir
-         , asio::yield_context);
+         , Async);
 
 public:
     using GroupName = BaseDhtGroups::GroupName;
 
 public:
-    static std::unique_ptr<Client>
-    build( AsioExecutor ex
-         , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-         , util::Ed25519PublicKey cache_pk
+    [[nodiscard]]
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
+    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+         , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
-         , asio::yield_context yield)
+         , Async yield)
     {
-        return build( ex, std::move(lan_my_endpoints), std::move(cache_pk)
+        return build( std::move(lan_my_endpoints), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , boost::none, boost::none
                     , yield);
     }
 
-    static std::unique_ptr<Client>
-    build( AsioExecutor ex
-         , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-         , util::Ed25519PublicKey cache_pk
+    [[nodiscard]]
+    static std::expected<std::shared_ptr<Client>, sys::error_code>
+    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+         , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
          , fs::path static_cache_dir
          , fs::path static_cache_content_dir
-         , asio::yield_context yield)
+         , Async yield)
     {
         assert(!static_cache_dir.empty());
         assert(!static_cache_content_dir.empty());
-        return build( ex, std::move(lan_my_endpoints), std::move(cache_pk)
+        return build( std::move(lan_my_endpoints), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
                     , opt_path{std::move(static_cache_dir)}
                     , opt_path{std::move(static_cache_content_dir)}
@@ -83,35 +85,38 @@ public:
     // false otherwise.
     bool enable_dht(std::shared_ptr<bittorrent::DhtBase>, size_t simultaneous_announcements);
 
+    // Returns true the first time the I2P is successfully enabled,
+    // false otherwise.
+    bool enable_i2p(std::shared_ptr<I2pSession>, I2pAddress tracker_addr);
 
     // This may add a response source header.
-    Session load( const ResourceId&
-                , const CryptoStreamKey&
-                , const GroupName& group
-                , bool is_head_request
-                , metrics::Client& metrics
-                , Cancel
-                , YieldContext);
+    [[nodiscard]]
+    std::expected<Session, sys::error_code>
+    load( const CachePeerRetrieveRequest&
+        , metrics::Client& metrics
+        , Async);
 
-    void store( const ResourceId&
-              , const GroupName& group
-              , http_response::AbstractReader&
-              , Cancel
-              , asio::yield_context);
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    store( const ResourceId&
+         , const GroupName& group
+         , http_response::AbstractReader&
+         , Async);
 
     // Returns true if both request and response had keep-alive == true.
     // Times out if forwarding to the sink gets stuck.
-    bool serve_local( const PeerCacheRequest&
-                    , GenericStream& sink
-                    , metrics::Client&
-                    , Cancel&
-                    , YieldContext);
+    [[nodiscard]]
+    std::expected<void, sys::error_code>
+    serve_local( const PeerCacheRequest&
+               , GenericStream& sink
+               , metrics::Client&
+               , Async);
 
-    std::size_t local_size( Cancel
-                          , asio::yield_context) const;
+    [[nodiscard]]
+    std::expected<std::size_t, sys::error_code> local_size(Async) const;
 
-    void local_purge( Cancel
-                    , asio::yield_context);
+    [[nodiscard]] std::expected<void, sys::error_code> local_purge(Async);
+
     bool pin_group(const std::string& group_name, sys::error_code& ec);
     bool unpin_group(const std::string& group_name, sys::error_code&);
     bool is_pinned_group(const std::string& group_name, sys::error_code&);

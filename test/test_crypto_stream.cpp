@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE utility
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
@@ -110,25 +110,6 @@ void test_all_cases(StreamType& s1, StreamType& s2, asio::yield_context yield) {
 }
 
 // Tests
-
-BOOST_AUTO_TEST_CASE(test_blob_stream) {
-    asio::io_context ctx;
-
-    asio::spawn(ctx, [&] (asio::yield_context yield) {
-        auto [socket1, socket2] = util::connected_pair(yield);
-
-        auto gs1 = GenericStream(std::move(socket1));
-        auto gs2 = GenericStream(std::move(socket2));
-
-        auto s1 = BlobStream(gs1);
-        auto s2 = BlobStream(gs2);
-
-        test_all_cases(s1, s2, yield);
-    },
-    check_exception);
-
-    ctx.run();
-}
 
 BOOST_AUTO_TEST_CASE(test_crypto_stream) {
     asio::io_context ctx;

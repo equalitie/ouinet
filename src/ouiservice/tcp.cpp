@@ -1,42 +1,41 @@
 #include "tcp.h"
-#include "../or_throw.h"
 #include "../util.h"
 #include "../logger.h"
+#include "util/async.h"
 
 namespace ouinet {
 namespace ouiservice {
 
-TcpOuiServiceServer::TcpOuiServiceServer(const AsioExecutor& ex, asio::ip::tcp::endpoint endpoint):
-    _ex(ex),
-    _acceptor(ex),
+TcpOuiServiceServer::TcpOuiServiceServer(asio::any_io_executor ex, asio::ip::tcp::endpoint endpoint):
+    _ex(std::move(ex)),
+    _acceptor(_ex),
     _endpoint(endpoint)
 {}
 
-void TcpOuiServiceServer::start_listen(asio::yield_context yield)
+sys::error_code TcpOuiServiceServer::start_listen(Async)
 {
     sys::error_code ec;
 
     _acceptor.open(_endpoint.protocol(), ec);
-    if (ec) {
-        return or_throw(yield, ec);
-    }
+    if (ec) return ec;
 
     _acceptor.set_option(asio::socket_base::reuse_address(true));
 
     _acceptor.bind(_endpoint, ec);
     if (ec) {
         _acceptor.close();
-        return or_throw(yield, ec);
+        return ec;
     }
 
     _acceptor.listen(asio::socket_base::max_listen_connections, ec);
     if (ec) {
         _acceptor.close();
-        return or_throw(yield, ec);
+        return ec;
     }
 
     LOG_DEBUG("Successfully listening on TCP Port");  // used by integration tests
 
+    return {};
 }
 
 void TcpOuiServiceServer::stop_listen()
@@ -47,16 +46,12 @@ void TcpOuiServiceServer::stop_listen()
     }
 }
 
-GenericStream TcpOuiServiceServer::accept(asio::yield_context yield)
+std::expected<GenericStream, sys::error_code> TcpOuiServiceServer::accept(Async yield)
 {
-    sys::error_code ec;
-
     asio::ip::tcp::socket socket(_ex);
-    _acceptor.async_accept(socket, yield[ec]);
+    auto r = _acceptor.async_accept(socket, yield);
 
-    if (ec) {
-        return or_throw<GenericStream>(yield, ec);
-    }
+    if (!r) return std::unexpected(r.error());
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
         sys::error_code ec;
@@ -67,54 +62,29 @@ GenericStream TcpOuiServiceServer::accept(asio::yield_context yield)
     return GenericStream(std::move(socket), tcp_shutter);
 }
 
-static boost::optional<asio::ip::tcp::endpoint> parse_endpoint(std::string endpoint)
-{
-    size_t pos = endpoint.rfind(':');
-    if (pos == std::string::npos) {
-        return boost::none;
-    }
-
-    int port;
-    try {
-        port = std::stoi(endpoint.substr(pos + 1));
-    } catch(...) {
-        return boost::none;
-    }
-    sys::error_code ec;
-    asio::ip::address address = asio::ip::make_address(endpoint.substr(0, pos), ec);
-    if (ec) {
-        return boost::none;
-    }
-    return asio::ip::tcp::endpoint(address, port);
-}
-
-TcpOuiServiceClient::TcpOuiServiceClient(const AsioExecutor& ex, std::string endpoint):
-    _ex(ex),
-    _endpoint(parse_endpoint(endpoint))
+TcpOuiServiceClient::TcpOuiServiceClient(asio::any_io_executor ex, asio::ip::tcp::endpoint endpoint):
+    _ex(std::move(ex)),
+    _endpoint(endpoint)
 {}
 
-GenericStream
-TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
+std::expected<GenericStream, sys::error_code>
+TcpOuiServiceClient::connect(Async yield)
 {
     if (!_endpoint) {
-        return or_throw<GenericStream>(yield, asio::error::invalid_argument);
+        return std::unexpected(asio::error::invalid_argument);
     }
-
-    sys::error_code ec;
 
     asio::ip::tcp::socket socket(_ex);
 
-    auto cancel_slot = cancel.connect([&] {
+    auto cancel_slot = yield.cancel_slot([&] {
         // tcp::socket::cancel() does not work properly on all platforms
         sys::error_code ec;
         socket.close(ec);
     });
 
-    socket.async_connect(*_endpoint, yield[ec]);
+    auto r = socket.async_connect(*_endpoint, yield);
 
-    if (ec) {
-        return or_throw<GenericStream>(yield, ec);
-    }
+    if (!r) return std::unexpected(r.error());
 
     static const auto tcp_shutter = [](asio::ip::tcp::socket& s) {
         sys::error_code ec;
@@ -123,6 +93,10 @@ TcpOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
     };
 
     return GenericStream(std::move(socket), tcp_shutter);
+}
+
+sys::error_code TcpOuiServiceClient::start(Async) {
+    return sys::error_code();
 }
 
 } // ouiservice namespace

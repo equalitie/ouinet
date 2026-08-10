@@ -1,0 +1,50 @@
+--- a/boost/asio/detail/config.hpp
++++ b/boost/asio/detail/config.hpp
+@@ -44,7 +44,7 @@
+ #if defined(BOOST_ASIO_HEADER_ONLY)
+ # define BOOST_ASIO_DECL inline
+ #else // defined(BOOST_ASIO_HEADER_ONLY)
+-# if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__CODEGEARC__)
++# if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__CODEGEARC__) || defined(__MINGW32__)
+ // We need to import/export our code only if the user has specifically asked
+ // for it by defining BOOST_ASIO_DYN_LINK.
+ #  if defined(BOOST_ASIO_DYN_LINK)
+
+--- a/boost/asio/execution/bad_executor.hpp
++++ b/boost/asio/execution/bad_executor.hpp
+@@ -29,10 +29,14 @@ class bad_executor
+ {
+ public:
+   /// Constructor.
+-  BOOST_ASIO_DECL bad_executor() noexcept;
++  bad_executor() {}
++
++  virtual ~bad_executor() noexcept {}
+ 
+   /// Obtain message associated with exception.
+-  BOOST_ASIO_DECL virtual const char* what() const noexcept;
++  virtual const char* what() const noexcept {
++      return "bad executor";
++  }
+ };
+ 
+ } // namespace execution
+
+--- a/boost/asio/execution/impl/bad_executor.ipp
++++ b/boost/asio/execution/impl/bad_executor.ipp
+@@ -24,15 +24,6 @@ namespace boost {
+ namespace asio {
+ namespace execution {
+ 
+-bad_executor::bad_executor() noexcept
+-{
+-}
+-
+-const char* bad_executor::what() const noexcept
+-{
+-  return "bad executor";
+-}
+-
+ } // namespace execution
+ } // namespace asio
+ } // namespace boost

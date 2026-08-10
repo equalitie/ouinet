@@ -48,7 +48,7 @@ public class Config implements Parcelable {
         private String cacheHttpPubKey;
         private String injectorCredentials;
         private String injectorTlsCert;
-        private String tlsCaCertStorePath;
+        private String tlsCaCertStoreDir;
         private String errorPagePath;
         private String cacheType;
         private boolean cachePrivate = false;
@@ -66,7 +66,6 @@ public class Config implements Parcelable {
         private String requestBodyLimit;
         private String maxCachedAge;
         private String localDomain;
-        private boolean disableDoH = false;
         private Set<String> dnsProtocols = null;
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
@@ -122,8 +121,8 @@ public class Config implements Parcelable {
          * Path to a .pem file with CA certificates.
          * One can get it from e.g.: https://curl.haxx.se/docs/caextract.html
          */
-        public ConfigBuilder setTlsCaCertStorePath(@Nullable String tlsCaCertStorePath){
-            this.tlsCaCertStorePath = tlsCaCertStorePath;
+        public ConfigBuilder setTlsCaCertStoreDir(@Nullable String tlsCaCertStoreDir){
+            this.tlsCaCertStoreDir = tlsCaCertStoreDir;
             return this;
         }
         /**
@@ -195,10 +194,6 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setLocalDomain(String localDomain){
             this.localDomain = localDomain;
-            return this;
-        }
-        public ConfigBuilder setDisableDoH(boolean disableDoH){
-            this.disableDoH = disableDoH;
             return this;
         }
 
@@ -290,18 +285,18 @@ public class Config implements Parcelable {
          * certificate.
          */
         private @Nullable String setupTlsCaCertStore(String ouinetDirectory) {
-            if (tlsCaCertStorePath == null || !tlsCaCertStorePath.startsWith(ASSET_PATH)) {
+            if (tlsCaCertStoreDir == null || !tlsCaCertStoreDir.startsWith(ASSET_PATH)) {
                 // Nothing to be done.
-                return tlsCaCertStorePath;
+                return tlsCaCertStoreDir;
             }
 
             // TODO: Ouinet's C++ code doesn't yet have a way to read asset
             // files from the apk. As a temporary workaround we copy the
             // asset file to a regular file and the pass path to that to
             // the C++ code.
-            String filename = tlsCaCertStorePath.substring(ASSET_PATH.length());
+            String filename = tlsCaCertStoreDir.substring(ASSET_PATH.length());
             String dest = ouinetDirectory + "/assets/" + filename;
-            if (copyAssetToFile(tlsCaCertStorePath, dest)) {
+            if (copyAssetToFile(tlsCaCertStoreDir, dest)) {
                 return dest;
             }
             return null;
@@ -448,7 +443,6 @@ public class Config implements Parcelable {
                     requestBodyLimit,
                     maxCachedAge,
                     localDomain,
-                    disableDoH,
                     dnsProtocols,
                     disableOriginAccess,
                     disableProxyAccess,
@@ -470,7 +464,7 @@ public class Config implements Parcelable {
     private String cacheHttpPubKey;
     private String injectorCredentials;
     private String injectorTlsCertPath;
-    private String tlsCaCertStorePath;
+    private String tlsCaCertStoreDir;
     private String errorPagePath;
     private String caRootCertPath;
     private String obfs4ProxyPath;
@@ -490,7 +484,6 @@ public class Config implements Parcelable {
     private String requestBodyLimit;
     private String maxCachedAge;
     private String localDomain;
-    private boolean disableDoH;
     private Set<String> dnsProtocols;
     private boolean disableOriginAccess;
     private boolean disableProxyAccess;
@@ -510,7 +503,7 @@ public class Config implements Parcelable {
                   String cacheHttpPubKey,
                   String injectorCredentials,
                   String injectorTlsCertPath,
-                  String tlsCaCertStorePath,
+                  String tlsCaCertStoreDir,
                   String errorPagePath,
                   String caRootCertPath,
                   String obfs4ProxyPath,
@@ -530,7 +523,6 @@ public class Config implements Parcelable {
                   String requestBodyLimit,
                   String maxCachedAge,
                   String localDomain,
-                  boolean disableDoH,
                   Set<String> dnsProtocols,
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
@@ -549,7 +541,7 @@ public class Config implements Parcelable {
         this.cacheHttpPubKey = cacheHttpPubKey;
         this.injectorCredentials = injectorCredentials;
         this.injectorTlsCertPath = injectorTlsCertPath;
-        this.tlsCaCertStorePath = tlsCaCertStorePath;
+        this.tlsCaCertStoreDir = tlsCaCertStoreDir;
         this.errorPagePath = errorPagePath;
         this.caRootCertPath = caRootCertPath;
         this.obfs4ProxyPath = obfs4ProxyPath;
@@ -569,7 +561,6 @@ public class Config implements Parcelable {
         this.requestBodyLimit = requestBodyLimit;
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
-        this.disableDoH = disableDoH;
         this.dnsProtocols = (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
         this.disableOriginAccess = disableOriginAccess;
         this.disableProxyAccess = disableProxyAccess;
@@ -599,8 +590,8 @@ public class Config implements Parcelable {
     public String getInjectorTlsCertPath() {
         return injectorTlsCertPath;
     }
-    public String getTlsCaCertStorePath() {
-        return tlsCaCertStorePath;
+    public String getTlsCaCertStoreDir() {
+        return tlsCaCertStoreDir;
     }
     public String getErrorPagePath() {
         return errorPagePath;
@@ -658,9 +649,6 @@ public class Config implements Parcelable {
     }
     public String getLocalDomain() {
         return localDomain;
-    }
-    public boolean getDisableDoH() {
-        return disableDoH;
     }
     public Set<String> getDnsProtocols() {
         return (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
@@ -725,7 +713,7 @@ public class Config implements Parcelable {
         out.writeString(cacheHttpPubKey);
         out.writeString(injectorCredentials);
         out.writeString(injectorTlsCertPath);
-        out.writeString(tlsCaCertStorePath);
+        out.writeString(tlsCaCertStoreDir);
         out.writeString(errorPagePath);
         out.writeString(caRootCertPath);
         out.writeString(obfs4ProxyPath);
@@ -745,7 +733,6 @@ public class Config implements Parcelable {
         out.writeString(requestBodyLimit);
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
-        out.writeInt(disableDoH ? 1 : 0);
         out.writeStringArray(dnsProtocols == null ? null : dnsProtocols.toArray(new String[0]));
         out.writeInt(disableOriginAccess ? 1 : 0);
         out.writeInt(disableProxyAccess ? 1 : 0);
@@ -775,7 +762,7 @@ public class Config implements Parcelable {
         cacheHttpPubKey = in.readString();
         injectorCredentials = in.readString();
         injectorTlsCertPath = in.readString();
-        tlsCaCertStorePath = in.readString();
+        tlsCaCertStoreDir = in.readString();
         errorPagePath = in.readString();
         caRootCertPath = in.readString();
         obfs4ProxyPath = in.readString();
@@ -795,7 +782,6 @@ public class Config implements Parcelable {
         requestBodyLimit = in.readString();
         maxCachedAge = in.readString();
         localDomain = in.readString();
-        disableDoH = in.readInt() != 0;
 
         String[] dnsProtocolsArray = in.createStringArray();
         if (dnsProtocolsArray == null)

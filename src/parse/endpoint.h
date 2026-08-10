@@ -39,7 +39,7 @@ endpoint(boost::string_view& s, sys::error_code& ec)
         return {};
     }
 
-    return {move(addr), *opt_port};
+    return {std::move(addr), *opt_port};
 }
 
 template<class Proto /* one of asio::ip::{tcp,udp} */>

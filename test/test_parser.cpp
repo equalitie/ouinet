@@ -1,5 +1,5 @@
 #define BOOST_TEST_MODULE parser
-#include <boost/test/included/unit_test.hpp>
+#include <boost/test/unit_test.hpp>
 #include <boost/optional/optional_io.hpp>
 
 #include "../src/parse/number.h"

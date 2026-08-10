@@ -2,35 +2,15 @@ if(NOT BOOST_VERSION)
     set(BOOST_VERSION 1.88.0)
 endif ()
 
-if (${BOOST_VERSION} EQUAL 1.79.0)
-    set(BOOST_VERSION_HASH 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
-    set(BOOST_COROUTINE_BACKEND coroutine)
-elseif (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
-    if (${BOOST_VERSION} EQUAL 1.87.0)
-      set(BOOST_VERSION_HASH af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
-      if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
-          # There is a bug in boost::outcome (used by cpp-upnp) which causes
-          # compilation issues. This works around it but also disables some nicer
-          # GDB error messages. I'm not sure it matters much on Android, plus
-          # AFAIK we always check the `outcome::result` type before we access
-          # it's value, so probably will also never happen.
-          # Github issue for the bug is here: https://github.com/ned14/outcome/pull/308
-          add_compile_definitions(BOOST_OUTCOME_SYSTEM_ERROR2_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
-          add_compile_definitions(BOOST_OUTCOME_DISABLE_INLINE_GDB_PRETTY_PRINTERS=1)
-      endif()
-      list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-1_87_0.patch)
-    elseif (${BOOST_VERSION} EQUAL 1.88.0)
+if (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
+    if (${BOOST_VERSION} EQUAL 1.88.0)
       set(BOOST_VERSION_HASH 46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b)
+      list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-1_88_0.patch)
     endif ()
 
     set(BOOST_COROUTINE_BACKEND fiber)
     list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-windows-iocp-1_87_0.patch)
 endif ()
-
-# These are not related to boost version, it fixes issues we started seeting
-# after Mingw upgrade.
-list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-decltype.patch)
-list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/mingw-bad-executor-vtable.patch)
 
 set(BOOST_COMPONENTS
     context
@@ -43,19 +23,20 @@ set(BOOST_COMPONENTS
     regex
     system
     unit_test_framework
+    url
 )
+
+if (NOT IOS)
+    # IOS doesn't allow spawning processes
+    list(APPEND BOOST_COMPONENTS process)
+endif()
 
 string(REPLACE "." "_" BOOST_VERSION_FILENAME ${BOOST_VERSION})
 
 set(OUINET_BOOST_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/boost")
 set(OUINET_BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
-
-if(BOOST_VERSION LESS_EQUAL 1.72.0)
-    list(APPEND BOOST_PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/inline-boost/beast-header-parser-fix-${BOOST_VERSION_FILENAME}.patch
-        ${CMAKE_CURRENT_LIST_DIR}/inline-boost/thread-pthread-stack-min-def-${BOOST_VERSION_FILENAME}.patch
-    )
-endif()
+set(OUINET_BOOST_CXXFLAGS -std=c++23 -DBOOST_ASIO_SEPARATE_COMPILATION)
+set(OUINET_BOOST_LINKFLAGS)
 
 set(CONFIG_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost && ./bootstrap.sh)
 set(BOOST_BUILD_SHARED ON)
@@ -79,10 +60,6 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         set(BOOST_ABI "sysv")
     else()
         message(FATAL_ERROR "Unsupported CMAKE_SYSTEM_PROCESSOR ${CMAKE_SYSTEM_PROCESSOR}")
-    endif()
-
-    if(BOOST_VERSION LESS_EQUAL 1.77.0)
-        list(APPEND BOOST_PATCHES ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-android-${BOOST_VERSION_FILENAME}.patch)
     endif()
 
     set(BOOST_ENVIRONMENT
@@ -130,26 +107,10 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     endif()
 
     link_libraries(ws2_32 mswsock)
-elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    if(BOOST_VERSION EQUAL 1.79.0)
-      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
-    endif()
-    # Unary function is deprecated in clang 16, this definition avoids using it
-    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
-    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
-    set(BOOST_ARCH_CONFIGURATION
-            cxxflags=${BOOST_CXXFLAGS}
-    )
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
     # iOS libraries must to be built as static libs that are linked into a single dynamic lib
     set(BOOST_BUILD_SHARED OFF)
-    if(BOOST_VERSION EQUAL 1.79.0)
-      set(BOOST_PATCHES ${BOOST_PATCHES} ${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-clang16-${BOOST_VERSION_FILENAME}.patch)
-    endif()
     set(OUINET_BOOST_CONFIGURE_COMMAND cp ${MACOS_BUILD_ROOT}/boost/src/built_boost/b2 ${CMAKE_CURRENT_BINARY_DIR}/boost/src/built_boost)
-    # Unary function is deprecated in clang 16, this definition avoids using it
-    set(BOOST_COMPILE_DEFINITIONS -DBOOST_NO_CXX98_FUNCTION_BASE)
-    set(BOOST_CXXFLAGS "${CXXFLAGS} -std=c++20 -DBOOST_NO_CXX98_FUNCTION_BASE")
     string(TOLOWER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
     set(BOOST_ENVIRONMENT )
     if (${PLATFORM} STREQUAL "OS64")
@@ -180,8 +141,6 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
     set(BOOST_ARCH_CONFIGURATION
         ${BOOST_ARCH_CONFIGURATION}
-        --stagedir=iphone-build/stage
-        cxxflags=${BOOST_CXXFLAGS}
         binary-format=mach-o
         define=_LITTLE_ENDIAN
         target-os=iphone
@@ -193,12 +152,13 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
 
 else()
     set(BOOST_ENVIRONMENT )
-    set(BOOST_ARCH_CONFIGURATION "cxxflags=-fPIC")
+    list(APPEND OUINET_BOOST_CXXFLAGS -fPIC)
+    list(APPEND OUINET_BOOST_CXXFLAGS -fvisibility=default)
 endif()
 
 set(BUILT_BOOST_VERSION ${BOOST_VERSION})
-set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/install/include)
-set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/install/lib)
+set(BUILT_BOOST_INCLUDE_DIR ${OUINET_BOOST_PREFIX}/src/built_boost)
+set(BUILT_BOOST_LIBRARY_DIR ${OUINET_BOOST_PREFIX}/src/built_boost/stage/lib)
 set(BUILT_BOOST_COMPONENTS ${BOOST_COMPONENTS})
 
 function(_boost_library_filename component output_var)
@@ -212,9 +172,9 @@ set(BOOST_LIBRARY_FILES )
 foreach (component ${BOOST_DEPENDENT_COMPONENTS})
     if (${component} STREQUAL "unit_test_framework")
         set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-test)
-        continue()
+    else()
+        set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-${component})
     endif()
-    set(ENABLE_BOOST_COMPONENTS ${ENABLE_BOOST_COMPONENTS} --with-${component})
     _boost_library_filename(${component} filename)
     set(BOOST_LIBRARY_FILES ${BOOST_LIBRARY_FILES} ${filename})
 endforeach()
@@ -223,14 +183,18 @@ set(BOOST_PATCH_COMMAND
     cd ${OUINET_BOOST_PREFIX}/src/built_boost
 )
 foreach (patch ${BOOST_PATCHES})
-    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch -N -p1 -i ${patch})
+    set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch --dry-run -R -N -p1 -i ${patch} || patch -N -p1 -i ${patch})
 endforeach()
 
 execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
 
+string(REPLACE ";" " " OUINET_BOOST_CXXFLAGS_STR "${OUINET_BOOST_CXXFLAGS}")
+
 externalproject_add(built_boost
     URL "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_FILENAME}.tar.bz2"
     URL_HASH SHA256=${BOOST_VERSION_HASH}
+    # Download here so that deleting `${CMAKE_BINARY_DIR}/boost` doesn't require re-download.
+    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}
     PREFIX ${OUINET_BOOST_PREFIX}
     BUILD_IN_SOURCE 1
     PATCH_COMMAND ${BOOST_PATCH_COMMAND}
@@ -244,10 +208,14 @@ externalproject_add(built_boost
             --layout=system
             --prefix=${OUINET_BOOST_PREFIX}/install
             --no-cmake-config
+            --verbosity=0
             -q # Stop at first error
             ${ENABLE_BOOST_COMPONENTS}
             ${BOOST_ARCH_CONFIGURATION}
-            install
+            # Possibly others, but in partucular `boost_process` includes Asio
+            # which then causes it to have different error categories
+            cxxflags="\"${OUINET_BOOST_CXXFLAGS_STR}\""
+            stage
     BUILD_BYPRODUCTS ${BOOST_LIBRARY_FILES}
     INSTALL_COMMAND ""
 )
@@ -284,9 +252,13 @@ set_target_properties(Boost::boost PROPERTIES
 # instead. Boost does not ship this library, so we need to create it.
 
 if (${BOOST_BUILD_SHARED})
-    add_library(ouinet_asio SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+    add_library(ouinet_asio SHARED
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 else()
-    add_library(ouinet_asio STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp")
+    add_library(ouinet_asio STATIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
 endif()
 
 target_link_libraries(ouinet_asio
@@ -297,50 +269,24 @@ target_link_libraries(ouinet_asio
     PRIVATE
         Boost::system
 )
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND BOOST_VERSION GREATER_EQUAL 1.77.0)
-    # explicitly link with bcrypt after Boost::filesystem
-    target_link_libraries(ouinet_asio
-        PUBLIC
-            crypt32
-            bcrypt)
+if ((WIN32 OR MINGW) AND BOOST_VERSION GREATER_EQUAL 1.77.0)
+    set(OUINET_ASIO_WIN_LIBRARIES crypt32 bcrypt)
 endif()
-target_compile_definitions(ouinet_asio
+
+target_link_libraries(ouinet_asio
     PUBLIC
+    OpenSSL::Crypto
+    OpenSSL::SSL
+    ${OUINET_ASIO_WIN_LIBRARIES})
+
+target_compile_definitions(ouinet_asio
+    PRIVATE
         -DBOOST_ASIO_DYN_LINK
+    PUBLIC
         ${BOOST_COMPILE_DEFINITIONS}
 )
+
 target_compile_options(ouinet_asio
-    PUBLIC -std=c++20
+    PUBLIC -std=c++23
 )
 
-if (${BOOST_BUILD_SHARED})
-    add_library(ouinet_asio_ssl SHARED "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
-else()
-    add_library(ouinet_asio_ssl STATIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/asio_ssl.cpp")
-endif()
-target_link_libraries(ouinet_asio_ssl
-    PUBLIC
-        OpenSSL::SSL
-        ouinet_asio
-)
-
-
-# FindBoost.cmake doesn't define targets for newer versions of boost.
-# Let's emulate it instead.
-foreach(component ${BOOST_COMPONENTS})
-    if (NOT TARGET Boost::${component})
-        include(${CMAKE_CURRENT_LIST_DIR}/inline-boost/boost-dependencies.cmake)
-        _static_Boost_recursive_dependencies(${component} dependencies)
-
-        find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS ${dependencies})
-        list(GET Boost_LIBRARIES 0 imported_location)
-
-        add_library(Boost::${component} UNKNOWN IMPORTED)
-        set_target_properties(Boost::${component} PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}"
-            INTERFACE_LINK_LIBRARIES "${Boost_LIBRARIES}"
-            IMPORTED_LOCATION "${imported_location}"
-            IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
-        )
-    endif()
-endforeach()

@@ -1,43 +1,88 @@
 #include "util.h"
 
+#ifdef OUINET_HAS_HARDCODED_CA_CERTS
+#   include "cacert.pem.h"
+#elif defined(_WIN32)
+#   include <wincrypt.h>
+
+    //
+    // If you're running on a fresh Windows (e.g. Windows docker
+    // container), use these to install CA certs:
+    //
+    //     # Download latest SST from Microsoft
+    //     CertUtil –generateSSTFromWU RootStore.sst
+    //     # Import RootStore.sst to Trusted Root CA Store
+    //     $file=Get-ChildItem -Path Rootstore.sst
+    //     $file | Import-Certificate -CertStoreLocation 'Cert:\LocalMachine\Root\'
+    // 
+    // Also see
+    //
+    //     https://stackoverflow.com/questions/39772878/reliable-way-to-get-root-ca-certificates-on-windows
+    //
+    static void add_windows_root_certs(boost::asio::ssl::context &ctx) {
+        HCERTSTORE hStore = CertOpenSystemStore(0, "ROOT");
+        if (hStore == NULL) {
+            return;
+        }
+    
+        X509_STORE *store = X509_STORE_new();
+        PCCERT_CONTEXT pContext = NULL;
+        while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != NULL) {
+            X509 *x509 = d2i_X509(NULL,
+                                  (const unsigned char **)&pContext->pbCertEncoded,
+                                  pContext->cbCertEncoded);
+            if(x509 != NULL) {
+                X509_STORE_add_cert(store, x509);
+                X509_free(x509);
+            }
+        }
+    
+        CertFreeCertificateContext(pContext);
+        CertCloseStore(hStore, 0);
+    
+        SSL_CTX_set_cert_store(ctx.native_handle(), store);
+    }
+#endif // _WIN32
+
 namespace ouinet::ssl::util {
 
-#if defined(_WIN32)
-static std::optional<bool> g_is_running_on_wine;
-
-static bool is_running_on_wine() {
-    if (g_is_running_on_wine) {
-        return *g_is_running_on_wine;
-    }
-
-    using F = const char* (CDECL *)(void);
-
-    HMODULE hntdll = GetModuleHandle("ntdll.dll");
-
-    if(!hntdll) {
-        g_is_running_on_wine = false;
-    } else {
-        F pwine_get_version = (F) GetProcAddress(hntdll, "wine_get_version");
-        if(pwine_get_version) {
-            g_is_running_on_wine = true;
-        } else {
-            g_is_running_on_wine = false;
-        }
-    }
-
-    return *g_is_running_on_wine;
-}
-#endif
-
-void set_default_verify_paths(asio::ssl::context& ctx) {
-    ctx.set_default_verify_paths();
-
-#ifdef _WIN32
-    // The above does not load the certificates when running on Wine.
-    if (is_running_on_wine()) {
-        ctx.add_verify_path("/etc/ssl/certs");
-    }
+void load_tls_ca_certificates(asio::ssl::context& ctx) {
+#ifdef OUINET_HAS_HARDCODED_CA_CERTS
+        ctx.add_certificate_authority(
+            asio::const_buffer(
+                hardcoded_ca_certificates.data(),
+                hardcoded_ca_certificates.size()
+            ));
+#elif _WIN32
+        add_windows_root_certs(ctx);
+#else
+        ctx.set_default_verify_paths();
 #endif
 }
 
-} // namespace
+void load_tls_ca_certificates(asio::ssl::context& ctx, const std::string& path_str) {
+    if (path_str.empty()) {
+        load_tls_ca_certificates(ctx);
+        return;
+    }
+
+    fs::path path = path_str;
+
+    if (!exists(path)) {
+        std::ostringstream ss;
+        ss << "Can not read CA certificates from \"" << path << "\": "
+           << "No such file or directory";
+        throw std::runtime_error(ss.str());
+    }
+
+    if (fs::is_directory(path)) {
+        ctx.add_verify_path(path_str);
+        return;
+    }
+
+    std::ostringstream ss;
+    ss << boost::nowide::ifstream(path).rdbuf();
+    ctx.add_certificate_authority(asio::buffer(ss.str()));
+}
+
+} // namespace ouinet::ssl::util

@@ -1,14 +1,13 @@
 #pragma once
 
 #include <boost/asio/error.hpp>
-#include <boost/asio/spawn.hpp>
-#include <boost/beast/http.hpp>
+#include <boost/beast/http/message.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include "util/yield.h"
-#include "cache/cache_entry.h"
+#include <stdexcept>
 #include "request.h"
 #include "namespaces.h"
-#include "declspec.h"
+#include "api.h"
+#include "session.h"
 
 namespace ouinet {
 using ouinet::util::AsioExecutor;
@@ -16,29 +15,28 @@ using ouinet::util::AsioExecutor;
 static const boost::posix_time::time_duration default_max_cached_age
     = boost::posix_time::hours(7 * 24);  // one week
 
-// Announcements are processed one at a time in Android to avoid increasing battery usage
-#ifdef __ANDROID__
-    const size_t default_max_simultaneous_announcements = 1;
-#else
-    const size_t default_max_simultaneous_announcements = 16;
-#endif
-
 class GenericStream;
 
-class OUINET_DECL CacheControl {
-private:
-    struct FetchState;
+class OUINET_CLIENT_API CacheControl {
+    struct CacheEntry {
+        // Data time stamp, not a date/time on errors.
+        boost::posix_time::ptime time_stamp;
+    
+        // Cached data.
+        Session response;
+    };
 
 public:
-    using Response = http::response<http::dynamic_body>;
 
-    using FetchStored = std::function<CacheEntry(const CacheRetrieveRequest&, Cancel&, YieldContext)>;
+    using FetchStored = std::function<
+        std::expected<Session, sys::error_code>(const CacheRetrieveRequest&, Async)
+    >;
+
     // If not null, the given cache entry is already available
     // (e.g. this may be a revalidation).
-    using FetchFresh  = std::function<Session(const CacheInjectRequest&, const CacheEntry*, Cancel&, YieldContext)>;
-    // When fetching stored (which may be slow), a parallel request to fetch fresh is started
-    // only if this is not null and it returns true.
-    using ParallelFresh = std::function<bool(const CacheRequest&)>;
+    using FetchFresh  = std::function<
+        std::expected<Session, sys::error_code>(const CacheInjectRequest&, Async)
+    >;
 
 public:
     CacheControl(const AsioExecutor& ex, std::string server_name)
@@ -51,15 +49,10 @@ public:
         , _server_name(std::move(server_name))
     {}
 
-    Session fetch(const CacheRequest&,
-                  sys::error_code& fresh_ec,
-                  sys::error_code& cache_ec,
-                  Cancel&,
-                  YieldContext);
+    std::expected<Session, sys::error_code> fetch(const CacheRequest&, Async);
 
     FetchStored  fetch_stored;
     FetchFresh   fetch_fresh;
-    ParallelFresh parallel_fresh;
 
     void max_cached_age(const boost::posix_time::time_duration&);
     boost::posix_time::time_duration max_cached_age() const;
@@ -76,27 +69,17 @@ public:
     bool is_expired( const http::response_header<>&
                    , boost::posix_time::ptime time_stamp);
 
+private:
     static
     bool is_expired(const CacheEntry&);
 
-private:
-    Session do_fetch(
-            const CacheRequest&,
-            sys::error_code& fresh_ec,
-            sys::error_code& cache_ec,
-            Cancel&,
-            YieldContext);
+    std::expected<Session, sys::error_code>
+    do_fetch_fresh(const CacheRequest&, Async);
 
-    Session do_fetch_fresh( FetchState&, const CacheRequest&, const CacheEntry*, YieldContext);
-
-    CacheEntry do_fetch_stored( FetchState&
-                              , const CacheRequest&
-                              , bool& is_fresh
-                              , YieldContext);
+    std::expected<CacheEntry, sys::error_code>
+    do_fetch_stored(const CacheRequest&, Async);
 
     bool is_older_than_max_cache_age(const boost::posix_time::ptime&) const;
-
-    auto make_fetch_fresh_job(const CacheRequest&, const CacheEntry*, YieldContext);
 
     bool has_temporary_result(const Session&) const;
 

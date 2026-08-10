@@ -1,11 +1,14 @@
 #pragma once
 
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/udp.hpp>
+#include <boost/utility/string_view.hpp>
+#include <optional>
 
 namespace ouinet { namespace bittorrent {
 
 inline
-std::string encode_endpoint(asio::ip::udp::endpoint endpoint)
+std::string encode_endpoint(boost::asio::ip::udp::endpoint endpoint)
 {
     std::string output;
     if (endpoint.address().is_v4()) {
@@ -23,17 +26,17 @@ std::string encode_endpoint(asio::ip::udp::endpoint endpoint)
 }
 
 inline
-std::string encode_endpoint(asio::ip::tcp::endpoint endpoint)
+std::string encode_endpoint(boost::asio::ip::tcp::endpoint endpoint)
 {
-    return encode_endpoint(asio::ip::udp::endpoint( endpoint.address()
-                                                  , endpoint.port()));
+    return encode_endpoint(boost::asio::ip::udp::endpoint( endpoint.address()
+                                                         , endpoint.port()));
 }
 
 inline
-boost::optional<asio::ip::udp::endpoint>
+std::optional<boost::asio::ip::udp::endpoint>
 decode_endpoint(boost::string_view endpoint)
 {
-    namespace ip = asio::ip;
+    namespace ip = boost::asio::ip;
     using ip::udp;
 
     if (endpoint.size() == 6) {
@@ -49,7 +52,7 @@ decode_endpoint(boost::string_view endpoint)
                       | ((uint16_t)(unsigned char)endpoint[17]) << 0;
         return udp::endpoint(ip::address_v6(ip_bytes), port);
     } else {
-        return boost::none;
+        return std::nullopt;
     }
 }
 

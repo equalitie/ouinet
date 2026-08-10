@@ -2,7 +2,7 @@
 
 #include <namespaces.h>
 #include <util/executor.h>
-#include <util/signal.h>
+#include <util/cancel.h>
 #include <boost/asio/ip/udp.hpp>
 #include <set>
 

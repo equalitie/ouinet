@@ -3,10 +3,12 @@
 #include <ouiservice/tls.h>
 #include <async_sleep.h>
 #include <logger.h>
-#include <util/handler_tracker.h>
+#include "task.h"
+#include "util/async.h"
+
+namespace ouinet {
 
 using namespace std;
-using namespace ouinet;
 using namespace ouiservice;
 
 using AbstractServer = OuiServiceImplementationServer;
@@ -20,79 +22,74 @@ using namespace std::chrono_literals;
 
 struct MultiUtpServer::State
 {
-    State( AsioExecutor ex, unique_ptr<AbstractServer> srv)
-        : ex(move(ex))
-        , server(move(srv))
+    State( asio::any_io_executor ex, unique_ptr<AbstractServer> srv)
+        : ex(std::move(ex))
+        , server(std::move(srv))
     {
     }
 
-    void start( util::AsyncQueue<GenericStream>& accept_queue
+    sys::error_code start( asio::experimental::channel<void(sys::error_code, GenericStream)>& accept_queue
               , Cancel& outer_cancel
-              , asio::yield_context yield)
+              , Async yield)
     {
-        sys::error_code ec;
-        server->start_listen(yield[ec]);
-        assert(!ec);
+        sys::error_code ec = server->start_listen(yield);
+        if (ec) return ec;
 
-        Cancel cancel(outer_cancel);
+        yield.spawn(outer_cancel, [&] (Async yield) mutable {
+            while (true) {
+                auto con = server->accept(yield);
 
-        TRACK_SPAWN(ex, ([
-            &,
-            cancel = move(cancel)
-        ] (asio::yield_context yield) mutable {
-            while (!cancel) {
-                sys::error_code ec;
-                auto con = server->accept(yield[ec]);
-
-                if (cancel) break;
-
-                if (ec) {
-                    async_sleep(ex, 100ms, cancel, yield);
-                    if (cancel) break;
+                if (!con.has_value()) {
+                    async_sleep(100ms, yield);
                     continue;
                 }
 
-                accept_queue.async_push(move(con), ec, cancel, yield[ec]);
-                assert(!cancel && !ec);
+                auto r = accept_queue.async_send(sys::error_code(), std::move(*con), yield);
+                if (!r) break;
             }
-        }));
+        });
+
+        return {};
     }
 
-    AsioExecutor ex;
+    asio::any_io_executor ex;
     std::unique_ptr<AbstractServer> server;
 };
 
-MultiUtpServer::MultiUtpServer( AsioExecutor ex
+MultiUtpServer::MultiUtpServer( asio::any_io_executor ex
                               , std::set<asio::ip::udp::endpoint> endpoints
-                              , boost::asio::ssl::context* ssl_context)
+                              , boost::asio::ssl::context* ssl_context
+                              , util::LogPath log_path)
     : _accept_queue(ex)
 {
     if (endpoints.empty()) {
-        LOG_ERROR("MultiUtpServer: endpoint set is empty!");
+        LOG_ERROR(log_path, " MultiUtpServer: endpoint set is empty!");
     }
 
     for (auto ep : endpoints) {
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(ex, ep, log_path);
         if (ssl_context) {
-            LOG_INFO("Bep5: uTP/TLS Address: ", ep);
-            auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, move(base), *ssl_context);
-            _states.emplace_back(new State(ex, move(tls)));
+            LOG_INFO(log_path, " Bep5: uTP/TLS Address: ", ep);
+            auto tls = make_unique<ouiservice::TlsOuiServiceServer>(ex, std::move(base), *ssl_context);
+            _states.emplace_back(new State(ex, std::move(tls)));
         } else {
-            LOG_INFO("Bep5: uTP Address: ", ep);
-            _states.emplace_back(new State(ex, move(base)));
+            LOG_INFO(log_path, " Bep5: uTP Address: ", ep);
+            _states.emplace_back(new State(ex, std::move(base)));
         }
     }
 }
 
-void MultiUtpServer::start_listen(asio::yield_context yield)
+sys::error_code MultiUtpServer::start_listen(Async yield)
 {
+    sys::error_code ret_ec;
     for (auto& s : _states) {
-        sys::error_code ec;
-        s->start(_accept_queue, _cancel, yield[ec]);
+        sys::error_code ec = s->start(_accept_queue, _cancel, yield);
         if (ec) {
-            LOG_ERROR("MultiUtpServer: Failed to start listen; ec=", ec);
+            LOG_ERROR(yield, " MultiUtpServer: Failed to start listen; ec=", ec);
+            if (!ret_ec) ret_ec = ec;
         }
     }
+    return ret_ec;
 }
 
 void MultiUtpServer::stop_listen()
@@ -101,14 +98,16 @@ void MultiUtpServer::stop_listen()
     _states.clear();
 }
 
-GenericStream MultiUtpServer::accept(asio::yield_context yield)
+std::expected<GenericStream, sys::error_code> MultiUtpServer::accept(Async yield)
 {
-    sys::error_code ec;
-    auto s = _accept_queue.async_pop(_cancel, yield[ec]);
-    return or_throw(yield, ec, move(s));
+    auto s = _accept_queue.async_receive(yield);
+    if (!s.has_value()) return std::unexpected(s.error());
+    return std::move(*s);
 }
 
 MultiUtpServer::~MultiUtpServer()
 {
     stop_listen();
 }
+
+} // namespace

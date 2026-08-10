@@ -5,42 +5,49 @@
 #include <boost/optional.hpp>
 
 #include "../ouiservice.h"
+#include "api.h"
 
 namespace ouinet {
+
+class Async;
+
 namespace ouiservice {
 
-class TcpOuiServiceServer : public OuiServiceImplementationServer
+class OUINET_COMMON_API TcpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    TcpOuiServiceServer(const AsioExecutor&, asio::ip::tcp::endpoint endpoint);
+    TcpOuiServiceServer(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
 
-    void start_listen(asio::yield_context yield) override;
+    [[nodiscard]]
+    sys::error_code start_listen(Async) override;
+
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context yield) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> accept(Async) override;
 
     private:
-    AsioExecutor _ex;
+    asio::any_io_executor _ex;
     asio::ip::tcp::acceptor _acceptor;
     asio::ip::tcp::endpoint _endpoint;
 };
 
-class TcpOuiServiceClient : public OuiServiceImplementationClient
+class OUINET_COMMON_API TcpOuiServiceClient : public OuiServiceClient
 {
     public:
-    TcpOuiServiceClient(const AsioExecutor&, std::string endpoint);
+    TcpOuiServiceClient(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
 
     // Tcp clients don't have any internal async IO to be started/stopped.
-    void start(asio::yield_context yield) override {}
-    void stop() override {}
+    [[nodiscard]]
+    sys::error_code start(Async) override;
 
-    GenericStream connect( asio::yield_context yield
-                         , Signal<void()>& cancel) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async) override;
 
     bool verify_endpoint() const { return (bool)_endpoint; }
 
     private:
-    AsioExecutor _ex;
+    asio::any_io_executor _ex;
     boost::optional<asio::ip::tcp::endpoint> _endpoint;
 };
 

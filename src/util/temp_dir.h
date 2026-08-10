@@ -7,11 +7,11 @@
 #include "temp_file.h"
 
 #include "../namespaces.h"
-#include "../declspec.h"
+#include "../api.h"
 
 namespace ouinet { namespace util {
 
-class OUINET_DECL temp_dir {
+class OUINET_CLIENT_API temp_dir {
 public:
     // Create a temporary directory named after the given `temp_model` under `dir`.
     // If `keep_on_close(false)`, remove the directory on close.

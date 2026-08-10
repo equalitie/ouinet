@@ -2,8 +2,8 @@
 
 #include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
-#include <util/executor.h>
-#include <util/unique_function.h>
+#include <boost/asio/any_io_executor.hpp>
+#include "util/unique_function.h"
 
 namespace ouinet {
 
@@ -22,11 +22,9 @@ namespace ouinet {
  *     t.async_read_some(my_buffer, yield[ec]);
  */
 
-using ouinet::util::AsioExecutor;
-
 template<class InnerStream> class TimeoutStream {
 public:
-    using executor_type = AsioExecutor;
+    using executor_type = asio::any_io_executor;
     using next_layer_type = InnerStream;
     using endpoint_type = typename InnerStream::endpoint_type;
 
@@ -42,7 +40,7 @@ private:
     class Deadline : public std::enable_shared_from_this<Deadline> {
         using Parent = std::enable_shared_from_this<Deadline>;
     public:
-        Deadline(AsioExecutor& exec)
+        Deadline(executor_type& exec)
             : _timer(exec)
         {}
 
@@ -207,7 +205,7 @@ public:
     }
 
     bool is_open() const {
-        if (_state) return false;
+        if (!_state) return false;
         return _state->is_open();
     }
 
@@ -303,29 +301,29 @@ inline
 auto TimeoutStream<InnerStream>::async_connect
     (const endpoint_type& ep, Token&& token)
 {
-    using Sig = void(const sys::error_code&);
+    return boost::asio::async_initiate<
+        Token,
+        void(sys::error_code)
+    >([&] (auto completion_handler) {
+        _state->connect_handler = std::move(completion_handler);
 
-    boost::asio::async_completion<Token, Sig> init(token);
+        setup_deadline(_max_connect_duration, *_state->connect_deadline, [s = _state] {
+            auto h = std::move(s->connect_handler);
+            s->inner.close();
+            h(asio::error::timed_out);
+        });
 
-    _state->connect_handler = std::move(init.completion_handler);
-
-    setup_deadline(_max_connect_duration, *_state->connect_deadline, [s = _state] {
-        auto h = std::move(s->connect_handler);
-        s->inner.close();
-        h(asio::error::timed_out);
-    });
-
-    _state->inner.async_connect( ep
-                               , [s = _state]
-                                 (const sys::error_code& ec) {
-                                     s->connect_deadline->stop();
-                                     if (s->connect_handler) {
-                                         auto h = std::move(s->connect_handler);
-                                         h(ec);
-                                     }
-                                 });
-
-    return init.result.get();
+        _state->inner.async_connect( ep
+                                   , [s = _state]
+                                     (const sys::error_code& ec) {
+                                         s->connect_deadline->stop();
+                                         if (s->connect_handler) {
+                                             auto h = std::move(s->connect_handler);
+                                             h(ec);
+                                         }
+                                     });
+    }
+    , token);
 }
 
 template<class InnerStream>

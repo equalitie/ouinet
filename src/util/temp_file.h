@@ -7,37 +7,39 @@
 #include "../namespaces.h"
 #include "../util/file_io/async_file_handle.h"
 #include "../util/executor.h"
+#include "api.h"
+#include <expected>
 
 namespace ouinet { namespace util {
 
 static const fs::path default_temp_model{"tmp.%%%%-%%%%-%%%%-%%%%"};
 
-class temp_file {
+class OUINET_COMMON_API temp_file {
 public:
     // Create a temporary file named after the given `temp_model` under `dir`
     // and open it for reading and writing.
     // Use its `lowest_layer()` to perform I/O.
     // If `keep_on_close(false)`, remove the file on close.
+    [[nodiscard]]
     static
-    boost::optional<temp_file>
+    std::expected<temp_file, sys::error_code>
     make( const AsioExecutor&
         , const fs::path& dir
-        , const fs::path& model
-        , sys::error_code&);
+        , const fs::path& model);
 
+    [[nodiscard]]
     static
-    boost::optional<temp_file>
+    std::expected<temp_file, sys::error_code>
     make( const AsioExecutor& ex
-        , const fs::path& dir
-        , sys::error_code& ec) {
-        return make(ex, dir, default_temp_model, ec);
+        , const fs::path& dir) {
+        return make(ex, dir, default_temp_model);
     }
 
+    [[nodiscard]]
     static
-    boost::optional<temp_file>
-    make( const AsioExecutor& ex
-        , sys::error_code& ec) {
-        return make(ex, ".", default_temp_model, ec);
+    std::expected<temp_file, sys::error_code>
+    make(const AsioExecutor& ex) {
+        return make(ex, ".", default_temp_model);
     }
 
 public:

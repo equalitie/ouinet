@@ -13,11 +13,12 @@
 
 #include "../constants.h"
 #include "../response_reader.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/hash.h"
 #include "../util/executor.h"
 
 #include "../namespaces.h"
+#include "../api.h"
 
 namespace ouinet { namespace http_ {
     // A prefix for HTTP signature headers at the response head,
@@ -85,12 +86,13 @@ using ouinet::util::AsioExecutor;
 //       headers="(response-status) (created) ... x-ouinet-injection x-ouinet-data-size digest",
 //       signature="..."
 //
+OUINET_COMMON_API
 http::fields
 http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey&
+                      , const sign::SecretKey&
                       , const std::string& key_id
                       , std::chrono::seconds::rep ts);
 
@@ -100,7 +102,7 @@ http_injection_trailer( const http::response_header<>& rsh
                       , http::fields rst
                       , size_t content_length
                       , const ouinet::util::SHA256::digest_type& content_digest
-                      , const ouinet::util::Ed25519PrivateKey& sk
+                      , const sign::SecretKey& sk
                       , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
@@ -122,32 +124,34 @@ http_injection_trailer( const http::response_header<>& rsh
 // Please note that framing headers are also removed,
 // so if you want to reuse the header in a response,
 // you must either add a `Content-Length` or a `Transfer-Encoding: chunked` header.
+OUINET_COMMON_API
 http::response_header<>
 http_injection_merge( http::response_header<> rsh
                     , const http::fields& rst);
 
 // Get a `keyId` encoding the given public key itself.
 std::string
-http_key_id_for_injection(const ouinet::util::Ed25519PublicKey&);
+http_key_id_for_injection(const sign::PublicKey&);
 
 // Create HTTP chunk extension
+OUINET_COMMON_API
 std::string
-block_chunk_ext( const boost::optional<util::Ed25519PublicKey::sig_array_t>& sig
+block_chunk_ext( const boost::optional<sign::Signature>& sig
                , const boost::optional<util::SHA512::digest_type>& prev_digest = {});
 
 // Allows reading parts of a response from stream `in`
 // while signing with the private key `sk`.
-class SigningReader : public ouinet::http_response::Reader {
+class OUINET_COMMON_API SigningReader : public ouinet::http_response::Reader {
 public:
     SigningReader( GenericStream in
                  , http::request_header<> rqh
                  , std::string injection_id
                  , std::chrono::seconds::rep injection_ts
-                 , ouinet::util::Ed25519PrivateKey sk);
+                 , sign::SecretKey sk);
     ~SigningReader() override;
 
-    boost::optional<ouinet::http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
 private:
     struct Impl;
@@ -174,20 +178,20 @@ private:
 //
 // The resulting output preserves all the information and formatting needed
 // to be verified again.
-class VerifyingReader : public ouinet::http_response::AbstractReader {
+class OUINET_COMMON_API VerifyingReader : public ouinet::http_response::AbstractReader {
 public:
     using reader_uptr = std::unique_ptr<ouinet::http_response::AbstractReader>;
     using status_set = std::set<http::status>;
 
 public:
-    VerifyingReader( GenericStream in, ouinet::util::Ed25519PublicKey pk
+    VerifyingReader( GenericStream in, sign::PublicKey pk
                    , status_set statuses = {});
-    VerifyingReader( reader_uptr rd, ouinet::util::Ed25519PublicKey pk
+    VerifyingReader( reader_uptr rd, sign::PublicKey pk
                    , status_set statuses = {});
     ~VerifyingReader() override;
 
-    boost::optional<ouinet::http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     bool is_done() const override { return _reader->is_done(); }
     void close() override { _reader->close(); }
@@ -209,7 +213,7 @@ private:
 // Use this reader to clean a signed response from
 // headers added after its verification
 // (e.g. used for internal purposes).
-class KeepSignedReader : public ouinet::http_response::AbstractReader {
+class OUINET_COMMON_API KeepSignedReader : public ouinet::http_response::AbstractReader {
 public:
     KeepSignedReader( ouinet::http_response::AbstractReader& r
                     , std::set<std::string> extra = {})
@@ -221,8 +225,8 @@ public:
 
     ~KeepSignedReader() override {}
 
-    boost::optional<ouinet::http_response::Part>
-    async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<ouinet::http_response::Part>, sys::error_code>
+    async_read_part(Async) override;
 
     bool is_done() const override { return _reader.is_done(); }
     void close() override { _reader.close(); }
@@ -260,14 +264,14 @@ http_digest(const http::response<http::dynamic_body>&);
 // Compute a signature as per draft-cavage-http-signatures-12.
 std::string  // use this to enable setting the time stamp (e.g. for tests)
 http_signature( const http::response_header<>&
-              , const ouinet::util::Ed25519PrivateKey&
+              , const sign::SecretKey&
               , const std::string& key_id
               , std::chrono::seconds::rep ts);
 
 inline  // use this for the rest of cases
 std::string
 http_signature( const http::response_header<>& rsh
-              , const ouinet::util::Ed25519PrivateKey& sk
+              , const sign::SecretKey& sk
               , const std::string& key_id)
 {
     auto ts = std::chrono::seconds(std::time(nullptr)).count();
@@ -300,7 +304,7 @@ struct HttpSignature {
     // present in the head but not covered by the signature
     // (extra field names and values point to the given head).
     std::pair<bool, http::fields> verify( const http::response_header<>&
-                                        , const util::Ed25519PublicKey&);
+                                        , const sign::PublicKey&);
 };
 
 }} // namespaces

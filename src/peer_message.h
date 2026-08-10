@@ -2,12 +2,12 @@
 
 #include <boost/beast/http/message.hpp>
 #include "generic_stream.h"
-#include "util/yield.h"
 #include "cache/resource_id.h"
 #include "http_util.h"
 
 namespace ouinet {
 
+class Async;
 // Peer wants to connect to the Injector using us as a Bridge
 class PeerConnectRequest {};
 
@@ -40,7 +40,7 @@ private:
             http::verb method,
             bool keep_alive,
             cache::ResourceId(resource_id),
-            std::optional<util::HttpRequestByteRange> range) : 
+            std::optional<util::HttpRequestByteRange> range) :
         _method(method),
         _keep_alive(keep_alive),
         _resource_id(std::move(resource_id)),
@@ -67,7 +67,8 @@ public:
     template<class M>
     PeerRequest(M m): Base(std::move(m)) {}
 
-    PeerRequest static async_read(GenericStream&, YieldContext yield);
+    std::expected<PeerRequest, sys::error_code>
+    static async_read(GenericStream&, Async yield);
 };
 
 enum class BlobType {
@@ -75,8 +76,13 @@ enum class BlobType {
     cypher_text,
 };
 
-void async_write_blob_type(BlobType, GenericStream&, asio::yield_context);
-BlobType async_read_blob_type(GenericStream&, asio::yield_context);
+[[nodiscard]]
+std::expected<void, sys::error_code>
+async_write_blob_type(BlobType, GenericStream&, Async);
+
+[[nodiscard]]
+std::expected<BlobType, sys::error_code>
+async_read_blob_type(GenericStream&, Async);
 
 enum PeerRequestError {
     success = 0,

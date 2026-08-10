@@ -2,6 +2,7 @@
 
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/optional.hpp>
 #include <asio_utp/udp_multiplexer.hpp>
 
 #include "../../ouiservice.h"
@@ -9,13 +10,15 @@
 
 namespace ouinet {
 
+class Async;
+
 namespace bittorrent {
     class DhtBase;
 }
 
 namespace ouiservice {
 
-class Bep5Client : public OuiServiceImplementationClient
+class Bep5Client : public OuiServiceClient
 {
 public:
     enum Target : uint8_t { none = 0, helpers = 1, injectors = 2 };
@@ -26,49 +29,70 @@ public:
     }
 
 private:
-    using AbstractClient = OuiServiceImplementationClient;
+    enum class SwarmType {
+        injector,
+        helper
+    };
+
+    friend std::ostream& operator<<(std::ostream& os, SwarmType t) {
+        switch (t) {
+            case SwarmType::injector: return os << "injector";
+            case SwarmType::helper: return os << "helper";
+        }
+        assert(false);
+        return os << "?";
+    }
+
     struct Swarm;
     class InjectorPinger;
 
     struct Candidate {
         asio::ip::udp::endpoint endpoint;
-        std::shared_ptr<AbstractClient> client;
-        Target target;
+        std::shared_ptr<OuiServiceClient> client;
+        SwarmType swarm_type;
 
         friend std::ostream& operator<<(std::ostream& os, const Candidate& c) {
-            return os << "Candidate{ endpoint:" << c.endpoint << ", client:" << c.client.get() << ", target:" << c.target << "}";
+            return os << "Candidate{ endpoint:" << c.endpoint << ", client:" << c.client.get() << ", type:" << c.swarm_type << "}";
         }
     };
+
+    struct Candidates;
+    friend struct Candidates;
 
 public:
     Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , asio::ssl::context*
-              , Target targets = helpers | injectors);
+              , Target targets
+              , const util::LogPath& log_path);
 
     Bep5Client( std::shared_ptr<bittorrent::DhtBase>
               , std::string injector_swarm_name
               , std::string helpers_swarm_name
               , bool helper_announcement_enabled
               , asio::ssl::context*
-              , Target targets = helpers | injectors);
+              , Target targets
+              , const util::LogPath& log_path);
 
-    void start(asio::yield_context) override;
-    void stop() override;
+    [[nodiscard]]
+    sys::error_code start(Async) override;
+
     size_t injector_candidates_n() const noexcept;
 
-    GenericStream connect(asio::yield_context, Cancel&) override;
-    GenericStream connect(asio::yield_context, Cancel&, bool tls, Target);
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async) override;
+
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> connect(Async, bool use_tls, Target);
 
     ~Bep5Client();
 
     AsioExecutor get_executor();
 
 private:
-    void status_loop(asio::yield_context);
-    std::vector<Candidate> get_peers(Target);
+    void status_loop(Async);
 
-    GenericStream connect_single(AbstractClient&, bool tls, Cancel&, asio::yield_context);
+    std::expected<GenericStream, sys::error_code> connect_single(OuiServiceClient&, bool use_tls, Async);
 
 private:
     std::shared_ptr<bittorrent::DhtBase> _dht;

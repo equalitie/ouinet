@@ -4,6 +4,7 @@
 #include "namespaces.h"
 #include <cstdint>
 #include <string>
+#include <expected>
 
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
@@ -17,9 +18,12 @@
 #include "constants.h"
 #include "default_timeout.h"
 #include "or_throw.h"
+#include "api.h"
 #include "util.h"
-#include "util/signal.h"
+#include "util/cancel.h"
 #include "util/watch_dog.h"
+#include "util/keep_alive.h"
+#include "util/async.h"
 
 namespace ouinet {
 
@@ -28,7 +32,8 @@ namespace util {
 // Get the host and port a request refers to,
 // either from the ``Host:`` header or from the target URI.
 // IPv6 addresses are returned without brackets.
-std::pair<std::string, uint16_t>
+OUINET_COMMON_API
+std::optional<std::pair<std::string, uint16_t>>
 get_host_port(const http::request_header<>&);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -37,10 +42,10 @@ struct HttpResponseByteRange {
     size_t first;
     size_t last;
     // Total size of the document (if known)
-    boost::optional<size_t> length;
+    std::optional<size_t> length;
 
     static
-    boost::optional<HttpResponseByteRange>
+    std::optional<HttpResponseByteRange>
     parse(boost::string_view);
 
     bool
@@ -50,6 +55,7 @@ struct HttpResponseByteRange {
     matches_length(boost::string_view) const;
 };
 
+OUINET_COMMON_API
 std::ostream&
 operator<<(std::ostream&, const HttpResponseByteRange&);
 
@@ -58,23 +64,27 @@ struct HttpRequestByteRange {
     size_t last;
 
     // Returns none on parse error
+    OUINET_COMMON_API
     static
     std::optional<std::vector<HttpRequestByteRange>>
     parse(boost::string_view);
 
     friend std::ostream& operator<<(std::ostream& os, HttpRequestByteRange const& r) {
-        return os << "{ first: " << r.first << ", last: " << r.last << "}";
+        return os << "{ first: " << r.first << ", last: " << r.last << " }";
     }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 // Returns ptime() if parsing fails.
+OUINET_COMMON_API
 boost::posix_time::ptime parse_date(beast::string_view);
+
 std::string format_date(boost::posix_time::ptime);
 
 // Return empty is missing or malformed.
+OUINET_COMMON_API
 boost::string_view http_injection_field( const http::response_header<>&
-                                       , const std::string&);
+                                       , std::string_view);
 
 inline
 boost::string_view http_injection_id(const http::response_header<>& rsh)
@@ -92,25 +102,32 @@ boost::string_view http_injection_ts(const http::response_header<>& rsh)
 // trigger an error on timeout or cancellation,
 // closing `in`.
 template<class StreamIn, class Request>
+[[nodiscard]]
 inline
-void
-http_request( StreamIn& in
-            , const Request& rq
-            , Cancel& cancel
-            , asio::yield_context yield)
+std::expected<void, sys::error_code>
+http_request(StreamIn& in, const Request& rq, Async yield_)
 {
-    auto cancelled = cancel.connect([&] { in.close(); });
-    sys::error_code ec;
+    Async yield = yield_;
+    auto cancelled = yield.cancel_slot([&] { in.close(); });
 
     auto wdog = watch_dog( in.get_executor(), default_timeout::http_send_simple()
-                         , [&] { in.close(); });
-    http::async_write(in, rq, yield[ec]);
+                         , [&] { yield.cancel(); });
 
-    // Ignore `end_of_stream` error, there may still be data in
-    // the receive buffer we can read.
-    if (ec == http::error::end_of_stream)
-        ec = sys::error_code();
-    fail_on_error_or_timeout(yield, cancel, ec, wdog);
+    try {
+        if (auto r = http::async_write(in, rq, yield); !r) {
+            // Ignore `end_of_stream` error, there may still be data in
+            // the receive buffer we can read.
+            if (r.error() != http::error::end_of_stream) {
+                return std::unexpected(r.error());
+            }
+        }
+    }
+    catch (Async::Cancelled const&) {
+        if (yield_.is_cancelled()) throw;
+        return std::unexpected(asio::error::timed_out);
+    }
+
+    return {};
 }
 
 // Send the HTTP response `rs` over `out`,
@@ -133,8 +150,26 @@ http_reply( StreamOut& out
     return or_throw(yield, ec);
 }
 
+template<class StreamOut, class Response>
+[[nodiscard]]
+inline
+sys::error_code
+http_reply( StreamOut& out
+          , const Response& rs
+          , Async yield)
+{
+    auto wd = watch_dog( out.get_executor(), default_timeout::http_send_simple()
+                       , [&] { out.close(); });
+
+    auto r = http::async_write(out, rs, yield);
+    if (!wd.is_running()) return asio::error::timed_out;
+    if (!r.has_value()) return r.error();
+    return sys::error_code();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 namespace detail {
+    OUINET_COMMON_API
     boost::optional<http::response<http::empty_body>>
     http_proto_version_error( unsigned rv
                             , beast::string_view ov
@@ -167,6 +202,7 @@ http_proto_version_error( const Request& rq
 }
 
 namespace detail {
+    OUINET_COMMON_API
     bool http_proto_version_check_trusted(boost::string_view, unsigned&);
 }
 
@@ -389,6 +425,7 @@ Request req_form_from_absolute_to_origin(const Request& absolute_req)
 }
 
 namespace detail {
+    OUINET_COMMON_API
     std::string http_host_header(const std::string&, const std::string&);
 }
 
@@ -404,9 +441,9 @@ template<class Request>
 bool req_ensure_host(Request& req) {
     if (!req[http::field::host].empty()) return true;
 
-    std::string host;
-    uint16_t port;
-    std::tie(host, port) = util::get_host_port(req);
+    auto host_port = util::get_host_port(req);
+    if (!host_port) return false;
+    auto [host, port] = std::move(*host_port);
     auto hosth = detail::http_host_header(host, std::to_string(port));
     if (hosth.empty()) return false;  // error
     req.set(http::field::host, hosth);
@@ -449,7 +486,7 @@ _to_canonical_request(Request rq, const Fields&... keep_fields) {
     // do not break privacy and can not break browsing for others.
     // For the moment we do not yet care about
     // requests coming from Ouinet injector being fingerprinted as such.
-    return filter_fields( move(rq)
+    return filter_fields( std::move(rq)
                         // Still DROP some fields that may break browsing for others
                         // and which have no sensible default (for all).
                         , http::field::connection
@@ -480,7 +517,7 @@ to_injector_request(Request rq) {
     // to behave like an injector instead of a proxy.
     rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
 
-    return _to_canonical_request( move(rq)
+    return _to_canonical_request( std::move(rq)
                                // PROXY AUTHENTICATION HEADERS (PASS)
                                , http::field::proxy_authorization
                                // CACHING AND RANGE HEADERS (PASS)
@@ -505,9 +542,9 @@ to_injector_request(Request rq) {
 // The rest of headers are left intact.
 template<class Request>
 static Request to_origin_request(Request rq) {
-    rq = req_form_from_absolute_to_origin(move(rq));
+    rq = req_form_from_absolute_to_origin(std::move(rq));
     rq.erase(http::field::proxy_authorization);
-    return remove_ouinet_fields(move(rq));
+    return remove_ouinet_fields(std::move(rq));
 }
 
 // Make the given request ready to be sent to the cache.
@@ -518,7 +555,7 @@ static Request to_origin_request(Request rq) {
 template<class Request>
 static boost::optional<Request>
 to_cache_request(Request rq) {
-    return _to_canonical_request(move(rq));
+    return _to_canonical_request(std::move(rq));
 }
 
 // Make the given response ready to be sent to the cache.

@@ -4,6 +4,8 @@
 #include "client_lib.h"
 #include "client.h"
 
+#include <boost/format.hpp>
+
 using namespace ouinet;
 
 // One writer, one reader.
@@ -148,16 +150,11 @@ int ouinet_client_run(const int argc, const char *argv[], void (*on_exit_callbac
         }
 
         try {
-            static bool crypto_initialized = false;
-            if (!crypto_initialized) {
-                ouinet::util::crypto_init();
-                crypto_initialized = true;
-            }
-
             ClientConfig cfg(argc, argv);
             if (cfg.is_help()) {
                 std::stringstream ss;
-                ss << "Usage: ouinet_client_run [OPTION...]\n" << cfg.description();
+                ss << "Usage: ouinet_client_run [OPTION...]\n";
+                cfg.describe(ss);
                 LOG_INFO(ouinet_client_error.set(ss.str()));
                 return;
             }

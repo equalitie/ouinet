@@ -1,22 +1,33 @@
 #include <asio_utp.hpp>
 
 #include "multi_peer_reader.h"
+
+#include "ouiservice/i2p/session.h"
+#include "ouiservice/i2p/tracker_lookup.h"
+
 #include "multi_peer_reader_error.h"
-#include "cache_entry.h"
 #include "http_sign.h"
 #include "../http_util.h"
 #include "../session.h"
-#include "../util/watch_dog.h"
-#include "../util/crypto.h"
-#include "../util/crypto_stream.h"
-#include "../util/intrusive_list.h"
-#include "../constants.h"
-#include "../util/set_io.h"
+#include "../util/async.h"
 #include "../util/async_job.h"
 #include "../util/condition_variable.h"
+#include "../util/crypto_stream.h"
+#include "../util/debug.h"
+#include "../util/intrusive_list.h"
+#include "../util/sign.h"
+#include "../util/select.h"
+#include "../util/watch_dog.h"
+#include "../async_sleep.h"
+#include "../constants.h"
 #include "../peer_message.h"
 #include "signed_head.h"
 
+#include <boost/asio/error.hpp>
+#include <boost/asio/spawn.hpp>
+#include <chrono>
+#include <expected>
+#include <optional>
 #include <random>
 
 using namespace std;
@@ -33,15 +44,14 @@ const Clock::duration READ_TRAILER_TIMEOUT = 10s;
 const Clock::duration WRITE_REQUEST_TIMEOUT = 10s;
 
 using udp = asio::ip::udp;
-namespace bt = bittorrent;
 using namespace ouinet::http_response;
 using Errc = MultiPeerReaderErrc;
-using OptPart = boost::optional<Part>;
+using OptPart = std::optional<Part>;
 
 struct MultiPeerReader::Block {
     ChunkBody chunk_body;
     ChunkHdr chunk_hdr;
-    boost::optional<Trailer> trailer;
+    std::optional<Trailer> trailer;
 };
 
 static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
@@ -50,7 +60,7 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 }
 
 static
-boost::optional<asio_utp::udp_multiplexer>
+std::optional<asio_utp::udp_multiplexer>
 choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
                       , const set<udp::endpoint>& lan_my_eps)
 {
@@ -64,35 +74,43 @@ choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
         }
     }
 
-    return boost::none;
+    return std::nullopt;
 }
 
+// TODO: For I2P peers, use i2p_client->connect() instead,
+// which also returns a GenericStream.
 static
-GenericStream connect( AsioExecutor exec
-                     , udp::endpoint ep
-                     , const set<udp::endpoint>& lan_my_eps
-                     , Cancel cancel
-                     , asio::yield_context yield)
+std::expected<GenericStream, sys::error_code>
+connect( udp::endpoint ep
+       , const set<udp::endpoint>& lan_my_eps
+       , Async yield)
 {
     sys::error_code ec;
+    auto exec = yield.get_executor();
+
     auto opt_m = choose_multiplexer_for(exec, ep, lan_my_eps);
 
 #ifdef __APPLE__
     if (!opt_m) {
         // No local endpoint with matching IP version (IPv4/IPv6) found
-        return or_throw<GenericStream>(yield, asio::error::network_unreachable);
+        return std::unexpected(asio::error::network_unreachable);
     }
 #else
     assert(opt_m);
 #endif
 
     asio_utp::socket s(exec);
+
     s.bind(*opt_m, ec);
-    if (ec) return or_throw<GenericStream>(yield, ec);
-    auto cancel_con = cancel.connect([&] { s.close(); });
-    s.async_connect(ep, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, GenericStream{});
-    return GenericStream(move(s));
+    if (ec) return std::unexpected(ec);
+
+    auto cancelled = yield.cancel_slot([&] { s.close(); });
+    auto r = s.async_connect(ep, yield);
+    if (!r) {
+        return std::unexpected(r.error());
+    }
+
+    return GenericStream(std::move(s));
 }
 
 class MultiPeerReader::Peer {
@@ -103,7 +121,7 @@ public:
     AsioExecutor _exec;
     ResourceId _resource_id;
     CryptoStreamKey _resource_key;
-    const util::Ed25519PublicKey _cache_pk;
+    const sign::PublicKey _cache_pk;
 
     GenericStream _connection;
 
@@ -111,7 +129,7 @@ public:
     Cancel _lifetime_cancel;
     util::LogPath _log_path;
 
-    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, util::Ed25519PublicKey cache_pk, util::LogPath log_path) :
+    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, sign::PublicKey cache_pk, util::LogPath log_path) :
         _exec(exec),
         _resource_id(resource_id),
         _resource_key(resource_key),
@@ -134,101 +152,128 @@ public:
         return _hash_list.blocks.size();
     }
 
-    void send_block_request(size_t block_id, Cancel c, asio::yield_context yield)
+    std::expected<void, sys::error_code>
+    send_block_request(size_t block_id, Async yield)
     {
-        if (!_connection.is_open()) return or_throw(yield, asio::error::not_connected);
+        if (!_connection.is_open()) {
+            return std::unexpected(asio::error::not_connected);
+        }
 
-        sys::error_code ec;
+        auto cl = _lifetime_cancel.connect([&] { yield.cancel(); });
 
-        auto cl = _lifetime_cancel.connect([&] { c(); });
-        auto cc = c.connect([&] { if (_connection.is_open()) _connection.close(); });
+        auto e = timeout(WRITE_REQUEST_TIMEOUT, [&] (Async yield) {
+            auto cancelled = yield.cancel_slot([&] {
+                if (_connection.is_open()) {
+                    _connection.close();
+                }
+            });
 
-        Cancel tc(c);
-        auto wd = watch_dog(_exec, WRITE_REQUEST_TIMEOUT, [&] { tc(); });
+            return http::async_write(
+                _connection,
+                range_request(http::verb::get, block_id, _resource_id),
+                yield
+            );
+        }, yield);
+        if (!e) {
+            return std::unexpected(e.error());
+        }
 
-        http::async_write(_connection, range_request(http::verb::get, block_id, _resource_id), yield[ec]);
-        fail_on_error_or_timeout(yield, c, ec, wd);
+        return {};
     }
 
-    // May return boost::none and no error if the response has no body (e.g. redirect msg)
-    boost::optional<Block> read_block(size_t block_id, Cancel c, asio::yield_context yield)
+    // May return std::nullopt and no error if the response has no body (e.g. redirect msg)
+    std::expected<std::optional<Block>, sys::error_code>
+    read_block(size_t block_id, Async yield)
     {
-        using OptBlock = boost::optional<Block>;
-
-        if (!_connection.is_open()) return or_throw<OptBlock>(yield, asio::error::not_connected);
-
-        sys::error_code ec;
-
-        GenericStream stream = determine_incoming_stream(_connection, yield[ec]);
-        return_or_throw_on_error(yield, c, ec, OptBlock{});
-
-        auto reader = http_response::Reader(std::move(stream));
-
-        auto cl = _lifetime_cancel.connect([&] { c(); });
-        auto cc = c.connect([&] { if (_connection.is_open()) _connection.close(); });
-
-        auto head = reader.timed_async_read_part(READ_HEAD_TIMEOUT, c, yield[ec]);
-        return_or_throw_on_error(yield, c, ec, OptBlock{});
-
-        if (!head || !head->is_head()) {
-            return or_throw<OptBlock>(yield, Errc::expected_head);
+        if (!_connection.is_open()) {
+            return std::unexpected(asio::error::not_connected);
         }
 
-        auto p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
-        return_or_throw_on_error(yield, c, ec, OptBlock{});
+        auto stream_e = determine_incoming_stream(_connection, yield);
+        if (!stream_e) {
+            return std::unexpected(stream_e.error());
+        }
+        auto reader = http_response::Reader(std::move(*stream_e));
+
+        auto cl = _lifetime_cancel.connect([&] { yield.cancel(); });
+
+        auto head_e = reader.timed_async_read_part(READ_HEAD_TIMEOUT, yield);
+        if (!head_e) {
+            return std::unexpected(head_e.error());
+        }
+        auto head = std::move(*head_e);
+        if (!head || !head->is_head()) {
+            return std::unexpected(Errc::expected_head);
+        }
+
+        auto part_e = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, yield);
+        if (!part_e) {
+            return std::unexpected(part_e.error());
+        }
+        auto part = std::move(*part_e);
 
         // This may happen when the message has no body
-        if (!p) {
-            return boost::none;
+        if (!part) {
+            return std::nullopt;
         }
 
-        auto first_chunk_hdr = p->as_chunk_hdr();
-
+        auto first_chunk_hdr = part->as_chunk_hdr();
         if (!first_chunk_hdr) {
-            return or_throw<OptBlock>(yield, Errc::expected_first_chunk_hdr);
+            return std::unexpected(Errc::expected_first_chunk_hdr);
         }
 
         if (first_chunk_hdr->size > http_::response_data_block_max) {
             assert(0 && "Block is too big");
-            return or_throw<OptBlock>(yield, Errc::block_is_too_big);
+            return std::unexpected(Errc::block_is_too_big);
         }
 
-        Block block{{{}, 0},{0, {}}, boost::none};
+        Block block{{{}, 0},{0, {}}, std::nullopt};
         util::SHA512 block_hasher;
 
         if (first_chunk_hdr->size) {
             // Read the block and the chunk header that comes after it.
             while (true) {
-                p = reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
-                return_or_throw_on_error(yield, c, ec, OptBlock{});
+                part_e = reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, yield);
+                if (!part_e) {
+                    return std::unexpected(part_e.error());
+                }
+                part = std::move(*part_e);
 
-                auto chunk_body = p->as_chunk_body();
+                auto chunk_body = part->as_chunk_body();
                 if (!chunk_body) {
                     assert(0 && "Expected chunk body");
-                    return or_throw<OptBlock>(yield, Errc::expected_chunk_body);
+                    return std::unexpected(Errc::expected_chunk_body);
                 }
 
                 block_hasher.update(*chunk_body);
 
                 if (block.chunk_body.size() + chunk_body->size() > http_::response_data_block_max) {
-                    return or_throw<OptBlock>(yield, Errc::block_is_too_big);
+                    return std::unexpected(Errc::block_is_too_big);
                 }
 
-                block.chunk_body.insert(block.chunk_body.end(),
-                    chunk_body->begin(), chunk_body->end());
+                block.chunk_body.insert(
+                    block.chunk_body.end(),
+                    chunk_body->begin(),
+                    chunk_body->end()
+                );
 
                 if (chunk_body->remain == 0) {
                     break;
                 }
             }
 
-            p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+            part_e = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, yield);
+            if (!part_e) {
+                return std::unexpected(part_e.error());
+            }
+            part = std::move(*part_e);
 
-            ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
-
-            if (!last_chunk_hdr) ec = Errc::expected_chunk_hdr;
-            else if (last_chunk_hdr->size != 0) ec = Errc::expected_no_more_data;
-            return_or_throw_on_error(yield, c, ec, OptBlock{});
+            ChunkHdr* last_chunk_hdr = part ? part->as_chunk_hdr() : nullptr;
+            if (!last_chunk_hdr) {
+                return std::unexpected(Errc::expected_chunk_hdr);
+            } else if (last_chunk_hdr->size != 0) {
+                return std::unexpected(Errc::expected_no_more_data);
+            }
         }
 
         // Check block signature
@@ -238,7 +283,7 @@ public:
             auto current_block = _hash_list.blocks[block_id];
 
             if (digest != current_block.data_hash) {
-                return or_throw<OptBlock>(yield, Errc::inconsistent_hash);
+                return std::unexpected(Errc::inconsistent_hash);
             }
 
             // We rewrite whatever chunk extension the peer sent because we
@@ -249,19 +294,25 @@ public:
 
         // Read the trailer (if any), and make sure we're done with this response
         while (true) {
-            p = reader.timed_async_read_part(READ_TRAILER_TIMEOUT, c, yield[ec]);
-            return_or_throw_on_error(yield, c, ec, OptBlock{});
-            if (!p) {
+            part_e = reader.timed_async_read_part(READ_TRAILER_TIMEOUT, yield);
+            if (!part_e) {
+                return std::unexpected(part_e.error());
+            }
+
+            part = std::move(*part_e);
+            if (!part) {
                 // We're done with this request
                 break;
             }
-            auto trailer = p->as_trailer();
+
+            auto trailer = part->as_trailer();
             if (trailer) {
-                if (block.trailer)
-                    return or_throw<OptBlock>(yield, Errc::trailer_received_twice);
+                if (block.trailer) {
+                    return std::unexpected(Errc::trailer_received_twice);
+                }
                 block.trailer = std::move(*trailer);
             } else {
-                return or_throw<OptBlock>(yield, Errc::expected_trailer_or_end_of_response);
+                return std::unexpected(Errc::expected_trailer_or_end_of_response);
             }
         }
 
@@ -288,51 +339,56 @@ public:
         return rq;
     }
 
-    void download_hash_list(
-            udp::endpoint ep,
-            const set<udp::endpoint>& lan_my_eps,
-            std::shared_ptr<unsigned> newest_proto_seen,
-            Cancel cancel,
-            asio::yield_context yield)
+    // Common logic for loading and validating hash list from an established connection
+    // for both udp::endpoint and i2p destinations
+    std::expected<void, sys::error_code>
+    download_hash_list(
+        GenericStream con,
+        std::shared_ptr<unsigned> newest_proto_seen,
+        Async yield
+    )
     {
-        sys::error_code ec;
+        auto cancelled = yield.cancel_slot([&] { con.close(); });
 
-        Cancel timeout_cancel(cancel);
+        auto result = http::async_write(con, request(http::verb::propfind, _resource_id), yield);
+        if (!result) {
+            return std::unexpected(result.error());
+        }
 
-        auto wd = watch_dog(_exec, chrono::seconds(10), [&] { timeout_cancel(); });
+        auto stream = determine_incoming_stream(con, yield);
+        if (!stream) {
+            return std::unexpected(stream.error());
+        }
 
-        auto con = connect(_exec, ep, lan_my_eps, timeout_cancel, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
+        auto reader = http_response::Reader(std::move(*stream));
 
-        auto timeout_cancel_con = timeout_cancel.connect([&] { con.close(); });
+        auto hash_list_e = HashList::load(reader, _cache_pk, yield);
+        if (!hash_list_e) {
+            return std::unexpected(hash_list_e.error());
+        }
+        auto hash_list = std::move(*hash_list_e);
 
-        http::async_write(con, request(http::verb::propfind, _resource_id), yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        GenericStream stream = determine_incoming_stream(con, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        auto reader = http_response::Reader(std::move(stream));
-
-        auto hash_list = HashList::load(reader, _cache_pk, timeout_cancel, yield[ec]);
-        fail_on_error_or_timeout(yield, cancel, ec, wd);
-
-        if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen))
+        if (!util::http_proto_version_check_trusted(hash_list.signed_head, *newest_proto_seen)) {
             // The client expects an injection belonging to a supported protocol version,
             // otherwise we just discard this copy.
-            return or_throw(yield, asio::error::not_found);
+            return std::unexpected(asio::error::not_found);
+        }
 
-        _hash_list = move(hash_list);
+        _hash_list = std::move(hash_list);
         _connection = std::move(con);
+
+        return {};
     }
 
     // Responses may be either plain-text or cypher-text, we read which type it is here
     // and return a generic stream that uses the input connection's reference.
-    GenericStream determine_incoming_stream(GenericStream& con, asio::yield_context yield) {
-        sys::error_code ec;
-        BlobType blob_type = async_read_blob_type(con, yield[ec]);
-
-        if (ec) return or_throw<GenericStream>(yield, ec);
+    std::expected<GenericStream, sys::error_code>
+    determine_incoming_stream(GenericStream& con, Async yield) {
+        auto blob_type_e = async_read_blob_type(con, yield);
+        if (!blob_type_e) {
+            return std::unexpected(blob_type_e.error());
+        }
+        auto blob_type = std::move(*blob_type_e);
 
         switch (blob_type) {
             case BlobType::plain_text:
@@ -342,10 +398,25 @@ public:
         }
 
         // Unreachable, but removes compilation warning
-        return or_throw<GenericStream>(yield, make_error_code(PeerRequestError::invalid_blob_type));
+        return std::unexpected(make_error_code(PeerRequestError::invalid_blob_type));
     }
 };
 
+struct MultiPeerReader::PreFetch {
+    using OptBlock = std::optional<MultiPeerReader::Block>;
+
+    size_t block_id;
+    Peer* peer;
+
+    PreFetch(size_t block_id, Peer* peer)
+        : block_id(block_id)
+        , peer(peer)
+    {}
+
+    virtual ~PreFetch() {}
+
+    virtual std::expected<OptBlock, sys::error_code> get_block(Async) = 0;
+};
 
 class MultiPeerReader::Peers {
 public:
@@ -353,7 +424,7 @@ public:
          , set<udp::endpoint> lan_my_eps
          , set<udp::endpoint> wan_my_eps
          , set<udp::endpoint> lan_peer_eps
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<DhtLookup> peer_lookup
@@ -361,101 +432,260 @@ public:
          , util::LogPath log_path)
         : _exec(exec)
         , _cv(_exec)
-        , _cache_pk(move(cache_pk))
-        , _lan_peer_eps(move(lan_peer_eps))
-        , _lan_my_eps(move(lan_my_eps))
-        , _wan_my_eps(move(wan_my_eps))
-        , _resource_id(move(resource_id))
+        , _cache_pk(std::move(cache_pk))
+        , _lan_peer_eps(std::move(lan_peer_eps))
+        , _lan_my_eps(std::move(lan_my_eps))
+        , _wan_my_eps(std::move(wan_my_eps))
+        , _resource_id(std::move(resource_id))
         , _resource_key(resource_key)
-        , _peer_lookup(move(peer_lookup))
-        , _newest_proto_seen(move(newest_proto_seen))
-        , _log_path(move(log_path))
+        , _dht_lookup(std::move(peer_lookup))
+        , _newest_proto_seen(std::move(newest_proto_seen))
+        , _log_path(std::move(log_path))
         , _random_generator(_random_device())
     {
-        if (auto dht_lock = _peer_lookup->get_dht_lock()) {
-            for (auto ep : _lan_peer_eps) {
-                add_candidate(ep, *dht_lock);
-            }
-        }
-
-        if (!_peer_lookup) {
+        if (!_dht_lookup) {
             _cv.notify();
             return;
         }
 
-        task::spawn_detached(_exec, [this, log_path = _log_path, c = _lifetime_cancel] (auto y) mutable {
-            TRACK_HANDLER();
-            sys::error_code ec;
+        spawn_detached(
+            _exec,
+            _lifetime_cancel,
+            _log_path,
+            [this] (Async yield) mutable {
+                auto dht = _dht_lookup->get_dht_lock();
+                assert(dht);
 
-            auto peer_eps = _peer_lookup->get(c, y[ec]);
+                LOG_DEBUG(yield, " Waiting for DHT to get ready...");
 
-            LOG_DEBUG(log_path, " Peer lookup result; ec=", ec, " eps=", peer_eps);
+                dht->wait_all_ready(yield);
 
-            if (c) return;
+                _wan_my_eps = dht->wan_endpoints();
+                LOG_DEBUG(yield, " Waiting for DHT to get ready: done");
+                LOG_DEBUG(yield, " Looking up peers...");
 
-            if (!ec) {
-                if (auto dht_lock = _peer_lookup->get_dht_lock()) {
-                    for (auto ep : peer_eps) add_candidate(ep, *dht_lock);
+                if (auto dht = _dht_lookup->get_dht_lock()) {
+                    for (auto ep : _lan_peer_eps) {
+                        add_candidate(ep, *dht);
+                    }
                 }
-            }
 
-            _peer_lookup.reset();
+                // Keep looking up for peers until success or until `this` is destroyed.
+                const auto min_sleep = chrono::milliseconds(100);
+                const auto max_sleep = chrono::milliseconds(10000);
+                auto sleep = min_sleep;
 
-            _cv.notify();
-        });
+                while (true) {
+                    auto peer_eps = _dht_lookup->get(yield);
+
+                    if (peer_eps && !peer_eps->empty()) {
+                        LOG_DEBUG(yield, " Found ", peer_eps->size(), " peers");
+
+                        if (auto dht = _dht_lookup->get_dht_lock()) {
+                            for (auto ep : *peer_eps) add_candidate(ep, *dht);
+                        }
+
+                        break;
+                    } else {
+                        if (peer_eps) {
+                            LOG_DEBUG(yield, " Found 0 peers. Retry in ", sleep);
+                        } else {
+                            LOG_DEBUG(yield, " Peer lookup failed: ", peer_eps.error(), ". Retry in ", sleep);
+                        }
+
+                        async_sleep(sleep, yield);
+                        sleep = min(2 * sleep, max_sleep);
+                    }
+                }
+
+                _dht_lookup.reset();
+                _cv.notify();
+            });
     }
 
     Peers(AsioExecutor exec
          , set<udp::endpoint> lan_my_eps
          , set<udp::endpoint> lan_peer_eps
-         , util::Ed25519PublicKey cache_pk
+         , sign::PublicKey cache_pk
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
          , util::LogPath log_path)
-        : Peers( exec, move(lan_my_eps), {}, move(lan_peer_eps)
-               , move(cache_pk), resource_id, resource_key, nullptr
-               , move(newest_proto_seen), move(log_path))
+        : Peers( exec, std::move(lan_my_eps), {}, std::move(lan_peer_eps)
+               , std::move(cache_pk), resource_id, resource_key, nullptr
+               , std::move(newest_proto_seen), std::move(log_path))
     {}
 
+    // Constructor for BEP3 tracker + I2P peers
+    // LAN peers some how depends on DHT (lock?) which might have not been initiated
+    // so we don't deal with them here.
+    Peers(AsioExecutor exec
+         , sign::PublicKey cache_pk
+         , const ResourceId& resource_id
+         , const CryptoStreamKey& resource_key
+         , std::shared_ptr<I2pTrackerLookup> i2p_lookup
+         , std::shared_ptr<I2pSession> i2p_session
+         , std::shared_ptr<unsigned> newest_proto_seen
+         , util::LogPath log_path)
+        : _exec(exec)
+        , _cv(_exec)
+        , _cache_pk(std::move(cache_pk))
+        , _resource_id(resource_id)
+        , _resource_key(resource_key)
+        , _i2p_lookup(std::move(i2p_lookup))
+        , _i2p_session(std::move(i2p_session))
+        , _newest_proto_seen(std::move(newest_proto_seen))
+        , _log_path(std::move(log_path))
+        , _random_generator(_random_device())
+    {
+        spawn_detached(_exec, _lifetime_cancel, _log_path,  [this] (Async yield) mutable {
+            auto i2p_dests = _i2p_lookup->get(yield);
+
+            if (!i2p_dests.has_value()) {
+                LOG_DEBUG(yield, " BEP3 tracker lookup result; error=", i2p_dests.error());
+                return;
+            }
+
+            LOG_DEBUG(yield, " BEP3 tracker lookup result; peers=", i2p_dests->size());
+
+            for (auto& dest : *i2p_dests) add_candidate(dest);
+
+            _i2p_lookup.reset();
+
+            _cv.notify();
+        });
+    }
+
+    void add_candidate(const I2pAddress& i2p_dest) {
+        auto ip = _all_i2p_peers.insert({i2p_dest, unique_ptr<Peer>()});
+
+        if (!ip.second) return; // Already inserted
+
+        ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, _log_path);
+        Peer* peer = ip.first->second.get();
+
+        _candidate_peers.push_back(*peer);
+
+        spawn_detached(
+            _exec,
+            _lifetime_cancel,
+            _log_path,
+            [
+                this,
+                peer,
+                i2p_dest,
+                i2p_session = _i2p_session
+            ] (Async yield) mutable {
+                LOG_DEBUG(yield, " Fetching hash list from I2P: ", i2p_dest);
+
+                std::expected<void, sys::error_code> result;
+                uint16_t retry = 10;
+
+                while (retry--) {
+                    LOG_DEBUG(yield, " BEP3 downloading hash list ", retry, " ", i2p_dest);
+
+                    result = timeout(
+                        MultiPeerReader::BEP3_HASH_LIST_TIMEOUT,
+                        [&](Async yield) -> std::expected<void, sys::error_code> {
+                            auto con = i2p_session->connect(i2p_dest, yield);
+                            if (!con) {
+                                return std::unexpected(con.error().code());
+                            }
+
+                            //TODO: Actually makes the connection works on the server side.
+                            //otherwise this code has not been tested.
+                            return peer->download_hash_list(std::move(*con), _newest_proto_seen, yield);
+                        },
+                        yield
+                    );
+
+                    if (!result) {
+                        async_sleep(5s, yield);
+                        continue;
+                    }
+
+                    break;
+                }
+
+                LOG_DEBUG(yield, " Done fetching hash list; i2p_dest="
+                               , i2p_dest
+                               , " result=", debug(result));
+
+                peer->_candidate_hook.unlink();
+
+                if (result) {
+                    _good_peers.push_back(*peer);
+                }
+
+                _cv.notify();
+            }
+        );
+    }
+
     void add_candidate(udp::endpoint ep, const bittorrent::DhtBase& dht) {
-        if (dht.is_martian(ep)) return;
+        if (!dht.is_peer_allowed(ep)) return;
         if (_wan_my_eps.count(ep)) return;
 
-        auto ip = _all_peers.insert({ep, unique_ptr<Peer>()});
+        auto ip = _all_udp_peers.insert({ep, unique_ptr<Peer>()});
 
         auto peer_log_path = _log_path.tag(util::str(ep));
 
         if (!ip.second) return; // Already inserted
 
         ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, peer_log_path);
-        Peer* p = ip.first->second.get();
+        Peer* peer = ip.first->second.get();
 
-        _candidate_peers.push_back(*p);
+        _candidate_peers.push_back(*peer);
 
-        task::spawn_detached(_exec, [=, this, log_path = peer_log_path, c = _lifetime_cancel] (auto y) mutable {
-            TRACK_HANDLER();
-            sys::error_code ec;
+        spawn_detached(
+            _exec,
+            _lifetime_cancel,
+            peer_log_path,
+            [
+                this,
+                ep,
+                peer,
+                lan_my_eps = _lan_my_eps,
+                newest_proto_seen = _newest_proto_seen
+            ] (Async yield) mutable {
+                LOG_DEBUG(yield, " Fetching hash list");
 
-            LOG_DEBUG(log_path, " Fetching hash list from: ", ep);
+                auto result = timeout(
+                    MultiPeerReader::BEP5_HASH_LIST_TIMEOUT,
+                    [&](Async yield) -> std::expected<void, sys::error_code> {
+                        auto con = connect(ep, lan_my_eps, yield);
 
-            p->download_hash_list(ep, _lan_my_eps, _newest_proto_seen, c, y[ec]);
+                        if (!con) {
+                            return std::unexpected(con.error());
+                        }
 
-            LOG_DEBUG(log_path, " Done fetching hash list; ep=", ep
-                     , " ec=", ec, " c=", bool(c));
+                        return peer->download_hash_list(std::move(*con), newest_proto_seen, yield);
+                    },
+                    yield
+                );
 
-            if (c) return;
+                LOG_DEBUG(yield, " Done fetching hash list; result=", debug(result));
 
-            p->_candidate_hook.unlink();
+                if (result == std::unexpected(asio::error::timed_out)) {
+                    LOG_DEBUG(yield, " BEP5 hash list download timed out");
+                    return;
+                }
 
-            if (!ec) _good_peers.push_back(*p);
+                peer->_candidate_hook.unlink();
 
-            _cv.notify();
-        });
+                if (result) {
+                    _good_peers.push_back(*peer);
+                }
+
+                _cv.notify();
+            }
+        );
     }
 
     bool still_waiting_for_candidates() const {
-        return _peer_lookup || !_candidate_peers.empty();
+        if (_dht_lookup || !_candidate_peers.empty()) return true;
+        if (_i2p_lookup) return true;
+        return false;
     }
 
     bool has_enough_good_peers() const {
@@ -464,27 +694,31 @@ public:
         return !_good_peers.empty();
     }
 
-    void wait_for_some_peers_to_respond(Cancel c, asio::yield_context yield)
+    std::expected<void, sys::error_code> wait_for_some_peers_to_respond(Async yield)
     {
-        if (!_good_peers.empty()) return;
+        if (!_good_peers.empty()) {
+            return {};
+        }
 
-        auto cc = _lifetime_cancel.connect([&] { c(); });
-        sys::error_code ec;
+        auto cc = _lifetime_cancel.connect([&] { yield.cancel(); });
 
-        while (!c && !ec && !has_enough_good_peers() && still_waiting_for_candidates())
-            _cv.wait(c, yield[ec]);
+        while (!has_enough_good_peers() && still_waiting_for_candidates()) {
+            _cv.wait(yield).value();
+        }
 
-        if (!ec && _good_peers.empty()) ec = Errc::no_peers;
+        if (_good_peers.empty()) {
+            return std::unexpected(Errc::no_peers);
+        }
 
-        return or_throw(yield, ec);
+        return {};
     }
 
-    HashList choose_reference_hash_list(Cancel c, asio::yield_context yield)
+    std::expected<HashList, sys::error_code> choose_reference_hash_list(Async yield)
     {
-        sys::error_code ec;
-
-        wait_for_some_peers_to_respond(c, yield[ec]);
-        return_or_throw_on_error(yield, c, ec, HashList{});
+        auto e = wait_for_some_peers_to_respond(yield);
+        if (!e) {
+            return std::unexpected(e.error());
+        }
 
         Peer* best_peer = nullptr;;
 
@@ -494,28 +728,33 @@ public:
             }
         }
 
-        if (!best_peer) return or_throw<HashList>(yield, Errc::no_peers);
+        if (!best_peer) {
+            return std::unexpected(Errc::no_peers);
+        }
 
         return best_peer->_hash_list;
     }
 
-    Peer* choose_peer_for_block(
-            const HashList& reference_hash_list,
-            size_t block_id,
-            Cancel c,
-            asio::yield_context yield)
+    std::expected<Peer*, sys::error_code> choose_peer_for_block(
+        const HashList& reference_hash_list,
+        size_t block_id,
+        Async yield
+    )
     {
-        sys::error_code ec;
+        auto e = wait_for_some_peers_to_respond(yield);
+        if (!e) {
+            return std::unexpected(e.error());
 
-        wait_for_some_peers_to_respond(c, yield[ec]);
-        return_or_throw_on_error(yield, c, ec, nullptr);
+        }
 
         std::vector<Peer*> peers;
 
         auto reference_block = reference_hash_list.get_block(block_id);
 
         assert(reference_block);
-        if (!reference_block) return or_throw<Peer*>(yield, Errc::no_peers, nullptr);
+        if (!reference_block) {
+            return std::unexpected(Errc::no_peers);
+        }
 
         for (auto& p : _good_peers) {
             auto opt_b = p._hash_list.get_block(block_id);
@@ -524,7 +763,9 @@ public:
             }
         }
 
-        if (peers.empty()) return or_throw<Peer*>(yield, Errc::no_peers, nullptr);
+        if (peers.empty()) {
+            return std::unexpected(Errc::no_peers);
+        }
 
         std::uniform_int_distribution<size_t> distrib(0, peers.size() - 1);
         return peers[distrib(_random_generator)];
@@ -540,9 +781,10 @@ public:
     }
 
 private:
-    // Peers that are in _all_peers but are not in either _candidate_peers
-    // nor _good_peers are considered as failed.
-    std::map<udp::endpoint, unique_ptr<Peer>> _all_peers;
+    // Peers that are in _all_udp_peers/_all_i2p_peers but are not in either
+    // _candidate_peers nor _good_peers are considered as failed.
+    std::map<udp::endpoint, unique_ptr<Peer>> _all_udp_peers;
+    std::map<I2pAddress, unique_ptr<Peer>> _all_i2p_peers;
 
     util::intrusive::list<Peer, &Peer::_candidate_hook> _candidate_peers;
     util::intrusive::list<Peer, &Peer::_good_peer_hook> _good_peers;
@@ -550,13 +792,15 @@ private:
     AsioExecutor _exec;
     ConditionVariable _cv;
 
-    util::Ed25519PublicKey _cache_pk;
+    sign::PublicKey _cache_pk;
     std::set<asio::ip::udp::endpoint> _lan_peer_eps;
     std::set<asio::ip::udp::endpoint> _lan_my_eps;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
     ResourceId _resource_id;
     CryptoStreamKey _resource_key;
-    std::shared_ptr<DhtLookup> _peer_lookup;
+    std::shared_ptr<DhtLookup> _dht_lookup;
+    std::shared_ptr<I2pTrackerLookup> _i2p_lookup;
+    std::shared_ptr<I2pSession> _i2p_session;
     std::shared_ptr<unsigned> _newest_proto_seen;
     util::LogPath _log_path;
 
@@ -569,7 +813,7 @@ private:
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
                                 , CryptoStreamKey resource_key
-                                , util::Ed25519PublicKey cache_pk
+                                , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::shared_ptr<unsigned> newest_proto_seen
@@ -578,22 +822,20 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _log_path(std::move(log_path))
 {
     _peers = make_unique<Peers>(ex
-                               , move(lan_my_eps)
-                               , move(lan_peer_eps)
-                               , move(cache_pk)
-                               , move(resource_id)
-                               , move(resource_key)
-                               , move(newest_proto_seen)
+                               , std::move(lan_my_eps)
+                               , std::move(lan_peer_eps)
+                               , std::move(cache_pk)
+                               , std::move(resource_id)
+                               , std::move(resource_key)
+                               , std::move(newest_proto_seen)
                                , _log_path.tag("Peers"));
 }
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , ResourceId resource_id
                                 , CryptoStreamKey resource_key
-                                , util::Ed25519PublicKey cache_pk
+                                , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
-                                , std::set<asio::ip::udp::endpoint> lan_my_eps
-                                , std::set<asio::ip::udp::endpoint> wan_my_eps
                                 , std::shared_ptr<DhtLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , util::LogPath log_path)
@@ -601,55 +843,47 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _log_path(std::move(log_path))
 {
     _peers = make_unique<Peers>(ex
-                               , move(lan_my_eps)
-                               , move(wan_my_eps)
-                               , move(lan_peer_eps)
-                               , move(cache_pk)
-                               , move(resource_id)
-                               , move(resource_key)
-                               , move(peer_lookup)
-                               , move(newest_proto_seen)
+                               , peer_lookup->get_dht_lock()->local_endpoints()
+                               , std::set<udp::endpoint>{}
+                               , std::move(lan_peer_eps)
+                               , std::move(cache_pk)
+                               , std::move(resource_id)
+                               , std::move(resource_key)
+                               , std::move(peer_lookup)
+                               , std::move(newest_proto_seen)
                                , _log_path.tag("Peers"));
 }
 
-struct MultiPeerReader::PreFetch {
-    using OptBlock = boost::optional<MultiPeerReader::Block>;
-
-    size_t block_id;
-    Peer* peer;
-
-    PreFetch(size_t block_id, Peer* peer)
-        : block_id(block_id)
-        , peer(peer)
-    {}
-
-    virtual ~PreFetch() {}
-
-    virtual OptBlock get_block(Cancel&, asio::yield_context) = 0;
-};
+MultiPeerReader::MultiPeerReader( AsioExecutor ex
+                                , ResourceId resource_id
+                                , CryptoStreamKey resource_key
+                                , sign::PublicKey cache_pk
+                                , std::shared_ptr<I2pTrackerLookup> i2p_lookup
+                                , std::shared_ptr<I2pSession> i2p_session
+                                , std::shared_ptr<unsigned> newest_proto_seen
+                                , util::LogPath log_path)
+    : _executor(ex)
+    , _log_path(log_path)
+{
+    _peers = make_unique<Peers>(ex
+                               , std::move(cache_pk)
+                               , std::move(resource_id)
+                               , std::move(resource_key)
+                               , std::move(i2p_lookup)
+                               , std::move(i2p_session)
+                               , std::move(newest_proto_seen)
+                               , log_path);
+}
 
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
-    AsyncJob<boost::none_t> job;
-
     PreFetchSequential(size_t block_id, Peer* peer, AsioExecutor ex)
         : PreFetch(block_id, peer)
-        , job(ex)
-    {
-        job.start([=] (auto& cancel, auto yield) -> boost::none_t {
-            sys::error_code ec;
-            peer->send_block_request(block_id, cancel, yield[ec]);
-            ec = compute_error_code(ec, cancel);
-            return or_throw(yield, ec, boost::none);
-        });
-    }
+    {}
 
-    OptBlock get_block(Cancel& cancel, asio::yield_context yield) override {
-        sys::error_code ec;
-
-        job.wait_for_finish(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptBlock{});
-
-        return peer->read_block(block_id, cancel, yield);
+    std::expected<OptBlock, sys::error_code>
+    get_block(Async yield) override {
+        return peer->send_block_request(block_id, yield)
+            .and_then([&] { return peer->read_block(block_id, yield); });
     }
 };
 
@@ -661,27 +895,19 @@ struct MultiPeerReader::PreFetchParallel : MultiPeerReader::PreFetch {
         : PreFetch(block_id, peer)
         , job(ex)
     {
-        job.start([=] (auto& cancel, auto yield) -> OptBlock {
-            sys::error_code ec;
-            peer->send_block_request(block_id, cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, OptBlock{});
-            return peer->read_block(block_id, cancel, yield);
+        job.start([=] (Async yield) -> std::expected<OptBlock, sys::error_code> {
+            auto e = peer->send_block_request(block_id, yield);
+            if (!e) {
+                return std::unexpected(e.error());
+            }
+
+            return peer->read_block(block_id, yield);
         });
     }
 
-    OptBlock get_block(Cancel& cancel, asio::yield_context yield) override {
-        sys::error_code ec;
-
-        job.wait_for_finish(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptBlock{});
-
-        Job::Result r = std::move(job.result());
-
-        if (r.ec) {
-            if (ec) return or_throw<OptBlock>(yield, ec);
-        }
-
-        return std::move(r.retval);
+    std::expected<OptBlock, sys::error_code> get_block(Async yield) override {
+        job.wait_for_finish(yield);
+        return std::move(job.result());
     }
 };
 
@@ -693,18 +919,18 @@ void MultiPeerReader::unmark_as_good(Peer& peer)
     }
 }
 
-std::unique_ptr<MultiPeerReader::PreFetch>
-MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Cancel& cancel, asio::yield_context yield)
+std::expected<std::unique_ptr<MultiPeerReader::PreFetch>, sys::error_code>
+MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Async yield)
 {
-    using R = std::unique_ptr<MultiPeerReader::PreFetch>;
-
-    if (block_id >= _reference_hash_list->blocks.size())
+    if (block_id >= _reference_hash_list->blocks.size()) {
         return nullptr;
+    }
 
-    sys::error_code ec;
-
-    Peer* next_peer = _peers->choose_peer_for_block(*_reference_hash_list, block_id, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, R{});
+    auto next_peer_e = _peers->choose_peer_for_block(*_reference_hash_list, block_id, yield);
+    if (!next_peer_e) {
+        return std::unexpected(next_peer_e.error());
+    }
+    auto next_peer = std::move(*next_peer_e);
 
     PreFetch* pre_fetch;
 
@@ -717,20 +943,19 @@ MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Cancel& cancel,
     return std::unique_ptr<PreFetch>(pre_fetch);
 }
 
-// May return boost::none and no error if the response has no body (e.g. redirect msg)
-boost::optional<MultiPeerReader::Block>
-MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield)
+// May return std::nullopt and no error if the response has no body (e.g. redirect msg)
+std::expected<std::optional<MultiPeerReader::Block>, sys::error_code>
+MultiPeerReader::fetch_block(size_t block_id, Async yield)
 {
     //   Q0   Q1   R0   Q2   R1   Q3   R2
     // |----|----|----|----|----|----|----|...
 
-    using OptBlock = boost::optional<MultiPeerReader::Block>;
-
-    sys::error_code ec;
-
     if (!_pre_fetch) {
-        _pre_fetch = new_fetch_job(block_id, nullptr, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptBlock{});
+        auto e = new_fetch_job(block_id, nullptr, yield);
+        if (!e) {
+            return std::unexpected(e.error());
+        }
+        _pre_fetch = std::move(*e);
 
         // new_fetch_job should always return non-null if block_id is valid.
         assert(_pre_fetch);
@@ -738,24 +963,23 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
 
     auto fetch = std::move(_pre_fetch);
 
-    _pre_fetch = new_fetch_job(block_id + 1, fetch->peer, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, OptBlock{});
+    auto e = new_fetch_job(block_id + 1, fetch->peer, yield);
+    if (!e) {
+        return std::unexpected(e.error());
+    }
+    _pre_fetch = std::move(*e);
 
     while (true) {
-        auto block = fetch->get_block(cancel, yield[ec]);
-
-        if (cancel) {
-            return or_throw<OptBlock>(yield, asio::error::operation_aborted);
-        }
-
-        if (ec) {
+        auto block_e = fetch->get_block(yield);
+        if (!block_e) {
             // Retry with another peer
-            ec = {};
-
             unmark_as_good(*fetch->peer);
 
-            fetch = new_fetch_job(block_id, nullptr, cancel, yield[ec]);
-            return_or_throw_on_error(yield, cancel, ec, OptBlock{});
+            auto fetch_e = new_fetch_job(block_id, nullptr, yield);
+            if (!fetch_e) {
+                return std::unexpected(fetch_e.error());
+            }
+            fetch = std::move(*fetch_e);
 
             // new_fetch_job should always return non-null if block_id is valid.
             assert(fetch);
@@ -763,47 +987,43 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
             continue;
         }
 
-        return block;
+        return *block_e;
     }
 }
 
-boost::optional<Part>
-MultiPeerReader::async_read_part(Cancel cancel, asio::yield_context yield)
+std::expected<std::optional<Part>, sys::error_code>
+MultiPeerReader::async_read_part(Async yield)
 {
-    using Ret = boost::optional<Part>;
+    auto lc = _lifetime_cancel.connect([&] { yield.cancel(); });
 
-    sys::error_code ec;
+    if (_state == State::closed) return std::unexpected(asio::error::bad_descriptor);
+    if (_state == State::done) return std::nullopt;
 
-    auto lc = _lifetime_cancel.connect([&] { cancel(); });
-
-    if (cancel) return or_throw<Ret>(yield, asio::error::operation_aborted);
-    if (_state == State::closed) return or_throw<Ret>(yield, asio::error::bad_descriptor);
-    if (_state == State::done) return boost::none;
-
-    auto r = async_read_part_impl(cancel, yield[ec]);
-    ec = compute_error_code(ec, cancel);
-
-    if (ec) {
+    auto result = async_read_part_impl(yield);
+    if (!result) {
         _state = State::closed;
         _peers = nullptr;
-        return or_throw<Ret>(yield, ec);
-    } else if (!r) {
+        return std::unexpected(result.error());
+    }
+
+    if (!*result) {
         _state = State::done;
         _peers = nullptr;
     }
 
-    return r;
+    return *result;
 }
 
-boost::optional<Part>
-MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
+std::expected<std::optional<Part>, sys::error_code>
+MultiPeerReader::async_read_part_impl(Async yield)
 {
-    sys::error_code ec;
-
     if (!_reference_hash_list) {
-        auto hl = _peers->choose_reference_hash_list(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptPart{});
-        _reference_hash_list = std::move(hl);
+        auto hl = _peers->choose_reference_hash_list(yield);
+        if (!hl) {
+            return std::unexpected(hl.error());
+        }
+
+        _reference_hash_list = std::move(*hl);
     }
 
     if (!_head_sent) {
@@ -813,8 +1033,8 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
 
     if (_next_chunk_body) {
         auto p = std::move(*_next_chunk_body);
-        _next_chunk_body = boost::none;
-        return {{std::move(p)}};
+        _next_chunk_body = std::nullopt;
+        return std::move(p);
     }
 
     if (_next_trailer) {
@@ -823,9 +1043,9 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
         }
         auto p = std::move(*_next_trailer);
-        _next_trailer = boost::none;
+        _next_trailer = std::nullopt;
         mark_done();
-        return {{std::move(p)}};
+        return std::move(p);
     }
 
     if (_block_id >= _reference_hash_list->blocks.size()) {
@@ -834,12 +1054,15 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             _last_chunk_hdr_sent = true;
             return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
         }
-        return boost::none;
+        return std::nullopt;
     }
 
     while (true /* do until successful block retrieval */) {
-        auto block = fetch_block(_block_id, cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, OptPart{});
+        auto block_e = fetch_block(_block_id, yield);
+        if (!block_e) {
+            return std::unexpected(block_e.error());
+        }
+        auto block = std::move(*block_e);
 
         ++_block_id;
 
@@ -849,7 +1072,7 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
                 _last_chunk_hdr_sent = true;
                 return Part{ChunkHdr(0, std::move(_next_chunk_hdr_ext))};
             }
-            return boost::none;
+            return std::nullopt;
         }
 
         ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
@@ -861,11 +1084,11 @@ MultiPeerReader::async_read_part_impl(Cancel& cancel, asio::yield_context yield)
             _next_trailer = std::move(block->trailer);
         }
 
-        return {{std::move(chunk_hdr)}};
+        return std::move(chunk_hdr);
     }
 
     assert(0 && "This shouldn't happen");
-    return boost::none;
+    return std::nullopt;
 }
 
 void MultiPeerReader::close()
@@ -883,4 +1106,3 @@ void MultiPeerReader::mark_done()
 MultiPeerReader::~MultiPeerReader() {
     _lifetime_cancel();
 }
-

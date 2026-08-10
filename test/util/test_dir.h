@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+#include <optional>
 #include <boost/filesystem.hpp>
 #include "namespaces.h"
 
@@ -32,6 +34,10 @@ public:
         : _tempdir(fs::temp_directory_path() / "ouinet-cpp-tests" / suite_name() / test_name() / fs::unique_path())
     {
         fs::create_directories(_tempdir);
+    }
+
+    static TestDir for_global_fixture() {
+        return TestDir(fs::temp_directory_path() / "ouinet-cpp-tests" / module_name() / fs::unique_path());
     }
 #endif
 
@@ -66,7 +72,6 @@ public:
     void delete_content() const {
         auto begin = fs::directory_iterator(_tempdir);
         auto end = fs::directory_iterator();
-        sys::error_code ec;
         for (auto i = begin; i != end; ++i) {
             try {
                 fs::remove_all(*i);
@@ -103,6 +108,10 @@ private:
 
     static std::string suite_name() {
         return boost::unit_test::framework::get<boost::unit_test::test_suite>(current_test_case().p_parent_id).p_name;
+    }
+
+    static std::string module_name() {
+        return boost::unit_test::framework::master_test_suite().p_name;
     }
 #endif
 

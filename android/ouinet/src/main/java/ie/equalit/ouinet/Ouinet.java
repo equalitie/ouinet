@@ -133,11 +133,10 @@ public class Ouinet {
         maybeAdd(args, "--udp-mux-rx-limit",       config.getUdpMuxRxLimit());
         maybeAdd(args, "--max-cached-age",         config.getMaxCachedAge());
         maybeAdd(args, "--local-domain",           config.getLocalDomain());
-        maybeAddBool(args, "--disable-doh",        config.getDisableDoH());
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
-        maybeAdd(args, "--tls-ca-cert-store-path", config.getTlsCaCertStorePath());
+        maybeAdd(args, "--tls-ca-cert-store-dir",  config.getTlsCaCertStoreDir());
         maybeAdd(args, "--injector-tls-cert-file", config.getInjectorTlsCertPath());
         maybeAdd(args, "--cache-type",             config.getCacheType());
         maybeAdd(args, "--cache-static-repo",      config.getCacheStaticPath());

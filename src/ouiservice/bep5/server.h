@@ -16,12 +16,15 @@ class Bep5Server : public OuiServiceImplementationServer
 public:
     Bep5Server( std::shared_ptr<bittorrent::DhtBase>
               , boost::asio::ssl::context* ssl_context
-              , std::string swarm_name);
+              , std::string swarm_name
+              , util::LogPath log_path);
 
-    void start_listen(asio::yield_context) override;
+    [[nodiscard]]
+    sys::error_code start_listen(Async) override;
     void stop_listen() override;
 
-    GenericStream accept(asio::yield_context) override;
+    [[nodiscard]]
+    std::expected<GenericStream, sys::error_code> accept(Async) override;
 
     ~Bep5Server();
 
@@ -31,4 +34,3 @@ private:
 };
 
 }} // namespaces
-

@@ -10,41 +10,39 @@ namespace ouiservice {
 using namespace std;
 
 
-GenericStream
-ConnectProxyOuiServiceClient::connect(asio::yield_context yield, Signal<void()>& cancel)
+std::expected<GenericStream, sys::error_code>
+ConnectProxyOuiServiceClient::connect(Async yield)
 {
-    sys::error_code ec;
+    auto connection = _base->connect(yield);
 
-    auto connection = _base->connect(yield[ec], cancel);
-
-    if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+    if (!connection.has_value()) {
+        return std::unexpected(connection.error());
     }
 
-    auto cancelled = cancel.connect([&] { connection.close(); });
+    auto cancel_slot = yield.cancel_slot([&] { connection->close(); });
 
     http::request<http::empty_body> req{http::verb::connect, "injector", 11};
 
-    http::async_write(connection, req, yield[ec]);
+    auto w_result = http::async_write(*connection, req, yield);
 
-    if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+    if (!w_result.has_value()) {
+        return std::unexpected(w_result.error());
     }
 
     beast::flat_buffer b;
     http::response<http::empty_body> res;
 
-    http::async_read(connection, b, res, yield[ec]);
+    auto r_result = http::async_read(*connection, b, res, yield);
 
-    if (!ec && res.result() != http::status::ok) {
-        ec = asio::error::connection_reset;
+    if (r_result.has_value() && res.result() != http::status::ok) {
+        return std::unexpected(asio::error::connection_reset);
     }
 
-    if (ec) {
-        return or_throw<GenericStream>(yield, ec);
+    if (!r_result.has_value()) {
+        return std::unexpected(r_result.error());
     }
 
-    return connection;
+    return std::move(*connection);
 }
 
 

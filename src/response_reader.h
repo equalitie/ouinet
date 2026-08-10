@@ -3,89 +3,48 @@
 #include <limits>
 
 #include "generic_stream.h"
-#include "namespaces.h"
-#include "or_throw.h"
 #include "response_part.h"
-#include "util/executor.h"
-#include "util/signal.h"
-#include "util/watch_dog.h"
-#include <boost/beast.hpp>
+#include "util/cancel.h"
+#include "namespaces.h"
+#include "api.h"
+
+#include <boost/beast/core/static_buffer.hpp>
+#include <boost/beast/http/buffer_body.hpp>
+#include <boost/beast/http/fields.hpp>
+#include <boost/beast/http/parser.hpp>
+
+namespace ouinet {
+    class Async;
+}
 
 namespace ouinet::http_response {
 
-using ouinet::util::AsioExecutor;
-
-class AbstractReader {
+class OUINET_COMMON_API AbstractReader {
 public:
-    virtual boost::optional<Part> async_read_part(Cancel, asio::yield_context) = 0;
+    [[nodiscard]]
+    virtual
+    std::expected<
+        std::optional<Part>,
+        sys::error_code
+    >
+    async_read_part(Async) = 0;
+
+    // Returns true once `async_read_part` has returned `{std::nullopt}`.
     virtual bool is_done() const = 0;
-    virtual void close()   = 0;
-    virtual AsioExecutor get_executor() = 0;
+
+    virtual void close() = 0;
+
+    virtual asio::any_io_executor get_executor() = 0;
+
     virtual ~AbstractReader() = default;
 
-    template<class Duration>
-    boost::optional<Part> timed_async_read_part(Duration d, Cancel c, asio::yield_context y)
-    {
-        Cancel tc(c);
-        auto wd = watch_dog(get_executor(), d, [&] { tc(); });
-        sys::error_code ec;
+    [[nodiscard]]
+    std::expected<std::optional<Part>, sys::error_code>
+    timed_async_read_part(std::chrono::steady_clock::duration, Async);
 
-        auto retval = async_read_part(tc, y[ec]);
-        fail_on_error_or_timeout(y, c, ec, wd, boost::none);
-
-        return retval;
-    }
 };
 
-// Read the whole session and return an in-memory response
-// if it does not exceed `max_body_size`,
-// otherwise fail with `boost::asio::error::message_size`.
-template<class RsBody>
-inline
-http::response<RsBody>
-slurp_response( AbstractReader& reader, size_t max_body_size
-              , Cancel cancel, asio::yield_context yield)
-{
-    sys::error_code ec;
-    http::response<RsBody> rs;
-
-    auto part = reader.async_read_part(cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, std::move(rs));
-
-    if (!part) ec = http::error::end_of_stream;
-    else if (!part->is_head()) ec = asio::error::invalid_argument;
-    if (ec) return or_throw(yield, ec, std::move(rs));
-    rs.base() = *(part->as_head());
-
-    typename RsBody::reader rsr(rs, rs.body());
-    size_t body_size = 0;
-    while (true) {
-        part = reader.async_read_part(cancel, yield[ec]);
-        return_or_throw_on_error(yield, cancel, ec, std::move(rs));
-
-        if (!part) break;  // end of transfer
-        if (part->is_trailer()) break;  // end of response
-        if (!part->is_body() && !part->is_chunk_body()) continue;
-
-        const Body::Base* data = nullptr;
-        if (auto b = part->as_body()) data = b;
-        else if (auto cb = part->as_chunk_body()) data = cb;
-        assert(data);
-
-        body_size += data->size();
-        if (body_size > max_body_size) continue;  // ignore extra data
-        rsr.put(asio::buffer(*data), ec);
-        if (ec) return or_throw(yield, ec, std::move(rs));
-    }
-
-    if (body_size > max_body_size)
-        ec = asio::error::message_size;
-
-    if (!ec) rs.prepare_payload();
-    return or_throw(yield, ec, std::move(rs));
-}
-
-class Reader : public AbstractReader {
+class OUINET_COMMON_API Reader : public AbstractReader {
 private:
     static const size_t http_forward_block = 16384;
     using string_view = boost::string_view;
@@ -104,7 +63,8 @@ public:
     //
     // Head >> Body* >> boost::none*
     //
-    boost::optional<Part> async_read_part(Cancel, asio::yield_context) override;
+    std::expected<std::optional<Part>, sys::error_code> async_read_part(Async) override;
+
     bool is_done() const override { return _is_done; }
 
     // This leaves the reader in an undefined state,
@@ -126,7 +86,7 @@ public:
 
     void close() override { if (_in.is_open()) _in.close(); }
 
-    AsioExecutor get_executor() override { return _in.get_executor(); }
+    asio::any_io_executor get_executor() override { return _in.get_executor(); }
 
 private:
     http::fields filter_trailer_fields(const http::fields& hdr)
@@ -152,7 +112,7 @@ private:
     std::function<void(size_t, string_view, sys::error_code&)> _on_chunk_header;
     std::function<size_t(size_t, string_view, sys::error_code&)> _on_chunk_body;
 
-    boost::optional<Part> _next_part;
+    std::optional<Part> _next_part;
 
     bool _is_done;
 };

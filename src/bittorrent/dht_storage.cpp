@@ -2,7 +2,7 @@
 
 #include "../async_sleep.h"
 #include "../util/bytes.h"
-#include "../util/crypto.h"
+#include "../util/sign.h"
 #include "../util/random.h"
 #include "../util/hash.h"
 #include "../task.h"
@@ -131,7 +131,7 @@ Tracker::Tracker(const AsioExecutor& exec):
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {
-            async_sleep(_exec, std::chrono::seconds(60), _terminate_signal, yield);
+            async_sleep(std::chrono::seconds(60), _terminate_signal, yield);
             if (terminated) {
                 break;
             }
@@ -183,7 +183,7 @@ DataStore::DataStore(const AsioExecutor& exec):
         auto terminated = _terminate_signal.connect([]{});
 
         while (true) {
-            async_sleep(_exec, std::chrono::seconds(60), _terminate_signal, yield);
+            async_sleep(std::chrono::seconds(60), _terminate_signal, yield);
             if (terminated) {
                 break;
             }
@@ -238,10 +238,10 @@ boost::optional<BencodedValue> DataStore::get_immutable(NodeID id)
     return it->second.value;
 }
 
-NodeID DataStore::mutable_get_id( util::Ed25519PublicKey public_key
+NodeID DataStore::mutable_get_id( sign::PublicKey public_key
                                 , boost::string_view salt)
 {
-    return util::sha1_digest(public_key.serialize(), salt);
+    return util::sha1_digest(public_key.to_bytes(), salt);
 }
 
 void DataStore::put_mutable(MutableDataItem item)

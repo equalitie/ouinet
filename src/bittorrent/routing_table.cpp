@@ -15,7 +15,7 @@ static void move_elements(From& from, To&& to, const Pred& predicate)
 {
     for (size_t i = 0; i < from.size();) {
         if (predicate(from[i])) {
-            to.push_back(move(from[i]));
+            to.push_back(std::move(from[i]));
             from.erase(from.begin() + i);
         } else {
             ++i;
@@ -42,7 +42,7 @@ static void erase_front_questionables(Q& q)
 
 RoutingTable::RoutingTable(const NodeID& node_id, SendPing send_ping)
     : _node_id(node_id)
-    , _send_ping(move(send_ping))
+    , _send_ping(std::move(send_ping))
     , _buckets(1)
 {
 }
@@ -139,7 +139,7 @@ void RoutingTable::split_bucket(size_t i)
                  , new_bucket.unverified_candidates
                  , belongs_to_new_bucket);
 
-    _buckets.push_back(move(new_bucket));
+    _buckets.push_back(std::move(new_bucket));
 }
 
 std::vector<NodeContact>
