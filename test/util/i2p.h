@@ -14,10 +14,15 @@
 namespace ouinet {
 
 I2pService create_i2p_service(Async yield) {
+#if defined(_WIN32) || defined(MINGW)
+    const char* i2pd_exe = "i2pd.exe";
+#else
+    const char* i2pd_exe = "i2pd";
+#endif
     auto test_path = fs::path(boost::unit_test::framework::master_test_suite().argv[0]);
     auto test_dir = test_path.parent_path();
     auto build_dir = test_dir.parent_path();
-    auto i2pd_exe_path = build_dir / "i2pd";
+    auto i2pd_exe_path = build_dir / i2pd_exe;
     auto i2pd_data_dir = TestDir::for_global_fixture();
 
     BOOST_TEST_MESSAGE("The `i2pd` executable path is set to " << i2pd_exe_path);
