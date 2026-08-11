@@ -796,7 +796,7 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
     }
 
     std::vector<MetricsServerConfig> servers;
-    for (int i = 0; i < raw_server_urls.size(); ++i) {
+    for (size_t i = 0; i < raw_server_urls.size(); ++i) {
         auto raw_url = std::move(raw_server_urls[i]);
         auto raw_token = i < raw_server_tokens.size() ? std::move(raw_server_tokens[i]) : "";
         auto raw_cacert = i < raw_server_cacerts.size() ? std::move(raw_server_cacerts[i]) : "";
