@@ -119,7 +119,6 @@ if(WITH_I2PD_LIB)
         i2pd/daemon/I2PControl.cpp
         i2pd/daemon/HTTPServer.cpp
         i2pd/daemon/I2PControlHandlers.cpp
-        i2pd/daemon/UnixDaemon.cpp
     )
     if(UNIX)
         list(APPEND ouinet_i2p_cpps i2pd/daemon/UnixDaemon.cpp)

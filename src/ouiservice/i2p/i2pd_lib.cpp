@@ -4,7 +4,6 @@
 
 #include "Daemon.h"
 #include <boost/asio/error.hpp>
-#include <thread>
 
 #ifndef OUINET_WITH_I2PD_LIB
 #error "Compiling i2pd_lib.cpp but OUINET_WITH_I2PD_LIB is not defined"
@@ -14,22 +13,23 @@ namespace ouinet {
 
 bool I2pd::is_start_lib_implemented() { return true; }
 
+struct OuiDaemon : public i2p::util::Daemon_Singleton {
+    static OuiDaemon& instance() {
+        static OuiDaemon d;
+        return d;
+    }
+};
+
 struct I2pd::InnerLib : I2pd::InnerBase {
-    std::thread thread;
     util::LogPath log_path;
 
-    InnerLib(std::thread thread, util::LogPath log_path):
-        thread(std::move(thread)),
+    InnerLib(util::LogPath log_path):
         log_path(std::move(log_path))
     {}
 
     ~InnerLib() {
         LOG_DEBUG(log_path, " Stopping I2P daemon");
-        // In the i2pd's UnixDaemon this is set to `false` when SIGINT is received.
-        Daemon.running = false;
-        Daemon.stop();
-        LOG_DEBUG(log_path, " Joining I2P daemon thread");
-        thread.join();
+        OuiDaemon::instance().stop();
     }
 };
 
@@ -49,19 +49,18 @@ I2pd::start_lib(I2pd::Config config, util::LogPath log_path) {
             std::back_inserter(args),
             [] (const std::string& str) { return str.c_str(); });
 
-    if (!Daemon.init(args.size(), (char**) args.data())) {
+    if (!OuiDaemon::instance().init(args.size(), (char**) args.data())) {
         LOG_WARN(log_path, " Failed to initialize I2P daemon");
         return std::unexpected(asio::error::fault);
     }
 
-    if (!Daemon.start()) {
+    if (!OuiDaemon::instance().start()) {
         LOG_WARN(log_path, " Failed to start I2P daemon");
-        Daemon.stop();
+        OuiDaemon::instance().stop();
         return std::unexpected(asio::error::fault);
     }
 
     return I2pd(std::make_unique<InnerLib>(
-        std::thread([] { Daemon.run(); }),
         log_path
     ));
 }
