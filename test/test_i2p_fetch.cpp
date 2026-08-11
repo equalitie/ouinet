@@ -177,8 +177,8 @@ void wait_for_peer_on_tracker(
     auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(yield)));
     auto tracker = I2pTrackerClient(session, tracker_addr);
     for (int i = 0; i < 120; ++i) {
-        auto peers = tracker.get_peers(infohash, yield);
-        if (peers && peers->contains(peer_addr)) {
+        auto peers = unwrap(tracker.get_peers(infohash, yield));
+        if (peers.contains(peer_addr)) {
             return;
         }
         async_sleep(1s, yield);
