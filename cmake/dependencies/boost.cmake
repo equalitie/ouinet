@@ -13,6 +13,7 @@ if (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
 endif ()
 
 set(BOOST_COMPONENTS
+    atomic
     context
     ${BOOST_COROUTINE_BACKEND}
     date_time
