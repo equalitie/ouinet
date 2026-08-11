@@ -19,6 +19,7 @@
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
 #include "ouiservice/i2p/address.h"
+#include "ouiservice/i2p/service.h"
 #include "logger.h"
 #include "cache_type.h"
 
@@ -253,6 +254,10 @@ public:
         return _ouisync;
     }
 
+    const std::optional<I2pService::Config>& i2p_service_config() const {
+        return _i2p_service_config;
+    }
+
 private:
     boost::program_options::options_description description_full();
 
@@ -377,6 +382,7 @@ private:
     boost::optional<I2pAddress> _i2p_bep3_tracker;
 
     std::optional<OuisyncCacheConfig> _ouisync;
+    std::optional<I2pService::Config> _i2p_service_config;
 };
 
 } // ouinet namespace

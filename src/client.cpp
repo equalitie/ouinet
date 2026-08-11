@@ -698,6 +698,7 @@ private:
     std::optional<TaskHandle<SysResult<std::shared_ptr<I2pSession>>>> _i2p_session_create;
 
     shared_ptr<dns::Resolver> _dns_resolver;
+    std::optional<I2pService> _i2p_service;
 };
 
 //------------------------------------------------------------------------------
@@ -2521,6 +2522,10 @@ void Client::State::start_ouinet()
             if (!r) LOG_ERROR(yield, " Failed to setup cache; ec=", r.error());
         }
     );
+
+    if (auto cfg = _config.i2p_service_config()) {
+        _i2p_service = I2pService::start(*cfg, _ctx.get_executor(), _shutdown_signal, _log_path);
+    }
 }
 
 //------------------------------------------------------------------------------

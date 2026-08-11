@@ -8,6 +8,7 @@
 #include <boost/filesystem/path.hpp>
 
 #include <memory>
+#include <variant>
 
 namespace ouinet {
 
