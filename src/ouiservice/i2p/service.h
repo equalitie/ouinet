@@ -56,7 +56,9 @@ public:
     struct State {
         struct Starting {};
         struct PerformingHealthCheck {};
-        struct Running {};
+        struct Running {
+            asio::ip::tcp::endpoint sam_endpoint;
+        };
         struct Aborted {};
 
         using Alternatives = std::variant<

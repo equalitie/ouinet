@@ -4,6 +4,7 @@
 #include "api.h"
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/filesystem/path.hpp>
 #include <expected>
 #include <vector>
@@ -26,6 +27,9 @@ public:
         std::vector<std::string> to_vector() const;
     
     private:
+        // TODO: Bind to a random port (0)
+        uint16_t sam_port = 7656;
+        //uint16_t sam_port = 0;
         fs::path i2pd_root_dir;
     };
 
@@ -38,7 +42,7 @@ public:
     [[nodiscard]]
     static
     std::expected<I2pd, sys::error_code>
-    start_exe(fs::path i2pd_binary_path, Config, asio::any_io_executor, util::LogPath);
+    start_exe(fs::path i2pd_binary_path, Config, Async);
 
     // Start i2pd through i2pd library compiled into ouinet.
     [[nodiscard]]
@@ -46,10 +50,16 @@ public:
     std::expected<I2pd, sys::error_code>
     start_lib(Config, util::LogPath);
 
+    // Endpoint of the SAM bridge to which we can connect.
+    asio::ip::tcp::endpoint sam_endpoint() const;
+
 private:
     struct InnerLib;
     struct InnerExe;
-    struct InnerBase { virtual ~InnerBase() = default; };
+    struct InnerBase {
+        virtual asio::ip::tcp::endpoint sam_endpoint() const = 0;
+        virtual ~InnerBase() = default;
+    };
 
     I2pd(std::unique_ptr<InnerBase> inner) : _inner(std::move(inner)) {}
 

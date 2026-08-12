@@ -17,14 +17,14 @@ namespace ouinet {
 
 using State = I2pService::State;
 using namespace std::chrono_literals;
+using tcp = asio::ip::tcp;
 
 struct Connection {
     I2pSession session;
-    asio::ip::tcp::socket socket;
+    tcp::socket socket;
 };
 
-struct ServiceExternal {};
-struct ServiceI2pd { I2pd i2pd; };
+struct ServiceExternal { tcp::endpoint sam_endpoint; };
 
 struct I2pService::Inner {
     Config config;
@@ -41,11 +41,11 @@ struct I2pService::Inner {
         >,
         sys::error_code
     >
-    create_two_sessions(Async yield) {
-        auto session0 = I2pSession::create(yield);
+    create_two_sessions(tcp::endpoint sam_endpoint, Async yield) {
+        auto session0 = I2pSession::create(yield, sam_endpoint);
         if (!session0) return std::unexpected(session0.error());
 
-        auto session1 = I2pSession::create(yield);
+        auto session1 = I2pSession::create(yield, sam_endpoint);
         if (!session1) return std::unexpected(session1.error());
 
         return std::pair(std::move(*session0), std::move(*session1));
@@ -59,7 +59,7 @@ struct I2pService::Inner {
         sys::error_code
     >
     connected_pair(I2pSession client_session, I2pSession server_session, Async yield) {
-        using R = std::expected<asio::ip::tcp::socket, sys::error_code>;
+        using R = std::expected<tcp::socket, sys::error_code>;
 
         auto addr = server_session.local_addr().to_b32();
 
@@ -88,7 +88,7 @@ struct I2pService::Inner {
         );
     }
 
-    bool ping(asio::ip::tcp::socket& s0, asio::ip::tcp::socket& s1, uint64_t n, Async yield) {
+    bool ping(tcp::socket& s0, tcp::socket& s1, uint64_t n, Async yield) {
         auto wr = asio::async_write(s0, asio::buffer((void*) &n, sizeof(n)), yield);
         if (!wr) return false;
         decltype(n) n_received;
@@ -97,15 +97,7 @@ struct I2pService::Inner {
         return n == n_received;
     }
 
-    void keep_alive(asio::ip::tcp::socket& s0, asio::ip::tcp::socket& s1, Async yield) {
-        auto y0 = yield;
-        auto y1 = yield;
-
-        y0.spawn([&] (Async y) {
-        });
-    }
-
-    void keep_performing_health_check(Async yield) {
+    void keep_performing_health_check(tcp::endpoint sam_endpoint, Async yield) {
         LOG_DEBUG(yield, " Trying to connect to the service");
         state = State::PerformingHealthCheck{};
 
@@ -113,7 +105,7 @@ struct I2pService::Inner {
             = std::unexpected(asio::error::fault);
 
         for (unsigned i = 0; i < 10; ++i) {
-            sessions = create_two_sessions(yield);
+            sessions = create_two_sessions(sam_endpoint, yield);
             if (!sessions) {
                 async_sleep(500ms, yield);
             }
@@ -170,12 +162,12 @@ struct I2pService::Inner {
             return {};
         }
 
-        LOG_DEBUG(yield, " Success");
+        LOG_DEBUG(yield, " Success ", conf->endpoint);
 
-        return ServiceExternal {};
+        return ServiceExternal { conf->endpoint };
     }
 
-    std::optional<ServiceI2pd> try_i2pd_exe(Async yield) {
+    std::optional<I2pd> try_i2pd_exe(Async yield) {
         auto& conf = config.i2pd_exe;
 
         if (!conf) {
@@ -192,8 +184,7 @@ struct I2pService::Inner {
         auto i2pd = I2pd::start_exe(
             conf->i2pd_exe_path,
             I2pd::Config(conf->datadir),
-            yield.get_executor(),
-            yield.log_path()
+            yield
         );
 
         if (!i2pd) {
@@ -201,11 +192,11 @@ struct I2pService::Inner {
             return {};
         }
 
-        LOG_DEBUG(yield, " Success");
-        return ServiceI2pd { std::move(*i2pd) };
+        LOG_DEBUG(yield, " Success ", i2pd->sam_endpoint());
+        return std::move(*i2pd);
     }
 
-    std::optional<ServiceI2pd> try_i2pd_lib(Async yield) {
+    std::optional<I2pd> try_i2pd_lib(Async yield) {
         auto& conf = config.i2pd_lib;
 
         if (!conf) {
@@ -229,9 +220,9 @@ struct I2pService::Inner {
             return {};
         }
 
-        LOG_DEBUG(yield, " Success");
+        LOG_DEBUG(yield, " Success ", i2pd->sam_endpoint());
 
-        return ServiceI2pd { std::move(*i2pd) };
+        return std::move(*i2pd);
     }
 
     void run(Async yield) {
@@ -252,13 +243,13 @@ struct I2pService::Inner {
             }
 
             if (auto s = try_external_service(yield.tag("ext"))) {
-                keep_performing_health_check(yield.tag("ext"));
+                keep_performing_health_check(s->sam_endpoint, yield.tag("ext"));
             }
             else if (auto s = try_i2pd_exe(yield.tag("exe"))) {
-                keep_performing_health_check(yield.tag("exe"));
+                keep_performing_health_check(s->sam_endpoint(), yield.tag("exe"));
             }
             else if (auto s = try_i2pd_lib(yield.tag("lib"))) {
-                keep_performing_health_check(yield.tag("lib"));
+                keep_performing_health_check(s->sam_endpoint(), yield.tag("lib"));
             }
 
             async_sleep(delay, yield);
