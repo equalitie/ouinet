@@ -24,7 +24,8 @@ I2pService create_i2p_service(Async yield) {
     auto test_dir = test_path.parent_path();
     auto build_dir = test_dir.parent_path();
     auto i2pd_exe_path = build_dir / i2pd_exe;
-    auto i2pd_data_dir = TestDir::for_global_fixture();
+    // Use the same i2pd datadir for all tests in hopes it'll help with "reseeding".
+    auto i2pd_data_dir = TestDir(TestDir::tests_root() / "i2pd.test.data");
 
     BOOST_TEST_MESSAGE("The `i2pd` executable path is set to " << i2pd_exe_path);
     BOOST_TEST_MESSAGE("The `i2pd` data directory is set to  " << i2pd_data_dir.path());

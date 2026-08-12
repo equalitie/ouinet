@@ -9,6 +9,10 @@ namespace ouinet {
 
 class TestDir {
 public:
+    static fs::path tests_root() {
+        return fs::temp_directory_path() / "ouinet-cpp-tests";
+    }
+
     struct Builder {
         bool _delete_if_exists = false;
         bool _delete_on_exit = false;
@@ -31,13 +35,13 @@ public:
 public:
 #ifdef BOOST_TEST_MODULE
     TestDir()
-        : _tempdir(fs::temp_directory_path() / "ouinet-cpp-tests" / suite_name() / test_name() / fs::unique_path())
+        : _tempdir(tests_root() / suite_name() / test_name() / fs::unique_path())
     {
         fs::create_directories(_tempdir);
     }
 
     static TestDir for_global_fixture() {
-        return TestDir(fs::temp_directory_path() / "ouinet-cpp-tests" / module_name() / fs::unique_path());
+        return TestDir(tests_root() / module_name() / fs::unique_path());
     }
 #endif
 
