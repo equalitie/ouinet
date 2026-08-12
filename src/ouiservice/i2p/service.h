@@ -12,6 +12,7 @@
 
 namespace ouinet {
 
+class Async;
 class Cancel;
 namespace util { class LogPath; }
 
@@ -74,14 +75,24 @@ public:
 
         Alternatives value;
 
+        template<class S> const S* as() const {
+            return std::get_if<S>(&value);
+        }
+
         template<class S> bool is() const {
-            return std::get_if<S>(&value) != nullptr;
+            return as<S>() != nullptr;
         }
     };
 
     static I2pService start(Config, asio::any_io_executor, Cancel, util::LogPath);
 
     State get_state() const;
+
+    // Returns `State::Running` when the state is `Running` and `none` if no
+    // more attempts to start the service will be made (the state is
+    // `Aborted`). Note that even if state is `Running` it can later change if
+    // the connection to the service is lost.
+    std::optional<State::Running> await_running_state(Async) const;
 
 private:
     struct Inner;

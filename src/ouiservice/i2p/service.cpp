@@ -3,6 +3,7 @@
 #include "util/spawn_for_result.h"
 #include "util/log_path.h"
 #include "util/str.h"
+#include "util/watch.h"
 #include "util/select.h"
 #include "logger.h"
 #include "async_sleep.h"
@@ -30,9 +31,16 @@ struct I2pService::Inner {
     Config config;
     LifetimeCancel cancel;
     TaskHandle<void> task;
-    State state = State::Starting{};
+    Watch<State>::Producer state;
 
-    Inner(Config config) : config(std::move(config)) {}
+    Inner(Config config, asio::any_io_executor exec) :
+        config(std::move(config)),
+        state(exec, State::Starting{})
+    {}
+
+    Watch<State> get_state_watch() const {
+        return Watch<State>(state);
+    }
 
     std::expected<
         std::pair<
@@ -99,7 +107,7 @@ struct I2pService::Inner {
 
     void keep_performing_health_check(tcp::endpoint sam_endpoint, Async yield) {
         LOG_DEBUG(yield, " Trying to connect to the service");
-        state = State::PerformingHealthCheck{};
+        state.send(State::PerformingHealthCheck{});
 
         std::expected<std::pair<I2pSession, I2pSession>, sys::error_code> sessions
             = std::unexpected(asio::error::fault);
@@ -133,16 +141,16 @@ struct I2pService::Inner {
 
         uint64_t n = 0;
         while (ping(connections->first.socket, connections->second.socket, n, yield)) {
-            if (!std::get_if<State::Running>(&state.value)) {
+            if (!state.value().is<State::Running>()) {
                 LOG_DEBUG(yield, " Health check passed, will continue pinging health check");
-                state = State::Running{};
+                state.send(State::Running{ sam_endpoint });
             }
             ++n;
             async_sleep(10s, yield);
         }
 
         LOG_DEBUG(yield, " Health check failed in ping");
-        state = State::Starting{};
+        state.send(State::Starting{});
     }
 
     std::optional<ServiceExternal> try_external_service(Async yield) {
@@ -238,7 +246,7 @@ struct I2pService::Inner {
 
             if (option_count == 0) {
                 LOG_WARN(yield, " No I2P service to try, aborting");
-                state = State::Aborted{};
+                state.send(State::Aborted{});
                 return;
             }
 
@@ -259,7 +267,7 @@ struct I2pService::Inner {
 
 /* static */
 I2pService I2pService::start(Config config, asio::any_io_executor exec, Cancel cancel, util::LogPath log_path) {
-    auto inner = std::make_shared<Inner>(std::move(config));
+    auto inner = std::make_shared<Inner>(std::move(config), exec);
 
     inner->task = spawn_for_result(exec, cancel, log_path, [inner = inner.get()] (Async yield) {
             if (yield.is_cancelled()) return;
@@ -269,8 +277,20 @@ I2pService I2pService::start(Config config, asio::any_io_executor exec, Cancel c
     return I2pService(std::move(inner));
 }
 
+std::optional<State::Running> I2pService::await_running_state(Async yield) const {
+    Watch<State> watch(_inner->state);
+
+    while (watch.await_change(yield)) {
+        if (auto running_state = _inner->state.value().as<State::Running>()) {
+            return *running_state;
+        }
+    }
+
+    return {};
+}
+
 State I2pService::get_state() const {
-    return _inner->state;
+    return _inner->state.value();
 }
 
 } // namespace

@@ -9,6 +9,7 @@
 #include "ouiservice/i2p/service.h"
 #include "async_sleep.h"
 #include "util/async.h"
+#include "util/select.h"
 #include "namespaces.h"
 
 namespace ouinet {
@@ -45,20 +46,19 @@ I2pService create_i2p_service(Async yield) {
     using namespace std::chrono_literals;
 
     auto start = steady_clock::now();
-    auto max_wait = 5min;
 
     auto i2p_service = I2pService::start(i2p_service_config, yield.get_executor(), {}, {});
 
+    auto max_wait = 5min;
     BOOST_TEST_MESSAGE("Waiting up to " << max_wait << " for I2P service to start");
 
-    while (true) {
-        if (i2p_service.get_state().is<I2pService::State::Running>()) {
-            break;
-        }
-        if (steady_clock::now() - start > max_wait) {
-            BOOST_FAIL("I2P service did not start within " << max_wait);
-        }
-        async_sleep(100ms, yield);
+    auto r = timeout(max_wait, [&](Async yield) { return i2p_service.await_running_state(yield); }, yield);
+
+    if (!r) {
+        BOOST_FAIL("I2P service did not start within " << max_wait);
+    }
+    else if (!*r) {
+        BOOST_FAIL("I2P service failed to start");
     }
 
     BOOST_TEST_MESSAGE("I2P service started in " << duration_cast<milliseconds>(steady_clock::now() - start));
