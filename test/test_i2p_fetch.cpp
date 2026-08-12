@@ -210,6 +210,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
     run(ctx, [&] (Async yield) {
         auto i2p_service = create_i2p_service(yield);
+        auto sam_endpoint = unwrap(i2p_service.await_running_state(yield)).sam_endpoint;
 
         Injector injector(make_config<InjectorConfig>({
                 "./no_injector_exec"s,
@@ -234,6 +235,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--disable-origin-access"s,
                 "--disable-proxy-access"s,
                 "--i2p-hops-per-tunnel"s, i2p_fast_tunnel_hop_count,
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
                 // XXX Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
                 "--front-end-ep=127.0.0.1:0"s,
@@ -251,6 +253,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--repo"s, root.make_subdir("leecher").string(),
                 "--cache-type=bep3-http-over-i2p"s,
                 "--i2p-bep3-tracker"s, tracker_addr.as_str(),
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
                 "--cache-http-public-key"s, injector.cache_http_public_key(),
                 "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
                 "--disable-origin-access"s,

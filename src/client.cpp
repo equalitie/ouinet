@@ -530,13 +530,35 @@ private:
         p = make_unique<UPnPUpdater>(executor, ext_port, local_ep.port());
     }
 
+    I2pService* get_or_create_i2p_service() {
+        if (_shutdown_signal) {
+            return nullptr;
+        }
+
+        if (_i2p_service) {
+            return &*_i2p_service;
+        }
+
+        if (auto cfg = _config.i2p_service_config()) {
+            _i2p_service = I2pService::start(*cfg, _ctx.get_executor(), _shutdown_signal, _log_path);
+            return &*_i2p_service;
+        }
+
+        return nullptr;
+    }
+
     TaskHandle<SysResult<std::shared_ptr<I2pSession>>> get_or_create_i2p_session_task() {
         using R = SysResult<std::shared_ptr<I2pSession>>;
 
         if (_i2p_session_create) return *_i2p_session_create;
 
-        _i2p_session_create = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path, [](Async yield) -> R {
-                auto session = I2pSession::create(yield);
+
+        _i2p_session_create = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path, [this](Async yield) -> R {
+                auto i2p_service = get_or_create_i2p_service();
+
+                if (!i2p_service) return std::unexpected(asio::error::service_not_found);
+
+                auto session = i2p_service->create_session(yield);
 
                 if (!session) return std::unexpected(session.error());
 
@@ -2523,9 +2545,7 @@ void Client::State::start_ouinet()
         }
     );
 
-    if (auto cfg = _config.i2p_service_config()) {
-        _i2p_service = I2pService::start(*cfg, _ctx.get_executor(), _shutdown_signal, _log_path);
-    }
+    get_or_create_i2p_service();
 }
 
 //------------------------------------------------------------------------------

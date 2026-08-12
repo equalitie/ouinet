@@ -293,4 +293,14 @@ State I2pService::get_state() const {
     return _inner->state.value();
 }
 
+std::expected<I2pSession, sys::error_code> I2pService::create_session(Async yield) {
+    auto running_state = await_running_state(yield);
+    
+    if (!running_state) {
+        return std::unexpected(asio::error::service_not_found);
+    }
+    
+    return I2pSession::create(yield, running_state->sam_endpoint);
+}
+
 } // namespace

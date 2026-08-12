@@ -9,11 +9,13 @@
 
 #include <memory>
 #include <variant>
+#include <expected>
 
 namespace ouinet {
 
 class Async;
 class Cancel;
+class I2pSession;
 namespace util { class LogPath; }
 
 //
@@ -93,6 +95,8 @@ public:
     // `Aborted`). Note that even if state is `Running` it can later change if
     // the connection to the service is lost.
     std::optional<State::Running> await_running_state(Async) const;
+
+    std::expected<I2pSession, sys::error_code> create_session(Async);
 
 private:
     struct Inner;
