@@ -36,16 +36,6 @@ void handle_exception(std::exception_ptr ep) {
     }
 }
 
-namespace std {
-    template<class T>
-    std::ostream& operator<<(std::ostream& os, std::optional<T> const& v) {
-        if (v) {
-            return os << *v;
-        } else {
-            return os << "none";
-        }
-    }
-}
 
 void spawn(auto& ctx, auto work) {
     asio::spawn(ctx, [work = std::move(work)] (asio::yield_context yield) mutable {
