@@ -67,6 +67,7 @@ public class Config implements Parcelable {
         private String maxCachedAge;
         private String localDomain;
         private boolean disableDoH = false;
+        private boolean disableUpnp = false;
         private Set<String> dnsProtocols = null;
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
@@ -199,6 +200,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setDisableDoH(boolean disableDoH){
             this.disableDoH = disableDoH;
+            return this;
+        }
+        public ConfigBuilder setDisableUpnp(boolean disableUpnp){
+            this.disableUpnp = disableUpnp;
             return this;
         }
 
@@ -449,6 +454,7 @@ public class Config implements Parcelable {
                     maxCachedAge,
                     localDomain,
                     disableDoH,
+                    disableUpnp,
                     dnsProtocols,
                     disableOriginAccess,
                     disableProxyAccess,
@@ -491,6 +497,7 @@ public class Config implements Parcelable {
     private String maxCachedAge;
     private String localDomain;
     private boolean disableDoH;
+    private boolean disableUpnp;
     private Set<String> dnsProtocols;
     private boolean disableOriginAccess;
     private boolean disableProxyAccess;
@@ -531,6 +538,7 @@ public class Config implements Parcelable {
                   String maxCachedAge,
                   String localDomain,
                   boolean disableDoH,
+                  boolean disableUpnp,
                   Set<String> dnsProtocols,
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
@@ -570,6 +578,7 @@ public class Config implements Parcelable {
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
         this.disableDoH = disableDoH;
+        this.disableUpnp = disableUpnp;
         this.dnsProtocols = (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
         this.disableOriginAccess = disableOriginAccess;
         this.disableProxyAccess = disableProxyAccess;
@@ -662,6 +671,9 @@ public class Config implements Parcelable {
     public boolean getDisableDoH() {
         return disableDoH;
     }
+    public boolean getDisableUpnp() {
+        return disableUpnp;
+    }
     public Set<String> getDnsProtocols() {
         return (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
     }
@@ -746,6 +758,7 @@ public class Config implements Parcelable {
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
         out.writeInt(disableDoH ? 1 : 0);
+        out.writeInt(disableUpnp ? 1 : 0);
         out.writeStringArray(dnsProtocols == null ? null : dnsProtocols.toArray(new String[0]));
         out.writeInt(disableOriginAccess ? 1 : 0);
         out.writeInt(disableProxyAccess ? 1 : 0);
@@ -796,6 +809,7 @@ public class Config implements Parcelable {
         maxCachedAge = in.readString();
         localDomain = in.readString();
         disableDoH = in.readInt() != 0;
+        disableUpnp = in.readInt() != 0;
 
         String[] dnsProtocolsArray = in.createStringArray();
         if (dnsProtocolsArray == null)

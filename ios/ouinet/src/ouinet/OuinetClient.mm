@@ -56,6 +56,17 @@ NativeLib _n;
   if ([config getDisableDoH]) {
     args.push_back("--disable-doh");
   }
+  if ([config getDisableUpnp]) {
+    args.push_back("--disable-upnp");
+  }
+  if ([config getMetricsEnableOnStart]) {
+    args.push_back("--metrics-enable-on-start");
+  }
+  args = [self maybeAdd:args stringOfKey:@"--metrics-server-url" stringOfValue:[config getMetricsServerUrl]];
+  args = [self maybeAdd:args stringOfKey:@"--metrics-server-token" stringOfValue:[config getMetricsServerToken]];
+  args = [self maybeAdd:args stringOfKey:@"--metrics-encryption-key" stringOfValue:[config getMetricsEncryptionKey]];
+  args = [self maybeAdd:args stringOfKey:@"--metrics-server-cacert-file" stringOfValue:[config getMetricsServerTlsCaCertPath]];
+  args = [self maybeAdd:args stringOfKey:@"--metrics-delete-after" stringOfValue:[config getMetricsDeleteAfter]];
   
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
   if (error)

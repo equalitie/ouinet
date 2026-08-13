@@ -26,6 +26,8 @@
 
 - (OuinetConfig*)setDisableDoH:(BOOL)value;
 
+- (OuinetConfig*)setDisableUpnp:(BOOL)value;
+
 - (OuinetConfig*)setLogLevel:(NSString*)level;
 
 - (NSString*)getOuinetDirectory;
@@ -44,6 +46,36 @@
 
 - (NSString*)getFrontEndEp;
 
+- (NSString*)getFrontEndAccessToken;
+
+- (NSString*)getProxyAccessToken;
+
+- (NSString*)getRequestBodyLimit;
+
+- (NSString*)getLocalDomain;
+
+- (NSArray<NSString*>*)getDnsProtocols;
+
+- (BOOL)getDisableCacheAccess;
+
+- (BOOL)getEnableLogFile;
+
+// Returns the absolute path to the Ouinet log file (<ouinetDirectory>/log.txt)
+// when file logging is enabled, or nil otherwise.
+- (NSString*)getLogFilePath;
+
+- (BOOL)getMetricsEnableOnStart;
+
+- (NSString*)getMetricsServerUrl;
+
+- (NSString*)getMetricsServerToken;
+
+- (NSString*)getMetricsServerTlsCaCertPath;
+
+- (NSString*)getMetricsEncryptionKey;
+
+- (NSString*)getMetricsDeleteAfter;
+
 - (NSString*)getLogLevel;
 
 - (BOOL)getDisableOriginAccess;
@@ -55,5 +87,7 @@
 - (BOOL)getDisableBridgeAnnouncement;
 
 - (BOOL)getDisableDoH;
+
+- (BOOL)getDisableUpnp;
 
 @end

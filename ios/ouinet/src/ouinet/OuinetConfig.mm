@@ -21,6 +21,7 @@
   BOOL disableInjectorAccess;
   BOOL disableBridgeAnnouncement;
   BOOL disableDoH;
+  BOOL disableUpnp;
 }
 
 - (OuinetConfig*)init
@@ -119,6 +120,12 @@
   return self;
 }
 
+- (OuinetConfig*)setDisableUpnp:(BOOL)value;
+{
+  disableUpnp = value;
+  return self;
+}
+
 - (NSString*)getOuinetDirectory
 {
   return ouinetDirectory;
@@ -187,6 +194,11 @@
 - (BOOL)getDisableDoH
 {
   return disableDoH;
+}
+
+- (BOOL)getDisableUpnp
+{
+  return disableUpnp;
 }
 
 /**
