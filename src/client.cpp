@@ -374,11 +374,13 @@ public:
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
-            upnps = _upnps_ptr
+            upnps = _upnps_ptr,
+            upnp_enabled = _config.is_upnp_enabled()
         ] (asio::yield_context yield) mutable {
             sys::error_code ec;
             auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
             if (ec || shutdown_signal) return;
+            if (!upnp_enabled) return;
             State::setup_upnp(executor, ext_ep.port(), local_ep, upnps);
         }));
 
