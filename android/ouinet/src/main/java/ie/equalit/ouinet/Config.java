@@ -55,6 +55,9 @@ public class Config implements Parcelable {
         private String cacheStaticPath;
         private String cacheStaticContentPath;
         private String i2pBep3Tracker;
+        private String enableI2pServiceExe;
+        private String enableI2pServiceExt;
+        private boolean enableI2pServiceLib = false;
         private String listenOnTcp;
         private String frontEndEp;
         private String frontEndAccessToken;
@@ -151,6 +154,18 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setI2pBep3Tracker(String i2pBep3Tracker){
             this.i2pBep3Tracker = i2pBep3Tracker;
+            return this;
+        }
+        public ConfigBuilder setEnableI2pServiceExe(String enableI2pServiceExe){
+            this.enableI2pServiceExe = enableI2pServiceExe;
+            return this;
+        }
+        public ConfigBuilder setEnableI2pServiceExt(String enableI2pServiceExt){
+            this.enableI2pServiceExt = enableI2pServiceExt;
+            return this;
+        }
+        public ConfigBuilder setEnableI2pServiceLib(boolean enableI2pServiceLib){
+            this.enableI2pServiceLib = enableI2pServiceLib;
             return this;
         }
         public ConfigBuilder setListenOnTcp(String listenOnTcp){
@@ -437,6 +452,9 @@ public class Config implements Parcelable {
                     cacheStaticPath,
                     cacheStaticContentPath,
                     i2pBep3Tracker,
+                    enableI2pServiceExe,
+                    enableI2pServiceExt,
+                    enableI2pServiceLib,
                     listenOnTcp,
                     frontEndEp,
                     frontEndAccessToken,
@@ -479,6 +497,9 @@ public class Config implements Parcelable {
     private String cacheStaticPath;
     private String cacheStaticContentPath;
     private String i2pBep3Tracker;
+    private String enableI2pServiceExe;
+    private String enableI2pServiceExt;
+    private boolean enableI2pServiceLib;
     private String listenOnTcp;
     private String frontEndEp;
     private String frontEndAccessToken;
@@ -519,6 +540,9 @@ public class Config implements Parcelable {
                   String cacheStaticPath,
                   String cacheStaticContentPath,
                   String i2pBep3Tracker,
+                  String enableI2pServiceExe,
+                  String enableI2pServiceExt,
+                  boolean enableI2pServiceLib,
                   String listenOnTcp,
                   String frontEndEp,
                   String frontEndAccessToken,
@@ -558,6 +582,9 @@ public class Config implements Parcelable {
         this.cacheStaticPath = cacheStaticPath;
         this.cacheStaticContentPath = cacheStaticContentPath;
         this.i2pBep3Tracker = i2pBep3Tracker;
+        this.enableI2pServiceExe = enableI2pServiceExe;
+        this.enableI2pServiceExt = enableI2pServiceExt;
+        this.enableI2pServiceLib = enableI2pServiceLib;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
         this.frontEndAccessToken = frontEndAccessToken;
@@ -625,6 +652,15 @@ public class Config implements Parcelable {
     }
     public String getI2pBep3Tracker() {
         return i2pBep3Tracker;
+    }
+    public String getEnableI2pServiceExe() {
+        return enableI2pServiceExe;
+    }
+    public String getEnableI2pServiceExt() {
+        return enableI2pServiceExt;
+    }
+    public boolean getEnableI2pServiceLib() {
+        return enableI2pServiceLib;
     }
     public String getListenOnTcp() {
         return listenOnTcp;
@@ -734,6 +770,9 @@ public class Config implements Parcelable {
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
         out.writeString(i2pBep3Tracker);
+        out.writeString(enableI2pServiceExe);
+        out.writeString(enableI2pServiceExt);
+        out.writeInt(enableI2pServiceLib ? 1 : 0);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
         out.writeString(frontEndAccessToken);
@@ -784,6 +823,9 @@ public class Config implements Parcelable {
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
         i2pBep3Tracker = in.readString();
+        enableI2pServiceExe = in.readString();
+        enableI2pServiceExt = in.readString();
+        enableI2pServiceLib = in.readInt() != 0;
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
         frontEndAccessToken = in.readString();
