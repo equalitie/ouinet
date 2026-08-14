@@ -571,10 +571,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
     if (const char *env_var = std::getenv("CLIENT_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
         _client_credentials = env_var;
-    } else if (auto opt = as_optional<string>(vm, "client-credentials"); !opt->empty()) {
+    } else if (auto opt = as_optional<string>(vm, "client-credentials"); opt && !opt->empty()) {
         _client_credentials = std::move(*opt);
     }
-    if (_client_credentials.find(':') == string::npos) {
+    if (!_client_credentials.empty() && _client_credentials.find(':') == string::npos) {
         throw error(
             "The '--client-credentials' argument or CLIENT_CREDENTIALS env variable expects a string "
             "in the format <username>:<password>, but the provided "
@@ -582,10 +582,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     }
     if (const char *env_var = std::getenv("FRONTEND_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
         _frontend_credentials = env_var;
-    } else if (auto opt = as_optional<string>(vm, "frontend-credentials"); !opt->empty()) {
+    } else if (auto opt = as_optional<string>(vm, "frontend-credentials"); opt && !opt->empty()) {
         _frontend_credentials = std::move(*opt);
     }
-    if (_frontend_credentials.find(':') == string::npos) {
+    if (!_frontend_credentials.empty() && _frontend_credentials.find(':') == string::npos) {
         throw error(
             "The '--frontend-credentials' argument or FRONTEND_CREDENTIALS env variable expects a string "
             "in the format <username>:<password>, but the provided "
