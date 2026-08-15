@@ -14,11 +14,6 @@ from test_http import (
 
 ctrl_c = asyncio.Event()
 
-# Third cache client (pure puller) — fresh ports so it doesn't collide
-# with cache_client_1 / cache_client_2 defined in TestFixtures.
-CACHE_CLIENT_3 = {"name": "cache_client_3", "port": 8072, "fe_port": 8077}
-
-
 def shutdown(_x, _y):
     ctrl_c.set()
 
@@ -156,8 +151,8 @@ async def main():
     print("Injector I2P id: " + injector_i2p_public_id)
 
     # Baseline (no BEP3 cache).
-    client1 = cacheless_i2p_client(injector_i2p_public_id)
-    await wait_for_benchmark(client1, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    # client1 = cacheless_i2p_client(injector_i2p_public_id)
+    # await wait_for_benchmark(client1, TestFixtures.I2P_TUNNEL_READY_REGEX)
 
     # BEP3 cache contributor.
     client2 = bep3_cache_contributor(
@@ -165,8 +160,8 @@ async def main():
     )
     await wait_for_benchmark(client2, TestFixtures.I2P_TUNNEL_READY_REGEX)
 
-    # BEP3 cache puller — no --injector-ep.
-    client3 = bep3_puller_client(CACHE_CLIENT_3, index_key)
+    # # BEP3 cache puller — no --injector-ep.
+    client3 = bep3_puller_client(TestFixtures.CACHE_CLIENT[1], index_key)
     await wait_for_benchmark(client3, TestFixtures.I2P_TUNNEL_READY_REGEX)
 
     print()

@@ -20,8 +20,9 @@ class TestFixtures:
     BEP5_CACHE_TIMEOUT = 900
     BEP3_CACHE_TIMEOUT = I2P_TRANSPORT_TIMEOUT + BEP5_CACHE_TIMEOUT
 
-    BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
+    #BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
     #BEP3_TRACKER_ID = "2qqoqlnajwd7qbtdfdn7enadnwktiqnn5ysear3ammt4dq6m65iq.b32.i2p"  #opentracker-i2p
+    BEP3_TRACKER_ID = "2rkpwc6l5phjeqdxyjodbkia4b6w44vh6wemzo3hdu6ycfmraaiq.b32.i2p" #Frankfurt
 
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
@@ -92,6 +93,7 @@ class TestFixtures:
     # TEST_PAGE_BODY = b"<html><body>TESTPAGE</body></html>\n"
     TEST_HTTP_SERVER_PORT = 7080
     RESPONSE_LENGTH = 20
+    MULTI_BLOCK_RESPONSE_LENGTH = 96 * 1024
 
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
     TCP_CLIENT = {"name": "tcp_client", "port": 8075, "fe_port": 8099}

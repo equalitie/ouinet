@@ -32,17 +32,17 @@ namespace ouinet::ouiservice::i2poui {
     size_t init_counter;
 }
 
-static std::map<std::string, std::string> make_tunnel_params(size_t hops) {
+static i2p::util::Mapping make_tunnel_params(size_t hops) {
     //i2pd does not support more than 8 hops
     auto h = std::to_string(std::min(hops, (size_t)8));
-    return {
-        { i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, h},
-        { i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3"},
-        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, h},
-        { i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3"},
-        // we set ack delay to 20 ms, because this outnet is considered as low-latency
-        { i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20"}
-    };
+    i2p::util::Mapping params;
+    params.Insert(i2p::client::I2CP_PARAM_INBOUND_TUNNEL_LENGTH, h);
+    params.Insert(i2p::client::I2CP_PARAM_INBOUND_TUNNELS_QUANTITY, "3");
+    params.Insert(i2p::client::I2CP_PARAM_OUTBOUND_TUNNEL_LENGTH, h);
+    params.Insert(i2p::client::I2CP_PARAM_OUTBOUND_TUNNELS_QUANTITY, "3");
+    // we set ack delay to 20 ms, because this outnet is considered as low-latency
+    params.Insert(i2p::client::I2CP_PARAM_STREAMING_INITIAL_ACK_DELAY, "20");
+    return params;
 }
 
 Service::Service(const string& datadir, const executor_type& exec, const size_t _number_of_hops_per_tunnel)
@@ -105,7 +105,7 @@ void Service::load_known_hosts_to_address_book()
     std::ifstream f(_data_dir + "/" + "hosts.txt", std::ifstream::in);
     if (f.is_open ())
       {
-        _i2p_address_book->LoadHostsFromStream (f, false);
+        _i2p_address_book->LoadHostsFromStream (std::move(f), false);
         LOG_INFO("Pre-resolved host loaded!");
 
       }

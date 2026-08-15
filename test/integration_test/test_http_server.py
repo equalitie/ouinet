@@ -12,6 +12,9 @@ from test_fixtures import TestFixtures
 class SimpleHandler(BaseHTTPRequestHandler):
     """Serve a single page, echoing ?content=… if present."""
 
+    # Force HTTP/1.1 so cached responses inherit keep-alive semantics.
+    protocol_version = "HTTP/1.1"
+
     def send_urandom(self, size: int) -> None:
         print("returning urandom")
         response = os.urandom(size)
@@ -21,6 +24,8 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Length", str(len(response)))
+        # Match the echo path so BEP3/BEP5 cache clients treat the response as cacheable
+        self.send_header("Cache-Control", "public, max-age=3600, immutable")
         self.end_headers()
         self.wfile.write(response)
 

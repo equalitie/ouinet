@@ -6,6 +6,8 @@
 
 #include <boost/asio.hpp>
 
+#include "i2pd/libi2pd/util.h"
+
 #include "client.h"
 #include "server.h"
 
@@ -41,7 +43,7 @@ public:
     executor_type get_executor() { return _exec; };
 
     std::shared_ptr<i2p::client::ClientDestination> get_local_destination () const { return _local_destination; };
-    const std::map<std::string, std::string>& get_tunnel_params() const { return _tunnel_params; };
+    const i2p::util::Mapping& get_tunnel_params() const { return _tunnel_params; };
 
     std::unique_ptr<Server> build_server(const std::string& private_key_filename);
     std::unique_ptr<Client> build_client(const std::string& target_id
@@ -55,7 +57,7 @@ protected:
 
     // all client tunnels share local destination, because destination is expensive
     std::shared_ptr<i2p::client::ClientDestination> _local_destination;
-    std::map<std::string, std::string> _tunnel_params;
+    i2p::util::Mapping _tunnel_params;
 
     // We run an address book as soon as we start the the i2pd daemon simialr to i2pd client
     i2p::client::AddressBook* _i2p_address_book = nullptr;

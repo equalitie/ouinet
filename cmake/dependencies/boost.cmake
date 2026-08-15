@@ -35,6 +35,7 @@ if(NOT WITH_EXPERIMENTAL)
 endif()
 
 set(BOOST_COMPONENTS
+    atomic
     context
     ${BOOST_COROUTINE_BACKEND}
     date_time

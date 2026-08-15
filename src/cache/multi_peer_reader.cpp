@@ -14,6 +14,7 @@
 #include "../util/sign.h"
 #include "../util/crypto_stream.h"
 #include "../util/intrusive_list.h"
+#include "../util/exponential_backoff.h"
 #include "../constants.h"
 #include "../util/set_io.h"
 #include "../util/async_job.h"
@@ -113,6 +114,18 @@ public:
 
     GenericStream _connection;
 
+#ifdef __EXPERIMENTAL__
+    // We need to keep the i2p LocalDestination alive for as long as
+    // `_connection` may be written to, because the client destroys its
+    // connections when it dies.
+    // Otherwise, for example, the per-peer i2p_client that
+    // is created in  add_candidate_i2p and gets destroyed as soon as the spawn
+    // coroutine exits — even though `_connection` still references its tunnel
+    // and if cause segdev if the write happens after
+    // the coroutine exited.    
+    std::unique_ptr<ouiservice::i2poui::Client> _i2p_client;
+#endif
+
     HashList _hash_list;
     Cancel _lifetime_cancel;
     util::LogPath _log_path;
@@ -199,20 +212,39 @@ public:
             return or_throw<OptBlock>(yield, Errc::block_is_too_big);
         }
 
+        LOG_DEBUG("read_block[", block_id, "]: got first chunk_hdr size=",
+                  first_chunk_hdr->size);
+
         Block block{{{}, 0},{0, {}}, boost::none};
         util::SHA512 block_hasher;
 
         if (first_chunk_hdr->size) {
             // Read the block and the chunk header that comes after it.
+            size_t chunk_body_iter = 0;
             while (true) {
+                LOG_DEBUG("read_block[", block_id, "]: awaiting chunk_body iter=",
+                          chunk_body_iter, " accumulated=", block.chunk_body.size());
                 p = reader.timed_async_read_part(READ_CHUNK_BODY_TIMEOUT, c, yield[ec]);
+                if (ec) {
+                    LOG_DEBUG("read_block[", block_id,
+                              "]: chunk_body read failed on iter=", chunk_body_iter,
+                              " accumulated=", block.chunk_body.size(), " ec=", ec);
+                }
                 return_or_throw_on_error(yield, c, ec, OptBlock{});
 
                 auto chunk_body = p->as_chunk_body();
                 if (!chunk_body) {
+                    LOG_DEBUG("read_block[", block_id,
+                              "]: expected chunk_body but got a different part on iter=",
+                              chunk_body_iter);
                     assert(0 && "Expected chunk body");
                     return or_throw<OptBlock>(yield, Errc::expected_chunk_body);
                 }
+
+                LOG_DEBUG("read_block[", block_id,
+                          "]: got chunk_body piece iter=", chunk_body_iter,
+                          " size=", chunk_body->size(),
+                          " remain=", chunk_body->remain);
 
                 block_hasher.update(*chunk_body);
 
@@ -224,16 +256,40 @@ public:
                     chunk_body->begin(), chunk_body->end());
 
                 if (chunk_body->remain == 0) {
+                    LOG_DEBUG("read_block[", block_id,
+                              "]: chunk_body loop done after iter=", chunk_body_iter,
+                              " total=", block.chunk_body.size());
                     break;
                 }
+                ++chunk_body_iter;
             }
 
+            // Now expect the terminator chunk header (size == 0).
+            LOG_DEBUG("read_block[", block_id,
+                      "]: chunk body complete — awaiting terminator chunk_hdr");
             p = reader.timed_async_read_part(READ_CHUNK_HDR_TIMEOUT, c, yield[ec]);
+            if (ec) {
+                LOG_DEBUG("read_block[", block_id,
+                          "]: terminator chunk_hdr read failed ec=", ec);
+            }
 
             ChunkHdr* last_chunk_hdr = p ? p->as_chunk_hdr() : nullptr;
 
-            if (!last_chunk_hdr) ec = Errc::expected_chunk_hdr;
-            else if (last_chunk_hdr->size != 0) ec = Errc::expected_no_more_data;
+            if (!last_chunk_hdr) {
+                LOG_DEBUG("read_block[", block_id,
+                          "]: expected terminator chunk_hdr, got nullptr/other part");
+                ec = Errc::expected_chunk_hdr;
+            }
+            else if (last_chunk_hdr->size != 0) {
+                LOG_DEBUG("read_block[", block_id,
+                          "]: expected terminator (size=0) chunk_hdr, got size=",
+                          last_chunk_hdr->size);
+                ec = Errc::expected_no_more_data;
+            }
+            else {
+                LOG_DEBUG("read_block[", block_id,
+                          "]: got terminator chunk_hdr — block read complete");
+            }
             return_or_throw_on_error(yield, c, ec, OptBlock{});
         }
 
@@ -496,38 +552,86 @@ public:
             TRACK_HANDLER();
             sys::error_code ec;
 
-            LOG_DEBUG(log_path, " Fetching hash list from I2P: ", i2p_dest);
-
-            Cancel timeout_cancel(c);
-            auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
-                LOG_DEBUG("BEP3 hash list download timed out for: ", i2p_dest);
-                timeout_cancel();
-            });
-
+            // Build+start the i2p_client once — tunnel setup is expensive
+            // (5–30s on a real i2p network). 
             LOG_DEBUG(log_path, " building new i2p client to tunnel to dest=", i2p_dest);
             auto i2p_client = i2p_service->build_client(i2p_dest);
             i2p_client->start(y[ec]);
-
-            auto y_ = y[ec];
-            fail_on_error_or_timeout(y_, c, ec, wd);
-
-            LOG_DEBUG(log_path, " connecting to the i2p peer");
-            auto con = i2p_client->connect(y[ec], c);
-            fail_on_error_or_timeout(y_, c, ec, wd);
-
-            LOG_DEBUG(log_path, " downloading hash list over i2p...");
-            p->download_hash_list(con, _newest_proto_seen, timeout_cancel, c, y[ec]);
-
-            LOG_DEBUG(log_path, " Done fetching hash list; i2p_dest=", i2p_dest
-                     , " ec=", ec, " c=", bool(c));
-
             if (c) return;
+            if (ec) {
+                LOG_DEBUG(log_path, " BEP3 i2p_client start failed ec=", ec,
+                          " — dropping peer: ", i2p_dest);
+                p->_candidate_hook.unlink();
+                _cv.notify();
+                return;
+            }
+            // Hand ownership to the Peer so
+            // the LocalDestination outlives this coroutine; otherwise later
+            // writes on `_connection` race with the tunnel teardown and
+            // crash.
+            p->_i2p_client = std::move(i2p_client);
 
-            p->_candidate_hook.unlink();
+            // On timeout, retry with exponential-backoff around connect+download_hash_list. 
+            // sleep and try again on the SAME client/tunnel — i2pd's
+            // LocalDestination already rotates through several inbound/outbound
+            // tunnels internally, so a fresh Client::connect() call still gets
+            // some path diversity for free.
 
-            if (!ec) _good_peers.push_back(*p);
+            // On a non-timeout failure (e.g.
+            // Element not found — the peer said it doesn't have the resource),
+            // give up on this peer immediately: retrying wouldn't change the
+            // answer. The outer _lifetime_cancel (captured as `c`) breaks the
+            // loop when the MultiPeerReader shuts down.
+            for (uint32_t attempt = 0; ; ++attempt) {
+                ec = {};
 
-            _cv.notify();
+                Cancel timeout_cancel(c);
+                auto wd = watch_dog(_exec, MultiPeerReader::BEP3_HASH_LIST_TIMEOUT, [&] {
+                    LOG_DEBUG("I2P BEP3 hash list download timed out for: ", i2p_dest);
+                    timeout_cancel();
+                });
+
+                LOG_DEBUG(log_path, " connecting to the i2p peer (attempt=",
+                          attempt, ")");
+                auto con = p->_i2p_client->connect(y[ec], timeout_cancel);
+                if (c) return;
+
+                if (!ec) {
+                    LOG_DEBUG(log_path, " downloading hash list over i2p...");
+                    p->download_hash_list(con, _newest_proto_seen,
+                                          timeout_cancel, c, y[ec]);
+                    if (c) return;
+                }
+
+                LOG_DEBUG(log_path, " Done fetching hash list attempt=", attempt,
+                          " i2p_dest=", i2p_dest, " ec=", ec, " c=", bool(c));
+
+                if (!ec) {
+                    // Success — promote to good_peers.
+                    p->_candidate_hook.unlink();
+                    _good_peers.push_back(*p);
+                    _cv.notify();
+                    return;
+                }
+
+                // Distinguish timeout (transient — retry) from a definitive
+                // failure (e.g., Element not found — give up on this peer).
+                const bool timed_out = !wd.is_running();
+                if (!timed_out) {
+                    LOG_DEBUG(log_path, " BEP3 peer definitive failure ec=", ec,
+                              " — dropping from candidates: ", i2p_dest);
+                    p->_candidate_hook.unlink();
+                    _cv.notify();
+                    return;
+                }
+
+                LOG_DEBUG(log_path, " BEP3 timeout on attempt=", attempt,
+                          " — backing off before retry: ", i2p_dest);
+
+                ec = {};
+                util::exponential_backoff(attempt, c, y[ec]);
+                if (ec || c) return;
+            }
         });
     }
 #endif
@@ -625,6 +729,9 @@ public:
         }
 
         if (!best_peer) return or_throw<HashList>(yield, Errc::no_peers);
+
+        LOG_DEBUG("choose_reference_hash_list: chosen peer has blocks.size()=",
+                  best_peer->_hash_list.blocks.size());
 
         return best_peer->_hash_list;
     }
@@ -863,10 +970,14 @@ MultiPeerReader::new_fetch_job(size_t block_id, Peer* last_peer, Cancel& cancel,
 
 // May return boost::none and no error if the response has no body (e.g. redirect msg)
 boost::optional<MultiPeerReader::Block>
-MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_context yield)
-{
-    //   Q0   Q1   R0   Q2   R1   Q3   R2
-    // |----|----|----|----|----|----|----|...
+MultiPeerReader::fetch_block(size_t block_id, Cancel &cancel, asio::yield_context yield) {
+
+  // Pipelining: send Q_{n+1} while reading R_n
+  //   Q0   Q1   R0   Q2   R1   Q3   R2
+  // |----|----|----|----|----|----|----|...
+  // somehow doesn't work here. read_block(n) over-reads response[n+1]
+  // I think and those bytes are lost. Till this gets fixed we send Q_{n+1} only after
+  // read_block(n) has completed.
 
     using OptBlock = boost::optional<MultiPeerReader::Block>;
 
@@ -881,9 +992,6 @@ MultiPeerReader::fetch_block(size_t block_id, Cancel& cancel, asio::yield_contex
     }
 
     auto fetch = std::move(_pre_fetch);
-
-    _pre_fetch = new_fetch_job(block_id + 1, fetch->peer, cancel, yield[ec]);
-    return_or_throw_on_error(yield, cancel, ec, OptBlock{});
 
     while (true) {
         auto block = fetch->get_block(cancel, yield[ec]);

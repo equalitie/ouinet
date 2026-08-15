@@ -289,15 +289,21 @@ async def wait_for_benchmark(process: OuinetProcess, benchmark: str) -> None:
     print("successfully waited for", benchmark, "\n\n")
 
 
-def request_sized_content(port, content_size) -> Response:
+def request_sized_content(port, content_size, nonce: Optional[str] = None) -> Response:
     """
-    Send a get request to request the test server to send a random content of a specific size
+    Send a get request to request the test server to send a random content of a
+    specific size. `nonce`, if provided, is appended as an ignored query
+    parameter so callers can force a unique cache key per test run (avoiding
+    stale announces from previous runs pointing at peers that no longer serve
+    this URL).
     """
     url = "http://%s:%d/?content_size=%s" % (
         get_nonloopback_ip(),
         TestFixtures.TEST_HTTP_SERVER_PORT,
         str(content_size),
     )
+    if nonce is not None:
+        url += "&nonce=" + nonce
     return request_url(port, url)
 
 
@@ -511,7 +517,7 @@ async def get_cached_echo(
 
     `retry_delay` is the wait between attempts.
 
-    For BEP3-over-I2P tests we pass a longer delay of 
+    For BEP3-over-I2P tests we pass a longer delay of
    `TestFixtures.I2P_TUNNEL_HEALING_PERIOD` (each request_echo blocks
     with timeout=None until the cache fetch succeeds or fails, so a retry
     only fires after the previous attempt has fully completed;
@@ -532,16 +538,61 @@ async def get_cached_echo(
         f"Failed to get cached response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts"
     )
 
+
+async def get_cached_sized_content(
+    port: int, expected_body: bytes, nonce: str, retry_delay: float = 5
+) -> Response:
+    """Fetch a cached sized-content response with retries, comparing bytes.
+
+    The sized-content endpoint (?content_size=N) returns N random bytes on the
+    origin path; on the cache path it must return the same bytes originally
+    stored. `expected_body` is the payload captured on the priming call, and
+    `nonce` must match the value used when priming so the URL (and therefore
+    the cache key) is identical.
+    """
+    content_size = len(expected_body)
+    for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
+        try:
+            print(f"get_cached_sized_content attempt {i + 1}... size={content_size}")
+            response = await asyncio.to_thread(
+                request_sized_content, port, content_size, nonce
+            )
+            if response.status_code == 200:
+                assertEquals(response.content, expected_body)
+                return response
+            print(
+                f"get_cached_sized_content: got status {response.status_code}, retrying..."
+            )
+        except Exception as e:
+            print(f"get_cached_sized_content: {e}, retrying...")
+        await asyncio.sleep(retry_delay)
+
+    raise AssertionError(
+        f"Failed to get cached sized response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts"
+    )
+
 @pytest.mark.timeout(TestFixtures.BEP5_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_tcp_cache(certificate_file, http_server):
+@pytest.mark.parametrize("content_length", [TestFixtures.RESPONSE_LENGTH, 96 * 1024])
+async def test_tcp_cache(certificate_file, http_server, content_length):
     """
     Starts an echoing http server, a injector and a two clients and client1 send a unique http
     request to the echoing http server through the g client --tcp--> injector -> http server
     and make sure it gets the correct echo. The test waits for the response to be cached.
     Then the second client request the same request makes sure that
     the response is served from cache.
+
+    Parametrized over content_length to cover both a small single-chunk payload
+    and a >64KB payload that spans multiple cache chunks — mirrors the BEP3
+    parametrization so we can compare multi-block behavior across transports.
     """
+    banner = (
+        "\n" + "*" * 78
+        + f"\n*** test_tcp_cache: content_length = {content_length} bytes"
+        + "\n" + "*" * 78 + "\n"
+    )
+    print(banner)
+    logging.info(banner)
     # Injector (caching by default)
     injector = run_tcp_injector(
         ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
@@ -575,10 +626,25 @@ async def test_tcp_cache(certificate_file, http_server):
     # Wait for the client to open the port
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
-    content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
-    assertEquals(response.status_code, 200)
-    assertEquals(response.text, content)
+    # for short responses we echo the content in the URL
+    use_sized = content_length > 4096
+    if use_sized:
+        sized_nonce = safe_random_str(16)
+        response = await asyncio.to_thread(
+            request_sized_content,
+            TestFixtures.CACHE_CLIENT[0]["port"],
+            content_length,
+            sized_nonce,
+        )
+        assertEquals(response.status_code, 200)
+        expected_body = response.content
+        assertEquals(len(expected_body), content_length)
+    # otherwise we generate random body.
+    else:
+        content = safe_random_str(content_length)
+        response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+        assertEquals(response.status_code, 200)
+        assertEquals(response.text, content)
 
     # Shut injector down to ensure it does not seed content to the cache client
     await injector.stop()
@@ -610,7 +676,12 @@ async def test_tcp_cache(certificate_file, http_server):
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
 
     # Now request the same page from second client
-    await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
+    if use_sized:
+        await get_cached_sized_content(
+            TestFixtures.CACHE_CLIENT[1]["port"], expected_body, sized_nonce
+        )
+    else:
+        await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
     # # make sure it was served from cache
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
@@ -837,12 +908,23 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
 
 @pytest.mark.timeout(TestFixtures.BEP3_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_bep3_cache_over_i2p(http_server, log):
+@pytest.mark.parametrize("content_length", [TestFixtures.RESPONSE_LENGTH, TestFixtures.MULTI_BLOCK_RESPONSE_LENGTH])
+async def test_bep3_cache_over_i2p(http_server, log, content_length):
     """
     Tests BEP3 cache over I2P: client1 fetches content via TCP injector,
     caches it and announces to BEP3 tracker over I2P. After injector is stopped,
     client2 looks up peers via the same BEP3 tracker and retrieves from cache.
+
+                    Parametrized over content_length to cover both a small single-chunk payload
+    and a >64KB payload that spans multiple cache chunks.
     """
+    banner = (
+        "\n" + "*" * 78
+        + f"\n*** test_bep3_cache_over_i2p: content_length = {content_length} bytes"
+        + "\n" + "*" * 78 + "\n"
+    )
+    print(banner)
+    logging.info(banner)
     logging.debug("Hello!")
     # TCP Injector (provides signing key, no I2P needed)
     injector = run_tcp_injector(
@@ -886,10 +968,27 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # is the only signal that the I2P path to the tracker is actually usable.
     await wait_for_benchmark(client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
-    content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
-    assertEquals(response.status_code, 200)
-    assertEquals(response.text, content)
+    # For small content, use the echo endpoint (content in URL — inherently
+    # unique per run). For large content, use the sized-content endpoint plus
+    # a random nonce to force a unique URL per run so we don't hit stale
+    # tracker announces pointing at peers from prior runs.
+    use_sized = content_length > 4096
+    if use_sized:
+        sized_nonce = safe_random_str(16)
+        response = await asyncio.to_thread(
+            request_sized_content,
+            TestFixtures.CACHE_CLIENT[0]["port"],
+            content_length,
+            sized_nonce,
+        )
+        assertEquals(response.status_code, 200)
+        expected_body = response.content
+        assertEquals(len(expected_body), content_length)
+    else:
+        content = safe_random_str(content_length)
+        response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+        assertEquals(response.status_code, 200)
+        assertEquals(response.text, content)
 
     # This somehow cause client1 to crash
     # Shut injector down to ensure it does not seed content to cache client
@@ -963,11 +1062,19 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # await asyncio.sleep(TestFixtures.I2P_DHT_ADVERTIZE_WAIT_PERIOD)
 
     # Retrieve cached content
-    await get_cached_echo(
-        TestFixtures.CACHE_CLIENT[1]["port"],
-        content,
-        retry_delay=TestFixtures.I2P_TUNNEL_HEALING_PERIOD,
-    )
+    if use_sized:
+        await get_cached_sized_content(
+            TestFixtures.CACHE_CLIENT[1]["port"],
+            expected_body,
+            sized_nonce,
+            retry_delay=TestFixtures.I2P_TUNNEL_HEALING_PERIOD,
+        )
+    else:
+        await get_cached_echo(
+            TestFixtures.CACHE_CLIENT[1]["port"],
+            content,
+            retry_delay=TestFixtures.I2P_TUNNEL_HEALING_PERIOD,
+        )
 
     # By this point client2 has gone through one or more get_peers rounds; if
     # the tracker is doing its job and our parser decoded it correctly, one of
