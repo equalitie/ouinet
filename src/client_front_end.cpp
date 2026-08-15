@@ -1,3 +1,4 @@
+#include "authenticate.h"
 #include "client_front_end.h"
 #include "generic_stream.h"
 #include "util.h"
@@ -65,53 +66,63 @@ static string as_safe_html(E e) {
 }
 
 struct TextInput {
-    beast::string_view html_label;
+    std::string_view html_label;
     char shortcut;
-    beast::string_view name;
-    beast::string_view placeholder;
-    std::string current_value;
+    std::string_view name;
+    std::string_view placeholder;
+    std::string_view current_value;
+    std::string_view csrf_token;
 };
 
 struct ToggleInput {
-    beast::string_view html_label;
+    std::string_view html_label;
     char shortcut;
-    beast::string_view name;
+    std::string_view name;
     bool current_value;
+    std::string_view csrf_token;
 };
 
 template<typename E>
 struct ClientFrontEnd::Input {
+private:
+    static std::vector<std::string> generate_string_values(const vector<E> &values) {
+        vector<std::string> string_values;
+        string_values.reserve(values.size());
+        for (const auto& val: values) {
+            std::ostringstream ss;
+            ss << val;
+            string_values.push_back(ss.str());
+        }
+        return string_values;
+    }
+public:
     string html_label;
     char shortcut;
     string name;
-    vector<E> values;
+    const vector<E> values;
+    const vector<std::string> string_values;
     E current_value;
+    std::string_view csrf_token;
 
-    Input( string html_label, char shortcut, string name
-         , vector<E> values, E current_value)
+    Input( string html_label, const char shortcut, string name
+         , vector<E> values_, E current_value, const std::string_view csrf_token)
         : html_label(std::move(html_label))
         , shortcut(shortcut)
         , name(std::move(name))
-        , values(std::move(values))
+        , values(std::move(values_))
+        , string_values(generate_string_values(values))
         , current_value(current_value)
+        , csrf_token(csrf_token)
     {}
 
     // Return true on change
-    bool update(beast::string_view s) {
-        auto i = s.find("?");
-        if (i == beast::string_view::npos) return false;
-        s = s.substr(i+1);
-        if (s.substr(0, name.size()) != name) return false;
-        s = s.substr(name.size());
-        if (s.empty() || s[0] != '=') return false;
-        s = s.substr(1);
-        for (auto v : values) {
-            ostringstream ss;
-            ss << v;
-            if (ss.str() == s) {
-                E prev = current_value;
-                current_value = v;
-                return prev != current_value;
+    bool update(const std::string_view new_value) {
+        for (size_t i = 0; i < string_values.size(); i++) {
+            if (string_values[i] == new_value) {
+                if (current_value != values[i]) {
+                    current_value = values[i];
+                    return true;
+                }
             }
         }
         return false;
@@ -122,13 +133,14 @@ namespace ouinet { // Need namespace here for argument-dependent-lookups to work
 
 ostream& operator<<(ostream& os, const TextInput& i) {
     return os <<
-          "<form method=\"get\">\n"
+          "<form method=\"POST\">\n"
           "    <label>" << i.html_label << ": "
                     "<input type=\"text\" "
                            "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "accesskey=\""  << i.shortcut << "\" "
                            "value=\"" << as_safe_html(i.current_value) << "\" "
                            "placeholder=\"" << as_safe_html(i.placeholder) << "\"/>"
+                    "<input type=\"hidden\" name=\"csrf\" value=\"" << i.csrf_token << "\" />"
                     "<input type=\"submit\" value=\"set\"/></label>\n"
           "</form>\n";
 }
@@ -138,18 +150,19 @@ ostream& operator<<(ostream& os, const ToggleInput& i) {
     auto next_value = i.current_value ? "disable" : "enable";
 
     return os <<
-          "<form method=\"get\">\n"
+          "<form method=\"POST\">\n"
           "    <label>" << i.html_label << ": " << cur_value << "&nbsp;"
                     "<input type=\"submit\" "
                            "name=\""  << i.name << "\" id=\"input-" << i.name << "\" "
                            "accesskey=\""  << i.shortcut << "\" "
                            "value=\"" << next_value << "\"/></label>\n"
+                "<input type=\"hidden\" name=\"csrf\" value=\"" << i.csrf_token << "\" />"
           "</form>\n";
 }
 
 template<typename E>
 ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
-    os << "<form method=\"get\">\n"
+    os << "<form method=\"POST\">\n"
           "    <label>" << i.html_label << ": " << as_safe_html(i.current_value) << "&nbsp;"
                     "<select onchange=\"this.form.submit()\" "
                             "name=\"" << i.name << "\" id=\"input-" << i.name << "\" "
@@ -162,6 +175,7 @@ ostream& operator<<(ostream& os, const ClientFrontEnd::Input<E>& i) {
     }
 
     os << "</select></label>\n"
+        "<input type=\"hidden\" name=\"csrf\" value=\"" << i.csrf_token << "\" />\n"
           "</form>\n";
 
     return os;
@@ -188,14 +202,30 @@ static ostream& operator<<(ostream& os, const ClientFrontEnd::Task& task) {
 
 } // ouinet namespace
 
-ClientFrontEnd::ClientFrontEnd(const ClientConfig& config)
-    : _log_level_input(new Input<log_level_t>( "Log le<u>v</u>el", 'v', "loglevel"
-                                             , { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR_LEVEL, ABORT }, config.log_level()))
-{}
+static std::string random_string(const std::size_t length) {
+    constexpr auto chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"sv;
 
-void ClientFrontEnd::handle_ca_pem( const Request& req, Response& res, ostringstream& ss
-                                  , const CACertificate& ca)
-{
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<std::size_t> dist(0, chars.length() - 1);
+
+    std::string s;
+    s.reserve(length);
+    for (std::size_t i = 0; i < length; ++i)
+        s += chars[dist(gen)];
+    return s;
+}
+
+ClientFrontEnd::ClientFrontEnd(const ClientConfig& config) {
+    _csrf_token = random_string(32);
+    _log_level_input = std::make_unique<Input<log_level_t>>(
+        "Log le<u>v</u>el", 'v', "loglevel"
+        , std::vector<log_level_t>{ SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR_LEVEL, ABORT }
+        , config.log_level(),
+        _csrf_token);
+}
+
+void ClientFrontEnd::handle_ca_pem(Response& res, ostringstream& ss, const CACertificate& ca) {
     res.set(http::field::content_type, "application/x-x509-ca-cert");
     res.set(http::field::content_disposition, "inline");
 
@@ -400,125 +430,18 @@ void ClientFrontEnd::handle_pinned_list( const Request&
         ss << g << std::endl;
 }
 
-std::map<std::string, std::string, std::less<>> get_query(std::string_view target) {
-
-    auto separator = target.find('?');
-
-    std::map<std::string, std::string, std::less<>> query;
-    auto npos = std::string_view::npos;
-
-    if (separator == npos) {
-        return query;
-    }
-
-    target = target.substr(separator + 1);
-
-    while (!target.empty()) {
-        separator = target.find('&');
-
-        std::string_view entry = target.substr(0, separator);
-
-        if (separator != npos) {
-            target = target.substr(separator + 1);
-        } else {
-            target = target.substr(target.size());
-        }
-
-        separator = entry.find('=');
-
-        if (separator == npos) {
-            continue;
-        }
-
-        std::string_view key = entry.substr(0, separator);
-        std::string_view val = entry.substr(separator + 1);
-
-        if (key.empty()) continue;
-
-        query[std::string(key)] = std::string(val);
-    }
-
-    return query;
-}
-
-std::optional<bool> parse_enable(std::string& str) {
-    if (str == "enable") {
-        return true;
-    } else if (str == "disable") {
-        return false;
-    } else {
-        return {};
-    }
-}
-
 std::expected<void, sys::error_code>
 ClientFrontEnd::handle_portal( ClientConfig& config
-                             , Client::RunningState cstate
-                             , boost::optional<UdpEndpoint> local_ep
-                             , const std::shared_ptr<UPnPs>& upnps_ptr
-                             , const bittorrent::DhtBase* dht
-                             , const Request& req, Response& res, ostringstream& ss
-                             , cache::Client* cache_client
-                             , ClientFrontEndMetricsController& metrics
-                             , Async yield)
+                                  , Client::RunningState cstate
+                                  , boost::optional<UdpEndpoint> local_ep
+                                  , const std::shared_ptr<UPnPs>& upnps_ptr
+                                  , const bittorrent::DhtBase* dht
+                                  , const Request& req, Response& res, ostringstream& ss
+                                  , cache::Client* cache_client
+                                  , ClientFrontEndMetricsController& metrics
+                                  , Async yield)
 {
     res.set(http::field::content_type, "text/html");
-
-    auto target = req.target();
-
-    if (_log_level_input->update(target)) {
-        config.log_level(_log_level_input->current_value);
-        if (config.is_log_file_enabled())  // remember explicitly set level
-            _log_level_no_file = _log_level_input->current_value;
-    }
-
-    auto query = get_query(target);
-
-    bool query_handled = false;
-
-    std::map<std::string_view, std::function<void (bool)>> bool_handlers = {
-        { "origin_access",     [&](bool enable) { config.is_origin_access_enabled(enable);                           } },
-        { "proxy_access",      [&](bool enable) { config.is_proxy_access_enabled(enable);                            } },
-        { "injector_access",   [&](bool enable) { config.is_injector_access_enabled(enable);                         } },
-        { "distributed_cache", [&](bool enable) { config.is_cache_enabled(CacheType::Bep5Http{});                    } },
-        { "auto_refresh",      [&](bool enable) { _auto_refresh_enabled = enable;                                    } },
-        { "logfile",           [&](bool enable) { enable ? enable_log_to_file(config) : disable_log_to_file(config); } },
-        { "metrics",           [&](bool enable) { enable ? metrics.enable() : metrics.disable();                     } },
-    };
-
-    for (auto [name, handler] : bool_handlers) {
-        if (auto it = query.find(name); it != query.end()) {
-            auto enable = parse_enable(it->second);
-            if (!enable.has_value()) {
-                res.result(http::status::bad_request);
-                ss << it->first << " accepts {enable,disable}, given \"" << it->second << "\"";
-                return {};
-            }
-            handler(*enable);
-            query_handled = true;
-        }
-    }
-
-    if (auto it = query.find("purge_cache"); it != query.end() && cache_client) {
-        std::ignore = cache_client->local_purge(yield);
-        query_handled = true;
-    }
-
-    if (auto it = query.find("bt_extra_bootstraps"); it != query.end() && cache_client) {
-        set_bt_extra_bootstraps(it->second, config);
-        query_handled = true;
-    }
-
-    if (query_handled) {
-        // Redirect back to the portal.
-        ss << "<!DOCTYPE html>\n"
-               "<html>\n"
-               "    <head>\n"
-               "        <meta http-equiv=\"refresh\" content=\"0; url=./\"/>\n"
-               "    </head>\n"
-               "</html>\n";
-        return {};
-    }
 
     ss << "<!DOCTYPE html>\n"
           "<html>\n"
@@ -543,18 +466,18 @@ ClientFrontEnd::handle_portal( ClientConfig& config
           "      Verification of HTTPS content coming from the origin will be performed by your Ouinet client\n"
           "      using system-accepted Certification Authorities.</p>\n";
 
-    ss << ToggleInput{"<u>A</u>uto refresh", 'a',      "auto_refresh", _auto_refresh_enabled};
+    ss << ToggleInput{"<u>A</u>uto refresh", 'a',      "auto_refresh", _auto_refresh_enabled, _csrf_token};
 
     ss << "<h2>Request mechanisms</h2>\n";
-    ss << ToggleInput{"<u>O</u>rigin access",'o',      "origin_access", config.is_origin_access_enabled()};
-    ss << ToggleInput{"<u>P</u>roxy access", 'p',      "proxy_access", config.is_proxy_access_enabled()};
-    ss << ToggleInput{"<u>I</u>njector proxy", 'i',    "injector_access", config.is_injector_access_enabled()};
-    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{})};
+    ss << ToggleInput{"<u>O</u>rigin access",'o',      "origin_access", config.is_origin_access_enabled(), _csrf_token};
+    ss << ToggleInput{"<u>P</u>roxy access", 'p',      "proxy_access", config.is_proxy_access_enabled(), _csrf_token};
+    ss << ToggleInput{"<u>I</u>njector proxy", 'i',    "injector_access", config.is_injector_access_enabled(), _csrf_token};
+    ss << ToggleInput{"Distributed <u>C</u>ache", 'c', "distributed_cache", config.is_cache_enabled(CacheType::Bep5Http{}), _csrf_token};
 
     ss << "<h2>Logging</h2>\n";
     ss << *_log_level_input;
     bool log_file_enabled = config.is_log_file_enabled();
-    ss << ToggleInput{"<u>L</u>og file", 'l', "logfile", log_file_enabled};
+    ss << ToggleInput{"<u>L</u>og file", 'l', "logfile", log_file_enabled, _csrf_token};
     if (log_file_enabled)
         ss << "Logging debug output to file: " << as_safe_html(get_logger().current_log_file())
            << " <a href=\"" << log_file_apath << "\" class=\"download\" download=\"ouinet-logfile.txt\">"
@@ -627,7 +550,8 @@ ClientFrontEnd::handle_portal( ClientConfig& config
     ss << TextInput{ "BitTorrent extra <u>b</u>ootstraps (space-separated, applied on restart)", 'b'
                    , "bt_extra_bootstraps"
                    , "HOST1 HOST2:PORT ..."
-                   , get_bt_extra_bootstraps(config)};
+                   , get_bt_extra_bootstraps(config)
+                   , _csrf_token };
 
     if (_show_pending_tasks) {
         ss << "        <h2>Pending tasks " << _pending_tasks.size() << "</h2>\n";
@@ -664,7 +588,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
         else ss << (boost::format("%.02f MiB") % (*local_size / 1048576.));
         ss << "<br>\n";
 
-        ss << "<form method=\"get\">\n"
+        ss << "<form method=\"POST\">\n"
               "    <input type=\"submit\" "
                          "name=\"purge_cache\" id=\"input-purge_cache\" "
                          "value=\"Purge cache now\"/>\n"
@@ -691,7 +615,7 @@ ClientFrontEnd::handle_portal( ClientConfig& config
 
     // Metrics
     ss << "<h2>Metrics</h2>\n";
-    ss << ToggleInput{"<u>M</u>etrics",'m', "metrics", metrics.is_enabled()};
+    ss << ToggleInput{"<u>M</u>etrics",'m', "metrics", metrics.is_enabled(), _csrf_token};
 
     if (metrics.is_enabled())
     {
@@ -721,15 +645,15 @@ size_t injector_candidates_n(ouiservice::Bep5Client* client) noexcept {
 
 std::expected<void, sys::error_code>
 ClientFrontEnd::handle_api_status( ClientConfig& config
-                                 , Client::RunningState cstate
-                                 , boost::optional<UdpEndpoint> local_ep
-                                 , const std::shared_ptr<UPnPs>& upnps_ptr
-                                 , const bittorrent::DhtBase* dht
-                                 , const Request& req, Response& res, ostringstream& ss
-                                 , cache::Client* cache_client
-                                 , ouiservice::Bep5Client* client
-                                 , ClientFrontEndMetricsController& metrics
-                                 , Async yield)
+                                      , Client::RunningState cstate
+                                      , boost::optional<UdpEndpoint> local_ep
+                                      , const std::shared_ptr<UPnPs>& upnps_ptr
+                                      , const bittorrent::DhtBase* dht
+                                      , const Request& req, Response& res, ostringstream& ss
+                                      , cache::Client* cache_client
+                                      , ouiservice::Bep5Client* client
+                                      , ClientFrontEndMetricsController& metrics
+                                      , Async yield) const
 {
     res.set(http::field::content_type, "application/json");
 
@@ -751,6 +675,7 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
         {"metrics_enabled", metrics.is_enabled()},
         {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
+        {"csrf", _csrf_token},
     };
 
     if (local_ep) response["local_udp_endpoints"] = local_udp_endpoints(*local_ep);
@@ -790,10 +715,12 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
     return {};
 }
 
-void ClientFrontEnd::handle_api_groups(std::string_view sub_path
+void ClientFrontEnd::handle_api_groups(const std::string_view sub_path
                                       , const Request& req
                                       , Response& res
                                       , ostringstream& ss
+                                      , const std::unordered_map<std::string_view, std::string_view>& request_arguments
+                                      , const bool is_frontend_post_requirement_enabled
                                       , cache::Client* cache_client)
 {
     res.set(http::field::content_type, "application/json");
@@ -808,10 +735,8 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
         ss << response;
     };
 
-    auto query = get_query(req.target());
-
     string group_name;
-    if (const auto name = query.find("name"); name != query.end())
+    if (const auto name = request_arguments.find("name"); name != request_arguments.end())
     {
         group_name = name->second;
         response["name"] = group_name;
@@ -843,12 +768,20 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
             response["pinned"] = cache_client->is_pinned_group(group_name, ec);
         }
     }
-    else if (sub_path.starts_with("/pin"))
-    {
+    else if (
+        sub_path.starts_with("/pin") && (
+            req.method() == http::verb::post ||
+            !is_frontend_post_requirement_enabled
+        )
+    ){
         response["pinned"] = cache_client->pin_group(group_name, ec);
     }
-    else if (sub_path.starts_with("/unpin"))
-    {
+    else if (
+        sub_path.starts_with("/unpin") && (
+            req.method() == http::verb::post ||
+            !is_frontend_post_requirement_enabled
+        )
+    ) {
         bool unpinned = cache_client->unpin_group(group_name, ec);
         response["pinned"] = !unpinned;
     }
@@ -873,31 +806,32 @@ void ClientFrontEnd::handle_api_groups(std::string_view sub_path
 
 void ClientFrontEnd::handle_api_metrics( std::string_view sub_path
                                        , const Request& req, Response& res, ostringstream& ss
-                                       , ClientFrontEndMetricsController& metrics)
+                                       , ClientFrontEndMetricsController& metrics
+                                       , const std::unordered_map<std::string_view, std::string_view>& request_arguments
+                                       , const bool is_frontend_post_requirement_enabled)
 {
     res.set(http::field::content_type, "text/html");
 
-    if (sub_path.starts_with("/set_key_value")) {
-        auto query = get_query(req.target());
-
-        auto rec_it = query.find("record_id");
-        auto key_it = query.find("key");
-        auto val_it = query.find("value");
-
-        bool missing = false;
-
-        if (rec_it == query.end()) missing = true;
-        if (key_it == query.end()) missing = true;
-        if (val_it == query.end()) missing = true;
-
-        if (missing) {
+    if (
+        sub_path.starts_with("/set_key_value") && (
+            req.method() == http::verb::post ||
+            !is_frontend_post_requirement_enabled
+        )
+    ) {
+        const auto rec_it = request_arguments.find("record_id");
+        const auto key_it = request_arguments.find("key");
+        const auto val_it = request_arguments.find("value");
+        if (
+            rec_it == request_arguments.cend() ||
+            key_it == request_arguments.cend() ||
+            val_it == request_arguments.cend()
+        ){
             res.result(http::status::bad_request);
             ss << "set_key_value requires \"record_id\", \"key\" and \"value\" arguments\n";
             return;
         }
 
-        auto result = metrics.set_aux_key_value(rec_it->second, key_it->second, val_it->second);
-
+        const auto result = metrics.set_aux_key_value(rec_it->second, key_it->second, val_it->second);
         switch (result) {
             case metrics::SetAuxResult::Ok:
                 return; // all good
@@ -948,6 +882,23 @@ ClientFrontEnd::serve( ClientConfig& config
                      , const std::string_view frontend_unix_socket_endpoint
                      , Async yield)
 {
+    if (const auto credentials = config.frontend_credentials(); !credentials.empty()) {
+        bool auth_ok = false;
+        if (const auto auth_i = req.find(http::field::authorization); auth_i != req.cend()) {
+            const std::string computed = authenticate_detail::parse_auth(auth_i->value());
+            if (computed.size() == credentials.size()) {
+                auth_ok = 0 == CRYPTO_memcmp(credentials.data(), computed.data(), credentials.size());
+            }
+        }
+        if (!auth_ok) {
+            Response res{http::status::unauthorized, req.version()};
+            res.keep_alive(false);
+            res.set( http::field::www_authenticate, "Basic realm=\"Ouinet client frontend\"");
+            res.prepare_payload();
+            return res;
+        }
+    }
+
     if (auto& token = config.front_end_access_token()) {
         std::string_view header_key = "X-Ouinet-Front-End-Token";
         if (*token != req[header_key]) {
@@ -968,24 +919,81 @@ ClientFrontEnd::serve( ClientConfig& config
         }
     }
 
+    auto url = util::Url::from(req.target());
+    const auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
+    std::string_view path(path_str);
+
+    std::unordered_map<std::string_view, std::string_view> request_arguments;
+    auto parse_request_arguments = [&request_arguments](const std::string_view input) {
+        for (std::size_t pos = 0; pos < input.size();) {
+            std::size_t amp = input.find('&', pos);
+            if (amp == std::string_view::npos) {
+                amp = input.size();
+            }
+            if (
+                const std::string_view argument_kv = input.substr(pos, amp - pos);
+                !argument_kv.empty()
+            ) {
+                if (const std::size_t eq = argument_kv.find('='); eq != std::string_view::npos) {
+                    const std::string_view key = argument_kv.substr(0, eq);
+                    const std::string_view val = argument_kv.substr(eq + 1);
+                    request_arguments[key] = val;
+                } else {
+                    request_arguments[argument_kv] = ""sv;
+                }
+            }
+            pos = amp + 1;
+        }
+    };
+    // Get arguments from URL
+    if (
+        const auto sep_pos = path.find_first_of('?');
+        sep_pos != std::string_view::npos && path.size() - sep_pos > 1
+    ) {
+        parse_request_arguments(path.substr(sep_pos + 1));
+    }
+    // Add arguments from POST body
+    if (req.method() == http::verb::post) {
+        parse_request_arguments(req.body());
+    }
+
+    // Verify CSRF token for POST requests
+    if (req.method() == http::verb::post) {
+        constexpr auto csrf_input_name = "csrf"sv;
+        const auto supplied_csrf = request_arguments.find(csrf_input_name);
+        if (
+            supplied_csrf == request_arguments.end() ||
+            supplied_csrf->second.length() != _csrf_token.length() ||
+            0 != CRYPTO_memcmp(
+                supplied_csrf->second.data(),
+                _csrf_token.data(),
+                _csrf_token.length()
+            )
+        ) {
+            Response res{http::status::forbidden, req.version()};
+            res.keep_alive(false);
+
+            auto body = std::string("csrf token missing or invalid\n");
+
+            Response::body_type::reader reader(res, res.body());
+            sys::error_code ec;
+            reader.put(asio::buffer(body), ec);
+            assert(!ec);
+
+            res.prepare_payload();
+            return res;
+        }
+        request_arguments.erase(supplied_csrf);
+    }
+
     Response res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.keep_alive(false);
 
     ostringstream ss;
-
-    auto url = util::Url::from(req.target());
-
-    auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
-    std::string_view path(path_str);
-
-    std::string_view groups_api_path = "/api/groups";
-    std::string_view metrics_api_path = "/api/metrics";
-    std::string_view status_api_path = "/api/status";
-    std::string_view endpoints_api_path = "/api/endpoints";
-
+    bool should_show_portal = false;
     if (path == "/ca.pem") {
-        handle_ca_pem(req, res, ss, ca);
+        handle_ca_pem(res, ss, ca);
     } else if (path == log_file_apath) {
         res.set(http::field::content_type, "text/plain");
         load_log_file(config, ss);
@@ -993,19 +1001,78 @@ ClientFrontEnd::serve( ClientConfig& config
         handle_group_list(req, res, ss, cache_client);
     } else if (path == pinned_list_apath) {
         handle_pinned_list(req, res, ss, cache_client);
-    } else if (path == status_api_path) {
+    } else if (path == "/api/status"sv) {
         handle_api_status( config, client_state, local_ep, upnps_ptr, dht
                          , req, res, ss, cache_client, client, metrics
                          , yield);
-    } else if (path.starts_with(groups_api_path)) {
-        path.remove_prefix(groups_api_path.size());
-        handle_api_groups(path, req, res, ss, cache_client);
-    } else if (path.starts_with(metrics_api_path)) {
-        path.remove_prefix(metrics_api_path.size());
-        handle_api_metrics(path, req, res, ss, metrics);
-    } else if (path.starts_with(endpoints_api_path)) {
-        handle_api_endpoints(proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
+    } else if (path == "/api/endpoints"sv) {
+        handle_api_endpoints( proxy_endpoint, frontend_endpoint, frontend_unix_socket_endpoint, res, ss);
+    } else if (path.starts_with("/api/groups"sv)) {
+        path.remove_prefix("/api/groups"sv.size());
+        handle_api_groups(path, req, res, ss, request_arguments, config.is_frontend_post_requirement_enabled(), cache_client);
+    } else if (path.starts_with("/api/metrics"sv)) {
+        path.remove_prefix("/api/metrics"sv.size());
+        sys::error_code e;
+        handle_api_metrics(path, req, res, ss, metrics, request_arguments, config.is_frontend_post_requirement_enabled());
+    } else if (req.method() == http::verb::post || !config.is_frontend_post_requirement_enabled()) {
+        for (const auto [argument, value]: request_arguments) {
+            constexpr std::array bool_value_arguments = {
+                "origin_access"sv, "proxy_access"sv,
+                "injector_access"sv, "distributed_cache"sv,
+                "auto_refresh"sv,
+                "metrics"sv,
+                "logfile"sv,
+            };
+            if (std::cend(bool_value_arguments) != std::ranges::find(bool_value_arguments, argument)) {
+                if (value != "enable"sv && value != "disable"sv) {
+                    res.result(http::status::bad_request);
+                    ss << argument << " accepts {enable,disable}, given \"" << value << "\"";
+                    return res;
+                }
+                const bool enable = value == "enable"sv;
+                if (argument == "origin_access"sv) config.is_origin_access_enabled(enable);
+                else if (argument == "proxy_access"sv) config.is_proxy_access_enabled(enable);
+                else if (argument == "injector_access"sv) config.is_injector_access_enabled(enable);
+                else if (argument == "distributed_cache"sv) config.enable_cache(CacheType::Bep5Http{}, enable);
+                else if (argument == "auto_refresh"sv) _auto_refresh_enabled = enable;
+                else if (argument == "logfile"sv) enable ? enable_log_to_file(config) : disable_log_to_file(config);
+                else if (argument == "metrics"sv) enable ? metrics.enable() : metrics.disable();
+            }
+            else if (argument == "loglevel"sv) {
+                if (_log_level_input->update(value)) {
+                    config.log_level(_log_level_input->current_value);
+                    if (config.is_log_file_enabled())  // remember explicitly set level
+                        _log_level_no_file = _log_level_input->current_value;
+                }
+            } else if (argument == "purge_cache"sv) {
+                if (cache_client) {
+                    std::ignore = cache_client->local_purge(yield);
+                }
+            } else if (argument == "bt_extra_bootstrap"sv) {
+                if (cache_client) {
+                    set_bt_extra_bootstraps(value, config);
+                }
+            } else {
+                res.result(http::status::bad_request);
+                ss << "Unknown argument \"" << argument;
+                if (!value.empty())
+                    ss << "=" << value;
+                ss << "\"";
+                return res;
+            }
+        }
+        if (!request_arguments.empty()) {
+            Response res_redirect{http::status::found, req.version()};
+            res_redirect.set(http::field::location, "./");
+            return res_redirect;
+        }
+        should_show_portal = true;
     } else {
+        should_show_portal = true;
+    }
+
+    if (should_show_portal) {
+        sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps_ptr, dht
                      , req, res, ss, cache_client, metrics
                      , yield);

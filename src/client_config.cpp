@@ -122,6 +122,9 @@ boost::program_options::options_description ClientConfig::description_full()
        ("listen-on-tcp"
         , po::value<string>()->default_value("127.0.0.1:8077")
         , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+        ("https-proxy"
+        , po::bool_switch(&_https_proxy)->default_value(false)
+        , "Create a HTTPS proxy instead of HTTP")
        ("udp-mux-port"
        , po::value<uint16_t>()
        , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
@@ -131,7 +134,11 @@ boost::program_options::options_description ClientConfig::description_full()
          "UDP multiplexer. The value is expressed in Kbps. To leave it "
          "unlimited, set it to zero.")
        ("client-credentials", po::value<string>()
-        , "<username>:<password> authentication pair for the client")
+        , "<username>:<password> authentication pair for proxy-auth."
+          "Environment variable CLIENT_CREDENTIALS overrides this arguments")
+       ("frontend-credentials", po::value<string>()
+        , "<username>:<password> authentication pair for frontend's www-auth."
+         "Environment variable FRONTEND_CREDENTIALS overrides this arguments")
        ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir)
         , "Path to the CA certificate store directory")
        ("tls-ca-cert-store-file", po::value<vector<string>>(&_tls_ca_cert_store_files)
@@ -139,6 +146,12 @@ boost::program_options::options_description ClientConfig::description_full()
        ("front-end-ep"
         , po::value<string>()->default_value("127.0.0.1:8078")
         , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+       ("https-frontend"
+        , po::bool_switch(&_https_frontend)->default_value(false)
+        , "Serve Frontend on HTTPS instead of HTTP")
+       ("require-post"
+        , po::bool_switch(&_frontend_post)->default_value(false)
+        , "Accept only POST requests for frontend methods which modify state.")
         ("front-end-unix-socket-ep"
         , po::value<string>()
         , "Path to the front-end Unix socket. Absolute or relative to repo root.")
@@ -458,6 +471,9 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
         _local_ep = *opt_local_ep;
     }
+    if (!_https_proxy) {
+        LOG_WARN("HTTP proxy is deprecated. Migrate to --https-proxy");
+    }
 
     if (auto opt = as_optional<uint16_t>(vm, "udp-mux-port")) {
         _udp_mux_port = *opt;
@@ -502,6 +518,9 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
         _front_end_endpoint = *opt_fe_ep;
     }
+    if (!_https_frontend) {
+        LOG_WARN("HTTP frontend is deprecated. Migrate to --https-frontend");
+    }
 
     if (auto opt = as_optional<string>(vm, "front-end-unix-socket-ep")) {
         if (opt->empty()) {
@@ -519,6 +538,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw error("--front-end-access-token must not be an empty string");
         }
         _front_end_access_token = *opt;
+        LOG_WARN("front-end-access-token is deprecated. Migrate to --frontend-credentials and www-auth");
     }
 
     if (auto opt = as_optional<string>(vm, "proxy-access-token")) {
@@ -526,6 +546,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw error("--proxy-access-token must not be an empty string");
         }
         _proxy_access_token = *opt;
+        LOG_WARN("proxy-access-token is deprecated. Migrate to --client-credentials and proxy-auth");
     }
 
     if (auto opt = as_optional<bool>(vm, "disable-bridge-announcement")) {
@@ -548,17 +569,27 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
     }
 
-    if (auto opt = as_optional<string>(vm, "client-credentials")) {
-        auto cred = *opt;
-
-        if (!cred.empty() && cred.find(':') == string::npos) {
-            throw error(
-                "The '--client-credentials' argument expects a string "
-                "in the format <username>:<password>, but the provided "
-                "string is missing a colon: ", cred);
-        }
-
-        _client_credentials = std::move(cred);
+    if (const char *env_var = std::getenv("CLIENT_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
+        _client_credentials = env_var;
+    } else if (auto opt = as_optional<string>(vm, "client-credentials"); opt && !opt->empty()) {
+        _client_credentials = std::move(*opt);
+    }
+    if (!_client_credentials.empty() && _client_credentials.find(':') == string::npos) {
+        throw error(
+            "The '--client-credentials' argument or CLIENT_CREDENTIALS env variable expects a string "
+            "in the format <username>:<password>, but the provided "
+            "string is missing a colon: ", _client_credentials);
+    }
+    if (const char *env_var = std::getenv("FRONTEND_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
+        _frontend_credentials = env_var;
+    } else if (auto opt = as_optional<string>(vm, "frontend-credentials"); opt && !opt->empty()) {
+        _frontend_credentials = std::move(*opt);
+    }
+    if (!_frontend_credentials.empty() && _frontend_credentials.find(':') == string::npos) {
+        throw error(
+            "The '--frontend-credentials' argument or FRONTEND_CREDENTIALS env variable expects a string "
+            "in the format <username>:<password>, but the provided "
+            "string is missing a colon: ", _frontend_credentials);
     }
 
     auto maybe_set_pk = [&] (const string& opt_name, auto& pk) {

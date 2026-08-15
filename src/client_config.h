@@ -162,6 +162,7 @@ public:
     }
 
     bool is_cache_enabled(CacheType type) const { return _enabled_caches.get(type); }
+    void enable_cache(const CacheType type, const bool enable) { _enabled_caches.set(type, enable); }
     bool is_injecting_cache_enabled() const { return _enabled_caches.is_injecting_cache_enabled(); }
 
     boost::posix_time::time_duration max_cached_age() const {
@@ -216,6 +217,7 @@ public:
     }
 
     const std::string& client_credentials() const { return _client_credentials; }
+    std::string_view frontend_credentials() const { return _frontend_credentials; }
 
     std::string local_domain() const { return _local_domain; }
 
@@ -314,6 +316,15 @@ public:
 
     bool is_private_target_allowed() const { return _allow_private_targets; }
 
+    bool is_https_proxy_enabled() const { return _https_proxy; }
+    void is_https_proxy_enabled(const bool v) { _https_proxy = v; }
+
+    bool is_https_frontend_enabled() const { return _https_frontend; }
+    void is_https_frontend_enabled(const bool v) { _https_frontend = v; }
+
+    bool is_frontend_post_requirement_enabled() const { return _frontend_post; }
+    void is_frontend_post_requirement_enabled(const bool v) { _frontend_post = v; }
+
 #undef CHANGE_AND_SAVE_OPS
 #undef CHANGE_AND_SAVE
 
@@ -330,6 +341,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
+    bool _https_proxy = false;
     boost::optional<uint16_t> _udp_mux_port;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     InjectorEndpoints _injector_endpoints;
@@ -346,6 +358,8 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    bool _https_frontend = false;
+    bool _frontend_post = false;
     asio::local::stream_protocol::endpoint _front_end_unix_socket_endpoint;
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
@@ -361,6 +375,7 @@ private:
 
     std::string _client_credentials;
     std::string _injector_credentials;
+    std::string _frontend_credentials;
 
     fs::path _cache_static_path;
     fs::path _cache_static_content_path;
