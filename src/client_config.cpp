@@ -9,6 +9,8 @@
 #include "util/debug.h"
 #include "util/overloaded.h"
 #include "util/str.h"
+#include "config/util.h"
+#include "config/i2p_service.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -22,36 +24,6 @@ static const fs::path log_file_name{_LOG_FILE_NAME};
 
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
-
-template <class... Args>
-inline
-std::runtime_error error(Args && ...args) {
-    return std::runtime_error(util::str(std::forward<Args>(args)...));
-}
-
-// Helper to avoid writing the name of the option twice.
-template<typename T>
-static boost::optional<T> as_optional(const po::variables_map& vm, const char* name) {
-    auto v = vm[name];
-
-    if (v.empty()) {
-        return boost::none;
-    } else {
-        return v.as<T>();
-    }
-}
-
-// Helper for extracting multiple values
-template<typename T>
-static std::vector<T> as_vector(const boost::program_options::variables_map& vm, const char* name) {
-    auto v = vm[name];
-
-    if (v.empty()) {
-        return std::vector<T>();
-    } else {
-        return v.as<std::vector<T>>();
-    }
-}
 
 bool ClientConfig::EnabledCaches::get(CacheType type) const {
     return std::visit(overloaded {
@@ -166,16 +138,9 @@ boost::program_options::options_description ClientConfig::description_full()
           "value to add to every request coming from the User Agent before "
           "Ouinet processes it. Useful for testing when using e.g. Firefox "
           "as the UA.")
-       ("enable-i2p-service-ext"
-        , po::value<std::string>()
-        , "Attempt to connect to an external I2P service on the given endpoint")
-       ("enable-i2p-service-exe"
-        , po::value<fs::path>()
-        , "Attempt to start `i2pd` executable at the given path")
-       ("enable-i2p-service-lib"
-        , po::bool_switch()->default_value(false)
-        , "Attempt to start `i2pd` in the same process")
        ;
+
+    add_i2p_service_options(services);
 
     po::options_description injector("Injector options");
     injector.add_options()
@@ -315,37 +280,6 @@ boost::program_options::options_description ClientConfig::description_full()
         .add(dns)
         .add(metrics);
     return desc;
-}
-
-std::optional<I2pService::Config> parse_i2p_service_config(po::variables_map const& vm, const fs::path& repo_root) {
-    I2pService::Config config;
-
-    // ConfigExternal
-    if (auto ext_endpoint = as_optional<std::string>(vm, "enable-i2p-service-ext")) {
-        auto ep = parse::endpoint<asio::ip::tcp>(*ext_endpoint);
-        if (!ep) {
-            throw error("Failed to parse --enable-i2p-service-ext: ", *ext_endpoint);
-        }
-        config.ext = I2pService::ConfigExternal { *ep };
-    }
-
-    auto datadir = repo_root / "i2pd";
-
-    // ConfigI2pdExe
-    if (auto path = as_optional<fs::path>(vm, "enable-i2p-service-exe")) {
-        config.i2pd_exe = I2pService::ConfigI2pdExe { *path, datadir };
-    }
-    
-    // ConfigI2pdLib
-    if (vm["enable-i2p-service-lib"].as<bool>()) {
-        config.i2pd_lib = I2pService::ConfigI2pdLib { datadir };
-    }
-
-    if (!config.ext && !config.i2pd_exe && !config.i2pd_lib) {
-        return {};
-    }
-
-    return config;
 }
 
 // A restricted version of the above, only accepting persistent configuration options,

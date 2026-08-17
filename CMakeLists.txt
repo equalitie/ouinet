@@ -182,6 +182,7 @@ file(GLOB ouinet_common_sources
     "./src/util/random.cpp"
     "./src/async_sleep.cpp"
     "./src/cache/resource_id.cpp"
+    "./src/config/i2p_service.cpp"
     "./src/connect_to_host.cpp"
     "./src/response_part.cpp"
     "./src/util.cpp"

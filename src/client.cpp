@@ -42,7 +42,6 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p/session.h"
-#include "ouiservice/i2p/util/create_i2p_session.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
