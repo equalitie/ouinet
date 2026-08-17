@@ -6,6 +6,7 @@
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <iostream>
+#include <map>
 #include <nlohmann/json.hpp>
 
 #include "cache/client.h"
@@ -1391,16 +1392,34 @@ void Client::State::send_metrics_record(
         throw_error(asio::error::invalid_argument);
     }
 
-    WaitCondition wc(yield.get_executor());
+    auto tiers = group_servers_by_priority(metrics_conf->servers);
 
-    // Send to all configured servers concurrently.
-    for (auto& server_conf : metrics_conf->servers) {
-        yield.spawn([&, lock = wc.lock()] (Async yield) {
-            send_metrics_record(record_name, record_content, server_conf, yield);
-        });
+    for (auto& tier_servers : tiers) {
+        bool tier_succeeded = false;
+        WaitCondition wc(yield.get_executor());
+
+        // Send to all servers in this priority tier concurrently.
+        for (auto* server_conf_ptr : tier_servers) {
+            auto& server_conf = *server_conf_ptr;
+            yield.spawn([&, lock = wc.lock()] (Async yield) {
+                try {
+                    send_metrics_record(record_name, record_content, server_conf, yield);
+                    tier_succeeded = true;
+                } catch (const std::exception& e) {
+                    LOG_DEBUG(yield, " Metrics: failed to send to ",
+                              server_conf.url.reassemble(), ": ", e.what());
+                }
+            });
+        }
+
+        wc.wait(yield).value();
+
+        if (tier_succeeded) return;
+        // Every server in this tier failed; fall through to the next (lower-priority) tier.
     }
 
-    wc.wait(yield).value();
+    // Every tier failed (or, degenerately, there was nothing to send to).
+    throw_error(asio::error::invalid_argument);
 }
 
 void Client::State::send_metrics_record(

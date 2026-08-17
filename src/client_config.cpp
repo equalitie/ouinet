@@ -1,3 +1,5 @@
+#include <map>
+
 #include <boost/optional/optional_io.hpp>
 #include <boost/program_options.hpp>
 #include "client_config.h"
@@ -281,6 +283,15 @@ boost::program_options::options_description ClientConfig::description_full()
           "To read the certificate from a file, set this option to the path to the file prefixed with '@' "
           "(example: '@/path/to/cert'). "
           "To use default certificates for all servers, this option can be omitted.")
+       ("metrics-server-priority", po::value<std::vector<int>>()->composing()
+        , "Priority tier for the metrics server: servers with a lower value are tried first. "
+          "The record is sent concurrently to every server in the highest-priority tier that "
+          "has at least one server; the next tier is only contacted if every server in the "
+          "current tier fails to receive the record. "
+          "This option must be specified once for each server specified with --metrics-server-url. "
+          "To use the default priority for a particular server, set this option to '0'. "
+          "To use the default priority for all servers (a single tier, same as if this option "
+          "was never used), this option can be omitted.")
        ("metrics-encryption-key", po::value<string>()
         , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
           "the following. \n"
@@ -770,10 +781,27 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     save_persistent();  // only if no errors happened
 }
 
+std::vector<std::vector<MetricsServerConfig*>>
+group_servers_by_priority(std::vector<MetricsServerConfig>& servers)
+{
+    std::map<int, std::vector<MetricsServerConfig*>> by_priority;
+    for (auto& server_conf : servers) {
+        by_priority[server_conf.priority].push_back(&server_conf);
+    }
+
+    std::vector<std::vector<MetricsServerConfig*>> tiers;
+    tiers.reserve(by_priority.size());
+    for (auto& [priority, tier_servers] : by_priority) {
+        tiers.push_back(std::move(tier_servers));
+    }
+    return tiers;
+}
+
 std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options::variables_map& vm) {
     auto raw_server_urls = as_vector<std::string>(vm, "metrics-server-url");
     auto raw_server_tokens = as_vector<std::string>(vm, "metrics-server-token");
     auto raw_server_cacerts = as_vector<std::string>(vm, "metrics-server-cacert");
+    auto raw_server_priorities = as_vector<int>(vm, "metrics-server-priority");
 
     if (!raw_server_urls.empty()) {
         if (!raw_server_tokens.empty() && raw_server_tokens.size() != raw_server_urls.size()) {
@@ -793,6 +821,15 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
                 raw_server_urls.size(), ") or zero"
             );
         }
+
+        if (!raw_server_priorities.empty() && raw_server_priorities.size() != raw_server_urls.size()) {
+            throw error(
+                "Wrong number of occurrences of --metrics-server-priority (",
+                raw_server_priorities.size(),
+                ") - it must be the same as the number of occurrences of --metrics-server-url (",
+                raw_server_urls.size(), ") or zero"
+            );
+        }
     } else {
         if (!raw_server_tokens.empty()) {
             throw error("--metrics-server-token can only be used together with --metrics-server-url");
@@ -801,6 +838,10 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         if (!raw_server_cacerts.empty()) {
             throw error("--metrics-server-cacert can only be used together with --metrics-server-url");
         }
+
+        if (!raw_server_priorities.empty()) {
+            throw error("--metrics-server-priority can only be used together with --metrics-server-url");
+        }
     }
 
     std::vector<MetricsServerConfig> servers;
@@ -808,6 +849,9 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         auto raw_url = std::move(raw_server_urls[i]);
         auto raw_token = i < raw_server_tokens.size() ? std::move(raw_server_tokens[i]) : "";
         auto raw_cacert = i < raw_server_cacerts.size() ? std::move(raw_server_cacerts[i]) : "";
+        auto priority = i < raw_server_priorities.size()
+                       ? raw_server_priorities[i]
+                       : default_metrics_server_priority;
 
         auto url = util::Url::from(raw_url);
         if (!url) {
@@ -839,7 +883,8 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         servers.emplace_back(
             std::move(*url),
             std::move(token),
-            std::move(cacert)
+            std::move(cacert),
+            priority
         );
     }
 

@@ -39,11 +39,23 @@ namespace ouinet {
     const size_t default_max_simultaneous_announcements = 16;
 #endif
 
+// Default priority for a metrics server when --metrics-server-priority is not used,
+// or a particular server's slot in it is left as the default value. All servers
+// sharing this priority land in a single tier, so leaving the option out entirely
+// reproduces the flat, non-tiered fan-out behavior.
+const int default_metrics_server_priority = 0;
+
 struct MetricsServerConfig {
     util::Url url;
     std::optional<std::string> token;
     std::optional<asio::ssl::context> cacert;
+    int priority = default_metrics_server_priority;
 };
+
+// Groups `servers` into tiers ordered by ascending priority (lowest value = highest
+// priority = first). Servers keep their relative order within a tier.
+std::vector<std::vector<MetricsServerConfig*>>
+group_servers_by_priority(std::vector<MetricsServerConfig>& servers);
 
 struct MetricsConfig {
     bool enable_on_start = false;
