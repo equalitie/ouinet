@@ -275,7 +275,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         seeder.start();
         leecher.start();
 
-        auto resource_group = util::random::printable_ascii(10);
+        auto resource_group = util::random::from_set(20, "0123456789abcdefghijklmnoprstuvxyz");
 
         auto control_body = fetch_from_origin(yield).body();
 
