@@ -217,6 +217,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
                 "--listen-on-i2p=true"s,
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
             }),
             ctx,
             util::LogPath("injector"),

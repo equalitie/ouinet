@@ -100,7 +100,6 @@ set(ouinet_i2p_cpps
     tracker_lookup.cpp
     announcer.cpp
     service.cpp
-    util/create_i2p_session.cpp
 )
 
 if (WITH_I2PD_EXE)

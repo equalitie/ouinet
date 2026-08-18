@@ -12,6 +12,7 @@
 #include "api.h"
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
+#include "ouiservice/i2p/service.h"
 #include "util/sign.h"
 #include "util/str.h"
 
@@ -126,6 +127,10 @@ public:
         return _origin_ssl_ctx;
     }
 
+    const std::optional<I2pService::Config>& i2p_service_config() const {
+        return _i2p_service_config;
+    }
+
 private:
     void setup_ed25519_private_key(const std::string& hex);
 
@@ -161,6 +166,7 @@ private:
     sign::SecretKey _ed25519_private_key;
 
     dns::Config _dns_config;
+    std::optional<I2pService::Config> _i2p_service_config;
 };
 
 } // ouinet namespace

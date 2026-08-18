@@ -8,6 +8,7 @@
 #include "logger.h"
 #include "constants.h"
 #include "ssl/util.h"
+#include "config/i2p_service.h"
 
 namespace ouinet {
 
@@ -87,6 +88,8 @@ boost::program_options::options_description InjectorConfig::options_description(
         ("ed25519-private-key", po::value<string>()
          , "Ed25519 private key for cache-related signatures (hex-encoded)")
         ;
+
+    add_i2p_service_options(desc);
 
     return desc;
 }
@@ -321,6 +324,8 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
             if (ec) throw error("Failed to load origin CA certificate from \"", verify_file, "\"");
         }
     }
+
+    _i2p_service_config = parse_i2p_service_config(vm, _repo_root);
 }
 
 void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
