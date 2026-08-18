@@ -25,6 +25,7 @@ set(BOOST_COMPONENTS
     system
     unit_test_framework
     url
+    json
 )
 
 if (NOT IOS)
