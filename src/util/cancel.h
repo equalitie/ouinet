@@ -182,6 +182,10 @@ public:
         return _cancel.connect(std::move(slot));
     }
 
+    void operator()() {
+        _cancel();
+    }
+
     ~LifetimeCancel() {
         _cancel();
     }
