@@ -1,4 +1,5 @@
 #include "i2pd.h"
+#include "util/async.h"
 #include "util/log_path.h"
 #include "util/str.h"
 #include "logger.h"
