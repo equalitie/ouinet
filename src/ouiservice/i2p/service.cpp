@@ -77,21 +77,44 @@ struct I2pService::Inner {
         return Watch<State>(state);
     }
 
-    std::expected<
-        std::pair<
-            I2pSession,
-            I2pSession
-        >,
-        sys::error_code
-    >
-    create_two_sessions(tcp::endpoint sam_endpoint, Async yield) {
-        auto session0 = I2pSession::create(yield, sam_endpoint);
-        if (!session0) return std::unexpected(session0.error());
+    std::expected<I2pSession, sys::error_code>
+    create_i2p_session_with_retry(tcp::endpoint sam_endpoint, Async yield) {
+        using R = std::expected<I2pSession, sys::error_code>;
 
-        auto session1 = I2pSession::create(yield, sam_endpoint);
-        if (!session1) return std::unexpected(session1.error());
+        auto now = std::chrono::steady_clock::now;
 
-        return std::pair(std::move(*session0), std::move(*session1));
+        sys::error_code last_error = asio::error::fault;
+
+        auto max_duration = 2min;
+        auto start = now();
+        auto end = start + max_duration;
+
+        while (true) {
+            auto iter_start = now();
+
+            if (end <= iter_start) {
+                break;
+            }
+
+            auto session = timeout(end - iter_start, [&] (Async yield) -> R {
+                    return I2pSession::create(yield, sam_endpoint);
+                },
+                yield);
+
+            if (session) {
+                return session;
+            }
+
+            last_error = session.error();
+
+            auto actual_duration = now() - iter_start;
+
+            if (actual_duration < 1s) {
+                async_sleep(1s - actual_duration, yield);
+            }
+        }
+
+        return std::unexpected(last_error);
     }
 
     std::expected<
@@ -118,9 +141,7 @@ struct I2pService::Inner {
             server_task.cancel();
         }
 
-        auto server_socket = timeout(10s, [&] (Async yield) -> R {
-                return std::move(server_task.wait_ref(yield));
-            }, yield);
+        auto server_socket = std::move(server_task.wait_ref(yield));
 
         if (!client_socket) return std::unexpected(client_socket.error());
         if (!server_socket) return std::unexpected(server_socket.error());
@@ -141,32 +162,22 @@ struct I2pService::Inner {
     }
 
     void keep_performing_health_check(Init init, Async yield) {
-        LOG_DEBUG(yield, " Trying to connect to the service");
+        LOG_DEBUG(yield, " Creating session 2/2");
         state.send(State::PerformingHealthCheck{});
 
-        std::expected<std::pair<I2pSession, I2pSession>, sys::error_code> sessions
-            = std::unexpected(asio::error::fault);
+        auto session0 = std::move(init.session());
+        auto session1 = I2pSession::create(yield, init.sam_endpoint());
 
-        for (unsigned i = 0; i < 10; ++i) {
-            sessions = create_two_sessions(init.sam_endpoint(), yield);
-            if (!sessions) {
-                async_sleep(500ms, yield);
-            }
-            else {
-                break;
-            }
-        }
-
-        if (!sessions) {
-            LOG_DEBUG(yield, " Connecting to service failed: ", sessions.error());
+        if (!session1) {
+            LOG_DEBUG(yield, " Session 2 creation failed: ", session1.error());
             return;
         }
 
         LOG_DEBUG(yield, " Performing self connection check");
 
         auto connections = connected_pair(
-                std::move(sessions->first),
-                std::move(sessions->second),
+                std::move(session0),
+                std::move(*session1),
                 yield);
 
         if (!connections) {
@@ -177,7 +188,7 @@ struct I2pService::Inner {
         uint64_t n = 0;
         while (ping(connections->first.socket, connections->second.socket, n, yield)) {
             if (!state.value().is<State::Running>()) {
-                LOG_DEBUG(yield, " Health check passed, will continue pinging health check");
+                LOG_DEBUG(yield, " Self connection passed. SAM endpoint: ", init.sam_endpoint());
                 state.send(State::Running{ init.sam_endpoint() });
             }
             ++n;
@@ -196,16 +207,14 @@ struct I2pService::Inner {
             return {};
         }
 
-        LOG_DEBUG(yield, " Starting ", conf->endpoint);
+        LOG_DEBUG(yield, " Creating session 1/2 ");
 
-        auto session = I2pSession::create(yield, conf->endpoint);
+        auto session = create_i2p_session_with_retry(conf->endpoint, yield);
 
         if (!session) {
-            LOG_DEBUG(yield, " Failed: ", session.error());
+            LOG_DEBUG(yield, " Session 1 creation failed: ", session.error());
             return {};
         }
-
-        LOG_DEBUG(yield, " Success ", conf->endpoint);
 
         return Init::External { conf->endpoint, std::move(*session) };
     }
@@ -235,16 +244,15 @@ struct I2pService::Inner {
             return {};
         }
 
-        LOG_DEBUG(yield, " Creating session");
+        LOG_DEBUG(yield, " Creating session 1/2");
 
-        auto session = I2pSession::create(yield, i2pd->sam_endpoint());
+        auto session = create_i2p_session_with_retry(i2pd->sam_endpoint(), yield);
 
         if (!session) {
-            LOG_DEBUG(yield, " Failed to create session: ", session.error());
+            LOG_DEBUG(yield, " Session 1 creation failed: ", session.error());
             return {};
         }
 
-        LOG_DEBUG(yield, " Success ", i2pd->sam_endpoint());
         return Init::Internal { std::move(*i2pd), std::move(*session) };
     }
 
@@ -272,16 +280,14 @@ struct I2pService::Inner {
             return {};
         }
 
-        LOG_DEBUG(yield, " Creating session");
+        LOG_DEBUG(yield, " Creating session 1/2");
 
-        auto session = I2pSession::create(yield, i2pd->sam_endpoint());
+        auto session = create_i2p_session_with_retry(i2pd->sam_endpoint(), yield);
 
         if (!session) {
-            LOG_DEBUG(yield, " Failed to create session: ", session.error());
+            LOG_DEBUG(yield, " Session 1 creation failed: ", session.error());
             return {};
         }
-
-        LOG_DEBUG(yield, " Success ", i2pd->sam_endpoint());
 
         return Init::Internal { std::move(*i2pd), std::move(*session) };
     }
