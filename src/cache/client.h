@@ -36,6 +36,7 @@ private:
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
+         , bool local_peer_discovery_enabled
          , opt_path static_cache_dir
          , opt_path static_cache_content_dir
          , asio::yield_context);
@@ -50,10 +51,12 @@ public:
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
+         , bool local_peer_discovery_enabled
          , asio::yield_context yield)
     {
         return build( ex, std::move(lan_my_endpoints), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
+                    , local_peer_discovery_enabled
                     , boost::none, boost::none
                     , yield);
     }
@@ -64,6 +67,7 @@ public:
          , util::Ed25519PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
+         , bool local_peer_discovery_enabled
          , fs::path static_cache_dir
          , fs::path static_cache_content_dir
          , asio::yield_context yield)
@@ -72,6 +76,7 @@ public:
         assert(!static_cache_content_dir.empty());
         return build( ex, std::move(lan_my_endpoints), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
+                    , local_peer_discovery_enabled
                     , opt_path{std::move(static_cache_dir)}
                     , opt_path{std::move(static_cache_content_dir)}
                     , yield);

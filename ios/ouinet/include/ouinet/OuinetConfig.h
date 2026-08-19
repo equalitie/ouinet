@@ -72,6 +72,8 @@
 
 - (OuinetConfig*)setDisableUpnp:(BOOL)value;
 
+- (OuinetConfig*)setDisableLocalPeerDiscovery:(BOOL)value;
+
 - (OuinetConfig*)setLogLevel:(NSString*)level;
 
 - (NSString*)getOuinetDirectory;
@@ -149,5 +151,7 @@
 - (BOOL)getDisableDoH;
 
 - (BOOL)getDisableUpnp;
+
+- (BOOL)getDisableLocalPeerDiscovery;
 
 @end
