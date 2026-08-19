@@ -63,7 +63,7 @@ if (WITH_I2PD)
     endif()
     
     target_link_libraries(libi2pd       PUBLIC Boost::program_options ${MINGW_EXTRA})
-    target_link_libraries(libi2pdclient PUBLIC Boost::program_options ${MINGW_EXTRA})
+    target_link_libraries(libi2pdclient PUBLIC Boost::program_options Boost::json ${MINGW_EXTRA})
     target_link_libraries(libi2pdlang   PUBLIC                       )
     
     if (ANDROID)
