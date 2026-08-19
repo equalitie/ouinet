@@ -42,6 +42,10 @@ std::vector<std::string> I2pd::Config::to_vector() const {
     }; 
 }
 
+asio::ip::tcp::endpoint I2pd::sam_endpoint() const {
+    return _inner->sam_endpoint();
+}
+
 #ifndef OUINET_WITH_I2PD_EXE
 
 bool I2pd::is_start_exe_implemented() { return false; }

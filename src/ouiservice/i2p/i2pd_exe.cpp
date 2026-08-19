@@ -213,8 +213,4 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
     return I2pd(std::move(inner));
 }
 
-asio::ip::tcp::endpoint I2pd::sam_endpoint() const {
-    return _inner->sam_endpoint();
-}
-
 } // namespace
