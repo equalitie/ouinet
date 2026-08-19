@@ -2529,12 +2529,14 @@ void Client::State::setup_cache(asio::yield_context yield)
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , yield[ec])
         : cache::Client::build( _ctx.get_executor()
                               , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , _config.cache_static_path()
                               , _config.cache_static_content_path()
                               , yield[ec]);

@@ -171,6 +171,10 @@ public:
         return !_disable_upnp;
     }
 
+    bool is_local_peer_discovery_enabled() const {
+        return !_disable_local_peer_discovery;
+    }
+
     dns::Config dns_config() const
     {
         return _dns_config;
@@ -274,6 +278,10 @@ private:
             , po::bool_switch(&_disable_upnp)->default_value(false)
             , "Disable UPnP IGD port mapping used to open the UDP port on the "
               "gateway for BitTorrent/uTP connectivity.")
+           ("disable-local-peer-discovery"
+            , po::bool_switch(&_disable_local_peer_discovery)->default_value(false)
+            , "Disable discovery of and announcement to other Ouinet clients "
+              "on the local network (LAN) via UDP multicast.")
            ("request-body-limit"
             , po::value<uint64_t>()->default_value(_max_req_body_size)
             , "Set the max size of body requests in KiB. This could be "
@@ -570,6 +578,7 @@ private:
     bool _disable_doh = false;
     bool _allow_private_targets = false;
     bool _disable_upnp = false;
+    bool _disable_local_peer_discovery = false;
     std::map<std::string, std::string> _add_request_fields;
 
     dns::Config _dns_config;

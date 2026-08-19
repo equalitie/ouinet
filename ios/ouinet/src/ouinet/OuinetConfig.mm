@@ -22,6 +22,7 @@
   BOOL disableBridgeAnnouncement;
   BOOL disableDoH;
   BOOL disableUpnp;
+  BOOL disableLocalPeerDiscovery;
 }
 
 - (OuinetConfig*)init
@@ -126,6 +127,12 @@
   return self;
 }
 
+- (OuinetConfig*)setDisableLocalPeerDiscovery:(BOOL)value;
+{
+  disableLocalPeerDiscovery = value;
+  return self;
+}
+
 - (NSString*)getOuinetDirectory
 {
   return ouinetDirectory;
@@ -199,6 +206,11 @@
 - (BOOL)getDisableUpnp
 {
   return disableUpnp;
+}
+
+- (BOOL)getDisableLocalPeerDiscovery
+{
+  return disableLocalPeerDiscovery;
 }
 
 /**

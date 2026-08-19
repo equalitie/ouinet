@@ -68,6 +68,7 @@ public class Config implements Parcelable {
         private String localDomain;
         private boolean disableDoH = false;
         private boolean disableUpnp = false;
+        private boolean disableLocalPeerDiscovery = false;
         private Set<String> dnsProtocols = null;
         private boolean disableOriginAccess   = false;
         private boolean disableProxyAccess    = false;
@@ -204,6 +205,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setDisableUpnp(boolean disableUpnp){
             this.disableUpnp = disableUpnp;
+            return this;
+        }
+        public ConfigBuilder setDisableLocalPeerDiscovery(boolean disableLocalPeerDiscovery){
+            this.disableLocalPeerDiscovery = disableLocalPeerDiscovery;
             return this;
         }
 
@@ -455,6 +460,7 @@ public class Config implements Parcelable {
                     localDomain,
                     disableDoH,
                     disableUpnp,
+                    disableLocalPeerDiscovery,
                     dnsProtocols,
                     disableOriginAccess,
                     disableProxyAccess,
@@ -498,6 +504,7 @@ public class Config implements Parcelable {
     private String localDomain;
     private boolean disableDoH;
     private boolean disableUpnp;
+    private boolean disableLocalPeerDiscovery;
     private Set<String> dnsProtocols;
     private boolean disableOriginAccess;
     private boolean disableProxyAccess;
@@ -539,6 +546,7 @@ public class Config implements Parcelable {
                   String localDomain,
                   boolean disableDoH,
                   boolean disableUpnp,
+                  boolean disableLocalPeerDiscovery,
                   Set<String> dnsProtocols,
                   boolean disableOriginAccess,
                   boolean disableProxyAccess,
@@ -579,6 +587,7 @@ public class Config implements Parcelable {
         this.localDomain = localDomain;
         this.disableDoH = disableDoH;
         this.disableUpnp = disableUpnp;
+        this.disableLocalPeerDiscovery = disableLocalPeerDiscovery;
         this.dnsProtocols = (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
         this.disableOriginAccess = disableOriginAccess;
         this.disableProxyAccess = disableProxyAccess;
@@ -674,6 +683,9 @@ public class Config implements Parcelable {
     public boolean getDisableUpnp() {
         return disableUpnp;
     }
+    public boolean getDisableLocalPeerDiscovery() {
+        return disableLocalPeerDiscovery;
+    }
     public Set<String> getDnsProtocols() {
         return (dnsProtocols == null ? null : new HashSet<>(dnsProtocols));
     }
@@ -759,6 +771,7 @@ public class Config implements Parcelable {
         out.writeString(localDomain);
         out.writeInt(disableDoH ? 1 : 0);
         out.writeInt(disableUpnp ? 1 : 0);
+        out.writeInt(disableLocalPeerDiscovery ? 1 : 0);
         out.writeStringArray(dnsProtocols == null ? null : dnsProtocols.toArray(new String[0]));
         out.writeInt(disableOriginAccess ? 1 : 0);
         out.writeInt(disableProxyAccess ? 1 : 0);
@@ -810,6 +823,7 @@ public class Config implements Parcelable {
         localDomain = in.readString();
         disableDoH = in.readInt() != 0;
         disableUpnp = in.readInt() != 0;
+        disableLocalPeerDiscovery = in.readInt() != 0;
 
         String[] dnsProtocolsArray = in.createStringArray();
         if (dnsProtocolsArray == null)

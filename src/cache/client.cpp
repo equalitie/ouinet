@@ -107,8 +107,9 @@ struct Client::Impl {
     GarbageCollector _gc;
     map<string, udp::endpoint> _peer_cache;
     util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
-    LocalPeerDiscovery _local_peer_discovery;
-    std::unique_ptr<DhtGroups> _groups;
+    // Null when local peer discovery is disabled via config.
+    std::unique_ptr<LocalPeerDiscovery> _local_peer_discovery;
+    std::unique_ptr<Groups> _groups;
 
 
     Impl( AsioExecutor ex
@@ -117,7 +118,8 @@ struct Client::Impl {
         , fs::path cache_dir
         , Client::opt_path static_cache_dir
         , unique_ptr<cache::HttpStore> http_store_
-        , boost::posix_time::time_duration max_cached_age)
+        , boost::posix_time::time_duration max_cached_age
+        , bool local_peer_discovery_enabled)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(ex)
         , _lan_my_endpoints(move(lan_my_eps))
@@ -132,8 +134,11 @@ struct Client::Impl {
               return keep_cache_entry(resource_id, move(rr), y);
           }, _ex)
         , _peer_lookups(256)
-        , _local_peer_discovery(_ex, _lan_my_endpoints)
-    {}
+    {
+        if (local_peer_discovery_enabled)
+            _local_peer_discovery
+                = make_unique<LocalPeerDiscovery>(_ex, _lan_my_endpoints);
+    }
 
     std::string compute_swarm_name(boost::string_view group) const {
         return bep5::compute_uri_swarm_name(
@@ -431,7 +436,9 @@ struct Client::Impl {
 
             auto peer_lookup_ = peer_lookup(compute_swarm_name(group));
 
-            auto local_peers = _local_peer_discovery.found_peers();
+            auto local_peers = _local_peer_discovery
+                ? _local_peer_discovery->found_peers()
+                : std::set<udp::endpoint>{};
 
             if (logger.get_threshold() <= DEBUG) {
                 LOG_DEBUG(log_path, " Peer lookup with DHT and local discovery:");
@@ -454,7 +461,9 @@ struct Client::Impl {
                 , _newest_proto_seen
                 , log_path);
         } else {
-            auto local_peers = _local_peer_discovery.found_peers();
+            auto local_peers = _local_peer_discovery
+                ? _local_peer_discovery->found_peers()
+                : std::set<udp::endpoint>{};
 
             if (logger.get_threshold() <= DEBUG) {
                 LOG_DEBUG(log_path, " Peer lookup with local discovery only:");
@@ -682,7 +691,7 @@ struct Client::Impl {
 
     void stop() {
         _lifetime_cancel();
-        _local_peer_discovery.stop();
+        if (_local_peer_discovery) _local_peer_discovery->stop();
     }
 
     unsigned get_newest_proto_version() const {
@@ -705,6 +714,7 @@ Client::build( AsioExecutor ex
              , util::Ed25519PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
+             , bool local_peer_discovery_enabled
              , Client::opt_path static_cache_dir
              , Client::opt_path static_cache_content_dir
              , asio::yield_context yield)
@@ -765,7 +775,8 @@ Client::build( AsioExecutor ex
 
     unique_ptr<Impl> impl(new Impl( ex, move(lan_my_eps)
                                   , cache_pk, move(cache_dir), std::move(static_cache_dir)
-                                  , move(http_store), max_cached_age));
+                                  , move(http_store), max_cached_age
+                                  , local_peer_discovery_enabled));
 
     impl->load_stored_groups(yield[ec]);
     if (ec) return or_throw<ClientPtr>(yield, ec);

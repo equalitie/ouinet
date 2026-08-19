@@ -135,6 +135,7 @@ public class Ouinet {
         maybeAdd(args, "--local-domain",           config.getLocalDomain());
         maybeAddBool(args, "--disable-doh",        config.getDisableDoH());
         maybeAddBool(args, "--disable-upnp",       config.getDisableUpnp());
+        maybeAddBool(args, "--disable-local-peer-discovery", config.getDisableLocalPeerDiscovery());
 
         maybeAdd(args, "--injector-credentials",   config.getInjectorCredentials());
         maybeAdd(args, "--cache-http-public-key",  config.getCacheHttpPubKey());
