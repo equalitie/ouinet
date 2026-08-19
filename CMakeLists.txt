@@ -27,8 +27,9 @@ option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_OUISYNC "Build with Ouisync" OFF)
 option(WITH_I2PD_LIB "Build with i2pd as a library" ON)
-if (IOS)
+if (APPLE)
     # iOS does not support spawning child processes
+    # macOS is a TODO
     option(WITH_I2PD_EXE "Build with i2pd as a separate executable" OFF)
 else()
     option(WITH_I2PD_EXE "Build with i2pd as a separate executable" ON)
