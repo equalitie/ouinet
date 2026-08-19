@@ -26,13 +26,14 @@ option(WITH_TEST "Compile tests" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_OUISYNC "Build with Ouisync" OFF)
-option(WITH_I2PD_LIB "Build with i2pd as a library" ON)
 if (APPLE)
-    # iOS does not support spawning child processes
+    # iOS does not support spawning child processes, WITH_I2PD_LIB is a TODO
     # macOS is a TODO
     option(WITH_I2PD_EXE "Build with i2pd as a separate executable" OFF)
+    option(WITH_I2PD_LIB "Build with i2pd as a library" OFF)
 else()
     option(WITH_I2PD_EXE "Build with i2pd as a separate executable" ON)
+    option(WITH_I2PD_LIB "Build with i2pd as a library" ON)
 endif()
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
