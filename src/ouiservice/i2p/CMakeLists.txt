@@ -9,11 +9,14 @@ endif()
 
 if (WITH_I2PD)
     block()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBOOST_ASIO_SEPARATE_COMPILATION")
+
         if (WITH_I2PD_EXE)
             set(WITH_BINARY ON)
         else(WITH_I2PD_LIB)
             set(WITH_LIBRARY ON)
         endif()
+
         set(WITH_GUI OFF)
         set(BUILD_TESTING OFF)
     
@@ -62,9 +65,9 @@ if (WITH_I2PD)
         cmake_policy(SET CMP0079 NEW)
     endif()
     
-    target_link_libraries(libi2pd       PUBLIC Boost::program_options ${MINGW_EXTRA})
-    target_link_libraries(libi2pdclient PUBLIC Boost::program_options Boost::json ${MINGW_EXTRA})
-    target_link_libraries(libi2pdlang   PUBLIC                       )
+    target_link_libraries(libi2pd       PUBLIC ouinet_asio Boost::program_options ${MINGW_EXTRA})
+    target_link_libraries(libi2pdclient PUBLIC ouinet_asio Boost::program_options Boost::json ${MINGW_EXTRA})
+    target_link_libraries(libi2pdlang   PUBLIC)
     
     if (ANDROID)
         target_compile_definitions(i2pd PRIVATE ANDROID_BINARY=1)
@@ -103,13 +106,13 @@ set(ouinet_i2p_cpps
 )
 
 if (WITH_I2PD_EXE)
-    list(APPEND ouinet_i2p_defs PUBLIC OUINET_WITH_I2PD_EXE)
+    list(APPEND ouinet_i2p_defs PRIVATE OUINET_WITH_I2PD_EXE)
     list(APPEND ouinet_i2p_libs Boost::process)
     list(APPEND ouinet_i2p_cpps i2pd_exe.cpp)
 endif()
 
 if(WITH_I2PD_LIB)
-    list(APPEND ouinet_i2p_defs PUBLIC OUINET_WITH_I2PD_LIB)
+    list(APPEND ouinet_i2p_defs PRIVATE OUINET_WITH_I2PD_LIB)
     list(APPEND ouinet_i2p_libs libi2pd libi2pdclient libi2pdlang)
     list(APPEND ouinet_i2p_includes ./i2pd/daemon ./i2pd/libi2pd ./i2pd/libi2pd_client ./i2pd/i18n)
     list(APPEND ouinet_i2p_cpps
