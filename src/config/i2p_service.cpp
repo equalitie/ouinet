@@ -1,6 +1,7 @@
 #include "config/util.h"
 #include "config/i2p_service.h"
 #include "parse/endpoint.h"
+#include <boost/filesystem.hpp>
 
 namespace ouinet {
 
@@ -36,11 +37,13 @@ std::optional<I2pService::Config> parse_i2p_service_config(po::variables_map con
 
     // ConfigI2pdExe
     if (auto path = as_optional<fs::path>(vm, "enable-i2p-service-exe")) {
+        boost::filesystem::create_directories(datadir);
         config.i2pd_exe = I2pService::ConfigI2pdExe { *path, datadir };
     }
     
     // ConfigI2pdLib
     if (vm["enable-i2p-service-lib"].as<bool>()) {
+        boost::filesystem::create_directories(datadir);
         config.i2pd_lib = I2pService::ConfigI2pdLib { datadir };
     }
 
