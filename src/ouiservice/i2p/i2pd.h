@@ -9,6 +9,7 @@
 #include <expected>
 #include <vector>
 #include <string>
+#include <variant>
 
 namespace ouinet {
 
@@ -18,13 +19,31 @@ namespace util { class LogPath; }
 // Class for controlling the `i2pd` executable/library
 class OUINET_I2P_API I2pd {
 public:
+    struct Type {
+        struct Exe {};
+        struct Lib {};
+
+        using Alternatives = std::variant<Exe, Lib>;
+
+        template<class V>
+        requires(!std::is_same_v<V, Type> && std::constructible_from<Alternatives, V>)
+        Type(V&& v) : value(std::forward<V>(v)) {}
+
+        template<class Visitor, class Self>
+        decltype(auto) visit(this Self&& self, Visitor&& visitor) {
+            return std::visit(std::forward<Visitor>(visitor), std::forward<Self>(self).value);
+        }
+
+        Alternatives value;
+    };
+
     class Config {
     public:
         Config(fs::path i2pd_root_dir):
             i2pd_root_dir(std::move(i2pd_root_dir))
         {}
     
-        std::vector<std::string> to_vector() const;
+        std::vector<std::string> to_vector(Type) const;
     
     private:
         // TODO: Bind to a random port (0)

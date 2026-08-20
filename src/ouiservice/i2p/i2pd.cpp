@@ -2,33 +2,15 @@
 #include "util/async.h"
 #include "util/log_path.h"
 #include "util/str.h"
+#include "util/overloaded.h"
 #include "logger.h"
 
 namespace ouinet {
 
-enum class I2pdLogLevel { debug, info, warn, error, none };
-
-// I used `none` here because it's quite verbose and doesn't seem to
-// provide much information. Normally the default is `warn`.
-static constexpr I2pdLogLevel log_level = I2pdLogLevel::info;
-
-static const char* log_level_to_str(I2pdLogLevel log_level) {
-    switch (log_level) {
-        case I2pdLogLevel::debug: return "debug";
-        case I2pdLogLevel::info: return "info";
-        case I2pdLogLevel::warn: return "warn";
-        case I2pdLogLevel::error: return "error";
-        case I2pdLogLevel::none: return "none";
-        default:
-            LOG_WARN("Invalid I2pd log level enum ", static_cast<int>(log_level));
-            return "none";
-    }
-}
-
-std::vector<std::string> I2pd::Config::to_vector() const {
+std::vector<std::string> I2pd::Config::to_vector(I2pd::Type type) const {
     using namespace std::string_literals;
 
-    return std::vector<std::string>{
+    std::vector<std::string> ret{
         "--datadir", (i2pd_root_dir / "datadir").string(),
         "--tunconf", (i2pd_root_dir / "tunnels.conf").string(),
         "--certsdir", (i2pd_root_dir / "certificates").string(),
@@ -38,8 +20,20 @@ std::vector<std::string> I2pd::Config::to_vector() const {
         "--sam.port="s + util::str(sam_port),
         "--http.enabled=0", // web console
         "--upnp.enabled=0", // default is disabled, should we enable?
-        "--loglevel="s + log_level_to_str(log_level),
     }; 
+
+    // Possible log level values: "debug", "info", "warn", "error", "none".
+    //
+    // Note 1: `Type::Exe` needs higher loglevel because we read SAM endpoint
+    //          from the log.
+    // Note 2: `Type::Exe` implementation reads the log but doesn't output it
+    //          by default, edit i2pd_exe.cpp to see it.
+    type.visit(overloaded {
+        [&ret] (Type::Exe) { ret.push_back("--loglevel=info"s); },
+        [&ret] (Type::Lib) { ret.push_back("--loglevel=none"s); }
+    });
+
+    return ret;
 }
 
 asio::ip::tcp::endpoint I2pd::sam_endpoint() const {

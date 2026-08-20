@@ -44,7 +44,7 @@ std::expected<I2pd, sys::error_code>
 I2pd::start_lib(I2pd::Config config, util::LogPath log_path) {
     OUI_LOG_DEBUG(log_path, " Starting I2P daemon (library)");
 
-    auto config_vec = config.to_vector();
+    auto config_vec = config.to_vector(I2pd::Type::Lib{});
 
     std::vector<const char*> args;
 

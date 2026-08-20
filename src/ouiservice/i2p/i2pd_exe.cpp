@@ -177,7 +177,7 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
         bp::process proc(
             exec,
             i2pd_binary_path.string(),
-            config.to_vector(),
+            config.to_vector(I2pd::Type::Exe{}),
             bp::process_stdio{
                 {}, // stdin
                 stdcout, // stdout
