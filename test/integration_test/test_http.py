@@ -845,6 +845,10 @@ async def test_bep3_cache_over_i2p(http_server, log):
             TestFixtures.BEP3_TRACKER_ID,
             "--disable-origin-access",
             "--disable-proxy-access",
+            # Try to connect to an already running I2P/SAM
+            #"--enable-i2p-service-ext", "127.0.0.1:7656",
+            # If the above doesn't work, start i2pd (as a library)
+            "--enable-i2p-service-lib",
             "--listen-on-tcp",
             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
             "--front-end-ep",
@@ -890,6 +894,13 @@ async def test_bep3_cache_over_i2p(http_server, log):
             TestFixtures.BEP3_TRACKER_ID,
             "--disable-origin-access",
             "--disable-proxy-access",
+            # Try to connect to an already running I2P/SAM
+            "--enable-i2p-service-ext", "127.0.0.1:7656",
+            # If the above doesn't work, start i2pd (as a library)
+            # Note that this currently won't work if the injector is using i2pd
+            # as well because it'd try to open the SAM acceptor on the same TCP
+            # port and fail.
+            #"--enable-i2p-service-lib",
             "--listen-on-tcp",
             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
             "--front-end-ep",
