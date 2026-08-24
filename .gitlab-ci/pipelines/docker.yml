@@ -9,7 +9,7 @@ docker / build:
       - < Dockerfile
     - docker image rm equalitie/ouinet:${CI_JOB_SLUG}
   needs:
-    - job: 'linux / build'
+    - job: []
       optional: true
       artifacts: false
   rules:
