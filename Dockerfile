@@ -4,10 +4,12 @@ ENV LANG=C.UTF-8
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y \
       build-essential \
+      curl \
       git \
       libssl-dev \
       python3-twisted \
       zlib1g-dev
+
 # quieten wget and unzip
 RUN echo 'quiet = on' >> /etc/wgetrc
 WORKDIR /usr/local/src
@@ -24,7 +26,9 @@ WORKDIR /opt/ouinet
 # is needed to allow CMake to extract files in the Go language binary distribution
 # with UTF-8-encoded Unicode names.
 RUN /usr/local/src/ouinet/scripts/install-cmake.sh "$CMAKE_VERSION"
-ENV PATH="/opt/cmake/cmake-$CMAKE_VERSION/bin:$PATH"
+ARG RUST_VERSION=1.96.0
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain="$RUST_VERSION"
+ENV PATH="/opt/cmake/cmake-$CMAKE_VERSION/bin:/root/.cargo/bin:$PATH"
 ARG OUINET_DEBUG=no
 RUN \
 if [ $OUINET_DEBUG = yes ]; then \
