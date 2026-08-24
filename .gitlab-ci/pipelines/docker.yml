@@ -8,9 +8,6 @@ docker / build:
       -t equalitie/ouinet:${CI_JOB_SLUG}
       - < Dockerfile
     - docker image rm equalitie/ouinet:${CI_JOB_SLUG}
-  needs:
-    - job: []
-      optional: true
-      artifacts: false
+  needs: []
   rules:
      - !reference [.optional_job, rules]
