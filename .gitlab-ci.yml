@@ -40,4 +40,5 @@ include:
   - .gitlab-ci/pipelines/windows.yml
   - .gitlab-ci/pipelines/macos.yml
   - .gitlab-ci/pipelines/ios.yml
+  - .gitlab-ci/pipelines/docker.yml
 

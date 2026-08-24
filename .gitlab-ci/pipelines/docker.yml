@@ -1,0 +1,16 @@
+docker / build:
+  stage: build
+  tags:
+    - shell+docker
+  script:
+    - >
+      docker build --progress=plain --pull
+      -t equalitie/ouinet:${CI_JOB_SLUG}
+      - < Dockerfile
+    - docker image rm equalitie/ouinet:${CI_JOB_SLUG}
+  needs:
+    - job: 'linux / build'
+      optional: true
+      artifacts: false
+  rules:
+     - !reference [.optional_job, rules]
