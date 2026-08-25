@@ -35,7 +35,7 @@ fi
 RUN cp -r /usr/local/src/ouinet/repos/ repo-templates/
 RUN \
 if [ $OUINET_DEBUG != yes ]; then \
-    strip injector client test/bt-* test/oui-* \
+    strip injector client test/bt_* test/test_* \
         && find . -name '*.so' -exec strip '{}' + \
         && find . -wholename '*/libexec/*' -executable -type f -exec strip '{}' + ; \
 fi
@@ -86,7 +86,7 @@ COPY --from=builder /opt/ouinet/injector /opt/ouinet/client ./
 COPY --from=builder /opt/ouinet/repo-templates/ repo-templates/
 RUN mkdir utils
 COPY --from=builder \
- /opt/ouinet/test/bt-* /opt/ouinet/test/oui-* \
+ /opt/ouinet/test/bt_* /opt/ouinet/test/test_* \
  /usr/local/src/ouinet/scripts/ping-swarm \
  utils/
 # This ensures that we use the desired Docker-specific files.
