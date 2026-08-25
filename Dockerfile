@@ -1,4 +1,4 @@
-FROM rust:slim-bookworm AS base
+FROM rust:slim-trixie AS base
 ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get upgrade -y
