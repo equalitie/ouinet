@@ -5,6 +5,7 @@ docker / build:
   script:
     - >
       docker build --progress=plain --pull
+      --build-arg OUINET_VERSION=${CI_COMMIT_BRANCH}
       -t equalitie/ouinet:${CI_JOB_SLUG}
       - < Dockerfile
     - docker image rm equalitie/ouinet:${CI_JOB_SLUG}
