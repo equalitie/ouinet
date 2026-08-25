@@ -54,6 +54,7 @@ struct MetricsServerConfig {
 
 // Groups `servers` into tiers ordered by ascending priority (lowest value = highest
 // priority = first). Servers keep their relative order within a tier.
+OUINET_CLIENT_API
 std::vector<std::vector<MetricsServerConfig*>>
 group_servers_by_priority(std::vector<MetricsServerConfig>& servers);
 
