@@ -73,6 +73,8 @@ if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
     add_test(TARGET test_client_stop)
 endif ()
 
+add_test(TARGET test_client_config)
+
 if (NOT WIN32)
     add_test(TARGET test_persistent_lru_cache)
 endif ()

@@ -12,8 +12,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -74,12 +76,15 @@ public class Config implements Parcelable {
         private boolean enableLogFile = false;
 
         private boolean metricsEnableOnStart = false;
-        private String metricsServerUrl;
-        private String metricsServerToken;
+        // Parallel lists: one entry per metrics server, in the same order.
+        // Use "." for token/caCert to mean "no token"/"default cert" for that
+        // server, and a "@/path/to/file" caCert value to read the certificate
+        // from a file instead of passing it inline.
+        private List<String> metricsServerUrls = null;
+        private List<String> metricsServerTokens = null;
+        private List<String> metricsServerCaCerts = null;
+        private List<Integer> metricsServerPriorities = null;
         private String metricsEncryptionKey;
-        // Set either-or, not both.
-        private String metricsServerTlsCaCert;
-        private String metricsServerTlsCaCertPath;
         private String metricsDeleteAfter;
 
         public ConfigBuilder(Context context) {
@@ -237,24 +242,52 @@ public class Config implements Parcelable {
             this.metricsEnableOnStart = enable;
             return this;
         }
-        public ConfigBuilder setMetricsServerUrl(String url) {
-            this.metricsServerUrl = url;
-            return this;
+        /**
+         * Adds one metrics server to send statistics/metrics records to.
+         * Can be called multiple times to send records to several servers.
+         *
+         * @param url URL of the metrics server.
+         * @param token Token sent as the 'token: &lt;TOKEN&gt;' HTTP header, or null for no token.
+         * @param caCert TLS CA certificate (inline PEM), a "@/path/to/file" reference to read it
+         *               from a file, or null to use the default certificate.
+         */
+        public ConfigBuilder addMetricsServer(String url, @Nullable String token, @Nullable String caCert) {
+            return addMetricsServer(url, token, caCert, 0);
         }
-        public ConfigBuilder setMetricsServerToken(String token) {
-            this.metricsServerToken = token;
+        /**
+         * Adds one metrics server to send statistics/metrics records to, with an explicit
+         * priority tier. Can be called multiple times to send records to several servers.
+         *
+         * Records are sent concurrently to every server in the highest-priority tier
+         * (lowest priority value) that has at least one server; the next tier is only
+         * contacted if every server in the current tier fails. Servers sharing the same
+         * priority (including the default, 0) fall in the same tier.
+         *
+         * @param url URL of the metrics server.
+         * @param token Token sent as the 'token: &lt;TOKEN&gt;' HTTP header, or null for no token.
+         * @param caCert TLS CA certificate (inline PEM), a "@/path/to/file" reference to read it
+         *               from a file, or null to use the default certificate.
+         * @param priority Priority tier for this server: servers with a lower value are tried
+         *                 first. Use 0 for the default priority (a single, flat tier).
+         */
+        public ConfigBuilder addMetricsServer(String url, @Nullable String token, @Nullable String caCert, int priority) {
+            if (url == null)
+                return this;
+
+            if (this.metricsServerUrls == null) {
+                this.metricsServerUrls = new ArrayList<>();
+                this.metricsServerTokens = new ArrayList<>();
+                this.metricsServerCaCerts = new ArrayList<>();
+                this.metricsServerPriorities = new ArrayList<>();
+            }
+            this.metricsServerUrls.add(url);
+            this.metricsServerTokens.add(token == null ? "." : token);
+            this.metricsServerCaCerts.add(caCert == null ? "." : caCert);
+            this.metricsServerPriorities.add(priority);
             return this;
         }
         public ConfigBuilder setMetricsEncryptionKey(String key) {
             this.metricsEncryptionKey = key;
-            return this;
-        }
-        public ConfigBuilder setMetricsServerTlsCaCert(String caCert) {
-            this.metricsServerTlsCaCert = caCert;
-            return this;
-        }
-        public ConfigBuilder setMetricsServerTlsCaCertPath(String path) {
-            this.metricsServerTlsCaCertPath = path;
             return this;
         }
         public ConfigBuilder setMetricsDeleteAfter(String metricsDeleteAfter){
@@ -450,11 +483,11 @@ public class Config implements Parcelable {
                     logLevel,
                     enableLogFile,
                     metricsEnableOnStart,
-                    metricsServerUrl,
-                    metricsServerToken,
+                    metricsServerUrls,
+                    metricsServerTokens,
+                    metricsServerCaCerts,
+                    metricsServerPriorities,
                     metricsEncryptionKey,
-                    metricsServerTlsCaCert,
-                    metricsServerTlsCaCertPath,
                     metricsDeleteAfter);
         }
     }
@@ -491,11 +524,11 @@ public class Config implements Parcelable {
     private LogLevel logLevel;
     private boolean enableLogFile;
     private boolean metricsEnableOnStart;
-    private String metricsServerUrl;
-    private String metricsServerToken;
+    private List<String> metricsServerUrls;
+    private List<String> metricsServerTokens;
+    private List<String> metricsServerCaCerts;
+    private List<Integer> metricsServerPriorities;
     private String metricsEncryptionKey;
-    private String metricsServerTlsCaCert;
-    private String metricsServerTlsCaCertPath;
     private String metricsDeleteAfter;
 
     private Config(String ouinetDirectory,
@@ -530,11 +563,11 @@ public class Config implements Parcelable {
                   LogLevel logLevel,
                   boolean enableLogFile,
                   boolean metricsEnableOnStart,
-                  String metricsServerUrl,
-                  String metricsServerToken,
+                  List<String> metricsServerUrls,
+                  List<String> metricsServerTokens,
+                  List<String> metricsServerCaCerts,
+                  List<Integer> metricsServerPriorities,
                   String metricsEncryptionKey,
-                  String metricsServerTlsCaCert,
-                  String metricsServerTlsCaCertPath,
                   String metricsDeleteAfter) {
         this.ouinetDirectory = ouinetDirectory;
         this.btBootstrapExtras = (btBootstrapExtras == null ? null : new HashSet<>(btBootstrapExtras));
@@ -568,11 +601,11 @@ public class Config implements Parcelable {
         this.logLevel = logLevel;
         this.enableLogFile = enableLogFile;
         this.metricsEnableOnStart = metricsEnableOnStart;
-        this.metricsServerUrl = metricsServerUrl;
-        this.metricsServerToken = metricsServerToken;
+        this.metricsServerUrls = (metricsServerUrls == null ? null : new ArrayList<>(metricsServerUrls));
+        this.metricsServerTokens = (metricsServerTokens == null ? null : new ArrayList<>(metricsServerTokens));
+        this.metricsServerCaCerts = (metricsServerCaCerts == null ? null : new ArrayList<>(metricsServerCaCerts));
+        this.metricsServerPriorities = (metricsServerPriorities == null ? null : new ArrayList<>(metricsServerPriorities));
         this.metricsEncryptionKey = metricsEncryptionKey;
-        this.metricsServerTlsCaCert = metricsServerTlsCaCert;
-        this.metricsServerTlsCaCertPath = metricsServerTlsCaCertPath;
         this.metricsDeleteAfter = metricsDeleteAfter;
     }
     public String getOuinetDirectory() {
@@ -671,20 +704,20 @@ public class Config implements Parcelable {
     public boolean getMetricsEnableOnStart() {
         return metricsEnableOnStart;
     }
-    public String getMetricsServerUrl() {
-        return metricsServerUrl;
+    public List<String> getMetricsServerUrls() {
+        return (metricsServerUrls == null ? null : new ArrayList<>(metricsServerUrls));
     }
-    public String getMetricsServerToken() {
-        return metricsServerToken;
+    public List<String> getMetricsServerTokens() {
+        return (metricsServerTokens == null ? null : new ArrayList<>(metricsServerTokens));
+    }
+    public List<String> getMetricsServerCaCerts() {
+        return (metricsServerCaCerts == null ? null : new ArrayList<>(metricsServerCaCerts));
+    }
+    public List<Integer> getMetricsServerPriorities() {
+        return (metricsServerPriorities == null ? null : new ArrayList<>(metricsServerPriorities));
     }
     public String getMetricsEncryptionKey() {
         return metricsEncryptionKey;
-    }
-    public String getMetricsServerTlsCaCert() {
-        return metricsServerTlsCaCert;
-    }
-    public String getMetricsServerTlsCaCertPath() {
-        return metricsServerTlsCaCertPath;
     }
     public String getMetricsDeleteAfter() {
         return metricsDeleteAfter;
@@ -741,11 +774,11 @@ public class Config implements Parcelable {
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
         out.writeInt(enableLogFile ? 1 : 0);
         out.writeInt(metricsEnableOnStart ? 1 : 0);
-        out.writeString(metricsServerUrl);
-        out.writeString(metricsServerToken);
+        out.writeStringList(metricsServerUrls);
+        out.writeStringList(metricsServerTokens);
+        out.writeStringList(metricsServerCaCerts);
+        out.writeList(metricsServerPriorities);
         out.writeString(metricsEncryptionKey);
-        out.writeString(metricsServerTlsCaCert);
-        out.writeString(metricsServerTlsCaCertPath);
         out.writeString(metricsDeleteAfter);
     }
     private Config(Parcel in) {
@@ -801,11 +834,12 @@ public class Config implements Parcelable {
         enableLogFile = in.readInt() != 0;
 
         metricsEnableOnStart = in.readInt() != 0;
-        metricsServerUrl = in.readString();
-        metricsServerToken = in.readString();
+        metricsServerUrls = in.createStringArrayList();
+        metricsServerTokens = in.createStringArrayList();
+        metricsServerCaCerts = in.createStringArrayList();
+        //noinspection unchecked
+        metricsServerPriorities = in.readArrayList(Integer.class.getClassLoader());
         metricsEncryptionKey = in.readString();
-        metricsServerTlsCaCert = in.readString();
-        metricsServerTlsCaCertPath = in.readString();
         metricsDeleteAfter = in.readString();
     }
 

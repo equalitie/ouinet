@@ -39,11 +39,11 @@ public class Ouinet {
             System.loadLibrary("gpg-error");
             System.loadLibrary("gcrypt");
 
-            System.loadLibrary("client");
+            System.loadLibrary("ouinet_client");
             System.loadLibrary("native-lib");
         } else {
             ReLinkerInstance relinker = ReLinker.recursively();
-            relinker.loadLibrary(context, "client");
+            relinker.loadLibrary(context, "ouinet_client");
             relinker.loadLibrary(context, "native-lib");
         }
 
@@ -155,12 +155,21 @@ public class Ouinet {
         maybeAdd    (args, "--request-body-limit",          config.getRequestBodyLimit());
 
         maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
-        maybeAdd    (args, "--metrics-server-url",          config.getMetricsServerUrl());
-        maybeAdd    (args, "--metrics-server-token",        config.getMetricsServerToken());
         maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
-        maybeAdd    (args, "--metrics-server-cacert",       config.getMetricsServerTlsCaCert());
-        maybeAdd    (args, "--metrics-server-cacert-file",  config.getMetricsServerTlsCaCertPath());
         maybeAdd    (args, "--metrics-delete-after",        config.getMetricsDeleteAfter());
+
+        List<String> metricsServerUrls = config.getMetricsServerUrls();
+        if (metricsServerUrls != null) {
+            List<String> metricsServerTokens = config.getMetricsServerTokens();
+            List<String> metricsServerCaCerts = config.getMetricsServerCaCerts();
+            List<Integer> metricsServerPriorities = config.getMetricsServerPriorities();
+            for (int i = 0; i < metricsServerUrls.size(); i++) {
+                args.add("--metrics-server-url=" + metricsServerUrls.get(i));
+                args.add("--metrics-server-token=" + metricsServerTokens.get(i));
+                args.add("--metrics-server-cacert=" + metricsServerCaCerts.get(i));
+                args.add("--metrics-server-priority=" + metricsServerPriorities.get(i));
+            }
+        }
 
         Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
         if (btBootstrapExtras != null) {
