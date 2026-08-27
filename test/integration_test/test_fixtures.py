@@ -79,13 +79,15 @@ class TestFixtures:
     TCP_INJECTOR_NAME = "tcp_injector"
     TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     # TCP_INJECTOR_PORT_READY_REGEX = "TCP address"
-    TCP_INJECTOR_PORT = 7070
+    # Don't use 7070 it is used by I2PD 
+    TCP_INJECTOR_PORT = 7090
 
     CACHE_INJECTOR_NAME = "cache_injector"
 
     # TEST_PAGE_BODY = b"<html><body>TESTPAGE</body></html>\n"
     TEST_HTTP_SERVER_PORT = 7080
     RESPONSE_LENGTH = 20
+    MULTI_BLOCK_RESPONSE_LENGTH = 96 * 1024
 
     CLIENT_CONFIG_FILE_NAME = "ouinet-client.conf"
     TCP_CLIENT = {"name": "tcp_client", "port": 8075, "fe_port": 8099}

@@ -285,15 +285,21 @@ async def wait_for_benchmark(process: OuinetProcess, benchmark: str) -> re.Match
     return process.callbacks[benchmark]
 
 
-async def request_sized_content(port, content_size, header = {}) -> Response:
+async def request_sized_content(port, content_size, nonce: Optional[str] = None, header = {}) -> Response:
     """
-    Send a get request to request the test server to send a random content of a specific size
+    Send a get request to request the test server to send a random content of a
+    specific size. `nonce`, if provided, is appended as an ignored query
+    parameter so callers can force a unique cache key per test run (avoiding
+    stale announces from previous runs pointing at peers that no longer serve
+    this URL).
     """
     url = "http://%s:%d/?content_size=%s" % (
         get_nonloopback_ip(),
         TestFixtures.TEST_HTTP_SERVER_PORT,
         str(content_size),
     )
+    if nonce is not None:
+        url += "&nonce=" + nonce
     return await request_url(port, url, header)
 
 
@@ -514,16 +520,59 @@ async def get_cached_echo(port: int, content: str, header = {}) -> Response:
     )
 
 
+async def get_cached_sized_content(
+    port: int, expected_body: bytes, nonce: str, header = {}
+) -> Response:
+    """Fetch a cached sized-content response with retries, comparing bytes.
+
+    The sized-content endpoint (?content_size=N) returns N random bytes on the
+    origin path; on the cache path it must return the same bytes originally
+    stored. `expected_body` is the payload captured on the priming call, and
+    `nonce` must match the value used when priming so the URL (and therefore
+    the cache key) is identical.
+    """
+    content_size = len(expected_body)
+    for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
+        try:
+            print(f"get_cached_sized_content attempt {i + 1}... size={content_size}")
+            response = await request_sized_content(port, content_size, nonce, header)
+            if response.status_code == 200:
+                assertEquals(response.content, expected_body)
+                return response
+            print(
+                f"get_cached_sized_content: got status {response.status_code}, retrying..."
+            )
+        except Exception as e:
+            print(f"get_cached_sized_content: {e}, retrying...")
+        await asyncio.sleep(5)
+
+    raise AssertionError(
+        f"Failed to get cached sized response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts"
+    )
+
+
 @pytest.mark.timeout(TestFixtures.BEP5_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_tcp_cache(certificate_file, http_server):
+@pytest.mark.parametrize("content_length", [TestFixtures.RESPONSE_LENGTH, TestFixtures.MULTI_BLOCK_RESPONSE_LENGTH])
+async def test_tcp_cache(certificate_file, http_server, content_length):
     """
     Starts an echoing http server, a injector and a two clients and client1 send a unique http
     request to the echoing http server through the g client --tcp--> injector -> http server
     and make sure it gets the correct echo. The test waits for the response to be cached.
     Then the second client request the same request makes sure that
     the response is served from cache.
+
+    Parametrized over content_length to cover both a small single-chunk payload
+    and a >64KB payload that spans multiple cache chunks — reproduces the
+    known multi-block cache bug when content exceeds one 65536-byte block.
     """
+    banner = (
+        "\n" + "*" * 78
+        + f"\n*** test_tcp_cache: content_length = {content_length} bytes"
+        + "\n" + "*" * 78 + "\n"
+    )
+    print(banner)
+    logging.info(banner)
     # Injector (caching by default)
     injector = run_tcp_injector(
         ["--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.TCP_INJECTOR_PORT)],
@@ -557,10 +606,24 @@ async def test_tcp_cache(certificate_file, http_server):
     # Wait for the client to open the port
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
-    content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
-    assertEquals(response.status_code, 200)
-    assertEquals(response.text, content)
+    # For small content, use the echo endpoint (content in URL — inherently
+    # unique per run). For large content, use the sized-content endpoint plus
+    # a random nonce to force a unique URL per run so we don't hit stale
+    # tracker announces pointing at peers from prior runs.
+    use_sized = content_length > 4096
+    if use_sized:
+        sized_nonce = safe_random_str(16)
+        response = await request_sized_content(
+            TestFixtures.CACHE_CLIENT[0]["port"], content_length, sized_nonce
+        )
+        assertEquals(response.status_code, 200)
+        expected_body = response.content
+        assertEquals(len(expected_body), content_length)
+    else:
+        content = safe_random_str(content_length)
+        response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+        assertEquals(response.status_code, 200)
+        assertEquals(response.text, content)
 
     # Shut injector down to ensure it does not seed content to the cache client
     await injector.stop()
@@ -592,7 +655,12 @@ async def test_tcp_cache(certificate_file, http_server):
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_PEER_FOUND)
 
     # Now request the same page from second client
-    response = await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
+    if use_sized:
+        response = await get_cached_sized_content(
+            TestFixtures.CACHE_CLIENT[1]["port"], expected_body, sized_nonce
+        )
+    else:
+        response = await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
     # # make sure it was served from cache
     assert response.headers['X-Ouinet-Source'] == 'dist-cache'
