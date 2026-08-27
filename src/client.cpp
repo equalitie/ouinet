@@ -374,11 +374,13 @@ public:
             local_ep = mpl.local_endpoint(),
             m = move(m),
             shutdown_signal = _shutdown_signal,
-            upnps = _upnps_ptr
+            upnps = _upnps_ptr,
+            upnp_enabled = _config.is_upnp_enabled()
         ] (asio::yield_context yield) mutable {
             sys::error_code ec;
             auto ext_ep = bt_dht->add_endpoint(move(m), yield[ec]);
             if (ec || shutdown_signal) return;
+            if (!upnp_enabled) return;
             State::setup_upnp(executor, ext_ep.port(), local_ep, upnps);
         }));
 
@@ -2810,12 +2812,14 @@ void Client::State::setup_cache(asio::yield_context yield)
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , yield[ec])
         : cache::Client::build( _ctx.get_executor()
                               , UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , _config.cache_static_path()
                               , _config.cache_static_content_path()
                               , yield[ec]);
