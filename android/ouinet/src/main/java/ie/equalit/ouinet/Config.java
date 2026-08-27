@@ -55,6 +55,7 @@ public class Config implements Parcelable {
         private String cacheStaticPath;
         private String cacheStaticContentPath;
         private String i2pBep3Tracker;
+        private String injectorEp;
         private String listenOnTcp;
         private String frontEndEp;
         private String frontEndAccessToken;
@@ -151,6 +152,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setI2pBep3Tracker(String i2pBep3Tracker){
             this.i2pBep3Tracker = i2pBep3Tracker;
+            return this;
+        }
+        public ConfigBuilder setInjectorEp(String injectorEp){
+            this.injectorEp = injectorEp;
             return this;
         }
         public ConfigBuilder setListenOnTcp(String listenOnTcp){
@@ -437,6 +442,7 @@ public class Config implements Parcelable {
                     cacheStaticPath,
                     cacheStaticContentPath,
                     i2pBep3Tracker,
+                    injectorEp,
                     listenOnTcp,
                     frontEndEp,
                     frontEndAccessToken,
@@ -479,6 +485,7 @@ public class Config implements Parcelable {
     private String cacheStaticPath;
     private String cacheStaticContentPath;
     private String i2pBep3Tracker;
+    private String injectorEp;
     private String listenOnTcp;
     private String frontEndEp;
     private String frontEndAccessToken;
@@ -519,6 +526,7 @@ public class Config implements Parcelable {
                   String cacheStaticPath,
                   String cacheStaticContentPath,
                   String i2pBep3Tracker,
+                  String injectorEp,
                   String listenOnTcp,
                   String frontEndEp,
                   String frontEndAccessToken,
@@ -558,6 +566,7 @@ public class Config implements Parcelable {
         this.cacheStaticPath = cacheStaticPath;
         this.cacheStaticContentPath = cacheStaticContentPath;
         this.i2pBep3Tracker = i2pBep3Tracker;
+        this.injectorEp = injectorEp;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
         this.frontEndAccessToken = frontEndAccessToken;
@@ -625,6 +634,9 @@ public class Config implements Parcelable {
     }
     public String getI2pBep3Tracker() {
         return i2pBep3Tracker;
+    }
+    public String getInjectorEp() {
+        return injectorEp;
     }
     public String getListenOnTcp() {
         return listenOnTcp;
@@ -734,6 +746,7 @@ public class Config implements Parcelable {
         out.writeString(cacheStaticPath);
         out.writeString(cacheStaticContentPath);
         out.writeString(i2pBep3Tracker);
+        out.writeString(injectorEp);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
         out.writeString(frontEndAccessToken);
@@ -784,6 +797,7 @@ public class Config implements Parcelable {
         cacheStaticPath = in.readString();
         cacheStaticContentPath = in.readString();
         i2pBep3Tracker = in.readString();
+        injectorEp = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
         frontEndAccessToken = in.readString();
