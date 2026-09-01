@@ -3,6 +3,11 @@
 # Empty means all tests
 run_tests=()
 
+function error() (
+    echo "$@"
+    exit 1
+)
+
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --run-test)
