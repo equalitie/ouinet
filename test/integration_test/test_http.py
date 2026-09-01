@@ -598,6 +598,7 @@ async def test_tcp_cache(certificate_file, http_server):
     assert response.headers['X-Ouinet-Source'] == 'dist-cache'
 
 
+@pytest.mark.skip(reason="TODO: injectors for this protocol version have not yet been deployed")
 @pytest.mark.timeout(TestFixtures.BEP5_CACHE_TIMEOUT)
 @pytest.mark.asyncio
 async def test_example_mainline_dht(http_server, certificate_file):
