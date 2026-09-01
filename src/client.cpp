@@ -307,18 +307,17 @@ public:
         //
         // But, for the majority of cases, this may still be a reasonable bet.
 
-        auto& mpl = common_udp_multiplexer();
-
-        asio_utp::udp_multiplexer m(_ctx);
-        m.bind(mpl);
+        asio_utp::udp_multiplexer m = common_udp_multiplexer();
 
         auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
 
+        auto local_ep = m.local_endpoint();
+
         yield.spawn([
             bt_dht,
-            local_ep = mpl.local_endpoint(),
+            local_ep,
             m = std::move(m),
             upnps = _upnps_ptr
         ] (auto y) mutable {
@@ -2632,8 +2631,7 @@ void Client::State::setup_injectors()
                         return maybe_wrap_tls(std::move(tcp_client));
                     },
                     [&] (const Endpoint::Utp& ep) -> R {
-                        asio_utp::udp_multiplexer m(_ctx);
-                        m.bind(common_udp_multiplexer());
+                        asio_utp::udp_multiplexer m = common_udp_multiplexer();
 
                         auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
                             (_ctx.get_executor(), std::move(m), ep.value);
