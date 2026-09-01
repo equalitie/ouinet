@@ -53,6 +53,7 @@ class TestFixtures:
     INJECTOR_CONF_FILE_CONTENT = "open-file-limit = 32768\n"
 
     I2P_INJECTOR_NAME = "i2p_injector"
+    I2P_SERVICE_READY_REGEX = r"[\s\S]*Self connection passed. SAM endpoint:\s*(\S+)$"
     I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Session created, local_addr:\s*(\S+)$"
     I2P_ANNOUNCER_ANNOUNCED_REGEX = r"[\s\S]*BEP3 announced\s*(\S+)$"
 

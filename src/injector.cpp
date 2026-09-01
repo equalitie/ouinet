@@ -112,6 +112,12 @@ struct Injector::Inner {
             auto session = _i2p_service->create_session(yield);
             if (!session) return std::unexpected(session.error());
 
+            // Used by python test
+            {
+                auto b32 = session->local_addr().to_b32();
+                LOG_DEBUG(yield, " I2P Session created, local_addr: ", b32);
+            }
+
             return std::move(*session);
         });
 
