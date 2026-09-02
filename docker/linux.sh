@@ -249,9 +249,9 @@ function list_artifacts_for_target_os (
                 $build_dir/injector$exe_suffix
                 $build_dir/libasio_utp$lib_suffix
                 $build_dir/libouinet_asio$lib_suffix
-                $build_dir/libouinet_common$lib_suffix
-                $build_dir/libouinet_client$lib_suffix
-                $build_dir/libouinet_injector$lib_suffix
+                $build_dir/libouinet_asio_ssl$lib_suffix
+                $build_dir/libclient$lib_suffix
+                $build_dir/libinjector$lib_suffix
             )
 
             if [[ "$target_os" == windows ]]; then
