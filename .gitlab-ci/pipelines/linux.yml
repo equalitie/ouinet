@@ -18,6 +18,7 @@ linux / build:
     paths:
       - $BUILD_PATH/$TARGET_OS/client
       - $BUILD_PATH/$TARGET_OS/injector
+      - $BUILD_PATH/$TARGET_OS/bt_bep5
       - $BUILD_PATH/$TARGET_OS/lib*.so*
     expire_in: 6h
   rules:
