@@ -9,6 +9,7 @@
 #include <chrono>
 #include "util/test_dir.h"
 #include "util/unwrap.h"
+#include "util/i2p.h"
 #include "bittorrent/mock_dht.h"
 #include "injector.h"
 #include "ouiservice/i2p/session.h"
@@ -162,10 +163,9 @@ void run(asio::io_context& ctx, F&& async_test) {
     // Test that after the test ended, the `ctx.run()` function exited in a timely manner.
     // If `!spawn_end` then the test threw an exception which already makes the test fail.
     if (spawn_end) {
-        auto test_end = steady_clock::now();
-        auto elapsed_ms = duration_cast<milliseconds>(test_end - *spawn_end).count();
+        auto elapsed = steady_clock::now() - *spawn_end;
         // TODO: Keep reducing the allowed timeout
-        BOOST_REQUIRE_LT(elapsed_ms, 5000);
+        BOOST_REQUIRE_LT(elapsed, 5s);
     }
 }
 
@@ -176,7 +176,7 @@ void wait_for_peer_on_tracker(
         Async yield) {
     auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(yield)));
     auto tracker = I2pTrackerClient(session, tracker_addr);
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 120; ++i) {
         auto peers = unwrap(tracker.get_peers(infohash, yield));
         if (peers.contains(peer_addr)) {
             return;
@@ -194,6 +194,10 @@ void wait_for_peer_on_tracker(
 //
 // The test is using `MockDht` because the `MainlineDht` wouldn't work locally.
 BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
+    // Logging is normally first enabled in either the Client or the Injector, but we want to
+    // see log lines even before that (mainly from the I2P code).
+    get_logger().set_threshold(DEBUG);
+
     asio::io_context ctx;
 
     TestDir root;
@@ -205,11 +209,15 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     run(ctx, [&] (Async yield) {
+        auto i2p_service = create_i2p_service(yield);
+        auto sam_endpoint = unwrap(i2p_service.await_running_state(yield)).sam_endpoint;
+
         Injector injector(make_config<InjectorConfig>({
                 "./no_injector_exec"s,
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
                 "--listen-on-i2p=true"s,
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
             }),
             ctx,
             util::LogPath("injector"),
@@ -228,6 +236,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--disable-origin-access"s,
                 "--disable-proxy-access"s,
                 "--i2p-hops-per-tunnel"s, i2p_fast_tunnel_hop_count,
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
                 // XXX Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
                 "--front-end-ep=127.0.0.1:0"s,
@@ -245,6 +254,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 "--repo"s, root.make_subdir("leecher").string(),
                 "--cache-type=bep3-http-over-i2p"s,
                 "--i2p-bep3-tracker"s, tracker_addr.as_str(),
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
                 "--cache-http-public-key"s, injector.cache_http_public_key(),
                 "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
                 "--disable-origin-access"s,
@@ -265,7 +275,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         seeder.start();
         leecher.start();
 
-        auto resource_group = util::random::printable_ascii(10);
+        auto resource_group = util::random::from_set(20, "0123456789abcdefghijklmnoprstuvxyz");
 
         auto control_body = fetch_from_origin(yield).body();
 

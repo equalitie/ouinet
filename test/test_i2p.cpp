@@ -5,7 +5,6 @@
 #include "util/wait_condition.h"
 #include "ouiservice/i2p/session.h"
 #include "ouiservice/i2p/address.h"
-#include "ouiservice/i2p/i2pd.h"
 #include "task.h"
 #include "async_sleep.h"
 #include "util/async.h"
@@ -58,7 +57,7 @@ void run_two(asio::io_context& ctx, ServerJob server_job, ClientJob client_job)
         [ server_job = std::move(server_job)
         , client_job = std::move(client_job)
         ] (asio::yield_context yield) mutable {
-            auto i2pd = ensure_i2p_service(Async(yield));
+            auto i2p_service = create_i2p_service(Async(yield));
 
             WaitCondition server_finished(yield.get_executor());
             WaitCondition client_finished(yield.get_executor());
@@ -66,18 +65,16 @@ void run_two(asio::io_context& ctx, ServerJob server_job, ClientJob client_job)
             auto test_name = boost::unit_test::framework::current_test_case().p_name;
             // Server
             asio::spawn(yield.get_executor(), [&, job = std::move(server_job), lock = server_finished.lock()] (asio::yield_context yield) mutable {
-                    job(Async(
-                        yield,
-                        util::LogPath(test_name).tag("server")
+                    job(i2p_service,
+                        Async(yield, util::LogPath(test_name).tag("server")
                     ));
                 },
                 [] (auto e) { handle_exception("server", e); });
 
             // Client
             asio::spawn(yield.get_executor(), [&, job = std::move(client_job), lock = client_finished.lock()] (asio::yield_context yield) mutable {
-                    job(Async(
-                        yield,
-                        util::LogPath(test_name).tag("client")
+                    job(i2p_service,
+                        Async(yield, util::LogPath(test_name).tag("client")
                     ));
                 },
                 [] (auto e) { handle_exception("client", e); });
@@ -131,8 +128,8 @@ void run_connected(asio::io_context& ctx, ServerJob server_job, ClientJob client
 
     run_two(ctx,
         // Server
-        [shared, lock = shared->server_finished.lock(), job = std::move(server_job)] (Async yield) mutable {
-            auto session = unwrap(I2pSession::create(yield));
+        [shared, lock = shared->server_finished.lock(), job = std::move(server_job)] (auto& i2p_service, Async yield) mutable {
+            auto session = unwrap(i2p_service.create_session(yield));
             shared->server_ep.set_value(session.local_addr());
 
             auto socket = unwrap(session.accept(yield));
@@ -144,8 +141,8 @@ void run_connected(asio::io_context& ctx, ServerJob server_job, ClientJob client
             job(std::move(session), std::move(socket), yield);
         },
         // Client
-        [shared, lock = shared->client_finished.lock(), job = std::move(client_job)] (Async yield) mutable {
-            auto session = unwrap(I2pSession::create(yield));
+        [shared, lock = shared->client_finished.lock(), job = std::move(client_job)] (auto& i2p_service, Async yield) mutable {
+            auto session = unwrap(i2p_service.create_session(yield));
             auto server_ep = *shared->server_ep.get_future().wait(yield);
 
             auto socket = unwrap(session.connect(server_ep, yield));

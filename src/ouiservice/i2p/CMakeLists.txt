@@ -3,10 +3,20 @@ cmake_minimum_required (VERSION 3.13)
 include(ExternalProject)
 
 ################################################################################
+if (WITH_I2PD_EXE OR WITH_I2PD_LIB)
+    set(WITH_I2PD TRUE)
+endif()
+
 if (WITH_I2PD)
     block()
-        set(WITH_BINARY ON)
-        set(WITH_LIBRARY OFF)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBOOST_ASIO_SEPARATE_COMPILATION")
+
+        if (WITH_I2PD_EXE)
+            set(WITH_BINARY ON)
+        else(WITH_I2PD_LIB)
+            set(WITH_LIBRARY ON)
+        endif()
+
         set(WITH_GUI OFF)
         set(BUILD_TESTING OFF)
     
@@ -25,6 +35,16 @@ if (WITH_I2PD)
         add_subdirectory(./i2pd/build)
     endblock()
     
+    if (MINGW)                                                                                                                                          
+        # mingw-w64 GCC's libstdc++.a (tinfo.o) and Boost's c++23 object files                                                                                          
+        # both emit a non-weak definition of std::type_info::operator==,                                                                                                
+        # causing a "multiple definition" link error (GCC bug 110572). Both                                                                                             
+        # definitions are identical implementations of the same standard                                                                                                
+        # function, so it's safe to let the linker keep either one.                                                                                                     
+        target_link_options(i2pd PRIVATE -Wl,--allow-multiple-definition)                                                                                               
+        set(MINGW_EXTRA iphlpapi)
+    endif()     
+
     # We build our own boost and openssl, so make sure those are built before i2pd
     # starts building so it can use those. Normally this should be automatic, but i2pd
     # does not specify that the later two libraries depend on Boost.
@@ -45,9 +65,9 @@ if (WITH_I2PD)
         cmake_policy(SET CMP0079 NEW)
     endif()
     
-    target_link_libraries(libi2pd       PUBLIC Boost::program_options)
-    target_link_libraries(libi2pdclient PUBLIC Boost::program_options)
-    target_link_libraries(libi2pdlang   PUBLIC                       )
+    target_link_libraries(libi2pd       PUBLIC ouinet_asio Boost::program_options ${MINGW_EXTRA})
+    target_link_libraries(libi2pdclient PUBLIC ouinet_asio Boost::program_options Boost::json ${MINGW_EXTRA})
+    target_link_libraries(libi2pdlang   PUBLIC)
     
     if (ANDROID)
         target_compile_definitions(i2pd PRIVATE ANDROID_BINARY=1)
@@ -57,43 +77,74 @@ endif()
 ################################################################################
 project(ouinet_i2p)
 
-add_library(ouinet_i2p OBJECT
-    "./address.cpp"
-    "./address.cpp"
-    "./sam.cpp"
-    "./i2pd.cpp"
-    "./session.cpp"
-    "./session_id.cpp"
-    "./tracker.cpp"
-    "./tracker_lookup.cpp"
-    "./announcer.cpp"
-    "./util/create_i2p_session.cpp"
-)
-
-set(ouinet_i2p_libs
-    ouinet_asio
-)
-
 set(ouinet_i2p_defs
     OUINET_API_I2P_EXPORT
     OUINET_API_COMMON_LOCAL
 )
 
-if (WITH_I2PD)
-    list(APPEND ouinet_i2p_libs Boost::process)
-    list(APPEND ouinet_i2p_defs OUINET_WITH_I2PD)
+if (ANDROID)
+    list(APPEND ouinet_i2p_defs PRIVATE ANDROID_BINARY=1)
 endif()
 
-ouinet_setup(TARGET ouinet_i2p
-    LINK ${ouinet_i2p_libs}
-    DEFS ${ouinet_i2p_defs}
+set(ouinet_i2p_libs
+    ouinet_asio
 )
 
-if (WITH_I2PD)
-    add_dependencies(ouinet_i2p i2pd)
+set(ouinet_i2p_includes)
+
+set(ouinet_i2p_cpps
+    address.cpp
+    address.cpp
+    sam.cpp
+    i2pd.cpp
+    session.cpp
+    session_id.cpp
+    tracker.cpp
+    tracker_lookup.cpp
+    announcer.cpp
+    service.cpp
+)
+
+if (WITH_I2PD_EXE)
+    list(APPEND ouinet_i2p_defs PRIVATE OUINET_WITH_I2PD_EXE)
+    list(APPEND ouinet_i2p_libs Boost::process)
+    list(APPEND ouinet_i2p_cpps i2pd_exe.cpp)
 endif()
 
-target_include_directories(ouinet_i2p INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WITH_I2PD_LIB)
+    list(APPEND ouinet_i2p_defs PRIVATE OUINET_WITH_I2PD_LIB)
+    list(APPEND ouinet_i2p_libs libi2pd libi2pdclient libi2pdlang)
+    list(APPEND ouinet_i2p_includes ./i2pd/daemon ./i2pd/libi2pd ./i2pd/libi2pd_client ./i2pd/i18n)
+    list(APPEND ouinet_i2p_cpps
+        i2pd_lib.cpp
+        i2pd/daemon/Daemon.cpp
+        i2pd/daemon/I2PControl.cpp
+        i2pd/daemon/HTTPServer.cpp
+        i2pd/daemon/I2PControlHandlers.cpp
+    )
+    if(UNIX)
+        list(APPEND ouinet_i2p_cpps i2pd/daemon/UnixDaemon.cpp)
+    elseif(WIN32 OR MINGW)
+        list(APPEND ouinet_i2p_cpps
+            i2pd/Win32/Win32App.cpp
+            i2pd/Win32/Win32Service.cpp
+            i2pd/Win32/Win32NetState.cpp
+            i2pd/Win32/DaemonWin32.cpp
+        )
+    endif()
+endif()
+
+add_library(ouinet_i2p OBJECT ${ouinet_i2p_cpps})
+
+ouinet_setup(TARGET ouinet_i2p
+    LINK ${ouinet_i2p_libs} ${MINGW_EXTRA}
+    DEFS ${ouinet_i2p_defs}
+    INCS PRIVATE ${ouinet_i2p_includes}
+)
+
+if (WITH_I2PD_EXE)
+    add_dependencies(ouinet_i2p i2pd)
+endif()
 
 ################################################################################
 
@@ -104,7 +155,7 @@ set_target_properties(ouinet_i2p PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
-if (WITH_I2PD)
+if (WITH_I2PD_EXE)
     set_target_properties(i2pd PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

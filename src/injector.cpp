@@ -32,7 +32,8 @@
 #include "session.h"
 
 #include "ouiservice.h"
-#include "ouiservice/i2p/util/create_i2p_session.h"
+#include "ouiservice/i2p/service.h"
+#include "ouiservice/i2p/session.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -43,6 +44,7 @@
 #include "util/atomic_file.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
+#include "util/spawn_for_result.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -66,13 +68,61 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using util::AsioExecutor;
+template<class V> using SysResult = std::expected<V, sys::error_code>;
+using I2pSessionTask = TaskHandle<SysResult<I2pSession>>;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 struct Injector::Inner {
-    std::optional<CreateI2pSessionPromise::Future> _i2p_session_future;
+    util::LogPath _log_path;
+    std::optional<I2pService> _i2p_service;
+    std::optional<I2pSessionTask> _i2p_session_task;
+
+    I2pService* get_or_create_i2p_service(asio::any_io_executor exec, const I2pService::Config& config, Cancel cancel) {
+        if (cancel) {
+            return nullptr;
+        }
+
+        if (_i2p_service) {
+            return &*_i2p_service;
+        }
+
+        _i2p_service = I2pService::start(config, exec, cancel, _log_path);
+        return &*_i2p_service;
+    }
+
+    I2pSessionTask get_or_create_i2p_session(asio::any_io_executor exec, const InjectorConfig& config, Cancel cancel) {
+        using R = SysResult<I2pSession>;
+
+        if (_i2p_session_task) return *_i2p_session_task;
+
+        auto cfg = config.i2p_service_config();
+
+        _i2p_session_task = spawn_for_result(exec, cancel, _log_path, [this, cfg] (Async yield) -> R {
+            if (!cfg) {
+                return std::unexpected(asio::error::service_not_found);
+            }
+
+            auto service = get_or_create_i2p_service(yield.get_executor(), *cfg, yield.get_cancel());
+
+            if (!service) return std::unexpected(asio::error::service_not_found);
+
+            auto session = _i2p_service->create_session(yield);
+            if (!session) return std::unexpected(session.error());
+
+            // Used by python test
+            {
+                auto b32 = session->local_addr().to_b32();
+                LOG_DEBUG(yield, " I2P Session created, local_addr: ", b32);
+            }
+
+            return std::move(*session);
+        });
+
+        return *_i2p_session_task;
+    }
 };
 
 // TODO: Get rid of this
@@ -833,7 +883,7 @@ Injector::Injector(
     _exec(ctx.get_executor()),
     _config(std::move(config)),
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
-    _inner(std::make_unique<Inner>())
+    _inner(std::make_unique<Inner>(log_path))
 {
     #ifndef __WIN32
     if (_config.open_file_limit()) {
@@ -963,44 +1013,35 @@ Injector::Injector(
             void stop_listen() override { _cancel(); }
 
             std::expected<GenericStream, sys::error_code> accept(Async yield) override {
-                auto future_result = _session_future.wait(yield);
+                auto& s = _session_task.wait_ref(yield);
 
-                if (!future_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
-                }
-                auto& create_result = future_result.value();
-                if (!create_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
+                if (!s) {
+                    LOG_WARN(_log_path, " I2P session was not created");
+                    return std::unexpected(s.error());
                 }
 
-                auto session = *create_result;
-
-                auto result = session->accept(yield);
+                auto result = s->accept(yield);
 
                 if (!result.has_value()) {
-                    LOG_WARN("Failed to accept I2P connection");
-                    return std::unexpected(result.error().code());
+                    LOG_WARN(_log_path, " Failed to accept I2P connection");
+                    return std::unexpected(result.error());
                 }
 
                 return std::move(*result);
             }
 
-            Server(CreateI2pSessionPromise::Future  session_future, Cancel cancel, util::LogPath log_path):
-                _session_future(std::move(session_future)),
-                _cancel(std::move(cancel)),
+            Server(I2pSessionTask session_task, util::LogPath log_path):
+                _session_task(std::move(session_task)),
                 _log_path(std::move(log_path))
             {}
 
-            CreateI2pSessionPromise::Future _session_future;
-            Cancel _cancel;
+            I2pSessionTask _session_task;
+            LifetimeCancel _cancel;
             util::LogPath _log_path;
         };
 
-        _inner->_i2p_session_future = create_i2p_session(_cancel, log_path, _exec);
-
         proxy_server->add(std::make_unique<Server>(
-            *_inner->_i2p_session_future,
-            _cancel,
+            _inner->get_or_create_i2p_session(_exec, _config, _cancel),
             log_path
         ));
     }
@@ -1031,21 +1072,13 @@ Injector::~Injector() {
 }
 
 std::expected<I2pAddress, sys::error_code> Injector::i2p_address(Async yield) {
-    if (!_inner->_i2p_session_future) {
-        return std::unexpected(asio::error::service_not_found);
-    }
+    auto session_task = _inner->get_or_create_i2p_session(_exec, _config, _cancel);
 
-    auto future_result = _inner->_i2p_session_future->wait(yield);
+    auto& result = session_task.wait_ref(yield);
 
-    if (!future_result.has_value()) {
-        return std::unexpected(future_result.error());
-    }
-    auto create_result = future_result.value();
-    if (!create_result.has_value()) {
-        return std::unexpected(create_result.error());
-    }
+    if (!result) return std::unexpected(result.error());
 
-    return (*create_result)->local_addr();
+    return result->local_addr();
 }
 
 } // namespace ouinet

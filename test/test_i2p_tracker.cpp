@@ -17,6 +17,7 @@
 #include "util/wait_condition.h"
 #include "bittorrent/node_id.h"
 #include "namespaces.h"
+#include "logger.h"
 
 using namespace ouinet;
 using namespace bittorrent;
@@ -35,16 +36,6 @@ void handle_exception(std::exception_ptr ep) {
     }
 }
 
-namespace std {
-    template<class T>
-    std::ostream& operator<<(std::ostream& os, std::optional<T> const& v) {
-        if (v) {
-            return os << *v;
-        } else {
-            return os << "none";
-        }
-    }
-}
 
 void spawn(auto& ctx, auto work) {
     asio::spawn(ctx, [work = std::move(work)] (asio::yield_context yield) mutable {
@@ -79,12 +70,14 @@ void spawn(auto& ctx, auto work) {
 static const auto tracker_id = *I2pAddress::parse("z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p");
 
 BOOST_AUTO_TEST_CASE(tracker_status) {
+    get_logger().set_threshold(DEBUG);
+
     asio::io_context ctx;
 
     spawn(ctx, [&] (Async yield) mutable {
-        auto i2pd = ensure_i2p_service(yield);
+        auto i2p_service = create_i2p_service(yield);
 
-        auto session = unwrap(I2pSession::create(yield));
+        auto session = unwrap(i2p_service.create_session(yield));
 
         auto socket = unwrap(session.connect(tracker_id, yield));
 
@@ -125,18 +118,20 @@ BOOST_AUTO_TEST_CASE(code) {
 }
 
 BOOST_AUTO_TEST_CASE(announce_and_get_peers) {
+    get_logger().set_threshold(DEBUG);
+
     asio::io_context ctx;
 
-    auto create_tracker = [] (Async yield) -> I2pTrackerClient {
-        auto session = unwrap(I2pSession::create(yield));
+    auto create_tracker = [] (auto& i2p_service, Async yield) -> I2pTrackerClient {
+        auto session = unwrap(i2p_service.create_session(yield));
         return I2pTrackerClient(std::make_shared<I2pSession>(std::move(session)), tracker_id);
     };
 
     spawn(ctx, [&] (Async yield) mutable {
-        auto i2pd = ensure_i2p_service(yield);
+        auto i2p_service = create_i2p_service(yield);
 
-        auto tracker_a = create_tracker(yield);
-        auto tracker_b = create_tracker(yield);
+        auto tracker_a = create_tracker(i2p_service, yield);
+        auto tracker_b = create_tracker(i2p_service, yield);
 
         auto infohash = NodeID::random();
 

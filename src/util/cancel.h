@@ -168,6 +168,32 @@ private:
     sys::error_code _ec;
 };
 
+class LifetimeCancel {
+public:
+    LifetimeCancel() = default;
+
+    LifetimeCancel(LifetimeCancel const&) = default;
+    LifetimeCancel(LifetimeCancel &&) = default;
+    LifetimeCancel& operator=(LifetimeCancel const&) = default;
+    LifetimeCancel& operator=(LifetimeCancel &&) = default;
+
+    [[nodiscard]]
+    Cancel::Connection connect(std::function<void()> slot) {
+        return _cancel.connect(std::move(slot));
+    }
+
+    void operator()() {
+        _cancel();
+    }
+
+    ~LifetimeCancel() {
+        _cancel();
+    }
+
+private:
+    Cancel _cancel;
+};
+
 inline
 sys::error_code
 compute_error_code( const sys::error_code& ec

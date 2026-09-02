@@ -113,6 +113,7 @@ function run_windows_test {(
     winepaths=(
         $BUILD_DIR
         /usr/lib/gcc/x86_64-w64-mingw32/14-win32
+        /usr/x86_64-w64-mingw32/lib
     )
     export WINEPATH="$(IFS=';'; echo "${winepaths[*]}")"
     wine $test "$@"

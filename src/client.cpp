@@ -43,7 +43,6 @@
 
 #include "ouiservice.h"
 #include "ouiservice/i2p/session.h"
-#include "ouiservice/i2p/util/create_i2p_session.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -309,18 +308,17 @@ public:
         //
         // But, for the majority of cases, this may still be a reasonable bet.
 
-        auto& mpl = common_udp_multiplexer();
-
-        asio_utp::udp_multiplexer m(_ctx);
-        m.bind(mpl);
+        asio_utp::udp_multiplexer m = common_udp_multiplexer();
 
         auto cache_control = _shutdown_signal.connect([&] { bt_dht.reset(); });
 
         _upnps_ptr = std::make_shared<std::map<asio::ip::udp::endpoint, unique_ptr<UPnPUpdater>>>();
 
+        auto local_ep = m.local_endpoint();
+
         yield.spawn([
             bt_dht,
-            local_ep = mpl.local_endpoint(),
+            local_ep,
             m = std::move(m),
             upnps = _upnps_ptr
         ] (auto y) mutable {
@@ -531,13 +529,35 @@ private:
         p = make_unique<UPnPUpdater>(executor, ext_port, local_ep.port());
     }
 
+    I2pService* get_or_create_i2p_service() {
+        if (_shutdown_signal) {
+            return nullptr;
+        }
+
+        if (_i2p_service) {
+            return &*_i2p_service;
+        }
+
+        if (auto cfg = _config.i2p_service_config()) {
+            _i2p_service = I2pService::start(*cfg, _ctx.get_executor(), _shutdown_signal, _log_path);
+            return &*_i2p_service;
+        }
+
+        return nullptr;
+    }
+
     TaskHandle<SysResult<std::shared_ptr<I2pSession>>> get_or_create_i2p_session_task() {
         using R = SysResult<std::shared_ptr<I2pSession>>;
 
         if (_i2p_session_create) return *_i2p_session_create;
 
-        _i2p_session_create = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path, [](Async yield) -> R {
-                auto session = I2pSession::create(yield);
+
+        _i2p_session_create = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path, [this](Async yield) -> R {
+                auto i2p_service = get_or_create_i2p_service();
+
+                if (!i2p_service) return std::unexpected(asio::error::service_not_found);
+
+                auto session = i2p_service->create_session(yield);
 
                 if (!session) return std::unexpected(session.error());
 
@@ -699,6 +719,7 @@ private:
     std::optional<TaskHandle<SysResult<std::shared_ptr<I2pSession>>>> _i2p_session_create;
 
     shared_ptr<dns::Resolver> _dns_resolver;
+    std::optional<I2pService> _i2p_service;
 };
 
 //------------------------------------------------------------------------------
@@ -2575,6 +2596,8 @@ void Client::State::start_ouinet()
             if (!r) LOG_ERROR(yield, " Failed to setup cache; ec=", r.error());
         }
     );
+
+    get_or_create_i2p_service();
 }
 
 //------------------------------------------------------------------------------
@@ -2596,7 +2619,7 @@ void Client::State::setup_injectors()
     using R = SysResult<std::unique_ptr<OuiServiceClient>>;
 
     if (auto ep = _config.injector_endpoint<CacheType::Bep3HTTPOverI2P>()) {
-        LOG_INFO("Setting up injector: ", *ep);
+        LOG_INFO(_log_path, " Setting up injector: ", *ep);
 
         struct Client : public OuiServiceClient {
             sys::error_code start(Async) override {
@@ -2606,7 +2629,7 @@ void Client::State::setup_injectors()
             std::expected<GenericStream, sys::error_code>
             connect(Async yield) override {
                 auto result = _session->connect(_addr, yield);
-                if (!result) return std::unexpected(result.error().code());
+                if (!result) return std::unexpected(result.error());
                 return std::move(*result);
             }
 
@@ -2647,7 +2670,7 @@ void Client::State::setup_injectors()
     auto injector_ep = _config.injector_endpoint<CacheType::Bep5Http>();
 
     if (injector_ep) {
-        LOG_INFO("Setting up injector: ", *injector_ep);
+        LOG_INFO(_log_path, " Setting up injector: ", *injector_ep);
 
         _injector_utp = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path,
             [this, injector_ep] (Async yield) -> R {
@@ -2662,8 +2685,7 @@ void Client::State::setup_injectors()
                         return maybe_wrap_tls(std::move(tcp_client));
                     },
                     [&] (const Endpoint::Utp& ep) -> R {
-                        asio_utp::udp_multiplexer m(_ctx);
-                        m.bind(common_udp_multiplexer());
+                        asio_utp::udp_multiplexer m = common_udp_multiplexer();
 
                         auto utp_client = make_unique<ouiservice::UtpOuiServiceClient>
                             (_ctx.get_executor(), std::move(m), ep.value);

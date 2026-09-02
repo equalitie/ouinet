@@ -22,11 +22,8 @@ public:
                     { return os << "Create {" << e << "}"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
-            }
             operator sys::error_code() const {
-                return code();
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Connect {
@@ -37,8 +34,8 @@ public:
                     { return os << "Connect {" << e << "}"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Accept {
@@ -49,13 +46,14 @@ public:
                     { return os << "Accept {" << e << "}"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
     };
 
-    I2pSession(I2pSession&& other) = default;
+    I2pSession(I2pSession&&) = default;
+    I2pSession& operator=(I2pSession&&) = default;
 
     [[nodiscard]]
     static std::expected<I2pSession, Error::Create> create(Async, std::optional<asio::ip::tcp::endpoint> sam_ep = {});

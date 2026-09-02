@@ -34,21 +34,21 @@ public:
             friend std::ostream& operator<<(std::ostream& os, const IoConnect& e) {
                 return os << "IoConnect{" << e.ec.message() << "}";
             }
-            sys::error_code code() const { return ec; }
+            operator sys::error_code() const { return ec; }
         };
         struct IoSend {
             sys::error_code ec;
             friend std::ostream& operator<<(std::ostream& os, const IoSend& e) {
                 return os << "IoSend{ " << e.ec.message() << " }";
             }
-            sys::error_code code() const { return ec; }
+            operator sys::error_code() const { return ec; }
         };
         struct IoRecv {
             sys::error_code ec;
             friend std::ostream& operator<<(std::ostream& os, const IoRecv& e) {
                 return os << "IoRecv{ " << e.ec.message() << " }";
             }
-            sys::error_code code() const { return ec; }
+            operator sys::error_code() const { return ec; }
         };
         struct Invoke {
             using Value = std::variant<IoSend, IoRecv>;
@@ -58,8 +58,8 @@ public:
                     { return os << "Invoke{ " << e << " }"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Result {
@@ -67,7 +67,7 @@ public:
                 friend std::ostream& operator<<(std::ostream& os, const NoVersion&) {
                     return os << "NOVERSION";
                 }
-                sys::error_code code() const {
+                operator sys::error_code() const {
                     return OuinetError::i2p;
                 }
             };
@@ -75,7 +75,7 @@ public:
                 friend std::ostream& operator<<(std::ostream& os, const DuplicatedId&) {
                     return os << "DuplicatedId";
                 }
-                sys::error_code code() const {
+                operator sys::error_code() const {
                     return OuinetError::i2p;
                 }
             };
@@ -83,7 +83,7 @@ public:
                 friend std::ostream& operator<<(std::ostream& os, const DuplicatedDest&) {
                     return os << "DuplicatedDest";
                 }
-                sys::error_code code() const {
+                operator sys::error_code() const {
                     return OuinetError::i2p;
                 }
             };
@@ -91,7 +91,7 @@ public:
                 friend std::ostream& operator<<(std::ostream& os, const InvalidKey&) {
                     return os << "InvalidKey";
                 }
-                sys::error_code code() const {
+                operator sys::error_code() const {
                     return OuinetError::i2p;
                 }
             };
@@ -100,7 +100,7 @@ public:
                 friend std::ostream& operator<<(std::ostream& os, const I2pError& e) {
                     return os << "I2P_ERROR{ " << e.message << " }";
                 }
-                sys::error_code code() const {
+                operator sys::error_code() const {
                     return OuinetError::i2p;
                 }
             };
@@ -111,7 +111,7 @@ public:
             friend std::ostream& operator<<(std::ostream& os, const InvalidAddress& e) {
                 return os << "InvalidAddress{ \"" << e.input << "\" }";
             }
-            sys::error_code code() const {
+            operator sys::error_code() const {
                 return asio::error::invalid_argument;
             }
         };
@@ -121,7 +121,7 @@ public:
             friend std::ostream& operator<<(std::ostream& os, const UnexpectedResponse& e) {
                 return os << "UnexpectedResponse{ request: \"" << e.request << "\" response: \"" << e.response << "\" }";
             }
-            sys::error_code code() const { return OuinetError::i2p; }
+            operator sys::error_code() const { return OuinetError::i2p; }
         };
         struct Handshake {
             using Value = std::variant<Invoke, UnexpectedResponse, Result::NoVersion, Result::I2pError>;
@@ -131,8 +131,8 @@ public:
                     { return os << "Handshake{ " << e << " }"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Connect {
@@ -143,8 +143,8 @@ public:
                     { return os << "Connect{ " << e << " }"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct DestGenerate {
@@ -155,8 +155,8 @@ public:
                     { return os << "DestGenerate{ " << e << " }"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct CreateSession {
@@ -176,8 +176,8 @@ public:
                     { return os << "CreateSession{ " << e << " }"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Lookup {
@@ -188,8 +188,8 @@ public:
                     { return os << "Lookup{ " << e << " }"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         struct Ping {
@@ -200,8 +200,8 @@ public:
                     { return os << "Ping{ " << e << " }"; },
                     e.value);
             }
-            sys::error_code code() const {
-                return std::visit([] (auto& e) { return e.code(); }, value);
+            operator sys::error_code() const {
+                return std::visit([] (auto& e) -> sys::error_code { return e; }, value);
             }
         };
         template<class Eo> static auto wrap() { return [](auto ei) { return Eo(std::move(ei)); }; }

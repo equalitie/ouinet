@@ -149,7 +149,7 @@ private:
         while (true) {
             _dht->wait_all_ready(yield);
 
-            LOG_DEBUG(yield, " Looking for peers (infohash=", _infohash, ")...");
+            LOG_DEBUG(yield, " Looking for peers (type=", _type, " infohash=", _infohash, ")...");
             auto endpoints = _dht->tracker_get_peers(_infohash, yield);
             if (!endpoints || endpoints->empty()) {
                 LOG_DEBUG(yield, " Looking for peers (infohash=", _infohash

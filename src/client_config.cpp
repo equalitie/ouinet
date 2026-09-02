@@ -11,47 +11,21 @@
 #include "util/debug.h"
 #include "util/overloaded.h"
 #include "util/str.h"
+#include "config/util.h"
+#include "config/i2p_service.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
 
 namespace ouinet {
 
+namespace po = boost::program_options;
+
 #define _LOG_FILE_NAME "log.txt"
 static const fs::path log_file_name{_LOG_FILE_NAME};
 
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
-
-template <class... Args>
-inline
-std::runtime_error error(Args && ...args) {
-    return std::runtime_error(util::str(std::forward<Args>(args)...));
-}
-
-// Helper to avoid writing the name of the option twice.
-template<typename T>
-static boost::optional<T> as_optional(const boost::program_options::variables_map& vm, const char* name) {
-    auto v = vm[name];
-
-    if (v.empty()) {
-        return boost::none;
-    } else {
-        return v.as<T>();
-    }
-}
-
-// Helper for extracting multiple values
-template<typename T>
-static std::vector<T> as_vector(const boost::program_options::variables_map& vm, const char* name) {
-    auto v = vm[name];
-
-    if (v.empty()) {
-        return std::vector<T>();
-    } else {
-        return v.as<std::vector<T>>();
-    }
-}
 
 bool ClientConfig::EnabledCaches::get(CacheType type) const {
     return std::visit(overloaded {
@@ -85,7 +59,6 @@ asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, c
 boost::program_options::options_description ClientConfig::description_full()
 {
     using namespace std;
-    namespace po = boost::program_options;
 
     po::options_description general("General options");
     general.add_options()
@@ -181,6 +154,8 @@ boost::program_options::options_description ClientConfig::description_full()
           "Ouinet processes it. Useful for testing when using e.g. Firefox "
           "as the UA.")
        ;
+
+    add_i2p_service_options(services);
 
     po::options_description injector("Injector options");
     injector.add_options()
@@ -335,8 +310,6 @@ boost::program_options::options_description ClientConfig::description_full()
 // with no defaults nor descriptions.
 boost::program_options::options_description ClientConfig::description_saved()
 {
-    namespace po = boost::program_options;
-
     po::options_description desc;
     desc.add_options()
         ("log-level", po::value<std::string>())
@@ -661,14 +634,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                         throw std::runtime_error(
                             "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
                     }
-
-                    auto& injector_ep = _injector_endpoints.get<CacheType::Bep5Http>();
-
-                    if (!injector_ep) {
-                        injector_ep = Endpoint::Bep5{
-                            bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-                        };
-                    }
                 },
                 [&] (const CacheType::Ouisync& type) {
                     LOG_INFO("Enabling Ouisync cache");
@@ -809,6 +774,8 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
     _metrics = MetricsConfig::parse(vm);
 
+    _i2p_service_config = parse_i2p_service_config(vm, _repo_root);
+
     save_persistent();  // only if no errors happened
 }
 
@@ -876,7 +843,7 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
     }
 
     std::vector<MetricsServerConfig> servers;
-    for (int i = 0; i < raw_server_urls.size(); ++i) {
+    for (size_t i = 0; i < raw_server_urls.size(); ++i) {
         auto raw_url = std::move(raw_server_urls[i]);
         auto raw_token = i < raw_server_tokens.size() ? std::move(raw_server_tokens[i]) : "";
         auto raw_cacert = i < raw_server_cacerts.size() ? std::move(raw_server_cacerts[i]) : "";

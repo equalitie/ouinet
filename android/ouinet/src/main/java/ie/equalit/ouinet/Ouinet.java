@@ -141,6 +141,10 @@ public class Ouinet {
         maybeAdd(args, "--cache-type",             config.getCacheType());
         maybeAdd(args, "--cache-static-repo",      config.getCacheStaticPath());
         maybeAdd(args, "--cache-static-root",      config.getCacheStaticContentPath());
+        maybeAdd(args, "--i2p-bep3-tracker",       config.getI2pBep3Tracker());
+        maybeAdd(args, "--enable-i2p-service-exe", config.getEnableI2pServiceExe());
+        maybeAdd(args, "--enable-i2p-service-ext", config.getEnableI2pServiceExt());
+        maybeAddBool(args, "--enable-i2p-service-lib", config.getEnableI2pServiceLib());
 
         if (config.getLogLevel() != null) {
             args.add("--log-level=" + config.getLogLevel().name());

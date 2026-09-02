@@ -77,7 +77,6 @@ private:
     Cancel _cancel;
     std::shared_ptr<bittorrent::DhtBase> _dht;
     std::unique_ptr<asio::ssl::context> _ssl_context;
-    std::optional<I2pAddress> _i2p_address;
 
     // TODO: Move all of the above inside `_inner` to use the pimpl pattern.
     std::unique_ptr<Inner> _inner;

@@ -589,7 +589,7 @@ public:
                         [&](Async yield) -> std::expected<void, sys::error_code> {
                             auto con = i2p_session->connect(i2p_dest, yield);
                             if (!con) {
-                                return std::unexpected(con.error().code());
+                                return std::unexpected(con.error());
                             }
 
                             //TODO: Actually makes the connection works on the server side.
