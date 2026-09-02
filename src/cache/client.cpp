@@ -109,7 +109,7 @@ struct Client::Impl {
     util::LruCache<std::string, shared_ptr<DhtLookup>> _peer_lookups;
     // Null when local peer discovery is disabled via config.
     std::unique_ptr<LocalPeerDiscovery> _local_peer_discovery;
-    std::unique_ptr<Groups> _groups;
+    std::unique_ptr<DhtGroups> _groups;
 
 
     Impl( AsioExecutor ex
