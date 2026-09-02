@@ -12,6 +12,7 @@ linux / build:
       --target-os $TARGET_OS
       --artifact-dir $BUILD_PATH
       --cmake-build-type $CMAKE_BUILD_TYPE
+      --artifact-extra test/bt_bep5
       $CONTAINER_ARGS
   artifacts:
     paths:
