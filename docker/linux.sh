@@ -12,6 +12,7 @@ run_python_tests=
 enter_on_exit=
 excluded_test_targets=()
 artifact_dir=
+artifacts_extra=()
 with_ouisync=n
 host_ouisync_dir=
 with_asan=n
@@ -74,6 +75,9 @@ while [[ "$#" -gt 0 ]]; do
         --artifact-dir)
             artifact_dir=$2; shift;
             mkdir -p $artifact_dir
+            ;;
+        --artifact-extra)
+            artifacts_extra+=($2); shift;
             ;;
         --container-name)
             container_name=($2); shift
@@ -316,6 +320,14 @@ function list_artifacts_for_target_os (
                   $build_dir/libcpp_ouisync_client$lib_suffix
                   $build_dir/libcpp_ouisync_service$lib_suffix
                 )
+            fi
+
+            if [ ${#artifacts_extra[@]} -gt 0 ]; then
+              for art in "${artifacts_extra[@]}"; do
+                  artifacts+=(
+                    $build_dir/$art
+                  )
+              done
             fi
             ;;
         android)
