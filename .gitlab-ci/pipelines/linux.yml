@@ -12,12 +12,13 @@ linux / build:
       --target-os $TARGET_OS
       --artifact-dir $BUILD_PATH
       --cmake-build-type $CMAKE_BUILD_TYPE
-      --artifact-extra test/bt_bep5
+      --artifact-extra test/bt-bep5
       $CONTAINER_ARGS
   artifacts:
     paths:
       - $BUILD_PATH/$TARGET_OS/client
       - $BUILD_PATH/$TARGET_OS/injector
+      - $BUILD_PATH/$TARGET_OS/bt-bep5
       - $BUILD_PATH/$TARGET_OS/lib*.so*
     expire_in: 6h
   rules:
