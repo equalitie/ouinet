@@ -1,13 +1,16 @@
+include:
+  - .gitlab-ci/jobs/common/prepare-macos-image.yml
+
 variables:
   BUILD_PATH: 'build.darwin/build-mac_arm64/Debug'
   BOOST_PATH: 'build.darwin/build-mac_arm64/boost/src/built_boost'
-  GCRYPT_PATH: 'build.darwin/build-mac_arm64/gcrypt/src/gcrypt'
-  GPGERROR_PATH: 'build.darwin/build-mac_arm64/gpg_error/src/gpg_error'
+  TESTS_PATH: 'build.darwin/build-mac_arm64/test/Debug'
+  HOMEBREW_NO_AUTO_UPDATE: 1
 
 macos / build:
   stage: build
-  tags:
-    - macos-shell
+  extends:
+    - .prepare-macos-image
   artifacts:
     paths:
       - $BUILD_PATH/client.app
@@ -15,16 +18,43 @@ macos / build:
       - $BUILD_PATH/lib*.dylib
       - $BUILD_PATH/lib*.a
       - $BOOST_PATH/b2
-      - $GCRYPT_PATH/cipher/gost-s-box
-      - $GCRYPT_PATH/doc/yat2m
-      - $GCRYPT_PATH/tests/testdrv-build
-      - $GPGERROR_PATH/doc/yat2m-for-build
-      - $GPGERROR_PATH/src/mkerrcodes
-      - $GPGERROR_PATH/src/mkheader
+      - $TESTS_PATH/bt_*
+      - $TESTS_PATH/test_*
+      - build.darwin/xcodebuild.log
     expire_in: 6h
   script:
     - mkdir -p build.darwin
     - cd build.darwin
-    - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh
-  when: manual
-  allow_failure: true
+    - PLATFORM=MAC_ARM64 ../scripts/build-darwin.sh | tee xcodebuild.log
+  rules:
+     - !reference [.optional_job, rules]
+
+
+macos / unit-test:
+  stage: test
+  extends:
+    - .prepare-macos-image
+  artifacts:
+    paths:
+      - $BUILD_PATH/client.app
+      - $BUILD_PATH/injector.app
+      - $BUILD_PATH/lib*.dylib
+      - $BUILD_PATH/lib*.a
+      - $TESTS_PATH/bt_*
+      - $TESTS_PATH/test_*
+    expire_in: 6h
+  script:
+    - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
+    - |+
+      for test in ./$TESTS_PATH/test*.app/Contents/MacOS/test*; do
+        name=$(basename "$test")
+        # TODO: I2P on Apple
+        if [ "$name" == test_i2p -o "$name" == test_i2p_tracker -o "$name" == test_i2p_fetch ]; then
+          continue
+        fi
+        "$test" --log_level=test_suite || exit 1
+      done
+  needs:
+    ['macos / build']
+  rules:
+     - !reference [.manual_job, rules]
