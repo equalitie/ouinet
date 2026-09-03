@@ -11,32 +11,28 @@ using Error = I2pSession::Error;
 
 struct I2pSession::Inner {
     Sam sam;
+    Sam::Keypair keypair;
     SessionId id;
     I2pAddress local_addr;
     Cancel cancel;
 
-    Inner(Sam sam, SessionId id, I2pAddress local_addr):
-        sam(std::move(sam)), id(std::move(id)), local_addr(std::move(local_addr))
+    Inner(Sam sam, Sam::Keypair keypair, SessionId id, I2pAddress local_addr):
+        sam(std::move(sam)), keypair(std::move(keypair)), id(std::move(id)), local_addr(std::move(local_addr))
     {}
 };
 
 /* static */
-std::expected<I2pSession, Error::Create> I2pSession::create(Async yield, std::optional<asio::ip::tcp::endpoint> sam_ep) {
+std::expected<I2pSession, Error::Create> I2pSession::create(Sam sam, Sam::Keypair keypair, Async yield) {
     auto error = [] (auto&& e) { return std::unexpected(Error::Create { std::move(e) }); };
 
-    auto ep = sam_ep ? *sam_ep : Sam::default_endpoint();
-
-    auto sam = Sam::connect(ep, yield);
-    if (!sam) return error(sam.error());
-
-    auto slot1 = yield.cancel_slot([&] { sam->close(); });
+    auto slot1 = yield.cancel_slot([&] { sam.close(); });
 
     auto id = SessionId::random();
 
-    auto c_rs = sam->create_session(id, yield);
+    auto c_rs = sam.create_session(id, keypair, yield);
     if (!c_rs) return error(c_rs.error());
 
-    auto inner = std::make_shared<Inner>(std::move(*sam), std::move(id), std::move(*c_rs));
+    auto inner = std::make_shared<Inner>(std::move(sam), std::move(keypair), std::move(id), std::move(*c_rs));
 
     // Keep-alive coroutine.
     yield.spawn([inner] (Async yield) mutable {
@@ -51,6 +47,19 @@ std::expected<I2pSession, Error::Create> I2pSession::create(Async yield, std::op
     });
 
     return I2pSession(inner);
+}
+
+/* static */
+std::expected<I2pSession, Error::Create> I2pSession::create(asio::ip::tcp::endpoint sam_ep, Async yield) {
+    auto error = [] (auto&& e) { return std::unexpected(Error::Create { std::move(e) }); };
+
+    auto sam = Sam::connect(sam_ep, yield);
+    if (!sam) return error(sam.error());
+
+    auto keypair = sam->dest_generate(yield);
+    if (!keypair) return error(keypair.error());
+
+    return create(std::move(*sam), std::move(*keypair), yield);
 }
 
 std::expected<asio::ip::tcp::socket, Error::Connect> I2pSession::connect(const I2pAddress& remote_addr, Async yield) {

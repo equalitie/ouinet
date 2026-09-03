@@ -173,8 +173,9 @@ void wait_for_peer_on_tracker(
         I2pAddress::B32 tracker_addr,
         bittorrent::NodeID infohash,
         I2pAddress::B32 peer_addr,
+        asio::ip::tcp::endpoint sam_ep,
         Async yield) {
-    auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(yield)));
+    auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(sam_ep, yield)));
     auto tracker = I2pTrackerClient(session, tracker_addr);
     for (int i = 0; i < 120; ++i) {
         auto peers = unwrap(tracker.get_peers(infohash, yield));
@@ -294,6 +295,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 tracker_addr,
                 leecher.compute_infohash_for_resource_group(resource_group),
                 unwrap(seeder.local_i2p_address(yield)).to_b32(),
+                sam_endpoint,
                 yield);
 
         // The "leecher" client fetches the signed content from the "seeder"

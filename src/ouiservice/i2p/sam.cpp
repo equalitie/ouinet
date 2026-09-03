@@ -160,17 +160,14 @@ std::expected<std::string, Error::Invoke> Sam::invoke(const std::string& request
     return std::move(*recv_r);
 }
 
-std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId const& session_id, Async yield) {
+std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId const& session_id, const Keypair& keypair, Async yield) {
     auto error = [] (auto e) { return std::unexpected(Error::CreateSession { std::move(e) }); };
-
-    auto keypair = dest_generate(yield);
-    if (!keypair) return error(keypair.error());
 
     std::string request =
         "SESSION CREATE"
             " STYLE=STREAM"
             " ID=" + session_id.value +
-            " DESTINATION=" + keypair->priv +
+            " DESTINATION=" + keypair.priv +
             " i2cp.leaseSetEncType=4,0";
 
     auto response = invoke(request, yield);
@@ -208,8 +205,8 @@ std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId co
     auto dst_val = read_token(rs);
     if (!dst_val) return proto_error();
 
-    auto local_addr = I2pAddress::parse(keypair->pub);
-    if (!local_addr) return error(Error::InvalidAddress { std::move(keypair->pub) });
+    auto local_addr = I2pAddress::parse(keypair.pub);
+    if (!local_addr) return error(Error::InvalidAddress { std::move(keypair.pub) });
 
     return std::move(*local_addr);
 }

@@ -21,7 +21,7 @@ class I2pAddress;
 
 // https://i2p.net/en/docs/api/samv3/
 struct OUINET_I2P_API Sam {
-private:
+public:
     struct Keypair {
         std::string pub;
         std::string priv;
@@ -30,7 +30,6 @@ private:
         std::optional<Keypair> from_json_string(std::string_view);
     };
 
-public:
     struct Error {
         struct IoConnect {
             sys::error_code ec;
@@ -170,7 +169,6 @@ public:
                 Result::DuplicatedDest,
                 Result::InvalidKey,
                 Result::I2pError,
-                DestGenerate,
                 InvalidAddress
             >;
             Value value;
@@ -231,7 +229,7 @@ public:
     std::expected<std::string, Error::Invoke> invoke(const std::string& request, Async);
 
     [[nodiscard]]
-    std::expected<I2pAddress, Error::CreateSession> create_session(SessionId const& session_id, Async);
+    std::expected<I2pAddress, Error::CreateSession> create_session(SessionId const&, const Keypair&, Async);
 
     [[nodiscard]]
     std::expected<void, Error::Handshake> handshake(Async);
@@ -258,16 +256,14 @@ public:
 
     ~Sam();
 
+    [[nodiscard]]
+    std::expected<Keypair, Error::DestGenerate> dest_generate(Async);
+
 private:
     // Only `Sam::connect` may construct a Sam. This way it ensures the socket is
     // open and connected before handing it in. Because Inner constructor
     // relies on the socket being open when caching the remote endpoint.
     Sam(asio::ip::tcp::socket socket);
-
-    // Private, because not useful outside of this class. Feel free to make
-    // public if needed.
-    [[nodiscard]]
-    std::expected<Keypair, Error::DestGenerate> dest_generate(Async);
 
 private:
     struct Inner;
