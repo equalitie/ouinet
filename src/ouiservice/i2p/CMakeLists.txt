@@ -103,6 +103,7 @@ set(ouinet_i2p_cpps
     tracker_lookup.cpp
     announcer.cpp
     service.cpp
+    destination_keypair.cpp
 )
 
 if (WITH_I2PD_EXE)

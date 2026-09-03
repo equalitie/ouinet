@@ -18,18 +18,11 @@ namespace ouinet {
 struct SessionId;
 class Async;
 class I2pAddress;
+class I2pDestinationKeypair;
 
 // https://i2p.net/en/docs/api/samv3/
 struct OUINET_I2P_API Sam {
 public:
-    struct Keypair {
-        std::string pub;
-        std::string priv;
-
-        std::string to_json_string();
-        std::optional<Keypair> from_json_string(std::string_view);
-    };
-
     struct Error {
         struct IoConnect {
             sys::error_code ec;
@@ -229,7 +222,7 @@ public:
     std::expected<std::string, Error::Invoke> invoke(const std::string& request, Async);
 
     [[nodiscard]]
-    std::expected<I2pAddress, Error::CreateSession> create_session(SessionId const&, const Keypair&, Async);
+    std::expected<I2pAddress, Error::CreateSession> create_session(SessionId const&, const I2pDestinationKeypair&, Async);
 
     [[nodiscard]]
     std::expected<void, Error::Handshake> handshake(Async);
@@ -257,7 +250,7 @@ public:
     ~Sam();
 
     [[nodiscard]]
-    std::expected<Keypair, Error::DestGenerate> dest_generate(Async);
+    std::expected<I2pDestinationKeypair, Error::DestGenerate> dest_generate(Async);
 
 private:
     // Only `Sam::connect` may construct a Sam. This way it ensures the socket is

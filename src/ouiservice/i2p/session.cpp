@@ -3,6 +3,7 @@
 #include "address.h"
 #include "util/async.h"
 #include "async_sleep.h"
+#include "destination_keypair.h"
 
 namespace ouinet {
 
@@ -11,18 +12,18 @@ using Error = I2pSession::Error;
 
 struct I2pSession::Inner {
     Sam sam;
-    Sam::Keypair keypair;
+    I2pDestinationKeypair keypair;
     SessionId id;
     I2pAddress local_addr;
     Cancel cancel;
 
-    Inner(Sam sam, Sam::Keypair keypair, SessionId id, I2pAddress local_addr):
+    Inner(Sam sam, I2pDestinationKeypair keypair, SessionId id, I2pAddress local_addr):
         sam(std::move(sam)), keypair(std::move(keypair)), id(std::move(id)), local_addr(std::move(local_addr))
     {}
 };
 
 /* static */
-std::expected<I2pSession, Error::Create> I2pSession::create(Sam sam, Sam::Keypair keypair, Async yield) {
+std::expected<I2pSession, Error::Create> I2pSession::create(Sam sam, I2pDestinationKeypair keypair, Async yield) {
     auto error = [] (auto&& e) { return std::unexpected(Error::Create { std::move(e) }); };
 
     auto slot1 = yield.cancel_slot([&] { sam.close(); });
@@ -101,6 +102,10 @@ std::expected<std::optional<I2pAddress>, Sam::Error::Lookup> I2pSession::lookup(
 }
 
 const I2pAddress& I2pSession::local_addr() const { return _inner->local_addr; }
+
+const I2pDestinationKeypair& I2pSession::destination_keypair() const {
+    return _inner->keypair;
+}
 
 asio::any_io_executor I2pSession::get_executor() {
     return _inner->sam.get_executor();

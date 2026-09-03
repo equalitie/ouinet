@@ -3,45 +3,15 @@
 #include "util/wait_condition.h"
 #include "session_id.h"
 #include "address.h"
-#include "logger.h"
 #include "namespaces.h"
+#include "destination_keypair.h"
 
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
-#include <boost/json.hpp>
-
-namespace json = boost::json;
 
 namespace ouinet {
 
 using Error = Sam::Error;
-
-std::string Sam::Keypair::to_json_string() {
-    return json::serialize(json::value ({
-        { "pub", pub },
-        { "priv", priv },
-    }));
-}
-
-std::optional<Sam::Keypair> Sam::Keypair::from_json_string(std::string_view str) {
-    sys::error_code ec;
-    json::value jv = json::parse(str, ec);
-
-    if (ec) {
-        LOG_ERROR("Failed to parse Sam::Keypair as json: ", ec.message());
-        return {};
-    }
-
-    try {
-        return Keypair {
-            std::string(jv.at("pub").as_string()),
-            std::string(jv.at("priv").as_string())
-        };
-    } catch (const std::exception& e) {
-        LOG_ERROR("Failed to read Sam::Keypair json values: ", e.what());
-        return {};
-    }
-}
 
 static
 std::optional<std::string_view> read_until(std::string_view& in, char delim) {
@@ -160,7 +130,7 @@ std::expected<std::string, Error::Invoke> Sam::invoke(const std::string& request
     return std::move(*recv_r);
 }
 
-std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId const& session_id, const Keypair& keypair, Async yield) {
+std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId const& session_id, const I2pDestinationKeypair& keypair, Async yield) {
     auto error = [] (auto e) { return std::unexpected(Error::CreateSession { std::move(e) }); };
 
     std::string request =
@@ -211,7 +181,7 @@ std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId co
     return std::move(*local_addr);
 }
 
-std::expected<Sam::Keypair, Error::DestGenerate> Sam::dest_generate(Async yield) {
+std::expected<I2pDestinationKeypair, Error::DestGenerate> Sam::dest_generate(Async yield) {
     auto error = [] (auto e) { return std::unexpected(Error::DestGenerate { std::move(e) }); };
     std::string request = "DEST GENERATE SIGNATURE_TYPE=7";
     auto response = invoke(request, yield);
@@ -232,7 +202,7 @@ std::expected<Sam::Keypair, Error::DestGenerate> Sam::dest_generate(Async yield)
     auto priv = read_token(rs);
     if (!priv) return proto_error();
 
-    return Keypair { std::string(*pub), std::string(*priv) };
+    return I2pDestinationKeypair { std::string(*pub), std::string(*priv) };
 }
 
 std::expected<void, Error::Handshake> Sam::handshake(Async yield) {

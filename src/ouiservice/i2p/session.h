@@ -56,9 +56,9 @@ public:
     I2pSession& operator=(I2pSession&&) = default;
 
     [[nodiscard]]
-    static std::expected<I2pSession, Error::Create> create(Sam, Sam::Keypair, Async);
+    static std::expected<I2pSession, Error::Create> create(Sam, I2pDestinationKeypair, Async);
 
-    // Conveniece to the above: connects to `Sam` and auto generates `Sam::Keypair`.
+    // Conveniece to the above: connects to `Sam` and auto generates `I2pDestinationKeypair`.
     [[nodiscard]]
     static std::expected<I2pSession, Error::Create> create(asio::ip::tcp::endpoint sam_ep, Async);
 
@@ -75,6 +75,8 @@ public:
     std::expected<std::optional<I2pAddress>, Sam::Error::Lookup> lookup(const std::string& name, Async);
 
     const I2pAddress& local_addr() const;
+
+    const I2pDestinationKeypair& destination_keypair() const;
 
     asio::any_io_executor get_executor();
 
