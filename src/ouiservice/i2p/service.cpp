@@ -11,6 +11,7 @@
 #include "session.h"
 #include "address.h"
 #include "i2pd.h"
+#include "destination_keypair.h"
 
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
@@ -360,6 +361,19 @@ std::expected<I2pSession, sys::error_code> I2pService::create_session(Async yiel
     }
     
     return I2pSession::create(running_state->sam_endpoint, yield);
+}
+
+std::expected<I2pSession, sys::error_code> I2pService::create_session(I2pDestinationKeypair keypair, Async yield) {
+    auto running_state = await_running_state(yield);
+    
+    if (!running_state) {
+        return std::unexpected(asio::error::service_not_found);
+    }
+    
+    auto sam = Sam::connect(running_state->sam_endpoint, yield);
+    if (!sam) return std::unexpected(sam.error());
+
+    return I2pSession::create(std::move(*sam), std::move(keypair), yield);
 }
 
 } // namespace
