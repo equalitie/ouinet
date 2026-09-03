@@ -3,14 +3,45 @@
 #include "util/wait_condition.h"
 #include "session_id.h"
 #include "address.h"
+#include "logger.h"
 #include "namespaces.h"
 
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
+#include <boost/json.hpp>
+
+namespace json = boost::json;
 
 namespace ouinet {
 
 using Error = Sam::Error;
+
+std::string Sam::Keypair::to_json_string() {
+    return json::serialize(json::value ({
+        { "pub", pub },
+        { "priv", priv },
+    }));
+}
+
+std::optional<Sam::Keypair> Sam::Keypair::from_json_string(std::string_view str) {
+    sys::error_code ec;
+    json::value jv = json::parse(str, ec);
+
+    if (ec) {
+        LOG_ERROR("Failed to parse Sam::Keypair as json: ", ec.message());
+        return {};
+    }
+
+    try {
+        return Keypair {
+            std::string(jv.at("pub").as_string()),
+            std::string(jv.at("priv").as_string())
+        };
+    } catch (const std::exception& e) {
+        LOG_ERROR("Failed to read Sam::Keypair json values: ", e.what());
+        return {};
+    }
+}
 
 static
 std::optional<std::string_view> read_until(std::string_view& in, char delim) {

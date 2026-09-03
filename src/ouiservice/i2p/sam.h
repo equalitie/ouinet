@@ -25,6 +25,9 @@ private:
     struct Keypair {
         std::string pub;
         std::string priv;
+
+        std::string to_json_string();
+        std::optional<Keypair> from_json_string(std::string_view);
     };
 
 public:
