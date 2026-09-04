@@ -114,10 +114,52 @@ void wait_for_peer_on_tracker(
     BOOST_FAIL("Failed to wait for peer appearing on the tracker");
 }
 
+using Urls = std::vector<util::Url>;
+
 struct TestCase {
     std::optional<HttpServer> server;
-    std::vector<util::Url> urls;
+    bool parallel = false;
+    Urls urls;
 };
+
+
+std::vector<Response> fetch_through_client_sequential(Client& client, const Urls& urls, Route route, std::string resource_group, Async yield) {
+    std::vector<Response> responses;
+
+    for (size_t i = 0; i < urls.size(); ++i) {
+        auto& url = urls[i];
+        responses.push_back(fetch_through_client(client, build_cache_request(url, route, resource_group), yield));
+    }
+
+    return responses;
+}
+
+std::vector<Response> fetch_through_client_parallel(Client& client, const Urls& urls, Route route, std::string resource_group, Async yield) {
+    std::vector<Response> responses;
+
+    responses.resize(urls.size());
+
+    WaitCondition wc(yield.get_executor());
+
+    for (size_t i = 0; i < urls.size(); ++i) {
+        yield.spawn([&, i, lock = wc.lock()] (Async yield) {
+            responses[i] = fetch_through_client(client, build_cache_request(urls[i], route, resource_group), yield);
+        });
+    }
+
+    unwrap(wc.wait(yield));
+
+    return responses;
+}
+
+std::vector<Response> fetch_through_client(bool parallel, Client& client, const Urls& urls, Route route, std::string resource_group, Async yield) {
+    if (parallel) {
+        return fetch_through_client_parallel(client, urls, route, resource_group, yield);
+    }
+    else {
+        return fetch_through_client_sequential(client, urls, route, resource_group, yield);
+    }
+}
 
 // An integration test with three identities: the 'injector', a 'seeder' client
 // and a 'leecher' client.
@@ -250,23 +292,23 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
         }
 
         BOOST_TEST_MESSAGE("Seeder fetching through injector");
-        for (size_t i = 0; i < test_case.urls.size(); ++i) {
-            auto& url = test_case.urls[i];
 
-            BOOST_TEST_MESSAGE("    " << url);
+        {
+            auto route = Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}};
 
-            auto rs = fetch_through_client(
-                    seeder,
-                    build_cache_request(url, Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}, resource_group),
-                    yield);
+            auto responses = fetch_through_client(test_case.parallel, seeder, test_case.urls, route, resource_group, yield);
 
-            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
-            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
-            BOOST_REQUIRE_EQUAL(rs.body(), control_body[i]);
+            BOOST_REQUIRE_EQUAL(responses.size(), control_body.size());
+
+            for (size_t i = 0; i < responses.size(); ++i) {
+                BOOST_REQUIRE_EQUAL(responses[i].result(), http::status::ok);
+                BOOST_REQUIRE_EQUAL(responses[i][http_::response_source_hdr], http_::response_source_hdr_injector);
+                BOOST_REQUIRE_EQUAL(responses[i].body(), control_body[i]);
+            }
         }
 
         BOOST_TEST_MESSAGE("Waiting for seeder to announce on BEP3/I2P tracker");
-        // Wait for seeder to announce
+
         wait_for_peer_on_tracker(
                 tracker_addr,
                 leecher.compute_infohash_for_resource_group(resource_group),
@@ -275,19 +317,19 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
                 yield);
 
         BOOST_TEST_MESSAGE("Leecher fetching from seeder");
-        for (size_t i = 0; i < test_case.urls.size(); ++i) {
-            auto& url = test_case.urls[i];
 
-            BOOST_TEST_MESSAGE("    " << url);
-            // The "leecher" client fetches the signed content from the "seeder"
-            auto rs = fetch_through_client(
-                    leecher,
-                    build_cache_request(url, Route::DCache{CacheType::Bep3HTTPOverI2P{}}, resource_group),
-                    yield);
+        {
+            auto route = Route::DCache{CacheType::Bep3HTTPOverI2P{}};
 
-            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
-            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
-            BOOST_REQUIRE_EQUAL(rs.body(), control_body[i]);
+            auto responses = fetch_through_client(test_case.parallel, leecher, test_case.urls, route, resource_group, yield);
+
+            BOOST_REQUIRE_EQUAL(responses.size(), control_body.size());
+
+            for (size_t i = 0; i < responses.size(); ++i) {
+                BOOST_REQUIRE_EQUAL(responses[i].result(), http::status::ok);
+                BOOST_REQUIRE_EQUAL(responses[i][http_::response_source_hdr], http_::response_source_hdr_dist_cache);
+                BOOST_REQUIRE_EQUAL(responses[i].body(), control_body[i]);
+            }
         }
 
         BOOST_TEST_MESSAGE("Stopping nodes");
@@ -302,9 +344,9 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__gitlab) {
 
     TestDir root;
 
-    const util::Url url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
+    const util::Url url = unwrap(util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE"));
 
-    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::nullopt, {url} });
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::nullopt, false, {url} });
 }
 
 BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local) {
@@ -313,13 +355,39 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local) {
     TestDir root;
 
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    server.add_resource("/", util::random::printable_ascii(512));
-    auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+    auto url = server.add_resource("/", util::random::printable_ascii(512));
 
-    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), {url} });
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), false, {url} });
 }
 
-BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local_many) {
+BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local_many_sequential) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+    std::vector<util::Url> urls;
+
+    const size_t M = 1024 * 1024;
+
+    // Randomly selected
+    std::vector<size_t> body_sizes {
+           0,    1,    2,    4,       8,     128,     511,      513, 
+        1000,    1,    2,    4,       8,     128,     511,      513, 
+        6020, 1830, 7040,  250,    1849,    9271,      12,       89,
+        1020, 1030, 2040, 2050, 1*M-128, 1*M+128, 1*M+500, 2*M-1024,
+    };
+
+    for (size_t i = 0; i < body_sizes.size(); ++i) {
+        auto path = util::str("/r", i);
+        urls.push_back(server.add_resource(path, util::random::printable_ascii(body_sizes[i])));
+    }
+
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), false, std::move(urls) });
+}
+
+BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local_many_parallel) {
     asio::io_context ctx;
 
     TestDir root;
@@ -330,10 +398,8 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local_many) 
 
     for (size_t i = 0; i < 32; ++i) {
         auto path = util::str("/r", i);
-        server.add_resource(path, util::random::printable_ascii(512));
-        urls.push_back(unwrap(util::Url::from(util::str("https://", server.authority(), path))));
+        urls.push_back(server.add_resource(path, util::random::printable_ascii(512)));
     }
 
-    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), std::move(urls) });
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), true, std::move(urls) });
 }
-
