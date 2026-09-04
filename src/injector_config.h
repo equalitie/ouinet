@@ -13,6 +13,7 @@
 #include "constants.h"
 #include "bittorrent/bootstrap.h"
 #include "ouiservice/i2p/service.h"
+#include "ouiservice/i2p/destination_keypair.h"
 #include "util/sign.h"
 #include "util/str.h"
 
@@ -130,6 +131,9 @@ public:
     const std::optional<I2pService::Config>& i2p_service_config() const {
         return _i2p_service_config;
     }
+
+    void store_i2p_destination_keypair(const I2pDestinationKeypair&) const;
+    std::optional<I2pDestinationKeypair> load_i2p_destination_keypair() const;
 
 private:
     void setup_ed25519_private_key(const std::string& hex);
