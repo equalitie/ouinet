@@ -1,5 +1,6 @@
 #include "http_server.h"
 #include "util/async.h"
+#include "util/url.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 #include <boost/asio/ssl.hpp>
@@ -332,14 +333,19 @@ std::string HttpServer::authority() const {
     return _impl->authority();
 }
 
-void HttpServer::add_resource(std::string path, std::string body) {
+util::Url HttpServer::add_resource(std::string path, std::string body) {
     http::response<http::string_body> rs{http::status::ok, 11};
     rs.set(http::field::server, "Ouinet test server");
     rs.set(http::field::content_type, "text/html");
     rs.body() = std::move(body);
     rs.prepare_payload();
 
+    auto url = util::Url::from(util::str("https://", authority(), path));
+    assert(url);
+
     _impl->resources.insert(std::pair(std::move(path), std::move(rs)));
+
+    return std::move(*url);
 }
 
 HttpServer::HttpServer(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
