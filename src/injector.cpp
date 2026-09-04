@@ -34,6 +34,7 @@
 #include "ouiservice.h"
 #include "ouiservice/i2p/service.h"
 #include "ouiservice/i2p/session.h"
+#include "ouiservice/i2p/destination_keypair.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -98,9 +99,9 @@ struct Injector::Inner {
 
         if (_i2p_session_task) return *_i2p_session_task;
 
-        auto cfg = config.i2p_service_config();
+        _i2p_session_task = spawn_for_result(exec, cancel, _log_path, [this, &config] (Async yield) -> R {
+            auto cfg = config.i2p_service_config();
 
-        _i2p_session_task = spawn_for_result(exec, cancel, _log_path, [this, cfg] (Async yield) -> R {
             if (!cfg) {
                 return std::unexpected(asio::error::service_not_found);
             }
@@ -109,8 +110,21 @@ struct Injector::Inner {
 
             if (!service) return std::unexpected(asio::error::service_not_found);
 
-            auto session = _i2p_service->create_session(yield);
-            if (!session) return std::unexpected(session.error());
+            auto keypair = config.load_i2p_destination_keypair();
+
+            std::optional<I2pSession> session;
+
+            if (!keypair) {
+                auto s = _i2p_service->create_session(yield);
+                if (!s) return std::unexpected(s.error());
+                config.store_i2p_destination_keypair(s->destination_keypair());
+                session = std::move(*s);
+            }
+            else {
+                auto s = _i2p_service->create_session(std::move(*keypair), yield);
+                if (!s) return std::unexpected(s.error());
+                session = std::move(*s);
+            }
 
             // Used by python test
             {
