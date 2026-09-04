@@ -108,8 +108,6 @@ set_target_properties(ouinet_i2p PROPERTIES
 )
 message(STATUS "setting the ouinet_i2p build dir to : ${CMAKE_BINARY_DIR}")
 
-message(STATUS "  mewmewbinarydir                : ${CMAKE_BINARY_DIR}")
-
 if (WITH_I2PD)
     set_target_properties(i2pd PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

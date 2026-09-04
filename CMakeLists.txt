@@ -366,4 +366,4 @@ if (NOT ANDROID AND NOT IOS AND WITH_TEST)
     add_subdirectory(test)
 endif()
 ################################################################################
-export(TARGETS i2pd)
+export(TARGETS i2pd FILE "${CMAKE_CURRENT_BINARY_DIR}/i2pd.cmake")
