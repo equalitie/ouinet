@@ -2,6 +2,7 @@
 
 #include <string>
 #include <optional>
+#include <ostream>
 #include <boost/utility/string_view.hpp>
 #include "api.h"
 
@@ -38,6 +39,8 @@ struct OUINET_COMMON_API Url {
             return host + ':' + port;
         }
     }
+
+    friend std::ostream& operator<<(std::ostream&, const Url&);
 };
 
 } // namespace ouinet::util
