@@ -58,7 +58,7 @@ public:
         fs::create_directories(_tempdir);
     }
 
-    TestDir make_subdir(const std::string& name) {
+    TestDir make_subdir(const std::string& name) const {
         fs::path path = _tempdir / name;
         fs::create_directory(path);
         auto dir = TestDir(path);
