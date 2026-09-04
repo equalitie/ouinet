@@ -32,6 +32,41 @@ namespace bp = boost::process::v2;
 
 bool I2pd::is_start_exe_implemented() { return true; }
 
+struct Line {
+    util::LogPath trace;
+    std::string text;
+};
+
+template<class T> class Tail {
+private:
+    // Points to the next position to insert to
+    size_t _next = 0;
+    size_t _size = 0;
+    std::vector<T> _lines;
+
+public:
+    Tail(size_t max_size) : _lines(max_size) {}
+
+    size_t size() const { return _size; }
+
+    void insert(T line) {
+        if (_lines.size() == 0) return;
+
+        _lines[_next++] = std::move(line);
+        if (_next == _lines.size()) _next = 0;
+
+        if (_size < _lines.size()) ++_size;
+    }
+
+    const T& operator[](size_t i) const {
+        assert(_size > 0);
+        assert(_size <= _lines.size());
+        assert(_size >= _next);
+        size_t first = _lines.size() - (_size - _next);
+        return _lines[(first + i) % _lines.size()];
+    }
+};
+
 // NOTE: iOS does not allow starting processes (macOS does).
 struct I2pd::InnerExe : I2pd::InnerBase {
     bp::process _process;
@@ -41,13 +76,15 @@ struct I2pd::InnerExe : I2pd::InnerBase {
     Cancel _cancel;
     std::optional<std::expected<asio::ip::tcp::endpoint, sys::error_code>> _sam_ep;
     ConditionVariable _cv;
+    Tail<Line> tail;
 
     InnerExe(bp::process process, asio::readable_pipe stdcout, asio::readable_pipe stdcerr, util::LogPath log_path):
         _process(std::move(process)),
         _stdcout(std::move(stdcout)),
         _stdcerr(std::move(stdcerr)),
         _log_path(std::move(log_path)),
-        _cv(process.get_executor())
+        _cv(process.get_executor()),
+        tail(8)
     {
         start_reading_pipe(_stdcout, "out");
         start_reading_pipe(_stdcerr, "err");
@@ -70,6 +107,7 @@ struct I2pd::InnerExe : I2pd::InnerBase {
 
                 if (!size_r.has_value()) {
                     LOG_DEBUG(_log_path, " ", size_r.error().message());
+                    print_tail();
                     break;
                 }
 
@@ -77,14 +115,14 @@ struct I2pd::InnerExe : I2pd::InnerBase {
                 std::string line;
                 std::getline(is, line);
 
-                process_line(log_trace, line);
+                process_line(log_trace, std::move(line));
             }
         });
     }
 
-    void process_line(const util::LogPath& log_path, std::string_view line) {
-        // Uncomment to see log from i2pd
-        //LOG_DEBUG(log_path, " ", line);
+    void process_line(const util::LogPath& trace, std::string line) {
+        // Uncomment to see full log from i2pd
+        //LOG_DEBUG(trace, " ", line);
 
         static const std::string_view sam_bound = "SAM: Bridge bound to TCP endpoint ";
         static const std::string_view sam_bound_fail = "Clients: Exception in SAM bridge:";
@@ -112,6 +150,8 @@ struct I2pd::InnerExe : I2pd::InnerBase {
                 _cv.notify();
             }
         }
+
+        tail.insert(Line { trace, std::move(line) });
     }
 
     asio::ip::tcp::endpoint sam_endpoint() const override {
@@ -135,6 +175,13 @@ struct I2pd::InnerExe : I2pd::InnerBase {
             if (auto r = _cv.wait(yield); !r) {
                 return std::unexpected(r.error());
             }
+        }
+    }
+
+    void print_tail() {
+        LOG_DEBUG(_log_path, " Tail from closed i2pd:");
+        for (size_t i = 0; i < tail.size(); ++i) {
+            LOG_DEBUG(tail[i].trace, " ", tail[i].text);
         }
     }
 
@@ -207,6 +254,7 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
 
     if (auto r = inner->wait_for_sam_endpoint_log_line(yield); !r) {
         LOG_WARN(log_path, " Failed to read `i2pd` SAM endpoint");
+        inner->print_tail();
         return std::unexpected(r.error());
     }
 
