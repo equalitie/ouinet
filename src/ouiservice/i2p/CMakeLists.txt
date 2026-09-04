@@ -88,6 +88,7 @@ endif()
 
 set(ouinet_i2p_libs
     ouinet_asio
+    Boost::json
 )
 
 set(ouinet_i2p_includes)
