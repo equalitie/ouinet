@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/filesystem/path.hpp>
 #include <string>
 #include <memory>
@@ -29,6 +30,8 @@ public:
     std::string authority() const;
 
     const fs::path& certificate_path() const;
+
+    asio::ssl::context ssl_context_for_client() const;
 
     HttpServer(HttpServer&&);
     ~HttpServer();

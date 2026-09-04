@@ -2,11 +2,11 @@
 #include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
-#include <boost/beast/version.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <namespaces.h>
 #include <chrono>
+#include "util/request_builder.h"
 #include "util/test_dir.h"
 #include "util/unwrap.h"
 #include "util/i2p.h"
@@ -43,36 +43,11 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-std::string_view get_group(const Request& rq) {
-    auto group = rq[http_::request_group_hdr];
-    assert(!group.empty());
-    return group;
-}
-
 Request build_cache_request(Route route, std::string resource_group) {
-    int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.reassemble();
-
-    Request req{http::verb::get, target, version};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http_::request_group_hdr, resource_group);
-    req.set("X-Ouinet-Route", util::str(route));
-    return req;
+    return CacheRequestBuilder(test_url)
+        .set_resource_group(resource_group)
+        .set_route(route).build();
 }
-
-Request build_origin_request() {
-    int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.path;
-
-    Request req{http::verb::get, target, version};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    return req;
-}
-
 
 Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
@@ -113,7 +88,7 @@ Response fetch_from_origin(Async yield) {
     ouinet::ssl::util::load_tls_ca_certificates(ctx);
     ctx.set_verify_mode(asio::ssl::verify_peer);
 
-    auto req = build_origin_request();
+    auto req = build_origin_request(test_url);
     std::string host = req[http::field::host];
 
     tcp::socket socket(exec);

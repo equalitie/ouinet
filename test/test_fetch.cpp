@@ -5,11 +5,10 @@
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/data/monomorphic.hpp>
 
-#include <boost/asio/ssl.hpp>
-#include <boost/beast/version.hpp>
 #include "util/dht.h"
 #include "util/test_dir.h"
 #include "util/http_server.h"
+#include "util/request_builder.h"
 #include "util/unwrap.h"
 #include "injector.h"
 #include "client.h"
@@ -37,47 +36,6 @@ static Config make_config(const std::vector<std::string>& args) {
 
 using Request = http::request<http::string_body>;
 using Response = http::response<http::string_body>;
-
-const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
-
-Request build_cache_request(const util::Url& url) {
-    int version = 11;
-    std::string host = url.host;
-    if (!url.port.empty()) host += ":" + url.port;
-    std::string target = url.reassemble();
-
-    Request req{http::verb::get, target, version};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http_::request_group_hdr, target);
-    return req;
-}
-
-Request build_origin_request(const util::Url& url) {
-    int version = 11;
-    std::string host = url.host;
-    if (!url.port.empty()) host += ":" + url.port;
-    std::string target = url.path;
-
-    Request req{http::verb::get, target, version};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    return req;
-}
-
-Request build_private_request(const util::Url& url) {
-    int version = 11;
-    std::string host = url.host;
-    if (!url.port.empty()) host += ":" + url.port;
-    std::string target = url.reassemble();
-
-    Request req{http::verb::get, target, version};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http_::request_private_hdr, "true");
-    req.prepare_payload();
-    return req;
-}
 
 Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
@@ -182,15 +140,6 @@ void run(asio::io_context& ctx, F&& async_test) {
     }
 }
 
-asio::ssl::context client_ssl_context_for(const HttpServer& server) {
-    asio::ssl::context ctx{asio::ssl::context::tls_client};
-
-    ctx.load_verify_file(server.certificate_path().string());
-    ctx.set_verify_mode(asio::ssl::verify_peer);
-
-    return ctx;
-}
-
 std::string generate_random_body() {
     size_t min_size = 64;
     size_t max_size = 2 * 1024 * 1024;
@@ -207,7 +156,7 @@ BOOST_AUTO_TEST_CASE(server) {
         std::string body = generate_random_body();
         server.add_resource("/", body);
 
-        auto ssl_ctx = client_ssl_context_for(server);
+        auto ssl_ctx = server.ssl_context_for_client();
 
         auto url = util::Url::from(util::str("https://", server.authority())).value();
         auto rs = fetch_from_origin(url, ssl_ctx, yield);
@@ -246,7 +195,7 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
 
         auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
 
-        auto rq = build_cache_request(url);
+        auto rq = CacheRequestBuilder(url).build();
 
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(client, rq, yield);
@@ -376,10 +325,10 @@ BOOST_DATA_TEST_CASE(
             client.start();
         }
 
-        auto ssl_ctx = client_ssl_context_for(server);
+        auto ssl_ctx = server.ssl_context_for_client();
         auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
-        auto rq = build_cache_request(url);
+        auto rq = CacheRequestBuilder(url).build();
 
         // "Seeders" fetch the signed content through the "injector"
         WaitCondition fetch_from_injector_wc(yield.get_executor());
@@ -453,7 +402,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
         util::LogPath("injector"));
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto ssl_ctx = client_ssl_context_for(server);
+        auto ssl_ctx = server.ssl_context_for_client();
         auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
         auto rq = build_private_request(url);
@@ -570,7 +519,7 @@ BOOST_DATA_TEST_CASE(
         // Clients are started explicitly
         client.start();
 
-        auto ssl_ctx = client_ssl_context_for(server);
+        auto ssl_ctx = server.ssl_context_for_client();
         auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
 
         auto rq = build_private_request(url);
