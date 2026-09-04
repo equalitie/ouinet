@@ -7,6 +7,7 @@
 #include <namespaces.h>
 #include <chrono>
 #include "util/request_builder.h"
+#include "util/http_client.h"
 #include "util/test_dir.h"
 #include "util/unwrap.h"
 #include "util/i2p.h"
@@ -43,70 +44,22 @@ using Response = http::response<http::string_body>;
 
 const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
 
-Request build_cache_request(Route route, std::string resource_group) {
-    return CacheRequestBuilder(test_url)
+Request build_cache_request(util::Url url, Route route, std::string resource_group) {
+    return CacheRequestBuilder(url)
         .set_resource_group(resource_group)
         .set_route(route).build();
 }
 
 Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
+
     unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
-
     unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
+
     unwrap(http::async_read(stream, b, res, yield));
-    return res;
-}
-
-asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, asio::ssl::context& ctx, std::string host) {
-    asio::ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
-    if(! SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
-        sys::error_code ec;
-        ec.assign(static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category());
-        static boost::source_location loc = BOOST_CURRENT_LOCATION;
-        sys::throw_exception_from_error(ec, loc);
-    }
-    stream.set_verify_callback(asio::ssl::host_name_verification(host));
-    return stream;
-}
-
-Response fetch_from_origin(Async yield) {
-    auto url = test_url;
-
-    if (url.port.empty()) url.port = "443";
-    if (url.path.empty()) url.path = "/";
-
-    auto exec = yield.get_executor();
-
-    tcp::resolver resolver(exec);
-    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
-
-    asio::ssl::context ctx{asio::ssl::context::tls_client};
-    ouinet::ssl::util::load_tls_ca_certificates(ctx);
-    ctx.set_verify_mode(asio::ssl::verify_peer);
-
-    auto req = build_origin_request(test_url);
-    std::string host = req[http::field::host];
-
-    tcp::socket socket(exec);
-    unwrap(asio::async_connect(socket, results, yield));
-
-    auto stream = setup_tls_stream(std::move(socket), ctx, host);
-    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
-
-    unwrap(http::async_write(stream, req, yield));
-
-    beast::flat_buffer b;
-    Response res;
-    unwrap(http::async_read(stream, b, res, yield));
-
-    sys::error_code ignored_ec;
-    stream.shutdown(ignored_ec);
-
-    BOOST_REQUIRE_EQUAL(res.result(), http::status::ok);
 
     return res;
 }
@@ -253,12 +206,12 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
 
         auto resource_group = util::random::from_set(20, "0123456789abcdefghijklmnoprstuvxyz");
 
-        auto control_body = fetch_from_origin(yield).body();
+        auto control_body = unwrap(fetch_from_origin(test_url, yield)).body();
 
         // The "seeder" fetches the signed content through the "injector"
         auto rs1 = fetch_through_client(
                 seeder,
-                build_cache_request(Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}, resource_group),
+                build_cache_request(test_url, Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}, resource_group),
                 yield);
 
         BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
@@ -276,7 +229,7 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
         // The "leecher" client fetches the signed content from the "seeder"
         auto rs2 = fetch_through_client(
                 leecher,
-                build_cache_request(Route::DCache{CacheType::Bep3HTTPOverI2P{}}, resource_group),
+                build_cache_request(test_url, Route::DCache{CacheType::Bep3HTTPOverI2P{}}, resource_group),
                 yield);
 
         BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);

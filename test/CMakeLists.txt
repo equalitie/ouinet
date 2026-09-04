@@ -14,6 +14,7 @@ set(OUINET_TEST_TARGETS)
 
 add_library(ouinet_test_utils OBJECT
     ./util/http_server.cpp
+    ./util/http_client.cpp
     ./util/request_builder.cpp
 )
 

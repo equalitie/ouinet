@@ -8,6 +8,7 @@
 #include "util/dht.h"
 #include "util/test_dir.h"
 #include "util/http_server.h"
+#include "util/http_client.h"
 #include "util/request_builder.h"
 #include "util/unwrap.h"
 #include "injector.h"
@@ -39,65 +40,16 @@ using Response = http::response<http::string_body>;
 
 Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
+
     unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
-
     unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
-    unwrap(http::async_read(stream, b, res, yield));
-    return res;
-}
 
-asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, asio::ssl::context& ctx, std::string host) {
-    asio::ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
-    if(! SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
-        sys::error_code ec;
-        ec.assign(static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category());
-        static boost::source_location loc = BOOST_CURRENT_LOCATION;
-        sys::throw_exception_from_error(ec, loc);
-    }
-    stream.set_verify_callback(asio::ssl::host_name_verification(host));
-    return stream;
-}
-
-Response fetch_from_origin(util::Url url, asio::ssl::context& ctx, Async yield) {
-    if (url.port.empty()) url.port = "443";
-    if (url.path.empty()) url.path = "/";
-
-    auto exec = yield.get_executor();
-
-    tcp::resolver resolver(exec);
-    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
-
-    auto req = build_origin_request(url);
-    std::string host = req[http::field::host];
-
-    tcp::socket socket(exec);
-    unwrap(asio::async_connect(socket, results, yield));
-
-    auto stream = setup_tls_stream(std::move(socket), ctx, url.host);
-    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
-
-    unwrap(http::async_write(stream, req, yield));
-
-    beast::flat_buffer b;
-    Response res;
     unwrap(http::async_read(stream, b, res, yield));
 
-    unwrap(stream.async_shutdown(yield));
-
-    BOOST_REQUIRE_EQUAL(res.result(), http::status::ok);
-
     return res;
-}
-
-Response fetch_from_origin(util::Url url, Async yield) {
-    asio::ssl::context ctx{asio::ssl::context::tls_client};
-    ouinet::ssl::util::load_tls_ca_certificates(ctx);
-    ctx.set_verify_mode(asio::ssl::verify_peer);
-
-    return fetch_from_origin(std::move(url), ctx, yield);
 }
 
 void check_exception(std::exception_ptr e) {
@@ -159,7 +111,7 @@ BOOST_AUTO_TEST_CASE(server) {
         auto ssl_ctx = server.ssl_context_for_client();
 
         auto url = util::Url::from(util::str("https://", server.authority())).value();
-        auto rs = fetch_from_origin(url, ssl_ctx, yield);
+        auto rs = unwrap(fetch_from_origin(url, ssl_ctx, yield));
 
         BOOST_CHECK_EQUAL(rs.body(), body);
     });
@@ -326,7 +278,7 @@ BOOST_DATA_TEST_CASE(
         }
 
         auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
+        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
         auto rq = CacheRequestBuilder(url).build();
 
@@ -403,7 +355,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
         auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
+        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
         auto rq = build_private_request(url);
 
@@ -520,7 +472,7 @@ BOOST_DATA_TEST_CASE(
         client.start();
 
         auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = fetch_from_origin(url, ssl_ctx, yield).body();
+        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
         auto rq = build_private_request(url);
 
