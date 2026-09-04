@@ -346,4 +346,13 @@ HttpServer::HttpServer(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
 HttpServer::HttpServer(HttpServer&&) = default;
 HttpServer::~HttpServer() = default;
 
+asio::ssl::context HttpServer::ssl_context_for_client() const {
+    asio::ssl::context ctx{asio::ssl::context::tls_client};
+
+    ctx.load_verify_file(certificate_path().string());
+    ctx.set_verify_mode(asio::ssl::verify_peer);
+
+    return ctx;
+}
+
 } // namespace
