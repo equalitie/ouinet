@@ -20,7 +20,8 @@ class TestFixtures:
     BEP5_CACHE_TIMEOUT = 900
     BEP3_CACHE_TIMEOUT = I2P_TRANSPORT_TIMEOUT + BEP5_CACHE_TIMEOUT
 
-    BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p"
+    #BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
+    BEP3_TRACKER_ID = "2rkpwc6l5phjeqdxyjodbkia4b6w44vh6wemzo3hdu6ycfmraaiq.b32.i2p" #opentracker-i2p
 
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
@@ -45,7 +46,7 @@ class TestFixtures:
     INDEX_READY_REGEX_INDEX = 1
     REQUEST_CACHED_REGEX_INDEX = 2
 
-    REPO_FOLDER_NAME = "/tmp/ouinet_python_test"
+    REPO_FOLDER_NAME = "test_repos"
     # TODO: they should be in the same dir I think
     I2P_FOLDER_NAME = "i2p"
 
@@ -53,10 +54,10 @@ class TestFixtures:
     INJECTOR_CONF_FILE_CONTENT = "open-file-limit = 32768\n"
 
     I2P_INJECTOR_NAME = "i2p_injector"
-    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Session created, local_addr:\s*(\S+)$"
-    I2P_ANNOUNCER_ANNOUNCED_REGEX = r"[\s\S]*BEP3 announced\s*(\S+)$"
+    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Tunnel has been established"
 
     I2P_INJECTOR_PRIVATE_KEY = "KWi-Y9dah6Acn52RFt6AnbAgr~c6zn0p9wSkuJMfiOe1tRAJ3wxxM36Hx1ASDS0no9EXoWBMk4EkiTSC7p4FNAuODhpTzITKQowOyBUWwSJnC4xzTYdturDqaZ3kJAPXgfxZoCQyPHMy3p8x7I7A3g03Pmlt26pQPF7slbUfp~Gptl0lQVKCwpHoIc1WlgcCzZDEAjCRcAuw36r5tluL3qrHVcJhsv73ZBq-ZfOoWAgi5D~UsUoq82EdpvpC6B37I9Gsj44IDByAG7xvG44R9RiJ3-ZBbGkAebJXhOtWFcoDoX~pnOcscY~q8C6HdYVG7gsfMWwW0cmD8YsCx0eYAByqMB~lmOWcEiBXFMj3Mcswtsk-5vSZmoiRvYs57g2hq8EHGm77~bOmoseUan2NjJRDwiCJa4X8jWv2qbYN84hEa2vALoxfNNoc0Feq3N9MjACf6H0kg4BpqBS0qG0wXHEjH9L~TwmpkdnjpB8iW2jp~v7XGjm7q5S2ycySQrHxBQAEAAEAAPGosOGDfqdjVcsK1h4tnCQUvuDyOOq1nI9bA2XCCje8T77VNux4z7IncMAZy02G04WD2bYCDusTgbeKCgtGdVoiF9zT3wpqOmpSDfs1fPPnIDZrTt1CJHg4vnu~RhqBoaXLRFjsojZ4lC~UYXWKaawTm0~mvexvSzzXOYwlzAi0Cgp1zHNPHS8BI9afnQjvNGLzdNaZ4gHlC1Am0iNmUA0WvQ3OsZFC7HRoOa9FtzLg8FCgKrIcNORCJKRIknrC7ODVnd5WJsEfrVTQlQXeBwB56POz1lrEEtSRHlMIap6YhKGSDKBpAUubrGqYtkiiOAXJp1QCAqyPaLeZumf2VeJ9AeU6lVvqP6dK3sDf7Tj2lbF7O92LlanedKNoEDa1Ow=="
+    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Tunnel has been established"
     I2P_INJECTOR_ADDRESS_RECEIVED_REGEX = r"[\s\S]*Received: I2P seeder[\s\S]*"
     I2P_CLIENT_FINISHED_READING_REGEX = r"[\s\S]*Finish reading[\s\S]*"
     I2P_CLIENT_ERROR_READING_REGEX = (
@@ -64,8 +65,11 @@ class TestFixtures:
     )
 
     I2P_CLIENT = {
-        "name": "i2p_client",
+        "name": "cacheless_i2p_client",
         "port": 3888,
+        # Distinct fe_port so this fixture can be run alongside CACHE_CLIENT[0]
+        # (which defaults to 8078) without a front-end port collision.
+        "fe_port": 8081,
         "i2cp_port": 7454,
     }
     I2P_DISCOVERED_ID_ANNOUNCE_PORT = 8998
@@ -73,13 +77,21 @@ class TestFixtures:
     I2P_ANON_TUNNEL_HOP_COUNT = 3
     I2P_FAST_TUNNEL_HOP_COUNT = 1
 
+    # X-Ouinet-Route header values that force a specific transport for a
+    # request. Route::choose (src/route.cpp) defaults to Bep5Http when no
+    # such header is present, so BEP3-over-I2P tests must pass one of these.
+    PUBLIC_INJECTOR_I2P_ROUTE = {"X-Ouinet-Route": "PublicInjector Bep3HTTPOverI2P"}
+    DCACHE_I2P_ROUTE = {"X-Ouinet-Route": "DCache Bep3HTTPOverI2P"}
+
     MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
 
     TCP_INJECTOR_NAME = "tcp_injector"
     TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     # TCP_INJECTOR_PORT_READY_REGEX = "TCP address"
-    TCP_INJECTOR_PORT = 7070
+    # Avoid 7070, which is i2pd's default web-console port and would collide
+    # with a system-wide i2pd if it is running during the test.
+    TCP_INJECTOR_PORT = 7090
 
     CACHE_INJECTOR_NAME = "cache_injector"
 
@@ -101,9 +113,35 @@ class TestFixtures:
     CACHE_CLIENT_PEER_FOUND = (
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
+    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve_utp_req/serve_local END[\s\S]*"
+
+    # Logged by the I2P cache server in client.cpp once a peer's PROPFIND or
+    # GET has been successfully written back over the I2P stream. Used by the
+    # BEP3-over-I2P cache test to confirm the seeding client actually served
+    # the request (serve_utp_req/serve_local ENDthe uTP  never fires on the I2P cache).
+    CACHE_CLIENT_I2P_REQUEST_SERVED = (
+        r'[\s\S]*serve_i2p_req/serve_local Write; ec="Success"[\s\S]*'
+    )
     BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*I2P announcer successfully initiated[\s\S]*"
+    # Logged by I2pAnnouncer::Loop in src/ouiservice/i2p/announcer.cpp once
+    # the entry has been successfully announced to the BEP3 tracker over I2P.
+    BEP3_ANNOUNCE_SUCCESS_REGEX = r"[\s\S]*BEP3 announced[\s\S]*"
+    # Logged by I2pTrackerClient::handshake in src/ouiservice/i2p/tracker.cpp
+    # once a probe round-trip to the BEP3 tracker has succeeded over I2P, i.e.
+    # the I2P path (lease-set + tunnel) is actually usable for tracker requests.
+    BEP3_HANDSHAKE_DONE_REGEX = (
+        r"[\s\S]*BEP3 tracker: tracker handshake successful[\s\S]*"
+    )
+    # Logged once in Bep3Tracker's constructor; the captured group is the
+    # 52-char base32 of our serving destination's IdentHash — i.e. the b32
+    # other clients should see as a peer for our infohash.
+    BEP3_SERVING_IDENTITY_REGEX = (
+        r"[\s\S]*BEP3 tracker: serving identity b32=([a-z2-7]{52})\.b32\.i2p[\s\S]*"
+    )
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
+
+    RESPONSE_RECEIVED_FROM_CACHE = r"[\s\S]*X-Ouinet-Source: dist-cache[\s\S]*"
 
     IPNS_ID_ANNOUNCE_REGEX = r"[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
     BEP5_PUBK_ANNOUNCE_REGEX = r"[\s\S]*BEP5 Index: ([0-9A-Fa-f]+)[\s\S]*"
@@ -126,11 +164,9 @@ class TestFixtures:
     TRIAL_CACHE_REQUESTS_WAIT = 20
 
     MAINNET_INJECTOR_HASH = "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq"
-    FRESH_SUCCESS_REGEX = (
-        r'[\s\S]*(?:fresh|cache_miss)/injector Finish; ec="Success"[\s\S]*'
-    )
+    FRESH_SUCCESS_REGEX = r'[\s\S]*fresh/injector Finish; ec="Success"[\s\S]*'
     DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
-    DHT_INITIALIZED_REGEX = r"[\s\S]*/dht WAN endpoint[\s\S]*"
+    DHT_INITIALIZED_REGEX = r"[\s\S]*BT DHT: WAN endpoint[\s\S]*"
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
@@ -157,6 +193,3 @@ AzZPXqk+2eab43GbbD6keXRGIufMThKGyrRX+9aIaV3tx3uWAOfWVmlzf9w3gV3D
 lmjPSOXmUsOLk0PFwoy7O7n9zJKNrUy1N2O+j0tH5HVXOnSjpS8aNrMtpfHS
 -----END CERTIFICATE-----
 """
-
-    PUBLIC_INJECTOR_I2P_ROUTE = {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'}
-    DCACHE_I2P_ROUTE          = {'X-Ouinet-Route': 'DCache Bep3HTTPOverI2P'}

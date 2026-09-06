@@ -82,10 +82,10 @@ def output_yielder(handle: Popen) -> Generator[str, None, None]:
         try:
             if not handle.stdout:
                 raise IOError("no stdout on process")
-            for line in iter(handle.stdout.readline, ""):
+            for line in iter(handle.stdout.readline, b""):
                 if isinstance(line, bytes):
-                    line = line.decode("utf-8")
-                yield line.rstrip()
+                    line = line.decode("utf-8", errors="replace")
+                yield line
         except:
             pass
 
@@ -200,12 +200,6 @@ class OuinetProcess(object):
                 stderr,
             )
 
-    def next(self) -> str:
-        try:
-            return self.output.__next__()
-        except StopIteration:
-            return "\nNo more stdout for " + self.command[0]
-
     async def stdout_listening_task(self):
         try:
             while True:
@@ -213,7 +207,7 @@ class OuinetProcess(object):
                     return
                 self.assert_process_is_alive()
 
-                line: str = await asyncio.to_thread(self.next)
+                line: str = await asyncio.to_thread(self.output.__next__)
                 assert isinstance(line, str)
                 self._proc_protocol.errReceived(line)
 
@@ -254,9 +248,6 @@ class OuinetProcess(object):
         if "teardown" in tb.lower():
             return True
         return False
-
-    def name(self) -> str:
-        return self.config.app_name
 
     async def stop(self):
         if self._has_started and not self._term_signal_sent:  # stop only if started
@@ -404,6 +395,14 @@ class OuinetI2PInjector(OuinetInjector):
             ) as private_key_file:
                 private_key_file.write(private_key_blob)
 
+    def get_I2P_public_ID(self):
+        try:
+            with open(
+                self.config.config_folder_name + "/endpoint-i2p", "r"
+            ) as public_id_file:
+                return public_id_file.read().rstrip()
+        except:
+            return None
 
     def get_index_key(self):
         return self._proc_protocol.bep5_public_key

@@ -511,7 +511,9 @@ struct Client::Impl {
                     }
                 },
                 [&] (CacheType::Bep3HTTPOverI2P) -> VisitR {
+                    LOG_DEBUG(yield, " Distributed cache lookup entering BEP3/I2P path");
                     if (!_i2p_tracker) {
+                        LOG_DEBUG(yield, " BEP3/I2P path: _i2p_tracker is null — aborting");
                         return std::unexpected(asio::error::no_protocol_option);
                     }
 

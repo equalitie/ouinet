@@ -4,6 +4,7 @@
 #include "session_id.h"
 #include "address.h"
 #include "namespaces.h"
+#include "../../logger.h"
 
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
@@ -179,6 +180,12 @@ std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId co
 
     auto local_addr = I2pAddress::parse(keypair->pub);
     if (!local_addr) return error(Error::InvalidAddress { std::move(keypair->pub) });
+
+    // SAM has acknowledged SESSION CREATE with OK — the destination is
+    // registered and STREAM operations can proceed on this session ID.
+    // The integration tests match on the "I2P Tunnel has been established" substring
+    // (see test/integration_test/test_fixtures.py:I2P_TUNNEL_READY_REGEX).
+    LOG_INFO("I2P Tunnel has been established, local_addr: ", local_addr->to_b32());
 
     return std::move(*local_addr);
 }
