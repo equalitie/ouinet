@@ -49,13 +49,13 @@ struct GarbageCollector {
     cache::HttpStore& http_store;  // for looping over entries
     cache::HttpStore::keep_func keep;  // caller-provided checks
 
-    util::LogPath _log_path;
+    Trace _log_path;
     AsioExecutor _executor;
     Cancel _cancel;
 
     GarbageCollector( cache::HttpStore& http_store
                     , cache::HttpStore::keep_func keep
-                    , util::LogPath log_path
+                    , Trace log_path
                     , AsioExecutor ex)
         : http_store(http_store)
         , keep(std::move(keep))
@@ -110,7 +110,7 @@ struct Client::Impl {
     util::LruCache<std::string, shared_ptr<I2pTrackerLookup>> _i2p_peer_lookups;
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _groups;
-    util::LogPath _log_path;
+    Trace _log_path;
 
     Impl( AsioExecutor ex
         , std::set<udp::endpoint> lan_my_eps
@@ -119,7 +119,7 @@ struct Client::Impl {
         , Client::opt_path static_cache_dir
         , unique_ptr<cache::HttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age
-        , util::LogPath log_path)
+        , Trace log_path)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(ex)
         , _lan_my_endpoints(std::move(lan_my_eps))
@@ -458,7 +458,7 @@ struct Client::Impl {
             // could be reused in the multi-peer download below.
         }
 
-        util::LogPath log_path = yield.log_path().tag("multi_peer_reader");
+        Trace log_path = yield.log_path().tag("multi_peer_reader");
 
         LOG_DEBUG(yield, " Distributed cache lookup: ", request.cache_type());
         LOG_DEBUG(yield, "    dht=", (_dht ? "yes" : "no"));

@@ -76,7 +76,7 @@ class OUINET_COMMON_API DhtNode {
            , uint32_t mux_rx_limit
            , boost::filesystem::path storage_dir
            , bootstrap::Config bs
-           , util::LogPath
+           , Trace
     );
 
     std::expected<void, sys::error_code> start(udp::endpoint, Async yield);
@@ -372,7 +372,7 @@ class OUINET_COMMON_API DhtNode {
     bootstrap::Config _bootstrap_config;
     PeerFilter _peer_filter = PeerFilter::martian;
     metrics::DhtNode _metrics;
-    util::LogPath _log_path;
+    Trace _log_path;
 };
 
 } // namespace ouinet::bittorent

@@ -160,7 +160,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
     auto swarms = std::make_shared<MockDht::Swarms>();
 
     asio::spawn(ctx, [&] (asio::yield_context yield_) {
-        auto yield = Async(yield_, util::LogPath());
+        auto yield = Async(yield_, Trace());
 
         Injector injector(make_config<InjectorConfig>({
                 "./no_injector_exec"s,
@@ -168,7 +168,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 "--credentials"s, injector_credentials,
             }),
             ctx,
-            util::LogPath("injector"),
+            Trace("injector"),
             std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
         auto seeder_dir = root.make_subdir("seeder");
@@ -186,7 +186,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 "--listen-on-tcp=127.0.0.1:0"s,
                 "--front-end-ep=127.0.0.1:0"s,
             }),
-            util::LogPath("seeder"),
+            Trace("seeder"),
             [&ctx, swarms] () {
                 return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
             });
@@ -231,7 +231,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 "--listen-on-tcp=127.0.0.1:0"s,
                 "--front-end-ep=127.0.0.1:0"s,
             }),
-            util::LogPath("leecher"),
+            Trace("leecher"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
                 dht->can_not_see("injector");

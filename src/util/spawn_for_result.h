@@ -125,7 +125,7 @@ public:
 private:
     template<class F>
     friend TaskHandle<std::invoke_result_t<F, Async>>
-    spawn_for_result(asio::any_io_executor, Cancel, util::LogPath, F);
+    spawn_for_result(asio::any_io_executor, Cancel, Trace, F);
 
     template<class> friend class MappedTaskHandle;
 
@@ -195,7 +195,7 @@ TaskHandle<
 spawn_for_result(
         asio::any_io_executor exec,
         Cancel cancel,
-        util::LogPath log_path,
+        Trace log_path,
         F func
 ) {
     using V = std::invoke_result_t<F, Async>;

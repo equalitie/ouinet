@@ -127,9 +127,9 @@ public:
 
     HashList _hash_list;
     Cancel _lifetime_cancel;
-    util::LogPath _log_path;
+    Trace _log_path;
 
-    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, sign::PublicKey cache_pk, util::LogPath log_path) :
+    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, sign::PublicKey cache_pk, Trace log_path) :
         _exec(exec),
         _resource_id(resource_id),
         _resource_key(resource_key),
@@ -429,7 +429,7 @@ public:
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<DhtLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
-         , util::LogPath log_path)
+         , Trace log_path)
         : _exec(exec)
         , _cv(_exec)
         , _cache_pk(std::move(cache_pk))
@@ -510,7 +510,7 @@ public:
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
-         , util::LogPath log_path)
+         , Trace log_path)
         : Peers( exec, std::move(lan_my_eps), {}, std::move(lan_peer_eps)
                , std::move(cache_pk), resource_id, resource_key, nullptr
                , std::move(newest_proto_seen), std::move(log_path))
@@ -526,7 +526,7 @@ public:
          , std::shared_ptr<I2pTrackerLookup> i2p_lookup
          , std::shared_ptr<I2pSession> i2p_session
          , std::shared_ptr<unsigned> newest_proto_seen
-         , util::LogPath log_path)
+         , Trace log_path)
         : _exec(exec)
         , _cv(_exec)
         , _cache_pk(std::move(cache_pk))
@@ -802,7 +802,7 @@ private:
     std::shared_ptr<I2pTrackerLookup> _i2p_lookup;
     std::shared_ptr<I2pSession> _i2p_session;
     std::shared_ptr<unsigned> _newest_proto_seen;
-    util::LogPath _log_path;
+    Trace _log_path;
 
     Cancel _lifetime_cancel;
 
@@ -817,7 +817,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , util::LogPath log_path)
+                                , Trace log_path)
     : _executor(ex)
     , _log_path(std::move(log_path))
 {
@@ -838,7 +838,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::shared_ptr<DhtLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , util::LogPath log_path)
+                                , Trace log_path)
     : _executor(ex)
     , _log_path(std::move(log_path))
 {
@@ -861,7 +861,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::shared_ptr<I2pTrackerLookup> i2p_lookup
                                 , std::shared_ptr<I2pSession> i2p_session
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , util::LogPath log_path)
+                                , Trace log_path)
     : _executor(ex)
     , _log_path(log_path)
 {

@@ -14,7 +14,7 @@ using namespace std;
 
 UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
                                         , udp::endpoint local_endpoint
-                                        , util::LogPath log_path):
+                                        , Trace log_path):
     _ex(std::move(ex)),
     _udp_multiplexer(new asio_utp::udp_multiplexer(_ex)),
     _accept_queue(_ex)

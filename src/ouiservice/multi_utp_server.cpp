@@ -59,7 +59,7 @@ struct MultiUtpServer::State
 MultiUtpServer::MultiUtpServer( asio::any_io_executor ex
                               , std::set<asio::ip::udp::endpoint> endpoints
                               , boost::asio::ssl::context* ssl_context
-                              , util::LogPath log_path)
+                              , Trace log_path)
     : _accept_queue(ex)
 {
     if (endpoints.empty()) {

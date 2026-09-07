@@ -23,9 +23,9 @@ struct OuiDaemon : public i2p::util::Daemon_Singleton {
 
 struct I2pd::InnerLib : I2pd::InnerBase {
     asio::ip::tcp::endpoint sam_ep;
-    util::LogPath log_path;
+    Trace log_path;
 
-    InnerLib(asio::ip::tcp::endpoint sam_ep, util::LogPath log_path):
+    InnerLib(asio::ip::tcp::endpoint sam_ep, Trace log_path):
         sam_ep(sam_ep),
         log_path(std::move(log_path))
     {}
@@ -41,7 +41,7 @@ struct I2pd::InnerLib : I2pd::InnerBase {
 };
 
 std::expected<I2pd, sys::error_code>
-I2pd::start_lib(I2pd::Config config, util::LogPath log_path) {
+I2pd::start_lib(I2pd::Config config, Trace log_path) {
     OUI_LOG_DEBUG(log_path, " Starting I2P daemon (library)");
 
     auto config_vec = config.to_vector(I2pd::Type::Lib{});

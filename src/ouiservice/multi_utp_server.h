@@ -18,7 +18,7 @@ public:
     MultiUtpServer( AsioExecutor
                   , std::set<asio::ip::udp::endpoint>
                   , boost::asio::ssl::context* ssl_context
-                  , util::LogPath);
+                  , Trace);
 
     [[nodiscard]]
     sys::error_code start_listen(Async) override;

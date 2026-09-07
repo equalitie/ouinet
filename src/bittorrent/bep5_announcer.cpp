@@ -42,7 +42,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
     Bep5AnnouncerImpl( NodeID infohash
                      , std::weak_ptr<DhtBase> dht_w
                      , Type type
-                     , util::LogPath log_path)
+                     , Trace log_path)
         : type(type)
         , cv(dht_w.lock()->get_executor())
         , infohash(infohash)
@@ -150,14 +150,14 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
     bool go_again = false;
     NodeID infohash;
     weak_ptr<DhtBase> dht_w;
-    util::LogPath log_path;
+    Trace log_path;
     Cancel cancel;
     static const bool debug = false;  // for development testing only
 };
 
 Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
                                             , std::weak_ptr<DhtBase> dht
-                                            , util::LogPath log_path)
+                                            , Trace log_path)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
                                                   , std::move(dht)
                                                   , Type::Periodic
@@ -174,7 +174,7 @@ Bep5PeriodicAnnouncer::~Bep5PeriodicAnnouncer()
 
 Bep5ManualAnnouncer::Bep5ManualAnnouncer( NodeID infohash
                                         , std::weak_ptr<DhtBase> dht
-                                        , util::LogPath log_path)
+                                        , Trace log_path)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
                                                   , std::move(dht)
                                                   , Type::Manual

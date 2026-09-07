@@ -33,7 +33,7 @@ namespace bp = boost::process::v2;
 bool I2pd::is_start_exe_implemented() { return true; }
 
 struct Line {
-    util::LogPath trace;
+    Trace trace;
     std::string text;
 };
 
@@ -72,13 +72,13 @@ struct I2pd::InnerExe : I2pd::InnerBase {
     bp::process _process;
     asio::readable_pipe _stdcout;
     asio::readable_pipe _stdcerr;
-    util::LogPath _log_path;
+    Trace _log_path;
     Cancel _cancel;
     std::optional<std::expected<asio::ip::tcp::endpoint, sys::error_code>> _sam_ep;
     ConditionVariable _cv;
     Tail<Line> tail;
 
-    InnerExe(bp::process process, asio::readable_pipe stdcout, asio::readable_pipe stdcerr, util::LogPath log_path):
+    InnerExe(bp::process process, asio::readable_pipe stdcout, asio::readable_pipe stdcerr, Trace log_path):
         _process(std::move(process)),
         _stdcout(std::move(stdcout)),
         _stdcerr(std::move(stdcerr)),
@@ -120,7 +120,7 @@ struct I2pd::InnerExe : I2pd::InnerBase {
         });
     }
 
-    void process_line(const util::LogPath& trace, std::string line) {
+    void process_line(const Trace& trace, std::string line) {
         // Uncomment to see full log from i2pd
         //LOG_DEBUG(trace, " ", line);
 

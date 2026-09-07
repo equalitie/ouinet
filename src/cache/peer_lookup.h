@@ -96,7 +96,7 @@ protected:
 
 private:
 
-    std::unique_ptr<Job> make_job(AsioExecutor exec, util::LogPath log_path) {
+    std::unique_ptr<Job> make_job(AsioExecutor exec, Trace log_path) {
         auto job = std::make_unique<Job>(exec);
 
         job->start(

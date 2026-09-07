@@ -207,7 +207,7 @@ DhtNode::DhtNode( const AsioExecutor& exec
                 , const uint32_t mux_rx_limit
                 , fs::path storage_dir
                 , bootstrap::Config bs
-                , util::LogPath log_path
+                , Trace log_path
 ):
     _exec(exec),
     _ready(false),
@@ -2512,7 +2512,7 @@ MainlineDht::MainlineDht( const AsioExecutor& exec
                         , uint32_t mux_rx_limit
                         , fs::path storage_dir
                         , bootstrap::Config bootstrap_config
-                        , util::LogPath log_path)
+                        , Trace log_path)
     : _exec(exec)
     , _ready_cv(exec)
     , _dns_resolver(std::move(dns_resolver))

@@ -66,7 +66,7 @@ void run_two(asio::io_context& ctx, ServerJob server_job, ClientJob client_job)
             // Server
             asio::spawn(yield.get_executor(), [&, job = std::move(server_job), lock = server_finished.lock()] (asio::yield_context yield) mutable {
                     job(i2p_service,
-                        Async(yield, util::LogPath(test_name).tag("server")
+                        Async(yield, Trace(test_name).tag("server")
                     ));
                 },
                 [] (auto e) { handle_exception("server", e); });
@@ -74,7 +74,7 @@ void run_two(asio::io_context& ctx, ServerJob server_job, ClientJob client_job)
             // Client
             asio::spawn(yield.get_executor(), [&, job = std::move(client_job), lock = client_finished.lock()] (asio::yield_context yield) mutable {
                     job(i2p_service,
-                        Async(yield, util::LogPath(test_name).tag("client")
+                        Async(yield, Trace(test_name).tag("client")
                     ));
                 },
                 [] (auto e) { handle_exception("client", e); });

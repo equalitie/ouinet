@@ -35,7 +35,7 @@ public:
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::set<asio::ip::udp::endpoint> lan_my_endpoints
                    , std::shared_ptr<unsigned> newest_proto_seen
-                   , util::LogPath);
+                   , Trace);
 
     // Use this to include peers on the Internet.
     MultiPeerReader( AsioExecutor ex
@@ -45,7 +45,7 @@ public:
                    , std::set<asio::ip::udp::endpoint> lan_peers
                    , std::shared_ptr<DhtLookup> peer_lookup
                    , std::shared_ptr<unsigned> newest_proto_seen
-                   , util::LogPath);
+                   , Trace);
 
     // Use this to include I2P peers via BEP3 tracker.
     MultiPeerReader( AsioExecutor ex
@@ -55,7 +55,7 @@ public:
                    , std::shared_ptr<I2pTrackerLookup>
                    , std::shared_ptr<I2pSession> i2p_session
                    , std::shared_ptr<unsigned> newest_proto_seen
-                   , util::LogPath);
+                   , Trace);
 
     MultiPeerReader(MultiPeerReader&&) = delete;
     MultiPeerReader(const MultiPeerReader&) = delete;
@@ -100,7 +100,7 @@ private:
 
     boost::optional<HashList> _reference_hash_list;
     std::unique_ptr<Peers> _peers;
-    util::LogPath _log_path;
+    Trace _log_path;
     bool _head_sent = false;
     size_t _block_id = 0;
 

@@ -326,7 +326,7 @@ struct I2pService::Inner {
 };
 
 /* static */
-I2pService I2pService::start(Config config, asio::any_io_executor exec, Cancel cancel, util::LogPath log_path) {
+I2pService I2pService::start(Config config, asio::any_io_executor exec, Cancel cancel, Trace log_path) {
     auto inner = std::make_shared<Inner>(std::move(config), exec);
 
     inner->task = spawn_for_result(exec, cancel, log_path, [inner = inner.get()] (Async yield) {

@@ -34,7 +34,7 @@ public:
     Bep5Announcer(
         std::shared_ptr<bittorrent::DhtBase>,
         size_t simultaneous_announcements,
-        util::LogPath log_path
+        Trace log_path
     );
     ~Bep5Announcer();
 };

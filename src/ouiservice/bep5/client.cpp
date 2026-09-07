@@ -86,7 +86,7 @@ private:
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
     const bool _connect_proxy;
-    util::LogPath _log_path;
+    Trace _log_path;
 
 public:
     Swarm( bt::NodeID infohash
@@ -95,7 +95,7 @@ public:
          , SwarmType type
          , Cancel& cancel
          , bool connect_proxy
-         , util::LogPath log_path)
+         , Trace log_path)
         : _dht(std::move(dht))
         , _infohash(infohash)
         , _type(type)
@@ -228,7 +228,7 @@ public:
                   , bool helper_announcement_enabled
                   , std::shared_ptr<bt::DhtBase> dht
                   , Cancel& cancel
-                  , const util::LogPath& log_path)
+                  , const Trace& log_path)
         : _lifetime_cancel(cancel)
         , _injector_swarm(std::move(injector_swarm))
         , _random_generator(std::random_device()())
@@ -368,14 +368,14 @@ private:
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
     bool _helper_announcement_enabled = true;
-    util::LogPath _log_path;
+    Trace _log_path;
 };
 
 Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
                       , std::string injector_swarm_name
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets
-                      , const util::LogPath& log_path)
+                      , const Trace& log_path)
     : _dht(dht)
     , _injector_swarm_name(std::move(injector_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
@@ -393,7 +393,7 @@ Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
                       , bool helper_announcement_enabled
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets
-                      , const util::LogPath& log_path)
+                      , const Trace& log_path)
     : _dht(dht)
     , _injector_swarm_name(std::move(injector_swarm_name))
     , _helpers_swarm_name(std::move(helpers_swarm_name))

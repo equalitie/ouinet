@@ -1,13 +1,13 @@
 #include "log_path.h"
 #include "intrusive_list.h"
 
-namespace ouinet::util {
+namespace ouinet {
 
 struct RootData {
     std::ostream* monitor_changes = nullptr;
 };
 
-struct LogPath::Node {
+struct Trace::Node {
     std::string _tag;
     std::shared_ptr<Node> _parent;
     std::shared_ptr<RootData> _root_data;
@@ -28,7 +28,7 @@ struct LogPath::Node {
 
         if (auto os = _root_data->monitor_changes) {
             *os << "+++ ";
-            LogPath::print_from_root(*os, this);
+            Trace::print_from_root(*os, this);
             *os << "\n";
         }
     }
@@ -36,22 +36,22 @@ struct LogPath::Node {
     ~Node() {
         if (auto os = _root_data->monitor_changes) {
             *os << "--- ";
-            LogPath::print_from_root(*os, this);
+            Trace::print_from_root(*os, this);
             *os << "\n";
         }
     }
 };
 
-LogPath::LogPath(std::string tag) :
+Trace::Trace(std::string tag) :
     _node(std::make_shared<Node>(std::move(tag), nullptr))
 {}
 
-LogPath LogPath::tag(std::string tag) {
+Trace Trace::tag(std::string tag) {
     auto node = std::make_shared<Node>(std::move(tag), _node);
-    return LogPath{std::move(node)};
+    return Trace{std::move(node)};
 }
 
-void LogPath::print_from_root(std::ostream& os, const LogPath::Node* node) {
+void Trace::print_from_root(std::ostream& os, const Trace::Node* node) {
     if (node == nullptr) {
         return;
     }
@@ -59,8 +59,8 @@ void LogPath::print_from_root(std::ostream& os, const LogPath::Node* node) {
     os << "/" << node->_tag;
 }
 
-void LogPath::start_monitor_changes(std::ostream& os) const {
+void Trace::start_monitor_changes(std::ostream& os) const {
     _node->_root_data->monitor_changes = &os;
 }
 
-} // namespace ouinet::util
+} // namespace

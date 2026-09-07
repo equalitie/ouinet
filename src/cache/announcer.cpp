@@ -64,12 +64,12 @@ struct Announcer::Loop {
     size_t _simultaneous_announcements;
     Cancel _cancel;
     Cancel _timer_cancel;
-    util::LogPath _log_path;
+    Trace _log_path;
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(AsioExecutor ex, size_t simultaneous_announcements, util::LogPath log_path)
+    Loop(AsioExecutor ex, size_t simultaneous_announcements, Trace log_path)
         : ex(ex)
         , entries(ex)
         , _simultaneous_announcements(simultaneous_announcements)
@@ -295,7 +295,7 @@ struct Bep5Loop : public Announcer::Loop {
     Bep5Loop(
         shared_ptr<bt::DhtBase> dht,
         size_t simultaneous_announcements,
-        util::LogPath log_path
+        Trace log_path
     )
         : Loop(dht->get_executor(), simultaneous_announcements, std::move(log_path))
         , dht(std::move(dht))
@@ -352,7 +352,7 @@ Announcer::~Announcer() {}
 Bep5Announcer::Bep5Announcer(
     std::shared_ptr<bittorrent::DhtBase> dht,
     size_t simultaneous_announcements,
-    util::LogPath log_path
+    Trace log_path
 )
     : Announcer(dht->get_executor(), simultaneous_announcements)
 {

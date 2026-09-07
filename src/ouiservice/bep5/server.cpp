@@ -15,7 +15,7 @@ namespace bt = bittorrent;
 Bep5Server::Bep5Server( shared_ptr<bt::DhtBase> dht
                       , boost::asio::ssl::context* ssl_context
                       , string swarm_name
-                      , util::LogPath log_path)
+                      , Trace log_path)
 {
     assert(dht);
 

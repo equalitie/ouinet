@@ -39,12 +39,12 @@ void handle_exception(std::exception_ptr ep) {
 
 void spawn(auto& ctx, auto work) {
     asio::spawn(ctx, [work = std::move(work)] (asio::yield_context yield) mutable {
-            // Wrap `asio::yield_context` in `Async` and pass `util::LogPath`
+            // Wrap `asio::yield_context` in `Async` and pass `Trace`
             // to it for convenient logging.
             work(
                 Async(
                     yield,
-                    util::LogPath(
+                    Trace(
                         boost::unit_test::framework::current_test_case().p_name
                     )
                 )

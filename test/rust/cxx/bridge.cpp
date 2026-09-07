@@ -18,7 +18,7 @@ namespace test {
         return std::make_unique<Client>(
             ctx,
             ClientConfig(argv.size(), const_cast<const char**>(argv.data())),
-            util::LogPath(static_cast<std::string>(log_tag))
+            Trace(static_cast<std::string>(log_tag))
         );
     }
 
@@ -72,7 +72,7 @@ namespace test {
         return std::make_unique<Injector>(
             InjectorConfig(argv.size(), const_cast<const char**>(argv.data())),
             ctx,
-            util::LogPath(static_cast<std::string>(log_tag))
+            Trace(static_cast<std::string>(log_tag))
         );
     }
 

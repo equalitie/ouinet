@@ -135,7 +135,7 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
             "--bt-bootstrap-no-default"
         }),
-        util::LogPath("client"));
+        Trace("client"));
 
     // Clients are started explicitly
     client.start();
@@ -203,7 +203,7 @@ BOOST_DATA_TEST_CASE(
                 "--bt-allow-martians"
             }),
             ctx,
-            util::LogPath("injector"),
+            Trace("injector"),
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
         );
 
@@ -230,7 +230,7 @@ BOOST_DATA_TEST_CASE(
                     "--bt-bootstrap-extra", util::str(dht_endpoint),
                     "--bt-allow-martians"
                 }),
-                util::LogPath(name),
+                Trace(name),
                 mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
             );
         }
@@ -259,7 +259,7 @@ BOOST_DATA_TEST_CASE(
                     "--bt-bootstrap-extra", util::str(dht_endpoint),
                     "--bt-allow-martians"
                 }),
-                util::LogPath(name),
+                Trace(name),
                 mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
             );
         }
@@ -346,7 +346,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--bt-bootstrap-no-default"
         }),
         ctx,
-        util::LogPath("injector"));
+        Trace("injector"));
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
         auto ssl_ctx = server.ssl_context_for_client();
@@ -433,7 +433,7 @@ BOOST_DATA_TEST_CASE(
                 "--bt-allow-martians"
             }),
             ctx,
-            util::LogPath("injector"),
+            Trace("injector"),
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
         );
 
@@ -457,7 +457,7 @@ BOOST_DATA_TEST_CASE(
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians"
             }),
-            util::LogPath("client"),
+            Trace("client"),
             mock_dht_builder("client", yield.get_executor(), mock_dht_swarms)
         );
 

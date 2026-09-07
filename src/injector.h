@@ -36,7 +36,7 @@ public:
         InjectorConfig config,
         asio::io_context& ctx,
         // For use in tests
-        util::LogPath log_path = {},
+        Trace log_path = {},
         std::shared_ptr<bittorrent::MockDht> dht = nullptr);
 
     void stop();

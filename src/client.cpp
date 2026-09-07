@@ -102,7 +102,7 @@ class Client::State : public enable_shared_from_this<Client::State> {
 public:
     State( asio::io_context& ctx
          , ClientConfig cfg
-         , util::LogPath log_path
+         , Trace log_path
          , std::optional<Client::MockDhtBuilder> dht_builder)
         : _ctx(ctx)
         , _config(std::move(cfg))
@@ -348,7 +348,7 @@ public:
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
-                Async yield(yield_, *cancel, util::LogPath("metrics"));
+                Async yield(yield_, *cancel, Trace("metrics"));
 
                 try {
                     client->send_metrics_record(record_name, record_content, yield);
@@ -697,7 +697,7 @@ private:
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
 
-    util::LogPath _log_path;
+    Trace _log_path;
     std::optional<Client::MockDhtBuilder> _bt_dht_builder;
     shared_ptr<bt::DhtBase> _bt_dht;
     WaitCondition _bt_dht_wc;
@@ -2633,7 +2633,7 @@ void Client::State::setup_injectors()
                 return std::move(*result);
             }
 
-            Client(I2pAddress addr, std::shared_ptr<I2pSession> session, Cancel cancel, util::LogPath log_path):
+            Client(I2pAddress addr, std::shared_ptr<I2pSession> session, Cancel cancel, Trace log_path):
                 _addr(std::move(addr)),
                 _session(std::move(session)),
                 _cancel(std::move(cancel)),
@@ -2647,7 +2647,7 @@ void Client::State::setup_injectors()
             I2pAddress _addr;
             std::shared_ptr<I2pSession> _session;
             Cancel _cancel;
-            util::LogPath _log_path;
+            Trace _log_path;
         };
 
         _injector_i2p = spawn_for_result(
@@ -2747,7 +2747,7 @@ void Client::State::setup_injectors()
 Client::Client(
         asio::io_context& ctx,
         ClientConfig cfg,
-        util::LogPath log_path,
+        Trace log_path,
         std::optional<MockDhtBuilder> dht_builder)
     : _state(make_shared<State>(ctx, std::move(cfg), std::move(log_path), std::move(dht_builder)))
 {

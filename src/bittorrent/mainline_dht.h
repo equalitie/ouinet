@@ -54,7 +54,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
                , uint32_t mux_rx_limit
                , boost::filesystem::path storage_dir
                , bootstrap::Config bs
-               , util::LogPath);
+               , Trace);
 
     MainlineDht(const MainlineDht&) = delete;
     MainlineDht& operator=(const MainlineDht&) = delete;
@@ -128,7 +128,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     bootstrap::Config _bootstrap_config;
     PeerFilter _peer_filter = PeerFilter::martian;
     metrics::MainlineDht _metrics;
-    util::LogPath _log_path;
+    Trace _log_path;
 };
 
 } // namespace ouinet::bittorrent

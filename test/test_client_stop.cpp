@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(test_client_start_stop) {
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
         }),
-        util::LogPath("client")
+        Trace("client")
         );
 
     // Clients are started explicitly

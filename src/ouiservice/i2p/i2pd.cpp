@@ -56,7 +56,7 @@ I2pd::start_exe(fs::path, I2pd::Config, Async) {
 bool I2pd::is_start_lib_implemented() { return false; }
 
 std::expected<I2pd, sys::error_code>
-I2pd::start_lib(I2pd::Config, util::LogPath) {
+I2pd::start_lib(I2pd::Config, Trace) {
     return std::unexpected(make_error_code(sys::errc::not_supported));
 }
 

@@ -77,7 +77,7 @@ static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 struct Injector::Inner {
-    util::LogPath _log_path;
+    Trace _log_path;
     std::optional<I2pService> _i2p_service;
     std::optional<I2pSessionTask> _i2p_session_task;
 
@@ -892,7 +892,7 @@ void listen( InjectorConfig& config
 Injector::Injector(
         InjectorConfig config,
         asio::io_context& ctx,
-        util::LogPath log_path,
+        Trace log_path,
         std::shared_ptr<bittorrent::MockDht> mock_dht) :
     _exec(ctx.get_executor()),
     _config(std::move(config)),
@@ -1044,14 +1044,14 @@ Injector::Injector(
                 return std::move(*result);
             }
 
-            Server(I2pSessionTask session_task, util::LogPath log_path):
+            Server(I2pSessionTask session_task, Trace log_path):
                 _session_task(std::move(session_task)),
                 _log_path(std::move(log_path))
             {}
 
             I2pSessionTask _session_task;
             LifetimeCancel _cancel;
-            util::LogPath _log_path;
+            Trace _log_path;
         };
 
         proxy_server->add(std::make_unique<Server>(

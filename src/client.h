@@ -38,7 +38,7 @@ public:
         asio::io_context&,
         ClientConfig,
         // For use in tests
-        util::LogPath log_path = {},
+        Trace log_path = {},
         std::optional<MockDhtBuilder> dht_builder = {});
 
     ~Client();
