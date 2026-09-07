@@ -8,6 +8,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.6.11](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.11) - 2026-09-07
+
+### Added
+
+- Add options to disable UPnP and local peer discovery. !209
+
+### Fixed
+
+- Fix MacOS/iOS build for clang 21 and per-session client lifecycle. !188
+
+### Changed
+
+- Package `asio_utp` as an embeddable framework for iOS. !204
+- CI improvements adapted for branch v1.6. !205
+- Include `bt_bep5` in the bundle of linux artifacts. !213
+- Updated `asio-utp` to 4e2403ae. c9ef2c13
+
+
+## [v1.6.10](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.10) - 2026-07-17
+
+### Changed
+
+- Adds matcher to the request routing such that all requests for our telegram mirror
+website (tg.ceno.app) will be routed to the injector, d-cache, or proxy mechanisms. !200
+
+### Fixed
+
+- Backport of fix for bt_extra_bootstraps front-end query parameter mismatch. !200
+
+
+## [v1.6.9](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.9) - 2026-07-08
+
+### Fixed
+
+- Prevents clients from crashing on peer requests when cache is uninitialized. ddaf4c02
+
+
 ## [v1.7.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.1) - 2026-07-03
 
 ### Fixed
@@ -19,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Build `asio_utp` as shared library. !192
 
+
 ## [v1.6.8](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.8) - 2026-06-30
 
 ### Fixed
@@ -29,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Build `asio_utp` as shared library. !193
+
 
 ## [v1.7.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.0) - 2026-05-08
 
