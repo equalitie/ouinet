@@ -79,14 +79,13 @@ struct I2pService::Inner {
     }
 
     std::expected<I2pSession, sys::error_code>
-    create_i2p_session_with_retry(tcp::endpoint sam_endpoint, Async yield) {
+    create_i2p_session_with_retry(tcp::endpoint sam_endpoint, std::chrono::steady_clock::duration max_duration, Async yield) {
         using R = std::expected<I2pSession, sys::error_code>;
 
         auto now = std::chrono::steady_clock::now;
 
         sys::error_code last_error = asio::error::fault;
 
-        auto max_duration = 2min;
         auto start = now();
         auto end = start + max_duration;
 
@@ -210,7 +209,7 @@ struct I2pService::Inner {
 
         LOG_DEBUG(yield, " Creating session 1/2 ");
 
-        auto session = create_i2p_session_with_retry(conf->endpoint, yield);
+        auto session = create_i2p_session_with_retry(conf->endpoint, 10s, yield);
 
         if (!session) {
             LOG_DEBUG(yield, " Session 1 creation failed: ", session.error());
@@ -247,7 +246,7 @@ struct I2pService::Inner {
 
         LOG_DEBUG(yield, " Creating session 1/2");
 
-        auto session = create_i2p_session_with_retry(i2pd->sam_endpoint(), yield);
+        auto session = create_i2p_session_with_retry(i2pd->sam_endpoint(), 2min, yield);
 
         if (!session) {
             LOG_DEBUG(yield, " Session 1 creation failed: ", session.error());
@@ -283,7 +282,7 @@ struct I2pService::Inner {
 
         LOG_DEBUG(yield, " Creating session 1/2");
 
-        auto session = create_i2p_session_with_retry(i2pd->sam_endpoint(), yield);
+        auto session = create_i2p_session_with_retry(i2pd->sam_endpoint(), 2min, yield);
 
         if (!session) {
             LOG_DEBUG(yield, " Session 1 creation failed: ", session.error());
