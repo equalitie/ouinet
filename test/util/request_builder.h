@@ -12,7 +12,7 @@ namespace ouinet {
 
 http::request<http::string_body> build_origin_request(const util::Url& url);
 
-http::request<http::string_body> build_private_request(const util::Url& url);
+http::request<http::string_body> build_private_request(const util::Url& url, std::optional<InjectingCacheType> cache_type = {});
 
 struct CacheRequestBuilder {
     util::Url url;

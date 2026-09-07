@@ -29,6 +29,8 @@ using namespace boost::asio::ip;
 using bittorrent::MockDht;
 using tcp = asio::ip::tcp;
 
+static const std::string_view I2P_TRACKER_ADDR_STR = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p";
+
 template<class Config>
 static Config make_config(const std::vector<std::string>& args) {
     static constexpr auto c_str = [](const std::string& str) {
@@ -174,7 +176,7 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
     get_logger().set_threshold(DEBUG);
 
     const std::string injector_credentials = "username:password";
-    auto tracker_addr = unwrap(I2pAddress::B32::parse("z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p"));
+    auto tracker_addr = unwrap(I2pAddress::B32::parse(I2P_TRACKER_ADDR_STR));
     const std::string i2p_fast_tunnel_hop_count = "1";
 
     auto swarms = std::make_shared<MockDht::Swarms>();
@@ -402,4 +404,93 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local_many_p
     }
 
     test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), true, std::move(urls) });
+}
+
+BOOST_AUTO_TEST_CASE(test_fetching_private_route) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+    std::vector<util::Url> urls;
+
+    for (size_t i = 0; i < 32; ++i) {
+        auto path = util::str("/r", i);
+        urls.push_back(server.add_resource(path, util::random::printable_ascii(1024)));
+    }
+
+    auto swarms = std::make_shared<MockDht::Swarms>();
+
+    auto tracker_addr = unwrap(I2pAddress::B32::parse(I2P_TRACKER_ADDR_STR));
+
+    run(ctx, [&, server = std::move(server)] (Async yield) {
+        auto i2p_service = create_i2p_service(yield);
+        auto sam_endpoint = unwrap(i2p_service.await_running_state(yield)).sam_endpoint;
+
+        const std::string injector_credentials = "username:password";
+
+    	Injector injector(
+	        make_config<InjectorConfig>({
+                "./no_injector_exec"s,
+                "--log-level=DEBUG",
+                "--repo"s, root.make_subdir("injector").string(),
+                "--credentials"s, injector_credentials,
+                // Because we're fetching from the local server
+                "--allow-private-targets",
+                "--listen-on-i2p=true"s,
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+            }),
+            ctx,
+            util::LogPath("injector"),
+            std::make_shared<MockDht>("injector", ctx.get_executor(), swarms)
+        );
+
+        Client client(
+            ctx,
+            make_config<ClientConfig>({
+                "./no_client_exec"s,
+                "--log-level=DEBUG"s,
+                "--repo"s, root.make_subdir("client").string(),
+                "--injector-credentials"s, injector_credentials,
+                "--i2p-bep3-tracker"s, tracker_addr.as_str(),
+                "--cache-type=bep3-http-over-i2p"s,
+                "--cache-http-public-key"s, injector.cache_http_public_key(),
+                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).to_b32().as_str(),
+                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+                "--disable-origin-access"s,
+                // Bind to random ports to avoid clashes
+                "--listen-on-tcp=127.0.0.1:0"s,
+                "--front-end-ep=127.0.0.1:0"s,
+                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+                "--allow-private-targets",
+            }),
+            util::LogPath("client"),
+            [&ctx, swarms] () {
+                auto dht = std::make_shared<MockDht>("client", ctx.get_executor(), swarms);
+                dht->can_not_see("injector");
+                return dht;
+            }
+        );
+
+        // Clients are started explicitly
+        client.start();
+
+        auto ssl_ctx = server.ssl_context_for_client();
+
+        for (uint16_t i = 0; i < urls.size(); ++i) {
+            auto control_body = unwrap(fetch_from_origin(urls[i], ssl_ctx, yield)).body();
+
+            auto rq = build_private_request(urls[i], CacheType::Bep3HTTPOverI2P{});
+            auto rs = fetch_through_client(client, rq, yield);
+
+            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_proxy);
+            BOOST_REQUIRE_EQUAL(rs.body(), control_body);
+        }
+
+        injector.stop();
+        client.stop();
+    });
 }

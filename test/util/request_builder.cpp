@@ -20,7 +20,7 @@ http::request<http::string_body> build_origin_request(const util::Url& url) {
     return req;
 }
 
-http::request<http::string_body> build_private_request(const util::Url& url) {
+http::request<http::string_body> build_private_request(const util::Url& url, std::optional<InjectingCacheType> cache_type) {
     int version = 11;
 
     std::string host = url.host;
@@ -31,6 +31,11 @@ http::request<http::string_body> build_private_request(const util::Url& url) {
     req.set(http::field::host, host);
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     req.set(http_::request_private_hdr, "true");
+
+    if (cache_type) {
+        req.set("X-Ouinet-Route", util::str(Route::BlindInjector { *cache_type }));
+    }
+
     req.prepare_payload();
     return req;
 }
