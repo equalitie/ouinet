@@ -106,11 +106,10 @@ BOOST_AUTO_TEST_CASE(server) {
         auto server = HttpServer(yield.get_executor(), root.path());
 
         std::string body = generate_random_body();
-        server.add_resource("/", body);
+        auto url = server.add_resource("/", body);
 
         auto ssl_ctx = server.ssl_context_for_client();
 
-        auto url = util::Url::from(util::str("https://", server.authority())).value();
         auto rs = unwrap(fetch_from_origin(url, ssl_ctx, yield));
 
         BOOST_CHECK_EQUAL(rs.body(), body);
@@ -143,9 +142,7 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
 
     run(ctx, [&, server = std::move(server)] (Async yield) mutable {
         auto body = generate_random_body();
-        server.add_resource("/", body);
-
-        auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+        auto url = server.add_resource("/", body);
 
         auto rq = CacheRequestBuilder(url).build();
 
@@ -186,8 +183,7 @@ BOOST_DATA_TEST_CASE(
     TestDir root;
 
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    server.add_resource("/", generate_random_body());
-    auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+    auto url = server.add_resource("/", generate_random_body());
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
         auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 8, yield);
@@ -333,8 +329,7 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
     TestDir root;
 
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    server.add_resource("/", generate_random_body());
-    auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+    auto url = server.add_resource("/", generate_random_body());
 
     tcp::endpoint injector_ep{
         asio::ip::address_v4::loopback(),
@@ -410,8 +405,7 @@ BOOST_DATA_TEST_CASE(
     TestDir root;
 
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    server.add_resource("/", generate_random_body());
-    auto url = util::Url::from(util::str("https://", server.authority(), "/")).value();
+    auto url = server.add_resource("/", generate_random_body());
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
         // NOTE: there is probably a bug somewhere which cause injector announcements to sometimes
