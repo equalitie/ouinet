@@ -133,9 +133,9 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-            "--bt-bootstrap-no-default"
-        }),
-        Trace("client"));
+            "--bt-bootstrap-no-default",
+            "--trace-root=client",
+        }));
 
     // Clients are started explicitly
     client.start();
@@ -200,10 +200,10 @@ BOOST_DATA_TEST_CASE(
                 "--allow-private-targets",
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians"
+                "--bt-allow-martians",
+                "--trace-root=injector"
             }),
             ctx,
-            Trace("injector"),
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
         );
 
@@ -228,9 +228,9 @@ BOOST_DATA_TEST_CASE(
                     "--allow-private-targets",
                     "--bt-bootstrap-no-default",
                     "--bt-bootstrap-extra", util::str(dht_endpoint),
-                    "--bt-allow-martians"
+                    "--bt-allow-martians",
+                    "--trace-root", name
                 }),
-                Trace(name),
                 mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
             );
         }
@@ -257,9 +257,9 @@ BOOST_DATA_TEST_CASE(
                     "--allow-private-targets",
                     "--bt-bootstrap-no-default",
                     "--bt-bootstrap-extra", util::str(dht_endpoint),
-                    "--bt-allow-martians"
+                    "--bt-allow-martians",
+                    "--trace-root"s, name
                 }),
-                Trace(name),
                 mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
             );
         }
@@ -343,10 +343,10 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--listen-on-tcp"s, util::str(injector_ep),
             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
             "--allow-private-targets",
-            "--bt-bootstrap-no-default"
+            "--bt-bootstrap-no-default",
+            "--trace-root=injector"
         }),
-        ctx,
-        Trace("injector"));
+        ctx);
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
         auto ssl_ctx = server.ssl_context_for_client();
@@ -430,10 +430,10 @@ BOOST_DATA_TEST_CASE(
                 "--allow-private-targets",
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians"
+                "--bt-allow-martians",
+                "--trace-root=injector"
             }),
             ctx,
-            Trace("injector"),
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
         );
 
@@ -455,9 +455,9 @@ BOOST_DATA_TEST_CASE(
                 "--allow-private-targets",
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians"
+                "--bt-allow-martians",
+                "--trace-root=client"
             }),
-            Trace("client"),
             mock_dht_builder("client", yield.get_executor(), mock_dht_swarms)
         );
 

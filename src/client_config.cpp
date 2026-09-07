@@ -85,6 +85,10 @@ boost::program_options::options_description ClientConfig::description_full()
           "This option is persistent.")
        ("bt-allow-martians", po::bool_switch()->default_value(false)
         , "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful mostly for testing.")
+       ("trace-root"
+        , po::value<string>()
+        , "Tracing prefix added to log lines, useful when debugging multiple "
+          "clients and/or injectors writing log into the same output")
 #ifndef __WIN32
        ("open-file-limit"
         , po::value<unsigned int>()
@@ -359,6 +363,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
+
+    if (vm.count("trace-root")) {
+        _trace_root = vm["trace-root"].as<string>();
+    }
 
     if (vm.count("help")) {
         _is_help = true;

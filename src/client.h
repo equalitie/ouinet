@@ -38,7 +38,6 @@ public:
         asio::io_context&,
         ClientConfig,
         // For use in tests
-        Trace trace = {},
         std::optional<MockDhtBuilder> dht_builder = {});
 
     ~Client();

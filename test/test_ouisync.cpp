@@ -166,9 +166,9 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 "./no_injector_exec"s,
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
+                "--trace-root=injector",
             }),
             ctx,
-            Trace("injector"),
             std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
         auto seeder_dir = root.make_subdir("seeder");
@@ -185,8 +185,8 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 // Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
                 "--front-end-ep=127.0.0.1:0"s,
+                "--trace-root=seeder",
             }),
-            Trace("seeder"),
             [&ctx, swarms] () {
                 return std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
             });
@@ -230,8 +230,8 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 // Bind to random ports to avoid clashes
                 "--listen-on-tcp=127.0.0.1:0"s,
                 "--front-end-ep=127.0.0.1:0"s,
+                "--trace-root=leecher",
             }),
-            Trace("leecher"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
                 dht->can_not_see("injector");

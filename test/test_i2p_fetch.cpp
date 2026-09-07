@@ -193,6 +193,7 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
             "--credentials"s, injector_credentials,
             "--listen-on-i2p=true"s,
             "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+            "--trace-root=injector",
         };
 
         if (test_case.server) {
@@ -202,7 +203,6 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
 
         Injector injector(make_config<InjectorConfig>(std::move(injector_config)),
             ctx,
-            Trace("injector"),
             std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
         BOOST_TEST_MESSAGE("Setting up seeder");
@@ -224,6 +224,7 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
             // XXX Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
+            "--trace-root=seeder",
         };
 
         if (test_case.server) {
@@ -231,7 +232,6 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
         }
 
         Client seeder(ctx, make_config<ClientConfig>(std::move(seeder_config)),
-            Trace("seeder"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
                 dht->can_not_see("injector");
@@ -254,6 +254,7 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
+            "--trace-root=leecher",
         };
 
         if (test_case.server) {
@@ -261,7 +262,6 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
         }
 
         Client leecher(ctx, make_config<ClientConfig>(std::move(leecher_config)),
-            Trace("leecher"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
                 dht->can_not_see("seeder");
@@ -440,9 +440,9 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route) {
                 "--allow-private-targets",
                 "--listen-on-i2p=true"s,
                 "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+                "--trace-root=injector",
             }),
             ctx,
-            Trace("injector"),
             std::make_shared<MockDht>("injector", ctx.get_executor(), swarms)
         );
 
@@ -465,8 +465,8 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route) {
                 "--front-end-ep=127.0.0.1:0"s,
                 "--tls-ca-cert-store-file="s + server.certificate_path().string(),
                 "--allow-private-targets",
+                "--trace-root=client",
             }),
-            Trace("client"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("client", ctx.get_executor(), swarms);
                 dht->can_not_see("injector");

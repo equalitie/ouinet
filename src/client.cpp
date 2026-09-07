@@ -102,7 +102,6 @@ class Client::State : public enable_shared_from_this<Client::State> {
 public:
     State( asio::io_context& ctx
          , ClientConfig cfg
-         , Trace trace
          , std::optional<Client::MockDhtBuilder> dht_builder)
         : _ctx(ctx)
         , _config(std::move(cfg))
@@ -114,7 +113,7 @@ public:
         , _front_end(_config)
         , _origin_pools(OriginPools())
         , inj_ctx{asio::ssl::context::tls_client}
-        , _trace(std::move(trace))
+        , _trace(_config.trace_root())
         , _bt_dht_builder(std::move(dht_builder))
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
@@ -2747,9 +2746,8 @@ void Client::State::setup_injectors()
 Client::Client(
         asio::io_context& ctx,
         ClientConfig cfg,
-        Trace trace,
         std::optional<MockDhtBuilder> dht_builder)
-    : _state(make_shared<State>(ctx, std::move(cfg), std::move(trace), std::move(dht_builder)))
+    : _state(make_shared<State>(ctx, std::move(cfg), std::move(dht_builder)))
 {
 }
 

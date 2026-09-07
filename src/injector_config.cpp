@@ -45,6 +45,10 @@ boost::program_options::options_description InjectorConfig::options_description(
          , "Max rate limit that's allowed for incoming packets to the "
            "UDP multiplexer. The value is expressed in Kbps. To leave it "
            "unlimited, set it to zero.")
+        ("trace-root"
+         , po::value<string>()
+         , "Tracing prefix added to log lines, useful when debugging multiple "
+           "clients and/or injectors writing log into the same output")
 
         // Injector options
         ("open-file-limit"
@@ -129,6 +133,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
+
+    if (vm.count("trace-root")) {
+        _trace_root = vm["trace-root"].as<string>();
+    }
 
     if (vm.count("help")) {
         _is_help = true;

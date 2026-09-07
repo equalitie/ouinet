@@ -16,6 +16,7 @@
 #include "ouiservice/i2p/destination_keypair.h"
 #include "util/sign.h"
 #include "util/str.h"
+#include "util/trace.h"
 
 #include "cxx/dns.h"
 
@@ -135,6 +136,10 @@ public:
     void store_i2p_destination_keypair(const I2pDestinationKeypair&) const;
     std::optional<I2pDestinationKeypair> load_i2p_destination_keypair() const;
 
+    const Trace& trace_root() const {
+        return _trace_root;
+    }
+
 private:
     void setup_ed25519_private_key(const std::string& hex);
 
@@ -171,6 +176,7 @@ private:
 
     dns::Config _dns_config;
     std::optional<I2pService::Config> _i2p_service_config;
+    Trace _trace_root;
 };
 
 } // ouinet namespace

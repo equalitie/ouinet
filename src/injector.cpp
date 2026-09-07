@@ -892,13 +892,14 @@ void listen( InjectorConfig& config
 Injector::Injector(
         InjectorConfig config,
         asio::io_context& ctx,
-        Trace trace,
         std::shared_ptr<bittorrent::MockDht> mock_dht) :
     _exec(ctx.get_executor()),
     _config(std::move(config)),
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
-    _inner(std::make_unique<Inner>(trace))
+    _inner(std::make_unique<Inner>(_config.trace_root()))
 {
+    auto trace = _inner->_trace;
+
     #ifndef __WIN32
     if (_config.open_file_limit()) {
         increase_open_file_limit(*_config.open_file_limit());
