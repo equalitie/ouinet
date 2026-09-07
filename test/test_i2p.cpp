@@ -14,6 +14,7 @@
 #include "util/test_dir.h"
 #include "util/i2p.h"
 #include "util/str.h"
+#include "logger.h"
 
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -181,6 +182,8 @@ std::string byte_units(uint64_t count) {
 }
 
 BOOST_AUTO_TEST_CASE(test_speed) {
+    get_logger().set_threshold(DEBUG);
+
     asio::io_context ctx;
 
     struct SharedState {
@@ -243,6 +246,8 @@ BOOST_AUTO_TEST_CASE(test_speed) {
 // Measure how long it takes for connections to be established to the same
 // endpoint once one connection is already active.
 BOOST_AUTO_TEST_CASE(test_subsequent_connection_speed) {
+    get_logger().set_threshold(DEBUG);
+
     asio::io_context ctx;
 
     struct SharedState {
