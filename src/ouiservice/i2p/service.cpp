@@ -11,6 +11,7 @@
 #include "session.h"
 #include "address.h"
 #include "i2pd.h"
+#include "destination_keypair.h"
 
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
@@ -97,7 +98,7 @@ struct I2pService::Inner {
             }
 
             auto session = timeout(end - iter_start, [&] (Async yield) -> R {
-                    return I2pSession::create(yield, sam_endpoint);
+                    return I2pSession::create(sam_endpoint, yield);
                 },
                 yield);
 
@@ -166,7 +167,7 @@ struct I2pService::Inner {
         state.send(State::PerformingHealthCheck{});
 
         auto session0 = std::move(init.session());
-        auto session1 = I2pSession::create(yield, init.sam_endpoint());
+        auto session1 = I2pSession::create(init.sam_endpoint(), yield);
 
         if (!session1) {
             LOG_DEBUG(yield, " Session 2 creation failed: ", session1.error());
@@ -359,7 +360,20 @@ std::expected<I2pSession, sys::error_code> I2pService::create_session(Async yiel
         return std::unexpected(asio::error::service_not_found);
     }
     
-    return I2pSession::create(yield, running_state->sam_endpoint);
+    return I2pSession::create(running_state->sam_endpoint, yield);
+}
+
+std::expected<I2pSession, sys::error_code> I2pService::create_session(I2pDestinationKeypair keypair, Async yield) {
+    auto running_state = await_running_state(yield);
+    
+    if (!running_state) {
+        return std::unexpected(asio::error::service_not_found);
+    }
+    
+    auto sam = Sam::connect(running_state->sam_endpoint, yield);
+    if (!sam) return std::unexpected(sam.error());
+
+    return I2pSession::create(std::move(*sam), std::move(keypair), yield);
 }
 
 } // namespace

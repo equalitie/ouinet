@@ -284,7 +284,7 @@ async def try_fetch_bytes_over_i2p(size: int) -> Response:
             print("request attempt no " + str(i + 1) + "...")
 
             request_start = time()
-            response = await request_sized_content(TestFixtures.I2P_CLIENT["port"], size, TestFixtures.PUBLIC_INJECTOR_I2P_ROUTE)
+            response = await request_sized_content(TestFixtures.I2P_CLIENT["port"], size, None, TestFixtures.PUBLIC_INJECTOR_I2P_ROUTE)
             response.raise_for_status()
 
             print(

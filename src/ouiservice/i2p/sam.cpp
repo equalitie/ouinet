@@ -4,6 +4,7 @@
 #include "session_id.h"
 #include "address.h"
 #include "namespaces.h"
+#include "destination_keypair.h"
 
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
@@ -129,17 +130,14 @@ std::expected<std::string, Error::Invoke> Sam::invoke(const std::string& request
     return std::move(*recv_r);
 }
 
-std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId const& session_id, Async yield) {
+std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId const& session_id, const I2pDestinationKeypair& keypair, Async yield) {
     auto error = [] (auto e) { return std::unexpected(Error::CreateSession { std::move(e) }); };
-
-    auto keypair = dest_generate(yield);
-    if (!keypair) return error(keypair.error());
 
     std::string request =
         "SESSION CREATE"
             " STYLE=STREAM"
             " ID=" + session_id.value +
-            " DESTINATION=" + keypair->priv +
+            " DESTINATION=" + keypair.priv +
             " i2cp.leaseSetEncType=4,0";
 
     auto response = invoke(request, yield);
@@ -177,13 +175,13 @@ std::expected<I2pAddress, Error::CreateSession> Sam::create_session(SessionId co
     auto dst_val = read_token(rs);
     if (!dst_val) return proto_error();
 
-    auto local_addr = I2pAddress::parse(keypair->pub);
-    if (!local_addr) return error(Error::InvalidAddress { std::move(keypair->pub) });
+    auto local_addr = I2pAddress::parse(keypair.pub);
+    if (!local_addr) return error(Error::InvalidAddress { std::move(keypair.pub) });
 
     return std::move(*local_addr);
 }
 
-std::expected<Sam::Keypair, Error::DestGenerate> Sam::dest_generate(Async yield) {
+std::expected<I2pDestinationKeypair, Error::DestGenerate> Sam::dest_generate(Async yield) {
     auto error = [] (auto e) { return std::unexpected(Error::DestGenerate { std::move(e) }); };
     std::string request = "DEST GENERATE SIGNATURE_TYPE=7";
     auto response = invoke(request, yield);
@@ -204,7 +202,7 @@ std::expected<Sam::Keypair, Error::DestGenerate> Sam::dest_generate(Async yield)
     auto priv = read_token(rs);
     if (!priv) return proto_error();
 
-    return Keypair { std::string(*pub), std::string(*priv) };
+    return I2pDestinationKeypair { std::string(*pub), std::string(*priv) };
 }
 
 std::expected<void, Error::Handshake> Sam::handshake(Async yield) {

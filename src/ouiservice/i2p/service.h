@@ -16,6 +16,7 @@ namespace ouinet {
 class Async;
 class Cancel;
 class I2pSession;
+class I2pDestinationKeypair;
 namespace util { class LogPath; }
 
 //
@@ -96,7 +97,11 @@ public:
     // the connection to the service is lost.
     std::optional<State::Running> await_running_state(Async) const;
 
+    // Create a session with newly generated destination keypair (thus unique I2P address).
     std::expected<I2pSession, sys::error_code> create_session(Async);
+
+    // Create a session with existing destionation keypair.
+    std::expected<I2pSession, sys::error_code> create_session(I2pDestinationKeypair, Async);
 
 private:
     struct Inner;

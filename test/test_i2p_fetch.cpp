@@ -2,11 +2,13 @@
 #include <boost/test/unit_test.hpp>
 
 #include <boost/beast/core.hpp>
-#include <boost/beast/version.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <namespaces.h>
 #include <chrono>
+#include "util/request_builder.h"
+#include "util/http_client.h"
+#include "util/http_server.h"
 #include "util/test_dir.h"
 #include "util/unwrap.h"
 #include "util/i2p.h"
@@ -27,6 +29,8 @@ using namespace boost::asio::ip;
 using bittorrent::MockDht;
 using tcp = asio::ip::tcp;
 
+static const std::string_view I2P_TRACKER_ADDR_STR = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p";
+
 template<class Config>
 static Config make_config(const std::vector<std::string>& args) {
     static constexpr auto c_str = [](const std::string& str) {
@@ -41,97 +45,22 @@ static Config make_config(const std::vector<std::string>& args) {
 using Request = http::request<http::string_body>;
 using Response = http::response<http::string_body>;
 
-const util::Url test_url = util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE").value();
-
-std::string_view get_group(const Request& rq) {
-    auto group = rq[http_::request_group_hdr];
-    assert(!group.empty());
-    return group;
+Request build_cache_request(util::Url url, Route route, std::string resource_group) {
+    return CacheRequestBuilder(url)
+        .set_resource_group(resource_group)
+        .set_route(route).build();
 }
-
-Request build_cache_request(Route route, std::string resource_group) {
-    int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.reassemble();
-
-    Request req{http::verb::get, target, version};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http_::request_group_hdr, resource_group);
-    req.set("X-Ouinet-Route", util::str(route));
-    return req;
-}
-
-Request build_origin_request() {
-    int version = 11;
-    std::string host = test_url.host;
-    std::string target = test_url.path;
-
-    Request req{http::verb::get, target, version};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    return req;
-}
-
 
 Response fetch_through_client(const Client& client, Request req, Async yield) {
     boost::beast::tcp_stream stream(client.get_executor());
+
     unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
-
     unwrap(http::async_write(stream, req, yield));
 
     beast::flat_buffer b;
     Response res;
+
     unwrap(http::async_read(stream, b, res, yield));
-    return res;
-}
-
-asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(tcp::socket socket, asio::ssl::context& ctx, std::string host) {
-    asio::ssl::stream<boost::beast::tcp_stream> stream(std::move(socket), ctx);
-    if(! SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
-        sys::error_code ec;
-        ec.assign(static_cast<int>(::ERR_get_error()), asio::error::get_ssl_category());
-        static boost::source_location loc = BOOST_CURRENT_LOCATION;
-        sys::throw_exception_from_error(ec, loc);
-    }
-    stream.set_verify_callback(asio::ssl::host_name_verification(host));
-    return stream;
-}
-
-Response fetch_from_origin(Async yield) {
-    auto url = test_url;
-
-    if (url.port.empty()) url.port = "443";
-    if (url.path.empty()) url.path = "/";
-
-    auto exec = yield.get_executor();
-
-    tcp::resolver resolver(exec);
-    auto const results = unwrap(resolver.async_resolve(url.host, url.port, yield));
-
-    asio::ssl::context ctx{asio::ssl::context::tls_client};
-    ouinet::ssl::util::load_tls_ca_certificates(ctx);
-    ctx.set_verify_mode(asio::ssl::verify_peer);
-
-    auto req = build_origin_request();
-    std::string host = req[http::field::host];
-
-    tcp::socket socket(exec);
-    unwrap(asio::async_connect(socket, results, yield));
-
-    auto stream = setup_tls_stream(std::move(socket), ctx, host);
-    unwrap(stream.async_handshake(asio::ssl::stream_base::client, yield));
-
-    unwrap(http::async_write(stream, req, yield));
-
-    beast::flat_buffer b;
-    Response res;
-    unwrap(http::async_read(stream, b, res, yield));
-
-    sys::error_code ignored_ec;
-    stream.shutdown(ignored_ec);
-
-    BOOST_REQUIRE_EQUAL(res.result(), http::status::ok);
 
     return res;
 }
@@ -173,8 +102,9 @@ void wait_for_peer_on_tracker(
         I2pAddress::B32 tracker_addr,
         bittorrent::NodeID infohash,
         I2pAddress::B32 peer_addr,
+        asio::ip::tcp::endpoint sam_ep,
         Async yield) {
-    auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(yield)));
+    auto session = std::make_shared<I2pSession>(unwrap(I2pSession::create(sam_ep, yield)));
     auto tracker = I2pTrackerClient(session, tracker_addr);
     for (int i = 0; i < 120; ++i) {
         auto peers = unwrap(tracker.get_peers(infohash, yield));
@@ -186,6 +116,53 @@ void wait_for_peer_on_tracker(
     BOOST_FAIL("Failed to wait for peer appearing on the tracker");
 }
 
+using Urls = std::vector<util::Url>;
+
+struct TestCase {
+    std::optional<HttpServer> server;
+    bool parallel = false;
+    Urls urls;
+};
+
+
+std::vector<Response> fetch_through_client_sequential(Client& client, const Urls& urls, Route route, std::string resource_group, Async yield) {
+    std::vector<Response> responses;
+
+    for (size_t i = 0; i < urls.size(); ++i) {
+        auto& url = urls[i];
+        responses.push_back(fetch_through_client(client, build_cache_request(url, route, resource_group), yield));
+    }
+
+    return responses;
+}
+
+std::vector<Response> fetch_through_client_parallel(Client& client, const Urls& urls, Route route, std::string resource_group, Async yield) {
+    std::vector<Response> responses;
+
+    responses.resize(urls.size());
+
+    WaitCondition wc(yield.get_executor());
+
+    for (size_t i = 0; i < urls.size(); ++i) {
+        yield.spawn([&, i, lock = wc.lock()] (Async yield) {
+            responses[i] = fetch_through_client(client, build_cache_request(urls[i], route, resource_group), yield);
+        });
+    }
+
+    unwrap(wc.wait(yield));
+
+    return responses;
+}
+
+std::vector<Response> fetch_through_client(bool parallel, Client& client, const Urls& urls, Route route, std::string resource_group, Async yield) {
+    if (parallel) {
+        return fetch_through_client_parallel(client, urls, route, resource_group, yield);
+    }
+    else {
+        return fetch_through_client_sequential(client, urls, route, resource_group, yield);
+    }
+}
+
 // An integration test with three identities: the 'injector', a 'seeder' client
 // and a 'leecher' client.
 //
@@ -193,54 +170,67 @@ void wait_for_peer_on_tracker(
 // * The 'leecher' client then fetches the resource from the 'seeder'.
 //
 // The test is using `MockDht` because the `MainlineDht` wouldn't work locally.
-BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
+void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, const TestDir& root, TestCase test_case) {
     // Logging is normally first enabled in either the Client or the Injector, but we want to
     // see log lines even before that (mainly from the I2P code).
     get_logger().set_threshold(DEBUG);
 
-    asio::io_context ctx;
-
-    TestDir root;
-
     const std::string injector_credentials = "username:password";
-    auto tracker_addr = unwrap(I2pAddress::B32::parse("z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p"));
+    auto tracker_addr = unwrap(I2pAddress::B32::parse(I2P_TRACKER_ADDR_STR));
     const std::string i2p_fast_tunnel_hop_count = "1";
 
     auto swarms = std::make_shared<MockDht::Swarms>();
 
-    run(ctx, [&] (Async yield) {
+    run(ctx, [&, test_case = std::move(test_case)] (Async yield) {
         auto i2p_service = create_i2p_service(yield);
         auto sam_endpoint = unwrap(i2p_service.await_running_state(yield)).sam_endpoint;
 
-        Injector injector(make_config<InjectorConfig>({
-                "./no_injector_exec"s,
-                "--repo"s, root.make_subdir("injector").string(),
-                "--credentials"s, injector_credentials,
-                "--listen-on-i2p=true"s,
-                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
-            }),
+        BOOST_TEST_MESSAGE("Setting up injector");
+
+        auto injector_config = std::vector<std::string> {
+            "./no_injector_exec"s,
+            "--repo"s, root.make_subdir("injector").string(),
+            "--credentials"s, injector_credentials,
+            "--listen-on-i2p=true"s,
+            "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+        };
+
+        if (test_case.server) {
+            injector_config.push_back("--tls-ca-cert-store-file="s + test_case.server->certificate_path().string());
+            injector_config.push_back("--allow-private-targets");
+        }
+
+        Injector injector(make_config<InjectorConfig>(std::move(injector_config)),
             ctx,
             util::LogPath("injector"),
             std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
-        Client seeder(ctx, make_config<ClientConfig>({
-                "./no_client_exec"s,
-                "--log-level=DEBUG"s,
-                "--repo"s, root.make_subdir("seeder").string(),
-                "--injector-credentials"s, injector_credentials,
-                "--cache-type=bep3-http-over-i2p"s,
-                "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).to_b32().as_str(),
-                "--i2p-bep3-tracker"s, tracker_addr.as_str(),
-                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-                "--disable-origin-access"s,
-                "--disable-proxy-access"s,
-                "--i2p-hops-per-tunnel"s, i2p_fast_tunnel_hop_count,
-                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
-                // XXX Bind to random ports to avoid clashes
-                "--listen-on-tcp=127.0.0.1:0"s,
-                "--front-end-ep=127.0.0.1:0"s,
-            }),
+        BOOST_TEST_MESSAGE("Setting up seeder");
+
+        auto seeder_config = std::vector<std::string> {
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("seeder").string(),
+            "--injector-credentials"s, injector_credentials,
+            "--cache-type=bep3-http-over-i2p"s,
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).to_b32().as_str(),
+            "--i2p-bep3-tracker"s, tracker_addr.as_str(),
+            "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+            "--disable-origin-access"s,
+            "--disable-proxy-access"s,
+            "--i2p-hops-per-tunnel"s, i2p_fast_tunnel_hop_count,
+            "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+            // XXX Bind to random ports to avoid clashes
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
+        };
+
+        if (test_case.server) {
+            seeder_config.push_back("--allow-private-targets");
+        }
+
+        Client seeder(ctx, make_config<ClientConfig>(std::move(seeder_config)),
             util::LogPath("seeder"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
@@ -248,21 +238,29 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 return dht;
             });
 
-        Client leecher(ctx, make_config<ClientConfig>({
-                "./no_client_exec"s,
-                "--log-level=DEBUG"s,
-                "--repo"s, root.make_subdir("leecher").string(),
-                "--cache-type=bep3-http-over-i2p"s,
-                "--i2p-bep3-tracker"s, tracker_addr.as_str(),
-                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
-                "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-                "--disable-origin-access"s,
-                "--disable-proxy-access"s,
-                // Bind to random ports to avoid clashes
-                "--listen-on-tcp=127.0.0.1:0"s,
-                "--front-end-ep=127.0.0.1:0"s,
-            }),
+        BOOST_TEST_MESSAGE("Setting up leecher");
+
+        auto leecher_config = std::vector<std::string> {
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("leecher").string(),
+            "--cache-type=bep3-http-over-i2p"s,
+            "--i2p-bep3-tracker"s, tracker_addr.as_str(),
+            "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+            "--disable-origin-access"s,
+            "--disable-proxy-access"s,
+            // Bind to random ports to avoid clashes
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
+        };
+
+        if (test_case.server) {
+            leecher_config.push_back("--allow-private-targets");
+        }
+
+        Client leecher(ctx, make_config<ClientConfig>(std::move(leecher_config)),
             util::LogPath("leecher"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
@@ -271,44 +269,228 @@ BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache) {
                 return dht;
             });
 
+        BOOST_TEST_MESSAGE("Starting clients");
+
         // Clients are started explicitly
         seeder.start();
         leecher.start();
 
         auto resource_group = util::random::from_set(20, "0123456789abcdefghijklmnoprstuvxyz");
 
-        auto control_body = fetch_from_origin(yield).body();
+        BOOST_TEST_MESSAGE("Requesting control bodys from origin");
 
-        // The "seeder" fetches the signed content through the "injector"
-        auto rs1 = fetch_through_client(
-                seeder,
-                build_cache_request(Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}}, resource_group),
-                yield);
+        std::vector<std::string> control_body;
 
-        BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
-        BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_injector);
-        BOOST_REQUIRE_EQUAL(rs1.body(), control_body);
+        for (auto& url : test_case.urls) {
+            BOOST_TEST_MESSAGE("    " << url);
 
-        // Wait for seeder to announce
+            if (test_case.server) {
+                asio::ssl::context ssl_ctx = test_case.server->ssl_context_for_client();
+                control_body.push_back(unwrap(fetch_from_origin(url, ssl_ctx, yield)).body());
+            }
+            else {
+                control_body.push_back(unwrap(fetch_from_origin(url, yield)).body());
+            }
+        }
+
+        BOOST_TEST_MESSAGE("Seeder fetching through injector");
+
+        {
+            auto route = Route::PublicInjector{CacheType::Bep3HTTPOverI2P{}};
+
+            auto responses = fetch_through_client(test_case.parallel, seeder, test_case.urls, route, resource_group, yield);
+
+            BOOST_REQUIRE_EQUAL(responses.size(), control_body.size());
+
+            for (size_t i = 0; i < responses.size(); ++i) {
+                BOOST_REQUIRE_EQUAL(responses[i].result(), http::status::ok);
+                BOOST_REQUIRE_EQUAL(responses[i][http_::response_source_hdr], http_::response_source_hdr_injector);
+                BOOST_REQUIRE_EQUAL(responses[i].body(), control_body[i]);
+            }
+        }
+
+        BOOST_TEST_MESSAGE("Waiting for seeder to announce on BEP3/I2P tracker");
+
         wait_for_peer_on_tracker(
                 tracker_addr,
                 leecher.compute_infohash_for_resource_group(resource_group),
                 unwrap(seeder.local_i2p_address(yield)).to_b32(),
+                sam_endpoint,
                 yield);
 
-        // The "leecher" client fetches the signed content from the "seeder"
-        auto rs2 = fetch_through_client(
-                leecher,
-                build_cache_request(Route::DCache{CacheType::Bep3HTTPOverI2P{}}, resource_group),
-                yield);
+        BOOST_TEST_MESSAGE("Leecher fetching from seeder");
 
-        BOOST_REQUIRE_EQUAL(rs2.result(), http::status::ok);
-        BOOST_REQUIRE_EQUAL(rs2[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
-        BOOST_REQUIRE_EQUAL(rs2.body(), control_body);
+        {
+            auto route = Route::DCache{CacheType::Bep3HTTPOverI2P{}};
 
+            auto responses = fetch_through_client(test_case.parallel, leecher, test_case.urls, route, resource_group, yield);
+
+            BOOST_REQUIRE_EQUAL(responses.size(), control_body.size());
+
+            for (size_t i = 0; i < responses.size(); ++i) {
+                BOOST_REQUIRE_EQUAL(responses[i].result(), http::status::ok);
+                BOOST_REQUIRE_EQUAL(responses[i][http_::response_source_hdr], http_::response_source_hdr_dist_cache);
+                BOOST_REQUIRE_EQUAL(responses[i].body(), control_body[i]);
+            }
+        }
+
+        BOOST_TEST_MESSAGE("Stopping nodes");
         injector.stop();
         seeder.stop();
         leecher.stop();
     });
 }
 
+BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__gitlab) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    const util::Url url = unwrap(util::Url::from("https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE"));
+
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::nullopt, false, {url} });
+}
+
+BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+    auto url = server.add_resource("/", util::random::printable_ascii(512));
+
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), false, {url} });
+}
+
+BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local_many_sequential) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+    std::vector<util::Url> urls;
+
+    const size_t M = 1024 * 1024;
+
+    // Randomly selected
+    std::vector<size_t> body_sizes {
+           0,    1,    2,    4,       8,     128,     511,      513, 
+        1000,    1,    2,    4,       8,     128,     511,      513, 
+        6020, 1830, 7040,  250,    1849,    9271,      12,       89,
+        1020, 1030, 2040, 2050, 1*M-128, 1*M+128, 1*M+500, 2*M-1024,
+    };
+
+    for (size_t i = 0; i < body_sizes.size(); ++i) {
+        auto path = util::str("/r", i);
+        urls.push_back(server.add_resource(path, util::random::printable_ascii(body_sizes[i])));
+    }
+
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), false, std::move(urls) });
+}
+
+BOOST_AUTO_TEST_CASE(test_storing_into_and_fetching_from_the_cache__local_many_parallel) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+    std::vector<util::Url> urls;
+
+    for (size_t i = 0; i < 32; ++i) {
+        auto path = util::str("/r", i);
+        urls.push_back(server.add_resource(path, util::random::printable_ascii(512)));
+    }
+
+    test_storing_into_and_fetching_from_the_cache_case(ctx, root, TestCase { std::move(server), true, std::move(urls) });
+}
+
+BOOST_AUTO_TEST_CASE(test_fetching_private_route) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+    std::vector<util::Url> urls;
+
+    for (size_t i = 0; i < 32; ++i) {
+        auto path = util::str("/r", i);
+        urls.push_back(server.add_resource(path, util::random::printable_ascii(1024)));
+    }
+
+    auto swarms = std::make_shared<MockDht::Swarms>();
+
+    auto tracker_addr = unwrap(I2pAddress::B32::parse(I2P_TRACKER_ADDR_STR));
+
+    run(ctx, [&, server = std::move(server)] (Async yield) {
+        auto i2p_service = create_i2p_service(yield);
+        auto sam_endpoint = unwrap(i2p_service.await_running_state(yield)).sam_endpoint;
+
+        const std::string injector_credentials = "username:password";
+
+    	Injector injector(
+	        make_config<InjectorConfig>({
+                "./no_injector_exec"s,
+                "--log-level=DEBUG",
+                "--repo"s, root.make_subdir("injector").string(),
+                "--credentials"s, injector_credentials,
+                // Because we're fetching from the local server
+                "--allow-private-targets",
+                "--listen-on-i2p=true"s,
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+            }),
+            ctx,
+            util::LogPath("injector"),
+            std::make_shared<MockDht>("injector", ctx.get_executor(), swarms)
+        );
+
+        Client client(
+            ctx,
+            make_config<ClientConfig>({
+                "./no_client_exec"s,
+                "--log-level=DEBUG"s,
+                "--repo"s, root.make_subdir("client").string(),
+                "--injector-credentials"s, injector_credentials,
+                "--i2p-bep3-tracker"s, tracker_addr.as_str(),
+                "--cache-type=bep3-http-over-i2p"s,
+                "--cache-http-public-key"s, injector.cache_http_public_key(),
+                "--injector-ep=i2p:" + unwrap(injector.i2p_address(yield)).to_b32().as_str(),
+                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+                "--enable-i2p-service-ext"s, util::str(sam_endpoint),
+                "--disable-origin-access"s,
+                // Bind to random ports to avoid clashes
+                "--listen-on-tcp=127.0.0.1:0"s,
+                "--front-end-ep=127.0.0.1:0"s,
+                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+                "--allow-private-targets",
+            }),
+            util::LogPath("client"),
+            [&ctx, swarms] () {
+                auto dht = std::make_shared<MockDht>("client", ctx.get_executor(), swarms);
+                dht->can_not_see("injector");
+                return dht;
+            }
+        );
+
+        // Clients are started explicitly
+        client.start();
+
+        auto ssl_ctx = server.ssl_context_for_client();
+
+        for (uint16_t i = 0; i < urls.size(); ++i) {
+            auto control_body = unwrap(fetch_from_origin(urls[i], ssl_ctx, yield)).body();
+
+            auto rq = build_private_request(urls[i], CacheType::Bep3HTTPOverI2P{});
+            auto rs = fetch_through_client(client, rq, yield);
+
+            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_proxy);
+            BOOST_REQUIRE_EQUAL(rs.body(), control_body);
+        }
+
+        injector.stop();
+        client.stop();
+    });
+}

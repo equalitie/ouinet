@@ -12,7 +12,12 @@ endif()
 
 set(OUINET_TEST_TARGETS)
 
-add_library(ouinet_test_utils OBJECT ./util/http_server.cpp)
+add_library(ouinet_test_utils OBJECT
+    ./util/http_server.cpp
+    ./util/http_client.cpp
+    ./util/request_builder.cpp
+)
+
 ouinet_setup(TARGET ouinet_test_utils LINK ouinet_asio)
 
 function(add_test)
