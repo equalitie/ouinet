@@ -50,4 +50,8 @@ build_image
 
 # After this you should be able to access i2p consose in your browser at
 # http://localhost:7657
+#
+# Note, that the SAM bridge doesn't always start automatically. In browser,
+# navigate to `Manage plugins` > `Clients` and (re-)start it through the button
+# in the `Control` column.
 docker run --network host -it --rm --name $container_name $image_name sudo -u i2p i2prouter console
