@@ -11,7 +11,7 @@
 #include "ouiservice/i2p/tracker.h"
 #include "util/unwrap.h"
 #include "util/test_dir.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 #include "util/async.h"
 #include "util/i2p.h"
 #include "util/wait_condition.h"

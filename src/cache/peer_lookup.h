@@ -51,7 +51,7 @@ public:
         // * Otherwise wait for the running job to finish
 
         if (!_job || !_job->is_running()) {
-            _job = make_job(yield.get_executor(), yield.log_path());
+            _job = make_job(yield.get_executor(), yield.trace());
         }
 
         if (_last_result.is_fresh()) {
@@ -96,13 +96,13 @@ protected:
 
 private:
 
-    std::unique_ptr<Job> make_job(AsioExecutor exec, Trace log_path) {
+    std::unique_ptr<Job> make_job(AsioExecutor exec, Trace trace) {
         auto job = std::make_unique<Job>(exec);
 
         job->start(
-            [this, log_path = std::move(log_path)]
+            [this, trace = std::move(trace)]
             (Async yield_) mutable -> std::expected<void, sys::error_code> {
-                auto yield = yield_.with_log_path(std::move(log_path));
+                auto yield = yield_.with_trace(std::move(trace));
 
                 auto result = timeout(
                     timeout_duration(),

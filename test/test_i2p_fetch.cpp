@@ -202,7 +202,7 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
 
         Injector injector(make_config<InjectorConfig>(std::move(injector_config)),
             ctx,
-            util::LogPath("injector"),
+            Trace("injector"),
             std::make_shared<MockDht>("injector", ctx.get_executor(), swarms));
 
         BOOST_TEST_MESSAGE("Setting up seeder");
@@ -231,7 +231,7 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
         }
 
         Client seeder(ctx, make_config<ClientConfig>(std::move(seeder_config)),
-            util::LogPath("seeder"),
+            Trace("seeder"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("seeder", ctx.get_executor(), swarms);
                 dht->can_not_see("injector");
@@ -261,7 +261,7 @@ void test_storing_into_and_fetching_from_the_cache_case(asio::io_context& ctx, c
         }
 
         Client leecher(ctx, make_config<ClientConfig>(std::move(leecher_config)),
-            util::LogPath("leecher"),
+            Trace("leecher"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("leecher", ctx.get_executor(), swarms);
                 dht->can_not_see("seeder");
@@ -442,7 +442,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route) {
                 "--enable-i2p-service-ext"s, util::str(sam_endpoint),
             }),
             ctx,
-            util::LogPath("injector"),
+            Trace("injector"),
             std::make_shared<MockDht>("injector", ctx.get_executor(), swarms)
         );
 
@@ -466,7 +466,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_private_route) {
                 "--tls-ca-cert-store-file="s + server.certificate_path().string(),
                 "--allow-private-targets",
             }),
-            util::LogPath("client"),
+            Trace("client"),
             [&ctx, swarms] () {
                 auto dht = std::make_shared<MockDht>("client", ctx.get_executor(), swarms);
                 dht->can_not_see("injector");

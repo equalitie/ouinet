@@ -372,7 +372,7 @@ class OUINET_COMMON_API DhtNode {
     bootstrap::Config _bootstrap_config;
     PeerFilter _peer_filter = PeerFilter::martian;
     metrics::DhtNode _metrics;
-    Trace _log_path;
+    Trace _trace;
 };
 
 } // namespace ouinet::bittorent

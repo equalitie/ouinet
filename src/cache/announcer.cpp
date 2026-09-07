@@ -64,16 +64,16 @@ struct Announcer::Loop {
     size_t _simultaneous_announcements;
     Cancel _cancel;
     Cancel _timer_cancel;
-    Trace _log_path;
+    Trace _trace;
 
     static Clock::duration success_reannounce_period() { return 20min; }
     static Clock::duration failure_reannounce_period() { return 5min;  }
 
-    Loop(AsioExecutor ex, size_t simultaneous_announcements, Trace log_path)
+    Loop(AsioExecutor ex, size_t simultaneous_announcements, Trace trace)
         : ex(ex)
         , entries(ex)
         , _simultaneous_announcements(simultaneous_announcements)
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
     { }
 
     inline static bool debug() { return get_logger().get_threshold() <= DEBUG; }
@@ -90,10 +90,10 @@ struct Announcer::Loop {
         bool already_has_key = (entry_i != entries.end());
 
         if (already_has_key) {
-            LOG_DEBUG(_log_path, " Adding ", key, " (already exists)");
+            LOG_DEBUG(_trace, " Adding ", key, " (already exists)");
             entry_i->first.to_remove = false;
         } else {
-            LOG_DEBUG(_log_path, " Adding ", key);
+            LOG_DEBUG(_trace, " Adding ", key);
         }
 
         if (already_has_key) return false;
@@ -120,7 +120,7 @@ struct Announcer::Loop {
             if (i->first.key == key) break;  // found
         if (i == entries.end()) return false;  // not found
 
-        LOG_DEBUG(_log_path, " Marking ", key, " for removal");
+        LOG_DEBUG(_trace, " Marking ", key, " for removal");
         // The actual removal is not done here but in the main loop.
         i->first.to_remove = true;
         // No new entries, so no `_timer_cancel` reset.
@@ -174,7 +174,7 @@ struct Announcer::Loop {
             ss << " ago";
         };
 
-        LOG_DEBUG(_log_path, " Entries:");
+        LOG_DEBUG(_trace, " Entries:");
         for (auto& ep : entries) {
             auto& e = ep.first;
             ss << " " << e.infohash << " | successful_update=";
@@ -183,7 +183,7 @@ struct Announcer::Loop {
             print(e.failed_update);
             ss << " | key=" << e.key;
 
-            LOG_DEBUG(_log_path, " ", ss.str());
+            LOG_DEBUG(_trace, " ", ss.str());
             ss.str({});
         }
     }
@@ -222,15 +222,15 @@ struct Announcer::Loop {
 
     void start()
     {
-        spawn_detached(ex, _cancel, _log_path, [this] (Async yield) {
+        spawn_detached(ex, _cancel, _trace, [this] (Async yield) {
             loop(yield);
         });
     }
 
     void loop(Async yield)
     {
-        auto on_exit = defer([log_path = yield.log_path(), cancel = Cancel(yield.get_cancel())] {
-            LOG_DEBUG(log_path, " Exiting the loop; cancel=", (cancel ? "true":"false"));
+        auto on_exit = defer([trace = yield.trace(), cancel = Cancel(yield.get_cancel())] {
+            LOG_DEBUG(trace, " Exiting the loop; cancel=", (cancel ? "true":"false"));
         });
 
         WaitCondition wc(ex);
@@ -295,15 +295,15 @@ struct Bep5Loop : public Announcer::Loop {
     Bep5Loop(
         shared_ptr<bt::DhtBase> dht,
         size_t simultaneous_announcements,
-        Trace log_path
+        Trace trace
     )
-        : Loop(dht->get_executor(), simultaneous_announcements, std::move(log_path))
+        : Loop(dht->get_executor(), simultaneous_announcements, std::move(trace))
         , dht(std::move(dht))
     { }
 
     void start()
     {
-        spawn_detached(ex, _cancel, _log_path, [this] (Async yield) {
+        spawn_detached(ex, _cancel, _trace, [this] (Async yield) {
             // Wait for DHT to be ready before starting the loop
             LOG_DEBUG(yield, " Waiting for DHT");
             dht->wait_all_ready(yield);
@@ -314,11 +314,11 @@ struct Bep5Loop : public Announcer::Loop {
 
     std::expected<void, sys::error_code> announce(Entry& e, Async yield) override
     {
-        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e.key, "...");
+        LOG_DEBUG(_trace, " Announcing (BEP5/DHT): ", e.key, "...");
 
         auto endpoints = dht->tracker_announce(e.infohash, std::nullopt, yield);
 
-        LOG_DEBUG(_log_path, " Announcing (BEP5/DHT): ", e.key
+        LOG_DEBUG(_trace, " Announcing (BEP5/DHT): ", e.key
                            , ": done; result=", ouinet::debug(endpoints));
 
         if (!endpoints) {
@@ -352,11 +352,11 @@ Announcer::~Announcer() {}
 Bep5Announcer::Bep5Announcer(
     std::shared_ptr<bittorrent::DhtBase> dht,
     size_t simultaneous_announcements,
-    Trace log_path
+    Trace trace
 )
     : Announcer(dht->get_executor(), simultaneous_announcements)
 {
-    _loop = make_unique<Bep5Loop>(std::move(dht), simultaneous_announcements, std::move(log_path));
+    _loop = make_unique<Bep5Loop>(std::move(dht), simultaneous_announcements, std::move(trace));
     static_cast<Bep5Loop*>(_loop.get())->start();
 }
 

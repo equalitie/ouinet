@@ -49,17 +49,17 @@ struct GarbageCollector {
     cache::HttpStore& http_store;  // for looping over entries
     cache::HttpStore::keep_func keep;  // caller-provided checks
 
-    Trace _log_path;
+    Trace _trace;
     AsioExecutor _executor;
     Cancel _cancel;
 
     GarbageCollector( cache::HttpStore& http_store
                     , cache::HttpStore::keep_func keep
-                    , Trace log_path
+                    , Trace trace
                     , AsioExecutor ex)
         : http_store(http_store)
         , keep(std::move(keep))
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
         , _executor(ex)
     {}
 
@@ -67,7 +67,7 @@ struct GarbageCollector {
 
     void start()
     {
-        spawn_detached(_executor, _cancel, _log_path, [&] (Async yield) {
+        spawn_detached(_executor, _cancel, _trace, [&] (Async yield) {
             LOG_DEBUG(yield, " Garbage collector started");
             while (true) {
                 async_sleep(chrono::minutes(7), yield);
@@ -110,7 +110,7 @@ struct Client::Impl {
     util::LruCache<std::string, shared_ptr<I2pTrackerLookup>> _i2p_peer_lookups;
     LocalPeerDiscovery _local_peer_discovery;
     std::unique_ptr<DhtGroups> _groups;
-    Trace _log_path;
+    Trace _trace;
 
     Impl( AsioExecutor ex
         , std::set<udp::endpoint> lan_my_eps
@@ -119,7 +119,7 @@ struct Client::Impl {
         , Client::opt_path static_cache_dir
         , unique_ptr<cache::HttpStore> http_store_
         , boost::posix_time::time_duration max_cached_age
-        , Trace log_path)
+        , Trace trace)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(ex)
         , _lan_my_endpoints(std::move(lan_my_eps))
@@ -132,11 +132,11 @@ struct Client::Impl {
         , _max_cached_age(max_cached_age)
         , _gc(*_http_store, [&] (const auto& resource_id, auto rr, auto y) {
               return keep_cache_entry(resource_id, std::move(rr), y);
-          }, log_path, _ex)
+          }, trace, _ex)
         , _dht_peer_lookups(256)
         , _i2p_peer_lookups(256)
         , _local_peer_discovery(_ex, _lan_my_endpoints)
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
     {}
 
     std::string compute_swarm_name(boost::string_view group) const {
@@ -170,7 +170,7 @@ struct Client::Impl {
         _bep5_announcer = std::make_unique<Bep5Announcer>(
             _dht,
             simultaneous_announcements,
-            _log_path.tag("announcer")
+            _trace.tag("announcer")
         );
 
         // Announce all groups.
@@ -458,7 +458,7 @@ struct Client::Impl {
             // could be reused in the multi-peer download below.
         }
 
-        Trace log_path = yield.log_path().tag("multi_peer_reader");
+        Trace trace = yield.trace().tag("multi_peer_reader");
 
         LOG_DEBUG(yield, " Distributed cache lookup: ", request.cache_type());
         LOG_DEBUG(yield, "    dht=", (_dht ? "yes" : "no"));
@@ -490,7 +490,7 @@ struct Client::Impl {
                             , std::move(local_peers)
                             , std::move(peer_lookup_)
                             , _newest_proto_seen
-                            , log_path);
+                            , trace);
                     }
                     else {
                         if (get_logger().get_threshold() <= DEBUG) {
@@ -507,7 +507,7 @@ struct Client::Impl {
                             , std::move(local_peers)
                             , _lan_my_endpoints
                             , _newest_proto_seen
-                            , log_path);
+                            , trace);
                     }
                 },
                 [&] (CacheType::Bep3HTTPOverI2P) -> VisitR {
@@ -537,7 +537,7 @@ struct Client::Impl {
                         , std::move(i2p_lookup)
                         , _i2p_tracker->get_session()
                         , _newest_proto_seen
-                        , log_path);
+                        , trace);
                 }
             });
 
@@ -886,7 +886,7 @@ Client::build( std::set<udp::endpoint> lan_my_eps
 
     unique_ptr<Impl> impl(new Impl( ex, std::move(lan_my_eps)
                                   , cache_pk, std::move(cache_dir), std::move(static_cache_dir)
-                                  , std::move(http_store), max_cached_age, yield.log_path()));
+                                  , std::move(http_store), max_cached_age, yield.trace()));
 
     if (auto r = impl->load_stored_groups(yield); !r) {
         return std::unexpected(r.error());

@@ -1,6 +1,6 @@
 #include "bridge.hpp"
 #include "ouinet-test-rs/src/lib.rs.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 
 namespace util = ouinet::util;
 

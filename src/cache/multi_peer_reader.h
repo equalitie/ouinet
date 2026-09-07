@@ -7,7 +7,7 @@
 #include "../namespaces.h"
 #include "dht_lookup.h"
 #include "hash_list.h"
-#include "../util/log_path.h"
+#include "../util/trace.h"
 #include "../session.h"
 #include "resource_id.h"
 #include "util/crypto_stream_key.h"
@@ -100,7 +100,7 @@ private:
 
     boost::optional<HashList> _reference_hash_list;
     std::unique_ptr<Peers> _peers;
-    Trace _log_path;
+    Trace _trace;
     bool _head_sent = false;
     size_t _block_id = 0;
 

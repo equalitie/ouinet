@@ -207,7 +207,7 @@ DhtNode::DhtNode( const AsioExecutor& exec
                 , const uint32_t mux_rx_limit
                 , fs::path storage_dir
                 , bootstrap::Config bs
-                , Trace log_path
+                , Trace trace
 ):
     _exec(exec),
     _ready(false),
@@ -217,7 +217,7 @@ DhtNode::DhtNode( const AsioExecutor& exec
     _storage_dir(std::move(storage_dir)),
     _bootstrap_config(std::move(bs)),
     _metrics(std::move(metrics)),
-    _log_path(std::move(log_path))
+    _trace(std::move(trace))
 {
 }
 
@@ -402,7 +402,7 @@ void DhtNode::store_contacts() const
 
     auto contacts = _routing_table->dump_contacts();
 
-    spawn_detached(_exec, _cancel, _log_path, [
+    spawn_detached(_exec, _cancel, _trace, [
         path = std::move(path),
         contacts = std::move(contacts)
     ] (Async yield) mutable {
@@ -2017,7 +2017,7 @@ void DhtNode::send_ping(NodeContact contact)
     spawn_detached(
         _exec,
         _cancel,
-        _log_path,
+        _trace,
         [this, contact] (Async yield) mutable {
             std::ignore = send_ping(contact, yield);
         }
@@ -2512,7 +2512,7 @@ MainlineDht::MainlineDht( const AsioExecutor& exec
                         , uint32_t mux_rx_limit
                         , fs::path storage_dir
                         , bootstrap::Config bootstrap_config
-                        , Trace log_path)
+                        , Trace trace)
     : _exec(exec)
     , _ready_cv(exec)
     , _dns_resolver(std::move(dns_resolver))
@@ -2520,7 +2520,7 @@ MainlineDht::MainlineDht( const AsioExecutor& exec
     , _storage_dir(std::move(storage_dir))
     , _bootstrap_config(std::move(bootstrap_config))
     , _metrics(std::move(metrics))
-    , _log_path(std::move(log_path))
+    , _trace(std::move(trace))
 {
 }
 
@@ -2593,7 +2593,7 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         _mux_rx_limit,
         _storage_dir,
         _bootstrap_config,
-        _log_path
+        _trace
     );
     node->set_peer_filter(_peer_filter);
 
@@ -2604,12 +2604,12 @@ MainlineDht::add_endpoint(asio_utp::udp_multiplexer m)
         _exec,
         [
             this,
-            log_path = _log_path,
+            trace = _trace,
             m = std::move(m),
             promise = std::move(promise),
             local_ep
         ](auto y) mutable {
-            Async yield(y, _cancel, std::move(log_path));
+            Async yield(y, _cancel, std::move(trace));
 
             auto cancelled = yield.cancel_slot([&] {
                 if (auto it = _nodes.find(local_ep); it != _nodes.end()) {

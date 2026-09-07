@@ -1,4 +1,4 @@
-#include "log_path.h"
+#include "trace.h"
 #include "intrusive_list.h"
 
 namespace ouinet {
@@ -12,8 +12,8 @@ struct Trace::Node {
     std::shared_ptr<Node> _parent;
     std::shared_ptr<RootData> _root_data;
 
-    intrusive::list_hook _hook;
-    intrusive::list<Node, &Node::_hook> _children;
+    util::intrusive::list_hook _hook;
+    util::intrusive::list<Node, &Node::_hook> _children;
 
     Node(std::string tag, std::shared_ptr<Node> parent) :
         _tag(std::move(tag)),

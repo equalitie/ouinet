@@ -1,7 +1,7 @@
 #include "service.h"
 #include "util/async.h"
 #include "util/spawn_for_result.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 #include "util/str.h"
 #include "util/watch.h"
 #include "util/select.h"
@@ -132,7 +132,7 @@ struct I2pService::Inner {
 
         WaitCondition wc(yield.get_executor());
 
-        auto server_task = spawn_for_result(yield.get_executor(), yield.get_cancel(), yield.log_path(), [&] (Async yield) {
+        auto server_task = spawn_for_result(yield.get_executor(), yield.get_cancel(), yield.trace(), [&] (Async yield) {
             return timeout(60s, [&] (Async yield) -> R { return server_session.accept(yield); }, yield);
         });
 
@@ -273,7 +273,7 @@ struct I2pService::Inner {
         LOG_DEBUG(yield, " Starting");
         auto i2pd = I2pd::start_lib(
             I2pd::Config(conf->datadir),
-            yield.log_path()
+            yield.trace()
         );
 
         if (!i2pd) {
@@ -326,10 +326,10 @@ struct I2pService::Inner {
 };
 
 /* static */
-I2pService I2pService::start(Config config, asio::any_io_executor exec, Cancel cancel, Trace log_path) {
+I2pService I2pService::start(Config config, asio::any_io_executor exec, Cancel cancel, Trace trace) {
     auto inner = std::make_shared<Inner>(std::move(config), exec);
 
-    inner->task = spawn_for_result(exec, cancel, log_path, [inner = inner.get()] (Async yield) {
+    inner->task = spawn_for_result(exec, cancel, trace, [inner = inner.get()] (Async yield) {
             if (yield.is_cancelled()) return;
             inner->run(yield.tag("I2pService"));
         });

@@ -42,12 +42,12 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
     Bep5AnnouncerImpl( NodeID infohash
                      , std::weak_ptr<DhtBase> dht_w
                      , Type type
-                     , Trace log_path)
+                     , Trace trace)
         : type(type)
         , cv(dht_w.lock()->get_executor())
         , infohash(infohash)
         , dht_w(std::move(dht_w))
-        , log_path(log_path.tag("Bep5Announcer"))
+        , trace(trace.tag("Bep5Announcer"))
     {}
 
     void start()
@@ -59,7 +59,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
 
             spawn_detached(
                 exec,
-                log_path,
+                trace,
                 [self = std::move(self)] (Async yield) mutable {
                     self->loop(yield);
                 }
@@ -140,7 +140,7 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
 
     void update() {
         if (type != Type::Manual) return;
-        LOG_DEBUG(log_path, " Manual update requested for infohash: ", infohash);
+        LOG_DEBUG(trace, " Manual update requested for infohash: ", infohash);
         go_again = true;
         cv.notify();
     }
@@ -150,18 +150,18 @@ struct ouinet::bittorrent::detail::Bep5AnnouncerImpl
     bool go_again = false;
     NodeID infohash;
     weak_ptr<DhtBase> dht_w;
-    Trace log_path;
+    Trace trace;
     Cancel cancel;
     static const bool debug = false;  // for development testing only
 };
 
 Bep5PeriodicAnnouncer::Bep5PeriodicAnnouncer( NodeID infohash
                                             , std::weak_ptr<DhtBase> dht
-                                            , Trace log_path)
+                                            , Trace trace)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
                                                   , std::move(dht)
                                                   , Type::Periodic
-                                                  , std::move(log_path)))
+                                                  , std::move(trace)))
 {
     _impl->start();
 }
@@ -174,11 +174,11 @@ Bep5PeriodicAnnouncer::~Bep5PeriodicAnnouncer()
 
 Bep5ManualAnnouncer::Bep5ManualAnnouncer( NodeID infohash
                                         , std::weak_ptr<DhtBase> dht
-                                        , Trace log_path)
+                                        , Trace trace)
     : _impl(make_shared<detail::Bep5AnnouncerImpl>( infohash
                                                   , std::move(dht)
                                                   , Type::Manual
-                                                  , std::move(log_path)))
+                                                  , std::move(trace)))
 {
     _impl->start();
 }

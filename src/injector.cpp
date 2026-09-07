@@ -77,7 +77,7 @@ static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 struct Injector::Inner {
-    Trace _log_path;
+    Trace _trace;
     std::optional<I2pService> _i2p_service;
     std::optional<I2pSessionTask> _i2p_session_task;
 
@@ -90,7 +90,7 @@ struct Injector::Inner {
             return &*_i2p_service;
         }
 
-        _i2p_service = I2pService::start(config, exec, cancel, _log_path);
+        _i2p_service = I2pService::start(config, exec, cancel, _trace);
         return &*_i2p_service;
     }
 
@@ -99,7 +99,7 @@ struct Injector::Inner {
 
         if (_i2p_session_task) return *_i2p_session_task;
 
-        _i2p_session_task = spawn_for_result(exec, cancel, _log_path, [this, &config] (Async yield) -> R {
+        _i2p_session_task = spawn_for_result(exec, cancel, _trace, [this, &config] (Async yield) -> R {
             auto cfg = config.i2p_service_config();
 
             if (!cfg) {
@@ -892,12 +892,12 @@ void listen( InjectorConfig& config
 Injector::Injector(
         InjectorConfig config,
         asio::io_context& ctx,
-        Trace log_path,
+        Trace trace,
         std::shared_ptr<bittorrent::MockDht> mock_dht) :
     _exec(ctx.get_executor()),
     _config(std::move(config)),
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
-    _inner(std::make_unique<Inner>(log_path))
+    _inner(std::make_unique<Inner>(trace))
 {
     #ifndef __WIN32
     if (_config.open_file_limit()) {
@@ -913,11 +913,11 @@ Injector::Injector(
         , _config.repo_root() / OUINET_TLS_DH_FILE );
 
     if (!_config.is_proxy_enabled())
-        LOG_INFO(log_path, " Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+        LOG_INFO(trace, " Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = _config.target_rx())
-        LOG_INFO(log_path, " Target URIs restricted to regular expression: ", *target_rx_o);
+        LOG_INFO(trace, " Target URIs restricted to regular expression: ", *target_rx_o);
     if (_config.is_private_target_allowed()) {
-        LOG_INFO(log_path, " Allowing injection of private targets.");
+        LOG_INFO(trace, " Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
     LOG_INFO( "DNS protocols enabled: ["
@@ -928,7 +928,7 @@ Injector::Injector(
 
     if (_config.tcp_endpoint()) {
         tcp::endpoint endpoint = *_config.tcp_endpoint();
-        LOG_INFO(log_path, " TCP address: ", endpoint);
+        LOG_INFO(trace, " TCP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
@@ -944,7 +944,7 @@ Injector::Injector(
 
     if (_config.tcp_tls_endpoint()) {
         tcp::endpoint endpoint = *_config.tcp_tls_endpoint();
-        LOG_INFO(log_path, " TCP/TLS address: ", endpoint);
+        LOG_INFO(trace, " TCP/TLS address: ", endpoint);
         util::create_state_file( _config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
@@ -954,12 +954,12 @@ Injector::Injector(
 
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
-        LOG_INFO(log_path, " uTP address: ", endpoint);
+        LOG_INFO(trace, " uTP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, log_path);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
         proxy_server->add(std::move(srv));
     }
 
@@ -967,18 +967,18 @@ Injector::Injector(
 
         udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, log_path);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
 
         auto local_ep = base->local_endpoint();
 
         if (local_ep) {
-            LOG_INFO(log_path, " uTP/TLS address: ", *local_ep);
+            LOG_INFO(trace, " uTP/TLS address: ", *local_ep);
             util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
             proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
 
         } else {
-            LOG_ERROR(log_path, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
+            LOG_ERROR(trace, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
         }
     }
 
@@ -994,7 +994,7 @@ Injector::Injector(
             bt::bootstrap::Config()
                 .with_default(!_config.bt_bootstrap_no_default())
                 .with_extras(_config.bt_bootstrap_extras()),
-            log_path.tag("dht")
+            trace.tag("dht")
         );
 
         if (_config.bt_allow_martians()) {
@@ -1009,13 +1009,13 @@ Injector::Injector(
     assert(!_dht->local_endpoints().empty());
 
     if (_dht->local_endpoints().empty())
-        LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
+        LOG_ERROR(trace, " Failed to bind the BitTorrent DHT to any local endpoint");
 
     proxy_server->add(make_unique<ouiservice::Bep5Server>(
         _dht,
         _ssl_context.get(),
         _config.bep5_injector_swarm_name(),
-        log_path
+        trace
     ));
 
     if (_config.listen_on_i2p()) {
@@ -1030,45 +1030,45 @@ Injector::Injector(
                 auto& s = _session_task.wait_ref(yield);
 
                 if (!s) {
-                    LOG_WARN(_log_path, " I2P session was not created");
+                    LOG_WARN(_trace, " I2P session was not created");
                     return std::unexpected(s.error());
                 }
 
                 auto result = s->accept(yield);
 
                 if (!result.has_value()) {
-                    LOG_WARN(_log_path, " Failed to accept I2P connection");
+                    LOG_WARN(_trace, " Failed to accept I2P connection");
                     return std::unexpected(result.error());
                 }
 
                 return std::move(*result);
             }
 
-            Server(I2pSessionTask session_task, Trace log_path):
+            Server(I2pSessionTask session_task, Trace trace):
                 _session_task(std::move(session_task)),
-                _log_path(std::move(log_path))
+                _trace(std::move(trace))
             {}
 
             I2pSessionTask _session_task;
             LifetimeCancel _cancel;
-            Trace _log_path;
+            Trace _trace;
         };
 
         proxy_server->add(std::make_unique<Server>(
             _inner->get_or_create_i2p_session(_exec, _config, _cancel),
-            log_path
+            trace
         ));
     }
 
-    LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
+    LOG_INFO(trace, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
     task::spawn_detached(_exec, [
         this,
         proxy_server = std::move(proxy_server),
         cancel = _cancel,
-        log_path
+        trace
     ] (asio::yield_context yield) mutable {
-        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, log_path));
+        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, trace));
     });
 }
 

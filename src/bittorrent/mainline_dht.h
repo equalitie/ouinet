@@ -21,7 +21,7 @@
 
 #include "../util/condition_variable.h"
 #include "../util/executor.h"
-#include "../util/log_path.h"
+#include "../util/trace.h"
 #include "../namespaces.h"
 
 namespace ouinet {
@@ -128,7 +128,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     bootstrap::Config _bootstrap_config;
     PeerFilter _peer_filter = PeerFilter::martian;
     metrics::MainlineDht _metrics;
-    Trace _log_path;
+    Trace _trace;
 };
 
 } // namespace ouinet::bittorrent

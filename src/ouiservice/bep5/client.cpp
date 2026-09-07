@@ -86,7 +86,7 @@ private:
     std::vector<WaitCondition::Lock> _wait_condition_locks;
     Peers _peers;
     const bool _connect_proxy;
-    Trace _log_path;
+    Trace _trace;
 
 public:
     Swarm( bt::NodeID infohash
@@ -95,14 +95,14 @@ public:
          , SwarmType type
          , Cancel& cancel
          , bool connect_proxy
-         , Trace log_path)
+         , Trace trace)
         : _dht(std::move(dht))
         , _infohash(infohash)
         , _type(type)
         , _lifetime_cancel(cancel)
         , _peers(capacity)
         , _connect_proxy(connect_proxy)
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
     {}
 
     ~Swarm() {
@@ -111,7 +111,7 @@ public:
     }
 
     void start() {
-        spawn_detached(_dht->get_executor(), _lifetime_cancel, _log_path, [&] (Async yield) {
+        spawn_detached(_dht->get_executor(), _lifetime_cancel, _trace, [&] (Async yield) {
             loop(yield);
         });
     }
@@ -181,7 +181,7 @@ private:
         auto opt_m = choose_multiplexer_for(*_dht, ep);
 
         if (!opt_m) {
-            LOG_ERROR(_log_path, " Failed to choose multiplexer");
+            LOG_ERROR(_trace, " Failed to choose multiplexer");
             return nullptr;
         }
 
@@ -189,7 +189,7 @@ private:
             (_dht->get_executor(), std::move(*opt_m), ep);
 
         if (!utp_client->verify_remote_endpoint()) {
-            LOG_ERROR(_log_path, " Failed to bind uTP client");
+            LOG_ERROR(_trace, " Failed to bind uTP client");
             return nullptr;
         }
 
@@ -228,19 +228,19 @@ public:
                   , bool helper_announcement_enabled
                   , std::shared_ptr<bt::DhtBase> dht
                   , Cancel& cancel
-                  , const Trace& log_path)
+                  , const Trace& trace)
         : _lifetime_cancel(cancel)
         , _injector_swarm(std::move(injector_swarm))
         , _random_generator(std::random_device()())
         , _helper_announcer(std::make_unique<bt::Bep5ManualAnnouncer>( util::sha1_digest(helper_swarm_name)
                                                                      , dht
-                                                                     , log_path))
+                                                                     , trace))
         , _helper_announcement_enabled(helper_announcement_enabled)
     {
         spawn_detached(
             _injector_swarm->get_executor(),
             _lifetime_cancel,
-            log_path,
+            trace,
             [this] (Async yield) { loop(yield); }
         );
     }
@@ -368,14 +368,14 @@ private:
     std::mt19937 _random_generator;
     std::unique_ptr<bt::Bep5ManualAnnouncer> _helper_announcer;
     bool _helper_announcement_enabled = true;
-    Trace _log_path;
+    Trace _trace;
 };
 
 Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
                       , std::string injector_swarm_name
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets
-                      , const Trace& log_path)
+                      , const Trace& trace)
     : _dht(dht)
     , _injector_swarm_name(std::move(injector_swarm_name))
     , _injector_tls_ctx(injector_tls_ctx)
@@ -383,7 +383,7 @@ Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
     , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
-        LOG_ERROR(log_path, " DHT has no endpoints!");
+        LOG_ERROR(trace, " DHT has no endpoints!");
     }
 }
 
@@ -393,7 +393,7 @@ Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
                       , bool helper_announcement_enabled
                       , asio::ssl::context* injector_tls_ctx
                       , Target targets
-                      , const Trace& log_path)
+                      , const Trace& trace)
     : _dht(dht)
     , _injector_swarm_name(std::move(injector_swarm_name))
     , _helpers_swarm_name(std::move(helpers_swarm_name))
@@ -403,7 +403,7 @@ Bep5Client::Bep5Client( std::shared_ptr<bt::DhtBase> dht
     , _default_targets(targets)
 {
     if (_dht->local_endpoints().empty()) {
-        LOG_ERROR(log_path, " DHT has no endpoints!");
+        LOG_ERROR(trace, " DHT has no endpoints!");
     }
 
     assert(_helpers_swarm_name.size());
@@ -425,7 +425,7 @@ sys::error_code Bep5Client::start(Async yield)
             SwarmType::injector,
             _cancel,
             false,
-            yield.log_path()
+            yield.trace()
         ));
         _injector_swarm->start();
     }
@@ -442,7 +442,7 @@ sys::error_code Bep5Client::start(Async yield)
             SwarmType::helper,
             _cancel,
             true,
-            yield.log_path()
+            yield.trace()
         ));
         _helpers_swarm->start();
 
@@ -458,7 +458,7 @@ sys::error_code Bep5Client::start(Async yield)
                                                   , _helper_announcement_enabled
                                                   , _dht
                                                   , _cancel
-                                                  , yield.log_path()));
+                                                  , yield.trace()));
     } else {
         _injector_swarm->wait_for_ready(yield);
     }

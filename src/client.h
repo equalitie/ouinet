@@ -8,7 +8,7 @@
 #include "api.h"
 #include "client_config.h"
 #include "bittorrent/mock_dht.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 
 namespace ouinet {
 
@@ -38,7 +38,7 @@ public:
         asio::io_context&,
         ClientConfig,
         // For use in tests
-        Trace log_path = {},
+        Trace trace = {},
         std::optional<MockDhtBuilder> dht_builder = {});
 
     ~Client();

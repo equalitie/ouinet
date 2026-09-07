@@ -127,14 +127,14 @@ public:
 
     HashList _hash_list;
     Cancel _lifetime_cancel;
-    Trace _log_path;
+    Trace _trace;
 
-    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, sign::PublicKey cache_pk, Trace log_path) :
+    Peer(AsioExecutor exec, const ResourceId& resource_id, const CryptoStreamKey& resource_key, sign::PublicKey cache_pk, Trace trace) :
         _exec(exec),
         _resource_id(resource_id),
         _resource_key(resource_key),
         _cache_pk(cache_pk),
-        _log_path(std::move(log_path))
+        _trace(std::move(trace))
     {
     }
 
@@ -429,7 +429,7 @@ public:
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<DhtLookup> peer_lookup
          , std::shared_ptr<unsigned> newest_proto_seen
-         , Trace log_path)
+         , Trace trace)
         : _exec(exec)
         , _cv(_exec)
         , _cache_pk(std::move(cache_pk))
@@ -440,7 +440,7 @@ public:
         , _resource_key(resource_key)
         , _dht_lookup(std::move(peer_lookup))
         , _newest_proto_seen(std::move(newest_proto_seen))
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
         , _random_generator(_random_device())
     {
         if (!_dht_lookup) {
@@ -451,7 +451,7 @@ public:
         spawn_detached(
             _exec,
             _lifetime_cancel,
-            _log_path,
+            _trace,
             [this] (Async yield) mutable {
                 auto dht = _dht_lookup->get_dht_lock();
                 assert(dht);
@@ -510,10 +510,10 @@ public:
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
-         , Trace log_path)
+         , Trace trace)
         : Peers( exec, std::move(lan_my_eps), {}, std::move(lan_peer_eps)
                , std::move(cache_pk), resource_id, resource_key, nullptr
-               , std::move(newest_proto_seen), std::move(log_path))
+               , std::move(newest_proto_seen), std::move(trace))
     {}
 
     // Constructor for BEP3 tracker + I2P peers
@@ -526,7 +526,7 @@ public:
          , std::shared_ptr<I2pTrackerLookup> i2p_lookup
          , std::shared_ptr<I2pSession> i2p_session
          , std::shared_ptr<unsigned> newest_proto_seen
-         , Trace log_path)
+         , Trace trace)
         : _exec(exec)
         , _cv(_exec)
         , _cache_pk(std::move(cache_pk))
@@ -535,10 +535,10 @@ public:
         , _i2p_lookup(std::move(i2p_lookup))
         , _i2p_session(std::move(i2p_session))
         , _newest_proto_seen(std::move(newest_proto_seen))
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
         , _random_generator(_random_device())
     {
-        spawn_detached(_exec, _lifetime_cancel, _log_path,  [this] (Async yield) mutable {
+        spawn_detached(_exec, _lifetime_cancel, _trace,  [this] (Async yield) mutable {
             auto i2p_dests = _i2p_lookup->get(yield);
 
             if (!i2p_dests.has_value()) {
@@ -561,7 +561,7 @@ public:
 
         if (!ip.second) return; // Already inserted
 
-        ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, _log_path);
+        ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, _trace);
         Peer* peer = ip.first->second.get();
 
         _candidate_peers.push_back(*peer);
@@ -569,7 +569,7 @@ public:
         spawn_detached(
             _exec,
             _lifetime_cancel,
-            _log_path,
+            _trace,
             [
                 this,
                 peer,
@@ -628,11 +628,11 @@ public:
 
         auto ip = _all_udp_peers.insert({ep, unique_ptr<Peer>()});
 
-        auto peer_log_path = _log_path.tag(util::str(ep));
+        auto peer_trace = _trace.tag(util::str(ep));
 
         if (!ip.second) return; // Already inserted
 
-        ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, peer_log_path);
+        ip.first->second = make_unique<Peer>(_exec, _resource_id, _resource_key, _cache_pk, peer_trace);
         Peer* peer = ip.first->second.get();
 
         _candidate_peers.push_back(*peer);
@@ -640,7 +640,7 @@ public:
         spawn_detached(
             _exec,
             _lifetime_cancel,
-            peer_log_path,
+            peer_trace,
             [
                 this,
                 ep,
@@ -802,7 +802,7 @@ private:
     std::shared_ptr<I2pTrackerLookup> _i2p_lookup;
     std::shared_ptr<I2pSession> _i2p_session;
     std::shared_ptr<unsigned> _newest_proto_seen;
-    Trace _log_path;
+    Trace _trace;
 
     Cancel _lifetime_cancel;
 
@@ -817,9 +817,9 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::set<asio::ip::udp::endpoint> lan_my_eps
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , Trace log_path)
+                                , Trace trace)
     : _executor(ex)
-    , _log_path(std::move(log_path))
+    , _trace(std::move(trace))
 {
     _peers = make_unique<Peers>(ex
                                , std::move(lan_my_eps)
@@ -828,7 +828,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , std::move(resource_id)
                                , std::move(resource_key)
                                , std::move(newest_proto_seen)
-                               , _log_path.tag("Peers"));
+                               , _trace.tag("Peers"));
 }
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
@@ -838,9 +838,9 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
                                 , std::shared_ptr<DhtLookup> peer_lookup
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , Trace log_path)
+                                , Trace trace)
     : _executor(ex)
-    , _log_path(std::move(log_path))
+    , _trace(std::move(trace))
 {
     _peers = make_unique<Peers>(ex
                                , peer_lookup->get_dht_lock()->local_endpoints()
@@ -851,7 +851,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , std::move(resource_key)
                                , std::move(peer_lookup)
                                , std::move(newest_proto_seen)
-                               , _log_path.tag("Peers"));
+                               , _trace.tag("Peers"));
 }
 
 MultiPeerReader::MultiPeerReader( AsioExecutor ex
@@ -861,9 +861,9 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , std::shared_ptr<I2pTrackerLookup> i2p_lookup
                                 , std::shared_ptr<I2pSession> i2p_session
                                 , std::shared_ptr<unsigned> newest_proto_seen
-                                , Trace log_path)
+                                , Trace trace)
     : _executor(ex)
-    , _log_path(log_path)
+    , _trace(trace)
 {
     _peers = make_unique<Peers>(ex
                                , std::move(cache_pk)
@@ -872,7 +872,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                , std::move(i2p_lookup)
                                , std::move(i2p_session)
                                , std::move(newest_proto_seen)
-                               , log_path);
+                               , trace);
 }
 
 struct MultiPeerReader::PreFetchSequential : MultiPeerReader::PreFetch {
