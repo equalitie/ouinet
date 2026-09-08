@@ -1012,7 +1012,6 @@ ClientFrontEnd::serve( ClientConfig& config
         handle_api_groups(path, req, res, ss, request_arguments, config.is_frontend_post_requirement_enabled(), cache_client);
     } else if (path.starts_with("/api/metrics"sv)) {
         path.remove_prefix("/api/metrics"sv.size());
-        sys::error_code e;
         handle_api_metrics(path, req, res, ss, metrics, request_arguments, config.is_frontend_post_requirement_enabled());
     } else if (req.method() == http::verb::post || !config.is_frontend_post_requirement_enabled()) {
         for (const auto [argument, value]: request_arguments) {
@@ -1072,7 +1071,6 @@ ClientFrontEnd::serve( ClientConfig& config
     }
 
     if (should_show_portal) {
-        sys::error_code e;
         handle_portal( config, client_state, local_ep, upnps_ptr, dht
                      , req, res, ss, cache_client, metrics
                      , yield);

@@ -7,7 +7,8 @@
 
 namespace ouinet {
 
-struct OUINET_I2P_API I2pDestinationKeypair {
+class OUINET_I2P_API I2pDestinationKeypair {
+public:
     std::string pub;
     std::string priv;
 

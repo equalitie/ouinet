@@ -174,7 +174,6 @@ public:
 
     LifetimeCancel(LifetimeCancel const&) = default;
     LifetimeCancel(LifetimeCancel &&) = default;
-    LifetimeCancel& operator=(LifetimeCancel const&) = default;
     LifetimeCancel& operator=(LifetimeCancel &&) = default;
 
     [[nodiscard]]
