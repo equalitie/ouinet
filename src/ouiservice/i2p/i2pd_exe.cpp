@@ -4,7 +4,7 @@
 #include "util/str.h"
 #include "task.h"
 #include "logger.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 #include "util/condition_variable.h"
 #include "parse/endpoint.h"
 
@@ -33,7 +33,7 @@ namespace bp = boost::process::v2;
 bool I2pd::is_start_exe_implemented() { return true; }
 
 struct Line {
-    util::LogPath trace;
+    Trace trace;
     std::string text;
 };
 
@@ -72,17 +72,17 @@ struct I2pd::InnerExe : I2pd::InnerBase {
     bp::process _process;
     asio::readable_pipe _stdcout;
     asio::readable_pipe _stdcerr;
-    util::LogPath _log_path;
+    Trace _trace;
     Cancel _cancel;
     std::optional<std::expected<asio::ip::tcp::endpoint, sys::error_code>> _sam_ep;
     ConditionVariable _cv;
     Tail<Line> tail;
 
-    InnerExe(bp::process process, asio::readable_pipe stdcout, asio::readable_pipe stdcerr, util::LogPath log_path):
+    InnerExe(bp::process process, asio::readable_pipe stdcout, asio::readable_pipe stdcerr, Trace trace):
         _process(std::move(process)),
         _stdcout(std::move(stdcout)),
         _stdcerr(std::move(stdcerr)),
-        _log_path(std::move(log_path)),
+        _trace(std::move(trace)),
         _cv(process.get_executor()),
         tail(8)
     {
@@ -100,13 +100,13 @@ struct I2pd::InnerExe : I2pd::InnerBase {
             std::string output;
             std::string line;
 
-            auto log_trace = _log_path.tag(tag);
+            auto log_trace = _trace.tag(tag);
 
             while (true) {
                 auto size_r = asio::async_read_until(pipe, buffer, '\n', yield);
 
                 if (!size_r.has_value()) {
-                    LOG_DEBUG(_log_path, " ", size_r.error().message());
+                    LOG_DEBUG(_trace, " ", size_r.error().message());
                     print_tail();
                     break;
                 }
@@ -120,7 +120,7 @@ struct I2pd::InnerExe : I2pd::InnerBase {
         });
     }
 
-    void process_line(const util::LogPath& trace, std::string line) {
+    void process_line(const Trace& trace, std::string line) {
         // Uncomment to see full log from i2pd
         //LOG_DEBUG(trace, " ", line);
 
@@ -179,7 +179,7 @@ struct I2pd::InnerExe : I2pd::InnerBase {
     }
 
     void print_tail() {
-        LOG_DEBUG(_log_path, " Tail from closed i2pd:");
+        LOG_DEBUG(_trace, " Tail from closed i2pd:");
         for (size_t i = 0; i < tail.size(); ++i) {
             LOG_DEBUG(tail[i].trace, " ", tail[i].text);
         }
@@ -211,10 +211,10 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
         fs::path i2pd_binary_path,
         I2pd::Config config,
         Async yield) {
-    auto log_path = yield.log_path();
+    auto trace = yield.trace();
     auto exec = yield.get_executor();
 
-    LOG_DEBUG(log_path, " Starting I2P daemon (process)");
+    LOG_DEBUG(trace, " Starting I2P daemon (process)");
     asio::readable_pipe stdcout{exec};
     asio::readable_pipe stdcerr{exec};
 
@@ -236,24 +236,24 @@ std::expected<I2pd, sys::error_code> I2pd::start_exe(
                 std::move(proc),
                 std::move(stdcout),
                 std::move(stdcerr),
-                std::move(log_path)
+                std::move(trace)
             );
     }
     catch (const sys::system_error& e) {
-        LOG_WARN(log_path, " Failed to start `i2pd`, system_error: ", e.what());
+        LOG_WARN(trace, " Failed to start `i2pd`, system_error: ", e.what());
         return std::unexpected(e.code());
     }
     catch (const std::exception& e) {
-        LOG_WARN(log_path, " Failed to start `i2pd`, std::exception: ", e.what());
+        LOG_WARN(trace, " Failed to start `i2pd`, std::exception: ", e.what());
         return std::unexpected(asio::error::fault);
     }
     catch (...) {
-        LOG_WARN(log_path, " Failed to start `i2pd`");
+        LOG_WARN(trace, " Failed to start `i2pd`");
         return std::unexpected(asio::error::fault);
     }
 
     if (auto r = inner->wait_for_sam_endpoint_log_line(yield); !r) {
-        LOG_WARN(log_path, " Failed to read `i2pd` SAM endpoint");
+        LOG_WARN(trace, " Failed to read `i2pd` SAM endpoint");
         inner->print_tail();
         return std::unexpected(r.error());
     }

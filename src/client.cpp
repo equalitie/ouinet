@@ -102,7 +102,6 @@ class Client::State : public enable_shared_from_this<Client::State> {
 public:
     State( asio::io_context& ctx
          , ClientConfig cfg
-         , util::LogPath log_path
          , std::optional<Client::MockDhtBuilder> dht_builder)
         : _ctx(ctx)
         , _config(std::move(cfg))
@@ -114,7 +113,7 @@ public:
         , _front_end(_config)
         , _origin_pools(OriginPools())
         , inj_ctx{asio::ssl::context::tls_client}
-        , _log_path(std::move(log_path))
+        , _trace(_config.trace_root())
         , _bt_dht_builder(std::move(dht_builder))
         , _bt_dht_wc(_ctx)
         , _multi_utp_server_wc(_ctx)
@@ -277,7 +276,7 @@ public:
                 bt::bootstrap::Config()
                     .with_default(!_config.bt_bootstrap_no_default())
                     .with_extras(_config.bt_bootstrap_extras()),
-                _log_path.tag("dht")
+                _trace.tag("dht")
             );
 
             if (_config.bt_allow_martians()) {
@@ -348,7 +347,7 @@ public:
                  , asio::yield_context yield_) {
                 if (*cancel) throw_error(asio::error::operation_aborted);
 
-                Async yield(yield_, *cancel, util::LogPath("metrics"));
+                Async yield(yield_, *cancel, Trace("metrics"));
 
                 try {
                     client->send_metrics_record(record_name, record_content, yield);
@@ -539,7 +538,7 @@ private:
         }
 
         if (auto cfg = _config.i2p_service_config()) {
-            _i2p_service = I2pService::start(*cfg, _ctx.get_executor(), _shutdown_signal, _log_path);
+            _i2p_service = I2pService::start(*cfg, _ctx.get_executor(), _shutdown_signal, _trace);
             return &*_i2p_service;
         }
 
@@ -552,7 +551,7 @@ private:
         if (_i2p_session_create) return *_i2p_session_create;
 
 
-        _i2p_session_create = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path, [this](Async yield) -> R {
+        _i2p_session_create = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _trace, [this](Async yield) -> R {
                 auto i2p_service = get_or_create_i2p_service();
 
                 if (!i2p_service) return std::unexpected(asio::error::service_not_found);
@@ -589,7 +588,7 @@ private:
 
         _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
             _ctx.get_executor()
-            , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr, _log_path);
+            , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr, _trace);
 
         yield.tag("accept_utp").spawn([&] (Async yield) mutable {
             auto slot = yield.cancel_slot([&] () mutable {
@@ -697,7 +696,7 @@ private:
     boost::optional<asio::ip::udp::endpoint> _local_utp_endpoint;
     boost::optional<asio_utp::udp_multiplexer> _udp_multiplexer;
 
-    util::LogPath _log_path;
+    Trace _trace;
     std::optional<Client::MockDhtBuilder> _bt_dht_builder;
     shared_ptr<bt::DhtBase> _bt_dht;
     WaitCondition _bt_dht_wc;
@@ -1923,7 +1922,7 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
 
             if ( ec != http::error::end_of_stream
               && ec != asio::ssl::error::stream_truncated) {
-                LOG_WARN(yield.log_path(), " Failed to read request; ec=", ec);
+                LOG_WARN(yield.trace(), " Failed to read request; ec=", ec);
             }
 
             break;
@@ -2307,7 +2306,7 @@ void Client::State::listen_tcp
         if (ec) {
             if (ec == asio::error::operation_aborted) break;
 
-            LOG_WARN(_log_path, " Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
+            LOG_WARN(_trace, " Accept failed on TCP:", acceptor.local_endpoint(), "; ec=", ec);
 
             if (!async_sleep(chrono::seconds(1), _shutdown_signal, yield)) {
                 break;
@@ -2321,7 +2320,7 @@ void Client::State::listen_tcp
 
             GenericStream connection(std::move(socket) , std::move(tcp_shutter));
 
-            spawn_detached(_ctx.get_executor(), _shutdown_signal, _log_path, [
+            spawn_detached(_ctx.get_executor(), _shutdown_signal, _trace, [
                 self = shared_from_this(),
                 c = std::move(connection),
                 handler,
@@ -2376,7 +2375,7 @@ void Client::State::listen_unix_socket
 
             GenericStream connection(std::move(socket) , std::move(unix_socket_shutter));
 
-            spawn_detached(_ctx.get_executor(), _shutdown_signal, _log_path.tag("unix_socket"), [
+            spawn_detached(_ctx.get_executor(), _shutdown_signal, _trace.tag("unix_socket"), [
                 self = shared_from_this(),
                 c = std::move(connection),
                 handler,
@@ -2451,7 +2450,7 @@ void Client::State::start_ouinet()
     next_internal_state = InternalState::Started;
 
     if (_ouisync) {
-        spawn_detached(_ctx.get_executor(), _shutdown_signal, _log_path, [
+        spawn_detached(_ctx.get_executor(), _shutdown_signal, _trace, [
             self = shared_from_this()
         ] (Async yield) mutable {
             sys::error_code ec = self->_ouisync->start(yield);
@@ -2589,7 +2588,7 @@ void Client::State::start_ouinet()
     spawn_detached(
         _ctx.get_executor(),
         _shutdown_signal,
-        _log_path.tag("setup_cache"),
+        _trace.tag("setup_cache"),
         [this] (Async yield) {
             if (was_stopped()) return;
             auto r = setup_cache(yield);
@@ -2607,7 +2606,7 @@ Client::State::maybe_wrap_tls(unique_ptr<OuiServiceClient> client)
     bool enable_injector_tls = !_config.tls_injector_cert_path().empty();
 
     if (!enable_injector_tls) {
-        LOG_WARN(_log_path, "Connection to the injector shall not be encrypted");
+        LOG_WARN(_trace, "Connection to the injector shall not be encrypted");
         return client;
     }
 
@@ -2619,7 +2618,7 @@ void Client::State::setup_injectors()
     using R = SysResult<std::unique_ptr<OuiServiceClient>>;
 
     if (auto ep = _config.injector_endpoint<CacheType::Bep3HTTPOverI2P>()) {
-        LOG_INFO(_log_path, " Setting up injector: ", *ep);
+        LOG_INFO(_trace, " Setting up injector: ", *ep);
 
         struct Client : public OuiServiceClient {
             sys::error_code start(Async) override {
@@ -2633,11 +2632,11 @@ void Client::State::setup_injectors()
                 return std::move(*result);
             }
 
-            Client(I2pAddress addr, std::shared_ptr<I2pSession> session, Cancel cancel, util::LogPath log_path):
+            Client(I2pAddress addr, std::shared_ptr<I2pSession> session, Cancel cancel, Trace trace):
                 _addr(std::move(addr)),
                 _session(std::move(session)),
                 _cancel(std::move(cancel)),
-                _log_path(std::move(log_path))
+                _trace(std::move(trace))
             {}
 
             ~Client() {
@@ -2647,13 +2646,13 @@ void Client::State::setup_injectors()
             I2pAddress _addr;
             std::shared_ptr<I2pSession> _session;
             Cancel _cancel;
-            util::LogPath _log_path;
+            Trace _trace;
         };
 
         _injector_i2p = spawn_for_result(
                 _ctx.get_executor(),
                 _shutdown_signal,
-                _log_path,
+                _trace,
                 [this, ep] (Async yield) -> R {
                 auto session = get_or_create_i2p_session_task().wait(yield);
 
@@ -2663,16 +2662,16 @@ void Client::State::setup_injectors()
                         *ep,
                         std::move(*session),
                         _shutdown_signal,
-                        _log_path);
+                        _trace);
             });
     }
 
     auto injector_ep = _config.injector_endpoint<CacheType::Bep5Http>();
 
     if (injector_ep) {
-        LOG_INFO(_log_path, " Setting up injector: ", *injector_ep);
+        LOG_INFO(_trace, " Setting up injector: ", *injector_ep);
 
-        _injector_utp = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _log_path,
+        _injector_utp = spawn_for_result(_ctx.get_executor(), _shutdown_signal, _trace,
             [this, injector_ep] (Async yield) -> R {
                 assert(!yield.is_cancelled());
                 auto client = injector_ep->visit(overloaded {
@@ -2717,7 +2716,7 @@ void Client::State::setup_injectors()
                             _config.is_bridge_announcement_enabled(),
                             &inj_ctx,
                             ouiservice::Bep5Client::injectors | ouiservice::Bep5Client::helpers,
-                            _log_path
+                            _trace
                         );
 
                         if (auto r = idempotent_start_accepting_on_utp(yield); !r) {
@@ -2747,9 +2746,8 @@ void Client::State::setup_injectors()
 Client::Client(
         asio::io_context& ctx,
         ClientConfig cfg,
-        util::LogPath log_path,
         std::optional<MockDhtBuilder> dht_builder)
-    : _state(make_shared<State>(ctx, std::move(cfg), std::move(log_path), std::move(dht_builder)))
+    : _state(make_shared<State>(ctx, std::move(cfg), std::move(dht_builder)))
 {
 }
 

@@ -14,7 +14,7 @@
 namespace ouinet {
 
 class Async;
-namespace util { class LogPath; }
+class Trace;
 
 // Class for controlling the `i2pd` executable/library
 class OUINET_I2P_API I2pd {
@@ -67,7 +67,7 @@ public:
     [[nodiscard]]
     static
     std::expected<I2pd, sys::error_code>
-    start_lib(Config, util::LogPath);
+    start_lib(Config, Trace);
 
     // Endpoint of the SAM bridge to which we can connect.
     asio::ip::tcp::endpoint sam_endpoint() const;

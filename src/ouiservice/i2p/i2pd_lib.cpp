@@ -1,7 +1,7 @@
 #include "i2pd.h"
 #include "ClientContext.h"
 #include "logger.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 
 #include "Daemon.h"
 #include <boost/asio/error.hpp>
@@ -23,11 +23,11 @@ struct OuiDaemon : public i2p::util::Daemon_Singleton {
 
 struct I2pd::InnerLib : I2pd::InnerBase {
     asio::ip::tcp::endpoint sam_ep;
-    util::LogPath log_path;
+    Trace trace;
 
-    InnerLib(asio::ip::tcp::endpoint sam_ep, util::LogPath log_path):
+    InnerLib(asio::ip::tcp::endpoint sam_ep, Trace trace):
         sam_ep(sam_ep),
-        log_path(std::move(log_path))
+        trace(std::move(trace))
     {}
 
     asio::ip::tcp::endpoint sam_endpoint() const override {
@@ -35,14 +35,14 @@ struct I2pd::InnerLib : I2pd::InnerBase {
     }
 
     ~InnerLib() {
-        OUI_LOG_DEBUG(log_path, " Stopping I2P daemon");
+        OUI_LOG_DEBUG(trace, " Stopping I2P daemon");
         OuiDaemon::instance().stop();
     }
 };
 
 std::expected<I2pd, sys::error_code>
-I2pd::start_lib(I2pd::Config config, util::LogPath log_path) {
-    OUI_LOG_DEBUG(log_path, " Starting I2P daemon (library)");
+I2pd::start_lib(I2pd::Config config, Trace trace) {
+    OUI_LOG_DEBUG(trace, " Starting I2P daemon (library)");
 
     auto config_vec = config.to_vector(I2pd::Type::Lib{});
 
@@ -57,12 +57,12 @@ I2pd::start_lib(I2pd::Config config, util::LogPath log_path) {
             [] (const std::string& str) { return str.c_str(); });
 
     if (!OuiDaemon::instance().init(args.size(), (char**) args.data())) {
-        OUI_LOG_WARN(log_path, " Failed to initialize I2P daemon");
+        OUI_LOG_WARN(trace, " Failed to initialize I2P daemon");
         return std::unexpected(asio::error::fault);
     }
 
     if (!OuiDaemon::instance().start()) {
-        OUI_LOG_WARN(log_path, " Failed to start I2P daemon");
+        OUI_LOG_WARN(trace, " Failed to start I2P daemon");
         OuiDaemon::instance().stop();
         return std::unexpected(asio::error::fault);
     }
@@ -70,7 +70,7 @@ I2pd::start_lib(I2pd::Config config, util::LogPath log_path) {
     auto sam_bridge = i2p::client::context.GetSAMBridge();
 
     if (!sam_bridge) {
-        OUI_LOG_WARN(log_path, " Failed to obtain SAMBridge");
+        OUI_LOG_WARN(trace, " Failed to obtain SAMBridge");
         return std::unexpected(asio::error::fault);
     }
 
@@ -78,13 +78,13 @@ I2pd::start_lib(I2pd::Config config, util::LogPath log_path) {
     auto ep = sam_bridge->GetAcceptorEndpoint(ec);
 
     if (ec) {
-        OUI_LOG_WARN(log_path, " Failed to obtain endpoint of SAMBridge: ", ec);
+        OUI_LOG_WARN(trace, " Failed to obtain endpoint of SAMBridge: ", ec);
         return std::unexpected(ec);
     }
 
     return I2pd(std::make_unique<InnerLib>(
         ep,
-        log_path
+        trace
     ));
 }
 

@@ -9,7 +9,7 @@
 #include "http_util.h"
 #include "http_logger.h"
 #include "util/executor.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 #include "util/promise.h"
 #include "injector_config.h"
 #include "bittorrent/mock_dht.h"
@@ -36,7 +36,6 @@ public:
         InjectorConfig config,
         asio::io_context& ctx,
         // For use in tests
-        util::LogPath log_path = {},
         std::shared_ptr<bittorrent::MockDht> dht = nullptr);
 
     void stop();

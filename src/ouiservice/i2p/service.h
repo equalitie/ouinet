@@ -17,7 +17,7 @@ class Async;
 class Cancel;
 class I2pSession;
 class I2pDestinationKeypair;
-namespace util { class LogPath; }
+class Trace;
 
 //
 // Ensures I2P is running by (in this order):
@@ -87,7 +87,7 @@ public:
         }
     };
 
-    static I2pService start(Config, asio::any_io_executor, Cancel, util::LogPath);
+    static I2pService start(Config, asio::any_io_executor, Cancel, Trace);
 
     State get_state() const;
 

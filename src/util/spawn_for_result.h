@@ -125,7 +125,7 @@ public:
 private:
     template<class F>
     friend TaskHandle<std::invoke_result_t<F, Async>>
-    spawn_for_result(asio::any_io_executor, Cancel, util::LogPath, F);
+    spawn_for_result(asio::any_io_executor, Cancel, Trace, F);
 
     template<class> friend class MappedTaskHandle;
 
@@ -195,7 +195,7 @@ TaskHandle<
 spawn_for_result(
         asio::any_io_executor exec,
         Cancel cancel,
-        util::LogPath log_path,
+        Trace trace,
         F func
 ) {
     using V = std::invoke_result_t<F, Async>;
@@ -211,7 +211,7 @@ spawn_for_result(
             weak,
             cancel,
             func = std::move(func),
-            log_path = std::move(log_path)
+            trace = std::move(trace)
         ] (asio::yield_context y) {
             // Note that the following line of code may not be executed right
             // after the `asio::spawn` call depending on whether or not
@@ -220,14 +220,14 @@ spawn_for_result(
             if (cancel) throw Async::Cancelled();
 
             if constexpr (std::is_void_v<V>) {
-                func(Async(y, cancel, log_path));
+                func(Async(y, cancel, trace));
 
                 if (auto shared = weak.lock()) {
                     shared->state = std::monostate{};
                 }
             }
             else {
-                V value = func(Async(y, cancel, log_path));
+                V value = func(Async(y, cancel, trace));
 
                 if (auto shared = weak.lock()) {
                     shared->state = std::move(value);

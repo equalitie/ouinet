@@ -343,6 +343,10 @@ public:
     bool is_frontend_post_requirement_enabled() const { return _frontend_post; }
     void is_frontend_post_requirement_enabled(const bool v) { _frontend_post = v; }
 
+    const Trace& trace_root() const {
+        return _trace_root;
+    }
+
 #undef CHANGE_AND_SAVE_OPS
 #undef CHANGE_AND_SAVE
 
@@ -411,6 +415,8 @@ private:
 
     std::optional<OuisyncCacheConfig> _ouisync;
     std::optional<I2pService::Config> _i2p_service_config;
+
+    Trace _trace_root;
 };
 
 } // ouinet namespace

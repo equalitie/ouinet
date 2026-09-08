@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../namespaces.h"
-#include "../util/log_path.h"
+#include "../util/trace.h"
 #include "cancel.h"
 #include "../task.h"
 
@@ -16,7 +16,7 @@
 namespace ouinet {
 
 // This class is a successor of `asio::yield_context`. It contains
-// `util::LogPath` for debugging, and `Cancel` signal so we no longer need to
+// `Trace` for debugging, and `Cancel` signal so we no longer need to
 // pass both to every function. But more importantly, `Async` is "cancel
 // aware", meaning that we no longer need to check whether the operation has
 // been cancelled explicitly.
@@ -43,17 +43,17 @@ public:
 
 private:
     template<class F> using DeprecatedApiResult
-        = std::invoke_result_t<F, util::LogPath, Cancel, asio::yield_context>;
+        = std::invoke_result_t<F, Trace, Cancel, asio::yield_context>;
 
 public:
-    explicit Async(asio::yield_context asio_yield, util::LogPath log_path = {})
+    explicit Async(asio::yield_context asio_yield, Trace trace = {})
         : _asio_yield(asio_yield)
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
     {}
 
-    explicit Async(asio::yield_context asio_yield, Cancel cancel, util::LogPath log_path = {})
+    explicit Async(asio::yield_context asio_yield, Cancel cancel, Trace trace = {})
         : _asio_yield(asio_yield)
-        , _log_path(std::move(log_path))
+        , _trace(std::move(trace))
         , _cancel(std::move(cancel))
     {}
 
@@ -63,17 +63,17 @@ public:
     Async(const Async&) = default;
 
 
-    util::LogPath log_path() const {
-        return _log_path;
+    Trace trace() const {
+        return _trace;
     }
 
-    Async with_log_path(util::LogPath log_path) const {
-        return Async(_asio_yield, _cancel, std::move(log_path));
+    Async with_trace(Trace trace) const {
+        return Async(_asio_yield, _cancel, std::move(trace));
     }
 
     Async tag(std::string t)
     {
-        return with_log_path(_log_path.tag(std::move(t)));
+        return with_trace(_trace.tag(std::move(t)));
     }
 
     asio::any_io_executor get_executor() const {
@@ -85,11 +85,10 @@ public:
             _asio_yield.get_executor(),
             [ lambda = std::move(lambda),
               cancel = std::move(cancel),
-              // log_path = _log_path.tag("spawn")
-              log_path = _log_path
+              trace = _trace
             ]
             (asio::yield_context yield) mutable {
-                lambda(Async(yield, std::move(cancel), std::move(log_path)));
+                lambda(Async(yield, std::move(cancel), std::move(trace)));
             });
     }
 
@@ -117,11 +116,11 @@ public:
     /// Returns a `Async` derived from `this` but which does not get cancelled when `this` gets
     /// cancelled.
     Async suppress_cancel() {
-        return Async(_asio_yield, _log_path);
+        return Async(_asio_yield, _trace);
     }
 
     friend std::ostream& operator<<(std::ostream& os, const Async& y) {
-        return os << y._log_path;
+        return os << y._trace;
     }
 
     // For running legacy API, try not to use it unless you feel confident in
@@ -136,7 +135,7 @@ public:
     std::expected<DeprecatedApiResult<F>, sys::error_code>
     call_deprecated(F f) {
         sys::error_code ec;
-        auto ret = f(_log_path, _cancel, _asio_yield[ec]);
+        auto ret = f(_trace, _cancel, _asio_yield[ec]);
         if (_cancel) throw Cancelled();
         if (ec) return std::unexpected(ec);
         return ret;
@@ -148,7 +147,7 @@ public:
     sys::error_code
     call_deprecated(F f) {
         sys::error_code ec;
-        f(_log_path, _cancel, _asio_yield[ec]);
+        f(_trace, _cancel, _asio_yield[ec]);
         if (_cancel) throw Cancelled();
         return ec;
     }
@@ -157,7 +156,7 @@ private:
     template<typename, asio::completion_signature...> friend class ::boost::asio::async_result;
 
     asio::yield_context _asio_yield;
-    util::LogPath _log_path;
+    Trace _trace;
     Cancel _cancel;
 };
 
@@ -170,13 +169,13 @@ namespace detail {
 
 template<typename Function>
 requires std::invocable<Function, Async>
-auto make_coroutine(Function&& func, Cancel cancel, util::LogPath log_path) {
+auto make_coroutine(Function&& func, Cancel cancel, Trace trace) {
     return [
         func = std::forward<Function>(func),
         cancel = std::move(cancel),
-        log_path = std::move(log_path)
+        trace = std::move(trace)
     ] (boost::asio::yield_context yield) mutable {
-        func(Async(yield, std::move(cancel), std::move(log_path)));
+        func(Async(yield, std::move(cancel), std::move(trace)));
     };
 }
 
@@ -188,14 +187,14 @@ requires std::invocable<Function, Async>
 void spawn_detached(
     const boost::asio::any_io_executor& exec,
     Cancel cancel,
-    util::LogPath log_path,
+    Trace trace,
     Function&& func,
     std::source_location location = std::source_location::current()
 )
 {
     task::spawn_detached(
         exec,
-        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), std::move(log_path)),
+        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), std::move(trace)),
         std::move(location)
     );
 }
@@ -212,7 +211,7 @@ void spawn_detached(
 {
     task::spawn_detached(
         exec,
-        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), util::LogPath()),
+        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), Trace()),
         std::move(location)
     );
 }
@@ -222,14 +221,14 @@ template<typename Function>
 requires std::invocable<Function, Async>
 void spawn_detached(
     const boost::asio::any_io_executor& exec,
-    util::LogPath log_path,
+    Trace trace,
     Function&& func,
     std::source_location location = std::source_location::current()
 )
 {
     task::spawn_detached(
         exec,
-        detail::make_coroutine(std::forward<Function>(func), Cancel(), std::move(log_path)),
+        detail::make_coroutine(std::forward<Function>(func), Cancel(), std::move(trace)),
         std::move(location)
     );
 }
@@ -245,7 +244,7 @@ void spawn_detached(
 {
     task::spawn_detached(
         exec,
-        detail::make_coroutine(std::forward<Function>(func), Cancel(), util::LogPath()),
+        detail::make_coroutine(std::forward<Function>(func), Cancel(), Trace()),
         std::move(location)
     );
 }

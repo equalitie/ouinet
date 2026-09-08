@@ -17,7 +17,7 @@ public:
     Bep5Server( std::shared_ptr<bittorrent::DhtBase>
               , boost::asio::ssl::context* ssl_context
               , std::string swarm_name
-              , util::LogPath log_path);
+              , Trace trace);
 
     [[nodiscard]]
     sys::error_code start_listen(Async) override;

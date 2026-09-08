@@ -180,7 +180,7 @@ add_subdirectory(./src/ouiservice/ouisync)
 file(GLOB ouinet_common_sources
     "./src/task.cpp"
     "./src/logger.cpp"
-    "./src/util/log_path.cpp"
+    "./src/util/trace.cpp"
     "./src/util/random.cpp"
     "./src/async_sleep.cpp"
     "./src/cache/resource_id.cpp"

@@ -5,25 +5,25 @@
 #include <ostream>
 #include "api.h"
 
-namespace ouinet::util {
+namespace ouinet {
 
 // To help keep track about which coroutine we're logging from.
-class OUINET_COMMON_API LogPath {
+class OUINET_COMMON_API Trace {
 private:
     struct Node;
 
 public:
-    LogPath() = default;
-    LogPath(std::string tag);
+    Trace() = default;
+    Trace(std::string tag);
 
-    LogPath(const LogPath&) = default;
-    LogPath(LogPath&&) = default;
-    LogPath& operator=(LogPath&&) = default;
+    Trace(const Trace&) = default;
+    Trace(Trace&&) = default;
+    Trace& operator=(Trace&&) = default;
 
     // Create new log tree with a new node having parent the one from `this`.
-    LogPath tag(std::string tag);
+    Trace tag(std::string tag);
 
-    friend std::ostream& operator<<(std::ostream& os, LogPath const& l) {
+    friend std::ostream& operator<<(std::ostream& os, Trace const& l) {
         print_from_root(os, l._node.get());
         return os;
     }
@@ -31,7 +31,7 @@ public:
     void start_monitor_changes(std::ostream&) const;
 
 private:
-    LogPath(std::shared_ptr<Node> node) : _node(std::move(node)) {}
+    Trace(std::shared_ptr<Node> node) : _node(std::move(node)) {}
 
     static
     void print_from_root(std::ostream&, const Node*);

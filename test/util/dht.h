@@ -49,7 +49,7 @@ std::vector<std::unique_ptr<MainlineDht>> spawn_dht_nodes(size_t count, Async yi
             bootstrap::Config()
                 .with_default(false)
                 .with_extras(std::move(bootstrap_addrs)),
-            util::LogPath(util::str("dht-node-", i))
+            Trace(util::str("dht-node-", i))
         ));
     }
 
