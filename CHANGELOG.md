@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.6.11](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.11) - 2026-09-07
+
+### Added
+
+- Add options to disable UPnP and local peer discovery. !209
+
+### Fixed
+
+- Fix MacOS/iOS build for clang 21 and per-session client lifecycle. !188
+
+### Changed
+
+- Package `asio_utp` as an embeddable framework for iOS. !204
+- CI improvements adapted for branch v1.6. !205
+- Include `bt_bep5` in the bundle of linux artifacts. !213
+- Updated `asio-utp` to 4e2403ae. c9ef2c13
+
+
 ## [v1.6.10](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.10) - 2026-07-17
 
 ### Changed
