@@ -3,11 +3,8 @@ cmake_minimum_required (VERSION 3.13)
 include(ExternalProject)
 
 ################################################################################
-if (WITH_I2PD_EXE OR WITH_I2PD_LIB)
-    set(WITH_I2PD TRUE)
-endif()
 
-if (WITH_I2PD)
+if (WITH_I2PD_EXE OR WITH_I2PD_LIB)
     block()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBOOST_ASIO_SEPARATE_COMPILATION")
 
