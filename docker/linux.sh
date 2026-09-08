@@ -168,7 +168,7 @@ function build_image (
     )
 
     apt_dependencies=(
-        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev gdb
+        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev gdb clang-19
         # For building Ouisync
         pkg-config
         # For building and testing Windows binaries
@@ -403,6 +403,13 @@ for target_os in ${target_oss[@]}; do
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
             -DOUINET_MEASURE_BUILD_TIMES=OFF
         )
+
+        if [ "$target_os" == linux ]; then
+            cmake_configure_options+=(
+                -DCMAKE_C_COMPILER=/usr/bin/clang-19
+                -DCMAKE_CXX_COMPILER=/usr/bin/clang++-19
+            )
+        fi
 
         if [ "$target_os" == windows ]; then
             cmake_configure_options+=(
