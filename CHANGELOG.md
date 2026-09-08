@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 
+## [v1.7.2](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.2) - 2026-09-07
+
+### Added
+
+- Backport: Add options to disable UPnP and local peer discovery. !209
+
+### Fixed
+
+- Backport: fix for bt_extra_bootstraps front-end query parameter mismatch. !200
+
+## Changed
+
+- Backport: Adds matcher to the request routing such that all requests for our
+telegram mirror website (tg.ceno.app) will be routed to the injector, d-cache, or
+proxy mechanisms. !200
+- Updated CI scripts and pipelines. 009d259a 64b8131d
+- Add bt_bep5 to the list of artifacts paths. 5149924b
+
+
 ## [v1.6.11](https://gitlab.com/equalitie/ouinet/-/releases/v1.6.11) - 2026-09-07
 
 ### Added
