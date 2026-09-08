@@ -396,6 +396,7 @@ for target_os in ${target_oss[@]}; do
         exe bash -c "mkdir -p $build_dir"
 
         cmake_configure_options=(
+            -G Ninja
             -DCMAKE_BUILD_TYPE=$cmake_build_type
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON
