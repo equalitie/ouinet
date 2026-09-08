@@ -7,6 +7,7 @@
 #include <parse/endpoint.h>
 #include <logger.h>
 #include <async_sleep.h>
+#include <map>
 
 using namespace ouinet;
 using namespace std;
@@ -71,7 +72,7 @@ struct LocalPeerDiscovery::Impl {
     udp::socket _socket;
     PeerId _id;
     set<udp::endpoint> _advertised_eps;
-    map<PeerId, Peer> _peers;
+    std::map<PeerId, Peer> _peers;
 
     Impl( const AsioExecutor& ex
         , uint64_t id
