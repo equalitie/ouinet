@@ -146,6 +146,7 @@ ouinet_setup(TARGET ouinet_i2p
 if (WITH_I2PD_EXE)
     message(STATUS "  adding dependency i2pd to ouinet_i2p")
     add_dependencies(ouinet_i2p i2pd)
+    export(TARGETS i2pd FILE "${CMAKE_CURRENT_BINARY_DIR}/i2pd.cmake")
 endif()
 
 ################################################################################
@@ -191,3 +192,4 @@ if (WITH_I2PD AND ANDROID)
     set_target_properties(ifaddrs PROPERTIES LINKER_LANGUAGE C)
     target_link_libraries(libi2pd PRIVATE ifaddrs)
 endif()
+
