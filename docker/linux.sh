@@ -326,6 +326,10 @@ function check_artifacts_exist_for_target_os (
     fi
 )
 
+function timestamp() (
+    date +%s
+)
+
 # ---
 
 build_image
@@ -413,8 +417,14 @@ for target_os in ${target_oss[@]}; do
             cmake_configure_options+=(-DOUISYNC_SRC_DIR=$container_ouisync_dir)
         fi
 
+        build_start_ts=$(timestamp);
+
         exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
         exe -w $build_dir cmake --build . -j $(exe nproc) ${run_cpp_tests[@]/#/--target }
+
+        build_end_ts=$(timestamp);
+
+        echo "Build took $((build_end_ts-build_start_ts)) seconds"
     else
         if [ "$clean" = y ]; then
             exe -w $ouinet_dir git clean -dfX
