@@ -254,9 +254,15 @@ function list_artifacts_for_target_os (
                 $build_dir/libasio_utp$lib_suffix
                 $build_dir/libouinet_asio$lib_suffix
                 $build_dir/libouinet_asio_ssl$lib_suffix
-                $build_dir/libclient$lib_suffix
-                $build_dir/libinjector$lib_suffix
             )
+
+            if [[ "$target_os" == linux ]]; then
+                artifacts+=(
+                  $build_dir/libclient$lib_suffix
+                  $build_dir/libinjector$lib_suffix
+                )
+            fi
+
 
             if [[ "$target_os" == windows ]]; then
                 mingw_gcc_dir=/usr/lib/gcc/x86_64-w64-mingw32/14-win32
@@ -265,12 +271,18 @@ function list_artifacts_for_target_os (
                 artifacts+=(
                   $ouinet_dir/src/client_lib.h
                 )
+                # dll files
+                artifacts+=(
+                    $build_dir/libclient_lib$lib_suffix
+                    $build_dir/libinjector_lib$lib_suffix
+                )
+
                 # dll.a files
                 artifacts+=(
                   $build_dir/libouinet_asio.dll.a
-                  $build_dir/libouinet_common.dll.a
-                  $build_dir/libouinet_client.dll.a
-                  $build_dir/libouinet_injector.dll.a
+                  $build_dir/libouinet_common.a
+                  $build_dir/libclient_lib.dll.a
+                  $build_dir/libinjector_lib.dll.a
                 )
                 # third party dlls required
                 artifacts+=(
