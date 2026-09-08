@@ -413,8 +413,14 @@ for target_os in ${target_oss[@]}; do
             cmake_configure_options+=(-DOUISYNC_SRC_DIR=$container_ouisync_dir)
         fi
 
+        START=$(date +%s);
         exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
-        exe -w $build_dir cmake --build . -j $(exe nproc) ${run_cpp_tests[@]/#/--target }
+        exe -w $build_dir cmake --build . -j $(exe nproc) --target client #${run_cpp_tests[@]/#/--target }
+        END=$(date +%s);
+        DURATION=$((END-START))
+        echo ">>>> DURATION: $DURATION"
+        echo $DURATION | awk '{print int($1/60)":"int($1%60)}'
+        exit
     else
         if [ "$clean" = y ]; then
             exe -w $ouinet_dir git clean -dfX
