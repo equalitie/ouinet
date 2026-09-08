@@ -24,6 +24,7 @@ android_abi=arm64-v8a
 android_publish=n
 windows_sign_artifacts=n
 sign_directory=/opt/sign
+cmake_generator="Ninja"
 env=()
 
 source $(dirname $0)/util.sh linux
@@ -103,6 +104,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --env-var|-e)
             env+=("$2"); shift
+            ;;
+        --use-makefile-generator)
+            cmake_generator="Unix Makefiles"
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -400,6 +404,7 @@ for target_os in ${target_oss[@]}; do
         exe bash -c "mkdir -p $build_dir"
 
         cmake_configure_options=(
+            -G "$cmake_generator"
             -DCMAKE_BUILD_TYPE=$cmake_build_type
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON

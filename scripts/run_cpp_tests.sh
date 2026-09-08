@@ -57,7 +57,11 @@ function get_subtest {( echo $1 | cut -s -d':' -f2 )}
 # If no tests are provided, this must run after configuration phase.
 function collect_targets {(
     if [ -z "${TEST_SPECS[@]}" ]; then
-        cmake --build $TEST_DIR --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g' | grep -v '\.'
+        if [ -f "$BUILD_DIR/build.ninja" ]; then
+            cmake --build $BUILD_DIR --target help | grep '^test_' | cut -d: -f 1
+        else
+            cmake --build $TEST_DIR --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g' | grep -v '\.'
+        fi
     else
         for spec in ${TEST_SPECS[@]}; do echo "$(get_target $spec)"; done
     fi
