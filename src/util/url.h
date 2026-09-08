@@ -8,7 +8,8 @@
 
 namespace ouinet::util {
 
-struct OUINET_COMMON_API Url {
+class OUINET_COMMON_API Url {
+public:
     // Uniform Resource Identifier (URI): Generic Syntax
     // https://www.ietf.org/rfc/rfc3986.txt
 
