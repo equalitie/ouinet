@@ -4,11 +4,16 @@
 #include <asio_utp/socket.hpp>
 #include <asio_utp/udp_multiplexer.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/any_completion_handler.hpp>
+#include <boost/asio/append.hpp>
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/async_result.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/address_v4.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/program_options.hpp>
+#include <boost/system/detail/error_code.hpp>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
