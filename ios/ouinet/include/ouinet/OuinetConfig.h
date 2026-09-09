@@ -10,6 +10,8 @@
 
 - (OuinetConfig*)setInjectorTlsCert:(NSString*)cert;
 
+- (OuinetConfig*)setTlsCaCertCn:(NSString*)cn;
+
 - (OuinetConfig*)setCacheType:(NSString*)type;
 
 - (OuinetConfig*)setListenOnTcp:(NSString*)address;
@@ -81,6 +83,8 @@
 - (NSString*)getInjectorTlsCertPath;
 
 - (NSString*)getTlsCaCertStoreDir;
+
+- (NSString*)getTlsCaCertCn;
 
 - (NSString*)getCacheType;
 
