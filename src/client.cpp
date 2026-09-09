@@ -2468,7 +2468,7 @@ void Client::State::start_ouinet()
     }
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
-        ( "Your own local Ouinet client"
+        ( _config.tls_ca_cert_cn()
         , ca_cert_path(), ca_key_path(), ca_dh_path());
 
     if (!_config.tls_injector_cert_path().empty()) {
@@ -2840,14 +2840,14 @@ fs::path Client::ca_cert_path() const
     return _state->ca_cert_path();
 }
 
-fs::path Client::get_or_gen_ca_root_cert(const string repo_root)
+fs::path Client::get_or_gen_ca_root_cert(const string repo_root, const string cn)
 {
     fs::path repo_path = fs::path(repo_root);
     fs::path ca_cert_path = repo_root / OUINET_CA_CERT_FILE;
     fs::path ca_key_path = repo_root / OUINET_CA_KEY_FILE;
     fs::path ca_dh_path = repo_root / OUINET_CA_DH_FILE;
     get_or_gen_tls_cert<CACertificate>
-        ( "Your own local Ouinet client"
+        ( cn
         , ca_cert_path, ca_key_path, ca_dh_path);
     return ca_cert_path;
 }
