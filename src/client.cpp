@@ -2083,7 +2083,11 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         LOG_DEBUG(yield, " Response: ", response->header());
 
         if (auto r = response->write(con, yield); !r) {
-            LOG_DEBUG(yield, " Failed to write response to UA: ", response.error());
+            LOG_DEBUG(yield, " Failed to write response to UA: ", r.error());
+            // TODO: This is incorrect, if the write function failed in writing
+            // to `con` (as opposed to reading from the session inside the
+            // response), or if some response has already been written, then we
+            // shouldn't attempt to write the failure response.
             auto rs = retrieval_failure_response(req);
             auto wr = http::async_write(con, rs, yield);
             if (!wr || !req.keep_alive() || !rs.keep_alive()) break;
