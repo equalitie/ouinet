@@ -9,11 +9,9 @@
 #include <ouisync/service.hpp>
 
 #include "logger.h"
-#include "ouiservice/ouisync/queue.h"
 #include "ouiservice/ouisync/socket.h"
 #include "util/promise.h"
 #include "util/random.h"
-#include "util/success_condition.h"
 #include "util/wait_condition.h"
 
 #include "util/async_test.h"
@@ -240,12 +238,13 @@ BOOST_AUTO_TEST_CASE(test_utp) {
                 auto session = unwrap(ouisync::Session::connect(root.path(), yield));
                 unwrap(session.bind_network({"quic/127.0.0.1:0"}, yield));
 
-                // Create uTP socket backed by  Ouisync's UDP socket
+                // Create uTP socket backed by Ouisync's UDP socket
                 auto ouisync_socket = unwrap(ouisync_service::OuisyncSocket::open(
                     session,
                     udp::v4(),
                     yield
                 ));
+
                 auto udp_socket = asio_utp::udp_multiplexer(yield.get_executor());
                 udp_socket.bind(
                     std::make_unique<ouisync_service::OuisyncSocket>(
@@ -256,11 +255,6 @@ BOOST_AUTO_TEST_CASE(test_utp) {
                 error_code ec;
                 utp_socket.bind(std::move(udp_socket), ec);
                 BOOST_REQUIRE(!ec);
-
-                // asio_utp::socket utp_socket(yield.get_executor());
-                // error_code ec;
-                // utp_socket.bind({ asio::ip::address_v4::loopback(), 0 }, ec);
-                // BOOST_REQUIRE(!ec);
 
                 // Connect to the peer
                 utp_socket
@@ -328,30 +322,5 @@ BOOST_AUTO_TEST_CASE(test_utp) {
         );
 
         unwrap(done.wait(yield));
-    });
-}
-
-// Sanity check for the internal async queue used by `OuisyncSocket`.
-BOOST_AUTO_TEST_CASE(test_queue) {
-    get_logger().set_threshold(DEBUG);
-
-    async_test([&] (Async yield) {
-        ouisync_service::detail::Queue queue(yield.get_executor(), 2);
-        SuccessCondition sc(yield.get_executor());
-
-        yield.spawn([&, lock = sc.lock()] (Async yield) {
-            auto [ ep, data ] = unwrap(queue.async_pop(yield));
-            std::string payload(data.begin(), data.end());
-            BOOST_REQUIRE_EQUAL(payload, "hello");
-            lock.release(true);
-        });
-
-        std::string payload("hello");
-        std::vector<uint8_t> data(payload.begin(), payload.end());
-        auto pushed = queue.try_push(sys::error_code(), { udp::endpoint(), std::move(data) });
-        BOOST_REQUIRE(pushed);
-
-        bool success = sc.wait_for_success(yield);
-        BOOST_REQUIRE(success);
     });
 }
