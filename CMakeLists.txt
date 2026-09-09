@@ -38,6 +38,9 @@ endif()
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
 
+# https://clang.llvm.org/docs/analyzer/developer-docs/PerformanceInvestigation.html
+option(OUINET_CLANG_TIME_TRACE "Enable compilation performance analysis" OFF)
+
 ################################################################################
 # show summary
 
@@ -161,6 +164,9 @@ function(ouinet_setup)
 
     target_compile_definitions(${ARG_TARGET} PRIVATE ${ARG_DEFS})
     target_compile_options(${ARG_TARGET} PRIVATE -std=c++23)
+    if (OUINET_CLANG_TIME_TRACE)
+        target_compile_options(${ARG_TARGET} PRIVATE $<$<CXX_COMPILER_ID:Clang>:-ftime-trace>)
+    endif()
     target_include_directories(${ARG_TARGET} PUBLIC
         ${OUINET_ROOT_DIR}/src
         ${OUINET_ROOT_DIR}/rust

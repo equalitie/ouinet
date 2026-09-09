@@ -24,6 +24,7 @@ android_abi=arm64-v8a
 android_publish=n
 windows_sign_artifacts=n
 sign_directory=/opt/sign
+cmake_generator="Ninja"
 env=()
 
 source $(dirname $0)/util.sh linux
@@ -104,6 +105,9 @@ while [[ "$#" -gt 0 ]]; do
         --env-var|-e)
             env+=("$2"); shift
             ;;
+        --use-makefile-generator)
+            cmake_generator="Unix Makefiles"
+            ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
     esac
@@ -168,7 +172,7 @@ function build_image (
     )
 
     apt_dependencies=(
-        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev gdb
+        rsync build-essential cmake zlib1g-dev libssl-dev git curl nlohmann-json3-dev gdb clang-19
         # For building Ouisync
         pkg-config
         # For building and testing Windows binaries
@@ -326,6 +330,10 @@ function check_artifacts_exist_for_target_os (
     fi
 )
 
+function timestamp() (
+    date +%s
+)
+
 # ---
 
 build_image
@@ -396,12 +404,20 @@ for target_os in ${target_oss[@]}; do
         exe bash -c "mkdir -p $build_dir"
 
         cmake_configure_options=(
+            -G "$cmake_generator"
             -DCMAKE_BUILD_TYPE=$cmake_build_type
             -DWITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
             -DCORROSION_BUILD_TESTS=ON
             -DWITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
             -DOUINET_MEASURE_BUILD_TIMES=OFF
         )
+
+        if [ "$target_os" == linux ]; then
+            cmake_configure_options+=(
+                -DCMAKE_C_COMPILER=/usr/bin/clang-19
+                -DCMAKE_CXX_COMPILER=/usr/bin/clang++-19
+            )
+        fi
 
         if [ "$target_os" == windows ]; then
             cmake_configure_options+=(
@@ -413,8 +429,14 @@ for target_os in ${target_oss[@]}; do
             cmake_configure_options+=(-DOUISYNC_SRC_DIR=$container_ouisync_dir)
         fi
 
+        build_start_ts=$(timestamp);
+
         exe -w $build_dir cmake $ouinet_dir "${cmake_configure_options[@]}"
         exe -w $build_dir cmake --build . -j $(exe nproc) ${run_cpp_tests[@]/#/--target }
+
+        build_end_ts=$(timestamp);
+
+        echo "Build took $((build_end_ts-build_start_ts)) seconds"
     else
         if [ "$clean" = y ]; then
             exe -w $ouinet_dir git clean -dfX

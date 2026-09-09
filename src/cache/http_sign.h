@@ -9,7 +9,6 @@
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/status.hpp>
-#include <boost/regex.hpp>
 
 #include "../constants.h"
 #include "../response_reader.h"
@@ -24,9 +23,9 @@ namespace ouinet { namespace http_ {
     // A prefix for HTTP signature headers at the response head,
     // each of them followed by a non-repeating, 0-based decimal integer.
     static const std::string response_signature_hdr_pfx = header_prefix + "Sig";
-    // The corresponding regular expression, capturing the number.
-    static const boost::regex response_signature_hdr_rx( response_signature_hdr_pfx + "([0-9]+)"
-                                                       , boost::regex::normal|boost::regex::icase);
+
+    OUINET_COMMON_API bool is_signature_header(const boost::string_view);
+
     // This allows signing the size of body data
     // without breaking on transfer encoding changes.
     static const std::string response_data_size_hdr = header_prefix + "Data-Size";

@@ -216,8 +216,8 @@ resolve_target( const http::request_header<>& req
     auto [host, port] = std::move(*host_port);
 
     // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = boost::regex_match(host, util::localhost_rx);
-    bool priv = boost::regex_match(host, util::private_addr_rx);
+    bool local = util::is_localhost_addr(host);
+    bool priv = util::is_private_addr(host);
 
     // Resolve address and also use result for more sophisticaded checking.
     if ((!local && !priv) || allow_private_targets)
@@ -235,11 +235,9 @@ resolve_target( const http::request_header<>& req
     // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
     for (auto r : lookup)
     {
-        if ((local = boost::regex_match(r.endpoint().address().to_string()
-                                        , util::localhost_rx)))
+        if ((local = util::is_localhost_addr(r.endpoint().address().to_string())))
             break;
-        if ((priv = boost::regex_match(r.endpoint().address().to_string()
-                                      , util::private_addr_rx)))
+        if ((priv = util::is_private_addr(r.endpoint().address().to_string())))
             if (!allow_private_targets)
                 break;
     }

@@ -302,7 +302,7 @@ static void apply_safety_restrictions(std::optional<Route>& route, const Request
     // Other requests to the local host should not use the network
     // to avoid leaking internal services accessed through the client.
     if (!config.is_private_target_allowed()) {
-        if (match(get_hostname(req), util::localhost_rx)) {
+        if (util::is_localhost_addr(get_hostname(req))) {
             route = Route::Origin();
             return;
         }
@@ -346,7 +346,7 @@ static void apply_safety_restrictions(std::optional<Route>& route, const Request
     // to avoid leaking internal services accessed through the client,
     // unless the option `allow-private-targets` is set to true.
     if (!config.is_private_target_allowed()) {
-        if (match(get_hostname(req), util::private_addr_rx)) {
+        if (util::is_private_addr(get_hostname(req))) {
             route = Route::Origin();
             return;
         }
