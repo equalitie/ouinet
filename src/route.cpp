@@ -3,6 +3,7 @@
 #include "http_util.h"
 #include "util/overloaded.h"
 #include "util/debug.h"
+#include "parse/endpoint.h"
 
 namespace ouinet {
 
@@ -36,7 +37,8 @@ template<class T> struct TypeTo;
     macro(OriginOrDCache) \
     macro(OriginOrPublicInjector) \
     macro(PublicInjectorOrDCache) \
-    macro(OriginOrPublicInjectorOrDCache)
+    macro(OriginOrPublicInjectorOrDCache) \
+    macro(ExternalProxy)
 
 #define DEF_TYPE_TO_STR(T) \
     template<> struct TypeTo<Route::T> { static constexpr string_view str() { return #T; } };
@@ -103,6 +105,18 @@ template<class R> struct ParseInjectingCacheTypeArg {
     }
 };
 
+template<class R> struct ParseProxyArgs {
+    static std::optional<R> parse(string_view& s) {
+        s = strip(s);
+        auto bs = boost::string_view(s.begin(), s.size());
+        auto ep = parse::endpoint<asio::ip::tcp>(bs);
+        s = std::string_view(bs.begin(), bs.size());
+        if (!ep) return {};
+        if (read_token(s)) return {}; // no other parameters
+        return R { std::move(*ep) };
+    }
+};
+
 template<class R> struct RouteArgs {};
 
 #define DEF_ROUTE_ARGS(R, Parser) \
@@ -118,6 +132,7 @@ DEF_ROUTE_ARGS(OriginOrDCache,                 ParseCacheTypeArg);
 DEF_ROUTE_ARGS(OriginOrPublicInjector,         ParseInjectingCacheTypeArg);
 DEF_ROUTE_ARGS(PublicInjectorOrDCache,         ParseInjectingCacheTypeArg);
 DEF_ROUTE_ARGS(OriginOrPublicInjectorOrDCache, ParseInjectingCacheTypeArg);
+DEF_ROUTE_ARGS(ExternalProxy,                  ParseProxyArgs);
 
 #undef DEF_ROUTE_ARGS
 
@@ -266,6 +281,7 @@ static std::optional<CacheType> get_cache_type(std::optional<Route> const& route
             [] (const Route::OriginOrPublicInjector& r)         -> R { return r.cache_type; },
             [] (const Route::PublicInjectorOrDCache& r)         -> R { return r.cache_type; },
             [] (const Route::OriginOrPublicInjectorOrDCache& r) -> R { return r.cache_type; },
+            [] (const Route::ExternalProxy&)                    -> R { return {}; },
         },
         route->value);
 }
@@ -426,6 +442,10 @@ std::ostream& operator<<(std::ostream& os, Route::PublicInjectorOrDCache const& 
 
 std::ostream& operator<<(std::ostream& os, Route::OriginOrPublicInjectorOrDCache const& r) {
     return os << TypeTo<std::decay_t<decltype(r)>>::str() << " " << r.cache_type;
+};
+
+std::ostream& operator<<(std::ostream& os, Route::ExternalProxy const& r) {
+    return os << TypeTo<std::decay_t<decltype(r)>>::str() << " " << r.proxy_ep;
 };
 
 std::ostream& operator<<(std::ostream& os, Route const& route) {

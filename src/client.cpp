@@ -380,6 +380,9 @@ private:
     std::expected<Session, sys::error_code>
     fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async);
 
+    [[nodiscard]]
+    std::expected<Session, sys::error_code>
+    fetch_through_external_proxy(asio::ip::tcp::endpoint, const Request&, Async);
 
     [[nodiscard]]
     std::expected<ClientFrontEnd::Response, sys::error_code>
@@ -922,6 +925,23 @@ Client::State::fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async
         if (yield.is_cancelled()) throw;
         return std::unexpected(asio::error::timed_out);
     }
+}
+
+[[nodiscard]]
+std::expected<Session, sys::error_code>
+Client::State::fetch_through_external_proxy(asio::ip::tcp::endpoint proxy_ep, const Request& rq, Async yield) {
+    asio::ip::tcp::socket socket(yield.get_executor());
+
+    if (auto r = socket.async_connect(proxy_ep, yield); !r) {
+        return std::unexpected(r.error());
+    }
+
+    if (auto r = http::async_write(socket, rq, yield); !r) {
+        return std::unexpected(r.error());
+    }
+
+    auto s = Session::create(std::move(socket), rq.method() == http::verb::head, yield);
+    return s;
 }
 
 //------------------------------------------------------------------------------
@@ -1598,7 +1618,10 @@ Client::State::maybe_wrap_in_storing_session(Dispatcher::Response response, Asyn
             },
             [&] (Response::Ouisync r) -> R {
                 return Response::Ouisync{std::move(r.session)};
-            }
+            },
+            [&] (Response::ExternalProxy r) -> R {
+                return Response::ExternalProxy{std::move(r.session)};
+            },
         },
         std::move(response.value));
 }
@@ -1867,6 +1890,11 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         SysResult<Session>
         distributes_cache(const CacheRetrieveRequest& rq, Async yield) override {
             return client_state.fetch_stored_in_dcache(rq, yield);
+        }
+
+        SysResult<Session>
+        external_proxy(asio::ip::tcp::endpoint proxy_ep, const Request& rq, Async yield) override {
+            return client_state.fetch_through_external_proxy(proxy_ep, rq, yield.tag("ext_proxy"));
         }
 
         boost::posix_time::time_duration max_cached_age() override {
