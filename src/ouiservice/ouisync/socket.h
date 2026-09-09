@@ -1,6 +1,7 @@
 #pragma once
 
 #include <asio_utp/udp_socket.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <expected>
 #include <ouisync.hpp>
 
@@ -9,9 +10,8 @@
 
 namespace ouinet::ouisync_service {
 
-static constexpr size_t outgoing_capacity = 128;
-static constexpr size_t incoming_capacity = 128;
-
+static constexpr size_t outgoing_buffer_size = 1024 * 1024;
+static constexpr size_t incoming_buffer_size = 1024 * 1024;
 
 // UDP socket backed by ouisync.
 class OuisyncSocket : public asio_utp::abstract_udp_socket {

@@ -1,13 +1,14 @@
 #include "socket.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/cancellation_type.hpp>
 #include <boost/asio/error.hpp>
 
-#include "queue.h"
+#include "ouiservice/ouisync/buffer.h"
 #include "parse/endpoint.h"
 #include "util/str.h"
 #include "util/trace.h"
@@ -45,7 +46,7 @@ struct OuisyncSocket::State {
     // We are using these intermediate buffers for the following reasons:
     //
     // - The `outgoing` buffer is used to support the `immediate_send_to` operation which must be
-    // non-async and non-blocking. The operation pushed the data into this buffer if it's not full
+    // non-async and non-blocking. The operation pushes the data into this buffer if it's not full
     // or returns `would_block` if it is. This is needed because `ouisync::NetworkSocket` doesn't
     // have any non-async send operation. A possible alternative would be to invoke
     // `ouisync::NetworkSocket` with `detached` completion token. To make it more robust, some sort
@@ -60,20 +61,18 @@ struct OuisyncSocket::State {
     // doesn't support per-object cancellation. An alternative would be to keep a collection of
     // cancellation tokens for every ongoing async operation and trigger them when `cancel` is
     // called.
-    detail::Queue outgoing;
-    detail::Queue incoming;
-
-    bool open = true;
+    detail::AsyncDatagramBuffer outgoing;
+    detail::AsyncDatagramBuffer incoming;
 
     State(
-        const asio::any_io_executor& exec,
+        const asio::any_io_executor& ex,
         ouisync::NetworkSocket inner,
         endpoint_type local_endpoint
     ) :
         inner(std::move(inner)),
         local_endpoint(std::move(local_endpoint)),
-        outgoing(exec, outgoing_capacity),
-        incoming(exec, incoming_capacity)
+        outgoing(ex, outgoing_buffer_size),
+        incoming(ex, incoming_buffer_size)
     {}
 
     const asio::any_io_executor& get_executor() {
@@ -83,10 +82,10 @@ struct OuisyncSocket::State {
     void recv_loop(Async yield) {
         constexpr size_t max_datagram_size = 4096;
 
-        while (open) {
+        while (true) {
             auto recv = inner.recv_from(max_datagram_size, yield);
             if (!recv) {
-                std::ignore = incoming.async_push(recv.error(), {}, yield);
+                // TODO: propagate the error?
                 break;
             }
 
@@ -95,22 +94,28 @@ struct OuisyncSocket::State {
                 break;
             }
 
-            auto send = incoming.async_push(error_code(), { *ep, std::move(recv->data) }, yield);
-            if (!send) {
+            auto n = incoming.async_push(asio::buffer(recv->data), *ep, yield);
+            if (!n) {
                 break;
             }
         }
     }
 
     void send_loop(Async yield) {
-        while (open) {
-            auto recv = outgoing.async_pop(yield);
-            if (!recv) {
+        std::vector<uint8_t> buffer;
+        asio::ip::udp::endpoint ep;
+
+        while (true) {
+            buffer.resize(outgoing.peek());
+
+            auto n = outgoing.async_pop(asio::buffer(buffer), ep, yield);
+            if (!n) {
                 break;
             }
 
-            auto [ ep, data ] = std::move(recv.value());
-            auto send = inner.send_to(data, util::str(ep), yield);
+            buffer.resize(*n);
+
+            auto send = inner.send_to(buffer, util::str(ep), yield);
             if (!send) {
                 break;
             }
@@ -118,25 +123,19 @@ struct OuisyncSocket::State {
     }
 
     void close(Async yield) {
-        open = false;
-        incoming.cancel();
-        outgoing.cancel();
+        incoming.close();
+        outgoing.close();
 
         // Flush outgoing messages
-        while (true) {
-            auto recv = outgoing.try_pop();
-            if (!recv) {
-                break;
-            }
+        std::vector<uint8_t> buffer;
+        asio::ip::udp::endpoint ep;
 
-            auto [ ec, ep, data ] = std::move(*recv);
-            if (ec) {
-                // this should not happen in practice because we don't push errors to the outgoing
-                // queue.
-                break;
-            }
+        while (!outgoing.empty()) {
+            buffer.resize(outgoing.peek());
+            size_t n = outgoing.try_pop(asio::buffer(buffer), ep);
+            buffer.resize(n);
 
-            auto send = inner.send_to(data, util::str(ep), yield);
+            auto send = inner.send_to(buffer, util::str(ep), yield);
             if (!send) {
                 break;
             }
@@ -146,18 +145,21 @@ struct OuisyncSocket::State {
     }
 };
 
-OuisyncSocket::OuisyncSocket(std::shared_ptr<State> state, Trace trace)
+OuisyncSocket::OuisyncSocket(
+    std::shared_ptr<State> state,
+    Trace trace
+)
     : _state(std::move(state))
 {
     task::spawn_detached(
-        _state->get_executor(),
+        get_executor(),
         [state = _state, trace] (asio::yield_context y) {
             state->send_loop(Async(y, trace));
         }
     );
 
     task::spawn_detached(
-        _state->get_executor(),
+        get_executor(),
         [state = _state, trace] (asio::yield_context y) {
             state->recv_loop(Async(y, trace));
         }
@@ -211,11 +213,11 @@ OuisyncSocket::open(ouisync::Session& session, ip::udp proto, Async yield) {
         return std::unexpected(asio::error::no_protocol_option);
     }
 
-    auto exec = inner.get_executor();
+    auto ex = inner.get_executor();
 
     return OuisyncSocket(
         std::make_shared<State>(
-            exec,
+            ex,
             std::move(inner),
             *local_endpoint
         ),
@@ -271,28 +273,14 @@ void OuisyncSocket::async_receive_from(
     handler handler
 ) {
     if (!_state) {
-        handler(asio::error::shut_down, 0);
+        asio::post(get_executor(), asio::append(std::move(handler), asio::error::shut_down, 0));
         return;
     }
 
-    auto cancellation_slot = handler.get_cancellation_slot();
-
     _state->incoming.async_pop(
-        asio::bind_cancellation_slot(
-            std::move(cancellation_slot),
-            [buffers, &sender, handler = std::move(handler)]
-            (error_code ec, std::tuple<endpoint_type, std::vector<uint8_t>> payload) mutable {
-                auto [ payload_ep, payload_data ] = std::move(payload);
-
-                if (ec) {
-                    handler(ec, 0);
-                } else {
-                    asio::buffer_copy(buffers, asio::buffer(payload_data));
-                    sender = payload_ep;
-                    handler(ec, payload_data.size());
-                }
-            }
-        )
+        buffers,
+        sender,
+        std::move(handler)
     );
 }
 
@@ -302,30 +290,11 @@ void OuisyncSocket::async_send_to(
     handler handler
 ) {
     if (!_state) {
-        handler(asio::error::shut_down, 0);
+        asio::post(get_executor(), asio::append(std::move(handler), asio::error::shut_down, 0));
         return;
     }
 
-    auto size = asio::buffer_size(buffers);
-    std::vector<uint8_t> data(size);
-    asio::buffer_copy(asio::buffer(data), buffers);
-
-    auto cancellation_slot = handler.get_cancellation_slot();
-
-    _state->outgoing.async_push(
-        error_code(),
-        { receiver, std::move(data) },
-        asio::bind_cancellation_slot(
-            std::move(cancellation_slot),
-            [size, handler = std::move(handler)] (error_code ec) mutable {
-                if (ec) {
-                    handler(ec, 0);
-                } else {
-                    handler(ec, size);
-                }
-            }
-        )
-    );
+    _state->outgoing.async_push(buffers, receiver, std::move(handler));
 }
 
 std::size_t OuisyncSocket::immediate_send_to(
@@ -341,21 +310,15 @@ std::size_t OuisyncSocket::immediate_send_to(
         return 0;
     }
 
-    if (_state->outgoing.full()) {
+    size_t n = _state->outgoing.try_push(buffers, receiver);
+
+    if (n == 0 && asio::buffer_size(buffers) > 0) {
         ec = asio::error::would_block;
-        return 0;
+    } else {
+        ec = error_code();
     }
 
-    auto size = asio::buffer_size(buffers);
-    std::vector<uint8_t> data(size);
-    asio::buffer_copy(asio::buffer(data), buffers);
-
-    bool pushed = _state->outgoing.try_push(error_code(), { receiver, std::move(data) });
-    assert(pushed);
-
-    ec = error_code();
-
-    return size;
+    return n;
 }
 
 } // namespace ouinet::ouisync_service
