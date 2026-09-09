@@ -102,8 +102,6 @@ BOOST_AUTO_TEST_CASE(test_initialize)
     const unsigned max_cache_size = 2;
 
     run_spawned([&] (Async yield) {
-        sys::error_code ec;
-
         {
             auto lru = unwrap(Lru::load(dir, max_cache_size, yield));
 

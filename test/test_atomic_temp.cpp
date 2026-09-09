@@ -97,8 +97,6 @@ BOOST_DATA_TEST_CASE(test_tmp_file, boost::unit_test::data::make(true_false), ke
         if (fs::exists(tf_path)) fs::remove_all(tf_path);
     });
     {
-        sys::error_code ec;
-
         auto tf = unwrap(util::temp_file::make(ctx.get_executor()));
 
         BOOST_CHECK(tf.keep_on_close());
