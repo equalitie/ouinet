@@ -1047,7 +1047,7 @@ ClientFrontEnd::serve( ClientConfig& config
                 if (cache_client) {
                     std::ignore = cache_client->local_purge(yield);
                 }
-            } else if (argument == "bt_extra_bootstrap"sv) {
+            } else if (argument == "bt_extra_bootstraps"sv) {
                 if (cache_client) {
                     set_bt_extra_bootstraps(value, config);
                 }
