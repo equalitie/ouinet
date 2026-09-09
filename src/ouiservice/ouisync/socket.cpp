@@ -18,9 +18,6 @@ using boost::system::error_code;
 
 namespace ouinet::ouisync_service {
 
-static constexpr size_t outgoing_capacity = 32;
-static constexpr size_t incoming_capacity = 32;
-
 static std::optional<ip::udp::endpoint> parse_quic_endpoint(const std::string& s) {
     // PROTO/IP:PORT
 

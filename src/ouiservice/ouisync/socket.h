@@ -9,6 +9,10 @@
 
 namespace ouinet::ouisync_service {
 
+static constexpr size_t outgoing_capacity = 128;
+static constexpr size_t incoming_capacity = 128;
+
+
 // UDP socket backed by ouisync.
 class OuisyncSocket : public asio_utp::abstract_udp_socket {
 public:
