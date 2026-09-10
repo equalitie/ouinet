@@ -30,6 +30,19 @@
   BOOL disableInjectorAccess;
   BOOL disableBridgeAnnouncement;
   BOOL disableDoH;
+  BOOL enableLogFile;
+  NSArray<NSString*>* btBootstrapExtras;
+  NSString* clientCredentials;
+  NSString* proxyAccessToken;
+  BOOL cachePrivate;
+  NSString* cacheStaticPath;
+  NSString* cacheStaticContentPath;
+  NSString* maxCachedAge;
+  NSString* requestBodyLimit;
+  NSString* localDomain;
+  NSArray<NSString*>* dnsProtocols;
+  NSString* udpMuxPort;
+  NSString* udpMuxRxLimit;
 }
 
 - (OuinetConfig*)init
@@ -138,6 +151,84 @@
 - (OuinetConfig*)setLogLevel:(NSString*)level
 {
   logLevel = level;
+  return self;
+}
+
+- (OuinetConfig*)setEnableLogFile:(BOOL)value
+{
+  enableLogFile = value;
+  return self;
+}
+
+- (OuinetConfig*)setBtBootstrapExtras:(NSArray<NSString*>*)extras
+{
+  btBootstrapExtras = extras;
+  return self;
+}
+
+- (OuinetConfig*)setClientCredentials:(NSString*)credentials
+{
+  clientCredentials = credentials;
+  return self;
+}
+
+- (OuinetConfig*)setProxyAccessToken:(NSString*)token
+{
+  proxyAccessToken = token;
+  return self;
+}
+
+- (OuinetConfig*)setCachePrivate:(BOOL)value
+{
+  cachePrivate = value;
+  return self;
+}
+
+- (OuinetConfig*)setCacheStaticPath:(NSString*)path
+{
+  cacheStaticPath = path;
+  return self;
+}
+
+- (OuinetConfig*)setCacheStaticContentPath:(NSString*)path
+{
+  cacheStaticContentPath = path;
+  return self;
+}
+
+- (OuinetConfig*)setMaxCachedAge:(NSString*)maxCachedAge_
+{
+  maxCachedAge = maxCachedAge_;
+  return self;
+}
+
+- (OuinetConfig*)setRequestBodyLimit:(NSString*)limit
+{
+  requestBodyLimit = limit;
+  return self;
+}
+
+- (OuinetConfig*)setLocalDomain:(NSString*)domain
+{
+  localDomain = domain;
+  return self;
+}
+
+- (OuinetConfig*)setDnsProtocols:(NSArray<NSString*>*)protocols
+{
+  dnsProtocols = protocols;
+  return self;
+}
+
+- (OuinetConfig*)setUdpMuxPort:(NSString*)port
+{
+  udpMuxPort = port;
+  return self;
+}
+
+- (OuinetConfig*)setUdpMuxRxLimit:(NSString*)limit
+{
+  udpMuxRxLimit = limit;
   return self;
 }
 
@@ -274,6 +365,79 @@
 - (BOOL)getDisableDoH
 {
   return disableDoH;
+}
+
+- (BOOL)getEnableLogFile
+{
+  return enableLogFile;
+}
+
+- (NSString*)getLogFilePath
+{
+  if (!enableLogFile) {
+    return nil;
+  }
+  return [NSString stringWithFormat: @"%@/log.txt", ouinetDirectory];
+}
+
+- (NSArray<NSString*>*)getBtBootstrapExtras
+{
+  return btBootstrapExtras;
+}
+
+- (NSString*)getClientCredentials
+{
+  return clientCredentials;
+}
+
+- (NSString*)getProxyAccessToken
+{
+  return proxyAccessToken;
+}
+
+- (BOOL)getCachePrivate
+{
+  return cachePrivate;
+}
+
+- (NSString*)getCacheStaticPath
+{
+  return cacheStaticPath;
+}
+
+- (NSString*)getCacheStaticContentPath
+{
+  return cacheStaticContentPath;
+}
+
+- (NSString*)getMaxCachedAge
+{
+  return maxCachedAge;
+}
+
+- (NSString*)getRequestBodyLimit
+{
+  return requestBodyLimit;
+}
+
+- (NSString*)getLocalDomain
+{
+  return localDomain;
+}
+
+- (NSArray<NSString*>*)getDnsProtocols
+{
+  return dnsProtocols;
+}
+
+- (NSString*)getUdpMuxPort
+{
+  return udpMuxPort;
+}
+
+- (NSString*)getUdpMuxRxLimit
+{
+  return udpMuxRxLimit;
 }
 
 /**
