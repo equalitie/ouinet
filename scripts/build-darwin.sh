@@ -89,11 +89,20 @@ function combine {
                 "${ROOT}/ios/ouinet/include" \
                 "${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework" 
             
+            # Bundle each slice's dSYM only when it exists: a Debug build whose
+            # DEBUG_INFORMATION_FORMAT is plain "dwarf" produces no .dSYM, and
+            # passing a missing -debug-symbols path makes xcodebuild fail.
+            OUINET_OS64=${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework
+            OUINET_SIM=${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework
+            OUINET_XCF_ARGS=(-framework "${OUINET_OS64}")
+            [[ -d "${OUINET_OS64}.dSYM" ]] && \
+                OUINET_XCF_ARGS+=(-debug-symbols "${OUINET_OS64}.dSYM")
+            OUINET_XCF_ARGS+=(-framework "${OUINET_SIM}")
+            [[ -d "${OUINET_SIM}.dSYM" ]] && \
+                OUINET_XCF_ARGS+=(-debug-symbols "${OUINET_SIM}.dSYM")
+            rm -rf ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
             xcodebuild -create-xcframework \
-                -framework ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework \
-                -debug-symbols ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework.dSYM \
-                -framework ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework \
-                -debug-symbols ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework.dSYM \
+                "${OUINET_XCF_ARGS[@]}" \
                 -output ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
 
             # ouinet.framework loads asio_utp as a shared library at runtime
