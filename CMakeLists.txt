@@ -302,6 +302,7 @@ else()
 endif()
 
 add_library(ouinet_client ${client_lib_type} ${client_sources})
+add_library(ouinet::client ALIAS ouinet_client)
 ouinet_setup(TARGET ouinet_client
     LINK
         ${client_link_libs}
@@ -313,19 +314,12 @@ ouinet_setup(TARGET ouinet_client
         OUINET_API_I2P_LOCAL
 )
 
-if (CLIENT_LIB_TYPE)
-    #add_library(client_lib ${CLIENT_LIB_TYPE})
-
-    #if (NOT WIN32 AND NOT MINGW)
-    #    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
-    #endif()
-
-    #ouinet_setup(TARGET client_lib LINK PUBLIC ${client_link_libs})
-
-    if (IOS)
-        set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
-        find_package(ouinet REQUIRED)
-    endif()
+if (IOS)
+    # On iOS the client is packaged as ouinet.framework (built via
+    # ios/ouinet/ouinet-config.cmake, which links ouinet::client) rather than a
+    # standalone executable.
+    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet REQUIRED)
 else()
     add_executable(client "./src/client_main.cpp")
     target_link_libraries(client ouinet_client)
