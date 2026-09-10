@@ -262,6 +262,27 @@ ouinet_setup(TARGET ouinet_common
         OUINET_API_I2P_LOCAL
 )
 
+if (IOS)
+    # ouinet_common is a SHARED library that ouinet.framework loads at runtime.
+    # A bare @rpath/libouinet_common.dylib is never packaged into the app bundle
+    # (and a bare .dylib is not reliably accepted by App Store review), so
+    # package it as a proper framework that can be embedded and code-signed
+    # alongside ouinet.framework. ouinet.framework then loads it via
+    # @rpath/ouinet_common.framework/ouinet_common, resolved through the existing
+    # @executable_path/Frameworks rpath. Shipped as a companion
+    # ouinet_common.xcframework (see build-darwin.sh).
+    set_target_properties(ouinet_common PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.ouinet-common
+        VERSION 1.0.0
+        SOVERSION 1.0.0
+        MACOSX_FRAMEWORK_BUNDLE_VERSION ${VERSION_NAME}
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+    )
+endif()
+
 if (OUINET_HARDCODE_CA_CERTS)
     set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
 endif()
