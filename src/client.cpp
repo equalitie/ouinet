@@ -333,7 +333,7 @@ public:
         return _bt_dht;
     }
 
-    http::response<http::string_body>
+    http::message_generator
     retrieval_failure_response(const Request&);
 
     void enable_metrics() {
@@ -1796,26 +1796,41 @@ string file_to_string(std::string fname)
 }
 
 //------------------------------------------------------------------------------
-http::response<http::string_body>
+http::message_generator
 Client::State::retrieval_failure_response(const Request& req)
 {
-    http::response<http::string_body> res;
-    std::string content = file_to_string(error_page_path().string());
-    if (content.empty()) {
-        res = util::http_error
-            ( req.keep_alive(), http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
+    beast::error_code ec;
+    http::file_body::value_type body;
+    body.open(error_page_path().c_str(), beast::file_mode::scan, ec);
+
+    if (!ec) {
+        auto const size = body.size();
+
+        http::response<http::file_body> res{
+            std::piecewise_construct,
+            std::make_tuple(std::move(body)),
+            std::make_tuple(http::status::bad_gateway, req.version())};
+
+        res.set(http::field::server, OUINET_CLIENT_SERVER_STRING);
+        res.set(http::field::content_type, "text/plain");
+        res.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+        res.set(http_::response_error_hdr, "Failed to retrieve the resource ");
+        res.content_length(size);
+        res.keep_alive(req.keep_alive());
+
+        maybe_add_proto_version_warning(res);
+        return res;
+    }
+    else {
+        http::response<http::string_body> res = util::http_error_html
+            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
               , http_::response_error_hdr_retrieval_failed
               , "Failed to retrieve the resource "
               "(after attempting all configured mechanisms)");
+
+        maybe_add_proto_version_warning(res);
+        return res;
     }
-    else {
-        res = util::http_error_html
-            ( req, http::status::bad_gateway, OUINET_CLIENT_SERVER_STRING
-              , http_::response_error_hdr_retrieval_failed
-              , content);
-    }
-    maybe_add_proto_version_warning(res);
-    return res;
 }
 
 //------------------------------------------------------------------------------
@@ -2085,7 +2100,7 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         if (!route) {
             LOG_WARN(yield, " Failed to choose route for request");
             auto rs = retrieval_failure_response(req);
-            auto r = http::async_write(con, rs, yield);
+            auto r = beast::async_write(con, std::move(rs), yield);
             if (!r || !req.keep_alive() || !rs.keep_alive()) break;
             continue;
         }
@@ -2095,7 +2110,7 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         if (!response) {
             LOG_DEBUG(yield, " Failed to receive a response: ", response.error());
             auto rs = retrieval_failure_response(req);
-            auto r = http::async_write(con, rs, yield);
+            auto r = beast::async_write(con, std::move(rs), yield);
             if (!r || !req.keep_alive() || !rs.keep_alive()) break;
             continue;
         }
@@ -2105,7 +2120,7 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         if (!response) {
             LOG_DEBUG(yield, " Failed wrap response in StoringSession: ", response.error());
             auto rs = retrieval_failure_response(req);
-            auto r = http::async_write(con, rs, yield);
+            auto r = beast::async_write(con, std::move(rs), yield);
             if (!r || !req.keep_alive() || !rs.keep_alive()) break;
             continue;
         }
@@ -2119,7 +2134,7 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
             // response), or if some response has already been written, then we
             // shouldn't attempt to write the failure response.
             auto rs = retrieval_failure_response(req);
-            auto wr = http::async_write(con, rs, yield);
+            auto wr = beast::async_write(con, std::move(rs), yield);
             if (!wr || !req.keep_alive() || !rs.keep_alive()) break;
             continue;
         }
