@@ -324,7 +324,6 @@ else()
 endif()
 
 add_library(ouinet_client ${client_lib_type} ${client_sources})
-add_library(ouinet::client ALIAS ouinet_client)
 ouinet_setup(TARGET ouinet_client
     LINK
         ${client_link_libs}
@@ -338,7 +337,7 @@ ouinet_setup(TARGET ouinet_client
 
 if (IOS)
     # On iOS the client is packaged as ouinet.framework (built via
-    # ios/ouinet/ouinet-config.cmake, which links ouinet::client) rather than a
+    # ios/ouinet/ouinet-config.cmake, which links ouinet_client) rather than a
     # standalone executable.
     set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
     find_package(ouinet REQUIRED)
