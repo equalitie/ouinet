@@ -260,7 +260,8 @@ BOOST_DATA_TEST_CASE(
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians",
-                "--trace-root=injector"
+                "--trace-root=injector",
+                "--listen-on-utp-tls=127.0.0.1:0",
             }),
             ctx,
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
@@ -403,7 +404,8 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
             "--allow-private-targets",
             "--bt-bootstrap-no-default",
-            "--trace-root=injector"
+            "--trace-root=injector",
+            "--listen-on-utp-tls=127.0.0.1:0",
         }),
         ctx);
 
@@ -490,7 +492,8 @@ BOOST_DATA_TEST_CASE(
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians",
-                "--trace-root=injector"
+                "--trace-root=injector",
+                "--listen-on-utp-tls=127.0.0.1:0",
             }),
             ctx,
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
