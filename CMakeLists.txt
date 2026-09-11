@@ -128,6 +128,28 @@ set_target_properties(asio_utp PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+if (IOS)
+    # asio_utp stays a shared library (linking it statically can produce
+    # undefined behaviour across the Asio/libutp shared-library boundary), but a
+    # bare .dylib is not reliably accepted by App Store review. Package it as a
+    # proper framework so it can be embedded and code-signed in the app bundle.
+    # ouinet.framework loads it at runtime via @rpath/asio_utp.framework/asio_utp
+    # (resolved through the existing @executable_path/Frameworks rpath).
+    # NOTE: asio_utp is defined in the modules/asio-utp submodule; this
+    # parent-side customization keeps the submodule untouched (allowed by
+    # CMP0079, set above).
+    set_target_properties(asio_utp PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.asio-utp
+        VERSION 1.0.0
+        SOVERSION 1.0.0
+        MACOSX_FRAMEWORK_BUNDLE_VERSION ${VERSION_NAME}
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+    )
+endif()
+
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
@@ -240,6 +262,27 @@ ouinet_setup(TARGET ouinet_common
         OUINET_API_I2P_LOCAL
 )
 
+if (IOS)
+    # ouinet_common is a SHARED library that ouinet.framework loads at runtime.
+    # A bare @rpath/libouinet_common.dylib is never packaged into the app bundle
+    # (and a bare .dylib is not reliably accepted by App Store review), so
+    # package it as a proper framework that can be embedded and code-signed
+    # alongside ouinet.framework. ouinet.framework then loads it via
+    # @rpath/ouinet_common.framework/ouinet_common, resolved through the existing
+    # @executable_path/Frameworks rpath. Shipped as a companion
+    # ouinet_common.xcframework (see build-darwin.sh).
+    set_target_properties(ouinet_common PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.ouinet-common
+        VERSION 1.0.0
+        SOVERSION 1.0.0
+        MACOSX_FRAMEWORK_BUNDLE_VERSION ${VERSION_NAME}
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+    )
+endif()
+
 if (OUINET_HARDCODE_CA_CERTS)
     set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
 endif()
@@ -313,19 +356,12 @@ ouinet_setup(TARGET ouinet_client
         OUINET_API_I2P_LOCAL
 )
 
-if (CLIENT_LIB_TYPE)
-    #add_library(client_lib ${CLIENT_LIB_TYPE})
-
-    #if (NOT WIN32 AND NOT MINGW)
-    #    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
-    #endif()
-
-    #ouinet_setup(TARGET client_lib LINK PUBLIC ${client_link_libs})
-
-    if (IOS)
-        set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
-        find_package(ouinet REQUIRED)
-    endif()
+if (IOS)
+    # On iOS the client is packaged as ouinet.framework (built via
+    # ios/ouinet/ouinet-config.cmake, which links ouinet_client) rather than a
+    # standalone executable.
+    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet REQUIRED)
 else()
     add_executable(client "./src/client_main.cpp")
     target_link_libraries(client ouinet_client)
