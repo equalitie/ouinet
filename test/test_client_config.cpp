@@ -2,6 +2,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,22 @@ static string public_key_pem =
     "-----BEGIN PUBLIC KEY-----\n"
     "MCowBQYDK2VuAyEAdrkFffyZjr5r6k1Jl2+27fv0KvJu+H8Xk7GwjKnRiHc=\n"
     "-----END PUBLIC KEY-----";
+
+// Self-signed CA certificate for tests only, generated with:
+//   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+//     -keyout /dev/null -out ca.pem -days 36500 -subj "/CN=ouinet test metrics CA"
+static string ca_cert_pem =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIBmTCCAT+gAwIBAgIUWrrGVQ6zkiBqvbz3HpMbHxa4tLwwCgYIKoZIzj0EAwIw\n"
+    "ITEfMB0GA1UEAwwWb3VpbmV0IHRlc3QgbWV0cmljcyBDQTAgFw0yNjA5MTExODAz\n"
+    "MDBaGA8yMTI2MDgxODE4MDMwMFowITEfMB0GA1UEAwwWb3VpbmV0IHRlc3QgbWV0\n"
+    "cmljcyBDQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABMuxzoiteoXXWXUxVNhR\n"
+    "BH2oVKzm+czEpru8UCD0FZYK12QabbjV55ERZvO/wKF6c0yxNPw98FhK2+rIC/3A\n"
+    "A2ejUzBRMB0GA1UdDgQWBBS9vsi5k3WIXnNI9oYWbfr1HKjMGjAfBgNVHSMEGDAW\n"
+    "gBS9vsi5k3WIXnNI9oYWbfr1HKjMGjAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49\n"
+    "BAMCA0gAMEUCIACHnLSfw2gCUgIP1WYESzlS4o9lBghLH11RpxTEZfFDAiEA4dK4\n"
+    "xtqcfRJqvyjVwIwyWszIYVXUF2OQBmOz1qZzdAI=\n"
+    "-----END CERTIFICATE-----\n";
 
 static ClientConfig make_config(const std::vector<std::string>& args) {
     std::vector<const char*> argv;
@@ -147,6 +164,81 @@ BOOST_AUTO_TEST_CASE(priority_requires_server_url) {
         }),
         std::exception
     );
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(ouinet_metrics_server_cacert)
+
+BOOST_AUTO_TEST_CASE(cacert_inline_pem) {
+    TestDir test_dir;
+
+    auto config = make_config({
+        "./no_client_exec"s,
+        "--repo"s, test_dir.string(),
+        "--metrics-server-url"s, "https://a.example.com/ingest"s,
+        "--metrics-server-cacert"s, ca_cert_pem,
+        "--metrics-encryption-key"s, public_key_pem,
+    });
+
+    BOOST_REQUIRE(config.metrics());
+    BOOST_REQUIRE_EQUAL(config.metrics()->servers.size(), 1u);
+    BOOST_CHECK(config.metrics()->servers[0].cacert.has_value());
+}
+
+BOOST_AUTO_TEST_CASE(cacert_from_file_with_at_prefix) {
+    TestDir test_dir;
+
+    auto cert_path = test_dir.path() / "ca.pem";
+    {
+        std::ofstream out(cert_path.string());
+        out << ca_cert_pem;
+    }
+
+    auto config = make_config({
+        "./no_client_exec"s,
+        "--repo"s, test_dir.string(),
+        "--metrics-server-url"s, "https://a.example.com/ingest"s,
+        "--metrics-server-cacert"s, "@" + cert_path.string(),
+        "--metrics-encryption-key"s, public_key_pem,
+    });
+
+    BOOST_REQUIRE(config.metrics());
+    BOOST_REQUIRE_EQUAL(config.metrics()->servers.size(), 1u);
+    BOOST_CHECK(config.metrics()->servers[0].cacert.has_value());
+}
+
+BOOST_AUTO_TEST_CASE(cacert_missing_file_throws) {
+    TestDir test_dir;
+
+    auto cert_path = test_dir.path() / "does-not-exist.pem";
+
+    BOOST_CHECK_THROW(
+        make_config({
+            "./no_client_exec"s,
+            "--repo"s, test_dir.string(),
+            "--metrics-server-url"s, "https://a.example.com/ingest"s,
+            "--metrics-server-cacert"s, "@" + cert_path.string(),
+            "--metrics-encryption-key"s, public_key_pem,
+        }),
+        std::exception
+    );
+}
+
+BOOST_AUTO_TEST_CASE(cacert_dot_means_default) {
+    TestDir test_dir;
+
+    auto config = make_config({
+        "./no_client_exec"s,
+        "--repo"s, test_dir.string(),
+        "--metrics-server-url"s, "https://a.example.com/ingest"s,
+        "--metrics-server-cacert"s, "."s,
+        "--metrics-encryption-key"s, public_key_pem,
+    });
+
+    BOOST_REQUIRE(config.metrics());
+    BOOST_REQUIRE_EQUAL(config.metrics()->servers.size(), 1u);
+    BOOST_CHECK(!config.metrics()->servers[0].cacert.has_value());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
