@@ -880,9 +880,9 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
             auto name = util::str("metrics server ", url->reassemble());
 
             if (raw_cacert.starts_with("@")) {
-                cacert = load_tls_client_ctx_from_string(raw_cacert.substr(1), name);
+                cacert = load_tls_client_ctx_from_file(raw_cacert.substr(1), name);
             } else {
-                cacert = load_tls_client_ctx_from_file(raw_cacert, name);
+                cacert = load_tls_client_ctx_from_string(raw_cacert, name);
             }
         }
 
