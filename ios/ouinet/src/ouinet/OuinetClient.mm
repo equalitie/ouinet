@@ -52,7 +52,7 @@ NativeLib _n;
   args = [self maybeAdd:args stringOfKey:@"--local-domain" stringOfValue:[config getLocalDomain]];
   args = [self maybeAdd:args stringOfKey:@"--dns-protocol" arrayOfValues:[config getDnsProtocols]];
   args = [self maybeAdd:args stringOfKey:@"--injector-tls-cert-file" stringOfValue:[config getInjectorTlsCertPath]];
-  args = [self maybeAdd:args stringOfKey:@"--tls-ca-cert-store-path" stringOfValue:[config getTlsCaCertStoreDir]];
+  args = [self maybeAdd:args stringOfKey:@"--tls-ca-cert-store-file" stringOfValue:[config getTlsCaCertStoreDir]];
   args = [self maybeAdd:args stringOfKey:@"--log-level" stringOfValue:[config getLogLevel]];
   if ([config getEnableLogFile]) {
     args.push_back("--enable-log-file");
@@ -78,7 +78,7 @@ NativeLib _n;
   args = [self maybeAdd:args stringOfKey:@"--metrics-server-url" stringOfValue:[config getMetricsServerUrl]];
   args = [self maybeAdd:args stringOfKey:@"--metrics-server-token" stringOfValue:[config getMetricsServerToken]];
   args = [self maybeAdd:args stringOfKey:@"--metrics-encryption-key" stringOfValue:[config getMetricsEncryptionKey]];
-  args = [self maybeAdd:args stringOfKey:@"--metrics-server-cacert-file" stringOfValue:[config getMetricsServerTlsCaCertPath]];
+  args = [self maybeAdd:args stringOfKey:@"--metrics-server-cacert" stringOfValue:[config getMetricsServerTlsCaCertPath]];
   args = [self maybeAdd:args stringOfKey:@"--metrics-delete-after" stringOfValue:[config getMetricsDeleteAfter]];
   
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
