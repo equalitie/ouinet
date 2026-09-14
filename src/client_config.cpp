@@ -150,6 +150,10 @@ boost::program_options::options_description ClientConfig::description_full()
         , po::bool_switch(&_disable_upnp)->default_value(false)
         , "Disable UPnP IGD port mapping used to open the UDP port on the "
           "gateway for BitTorrent/uTP connectivity.")
+       ("disable-local-peer-discovery"
+        , po::bool_switch(&_disable_local_peer_discovery)->default_value(false)
+        , "Disable discovery of and announcement to other Ouinet clients "
+          "on the local network (LAN) via UDP multicast.")
        ("request-body-limit"
         , po::value<uint64_t>()->default_value(_max_req_body_size)
         , "Set the max size of body requests in KiB. This could be "

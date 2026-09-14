@@ -2165,11 +2165,13 @@ Client::State::setup_cache(Async yield)
                               , *_config.cache_http_pub_key()
                                 , _config.repo_root()/"bep5_http" //TODO gives this a more inclusive name covering bothe bep5 and bep3 caches
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , yield)
         : cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , _config.cache_static_path()
                               , _config.cache_static_content_path()
                               , yield)) {
