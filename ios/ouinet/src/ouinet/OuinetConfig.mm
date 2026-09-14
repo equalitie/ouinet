@@ -28,6 +28,7 @@
   BOOL disableInjectorAccess;
   BOOL disableBridgeAnnouncement;
   BOOL disableDoH;
+  BOOL disableUpnp;
   BOOL enableLogFile;
   NSArray<NSString*>* btBootstrapExtras;
   NSString* clientCredentials;
@@ -259,6 +260,12 @@
   return self;
 }
 
+- (OuinetConfig*)setDisableUpnp:(BOOL)value;
+{
+  disableUpnp = value;
+  return self;
+}
+
 - (NSString*)getOuinetDirectory
 {
   return ouinetDirectory;
@@ -362,6 +369,11 @@
 - (BOOL)getDisableDoH
 {
   return disableDoH;
+}
+
+- (BOOL)getDisableUpnp
+{
+  return disableUpnp;
 }
 
 - (BOOL)getEnableLogFile

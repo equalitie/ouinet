@@ -319,10 +319,12 @@ public:
             bt_dht,
             local_ep,
             m = std::move(m),
-            upnps = _upnps_ptr
+            upnps = _upnps_ptr,
+            upnp_enabled = _config.is_upnp_enabled()
         ] (auto y) mutable {
             auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(y);
             if (!ext_ep) return;
+            if (!upnp_enabled) return;
 
             State::setup_upnp(y.get_executor(), ext_ep->port(), local_ep, upnps);
         });
