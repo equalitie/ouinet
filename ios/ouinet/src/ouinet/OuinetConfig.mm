@@ -2,7 +2,6 @@
 
 @interface OuinetConfig()
 - (NSString*)setupInjectorTlsCert:(NSString*)ouinetDirectory;
-- (NSString*)setupMetricsTlsCaCert:(NSString*)ouinetDirectory;
 @end
 
 @implementation OuinetConfig
@@ -21,7 +20,6 @@
   NSString* metricsServerUrl;
   NSString* metricsServerToken;
   NSString* metricsServerTlsCaCert;
-  NSString* metricsServerTlsCaCertPath;
   NSString* metricsEncryptionKey;
   NSString* metricsDeleteAfter;
   NSString* logLevel;
@@ -132,7 +130,6 @@
 - (OuinetConfig*)setMetricsServerTlsCaCert:(NSString*)caCert
 {
   metricsServerTlsCaCert = caCert;
-  metricsServerTlsCaCertPath = [self setupMetricsTlsCaCert:ouinetDirectory];
   return self;
 }
 
@@ -322,9 +319,9 @@
   return metricsServerToken;
 }
 
-- (NSString*)getMetricsServerTlsCaCertPath
+- (NSString*)getMetricsServerTlsCaCert
 {
-  return metricsServerTlsCaCertPath;
+  return metricsServerTlsCaCert;
 }
 
 - (NSString*)getMetricsEncryptionKey
@@ -456,19 +453,6 @@
                                 contents:fileContents
                                 attributes:nil];
   return tlsCertPath;
-}
-
-- (NSString*)setupMetricsTlsCaCert:(NSString*)ouinetDir
-{
-  if (metricsServerTlsCaCert == nil) {
-      return nil;
-  }
-  NSString* caCertPath = [NSString stringWithFormat: @"%@%@", ouinetDir, @"/metrics-tls-ca-cert.pem"];
-  NSData *fileContents = [metricsServerTlsCaCert dataUsingEncoding:NSUTF8StringEncoding];
-  [[NSFileManager defaultManager] createFileAtPath:caCertPath
-                                contents:fileContents
-                                attributes:nil];
-  return caCertPath;
 }
 
 @end

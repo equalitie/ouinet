@@ -78,7 +78,7 @@ NativeLib _n;
   args = [self maybeAdd:args stringOfKey:@"--metrics-server-url" stringOfValue:[config getMetricsServerUrl]];
   args = [self maybeAdd:args stringOfKey:@"--metrics-server-token" stringOfValue:[config getMetricsServerToken]];
   args = [self maybeAdd:args stringOfKey:@"--metrics-encryption-key" stringOfValue:[config getMetricsEncryptionKey]];
-  args = [self maybeAdd:args stringOfKey:@"--metrics-server-cacert" stringOfValue:[config getMetricsServerTlsCaCertPath]];
+  args = [self maybeAdd:args stringOfKey:@"--metrics-server-cacert" stringOfValue:[config getMetricsServerTlsCaCert]];
   args = [self maybeAdd:args stringOfKey:@"--metrics-delete-after" stringOfValue:[config getMetricsDeleteAfter]];
   
   NSString *certFileContents = [NSString stringWithContentsOfFile:[config getInjectorTlsCertPath] encoding:NSUTF8StringEncoding error:&error];
