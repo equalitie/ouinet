@@ -528,6 +528,18 @@ ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "enabled.<br>\n";
     else
         ss << "disabled.<br>\n";
+
+    ss << "UPnP port mapping is ";
+    if (config.is_upnp_enabled())
+        ss << "enabled.<br>\n";
+    else
+        ss << "disabled.<br>\n";
+
+    ss << "Local peer discovery is ";
+    if (config.is_local_peer_discovery_enabled())
+        ss << "enabled.<br>\n";
+    else
+        ss << "disabled.<br>\n";
     ss << "<br>\n";
 
     ss << "Injector endpoint: " << debug(config.injector_endpoint<CacheType::Bep5Http>()) << "<br>\n";
@@ -672,6 +684,8 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
+        {"upnp_enabled", config.is_upnp_enabled()},
+        {"local_peer_discovery_enabled", config.is_local_peer_discovery_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
         {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
