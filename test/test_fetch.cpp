@@ -1,20 +1,25 @@
-#include "logger.h"
-#include "util/wait_condition.h"
 #define BOOST_TEST_MODULE test_fetch
+
 #include <boost/test/unit_test.hpp>
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/asio/ssl.hpp>
 #include <ouisync/service.hpp>
-
 #include <boost/beast/version.hpp>
+
+#include "client.h"
+#include "injector.h"
+#include "logger.h"
+#include "ssl/util.h"
 #include "util/dht.h"
-#include "util/test_dir.h"
-#include "util/http_server.h"
 #include "util/http_client.h"
+#include "util/http_server.h"
+#include "util/random.h"
 #include "util/request_builder.h"
+#include "util/test_dir.h"
 #include "util/unwrap.h"
 #include "util/select.h"
+#include "util/wait_condition.h"
 #include "injector.h"
 #include "client.h"
 #include "swarm_calculator.h"
@@ -392,7 +397,13 @@ BOOST_DATA_TEST_CASE(
     get_logger().set_threshold(INFO);
     ouisync::init_log();
 
-    LOG_INFO("dht_impl=", dht_impl, " seeder_count=", seeder_count, " leecher_count=", leecher_count, " resource_count=", resource_count);
+    LOG_INFO(
+        " dht_impl=", dht_impl,
+        " flags=", ouisync_transport_flag,
+        " seeder_count=", seeder_count,
+        " leecher_count=", leecher_count,
+        " resource_count=", resource_count
+    );
 
     asio::io_context ctx;
 
