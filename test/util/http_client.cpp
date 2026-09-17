@@ -28,7 +28,8 @@ std::expected<
     http::response<http::string_body>,
     sys::error_code
 >
-fetch_from_origin(util::Url url, asio::ssl::context& ctx, Async yield) {
+fetch_from_origin(util::Url url, asio::ssl::context& ctx,
+                  Async yield, http::status expected_result) {
     if (url.port.empty()) url.port = "443";
     if (url.path.empty()) url.path = "/";
 
@@ -63,7 +64,7 @@ fetch_from_origin(util::Url url, asio::ssl::context& ctx, Async yield) {
 
     std::ignore = stream.async_shutdown(yield);
 
-    assert(res.result() == http::status::ok);
+    assert(res.result() == expected_result);
 
     return res;
 }
