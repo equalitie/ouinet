@@ -53,6 +53,7 @@ NativeLib _n;
   args = [self maybeAdd:args stringOfKey:@"--dns-protocol" arrayOfValues:[config getDnsProtocols]];
   args = [self maybeAdd:args stringOfKey:@"--injector-tls-cert-file" stringOfValue:[config getInjectorTlsCertPath]];
   args = [self maybeAdd:args stringOfKey:@"--tls-ca-cert-store-file" stringOfValue:[config getTlsCaCertStoreDir]];
+  args = [self maybeAdd:args stringOfKey:@"--tls-ca-cert-cn" stringOfValue:[config getTlsCaCertCn]];
   args = [self maybeAdd:args stringOfKey:@"--log-level" stringOfValue:[config getLogLevel]];
   if ([config getEnableLogFile]) {
     args.push_back("--enable-log-file");

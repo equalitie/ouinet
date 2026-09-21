@@ -12,6 +12,7 @@
   NSString* injectorTlsCert;
   NSString* injectorTlsCertPath;
   NSString* tlsCaCertStoreDir;
+  NSString* tlsCaCertCn;
   NSString* cacheType;
   NSString* listenOnTcp;
   NSString* frontEndEp;
@@ -108,6 +109,12 @@
 - (OuinetConfig*)setFrontEndAccessToken:(NSString*)token
 {
   frontEndAccessToken = token;
+  return self;
+}
+
+- (OuinetConfig*)setTlsCaCertCn:(NSString*)cn
+{
+  tlsCaCertCn = cn;
   return self;
 }
 
@@ -296,6 +303,11 @@
 - (NSString*)getTlsCaCertStoreDir;
 {
   return [NSString stringWithFormat: @"%@/cacert.pem", ouinetDirectory];
+}
+
+- (NSString*)getTlsCaCertCn
+{
+  return tlsCaCertCn;
 }
 
 - (NSString*)getCacheType
