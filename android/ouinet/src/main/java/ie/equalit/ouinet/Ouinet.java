@@ -156,6 +156,8 @@ public class Ouinet {
         maybeAddBool(args, "--disable-injector-access",     config.getDisableInjectorAccess());
         maybeAddBool(args, "--cache-private",               config.getCachePrivate());
         maybeAddBool(args, "--disable-bridge-announcement", config.getDisableBridgeAnnouncement());
+        maybeAddBool(args, "--disable-upnp",                config.getDisableUpnp());
+        maybeAddBool(args, "--disable-local-peer-discovery", config.getDisableLocalPeerDiscovery());
         maybeAdd    (args, "--request-body-limit",          config.getRequestBodyLimit());
 
         maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());

@@ -72,6 +72,12 @@ NativeLib _n;
   if ([config getDisableBridgeAnnouncement]) {
     args.push_back("--disable-bridge-announcement");
   }
+  if ([config getDisableUpnp]) {
+    args.push_back("--disable-upnp");
+  }
+  if ([config getDisableLocalPeerDiscovery]) {
+    args.push_back("--disable-local-peer-discovery");
+  }
   if ([config getMetricsEnableOnStart]) {
     args.push_back("--metrics-enable-on-start");
   }

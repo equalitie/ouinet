@@ -205,6 +205,14 @@ public:
         return !_disable_bridge_announcement;
     }
 
+    bool is_upnp_enabled() const {
+        return !_disable_upnp;
+    }
+
+    bool is_local_peer_discovery_enabled() const {
+        return !_disable_local_peer_discovery;
+    }
+
     boost::optional<std::string>
     injector_credentials() const {
         return _injector_credentials;
@@ -386,6 +394,8 @@ private:
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
+    bool _disable_upnp = false;
+    bool _disable_local_peer_discovery = false;
     EnabledCaches _enabled_caches;
 
     boost::posix_time::time_duration _max_cached_age

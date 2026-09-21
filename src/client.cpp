@@ -319,10 +319,12 @@ public:
             bt_dht,
             local_ep,
             m = std::move(m),
-            upnps = _upnps_ptr
+            upnps = _upnps_ptr,
+            upnp_enabled = _config.is_upnp_enabled()
         ] (auto y) mutable {
             auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(y);
             if (!ext_ep) return;
+            if (!upnp_enabled) return;
 
             State::setup_upnp(y.get_executor(), ext_ep->port(), local_ep, upnps);
         });
@@ -2163,11 +2165,13 @@ Client::State::setup_cache(Async yield)
                               , *_config.cache_http_pub_key()
                                 , _config.repo_root()/"bep5_http" //TODO gives this a more inclusive name covering bothe bep5 and bep3 caches
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , yield)
         : cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , _config.cache_static_path()
                               , _config.cache_static_content_path()
                               , yield)) {

@@ -69,6 +69,8 @@ public class Config implements Parcelable {
         private String udpMuxPort;
         private String udpMuxRxLimit;
         private boolean disableBridgeAnnouncement = false;
+        private boolean disableUpnp = false;
+        private boolean disableLocalPeerDiscovery = false;
         private String requestBodyLimit;
         private String maxCachedAge;
         private String localDomain;
@@ -207,6 +209,14 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setDisableBridgeAnnouncement(boolean disableBridgeAnnouncement){
             this.disableBridgeAnnouncement = disableBridgeAnnouncement;
+            return this;
+        }
+        public ConfigBuilder setDisableUpnp(boolean disableUpnp){
+            this.disableUpnp = disableUpnp;
+            return this;
+        }
+        public ConfigBuilder setDisableLocalPeerDiscovery(boolean disableLocalPeerDiscovery){
+            this.disableLocalPeerDiscovery = disableLocalPeerDiscovery;
             return this;
         }
         public ConfigBuilder setRequestBodyLimit(String requestBodyLimit){
@@ -497,6 +507,8 @@ public class Config implements Parcelable {
                     udpMuxPort,
                     udpMuxRxLimit,
                     disableBridgeAnnouncement,
+                    disableUpnp,
+                    disableLocalPeerDiscovery,
                     requestBodyLimit,
                     maxCachedAge,
                     localDomain,
@@ -542,6 +554,8 @@ public class Config implements Parcelable {
     private String udpMuxPort;
     private String udpMuxRxLimit;
     private boolean disableBridgeAnnouncement;
+    private boolean disableUpnp;
+    private boolean disableLocalPeerDiscovery;
     private String requestBodyLimit;
     private String maxCachedAge;
     private String localDomain;
@@ -585,6 +599,8 @@ public class Config implements Parcelable {
                   String udpMuxPort,
                   String udpMuxRxLimit,
                   boolean disableBridgeAnnouncement,
+                  boolean disableUpnp,
+                  boolean disableLocalPeerDiscovery,
                   String requestBodyLimit,
                   String maxCachedAge,
                   String localDomain,
@@ -627,6 +643,8 @@ public class Config implements Parcelable {
         this.udpMuxPort = udpMuxPort;
         this.udpMuxRxLimit = udpMuxRxLimit;
         this.disableBridgeAnnouncement = disableBridgeAnnouncement;
+        this.disableUpnp = disableUpnp;
+        this.disableLocalPeerDiscovery = disableLocalPeerDiscovery;
         this.requestBodyLimit = requestBodyLimit;
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
@@ -722,6 +740,12 @@ public class Config implements Parcelable {
     public boolean getDisableBridgeAnnouncement() {
         return disableBridgeAnnouncement;
     }
+    public boolean getDisableUpnp() {
+        return disableUpnp;
+    }
+    public boolean getDisableLocalPeerDiscovery() {
+        return disableLocalPeerDiscovery;
+    }
     public String getRequestBodyLimit() {
         return requestBodyLimit;
     }
@@ -815,6 +839,8 @@ public class Config implements Parcelable {
         out.writeString(udpMuxPort);
         out.writeString(udpMuxRxLimit);
         out.writeInt(disableBridgeAnnouncement ? 1 : 0);
+        out.writeInt(disableUpnp ? 1 : 0);
+        out.writeInt(disableLocalPeerDiscovery ? 1 : 0);
         out.writeString(requestBodyLimit);
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
@@ -868,6 +894,8 @@ public class Config implements Parcelable {
         udpMuxPort = in.readString();
         udpMuxRxLimit = in.readString();
         disableBridgeAnnouncement = in.readInt() != 0;
+        disableUpnp = in.readInt() != 0;
+        disableLocalPeerDiscovery = in.readInt() != 0;
         requestBodyLimit = in.readString();
         maxCachedAge = in.readString();
         localDomain = in.readString();
