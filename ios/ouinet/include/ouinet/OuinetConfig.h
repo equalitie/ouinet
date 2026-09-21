@@ -92,7 +92,7 @@
 
 - (NSString*)getMetricsServerToken;
 
-- (NSString*)getMetricsServerTlsCaCertPath;
+- (NSString*)getMetricsServerTlsCaCert;
 
 - (NSString*)getMetricsEncryptionKey;
 
