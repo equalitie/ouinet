@@ -15,6 +15,7 @@ set(OUINET_TEST_TARGETS)
 add_library(ouinet_test_utils OBJECT
     ./util/http_server.cpp
     ./util/http_client.cpp
+    ./util/random_url.cpp
     ./util/request_builder.cpp
 )
 
@@ -77,6 +78,7 @@ add_test(TARGET test_response_writer)
 
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
     add_test(TARGET test_client_stop)
+    add_test(TARGET test_fetch_random_pages)
 endif ()
 
 add_test(TARGET test_client_config)
