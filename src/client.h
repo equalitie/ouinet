@@ -32,7 +32,9 @@ public:
         Stopped,  // told to stop, all operations succeeded (final)
     };
 
-    static boost::filesystem::path get_or_gen_ca_root_cert(const std::string repo_root);
+    static boost::filesystem::path get_or_gen_ca_root_cert(
+            const std::string repo_root,
+            const std::string cn = "Your own local Ouinet client");
 
     Client(
         asio::io_context&,

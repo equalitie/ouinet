@@ -122,6 +122,10 @@ boost::program_options::options_description ClientConfig::description_full()
         , "Path to the CA certificate store directory")
        ("tls-ca-cert-store-file", po::value<vector<string>>(&_tls_ca_cert_store_files)
         , "Add CA certificate store file")
+       ("tls-ca-cert-cn", po::value<string>(&_tls_ca_cert_cn)
+        , "Common Name (CN) to use for the generated root CA certificate. "
+          "Only applied when the CA certificate is first generated; "
+          "delete the existing CA cert/key/dh files to regenerate with a new name.")
        ("front-end-ep"
         , po::value<string>()->default_value("127.0.0.1:8078")
         , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")

@@ -132,7 +132,19 @@ private:
         , boost::intrusive::constant_time_size<false>
         > _pending_tasks;
 
-    static void handle_ca_pem(Response&, std::ostringstream&, const CACertificate&);
+    // Build the full Response serving the public CA certificate (no
+    // authentication required; it never exposes the private key).
+    static Response handle_ca_pem(const Request&, const CACertificate&);
+    
+    // Validate a request against the configured frontend Basic-auth credentials.
+    // Returns boost::none when authorized (or when no credentials are configured,
+    // i.e. auth is disabled); otherwise the 401 Response to send back.
+    static boost::optional<Response> check_frontend_credentials(const ClientConfig&, const Request&);
+
+    // Validate a request against the configured X-Ouinet-Front-End-Token.
+    // Returns boost::none when authorized (or when no token is configured);
+    // otherwise the 403 Response to send back.
+    static boost::optional<Response> check_frontend_token(const ClientConfig&, const Request&);
 
     static void handle_group_list( const Request&
                           , Response&

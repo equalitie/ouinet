@@ -156,6 +156,10 @@ public:
       return _i2p_bep3_tracker;
     }
 
+    const std::string& tls_ca_cert_cn() const {
+        return _tls_ca_cert_cn;
+    }
+
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
     }
@@ -380,6 +384,7 @@ private:
     std::string _tls_ca_cert_store_dir;
     std::vector<std::string> _tls_ca_cert_store_files;
     asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+    std::string _tls_ca_cert_cn = "Your own local Ouinet client";
 
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
