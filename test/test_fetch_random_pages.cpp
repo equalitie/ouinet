@@ -16,6 +16,8 @@
 using namespace std;
 using namespace ouinet;
 
+namespace test_constants = test::constants::ceno;
+
 using Request = http::request<http::string_body>;
 using Response = http::response<http::string_body>;
 
@@ -93,14 +95,14 @@ BOOST_AUTO_TEST_CASE(
         TestDir root;
         auto repo_dir = root.make_subdir("client").string();
 
-        auto tls_cert_path = repo_dir + "/tls-cert-ceno.pem";
+        auto tls_cert_path = repo_dir + "/tls-inj-cert.pem";
         auto tls_cert_file = util::file_io::open_or_create(
             ctx.get_executor(), tls_cert_path);
         auto r = util::file_io::write(
             tls_cert_file.value(),
             asio::const_buffer(
-                test::constants::ceno::tls_injector_cert.data(),
-                test::constants::ceno::tls_injector_cert.size()),
+                test_constants::tls_injector_cert.data(),
+                test_constants::tls_injector_cert.size()),
             yield
         );
         BOOST_CHECK(r);
@@ -109,11 +111,9 @@ BOOST_AUTO_TEST_CASE(
             "./no_client_exec"s,
             "--log-level=DEBUG"s,
             "--repo"s, repo_dir,
-            "--injector-credentials"s,
-            "ouinet:160d79874a52c2cbcdec58db1a8160a9"s,
+            "--injector-credentials"s, test_constants::injector_credentials,
             "--cache-type=bep5-http"s,
-            "--cache-http-public-key"s,
-            "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq"s,
+            "--cache-http-public-key"s, test_constants::cache_http_public_key,
             "--injector-tls-cert-file"s, tls_cert_path,
             "--disable-origin-access"s,
             // Bind to random ports to avoid clashes
