@@ -16,7 +16,7 @@
 using namespace std;
 using namespace ouinet;
 
-namespace test_constants = test::constants::sandbox;
+namespace test_constants = test::constants::ceno;
 
 using Request = http::request<http::string_body>;
 using Response = http::response<http::string_body>;
