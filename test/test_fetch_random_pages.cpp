@@ -17,8 +17,6 @@
 using namespace std;
 using namespace ouinet;
 
-namespace test_constants = test::constants::ceno;
-
 using Request = http::request<http::string_body>;
 using Response = http::response<http::string_body>;
 
@@ -88,9 +86,11 @@ void run(asio::io_context& ctx, F&& async_test) {
 }
 
 BOOST_AUTO_TEST_CASE(
-    test_fetch_random_page_from_wikipedia_ceno,
+    test_fetch_random_pages_from_wikipedia_ceno,
     * boost::unit_test::timeout(240)
 ) {
+    namespace test_constants = test::constants::ceno;
+
     asio::io_context ctx;
     run(ctx, [&ctx] (Async yield) {
         TestDir root;
@@ -125,12 +125,18 @@ BOOST_AUTO_TEST_CASE(
         client.start();
 
         auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
-        auto url = random_url_from_wikipedia(yield);
-        auto rq = CacheRequestBuilder(url.value()).set_route(rpi).build();
-        auto rs = fetch_through_client(client, rq, yield);
 
-        BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-        BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+        for (uint16_t i = 0; i < 10; ++i)
+        {
+            BOOST_TEST_MESSAGE("Iteration: " << i);
+            auto url = random_url_from_wikipedia(yield);
+            auto rq = CacheRequestBuilder(url.value()).set_route(rpi).build();
+            auto rs = fetch_through_client(client, rq, yield);
+
+            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+            BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+            async_sleep(500ms, yield);
+        }
 
         client.stop();
     });
