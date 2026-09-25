@@ -12,6 +12,7 @@
 #include "util/test_constants.h"
 #include "util/test_dir.h"
 #include "util/unwrap.h"
+#include "async_sleep.h"
 
 using namespace std;
 using namespace ouinet;
@@ -87,7 +88,7 @@ void run(asio::io_context& ctx, F&& async_test) {
 }
 
 BOOST_AUTO_TEST_CASE(
-    test_fetch_random_page_from_wikipedia,
+    test_fetch_random_page_from_wikipedia_ceno,
     * boost::unit_test::timeout(240)
 ) {
     asio::io_context ctx;
@@ -130,6 +131,65 @@ BOOST_AUTO_TEST_CASE(
 
         BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
         BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+
+        client.stop();
+    });
+}
+
+BOOST_AUTO_TEST_CASE(
+    test_fetch_random_pages_from_wikipedia_local_tcp,
+    * boost::unit_test::timeout(240)
+)
+{
+    asio::io_context ctx;
+    run(ctx, [&ctx] (Async yield){
+        TestDir root;
+        const std::string injector_credentials = "username:password";
+
+        Injector injector(
+            make_config<InjectorConfig>({
+                "./no_injector_exec"s,
+                "--log-level=DEBUG",
+                "--repo"s, root.make_subdir("injector").string(),
+                "--credentials"s, injector_credentials,
+                "--listen-on-tcp=0.0.0.0:7070"s, // TODO: bind to random port
+                //"--tls-ca-cert-store-file="s + server.certificate_path().string(),
+                "--trace-root=injector"
+            }),
+            ctx
+        );
+
+        Client client(ctx, make_config<ClientConfig>({
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("client"s).string(),
+            "--injector-credentials"s, injector_credentials,
+            "--cache-type=bep5-http"s,
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            //"--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+            "--disable-origin-access"s,
+            "--injector-ep=tcp:127.0.0.1:7070"s,
+            // Bind to random ports to avoid clashes
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
+            "--trace-root=client"s,
+        }));
+        client.start();
+
+        auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
+
+        for (uint16_t i = 0; i < 100; ++i)
+        {
+            BOOST_TEST_MESSAGE("Iteration: " << i);
+            auto url = random_url_from_wikipedia(yield);
+            auto rq = CacheRequestBuilder(url.value()).set_route(rpi).build();
+            auto rs = fetch_through_client(client, rq, yield);
+
+            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+            BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+
+            async_sleep(500ms, yield);
+        }
 
         client.stop();
     });
