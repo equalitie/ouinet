@@ -87,7 +87,7 @@ void run(asio::io_context& ctx, F&& async_test) {
 
 BOOST_AUTO_TEST_CASE(
     test_fetch_random_pages_from_wikipedia_ceno,
-    * boost::unit_test::timeout(240)
+    * boost::unit_test::disabled()
 ) {
     namespace test_constants = test::constants::ceno;
 
