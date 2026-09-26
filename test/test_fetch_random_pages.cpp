@@ -196,9 +196,10 @@ BOOST_DATA_TEST_CASE(
             BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
             BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
 
-            async_sleep(500ms, yield);
+            async_sleep(800ms, yield);
         }
 
+        async_sleep(500ms, yield);
         client.stop();
     });
 }
