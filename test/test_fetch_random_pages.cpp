@@ -1,5 +1,7 @@
 #define BOOST_TEST_MODULE test_random_pages
 #include <boost/test/unit_test.hpp>
+#include <boost/test/data/test_case.hpp>
+#include <boost/test/data/monomorphic.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -14,6 +16,7 @@
 #include "util/unwrap.h"
 #include "async_sleep.h"
 
+namespace data = boost::unit_test::data;
 using namespace std;
 using namespace ouinet;
 
@@ -140,13 +143,14 @@ BOOST_AUTO_TEST_CASE(
     });
 }
 
-BOOST_AUTO_TEST_CASE(
-    test_fetch_random_pages_from_wikipedia_local_tcp,
-    * boost::unit_test::timeout(240)
+BOOST_DATA_TEST_CASE(
+    test_fetch_random_pages_from_wikipedia_local,
+    data::make({"tcp"s, "utp"s}),
+    proto
 )
 {
     asio::io_context ctx;
-    run(ctx, [&ctx] (Async yield){
+    run(ctx, [&ctx, &proto] (Async yield){
         TestDir root;
         const std::string injector_credentials = "username:password";
 
@@ -156,7 +160,7 @@ BOOST_AUTO_TEST_CASE(
                 "--log-level=DEBUG",
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
-                "--listen-on-tcp=0.0.0.0:7070"s, // TODO: bind to random port
+                "--listen-on-" + proto + "=0.0.0.0:7070"s, // TODO: bind to random port
                 //"--tls-ca-cert-store-file="s + server.certificate_path().string(),
                 "--trace-root=injector"
             }),
@@ -172,7 +176,7 @@ BOOST_AUTO_TEST_CASE(
             "--cache-http-public-key"s, injector.cache_http_public_key(),
             //"--injector-tls-cert-file"s, injector.tls_cert_file().string(),
             "--disable-origin-access"s,
-            "--injector-ep=tcp:127.0.0.1:7070"s,
+            "--injector-ep=" + proto + ":127.0.0.1:7070"s,
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
@@ -182,9 +186,9 @@ BOOST_AUTO_TEST_CASE(
 
         auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
 
-        for (uint16_t i = 0; i < 100; ++i)
+        for (uint16_t i = 0; i < 150; ++i)
         {
-            BOOST_TEST_MESSAGE("Iteration: " << i);
+            BOOST_TEST_MESSAGE("Iteration " << proto << ": " << i);
             auto url = random_url_from_wikipedia(yield);
             auto rq = CacheRequestBuilder(url.value()).set_route(rpi).build();
             auto rs = fetch_through_client(client, rq, yield);
