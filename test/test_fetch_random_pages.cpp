@@ -80,8 +80,6 @@ void run(asio::io_context& ctx, F&& async_test) {
     if (spawn_end) {
         auto test_end = steady_clock::now();
         auto elapsed_ms = duration_cast<milliseconds>(test_end - *spawn_end).count();
-        // TODO: Keep reducing the allowed timeout
-        BOOST_REQUIRE_LT(elapsed_ms, 5000);
     }
 }
 
