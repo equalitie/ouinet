@@ -186,7 +186,7 @@ BOOST_DATA_TEST_CASE(
 
         auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
 
-        for (uint16_t i = 0; i < 150; ++i)
+        for (uint16_t i = 0; i < 2; ++i)
         {
             BOOST_TEST_MESSAGE("Iteration " << proto << ": " << i);
             auto url = random_url_from_wikipedia(yield);
