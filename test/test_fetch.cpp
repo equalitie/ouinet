@@ -157,6 +157,65 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     });
 }
 
+BOOST_DATA_TEST_CASE(
+    test_client_fetch_from_injector,
+    data::make({"tcp"s, "utp"s}),
+    proto
+){
+    asio::io_context ctx;
+    run(ctx, [&ctx, &proto] (Async yield){
+        TestDir root;
+        HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+        const std::string injector_credentials = "username:password";
+
+        Injector injector(
+            make_config<InjectorConfig>({
+                "./no_injector_exec"s,
+                "--log-level=DEBUG",
+                "--repo"s, root.make_subdir("injector").string(),
+                "--credentials"s, injector_credentials,
+                "--listen-on-" + proto + "=0.0.0.0:7070"s, // TODO: bind to random port
+                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+                "--trace-root=injector"s,
+                "--allow-private-targets"s,
+            }),
+            ctx
+        );
+
+        Client client(ctx, make_config<ClientConfig>({
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("client"s).string(),
+            "--injector-credentials"s, injector_credentials,
+            "--cache-type=bep5-http"s,
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            "--disable-origin-access"s,
+            "--injector-ep=" + proto + ":127.0.0.1:7070"s,
+            // Bind to random ports to avoid clashes
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
+            "--trace-root=client"s,
+            "--allow-private-targets"s,
+        }));
+        client.start();
+
+        auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
+        auto body = generate_random_body();
+        for (uint16_t i = 0; i < 4; ++i)
+        {
+            BOOST_TEST_MESSAGE("Iteration " << proto << ": " << i);
+            auto url = server.add_resource("/", body);
+            auto rq = CacheRequestBuilder(url).set_route(rpi).build();
+            auto rs = fetch_through_client(client, rq, yield);
+
+            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+            BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+            BOOST_CHECK(rs.body() == body);
+        }
+        client.stop();
+    });
+}
+
 // An integration test with three types of nodes: the 'injector', a number of 'seeder' clients
 // and a number of 'leecher' clients.
 //
