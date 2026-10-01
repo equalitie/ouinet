@@ -208,9 +208,9 @@ BOOST_DATA_TEST_CASE(
             auto rq = CacheRequestBuilder(url).set_route(rpi).build();
             auto rs = fetch_through_client(client, rq, yield);
 
-            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-            BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
-            BOOST_CHECK(rs.body() == body);
+            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+            BOOST_REQUIRE(rs.body() == body);
         }
         client.stop();
     });
