@@ -80,14 +80,14 @@ void parse_args( const vector<string>& args
     }
 }
 
-void wait_for_ready(DhtNode& dht, udp::endpoint ep, asio::yield_context yield)
+void wait_for_ready(DhtNode& dht, asio::yield_context yield)
 {
     auto ex = dht.get_executor();
 
     sys::error_code ec;
     Progress progress(ex, "Bootstrapping");
 
-    compat([&](Async yield) { return dht.start(ep, yield); })(yield[ec]);
+    compat([&](Async yield) { return dht.start(yield); })(yield[ec]);
 
     asio::steady_timer timer(ex);
 
@@ -106,8 +106,16 @@ int main(int argc, const char** argv)
     auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
+    asio_utp::udp_multiplexer m(ctx.get_executor());
+
+    {
+        sys::error_code ec;
+        m.bind({asio::ip::address_v4::any(), 0}, ec);
+        assert(!ec);
+    }
+
     DhtNode dht(
-        ctx.get_executor(),
+        std::move(m),
         metrics_dht.dht_node_ipv4(),
         dns_resolver,
         rx_limit,
@@ -131,7 +139,7 @@ int main(int argc, const char** argv)
     parse_args(args, &ifaddrs, &ping_cmd, &announce_cmd, &get_peers_cmd);
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        wait_for_ready(dht, { asio::ip::address_v4::any(), 0 }, yield);
+        wait_for_ready(dht, yield);
 
         cerr << "Our WAN endpoint: " << dht.wan_endpoint() << "\n";
 

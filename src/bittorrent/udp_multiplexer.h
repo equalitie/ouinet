@@ -60,6 +60,10 @@ public:
     bool is_v4() const { return _socket.local_endpoint().address().is_v4(); }
     bool is_v6() const { return _socket.local_endpoint().address().is_v6(); }
 
+    asio_utp::udp_multiplexer inner_udp_multiplexer() const {
+        return _socket;
+    }
+
 private:
     void maintain_max_rate_bytes_per_sec( float current_rate
                                         , float max_rate
@@ -92,8 +96,6 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
     _rx_limit(rx_limit)
 {
     assert(_socket.is_open());
-
-    LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {

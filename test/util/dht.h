@@ -103,7 +103,7 @@ setup_dht(DhtImpl impl, size_t count, Async yield) {
     switch (impl) {
     case DhtImpl::real: {
         auto nodes = spawn_dht_nodes(count, yield);
-        auto endpoint = *nodes[0]->local_endpoints().begin();
+        auto endpoint = nodes[0]->udp_multiplexers().begin()->local_endpoint();
 
         return std::make_tuple(std::move(nodes), endpoint, nullptr);
     }

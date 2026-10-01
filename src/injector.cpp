@@ -6,6 +6,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/optional/optional_io.hpp>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -896,7 +897,13 @@ Injector::Injector(
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
     _inner(std::make_unique<Inner>(_config.trace_root()))
 {
-    auto trace = _inner->_trace;
+    auto trace = _inner->_trace.tag("constructor");
+
+    LOG_DEBUG(trace, " Config/tcp_endpoint:        ", _config.tcp_endpoint());
+    LOG_DEBUG(trace, " Config/tcp_tls_endpoint:    ", _config.tcp_tls_endpoint());
+    LOG_DEBUG(trace, " Config/utp_endpoint:        ", _config.utp_endpoint());
+    LOG_DEBUG(trace, " Config/utp_tls_endpoint:    ", _config.utp_tls_endpoint());
+    LOG_DEBUG(trace, " Config/bittorrent_endpoint: ", _config.bittorrent_endpoint());
 
     #ifndef __WIN32
     if (_config.open_file_limit()) {
@@ -919,7 +926,7 @@ Injector::Injector(
         LOG_INFO(trace, " Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
-    LOG_INFO( "DNS protocols enabled: ["
+    LOG_INFO( trace, " DNS protocols enabled: ["
             , dns::Resolver::protos_to_str(_config.dns_config().protocols)
             , "].");
 
@@ -951,6 +958,19 @@ Injector::Injector(
         proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
     }
 
+    auto create_multiplexer = [exec = _exec, trace] (asio::ip::udp::endpoint ep) {
+        asio_utp::udp_multiplexer m(exec);
+        sys::error_code ec;
+        m.bind(ep, ec);
+        if (ec) {
+            LOG_ABORT(trace, " Failed to bind multiplexer to ", ep, " (", ec.message(), ")");
+        }
+        return m;
+    };
+
+    asio_utp::udp_multiplexer utp_plain_mux(_exec);
+    asio_utp::udp_multiplexer utp_tls_mux(_exec);
+
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
         LOG_INFO(trace, " uTP address: ", endpoint);
@@ -958,7 +978,8 @@ Injector::Injector(
         util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
+        utp_plain_mux = create_multiplexer(endpoint);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, utp_plain_mux, trace);
         proxy_server->add(std::move(srv));
     }
 
@@ -966,7 +987,8 @@ Injector::Injector(
 
         udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
+        utp_tls_mux = create_multiplexer(endpoint);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, utp_tls_mux, trace);
 
         auto local_ep = base->local_endpoint();
 
@@ -993,7 +1015,7 @@ Injector::Injector(
             bt::bootstrap::Config()
                 .with_default(!_config.bt_bootstrap_no_default())
                 .with_extras(_config.bt_bootstrap_extras()),
-            trace.tag("dht")
+            _inner->_trace.tag("dht")
         );
 
         if (_config.bt_allow_martians()) {
@@ -1003,18 +1025,27 @@ Injector::Injector(
         _dht = std::move(dht);
     }
 
-    _dht->set_endpoints({_config.bittorrent_endpoint()});
+    {
+        std::vector<asio_utp::udp_multiplexer> dht_muxs;
 
-    assert(!_dht->local_endpoints().empty());
+        if (utp_plain_mux.is_open()) {
+            dht_muxs.push_back(utp_plain_mux);
+            LOG_INFO(trace, " BtDHT bound to udp/", utp_plain_mux.local_endpoint(), " (plain)");
+        }
 
-    if (_dht->local_endpoints().empty())
-        LOG_ERROR(trace, " Failed to bind the BitTorrent DHT to any local endpoint");
+        if (utp_tls_mux.is_open()) {
+            dht_muxs.push_back(utp_tls_mux);
+            LOG_INFO(trace, " BtDHT bound to udp/", utp_tls_mux.local_endpoint(), " (tls)");
+        }
+
+        _dht->set_endpoints(std::move(dht_muxs));
+    }
 
     proxy_server->add(make_unique<ouiservice::Bep5Server>(
         _dht,
         _ssl_context.get(),
         _config.bep5_injector_swarm_name(),
-        trace
+        _inner->_trace
     ));
 
     if (_config.listen_on_i2p()) {
@@ -1055,7 +1086,7 @@ Injector::Injector(
 
         proxy_server->add(std::make_unique<Server>(
             _inner->get_or_create_i2p_session(_exec, _config, _cancel),
-            trace
+            _inner->_trace
         ));
     }
 
@@ -1065,7 +1096,7 @@ Injector::Injector(
         this,
         proxy_server = std::move(proxy_server),
         cancel = _cancel,
-        trace
+        trace = _inner->_trace
     ] (asio::yield_context yield) mutable {
         listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, trace));
     });

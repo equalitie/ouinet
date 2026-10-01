@@ -774,7 +774,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             _dns_config.protocols.emplace_back(proto);
     }
 
-    LOG_DEBUG( "DNS protocols enabled: ["
+    LOG_DEBUG( _trace_root, " DNS protocols: ["
              , dns::Resolver::protos_to_str(_dns_config.protocols)
              , "]");
 
