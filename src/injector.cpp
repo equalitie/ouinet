@@ -21,6 +21,7 @@
 #include "split_string.h"
 #include "async_sleep.h"
 #include "bittorrent/mainline_dht.h"
+#include "bittorrent/bep5_announcer.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
@@ -39,7 +40,6 @@
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
-#include "ouiservice/bep5/server.h"
 #include "ssl/ca_certificate.h"
 #include "ssl/util.h"
 
@@ -81,6 +81,7 @@ struct Injector::Inner {
     Trace _trace;
     std::optional<I2pService> _i2p_service;
     std::optional<I2pSessionTask> _i2p_session_task;
+    std::unique_ptr<bt::Bep5PeriodicAnnouncer> _bep5_announcer;
 
     I2pService* get_or_create_i2p_service(asio::any_io_executor exec, const I2pService::Config& config, Cancel cancel) {
         if (cancel) {
@@ -891,7 +892,7 @@ void listen( InjectorConfig& config
 Injector::Injector(
         InjectorConfig config,
         asio::io_context& ctx,
-        std::shared_ptr<bittorrent::MockDht> mock_dht) :
+        std::shared_ptr<bt::MockDht> mock_dht) :
     _exec(ctx.get_executor()),
     _config(std::move(config)),
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
@@ -1041,12 +1042,13 @@ Injector::Injector(
         _dht->set_endpoints(std::move(dht_muxs));
     }
 
-    proxy_server->add(make_unique<ouiservice::Bep5Server>(
-        _dht,
-        _ssl_context.get(),
-        _config.bep5_injector_swarm_name(),
-        _inner->_trace
-    ));
+    {
+        auto swarm_name = _config.bep5_injector_swarm_name();
+        bt::NodeID infohash = util::sha1_digest(swarm_name);
+        LOG_INFO(trace, " Injector swarm: sha1('", swarm_name, "'): ", infohash.to_hex());
+
+        _inner->_bep5_announcer = std::make_unique<bt::Bep5PeriodicAnnouncer>(infohash, _dht, std::move(trace));
+    }
 
     if (_config.listen_on_i2p()) {
         struct Server : public OuiServiceImplementationServer {
