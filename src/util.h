@@ -9,7 +9,6 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/regex.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/optional.hpp>
 #include <boost/beast/core/string_type.hpp>
@@ -29,58 +28,8 @@ boost::optional<asio::ip::address> get_local_ipv4_address();
 OUINET_COMMON_API
 boost::optional<asio::ip::address> get_local_ipv6_address();
 
-#define _IP4_LOOP_RE "127(?:\\.[0-9]{1,3}){3}"
-static const std::string _localhost_re =
-    "^(?:"
-    "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
-    "|" _IP4_LOOP_RE         // IPv4, e.g. 127.1.2.3
-    "|::1"                   // IPv6 loopback
-    "|::ffff:" _IP4_LOOP_RE  // IPv4-mapped IPv6
-    "|::" _IP4_LOOP_RE       // IPv4-compatible IPv6
-    ")$";
-
-#define _IP4_PRIV1_RE "10(?:\\.[0-9]{1,3}){3}"
-#define _IP4_PRIV2_RE "172\\.(1[6-9]|2[0-9]|3[0-1])(?:\\.[0-9]{1,3}){2}"
-#define _IP4_PRIV3_RE "192\\.168(?:\\.[0-9]{1,3}){2}"
-#define _IP4_PRIV4_RE "169\\.254(?:\\.[0-9]{1,3}){2}"
-#define _IP6_PRIV1_RE "fe80::(?:%[0-9a-zA-Z]+)?"
-#define _IP6_PRIV2_RE "fe80:(?:(?:[0-9a-f]{1,4}:)*:(?:[0-9a-f]{1,4}:)*[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}[0-9a-f]{1,4})(?:%[0-9a-zA-Z]+)?"
-#define _IP6_PRIV3_RE "f[cd][0-9a-f]{2}::(?:%[0-9a-zA-Z]+)?"
-#define _IP6_PRIV4_RE "f[cd][0-9a-f]{2}:(?:(?:[0-9a-f]{1,4}:)*:(?:[0-9a-f]{1,4}:)*[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}[0-9a-f]{1,4})(?:%[0-9a-zA-Z]+)?"
-static const std::string _private_addr_re =
-    "^(?:"
-    "|" _IP4_PRIV1_RE         // IPv4, e.g. 10.8.4.2
-    "|::ffff:" _IP4_PRIV1_RE  // IPv4-mapped IPv6
-    "|::" _IP4_PRIV1_RE       // IPv4-compatible IPv6
-    "|" _IP4_PRIV2_RE         // IPv4, e.g. 172.17.0.1
-    "|::ffff:" _IP4_PRIV2_RE  // IPv4-mapped IPv6
-    "|::" _IP4_PRIV2_RE       // IPv4-compatible IPv6
-    "|" _IP4_PRIV3_RE         // IPv4, e.g. 192.168.2.3
-    "|::ffff:" _IP4_PRIV3_RE  // IPv4-mapped IPv6
-    "|::" _IP4_PRIV3_RE       // IPv4-compatible IPv6
-    "|" _IP4_PRIV4_RE         // IPv4, e.g. 169.254.2.3
-    "|::ffff:" _IP4_PRIV4_RE  // IPv4-mapped IPv6
-    "|::" _IP4_PRIV4_RE       // IPv4-compatible IPv6
-    "|" _IP6_PRIV1_RE         // IPv6 link-local compact
-    "|" _IP6_PRIV2_RE         // IPv6 link-local
-    "|" _IP6_PRIV3_RE         // IPv6 unique-local compact
-    "|" _IP6_PRIV4_RE         // IPv6 unique-local
-    ")$";
-
-// Matches a host string which looks like a loopback address.
-// This assumes canonical IPv6 addresses (like those coming out of resolving).
-// IPv6 addresses should not be bracketed.
-static const boost::regex localhost_rx( _localhost_re
-                                      , boost::regex::normal | boost::regex::icase);
-static const boost::regex private_addr_rx( _private_addr_re
-                                         , boost::regex::normal | boost::regex::icase);
-#undef _IP4_LOOP_RE
-#undef _IP4_PRIV1_RE
-#undef _IP4_PRIV2_RE
-#undef _IP4_PRIV3_RE
-#undef _IP4_PRIV4_RE
-#undef _IP6_PRIV1_RE
-#undef _IP6_PRIV2_RE
+OUINET_COMMON_API bool is_localhost_addr(const boost::string_view);
+OUINET_COMMON_API bool is_private_addr(const boost::string_view);
 
 // Format host/port pair taking IPv6 into account.
 inline

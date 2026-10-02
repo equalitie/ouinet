@@ -122,6 +122,10 @@ boost::program_options::options_description ClientConfig::description_full()
         , "Path to the CA certificate store directory")
        ("tls-ca-cert-store-file", po::value<vector<string>>(&_tls_ca_cert_store_files)
         , "Add CA certificate store file")
+       ("tls-ca-cert-cn", po::value<string>(&_tls_ca_cert_cn)
+        , "Common Name (CN) to use for the generated root CA certificate. "
+          "Only applied when the CA certificate is first generated; "
+          "delete the existing CA cert/key/dh files to regenerate with a new name.")
        ("front-end-ep"
         , po::value<string>()->default_value("127.0.0.1:8078")
         , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
@@ -146,6 +150,14 @@ boost::program_options::options_description ClientConfig::description_full()
         , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
         , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
           "Previous announcements could take up to an hour to expire.")
+       ("disable-upnp"
+        , po::bool_switch(&_disable_upnp)->default_value(false)
+        , "Disable UPnP IGD port mapping used to open the UDP port on the "
+          "gateway for BitTorrent/uTP connectivity.")
+       ("disable-local-peer-discovery"
+        , po::bool_switch(&_disable_local_peer_discovery)->default_value(false)
+        , "Disable discovery of and announcement to other Ouinet clients "
+          "on the local network (LAN) via UDP multicast.")
        ("request-body-limit"
         , po::value<uint64_t>()->default_value(_max_req_body_size)
         , "Set the max size of body requests in KiB. This could be "
@@ -762,7 +774,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             _dns_config.protocols.emplace_back(proto);
     }
 
-    LOG_DEBUG( "DNS protocols enabled: ["
+    LOG_DEBUG( _trace_root, " DNS protocols: ["
              , dns::Resolver::protos_to_str(_dns_config.protocols)
              , "]");
 
@@ -880,9 +892,9 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
             auto name = util::str("metrics server ", url->reassemble());
 
             if (raw_cacert.starts_with("@")) {
-                cacert = load_tls_client_ctx_from_string(raw_cacert.substr(1), name);
+                cacert = load_tls_client_ctx_from_file(raw_cacert.substr(1), name);
             } else {
-                cacert = load_tls_client_ctx_from_file(raw_cacert, name);
+                cacert = load_tls_client_ctx_from_string(raw_cacert, name);
             }
         }
 

@@ -128,6 +128,7 @@ public class Ouinet {
         maybeAdd(args, "--enable-i2p-service-exe", config.getEnableI2pServiceExe());
         maybeAdd(args, "--enable-i2p-service-ext", config.getEnableI2pServiceExt());
         maybeAddBool(args, "--enable-i2p-service-lib", config.getEnableI2pServiceLib());
+        maybeAdd(args, "--injector-ep",            config.getInjectorEp());
 
         if (config.getLogLevel() != null) {
             args.add("--log-level=" + config.getLogLevel().name());
@@ -139,11 +140,20 @@ public class Ouinet {
         maybeAddBool(args, "--disable-injector-access",     config.getDisableInjectorAccess());
         maybeAddBool(args, "--cache-private",               config.getCachePrivate());
         maybeAddBool(args, "--disable-bridge-announcement", config.getDisableBridgeAnnouncement());
+        maybeAddBool(args, "--disable-upnp",                config.getDisableUpnp());
+        maybeAddBool(args, "--disable-local-peer-discovery", config.getDisableLocalPeerDiscovery());
         maybeAdd    (args, "--request-body-limit",          config.getRequestBodyLimit());
 
         maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
         maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
         maybeAdd    (args, "--metrics-delete-after",        config.getMetricsDeleteAfter());
+
+        List<String> requestFields = config.getRequestFields();
+        if (requestFields != null) {
+            for (int i = 0; i < requestFields.size(); i++) {
+                args.add("--add-request-field=" + requestFields.get(i));
+            }
+        }
 
         List<String> metricsServerUrls = config.getMetricsServerUrls();
         if (metricsServerUrls != null) {

@@ -319,10 +319,12 @@ public:
             bt_dht,
             local_ep,
             m = std::move(m),
-            upnps = _upnps_ptr
+            upnps = _upnps_ptr,
+            upnp_enabled = _config.is_upnp_enabled()
         ] (auto y) mutable {
             auto ext_ep = bt_dht->add_endpoint(std::move(m)).wait(y);
             if (!ext_ep) return;
+            if (!upnp_enabled) return;
 
             State::setup_upnp(y.get_executor(), ext_ep->port(), local_ep, upnps);
         });
@@ -380,6 +382,9 @@ private:
     std::expected<Session, sys::error_code>
     fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async);
 
+    [[nodiscard]]
+    std::expected<Session, sys::error_code>
+    fetch_through_external_proxy(asio::ip::tcp::endpoint, const Request&, Async);
 
     [[nodiscard]]
     std::expected<ClientFrontEnd::Response, sys::error_code>
@@ -588,7 +593,7 @@ private:
 
         _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
             _ctx.get_executor()
-            , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr, _trace);
+            , std::vector<asio_utp::udp_multiplexer>{common_udp_multiplexer()}, nullptr, _trace);
 
         yield.tag("accept_utp").spawn([&] (Async yield) mutable {
             auto slot = yield.cancel_slot([&] () mutable {
@@ -922,6 +927,23 @@ Client::State::fetch_stored_in_dcache(const CacheRetrieveRequest& request, Async
         if (yield.is_cancelled()) throw;
         return std::unexpected(asio::error::timed_out);
     }
+}
+
+[[nodiscard]]
+std::expected<Session, sys::error_code>
+Client::State::fetch_through_external_proxy(asio::ip::tcp::endpoint proxy_ep, const Request& rq, Async yield) {
+    asio::ip::tcp::socket socket(yield.get_executor());
+
+    if (auto r = socket.async_connect(proxy_ep, yield); !r) {
+        return std::unexpected(r.error());
+    }
+
+    if (auto r = http::async_write(socket, rq, yield); !r) {
+        return std::unexpected(r.error());
+    }
+
+    auto s = Session::create(std::move(socket), rq.method() == http::verb::head, yield);
+    return s;
 }
 
 //------------------------------------------------------------------------------
@@ -1598,7 +1620,10 @@ Client::State::maybe_wrap_in_storing_session(Dispatcher::Response response, Asyn
             },
             [&] (Response::Ouisync r) -> R {
                 return Response::Ouisync{std::move(r.session)};
-            }
+            },
+            [&] (Response::ExternalProxy r) -> R {
+                return Response::ExternalProxy{std::move(r.session)};
+            },
         },
         std::move(response.value));
 }
@@ -1869,6 +1894,11 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
             return client_state.fetch_stored_in_dcache(rq, yield);
         }
 
+        SysResult<Session>
+        external_proxy(asio::ip::tcp::endpoint proxy_ep, const Request& rq, Async yield) override {
+            return client_state.fetch_through_external_proxy(proxy_ep, rq, yield.tag("ext_proxy"));
+        }
+
         boost::posix_time::time_duration max_cached_age() override {
             return client_state._config.max_cached_age();
         }
@@ -2083,7 +2113,11 @@ void Client::State::serve_request(GenericStream&& con, Async yield_)
         LOG_DEBUG(yield, " Response: ", response->header());
 
         if (auto r = response->write(con, yield); !r) {
-            LOG_DEBUG(yield, " Failed to write response to UA: ", response.error());
+            LOG_DEBUG(yield, " Failed to write response to UA: ", r.error());
+            // TODO: This is incorrect, if the write function failed in writing
+            // to `con` (as opposed to reading from the session inside the
+            // response), or if some response has already been written, then we
+            // shouldn't attempt to write the failure response.
             auto rs = retrieval_failure_response(req);
             auto wr = http::async_write(con, rs, yield);
             if (!wr || !req.keep_alive() || !rs.keep_alive()) break;
@@ -2127,15 +2161,17 @@ Client::State::setup_cache(Async yield)
     LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
     if (auto r = _config.cache_static_content_path().empty()
-        ? cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
+        ? cache::Client::build( std::vector<asio_utp::udp_multiplexer>{common_udp_multiplexer()}
                               , *_config.cache_http_pub_key()
                                 , _config.repo_root()/"bep5_http" //TODO gives this a more inclusive name covering bothe bep5 and bep3 caches
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , yield)
-        : cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
+        : cache::Client::build( std::vector<asio_utp::udp_multiplexer>{common_udp_multiplexer()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
+                              , _config.is_local_peer_discovery_enabled()
                               , _config.cache_static_path()
                               , _config.cache_static_content_path()
                               , yield)) {
@@ -2432,7 +2468,7 @@ void Client::State::start_ouinet()
     }
 
     _ca_certificate = get_or_gen_tls_cert<CACertificate>
-        ( "Your own local Ouinet client"
+        ( _config.tls_ca_cert_cn()
         , ca_cert_path(), ca_key_path(), ca_dh_path());
 
     if (!_config.tls_injector_cert_path().empty()) {
@@ -2804,14 +2840,14 @@ fs::path Client::ca_cert_path() const
     return _state->ca_cert_path();
 }
 
-fs::path Client::get_or_gen_ca_root_cert(const string repo_root)
+fs::path Client::get_or_gen_ca_root_cert(const string repo_root, const string cn)
 {
     fs::path repo_path = fs::path(repo_root);
     fs::path ca_cert_path = repo_root / OUINET_CA_CERT_FILE;
     fs::path ca_key_path = repo_root / OUINET_CA_KEY_FILE;
     fs::path ca_dh_path = repo_root / OUINET_CA_DH_FILE;
     get_or_gen_tls_cert<CACertificate>
-        ( "Your own local Ouinet client"
+        ( cn
         , ca_cert_path, ca_key_path, ca_dh_path);
     return ca_cert_path;
 }

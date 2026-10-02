@@ -33,7 +33,7 @@ public:
                    , CryptoStreamKey
                    , sign::PublicKey cache_pk
                    , std::set<asio::ip::udp::endpoint> lan_peers
-                   , std::set<asio::ip::udp::endpoint> lan_my_endpoints
+                   , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
                    , std::shared_ptr<unsigned> newest_proto_seen
                    , Trace);
 

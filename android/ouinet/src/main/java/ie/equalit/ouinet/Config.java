@@ -60,6 +60,7 @@ public class Config implements Parcelable {
         private String enableI2pServiceExe;
         private String enableI2pServiceExt;
         private boolean enableI2pServiceLib = false;
+        private String injectorEp;
         private String listenOnTcp;
         private String frontEndEp;
         private String frontEndAccessToken;
@@ -69,6 +70,8 @@ public class Config implements Parcelable {
         private String udpMuxPort;
         private String udpMuxRxLimit;
         private boolean disableBridgeAnnouncement = false;
+        private boolean disableUpnp = false;
+        private boolean disableLocalPeerDiscovery = false;
         private String requestBodyLimit;
         private String maxCachedAge;
         private String localDomain;
@@ -78,6 +81,7 @@ public class Config implements Parcelable {
         private boolean disableInjectorAccess = false;
         private LogLevel logLevel = null;
         private boolean enableLogFile = false;
+        private List<String> requestFields = null;
 
         private boolean metricsEnableOnStart = false;
         // Parallel lists: one entry per metrics server, in the same order.
@@ -173,6 +177,10 @@ public class Config implements Parcelable {
             this.enableI2pServiceLib = enableI2pServiceLib;
             return this;
         }
+        public ConfigBuilder setInjectorEp(String injectorEp){
+            this.injectorEp = injectorEp;
+            return this;
+        }
         public ConfigBuilder setListenOnTcp(String listenOnTcp){
             this.listenOnTcp = listenOnTcp;
             return this;
@@ -207,6 +215,14 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setDisableBridgeAnnouncement(boolean disableBridgeAnnouncement){
             this.disableBridgeAnnouncement = disableBridgeAnnouncement;
+            return this;
+        }
+        public ConfigBuilder setDisableUpnp(boolean disableUpnp){
+            this.disableUpnp = disableUpnp;
+            return this;
+        }
+        public ConfigBuilder setDisableLocalPeerDiscovery(boolean disableLocalPeerDiscovery){
+            this.disableLocalPeerDiscovery = disableLocalPeerDiscovery;
             return this;
         }
         public ConfigBuilder setRequestBodyLimit(String requestBodyLimit){
@@ -256,6 +272,16 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setEnableLogFile(boolean enableLogFile){
             this.enableLogFile = enableLogFile;
+            return this;
+        }
+        public ConfigBuilder addRequestField(String requestField) {
+            if (requestField == null)
+                return this;
+
+            if (this.requestFields == null) {
+                this.requestFields = new ArrayList<>();
+            }
+            this.requestFields.add(requestField);
             return this;
         }
         public ConfigBuilder setMetricsEnableOnStart(boolean enable) {
@@ -488,6 +514,7 @@ public class Config implements Parcelable {
                     enableI2pServiceExe,
                     enableI2pServiceExt,
                     enableI2pServiceLib,
+                    injectorEp,
                     listenOnTcp,
                     frontEndEp,
                     frontEndAccessToken,
@@ -497,6 +524,8 @@ public class Config implements Parcelable {
                     udpMuxPort,
                     udpMuxRxLimit,
                     disableBridgeAnnouncement,
+                    disableUpnp,
+                    disableLocalPeerDiscovery,
                     requestBodyLimit,
                     maxCachedAge,
                     localDomain,
@@ -506,6 +535,7 @@ public class Config implements Parcelable {
                     disableInjectorAccess,
                     logLevel,
                     enableLogFile,
+                    requestFields,
                     metricsEnableOnStart,
                     metricsServerUrls,
                     metricsServerTokens,
@@ -533,6 +563,7 @@ public class Config implements Parcelable {
     private String enableI2pServiceExe;
     private String enableI2pServiceExt;
     private boolean enableI2pServiceLib;
+    private String injectorEp;
     private String listenOnTcp;
     private String frontEndEp;
     private String frontEndAccessToken;
@@ -542,6 +573,8 @@ public class Config implements Parcelable {
     private String udpMuxPort;
     private String udpMuxRxLimit;
     private boolean disableBridgeAnnouncement;
+    private boolean disableUpnp;
+    private boolean disableLocalPeerDiscovery;
     private String requestBodyLimit;
     private String maxCachedAge;
     private String localDomain;
@@ -551,6 +584,7 @@ public class Config implements Parcelable {
     private boolean disableInjectorAccess;
     private LogLevel logLevel;
     private boolean enableLogFile;
+    private List<String> requestFields;
     private boolean metricsEnableOnStart;
     private List<String> metricsServerUrls;
     private List<String> metricsServerTokens;
@@ -576,6 +610,7 @@ public class Config implements Parcelable {
                   String enableI2pServiceExe,
                   String enableI2pServiceExt,
                   boolean enableI2pServiceLib,
+                  String injectorEp,
                   String listenOnTcp,
                   String frontEndEp,
                   String frontEndAccessToken,
@@ -585,6 +620,8 @@ public class Config implements Parcelable {
                   String udpMuxPort,
                   String udpMuxRxLimit,
                   boolean disableBridgeAnnouncement,
+                  boolean disableUpnp,
+                  boolean disableLocalPeerDiscovery,
                   String requestBodyLimit,
                   String maxCachedAge,
                   String localDomain,
@@ -594,6 +631,7 @@ public class Config implements Parcelable {
                   boolean disableInjectorAccess,
                   LogLevel logLevel,
                   boolean enableLogFile,
+                  List<String> requestFields,
                   boolean metricsEnableOnStart,
                   List<String> metricsServerUrls,
                   List<String> metricsServerTokens,
@@ -618,6 +656,7 @@ public class Config implements Parcelable {
         this.enableI2pServiceExe = enableI2pServiceExe;
         this.enableI2pServiceExt = enableI2pServiceExt;
         this.enableI2pServiceLib = enableI2pServiceLib;
+        this.injectorEp = injectorEp;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
         this.frontEndAccessToken = frontEndAccessToken;
@@ -627,6 +666,8 @@ public class Config implements Parcelable {
         this.udpMuxPort = udpMuxPort;
         this.udpMuxRxLimit = udpMuxRxLimit;
         this.disableBridgeAnnouncement = disableBridgeAnnouncement;
+        this.disableUpnp = disableUpnp;
+        this.disableLocalPeerDiscovery = disableLocalPeerDiscovery;
         this.requestBodyLimit = requestBodyLimit;
         this.maxCachedAge = maxCachedAge;
         this.localDomain = localDomain;
@@ -636,6 +677,7 @@ public class Config implements Parcelable {
         this.disableInjectorAccess = disableInjectorAccess;
         this.logLevel = logLevel;
         this.enableLogFile = enableLogFile;
+        this.requestFields = (requestFields == null ? null : new ArrayList<>(requestFields));
         this.metricsEnableOnStart = metricsEnableOnStart;
         this.metricsServerUrls = (metricsServerUrls == null ? null : new ArrayList<>(metricsServerUrls));
         this.metricsServerTokens = (metricsServerTokens == null ? null : new ArrayList<>(metricsServerTokens));
@@ -695,6 +737,9 @@ public class Config implements Parcelable {
     public boolean getEnableI2pServiceLib() {
         return enableI2pServiceLib;
     }
+    public String getInjectorEp() {
+        return injectorEp;
+    }
     public String getListenOnTcp() {
         return listenOnTcp;
     }
@@ -722,6 +767,12 @@ public class Config implements Parcelable {
     public boolean getDisableBridgeAnnouncement() {
         return disableBridgeAnnouncement;
     }
+    public boolean getDisableUpnp() {
+        return disableUpnp;
+    }
+    public boolean getDisableLocalPeerDiscovery() {
+        return disableLocalPeerDiscovery;
+    }
     public String getRequestBodyLimit() {
         return requestBodyLimit;
     }
@@ -748,6 +799,9 @@ public class Config implements Parcelable {
     }
     public boolean getEnableLogFile() {
         return enableLogFile;
+    }
+    public List<String> getRequestFields() {
+        return (requestFields == null ? null : new ArrayList<>(requestFields));
     }
     public boolean getMetricsEnableOnStart() {
         return metricsEnableOnStart;
@@ -806,6 +860,7 @@ public class Config implements Parcelable {
         out.writeString(enableI2pServiceExe);
         out.writeString(enableI2pServiceExt);
         out.writeInt(enableI2pServiceLib ? 1 : 0);
+        out.writeString(injectorEp);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
         out.writeString(frontEndAccessToken);
@@ -815,6 +870,8 @@ public class Config implements Parcelable {
         out.writeString(udpMuxPort);
         out.writeString(udpMuxRxLimit);
         out.writeInt(disableBridgeAnnouncement ? 1 : 0);
+        out.writeInt(disableUpnp ? 1 : 0);
+        out.writeInt(disableLocalPeerDiscovery ? 1 : 0);
         out.writeString(requestBodyLimit);
         out.writeString(maxCachedAge);
         out.writeString(localDomain);
@@ -825,6 +882,7 @@ public class Config implements Parcelable {
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
         out.writeInt(enableLogFile ? 1 : 0);
+        out.writeStringList(requestFields);
         out.writeInt(metricsEnableOnStart ? 1 : 0);
         out.writeStringList(metricsServerUrls);
         out.writeStringList(metricsServerTokens);
@@ -859,6 +917,7 @@ public class Config implements Parcelable {
         enableI2pServiceExe = in.readString();
         enableI2pServiceExt = in.readString();
         enableI2pServiceLib = in.readInt() != 0;
+        injectorEp = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
         frontEndAccessToken = in.readString();
@@ -868,6 +927,8 @@ public class Config implements Parcelable {
         udpMuxPort = in.readString();
         udpMuxRxLimit = in.readString();
         disableBridgeAnnouncement = in.readInt() != 0;
+        disableUpnp = in.readInt() != 0;
+        disableLocalPeerDiscovery = in.readInt() != 0;
         requestBodyLimit = in.readString();
         maxCachedAge = in.readString();
         localDomain = in.readString();
@@ -888,6 +949,8 @@ public class Config implements Parcelable {
         logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
 
         enableLogFile = in.readInt() != 0;
+
+        requestFields = in.createStringArrayList();
 
         metricsEnableOnStart = in.readInt() != 0;
         metricsServerUrls = in.createStringArrayList();

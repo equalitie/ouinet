@@ -36,10 +36,11 @@ private:
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+    build( std::vector<asio_utp::udp_multiplexer>
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
+         , bool local_peer_discovery_enabled
          , opt_path static_cache_dir
          , opt_path static_cache_content_dir
          , Async);
@@ -50,32 +51,36 @@ public:
 public:
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+    build( std::vector<asio_utp::udp_multiplexer> multiplexers
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
+         , bool local_peer_discovery_enabled
          , Async yield)
     {
-        return build( std::move(lan_my_endpoints), std::move(cache_pk)
+        return build( std::move(multiplexers), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
+                    , local_peer_discovery_enabled
                     , boost::none, boost::none
                     , yield);
     }
 
     [[nodiscard]]
     static std::expected<std::shared_ptr<Client>, sys::error_code>
-    build( std::set<asio::ip::udp::endpoint> lan_my_endpoints
+    build( std::vector<asio_utp::udp_multiplexer> multiplexers
          , sign::PublicKey cache_pk
          , fs::path cache_dir
          , boost::posix_time::time_duration max_cached_age
+         , bool local_peer_discovery_enabled
          , fs::path static_cache_dir
          , fs::path static_cache_content_dir
          , Async yield)
     {
         assert(!static_cache_dir.empty());
         assert(!static_cache_content_dir.empty());
-        return build( std::move(lan_my_endpoints), std::move(cache_pk)
+        return build( std::move(multiplexers), std::move(cache_pk)
                     , std::move(cache_dir), max_cached_age
+                    , local_peer_discovery_enabled
                     , opt_path{std::move(static_cache_dir)}
                     , opt_path{std::move(static_cache_content_dir)}
                     , yield);

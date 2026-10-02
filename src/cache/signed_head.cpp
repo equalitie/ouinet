@@ -62,7 +62,7 @@ SignedHead::verify(http::response_header<> rsh, const sign::PublicKey& pk)
     to_verify = util::without_framing(rsh);
     for (auto hit = rsh.begin(); hit != rsh.end();) {
         auto hn = hit->name_string();
-        if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
+        if (http_::is_signature_header(hn)) {
             sig_headers.insert(hit->name(), hn, hit->value());
             to_verify.erase(hn);
             hit = rsh.erase(hit);  // will re-add at the end, minus bad signatures

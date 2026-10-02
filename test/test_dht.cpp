@@ -115,8 +115,16 @@ BOOST_AUTO_TEST_CASE(test_bootstrap)
     auto dns_resolver = std::make_shared<dns::Resolver>();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
+    asio_utp::udp_multiplexer mux(exec);
+
+    {
+        sys::error_code ec;
+        mux.bind({asio::ip::make_address("0.0.0.0"), 0}, ec);
+        BOOST_REQUIRE(!ec);
+    }
+
     DhtNode dht_node(
-        exec,
+        std::move(mux),
         metrics_dht.dht_node_ipv4(),
         dns_resolver,
         rx_limit,

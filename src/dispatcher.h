@@ -30,6 +30,7 @@ public:
         struct PublicInjector { CacheRequest request; Session session; };
         struct PrivateInjector { Session session; };
         struct Ouisync { Session session; };
+        struct ExternalProxy { Session session; };
 
         using Alternatives = std::variant<
             FrontEnd,
@@ -38,7 +39,8 @@ public:
             LocalCache,
             PublicInjector,
             PrivateInjector,
-            Ouisync
+            Ouisync,
+            ExternalProxy
         >;
 
         template<class Rs>
@@ -84,6 +86,10 @@ public:
         virtual SysResult<Session>
         distributes_cache(const CacheRetrieveRequest&, Async) = 0;
 
+        [[nodiscard]]
+        virtual SysResult<Session>
+        external_proxy(asio::ip::tcp::endpoint, const Request&, Async) = 0;
+
         virtual boost::posix_time::time_duration max_cached_age() = 0;
 
         virtual bool is_injector_starting() = 0;
@@ -108,6 +114,7 @@ private:
     SysResult<Response> fetch_from_public_injector(CacheType, Request const&, Async);
     SysResult<Response> fetch_from_private_injector(InjectingCacheType, Request const&, Async);
     SysResult<Response> fetch_from_cache_control(CacheType, Request const&, Async);
+    SysResult<Response> fetch_through_external_proxy(asio::ip::tcp::endpoint, Request const&, Async);
 
 private:
     Routes& routes;

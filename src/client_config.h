@@ -156,6 +156,10 @@ public:
       return _i2p_bep3_tracker;
     }
 
+    const std::string& tls_ca_cert_cn() const {
+        return _tls_ca_cert_cn;
+    }
+
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
     }
@@ -203,6 +207,14 @@ public:
 
     bool is_bridge_announcement_enabled() const {
         return !_disable_bridge_announcement;
+    }
+
+    bool is_upnp_enabled() const {
+        return !_disable_upnp;
+    }
+
+    bool is_local_peer_discovery_enabled() const {
+        return !_disable_local_peer_discovery;
     }
 
     boost::optional<std::string>
@@ -372,6 +384,7 @@ private:
     std::string _tls_ca_cert_store_dir;
     std::vector<std::string> _tls_ca_cert_store_files;
     asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+    std::string _tls_ca_cert_cn = "Your own local Ouinet client";
 
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
@@ -386,6 +399,8 @@ private:
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
+    bool _disable_upnp = false;
+    bool _disable_local_peer_discovery = false;
     EnabledCaches _enabled_caches;
 
     boost::posix_time::time_duration _max_cached_age

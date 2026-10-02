@@ -225,11 +225,21 @@ ClientFrontEnd::ClientFrontEnd(const ClientConfig& config) {
         _csrf_token);
 }
 
-void ClientFrontEnd::handle_ca_pem(Response& res, ostringstream& ss, const CACertificate& ca) {
+Response
+ClientFrontEnd::handle_ca_pem(const Request& req, const CACertificate& ca) {
+    Response res{http::status::ok, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "application/x-x509-ca-cert");
     res.set(http::field::content_disposition, "inline");
+    res.keep_alive(false);
 
-    ss << ca.pem_certificate();
+    Response::body_type::reader reader(res, res.body());
+    sys::error_code ec;
+    reader.put(asio::buffer(ca.pem_certificate()), ec);
+    assert(!ec);
+
+    res.prepare_payload();
+    return res;
 }
 
 void ClientFrontEnd::enable_log_to_file(ClientConfig& config) {
@@ -528,6 +538,18 @@ ClientFrontEnd::handle_portal( ClientConfig& config
         ss << "enabled.<br>\n";
     else
         ss << "disabled.<br>\n";
+
+    ss << "UPnP port mapping is ";
+    if (config.is_upnp_enabled())
+        ss << "enabled.<br>\n";
+    else
+        ss << "disabled.<br>\n";
+
+    ss << "Local peer discovery is ";
+    if (config.is_local_peer_discovery_enabled())
+        ss << "enabled.<br>\n";
+    else
+        ss << "disabled.<br>\n";
     ss << "<br>\n";
 
     ss << "Injector endpoint: " << debug(config.injector_endpoint<CacheType::Bep5Http>()) << "<br>\n";
@@ -672,6 +694,8 @@ ClientFrontEnd::handle_api_status( ClientConfig& config
         {"state", client_state(cstate)},
         {"logfile", config.is_log_file_enabled()},
         {"bridge_announcement", config.is_bridge_announcement_enabled()},
+        {"upnp_enabled", config.is_upnp_enabled()},
+        {"local_peer_discovery_enabled", config.is_local_peer_discovery_enabled()},
         {"metrics_enabled", metrics.is_enabled()},
         {"dns_protocols", dns_protocols(config)},
         {"udp_mux_rx_limit", config.udp_mux_rx_limit()},
@@ -866,6 +890,55 @@ void ClientFrontEnd::handle_api_endpoints(const std::string_view proxy_endpoint
     ss << response;
 }
 
+boost::optional<ClientFrontEnd::Response>
+ClientFrontEnd::check_frontend_credentials( const ClientConfig& config
+                                          , const Request& req)
+{
+    const auto credentials = config.frontend_credentials();
+    if (credentials.empty()) return boost::none;  // auth disabled
+
+    bool auth_ok = false;
+    if (const auto auth_i = req.find(http::field::authorization); auth_i != req.cend()) {
+        const std::string computed = authenticate_detail::parse_auth(auth_i->value());
+        if (computed.size() == credentials.size()) {
+            auth_ok = 0 == CRYPTO_memcmp(credentials.data(), computed.data(), credentials.size());
+        }
+    }
+    if (auth_ok) return boost::none;
+
+    Response res{http::status::unauthorized, req.version()};
+    res.keep_alive(false);
+    res.set(http::field::www_authenticate, "Basic realm=\"Ouinet client frontend\"");
+    res.prepare_payload();
+    return res;
+}
+
+boost::optional<ClientFrontEnd::Response>
+ClientFrontEnd::check_frontend_token( const ClientConfig& config
+                                    , const Request& req)
+{
+    auto& token = config.front_end_access_token();
+    if (!token) return boost::none;  // token check disabled
+
+    std::string_view header_key = "X-Ouinet-Front-End-Token";
+    if (*token == req[header_key]) return boost::none;
+
+    Response res{http::status::forbidden, req.version()};
+    res.keep_alive(false);
+
+    auto body = std::string("The request is missing a valid ")
+              + std::string(header_key)
+              + " HTTP header\n";
+
+    Response::body_type::reader reader(res, res.body());
+    sys::error_code ec;
+    reader.put(asio::buffer(body), ec);
+    assert(!ec);
+
+    res.prepare_payload();
+    return res;
+}
+
 std::expected<Response, sys::error_code>
 ClientFrontEnd::serve( ClientConfig& config
                      , const Request& req
@@ -882,46 +955,18 @@ ClientFrontEnd::serve( ClientConfig& config
                      , const std::string_view frontend_unix_socket_endpoint
                      , Async yield)
 {
-    if (const auto credentials = config.frontend_credentials(); !credentials.empty()) {
-        bool auth_ok = false;
-        if (const auto auth_i = req.find(http::field::authorization); auth_i != req.cend()) {
-            const std::string computed = authenticate_detail::parse_auth(auth_i->value());
-            if (computed.size() == credentials.size()) {
-                auth_ok = 0 == CRYPTO_memcmp(credentials.data(), computed.data(), credentials.size());
-            }
-        }
-        if (!auth_ok) {
-            Response res{http::status::unauthorized, req.version()};
-            res.keep_alive(false);
-            res.set( http::field::www_authenticate, "Basic realm=\"Ouinet client frontend\"");
-            res.prepare_payload();
-            return res;
-        }
-    }
-
-    if (auto& token = config.front_end_access_token()) {
-        std::string_view header_key = "X-Ouinet-Front-End-Token";
-        if (*token != req[header_key]) {
-            Response res{http::status::forbidden, req.version()};
-            res.keep_alive(false);
-
-            auto body = std::string("The request is missing a valid ")
-                      + std::string(header_key)
-                      + " HTTP header\n";
-
-            Response::body_type::reader reader(res, res.body());
-            sys::error_code ec;
-            reader.put(asio::buffer(body), ec);
-            assert(!ec);
-
-            res.prepare_payload();
-            return res;
-        }
-    }
-
     auto url = util::Url::from(req.target());
     const auto path_str = (url && !url->path.empty()) ? url->path : std::string(req.target());
     std::string_view path(path_str);
+
+    // The /ca.pem endpoint returns only the public CA certificate (never the
+    // private key), so it needs no authentication. Serving it up front lets
+    // clients that cannot set custom HTTP headers (e.g. iOS
+    // SFSafariViewController) fetch the certificate during onboarding.
+    if (path == "/ca.pem") return handle_ca_pem(req, ca);
+
+    if (auto res = check_frontend_credentials(config, req)) return std::move(*res);
+    if (auto res = check_frontend_token(config, req))       return std::move(*res);
 
     std::unordered_map<std::string_view, std::string_view> request_arguments;
     auto parse_request_arguments = [&request_arguments](const std::string_view input) {
@@ -992,9 +1037,7 @@ ClientFrontEnd::serve( ClientConfig& config
 
     ostringstream ss;
     bool should_show_portal = false;
-    if (path == "/ca.pem") {
-        handle_ca_pem(res, ss, ca);
-    } else if (path == log_file_apath) {
+    if (path == log_file_apath) {
         res.set(http::field::content_type, "text/plain");
         load_log_file(config, ss);
     } else if (path == group_list_apath) {
@@ -1047,7 +1090,7 @@ ClientFrontEnd::serve( ClientConfig& config
                 if (cache_client) {
                     std::ignore = cache_client->local_purge(yield);
                 }
-            } else if (argument == "bt_extra_bootstrap"sv) {
+            } else if (argument == "bt_extra_bootstraps"sv) {
                 if (cache_client) {
                     set_bt_extra_bootstraps(value, config);
                 }

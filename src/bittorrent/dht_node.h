@@ -70,7 +70,7 @@ class OUINET_COMMON_API DhtNode {
     const size_t RESPONSIBLE_TRACKERS_PER_SWARM = 8;
 
     public:
-    DhtNode( const AsioExecutor&
+    DhtNode( asio_utp::udp_multiplexer
            , metrics::DhtNode
            , std::shared_ptr<dns::Resolver>
            , uint32_t mux_rx_limit
@@ -79,8 +79,7 @@ class OUINET_COMMON_API DhtNode {
            , Trace
     );
 
-    std::expected<void, sys::error_code> start(udp::endpoint, Async yield);
-    std::expected<void, sys::error_code> start(asio_utp::udp_multiplexer, Async yield);
+    std::expected<void, sys::error_code> start(Async yield);
     void stop();
 
     /**
@@ -199,10 +198,10 @@ class OUINET_COMMON_API DhtNode {
         Async
     );
 
-    bool is_v4() const { return _local_endpoint.address().is_v4(); }
-    bool is_v6() const { return _local_endpoint.address().is_v6(); }
+    bool is_v4() const { return local_endpoint().address().is_v4(); }
+    bool is_v6() const { return local_endpoint().address().is_v6(); }
 
-    udp::endpoint local_endpoint() const { return _local_endpoint; }
+    udp::endpoint local_endpoint() const { return udp_multiplexer().local_endpoint(); }
     udp::endpoint wan_endpoint() const { return _wan_endpoint; }
 
     ~DhtNode();
@@ -214,6 +213,8 @@ class OUINET_COMMON_API DhtNode {
     void set_peer_filter(PeerFilter filter) {
         _peer_filter = filter;
     }
+
+    asio_utp::udp_multiplexer udp_multiplexer() const;
 
     private:
     void receive_loop(Async);
@@ -342,7 +343,6 @@ class OUINET_COMMON_API DhtNode {
 
     private:
     AsioExecutor _exec;
-    ip::udp::endpoint _local_endpoint;
     std::unique_ptr<UdpMultiplexer> _multiplexer;
     NodeID _node_id;
     udp::endpoint _wan_endpoint;
@@ -367,7 +367,6 @@ class OUINET_COMMON_API DhtNode {
     class Stats;
     std::unique_ptr<Stats> _stats;
     std::shared_ptr<dns::Resolver> _dns_resolver;
-    uint32_t _mux_rx_limit;
     boost::filesystem::path _storage_dir;
     bootstrap::Config _bootstrap_config;
     PeerFilter _peer_filter = PeerFilter::martian;

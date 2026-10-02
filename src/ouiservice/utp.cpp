@@ -13,22 +13,12 @@ using udp = asio::ip::udp;
 using namespace std;
 
 UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
-                                        , udp::endpoint local_endpoint
+                                        , asio_utp::udp_multiplexer multiplexer
                                         , Trace trace):
     _ex(std::move(ex)),
-    _udp_multiplexer(new asio_utp::udp_multiplexer(_ex)),
+    _udp_multiplexer(new asio_utp::udp_multiplexer(std::move(multiplexer))),
     _accept_queue(_ex)
 {
-    sys::error_code ec;
-
-    _udp_multiplexer->bind(local_endpoint, ec);
-
-    if (ec) {
-        LOG_ERROR(trace, " uTP: Failed to bind UtpOuiServiceServer to "
-                 , local_endpoint, "; ec=", ec);
-    } else {
-        LOG_DEBUG(trace, " uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
-    }
 
     assert(_udp_multiplexer->is_open());
 }
@@ -39,20 +29,20 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
 
     assert(_udp_multiplexer->is_open());
     yield.spawn(_cancel, [this] (Async yield) {
-        auto local_ep = _udp_multiplexer->local_endpoint();
-
         while (true) {
             sys::error_code ec;
             asio_utp::socket s(_ex);
 
             auto cancel_con = yield.cancel_slot([&] { s.close(); });
 
-            s.bind(local_ep, ec);
+            s.bind(*_udp_multiplexer, ec);
             assert(!ec);
+
             auto r = s.async_accept(yield);
+
             if (!r) {
                 LOG_ERROR(yield, " UtpOuiServiceServer: failed to accept, will retry in 5s;"
-                         , " lep=", local_ep, " ec=", r.error());
+                         , " lep=", _udp_multiplexer->local_endpoint(), " ec=", r.error());
                 async_sleep(5s, yield);
                 continue;
             }

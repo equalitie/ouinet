@@ -10,6 +10,7 @@
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
+#include <boost/regex.hpp>
 
 #include <boost/url/encode.hpp>
 #include <boost/url/decode_view.hpp>
@@ -18,7 +19,70 @@
 #include "util/iterators/base32_from_binary.hpp"
 #include "util/iterators/binary_from_base32.hpp"
 
+namespace ouinet::util {
+
 using namespace std;
+
+#define _IP4_LOOP_RE "127(?:\\.[0-9]{1,3}){3}"
+static const std::string _localhost_re =
+    "^(?:"
+    "(?:localhost|ip6-localhost|ip6-loopback)(?:\\.localdomain)?"
+    "|" _IP4_LOOP_RE         // IPv4, e.g. 127.1.2.3
+    "|::1"                   // IPv6 loopback
+    "|::ffff:" _IP4_LOOP_RE  // IPv4-mapped IPv6
+    "|::" _IP4_LOOP_RE       // IPv4-compatible IPv6
+    ")$";
+
+#define _IP4_PRIV1_RE "10(?:\\.[0-9]{1,3}){3}"
+#define _IP4_PRIV2_RE "172\\.(1[6-9]|2[0-9]|3[0-1])(?:\\.[0-9]{1,3}){2}"
+#define _IP4_PRIV3_RE "192\\.168(?:\\.[0-9]{1,3}){2}"
+#define _IP4_PRIV4_RE "169\\.254(?:\\.[0-9]{1,3}){2}"
+#define _IP6_PRIV1_RE "fe80::(?:%[0-9a-zA-Z]+)?"
+#define _IP6_PRIV2_RE "fe80:(?:(?:[0-9a-f]{1,4}:)*:(?:[0-9a-f]{1,4}:)*[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}[0-9a-f]{1,4})(?:%[0-9a-zA-Z]+)?"
+#define _IP6_PRIV3_RE "f[cd][0-9a-f]{2}::(?:%[0-9a-zA-Z]+)?"
+#define _IP6_PRIV4_RE "f[cd][0-9a-f]{2}:(?:(?:[0-9a-f]{1,4}:)*:(?:[0-9a-f]{1,4}:)*[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}[0-9a-f]{1,4})(?:%[0-9a-zA-Z]+)?"
+static const std::string _private_addr_re =
+    "^(?:"
+    "|" _IP4_PRIV1_RE         // IPv4, e.g. 10.8.4.2
+    "|::ffff:" _IP4_PRIV1_RE  // IPv4-mapped IPv6
+    "|::" _IP4_PRIV1_RE       // IPv4-compatible IPv6
+    "|" _IP4_PRIV2_RE         // IPv4, e.g. 172.17.0.1
+    "|::ffff:" _IP4_PRIV2_RE  // IPv4-mapped IPv6
+    "|::" _IP4_PRIV2_RE       // IPv4-compatible IPv6
+    "|" _IP4_PRIV3_RE         // IPv4, e.g. 192.168.2.3
+    "|::ffff:" _IP4_PRIV3_RE  // IPv4-mapped IPv6
+    "|::" _IP4_PRIV3_RE       // IPv4-compatible IPv6
+    "|" _IP4_PRIV4_RE         // IPv4, e.g. 169.254.2.3
+    "|::ffff:" _IP4_PRIV4_RE  // IPv4-mapped IPv6
+    "|::" _IP4_PRIV4_RE       // IPv4-compatible IPv6
+    "|" _IP6_PRIV1_RE         // IPv6 link-local compact
+    "|" _IP6_PRIV2_RE         // IPv6 link-local
+    "|" _IP6_PRIV3_RE         // IPv6 unique-local compact
+    "|" _IP6_PRIV4_RE         // IPv6 unique-local
+    ")$";
+
+OUINET_COMMON_API bool is_localhost_addr(const boost::string_view s) {
+    // Matches a host string which looks like a loopback address.
+    // This assumes canonical IPv6 addresses (like those coming out of resolving).
+    // IPv6 addresses should not be bracketed.
+    static const boost::regex localhost_rx( _localhost_re
+                                          , boost::regex::normal | boost::regex::icase);
+    return boost::regex_match(s.begin(), s.end(), localhost_rx);
+}
+
+OUINET_COMMON_API bool is_private_addr(const boost::string_view s) {
+    static const boost::regex private_addr_rx( _private_addr_re
+                                             , boost::regex::normal | boost::regex::icase);
+    return boost::regex_match(s.begin(), s.end(), private_addr_rx);
+}
+
+#undef _IP4_LOOP_RE
+#undef _IP4_PRIV1_RE
+#undef _IP4_PRIV2_RE
+#undef _IP4_PRIV3_RE
+#undef _IP4_PRIV4_RE
+#undef _IP6_PRIV1_RE
+#undef _IP6_PRIV2_RE
 
 boost::optional<boost::asio::ip::address>
 get_local_ip_address(const boost::asio::ip::udp::endpoint& ep) {
@@ -31,21 +95,21 @@ get_local_ip_address(const boost::asio::ip::udp::endpoint& ep) {
 }
 
 boost::optional<boost::asio::ip::address>
-ouinet::util::get_local_ipv4_address() {
+get_local_ipv4_address() {
     using namespace boost::asio::ip;
     static const udp::endpoint ep(make_address_v4("192.0.2.1"), 1234);
     return get_local_ip_address(ep);
 }
 
 boost::optional<boost::asio::ip::address>
-ouinet::util::get_local_ipv6_address() {
+get_local_ipv6_address() {
     using namespace boost::asio::ip;
     static const udp::endpoint ep(make_address_v6("2001:db8::1"), 1234);
     return get_local_ip_address(ep);
 }
 
 std::pair<boost::string_view, boost::string_view>
-ouinet::util::split_ep(const boost::string_view ep) {
+split_ep(const boost::string_view ep) {
     if (ep.empty()) return {};
 
     boost::string_view host, port;
@@ -85,18 +149,18 @@ string zlib_filter(const boost::string_view& in) {
     return out_ss.str();
 }
 
-string ouinet::util::zlib_compress(const boost::string_view& in) {
+string zlib_compress(const boost::string_view& in) {
     return zlib_filter<boost::iostreams::zlib_compressor>(in);
 }
 
 // TODO: Catch and report decompression errors.
-string ouinet::util::zlib_decompress(const boost::string_view& in, sys::error_code& ec) {
+string zlib_decompress(const boost::string_view& in, sys::error_code& ec) {
     return zlib_filter<boost::iostreams::zlib_decompressor>(in);
 }
 
 // Based on <https://stackoverflow.com/a/28471421> by user "ltc"
 // and <https://stackoverflow.com/a/10973348> by user "PiQuer".
-string ouinet::util::detail::base32up_encode(const char* data, size_t size) {
+string detail::base32up_encode(const char* data, size_t size) {
     using namespace boost::archive::iterators;
     using It = base32_from_binary<transform_width<const char*, 5, 8>>;
     It begin = data;
@@ -105,7 +169,7 @@ string ouinet::util::detail::base32up_encode(const char* data, size_t size) {
     return out;  // do not add padding
 }
 
-string ouinet::util::base32_decode(const boost::string_view in) {
+string base32_decode(const boost::string_view in) {
     using namespace boost::archive::iterators;
     using It = transform_width<binary_from_base32<const char*>, 8, 5>;
     It begin = in.data();
@@ -120,7 +184,7 @@ string ouinet::util::base32_decode(const boost::string_view in) {
 
 // Based on <https://stackoverflow.com/a/28471421> by user "ltc"
 // and <https://stackoverflow.com/a/10973348> by user "PiQuer".
-string ouinet::util::detail::base64_encode(const char* data, size_t size) {
+string detail::base64_encode(const char* data, size_t size) {
     using namespace boost::archive::iterators;
     using It = base64_from_binary<transform_width<const char*, 6, 8>>;
     It begin = data;
@@ -129,7 +193,7 @@ string ouinet::util::detail::base64_encode(const char* data, size_t size) {
     return out.append((3 - size % 3) % 3, '=');  // add padding
 }
 
-string ouinet::util::base64_decode(const boost::string_view in) {
+string base64_decode(const boost::string_view in) {
     using namespace boost::archive::iterators;
     using It = transform_width<binary_from_base64<const char*>, 8, 6>;
     It begin = in.data();
@@ -139,7 +203,7 @@ string ouinet::util::base64_decode(const boost::string_view in) {
     return out.erase((npad > out.size()) ? 0 : out.size() - npad);  // remove padding
 }
 
-bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out_size) {
+bool base64_decode(boost::string_view in, uint8_t* out, size_t out_size) {
     using namespace boost::archive::iterators;
     using It = transform_width<binary_from_base64<const char*>, 8, 6>;
 
@@ -159,15 +223,17 @@ bool ouinet::util::base64_decode(boost::string_view in, uint8_t* out, size_t out
     return size == out_size;
 }
 
-string ouinet::util::percent_decode(const boost::string_view in) {
+string percent_decode(const boost::string_view in) {
     if (in.empty()) return {};
     boost::urls::decode_view dv(in);
     return std::string(dv.begin(), dv.end());
 }
 
-string ouinet::util::percent_encode(const boost::string_view in) {
+string percent_encode(const boost::string_view in) {
     if (in.empty()) return {};
     namespace urls = boost::urls;
     auto ev = urls::encode(in, urls::unreserved_chars);
     return std::string(ev.begin(), ev.end());
 }
+
+} // namespace

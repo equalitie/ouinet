@@ -101,7 +101,7 @@ set(HEADERS
 add_library (ouinet SHARED ${SOURCES} ${HEADERS})
 target_link_libraries(ouinet
   PRIVATE
-      ouinet::client
+      ouinet_client
       ${FOUNDATION_LIBRARY}
 )
 target_compile_definitions(ouinet PUBLIC IS_BUILDING_SHARED)

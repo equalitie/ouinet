@@ -159,6 +159,9 @@ Dispatcher::dispatch(const Request& request, const Route& route, Async yield) {
             [&] (Route::PublicInjectorOrDCache const& route) -> R {
                 return fetch_from_cache_control(route.cache_type, request, yield);
             },
+            [&] (Route::ExternalProxy const& route) -> R {
+                return fetch_through_external_proxy(route.proxy_ep, request, yield);
+            },
         },
         route.value);
 }
@@ -238,6 +241,11 @@ SysResult<Response> Dispatcher::fetch_from_cache_control(CacheType cache_type, R
     return std::unexpected(asio::error::fault);
 }
 
+SysResult<Response> Dispatcher::fetch_through_external_proxy(asio::ip::tcp::endpoint proxy_ep, Request const& request, Async yield) {
+    auto r = routes.external_proxy(proxy_ep, request, yield);
+    if (!r) return std::unexpected(r.error());
+    return wrap<Response::ExternalProxy>(std::move(r));
+}
 
 inline
 std::variant<
@@ -257,7 +265,8 @@ get_inner(const Dispatcher::Response& response) {
             [] (const Response::LocalCache& v) -> R { return &v.session; },
             [] (const Response::PublicInjector& v) -> R { return &v.session; },
             [] (const Response::PrivateInjector& v) -> R { return &v.session; },
-            [] (const Response::Ouisync& v) -> R { return &v.session; }
+            [] (const Response::Ouisync& v) -> R { return &v.session; },
+            [] (const Response::ExternalProxy& v) -> R { return &v.session; },
        },
        response.value);
 }
@@ -280,7 +289,8 @@ get_inner(Dispatcher::Response& response) {
             [] (Response::LocalCache& v) -> R { return &v.session; },
             [] (Response::PublicInjector& v) -> R { return &v.session; },
             [] (Response::PrivateInjector& v) -> R { return &v.session; },
-            [] (Response::Ouisync& v) -> R { return &v.session; }
+            [] (Response::Ouisync& v) -> R { return &v.session; },
+            [] (Response::ExternalProxy& v) -> R { return &v.session; },
        },
        response.value);
 }

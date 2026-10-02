@@ -63,17 +63,13 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
 
     // This removes existing endpoints not in the given set.
     // Since adding some endpoints may fail (e.g. because of port busy),
-    // you may want to check `local_endpoints()` after this operation.
-    void set_endpoints(const std::set<udp::endpoint>&) override;
+    // you may want to check `udp_multiplexers()` after this operation.
+    void set_endpoints(const std::vector<asio_utp::udp_multiplexer>&) override;
 
     [[nodiscard]]
     Promise<udp::endpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
-    std::set<udp::endpoint> local_endpoints() const override {
-        std::set<udp::endpoint> ret;
-        for (auto& p : _nodes) { ret.insert(p.first); }
-        return ret;
-    }
+    std::vector<asio_utp::udp_multiplexer> udp_multiplexers() const override;
 
     std::set<udp::endpoint> wan_endpoints() const override;
 
@@ -107,7 +103,7 @@ class OUINET_COMMON_API MainlineDht : public DhtBase {
     bool all_ready() const override;
 
     bool is_bootstrapped() const override {
-        return !local_endpoints().empty() && all_ready();
+        return !_nodes.empty() && all_ready();
     }
 
     void wait_all_ready(Async) override;

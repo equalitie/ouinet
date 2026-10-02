@@ -1,12 +1,14 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ip/multicast.hpp>
 #include "local_peer_discovery.h"
+#include <asio_utp/udp_multiplexer.hpp>
 #include <util/random.h>
 #include <task.h>
 #include <parse/number.h>
 #include <parse/endpoint.h>
 #include <logger.h>
 #include <async_sleep.h>
+#include <map>
 
 using namespace ouinet;
 using namespace std;
@@ -71,7 +73,7 @@ struct LocalPeerDiscovery::Impl {
     udp::socket _socket;
     PeerId _id;
     set<udp::endpoint> _advertised_eps;
-    map<PeerId, Peer> _peers;
+    std::map<PeerId, Peer> _peers;
 
     Impl( const AsioExecutor& ex
         , uint64_t id
@@ -269,9 +271,15 @@ set<udp::endpoint> LocalPeerDiscovery::found_peers() const
 }
 
 LocalPeerDiscovery::LocalPeerDiscovery( const AsioExecutor& ex
-                                      , set<udp::endpoint> advertised_eps)
+                                      , std::vector<asio_utp::udp_multiplexer> multiplexers)
     : _ex(ex)
 {
+    std::set<udp::endpoint> advertised_eps;
+
+    for (auto& m : multiplexers) {
+        advertised_eps.insert(m.local_endpoint());
+    }
+
     auto id = util::random::number<uint64_t>();
     _impl = make_unique<Impl>(_ex, id, advertised_eps, _lifetime_cancel);
 }

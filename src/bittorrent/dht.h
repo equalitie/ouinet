@@ -24,11 +24,13 @@ public:
 
     virtual ~DhtBase();
 
-    virtual void set_endpoints(const std::set<UdpEndpoint>&) = 0;
+    virtual void set_endpoints(const std::vector<asio_utp::udp_multiplexer>&) = 0;
 
     virtual Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) = 0;
 
-    virtual std::set<UdpEndpoint> local_endpoints() const = 0;
+    virtual std::vector<asio_utp::udp_multiplexer> udp_multiplexers() const = 0;
+
+    std::set<UdpEndpoint> local_endpoints() const;
 
     virtual std::set<UdpEndpoint> wan_endpoints() const = 0;
 

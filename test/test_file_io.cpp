@@ -35,7 +35,7 @@ struct fixture_file_io:fixture_base
 
     template<class Job>
     void run(Job job) {
-        task::spawn_detached(ctx.get_executor(), [this, job = std::move(job)] (asio::yield_context yield) {
+        task::spawn_detached(ctx.get_executor(), [job = std::move(job)] (asio::yield_context yield) {
                 try {
                     job(Async(yield));
                 }

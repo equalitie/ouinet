@@ -12,13 +12,11 @@ namespace test {
 
     std::unique_ptr<Client> client_new(
         Context& ctx,
-        rust::Slice<const char* const> argv,
-        rust::Str log_tag
+        rust::Slice<const char* const> argv
     ) {
         return std::make_unique<Client>(
             ctx,
-            ClientConfig(argv.size(), const_cast<const char**>(argv.data())),
-            Trace(static_cast<std::string>(log_tag))
+            ClientConfig(argv.size(), const_cast<const char**>(argv.data()))
         );
     }
 
@@ -66,13 +64,11 @@ namespace test {
 
     std::unique_ptr<Injector> injector_new(
         Context& ctx,
-        rust::Slice<const char* const> argv,
-        rust::Str log_tag
+        rust::Slice<const char* const> argv
     ) {
         return std::make_unique<Injector>(
             InjectorConfig(argv.size(), const_cast<const char**>(argv.data())),
-            ctx,
-            Trace(static_cast<std::string>(log_tag))
+            ctx
         );
     }
 
