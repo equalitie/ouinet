@@ -81,6 +81,7 @@ public class Config implements Parcelable {
         private boolean disableInjectorAccess = false;
         private LogLevel logLevel = null;
         private boolean enableLogFile = false;
+        private List<String> requestFields = null;
 
         private boolean metricsEnableOnStart = false;
         // Parallel lists: one entry per metrics server, in the same order.
@@ -271,6 +272,16 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setEnableLogFile(boolean enableLogFile){
             this.enableLogFile = enableLogFile;
+            return this;
+        }
+        public ConfigBuilder addRequestField(String requestField) {
+            if (requestField == null)
+                return this;
+
+            if (this.requestFields == null) {
+                this.requestFields = new ArrayList<>();
+            }
+            this.requestFields.add(requestField);
             return this;
         }
         public ConfigBuilder setMetricsEnableOnStart(boolean enable) {
@@ -524,6 +535,7 @@ public class Config implements Parcelable {
                     disableInjectorAccess,
                     logLevel,
                     enableLogFile,
+                    requestFields,
                     metricsEnableOnStart,
                     metricsServerUrls,
                     metricsServerTokens,
@@ -572,6 +584,7 @@ public class Config implements Parcelable {
     private boolean disableInjectorAccess;
     private LogLevel logLevel;
     private boolean enableLogFile;
+    private List<String> requestFields;
     private boolean metricsEnableOnStart;
     private List<String> metricsServerUrls;
     private List<String> metricsServerTokens;
@@ -618,6 +631,7 @@ public class Config implements Parcelable {
                   boolean disableInjectorAccess,
                   LogLevel logLevel,
                   boolean enableLogFile,
+                  List<String> requestFields,
                   boolean metricsEnableOnStart,
                   List<String> metricsServerUrls,
                   List<String> metricsServerTokens,
@@ -663,6 +677,7 @@ public class Config implements Parcelable {
         this.disableInjectorAccess = disableInjectorAccess;
         this.logLevel = logLevel;
         this.enableLogFile = enableLogFile;
+        this.requestFields = (requestFields == null ? null : new ArrayList<>(requestFields));
         this.metricsEnableOnStart = metricsEnableOnStart;
         this.metricsServerUrls = (metricsServerUrls == null ? null : new ArrayList<>(metricsServerUrls));
         this.metricsServerTokens = (metricsServerTokens == null ? null : new ArrayList<>(metricsServerTokens));
@@ -785,6 +800,9 @@ public class Config implements Parcelable {
     public boolean getEnableLogFile() {
         return enableLogFile;
     }
+    public List<String> getRequestFields() {
+        return (requestFields == null ? null : new ArrayList<>(requestFields));
+    }
     public boolean getMetricsEnableOnStart() {
         return metricsEnableOnStart;
     }
@@ -864,6 +882,7 @@ public class Config implements Parcelable {
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
         out.writeInt(enableLogFile ? 1 : 0);
+        out.writeStringList(requestFields);
         out.writeInt(metricsEnableOnStart ? 1 : 0);
         out.writeStringList(metricsServerUrls);
         out.writeStringList(metricsServerTokens);
@@ -930,6 +949,8 @@ public class Config implements Parcelable {
         logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
 
         enableLogFile = in.readInt() != 0;
+
+        requestFields = in.createStringArrayList();
 
         metricsEnableOnStart = in.readInt() != 0;
         metricsServerUrls = in.createStringArrayList();

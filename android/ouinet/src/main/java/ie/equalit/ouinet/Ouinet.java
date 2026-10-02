@@ -165,6 +165,13 @@ public class Ouinet {
         maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
         maybeAdd    (args, "--metrics-delete-after",        config.getMetricsDeleteAfter());
 
+        List<String> requestFields = config.getRequestFields();
+        if (requestFields != null) {
+            for (int i = 0; i < requestFields.size(); i++) {
+                args.add("--add-request-field=" + requestFields.get(i));
+            }
+        }
+
         List<String> metricsServerUrls = config.getMetricsServerUrls();
         if (metricsServerUrls != null) {
             List<String> metricsServerTokens = config.getMetricsServerTokens();
