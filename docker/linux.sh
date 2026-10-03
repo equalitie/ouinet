@@ -25,6 +25,7 @@ android_publish=n
 windows_sign_artifacts=n
 sign_directory=/opt/sign
 cmake_generator="Ninja"
+check_code_format=n
 env=()
 
 source $(dirname $0)/util.sh linux
@@ -107,6 +108,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --use-makefile-generator)
             cmake_generator="Unix Makefiles"
+            ;;
+        --check-code-format)
+            check_code_format=y
             ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
@@ -392,6 +396,11 @@ if [ -n "$host_ouisync_dir" ]; then
 fi
 
 # ---
+
+### Check code format
+if [ "$check_code_format" = y ]; then
+  exe -w $ouinet_dir bash ./scripts/check-code-format.sh
+fi
 
 for target_os in ${target_oss[@]}; do
     ### Build
